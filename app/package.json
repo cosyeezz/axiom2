@@ -1,0 +1,32 @@
+{
+  "name": "axiom2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "dev": "tsx src/server/index.ts --dev",
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "test": "tsx --test tests/*.test.ts",
+    "check:ui": "tsx tests/ui.check.ts",
+    "check:sdk": "tsx tests/sdk.check.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typebox": "1.1.38",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.1",
+    "playwright": "1.64.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.2",
+    "vite": "8.3.4"
+  }
+}
