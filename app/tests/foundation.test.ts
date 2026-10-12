@@ -346,6 +346,153 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       ).error.code,
       "AGENT_NOT_READY",
     );
+    const observer = await connect();
+    await observer.call({
+      op: "subscribe",
+      params: { scope: "authentication" },
+    });
+    await second.call({ op: "subscribe", params: { scope: "configuration" } });
+    const draft = (await second.call({ op: "configuration.get" })).data;
+    draft.providers = [
+      {
+        id: "draft",
+        providerId: "axiom-ws-auth",
+        name: "WS test",
+        api: "openai-completions",
+        url: "http://127.0.0.1:1/v1",
+        key: "",
+        headers: [],
+        body: [],
+        models: [],
+      },
+    ];
+    const publication = {
+      op: "configuration.save",
+      requestId: randomUUID(),
+      params: draft,
+    };
+    assert.equal((await second.call(publication)).ok, true);
+    const revision = (await second.call({ op: "configuration.get" })).data
+      .revision;
+    const start = {
+      op: "auth.start",
+      requestId: randomUUID(),
+      params: { providerId: "axiom-ws-auth", type: "api_key", revision },
+    };
+    const started = await second.call(start);
+    assert.equal(started.ok, true);
+    assert.equal(
+      (await second.call(start)).data.id,
+      started.data.id,
+      "duplicate starts never restart login",
+    );
+    const prompt = second.messages.find(
+      (m) =>
+        m.scope === "authentication" &&
+        m.data?.id === started.data.id &&
+        m.data.prompt,
+    )?.data.prompt;
+    assert.ok(prompt);
+    const input = {
+      id: started.data.id,
+      promptId: prompt.id,
+      answer: "WS-PRIVATE-KEY",
+    };
+    assert.equal(
+      (await observer.call({ op: "auth.answer", params: input })).error.code,
+      "AUTH_SCOPE_MISMATCH",
+    );
+    assert.equal(
+      (
+        await second.call({
+          op: "configuration.save",
+          params: { ...draft, revision },
+        })
+      ).error.code,
+      "AUTH_BUSY",
+    );
+    assert.equal(
+      (
+        await second.call({
+          op: "auth.answer",
+          params: { ...input, answer: "!must-not-run" },
+        })
+      ).error.code,
+      "INVALID_INPUT",
+    );
+    assert.equal(
+      (await second.call({ op: "auth.answer", params: input })).ok,
+      true,
+    );
+    for (
+      let n = 0;
+      n < 100 &&
+      !second.messages.some(
+        (m) => m.scope === "authentication" && m.data?.status === "completed",
+      );
+      n++
+    )
+      await new Promise((r) => setTimeout(r, 10));
+    assert.ok(
+      second.messages.some(
+        (m) => m.scope === "authentication" && m.data?.status === "completed",
+      ),
+    );
+    assert.ok(
+      !observer.messages.some((m) => m.scope === "authentication" && m.data),
+    );
+    assert.ok(!JSON.stringify(second.messages).includes("WS-PRIVATE-KEY"));
+    assert.ok(
+      !JSON.stringify(
+        app.store.db.prepare("SELECT * FROM external_requests").all(),
+      ).includes("WS-PRIVATE-KEY"),
+    );
+    assert.equal(
+      (
+        await observer.call({
+          op: "request.get",
+          params: { requestId: publication.requestId },
+        })
+      ).data.status,
+      "committed",
+    );
+    assert.deepEqual(
+      (await observer.call(publication)).data,
+      (await second.call(publication)).data,
+    );
+    const ongoing = await second.call({ ...start, requestId: randomUUID() });
+    assert.equal(ongoing.ok, true);
+    second.ws.close();
+    await once(second.ws, "close");
+    // Reconnection provides no authentication URLs/prompts from the old connection and no login replay.
+    const reconnected = await connect();
+    await reconnected.call({
+      op: "subscribe",
+      params: { scope: "authentication" },
+    });
+    assert.ok(
+      !reconnected.messages.some((m) => m.scope === "authentication" && m.data),
+    );
+    assert.equal(
+      (
+        await reconnected.call({
+          op: "auth.cancel",
+          params: { id: ongoing.data.id },
+        })
+      ).error.code,
+      "AUTH_SCOPE_MISMATCH",
+    );
+    const current = (await reconnected.call({ op: "configuration.get" })).data;
+    assert.equal(
+      current.providers[0].auth.type,
+      "api_key",
+      "disconnect does not clear prior credentials",
+    );
+    // Leave a pending prompt: service shutdown must abort it before closing the journal.
+    assert.equal(
+      (await reconnected.call({ ...start, requestId: randomUUID() })).ok,
+      true,
+    );
     const alien = new WebSocket(app.origin.replace("http", "ws") + "/ws", {
       headers: { Cookie: cookie, Origin: "https://evil.example" },
     });

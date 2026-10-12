@@ -316,7 +316,7 @@ try {
   await page.getByRole("checkbox", { name: "high", exact: true }).check();
   await page.getByRole("checkbox", { name: "max", exact: true }).check();
   await page.getByRole("button", { name: "完成编辑", exact: true }).click();
-  assert.equal(await page.locator("#save-provider").isDisabled(), true);
+  assert.equal(await page.locator("#save-provider").isDisabled(), false);
   await page
     .getByRole("button", { name: "复制模型名称：验收模型名称", exact: true })
     .click();
@@ -401,14 +401,195 @@ try {
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
     .click();
+  await page.waitForFunction(() => !document.querySelector(".supplier-option"));
   assert.equal(await page.locator("#reset-provider").isDisabled(), true);
+  // Publish through the real service; a test key checks local persistence, not remote authentication.
+  await page.locator("#add-supplier").click();
+  await page.locator("#provider-id").fill("axiom-ui-check");
+  await page.locator("#provider-name").fill("可发布供应商");
+  await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
+  await page.locator("#provider-key").fill("UI-PUBLISH-TEST-KEY");
+  const headers = page.getByRole("region", { name: "供应商请求头覆盖" });
+  await headers.getByRole("button", { name: /添加一项/ }).click();
+  await headers.getByLabel("第 1 项 key", { exact: true }).fill("X-UI-Test");
+  await headers
+    .getByLabel("第 1 项 value", { exact: true })
+    .fill("UI-HEADER-SECRET");
+  const body = page
+    .getByRole("region", { name: "请求体覆盖", exact: true })
+    .filter({ visible: true });
+  await body.getByRole("button", { name: /添加一项/ }).click();
+  await body.getByLabel("第 1 项请求体值", { exact: true }).fill("0.3");
+  await page.getByRole("tab", { name: /模型配置/ }).click();
+  await page.locator("#add-model").click();
+  await page.locator("#new-model-id").fill("ui-model");
+  await page.getByRole("checkbox", { name: "high", exact: true }).check();
+  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
+  await page.locator("#save-provider").click();
+  await page.waitForFunction(() =>
+    document.body.innerText.includes("已发布配置"),
+  );
+  await page.getByRole("tab", { name: /连接配置/ }).click();
+  assert.equal(await page.locator("#provider-key").inputValue(), "");
+  assert.equal(
+    await headers.getByLabel("第 1 项 value", { exact: true }).inputValue(),
+    "",
+  );
+  assert.equal(
+    JSON.parse(readFileSync(join(root, "data/pi/models.json"), "utf8"))
+      .providers["axiom-ui-check"].models[0].samplingParams.temperature,
+    0.3,
+  );
+  for (const [width, height] of sizes) {
+    await page.setViewportSize({ width, height });
+    await overflow(page, `models connection ${width}`);
+    await page.screenshot({
+      path: join(artifacts, `models-connection-${width}.png`),
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(
+    !(await page
+      .locator("body")
+      .innerText()
+      .then((t) => t.includes("UI-PUBLISH-TEST-KEY"))),
+  );
+  await page.getByRole("button", { name: "API Key 登录", exact: true }).click();
+  await page.waitForSelector("#auth-answer");
+  for (const [width, height] of sizes) {
+    await page.setViewportSize({ width, height });
+    await overflow(page, `model login ${width}`);
+    await page.screenshot({
+      path: join(artifacts, `models-login-${width}.png`),
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("#auth-answer").fill("UI-LOGIN-TEST-KEY");
+  await page.getByRole("button", { name: "提交认证输入", exact: true }).click();
+  await page
+    .getByRole("button", { name: "关闭并刷新状态", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => !document.querySelector(".container[inert]"),
+  );
+  await page.reload();
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("#provider-name") as HTMLInputElement)?.value ===
+      "可发布供应商",
+  );
+  await page.getByRole("button", { name: "API Key 登录", exact: true }).click();
+  await page.waitForSelector("#auth-answer");
+  await page.getByRole("button", { name: "取消登录", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  await page.waitForFunction(
+    () => !document.querySelector(".container[inert]"),
+  );
+  // External updates leave the local draft/focus intact; stale publication cannot overwrite them.
+  await page.locator("#provider-name").fill("保留本页草稿");
+  const configPath = join(root, "data/pi/models.json"),
+    external = JSON.parse(readFileSync(configPath, "utf8"));
+  external.providers["axiom-ui-check"].name = "其他页面修改";
+  writeFileSync(configPath, JSON.stringify(external));
+  await app.refreshConfiguration();
+  assert.equal(
+    await page.locator("#provider-name").inputValue(),
+    "保留本页草稿",
+  );
+  assert.equal(
+    await page
+      .locator("#provider-name")
+      .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.locator("#save-provider").click();
+  await page.waitForFunction(() =>
+    document.body.innerText.includes("配置已被修改"),
+  );
+  assert.equal(
+    JSON.parse(readFileSync(configPath, "utf8")).providers["axiom-ui-check"]
+      .name,
+    "其他页面修改",
+  );
+  await page.getByRole("button", { name: "重新读取配置", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  assert.equal(
+    await page.locator("#provider-name").inputValue(),
+    "保留本页草稿",
+  );
+  await page.getByRole("button", { name: "重新读取配置", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("#provider-name") as HTMLInputElement)?.value ===
+      "其他页面修改",
+  );
+  await page.getByRole("tab", { name: /模型配置/ }).click();
+  await page
+    .getByRole("button", { name: "删除模型：ui-model", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await page.locator("#save-provider").click();
+  await page
+    .getByRole("dialog", { name: "确认供应商级退出登录？" })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  assert.ok(
+    JSON.parse(readFileSync(join(root, "data/pi/auth.json"), "utf8"))[
+      "axiom-ui-check"
+    ],
+  );
+  await page.locator("#save-provider").click();
+  await page
+    .getByRole("dialog", { name: "确认供应商级退出登录？" })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await page.waitForFunction(() =>
+    document.body.innerText.includes("配置已发布并刷新目录"),
+  );
+  assert.equal(
+    JSON.parse(readFileSync(join(root, "data/pi/auth.json"), "utf8"))[
+      "axiom-ui-check"
+    ],
+    undefined,
+  );
+  await page.getByRole("tab", { name: /连接配置/ }).click();
+  await page.getByRole("button", { name: "删除供应商", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  assert.ok(
+    JSON.parse(readFileSync(configPath, "utf8")).providers["axiom-ui-check"],
+  );
+  await page.getByRole("button", { name: "删除供应商", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await page.waitForFunction(() => !document.querySelector(".supplier-option"));
+  assert.equal(
+    JSON.parse(readFileSync(configPath, "utf8")).providers["axiom-ui-check"],
+    undefined,
+  );
   assert.deepEqual(errors, []);
   writeFileSync(
     join(artifacts, "geometry.json"),
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, memory-only model drafts, multi-select, copy and confirmations. Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy. Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

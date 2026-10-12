@@ -1,28 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Dialog, Icon, SettingsSidebar } from "../components.js";
-import { useScope } from "../transport.js";
+import { command, useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
+import { ModelLogin } from "./ModelLogin.js";
 import "../styles/models.css";
 import "../styles/model-interactions.css";
 
-type Row = { id: string; key: string; value: string };
-type Model = {
-  key: string;
-  id: string;
-  name: string;
-  levels: string[];
-  headers: Row[];
-};
-type Provider = {
-  id: string;
-  name: string;
-  api: string;
-  url: string;
-  key: string;
-  headers: Row[];
-  models: Model[];
-};
-const levels = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+import {
+  reasoningLevels as levels,
+  samplingKeys,
+  type OverrideRow as Row,
+  type ModelDraft as Model,
+  type ProviderDraft as Provider,
+  type ModelConfiguration,
+} from "../../shared/models.js";
 const empty: Configuration = {
   revision: "",
   providerCount: 0,
@@ -32,7 +23,20 @@ const empty: Configuration = {
 };
 
 export default function Models() {
-  const config = useScope("configuration", empty);
+  const config = useScope("configuration", empty),
+    connection = useConnection();
+  const [revision, setRevision] = useState("");
+  const [templates, setTemplates] = useState<ModelConfiguration["templates"]>(
+    [],
+  );
+  const [dirty, setDirty] = useState(false),
+    [busy, setBusy] = useState(false);
+  const initialized = useRef(false);
+  const [needsReconcile, setNeedsReconcile] = useState(false);
+  const [login, setLogin] = useState<{
+    providerId: string;
+    type: "api_key" | "oauth";
+  } | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]),
     [selected, setSelected] = useState("");
   const [query, setQuery] = useState(""),
@@ -47,15 +51,96 @@ export default function Models() {
     text: string;
     proceed: () => void;
   } | null>(null);
-  const p = providers.find((p) => p.id === selected),
-    dirty = providers.length > 0;
+  const p = providers.find((p) => p.id === selected);
+  const load = async () => {
+    setBusy(true);
+    try {
+      const data = await command<ModelConfiguration>("configuration.get");
+      setProviders(data.providers);
+      setRevision(data.revision);
+      setTemplates(data.templates);
+      setSelected((old) =>
+        data.providers.some((p) => p.id === old)
+          ? old
+          : (data.providers[0]?.id ?? ""),
+      );
+      setEditor(null);
+      setDirty(false);
+      setNeedsReconcile(false);
+      setShowKey(false);
+      setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
+      return true;
+    } catch (error) {
+      setFeedback((error as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  useEffect(() => {
+    if (connection === "已连接本地服务" && !initialized.current) {
+      initialized.current = true;
+      void load();
+    }
+  }, [connection]);
+  const save = async (confirmLogout = false, allowCommands = false) => {
+    setBusy(true);
+    try {
+      await command("configuration.save", {
+        revision,
+        providers,
+        confirmLogout,
+        allowCommands,
+      });
+      setNeedsReconcile(true);
+      if (await load())
+        setFeedback(
+          "配置已发布并刷新目录；配置有效不代表远端认证或模型调用成功。",
+        );
+    } catch (error) {
+      const e = error as Error & { code?: string };
+      setFeedback(e.message);
+      if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN"].includes(e.code ?? ""))
+        setNeedsReconcile(true);
+      if (
+        e.code === "LOGOUT_CONFIRMATION_REQUIRED" ||
+        e.code === "COMMAND_AUTHORIZATION_REQUIRED"
+      )
+        setDecision({
+          title:
+            e.code === "LOGOUT_CONFIRMATION_REQUIRED"
+              ? "确认供应商级退出登录？"
+              : "允许执行配置命令？",
+          text:
+            e.message +
+            (e.code === "LOGOUT_CONFIRMATION_REQUIRED"
+              ? "受影响供应商及其模型的请求头覆盖也将清除，以移除备用认证来源；外部环境变量不改写。"
+              : "只应允许你自己配置并理解的命令。"),
+          proceed: () =>
+            void save(
+              confirmLogout || e.code === "LOGOUT_CONFIRMATION_REQUIRED",
+              allowCommands || e.code === "COMMAND_AUTHORIZATION_REQUIRED",
+            ),
+        });
+    } finally {
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     const leave = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault();
+      if (dirty || editor || busy) e.preventDefault();
     };
     const navigate = (e: MouseEvent) => {
       const link = (e.target as Element).closest("a[href]");
-      if (!dirty || !link || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (
+        (!dirty && !editor && !busy) ||
+        !link ||
+        link.getAttribute("target") === "_blank" ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.shiftKey
+      )
+        return;
       e.preventDefault();
       setDecision({
         title: "离开模型服务？",
@@ -69,11 +154,13 @@ export default function Models() {
       window.removeEventListener("beforeunload", leave);
       document.removeEventListener("click", navigate);
     };
-  }, [dirty]);
-  const patch = (change: Partial<Provider>) =>
+  }, [dirty, editor, busy]);
+  const patch = (change: Partial<Provider>) => {
+    setDirty(true);
     setProviders((all) =>
       all.map((item) => (item.id === selected ? { ...item, ...change } : item)),
     );
+  };
   const discardEditor = (proceed: () => void) => {
     if (!editor) {
       proceed();
@@ -92,14 +179,17 @@ export default function Models() {
         ...all,
         {
           id,
+          providerId: "custom-" + id.slice(0, 8),
           name: "新供应商",
           api: "openai-completions",
           url: "",
           key: "",
           headers: [],
+          body: [],
           models: [],
         },
       ]);
+      setDirty(true);
       setSelected(id);
       setTab("suppliers");
       setEditor(null);
@@ -112,7 +202,48 @@ export default function Models() {
       setSelected(id);
       setEditor(null);
       setShowKey(false);
-      setFeedback("已保留其他供应商的草稿；顶部保存尚未接入。");
+      setFeedback("已保留其他供应商的草稿；顶部保存才会发布配置。");
+    });
+  };
+  const removeProvider = (provider: Provider) => {
+    setDecision({
+      title: "删除供应商？",
+      text: provider.originalId
+        ? "立即退出该供应商，删除其模型与受管理认证；同供应商会话将需要重新选择模型。未保存的其他修改不会一并提交。"
+        : "仅移除尚未发布的供应商草稿。",
+      proceed: async () => {
+        if (!provider.originalId) {
+          setProviders((all) => all.filter((p) => p.id !== provider.id));
+          setSelected("");
+          setEditor(null);
+          setDirty(true);
+          return;
+        }
+        setBusy(true);
+        try {
+          const current =
+            await command<ModelConfiguration>("configuration.get");
+          await command("configuration.save", {
+            revision,
+            providers: current.providers.filter(
+              (p) => p.providerId !== provider.providerId,
+            ),
+            confirmLogout: true,
+          });
+          setNeedsReconcile(true);
+          if (await load())
+            setFeedback(
+              "已删除供应商并退出 pi 登录；项目文件与会话索引保持不变。",
+            );
+        } catch (error) {
+          const e = error as Error & { code?: string };
+          if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN"].includes(e.code ?? ""))
+            setNeedsReconcile(true);
+          setFeedback(e.message);
+        } finally {
+          setBusy(false);
+        }
+      },
     });
   };
   const changeTab = (next: string) => {
@@ -169,16 +300,12 @@ export default function Models() {
             <button
               className="btn btn-ghost"
               id="reset-provider"
-              disabled={!dirty}
+              disabled={busy || (!dirty && !editor)}
               onClick={() =>
                 setDecision({
                   title: "放弃修改？",
-                  text: "丢弃本页所有草稿及临时密钥；不会改变服务端配置。",
-                  proceed: () => {
-                    setProviders([]);
-                    setSelected("");
-                    setEditor(null);
-                  },
+                  text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
+                  proceed: () => void load(),
                 })
               }
             >
@@ -187,14 +314,35 @@ export default function Models() {
             <button
               className="btn btn-primary"
               id="save-provider"
-              disabled
-              title="配置发布与认证尚未接入；草稿不会生效"
+              disabled={
+                busy || needsReconcile || !dirty || !!editor || !revision
+              }
+              title={
+                editor ? "请先完成或取消行内编辑" : "发布到应用独立的 pi 配置"
+              }
+              onClick={() => void save()}
             >
-              保存
+              {busy ? "处理中…" : needsReconcile ? "请先重新读取" : "保存"}
+            </button>
+            <button
+              className="btn btn-ghost"
+              aria-label="重新读取配置"
+              disabled={busy}
+              onClick={() => {
+                if (dirty || editor)
+                  setDecision({
+                    title: "重新读取配置？",
+                    text: "这会丢弃当前未保存修改和临时密钥。取消可继续编辑。",
+                    proceed: () => void load(),
+                  });
+                else void load();
+              }}
+            >
+              重新读取
             </button>
           </div>
         </header>
-        <div className="container">
+        <div className="container" inert={busy} aria-busy={busy}>
           <div className="configuration-layout">
             <section
               className="supplier-panel"
@@ -210,6 +358,7 @@ export default function Models() {
                   type="button"
                   aria-label="添加供应商"
                   onClick={add}
+                  disabled={!revision}
                 >
                   <Icon name="plus" />
                 </button>
@@ -241,13 +390,17 @@ export default function Models() {
                           </span>
                           <span className="tag">{p.models.length}</span>
                         </strong>
-                        <small>未保存 · 本页草稿</small>
+                        <small>
+                          {p.originalId
+                            ? p.auth?.configured
+                              ? "已配置认证 · 未验证调用"
+                              : "尚未配置认证"
+                            : "未保存 · 本页草稿"}
+                        </small>
                       </span>
                     </button>
                   ))}
-                {!providers.length && (
-                  <p className="list-empty">暂无本页草稿</p>
-                )}
+                {!providers.length && <p className="list-empty">暂无供应商</p>}
               </div>
             </section>
             <div className="supplier-detail">
@@ -256,8 +409,7 @@ export default function Models() {
                   <h2>添加供应商</h2>
                   <p>使用供应商列表旁的「添加供应商」按钮，填写连接信息。</p>
                   <p className="feedback" role="status">
-                    {config.error ||
-                      `服务端已配置 ${config.providerCount} 个供应商、${config.modelCount} 个模型；编辑现有配置与发布保存将在模型接入步骤开放。`}
+                    {feedback || config.error || connection}
                   </p>
                 </div>
               ) : (
@@ -266,10 +418,13 @@ export default function Models() {
                     <div className="provider-heading-copy">
                       <h2>{p.name || "新供应商"}</h2>
                       <p className="meta">
-                        {p.models.length} 个模型 · 本页草稿
+                        {p.models.length} 个模型 ·{" "}
+                        {dirty ? "有未保存修改" : "已发布配置"}
                       </p>
                     </div>
-                    <span className="tag">未保存 · 未连接</span>
+                    <span className="tag">
+                      {p.auth?.configured ? "已配置认证" : "未认证"}
+                    </span>
                   </div>
                   <nav
                     className="config-tabs"
@@ -306,7 +461,9 @@ export default function Models() {
                         onClick={() => changeTab(id)}
                       >
                         {id === "suppliers" ? "连接配置" : "模型配置"}
-                        <span className="draft-indicator">未保存</span>
+                        {dirty && (
+                          <span className="draft-indicator">未保存</span>
+                        )}
                       </button>
                     ))}
                   </nav>
@@ -323,9 +480,48 @@ export default function Models() {
                       <section className="section">
                         <div className="section-heading">
                           <h3>连接信息</h3>
-                          <p>草稿尚未接入发布服务</p>
+                          <p>
+                            顶部保存统一发布；密钥通过 pi 原生认证接口管理。
+                          </p>
                         </div>
                         <div className="connection-fields">
+                          <div className="field">
+                            <label htmlFor="provider-id">供应商 ID</label>
+                            <input
+                              className="input num"
+                              id="provider-id"
+                              list="provider-templates"
+                              value={p.providerId}
+                              readOnly={!!p.originalId}
+                              maxLength={160}
+                              onChange={(e) => {
+                                const template = templates.find(
+                                  (t) => t.id === e.target.value,
+                                );
+                                patch({
+                                  providerId: e.target.value,
+                                  ...(template
+                                    ? {
+                                        name: template.name,
+                                        api: template.api,
+                                        url: template.url,
+                                      }
+                                    : {}),
+                                });
+                              }}
+                            />
+                            <datalist id="provider-templates">
+                              {templates.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name}
+                                </option>
+                              ))}
+                            </datalist>
+                            <span className="field-help">
+                              稳定的 pi 供应商标识；使用内置供应商认证时选择对应
+                              ID，保存后不可修改。
+                            </span>
+                          </div>
                           <div className="grid-2">
                             <div className="field">
                               <label htmlFor="provider-name">供应商名称</label>
@@ -353,6 +549,17 @@ export default function Models() {
                                 <option value="openai-completions">
                                   OpenAI 兼容
                                 </option>
+                                <option value="openai-responses">
+                                  OpenAI Responses
+                                </option>
+                                {![
+                                  "openai-completions",
+                                  "openai-responses",
+                                  "anthropic-messages",
+                                  "google-generative-ai",
+                                ].includes(p.api) && (
+                                  <option value={p.api}>{p.api}</option>
+                                )}
                                 <option value="anthropic-messages">
                                   Anthropic
                                 </option>
@@ -372,9 +579,15 @@ export default function Models() {
                                 required
                                 maxLength={2048}
                                 spellCheck={false}
-                                placeholder="https://api.example.com/v1"
+                                placeholder={
+                                  p.keepUrl
+                                    ? "已保存敏感地址；留空保留，输入替换"
+                                    : "https://api.example.com/v1"
+                                }
                                 value={p.url}
-                                onChange={(e) => patch({ url: e.target.value })}
+                                onChange={(e) =>
+                                  patch({ url: e.target.value, keepUrl: false })
+                                }
                               />
                               <span className="field-help">
                                 填写基础地址，支持 HTTP / HTTPS。
@@ -392,10 +605,17 @@ export default function Models() {
                                   autoComplete="off"
                                   maxLength={4096}
                                   spellCheck={false}
-                                  placeholder="输入 API 密钥"
+                                  placeholder={
+                                    p.auth?.configured
+                                      ? "已配置；留空保持不变"
+                                      : "输入 API 密钥"
+                                  }
                                   value={p.key}
                                   onChange={(e) =>
-                                    patch({ key: e.target.value })
+                                    patch({
+                                      key: e.target.value,
+                                      clearKey: false,
+                                    })
                                   }
                                 />
                                 <button
@@ -414,8 +634,55 @@ export default function Models() {
                                 </button>
                               </div>
                               <span className="field-help">
-                                密钥仅临时保留，不写入浏览器存储；清空可丢弃本页输入。
+                                已保存密钥不回传；空白保持原认证，输入替换。
                               </span>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={p.clearKey === true}
+                                  onChange={(e) =>
+                                    patch({
+                                      clearKey: e.target.checked,
+                                      key: "",
+                                    })
+                                  }
+                                />{" "}
+                                保存时退出此供应商并清除受管理认证
+                              </label>
+                              <span className="field-help">
+                                认证来源：{p.auth?.source || "无"}{" "}
+                                {p.auth?.type || ""}
+                              </span>
+                              <div className="row">
+                                {p.auth?.methods.map((type) => (
+                                  <button
+                                    key={type}
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    disabled={
+                                      dirty ||
+                                      !!editor ||
+                                      busy ||
+                                      needsReconcile
+                                    }
+                                    onClick={() =>
+                                      setLogin({
+                                        providerId: p.providerId,
+                                        type,
+                                      })
+                                    }
+                                  >
+                                    {type === "oauth"
+                                      ? "OAuth 登录"
+                                      : "API Key 登录"}
+                                  </button>
+                                ))}
+                              </div>
+                              {dirty && (
+                                <span className="field-help">
+                                  单独登录前请先保存或放弃配置修改。
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -426,12 +693,16 @@ export default function Models() {
                           change={(headers) => patch({ headers })}
                           scope="provider"
                         />
-                        <BodyOverrides />
+                        <BodyOverrides
+                          rows={p.body}
+                          change={(body) => patch({ body })}
+                          api={p.api}
+                        />
                       </div>
                       <div className="save-bar">
                         <div>
                           <p className="meta">
-                            统一点击顶部「保存」后才会发布；当前发布尚未接入。
+                            统一点击顶部「保存」后发布。草稿仅保留在本页内存。
                           </p>
                           <p className="feedback" role="status">
                             {feedback}
@@ -440,26 +711,24 @@ export default function Models() {
                         <button
                           type="button"
                           className="btn btn-ghost"
-                          onClick={() =>
-                            setDecision({
-                              title: "删除供应商草稿？",
-                              text: "这里只删除未发布草稿，不执行服务端删除或退出登录。",
-                              proceed: () => {
-                                setProviders((all) =>
-                                  all.filter((item) => item.id !== p.id),
-                                );
-                                setSelected("");
-                              },
-                            })
+                          disabled={
+                            !!p.originalId &&
+                            (dirty || !!editor || busy || needsReconcile)
                           }
+                          title={
+                            dirty && p.originalId
+                              ? "请先保存或放弃未保存修改，再删除供应商"
+                              : "确认后删除供应商并退出登录"
+                          }
+                          onClick={() => removeProvider(p)}
                         >
                           删除供应商
                         </button>
                       </div>
                     </form>
                     <p className="prototype-note">
-                      配置、API Key / OAuth
-                      认证及退出登录尚未接入。草稿仅保留在本页内存，刷新后丢失；保存不代表连接验证成功。
+                      API Key 与 OAuth 使用 pi
+                      原生认证流程，凭据仅保存在服务端。保存或登录成功不代表远端模型调用已验证。
                     </p>
                   </div>
                   <section
@@ -499,6 +768,7 @@ export default function Models() {
                                 name: "",
                                 levels: ["none"],
                                 headers: [],
+                                body: [],
                               }),
                             )
                           }
@@ -610,8 +880,9 @@ export default function Models() {
                                 ))}
                               </div>
                               <span className="field-help">
-                                选择模型支持的等级；再次点击可取消。pi
-                                能力映射与校验尚未接入，当前不会用于请求。
+                                多选模型支持的等级；none 对应 pi 的
+                                off。保存时映射
+                                thinkingLevelMap；会话每次只选择一个等级。
                               </span>
                             </div>
                           </div>
@@ -623,7 +894,11 @@ export default function Models() {
                                 setEditor({ ...editor, headers })
                               }
                             />
-                            <BodyOverrides />
+                            <BodyOverrides
+                              rows={editor.body}
+                              change={(body) => setEditor({ ...editor, body })}
+                              api={p.api}
+                            />
                           </div>
                           <div className="inline-model-actions">
                             <p className="feedback" role="status">
@@ -711,7 +986,9 @@ export default function Models() {
                                     onClick={() =>
                                       setDecision({
                                         title: "删除模型草稿？",
-                                        text: "该模型尚未发布；仅从本页草稿移除。",
+                                        text: m.originalId
+                                          ? "先移出草稿；顶部保存时会退出整个供应商，同供应商其他模型也可能需要重新认证。"
+                                          : "该模型尚未发布；仅从本页草稿移除。",
                                         proceed: () => {
                                           patch({
                                             models: p.models.filter(
@@ -741,8 +1018,14 @@ export default function Models() {
                         </div>
                       )}
                     </div>
+                    {!editor && (
+                      <p className="feedback" role="status">
+                        {feedback}
+                      </p>
+                    )}
                     <p className="prototype-note">
-                      新增、编辑、删除及覆盖项均为草稿；「完成编辑」仅收起表单，统一点击顶部「保存」后生效。当前保存尚未开放，草稿不会进入工作台模型列表。
+                      新增、编辑、删除及覆盖项均为草稿；「完成编辑」仅收起表单，顶部「保存」才发布。配置明确列出且
+                      pi 判定认证可用的模型才进入工作台列表。
                     </p>
                   </section>
                 </>
@@ -750,6 +1033,21 @@ export default function Models() {
             </div>
           </div>
         </div>
+        {login && (
+          <ModelLogin
+            {...login}
+            revision={revision}
+            close={() => {
+              setLogin(null);
+              void load();
+            }}
+          />
+        )}
+        {revision && config.revision && revision !== config.revision && (
+          <p className="feedback" role="alert">
+            服务端配置已更新；当前草稿未被覆盖。请重新读取后合并，过期保存会被拒绝。
+          </p>
+        )}
         {decision && (
           <Dialog
             title={decision.title}
@@ -820,7 +1118,9 @@ function Headers({
               onChange={(e) =>
                 change(
                   rows.map((r) =>
-                    r.id === row.id ? { ...r, key: e.target.value } : r,
+                    r.id === row.id
+                      ? { ...r, key: e.target.value, keep: false }
+                      : r,
                   ),
                 )
               }
@@ -828,14 +1128,16 @@ function Headers({
             <input
               className="input override-value"
               aria-label={`第 ${i + 1} 项 value`}
-              placeholder="value"
+              placeholder={row.keep ? "已保存；留空保留，输入替换" : "value"}
               maxLength={8192}
               autoComplete="off"
               value={row.value}
               onChange={(e) =>
                 change(
                   rows.map((r) =>
-                    r.id === row.id ? { ...r, value: e.target.value } : r,
+                    r.id === row.id
+                      ? { ...r, value: e.target.value, keep: false }
+                      : r,
                   ),
                 )
               }
@@ -856,22 +1158,87 @@ function Headers({
     </section>
   );
 }
-function BodyOverrides() {
+function BodyOverrides({
+  rows,
+  change,
+  api,
+}: {
+  rows: Row[];
+  change: (rows: Row[]) => void;
+  api: string;
+}) {
+  const supported = [
+    "openai-completions",
+    "openai-responses",
+    "azure-openai-responses",
+  ].includes(api);
   return (
-    <section className="override-editor">
+    <section className="override-editor" aria-label="请求体覆盖">
       <div className="override-heading">
         <h3>请求体覆盖</h3>
         <button
+          type="button"
           className="btn btn-ghost"
-          disabled
-          title="仅允许 pi 支持的字段，映射校验尚未接入"
+          disabled={!supported || rows.length >= 30}
+          onClick={() =>
+            change([
+              ...rows,
+              { id: crypto.randomUUID(), key: "temperature", value: "1" },
+            ])
+          }
         >
           ＋ 添加一项
         </button>
       </div>
-      <p className="override-empty">未设置覆盖项</p>
+      <div className="override-rows">
+        {rows.map((r, i) => (
+          <div className="override-row" key={r.id}>
+            <select
+              className="input"
+              aria-label={`第 ${i + 1} 项请求体字段`}
+              value={r.key}
+              onChange={(e) =>
+                change(
+                  rows.map((row) =>
+                    row.id === r.id ? { ...row, key: e.target.value } : row,
+                  ),
+                )
+              }
+            >
+              {samplingKeys.map((key) => (
+                <option key={key}>{key}</option>
+              ))}
+            </select>
+            <input
+              className="input override-value"
+              type="number"
+              step="any"
+              aria-label={`第 ${i + 1} 项请求体值`}
+              value={r.value}
+              onChange={(e) =>
+                change(
+                  rows.map((row) =>
+                    row.id === r.id ? { ...row, value: e.target.value } : row,
+                  ),
+                )
+              }
+            />
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`删除第 ${i + 1} 项请求体覆盖`}
+              onClick={() => change(rows.filter((row) => row.id !== r.id))}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        ))}
+      </div>
+      {!rows.length && <p className="override-empty">未设置覆盖项</p>}
       <p className="field-help">
-        仅支持 pi 可表达的模型参数；映射接入前禁用，不能保存后静默忽略。
+        {supported
+          ? "映射 pi samplingParams；供应商项保存时落实到各模型，模型项优先。其他已有字段保留在服务端。"
+          : "当前协议不支持采样请求体覆盖；不可保存后静默忽略。"}
       </p>
     </section>
   );

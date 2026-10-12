@@ -74,7 +74,7 @@ export default function Settings() {
               </div>
               <div className="scope-row">
                 <dt>供应商与模型</dt>
-                <dd>独立 pi 配置目录中的 models.json；配置发布尚未接入</dd>
+                <dd>独立 pi 配置目录中的 models.json；校验后原子发布</dd>
               </div>
               <div className="scope-row">
                 <dt>API 密钥</dt>

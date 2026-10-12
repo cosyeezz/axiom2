@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.0.0" },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "tsx src/server/index.ts --dev",
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
@@ -13,6 +15,7 @@
     "check:sdk": "tsx tests/sdk.check.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",

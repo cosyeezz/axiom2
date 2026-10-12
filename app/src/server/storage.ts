@@ -23,6 +23,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL REFERENCES workspaces(id),title TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,unread INTEGER NOT NULL DEFAULT 0,updatedAt INTEGER NOT NULL,UNIQUE(workspaceId,id));
       CREATE TABLE IF NOT EXISTS drafts(viewId TEXT NOT NULL,workspaceId TEXT NOT NULL,sessionId TEXT NOT NULL,revision INTEGER NOT NULL,body TEXT NOT NULL,PRIMARY KEY(viewId,workspaceId,sessionId),FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,hash TEXT NOT NULL,response TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS external_requests(id TEXT PRIMARY KEY,hash TEXT NOT NULL,state TEXT NOT NULL,response TEXT);
+      UPDATE external_requests SET state='uncertain' WHERE state='pending';
     `);
   }
   workspaces(): Workspace[] {
@@ -67,19 +69,93 @@ export class Store {
       ? { ...JSON.parse(row.body as string), revision: Number(row.revision) }
       : { text: "", attachment: null, revision: 0 };
   }
-  receipt(
-    requestId: unknown,
-  ): { status: "committed"; data: unknown } | { status: "not_found" } {
+  receipt(requestId: unknown): { status: string; data?: unknown } {
+    const id = text(requestId, "请求标识");
     const row = this.db
       .prepare("SELECT response FROM requests WHERE id=?")
-      .get(text(requestId, "请求标识"));
-    return row
-      ? { status: "committed", data: JSON.parse(row.response as string) }
+      .get(id);
+    if (row)
+      return { status: "committed", data: JSON.parse(row.response as string) };
+    const external = this.db
+      .prepare("SELECT state,response FROM external_requests WHERE id=?")
+      .get(id);
+    return external
+      ? {
+          status: String(external.state),
+          ...(external.response
+            ? { data: JSON.parse(external.response as string) }
+            : {}),
+        }
       : { status: "not_found" };
+  }
+  async external(
+    command: Command,
+    run: () => Promise<unknown>,
+  ): Promise<unknown> {
+    const id = text(command.requestId, "请求标识");
+    const hash = createHash("sha256")
+      .update(JSON.stringify(command))
+      .digest("hex");
+    if (this.db.prepare("SELECT 1 FROM requests WHERE id=?").get(id))
+      throw new AppError("REQUEST_CONFLICT", "请求标识已用于其他操作");
+    const previous = this.db
+      .prepare("SELECT hash,state,response FROM external_requests WHERE id=?")
+      .get(id);
+    if (previous) {
+      if (previous.hash !== hash)
+        throw new AppError("REQUEST_CONFLICT", "同一请求标识不能使用不同参数");
+      if (previous.state === "committed")
+        return JSON.parse(previous.response as string);
+      if (previous.state === "failed") {
+        const error = JSON.parse(previous.response as string);
+        throw new AppError(error.code, error.message);
+      }
+      throw new AppError(
+        "UNCERTAIN",
+        "外部操作处理中或结果待核实；请读取当前配置，不自动重做。",
+      );
+    }
+    this.db
+      .prepare("INSERT INTO external_requests VALUES(?,?,'pending',NULL)")
+      .run(id, hash);
+    try {
+      const result = await run();
+      this.db
+        .prepare(
+          "UPDATE external_requests SET state='committed',response=? WHERE id=?",
+        )
+        .run(JSON.stringify(result), id);
+      return result;
+    } catch (error) {
+      const safe =
+        error instanceof AppError
+          ? error
+          : new AppError(
+              "UNCERTAIN",
+              "外部操作状态待核实，请读取当前配置和认证状态。",
+            );
+      try {
+        this.db
+          .prepare("UPDATE external_requests SET state=?,response=? WHERE id=?")
+          .run(
+            safe.code === "UNCERTAIN" ? "uncertain" : "failed",
+            JSON.stringify({ code: safe.code, message: safe.message }),
+            id,
+          );
+      } catch {
+        throw new AppError(
+          "UNCERTAIN",
+          "操作回执未保存；请重新读取配置和认证状态，勿重复提交。",
+        );
+      }
+      throw safe;
+    }
   }
   // Synchronous SQLite transaction: mutation and receipt commit together before acknowledgement.
   execute(command: Command): unknown {
     const id = text(command.requestId, "请求标识");
+    if (this.db.prepare("SELECT 1 FROM external_requests WHERE id=?").get(id))
+      throw new AppError("REQUEST_CONFLICT", "请求标识已用于其他操作");
     const hash = createHash("sha256")
       .update(JSON.stringify(command))
       .digest("hex");

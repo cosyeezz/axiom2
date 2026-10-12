@@ -47,6 +47,14 @@ export function command<T>(
   if (socket?.readyState !== WebSocket.OPEN)
     return Promise.reject(new AppError("DISCONNECTED", "尚未连接，操作未发送"));
   const value: Command = { requestId, op, ...target, params };
+  const payload = JSON.stringify(value);
+  if (new TextEncoder().encode(payload).byteLength > 200_000)
+    return Promise.reject(
+      new AppError(
+        "PAYLOAD_TOO_LARGE",
+        "请求超过 200 KB；操作未发送，请减少条目或附件。",
+      ),
+    );
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(requestId);
@@ -62,7 +70,7 @@ export function command<T>(
       reject,
       timer,
     });
-    socket!.send(JSON.stringify(value));
+    socket!.send(payload);
   });
 }
 export function acceptSnapshot(event: Snapshot) {

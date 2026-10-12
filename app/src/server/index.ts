@@ -5,9 +5,11 @@ import { homedir } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Store } from "./storage.js";
 import { configuration } from "./models.js";
+import { ModelService } from "./model-service.js";
+import { Logins } from "./auth.js";
 import {
   AppError,
   object,
@@ -44,7 +46,19 @@ export async function startServer(
   const streamId = randomUUID();
   let seq = 0,
     origin = "";
+  const models = new ModelService(store.root);
   let config: Configuration = await configuration(store.root);
+  let configurationRead = 0,
+    shuttingDown = false;
+  const inFlight = new Set<Promise<void>>();
+  const refreshConfiguration = async () => {
+    const reading = ++configurationRead;
+    const next = await configuration(store.root);
+    if (reading === configurationRead) {
+      config = next;
+      publish("configuration");
+    }
+  };
   const authenticated = (req: IncomingMessage) =>
     (req.headers.cookie ?? "")
       .split(";")
@@ -58,6 +72,7 @@ export async function startServer(
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
     if (scope === "configuration") return config;
+    if (scope === "authentication") return null;
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "sessions")
       return store.sessions(parts[1]);
@@ -84,12 +99,27 @@ export async function startServer(
     for (const [ws, scopes] of subscriptions)
       if (scopes.has(scope)) send(ws, event);
   };
+  const logins = new Logins(
+    models,
+    (owner, state) =>
+      send(owner as WebSocket, {
+        type: "snapshot",
+        scope: "authentication",
+        streamId,
+        seq: ++seq,
+        data: state,
+      }),
+    refreshConfiguration,
+  );
   sockets.on("connection", (ws) => {
     subscriptions.set(ws, new Set());
     send(ws, { type: "hello", streamId });
-    ws.on("close", () => subscriptions.delete(ws));
+    ws.on("close", () => {
+      subscriptions.delete(ws);
+      logins.disconnect(ws);
+    });
     ws.on("error", () => ws.close());
-    ws.on("message", (raw) => {
+    const handle = async (raw: RawData) => {
       let requestId = "";
       try {
         const value = object(JSON.parse(raw.toString()));
@@ -126,7 +156,34 @@ export async function startServer(
           return;
         }
         let data: unknown;
-        if (c.op === "draft.get")
+        if (c.op === "configuration.get") {
+          await refreshConfiguration();
+          data = await models.read();
+        } else if (c.op === "auth.start")
+          data = await store.external(c, () =>
+            logins.start(
+              ws,
+              c.params!.providerId,
+              c.params!.type,
+              c.params!.revision,
+            ),
+          );
+        else if (c.op === "auth.answer")
+          data = logins.answer(
+            ws,
+            text(c.params!.id, "认证流程"),
+            c.params!.promptId,
+            c.params!.answer,
+          );
+        else if (c.op === "auth.cancel")
+          data = await logins.cancel(ws, text(c.params!.id, "认证流程"));
+        else if (c.op === "configuration.save") {
+          try {
+            data = await store.external(c, () => models.save(c.params));
+          } finally {
+            await refreshConfiguration();
+          }
+        } else if (c.op === "draft.get")
           data = store.draft(c.workspaceId, c.sessionId, c.params!.viewId);
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId);
@@ -154,6 +211,12 @@ export async function startServer(
                 },
         });
       }
+    };
+    ws.on("message", (raw) => {
+      if (shuttingDown) return;
+      const operation = handle(raw);
+      inFlight.add(operation);
+      void operation.finally(() => inFlight.delete(operation));
     });
   });
   const server = createServer();
@@ -161,7 +224,7 @@ export async function startServer(
     ? await (
         await import("vite")
       ).createServer({
-        server: { middlewareMode: true, hmr: { server } },
+        server: { middlewareMode: true, ws: { server } },
         appType: "spa",
       })
     : null;
@@ -288,6 +351,10 @@ export async function startServer(
     }
   });
   server.on("upgrade", (req, socket, head) => {
+    if (shuttingDown) {
+      socket.destroy();
+      return;
+    }
     if (req.url !== "/ws") {
       if (!vite) socket.destroy();
       return;
@@ -310,13 +377,16 @@ export async function startServer(
     origin,
     accessUrl: `${origin}/#access=${bootstrap}`,
     store,
-    refreshConfiguration: async () => {
-      config = await configuration(store.root);
-      publish("configuration");
-    },
+    refreshConfiguration,
     close: async () => {
-      for (const ws of sockets.clients) ws.terminate();
+      shuttingDown = true;
+      for (const ws of sockets.clients) {
+        logins.disconnect(ws);
+        ws.terminate();
+      }
       sockets.close();
+      await Promise.allSettled(inFlight);
+      await logins.close();
       await vite?.close();
       await new Promise<void>((r) => server.close(() => r()));
       store.close();
