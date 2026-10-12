@@ -1,4 +1,5 @@
 import { SettingsSidebar } from "../components.js";
+import { TaskSettings } from "../tasks/TaskSettings.js";
 import { useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
 import "../styles/settings.css";
@@ -65,6 +66,7 @@ export default function Settings() {
                 `${connection}；${config.available.length} 个配置模型通过 pi 可用性检查。保存不代表远端连接验证成功。`}
             </p>
           </section>
+          <TaskSettings />
           <section className="overview-section" aria-labelledby="scope-heading">
             <h2 id="scope-heading">存储与隐私</h2>
             <dl className="scope-list">
@@ -85,7 +87,7 @@ export default function Settings() {
               </div>
               <div className="scope-row">
                 <dt>服务连接</dt>
-                <dd>{connection} · 主 Agent 尚未接入</dd>
+                <dd>{connection} · 独立 pi 会话进程</dd>
               </div>
               <div className="scope-row">
                 <dt>数据目录</dt>

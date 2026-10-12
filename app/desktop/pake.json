@@ -1,0 +1,16 @@
+{
+  "url": "./dist/desktop",
+  "name": "Axiom2",
+  "identifier": "local.axiom2.desktop",
+  "title": "Axiom2",
+  "appVersion": "0.1.0",
+  "icon": "./desktop/icon.png",
+  "width": 1440,
+  "height": 900,
+  "minWidth": 360,
+  "minHeight": 600,
+  "darkMode": true,
+  "hideOnClose": false,
+  "internalUrlRegex": "^(http://127\\.0\\.0\\.1:[0-9]+/|https?://tauri\\.localhost/|tauri://localhost/)",
+  "keepBinary": true
+}

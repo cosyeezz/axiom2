@@ -33,6 +33,11 @@ export interface Run {
   cleanup: "pending" | "confirmed" | "unconfirmed";
 }
 export interface AgentInfo {
+  task?: {
+    id: string;
+    parentSessionId: string;
+    status: import("./tasks.js").TaskStatus;
+  };
   phase?: string;
   selection: Selection | null;
   run: Run | null;

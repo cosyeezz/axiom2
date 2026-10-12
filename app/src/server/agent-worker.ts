@@ -9,6 +9,8 @@ import {
 import type { AgentInfo, Selection } from "../shared/agent.js";
 import { ModelService } from "./model-service.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
+import { taskTools } from "./task-tools.js";
+import { taskToolNames, type TaskTool } from "../shared/tasks.js";
 
 export interface WorkerInput {
   root: string;
@@ -19,10 +21,59 @@ export interface WorkerInput {
   selection: Selection;
   prompt: string;
   projectTrusted: boolean;
+  task?: { id: string; role: string; inputIds: string[] };
+  notification?: { id: string; content: string };
 }
 let session: AgentSession | undefined,
   cancelled = false,
-  started = false;
+  started = false,
+  accepting = false,
+  summarize = false,
+  summarizing = false,
+  summaryMs = 60000,
+  stopReason = "已请求停止";
+const pendingCalls = new Map<
+  string,
+  { resolve: (data: unknown) => void; reject: (error: Error) => void }
+>();
+function callTask(
+  name: TaskTool,
+  id: string,
+  params: unknown,
+  signal?: AbortSignal,
+) {
+  return new Promise<unknown>((resolve, reject) => {
+    const key = randomUUID();
+    const abort = () => {
+      pendingCalls.delete(key);
+      reject(Error("工具调用已中断；受理状态需核实，勿重复委派。"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    pendingCalls.set(key, {
+      resolve: (data) => {
+        signal?.removeEventListener("abort", abort);
+        resolve(data);
+      },
+      reject: (error) => {
+        signal?.removeEventListener("abort", abort);
+        reject(error);
+      },
+    });
+    if (signal?.aborted) abort();
+    else send({ type: "task-call", key, name, callId: id, params });
+  });
+}
+function delivered() {
+  const ids =
+    session?.sessionManager
+      .getEntries()
+      .flatMap((e) =>
+        e.type === "custom_message" && (e.details as any)?.axiomInput
+          ? [(e.details as any).axiomInput]
+          : [],
+      ) ?? [];
+  if (ids.length) send({ type: "delivered", ids });
+}
 const send = (value: unknown) => {
   if (process.connected) process.send?.(value);
 };
@@ -32,8 +83,41 @@ process.on("disconnect", () => {
   setTimeout(() => process.exit(1), 9000).unref();
 });
 process.on("message", (value: any) => {
+  if (value.type === "task-reply") {
+    const pending = pendingCalls.get(value.key);
+    pendingCalls.delete(value.key);
+    if (value.ok) pending?.resolve(value.data);
+    else
+      pending?.reject(Error(value.error || "子任务操作未完成；请核实状态。"));
+  }
+  if (
+    value.type === "input" &&
+    session &&
+    accepting &&
+    session.isStreaming &&
+    !cancelled
+  ) {
+    void session
+      .sendCustomMessage(
+        {
+          customType: value.notification ? "axiom-result" : "axiom-append",
+          content: value.text,
+          display: true,
+          details: { axiomInput: value.id },
+        },
+        { deliverAs: value.mode === "followUp" ? "followUp" : "steer" },
+      )
+      .then(delivered)
+      .catch(() => send({ type: "input-error", id: value.id }));
+  }
   if (value.type === "stop") {
+    if (!cancelled) {
+      summarize = value.summary === true;
+      summaryMs = value.summaryMs ?? 60000;
+      stopReason = value.reason || stopReason;
+    } else summarize = false;
     cancelled = true;
+    accepting = false;
     void session?.abort();
   }
   if (value.type === "start" && !started) {
@@ -81,6 +165,30 @@ async function run(input: WorkerInput) {
       cwd: input.cwd,
       agentDir: join(input.root, "pi"),
       settingsManager,
+      extensionFactories: [
+        {
+          name: "axiom-summary-guard",
+          factory: (pi) => {
+            pi.on("tool_call", () =>
+              summarizing
+                ? {
+                    block: true,
+                    reason: "停止总结阶段禁止工具",
+                    terminate: true,
+                  }
+                : undefined,
+            );
+          },
+        },
+      ],
+      appendSystemPrompt: input.task
+        ? [
+            "你是独立子代理，只处理明确委派的背景和任务，不能递归委派。职责补充不覆盖项目规则、安全约束或预算。停止不代表文件回滚。交付须包含已有产出、未完成／未验证项和已知副作用。",
+            input.task.role,
+          ]
+        : [
+            "delegate、append、cancel_task、read_result 是独立的子任务工具。委派后继续独立工作，不轮询；完成通知到达后读取指定结果。并行 Agent 共享文件，必须分配不重叠范围。",
+          ],
     });
     await loader.reload();
     const result = await createAgentSession({
@@ -92,6 +200,8 @@ async function run(input: WorkerInput) {
       settingsManager,
       resourceLoader: loader,
       sessionManager: openTranscript(input.file, input.cwd),
+      customTools: input.task ? [] : taskTools(callTask),
+      ...(input.task ? { excludeTools: [...taskToolNames] } : {}),
       // Add the platform shell without hiding authorized extension tools.
       ...(process.platform === "win32" &&
       !settingsManager.getSettings().defaultTools
@@ -107,6 +217,10 @@ async function run(input: WorkerInput) {
           text: "扩展执行失败；未转发可能含敏感内容的原始错误。",
         }),
     });
+    if (!input.task)
+      session.setActiveToolsByName([
+        ...new Set([...session.getActiveToolNames(), ...taskToolNames]),
+      ]);
     await session.setModel(model);
     session.setThinkingLevel(input.selection.thinking);
     if (session.thinkingLevel !== input.selection.thinking) throw Error();
@@ -116,7 +230,9 @@ async function run(input: WorkerInput) {
         cwd: input.cwd,
         tools: session.getActiveToolNames(),
         skills: loader.getSkills().skills.map((s) => s.name),
-        extensions: result.extensionsResult.extensions.length,
+        extensions: result.extensionsResult.extensions.filter(
+          (e) => !e.path.includes("axiom-summary-guard"),
+        ).length,
         warnings: [
           ...(!input.projectTrusted
             ? ["项目本地扩展、技能与设置尚未授权，按 pi 非信任规则跳过。"]
@@ -133,11 +249,14 @@ async function run(input: WorkerInput) {
       if (event.type === "message_start") {
         send({ type: "phase", text: "" });
         currentId =
-          event.message.role === "toolResult"
-            ? `tool-${toolKey(input.runId, event.message.toolCallId)}`
-            : event.message.role === "user" && firstUser
-              ? input.runId
-              : randomUUID();
+          event.message.role === "custom" &&
+          (event.message.details as any)?.axiomInput
+            ? `input-${(event.message.details as any).axiomInput}`
+            : event.message.role === "toolResult"
+              ? `tool-${toolKey(input.runId, event.message.toolCallId)}`
+              : event.message.role === "user" && firstUser
+                ? input.runId
+                : randomUUID();
         if (event.message.role === "user") firstUser = false;
         (event.message as any).axiomId = currentId;
       }
@@ -183,15 +302,69 @@ async function run(input: WorkerInput) {
           },
         });
       }
-      if (event.type === "turn_end") send({ type: "usage", usage: usage() });
+      if (event.type === "turn_end") {
+        delivered();
+        send({ type: "usage", usage: usage() });
+      }
+      if (event.type === "message_end") {
+        setImmediate(() => {
+          delivered();
+          if (
+            event.message.role === "user" &&
+            (event.message as any).axiomId === input.runId &&
+            input.task
+          )
+            send({ type: "delivered", ids: input.task.inputIds });
+        });
+      }
       if (event.type === "auto_retry_start")
         send({ type: "phase", text: `pi 正在重试（${event.attempt}）` });
       if (event.type === "compaction_start")
         send({ type: "phase", text: "pi 正在压缩上下文" });
     });
     if (!cancelled) {
+      accepting = true;
       send({ type: "running" });
-      await session.prompt(input.prompt, { expandPromptTemplates: true });
+      if (input.notification)
+        await session.sendCustomMessage(
+          {
+            customType: "axiom-result",
+            content: input.notification.content,
+            display: true,
+            details: { axiomInput: input.notification.id },
+          },
+          { triggerTurn: true },
+        );
+      else
+        await session.prompt(input.prompt, {
+          expandPromptTemplates: !input.task,
+        });
+    }
+    accepting = false;
+    delivered();
+    if (cancelled && summarize && input.task) {
+      await session.abort();
+      session.clearQueue();
+      summarizing = true;
+      session.setActiveToolsByName([]);
+      // Block extension attempts to re-enable tools during the summary as well.
+      session.agent.state.tools = [];
+      const off = session.subscribe((event) => {
+        if (event.type === "turn_start") session!.agent.state.tools = [];
+      });
+      send({ type: "summarizing" });
+      const timer = setTimeout(() => {
+        void session?.abort();
+      }, summaryMs);
+      try {
+        await session.prompt(
+          `工作已停止：${stopReason}。仅根据已有上下文总结产出、未完成／未验证项和已知副作用。禁止工具，不要继续工作，不声称已回滚。`,
+          { expandPromptTemplates: false },
+        );
+      } finally {
+        clearTimeout(timer);
+        off();
+      }
     }
     const last = [...session.messages]
       .reverse()

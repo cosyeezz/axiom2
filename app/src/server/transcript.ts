@@ -139,7 +139,9 @@ export function transcriptMessages(manager: SessionManager): ChatMessage[] {
     if (entry.type === "custom_message" && entry.display) {
       const m = chatMessage(
         { role: "custom", content: entry.content, display: true },
-        entry.id,
+        (entry.details as any)?.axiomInput
+          ? `input-${(entry.details as any).axiomInput}`
+          : entry.id,
       );
       return m ? [m] : [];
     }

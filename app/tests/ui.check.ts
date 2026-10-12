@@ -12,6 +12,8 @@ import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { checkAgentUI } from "./agent-ui.js";
+import { checkTasksUI } from "./tasks-ui.js";
+import { checkPreviewUI } from "./preview-ui.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-ui-")),
   artifacts = resolve("test-results");
@@ -96,7 +98,17 @@ async function openWorkspace(path: string) {
   );
 }
 try {
-  await page.goto(app.accessUrl);
+  await page.goto(app.origin + "/connect.html");
+  await page
+    .locator("#access-link")
+    .fill("https://external.example/#access=" + "a".repeat(64));
+  await page.getByRole("button", { name: "连接本地服务", exact: true }).click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "请使用本机服务" })
+    .waitFor();
+  await page.locator("#access-link").fill(app.accessUrl);
+  await page.getByRole("button", { name: "连接本地服务", exact: true }).click();
   await ready();
   assert.equal(new URL(page.url()).hash, "");
   assert.equal(
@@ -108,7 +120,41 @@ try {
   await openWorkspace(project);
   await page.locator("#prompt").fill("项目 A 中文草稿");
   await page.waitForTimeout(450);
-  await page.locator(".history-item").first().dblclick();
+  const recoveryScope = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("view")!),
+  );
+  app.store.execute({
+    requestId: crypto.randomUUID(),
+    op: "draft.save",
+    ...recoveryScope,
+    params: {
+      viewId: "recovery-check",
+      revision: 0,
+      text: "另一窗口恢复副本",
+      attachment: null,
+    },
+  });
+  await page.locator(".draft-recovery > summary").click();
+  await page.getByRole("button", { name: "读取草稿副本", exact: true }).click();
+  const copy = page
+    .locator(".draft-recovery > div")
+    .filter({ hasText: "另一窗口恢复副本" });
+  page.once("dialog", (d) => d.dismiss());
+  await copy.getByRole("button", { name: "恢复此草稿" }).click();
+  assert.equal(await page.locator("#prompt").inputValue(), "项目 A 中文草稿");
+  page.once("dialog", (d) => d.accept());
+  await copy.getByRole("button", { name: "恢复此草稿" }).click();
+  assert.equal(await page.locator("#prompt").inputValue(), "另一窗口恢复副本");
+  await page.locator(".draft-recovery > summary").click();
+  await page.locator("#prompt").fill("项目 A 中文草稿");
+  await page
+    .getByRole("button", { name: /^管理会话：/ })
+    .first()
+    .click();
+  await page
+    .getByRole("dialog", { name: "管理会话", exact: true })
+    .getByRole("button", { name: "重命名", exact: true })
+    .click();
   await page.locator("#rename-title").fill("会话 A");
   await page.getByRole("button", { name: "保存名称" }).click();
   await page.waitForFunction(
@@ -303,6 +349,18 @@ try {
       fullPage: true,
     });
   }
+  await page.getByText("子任务并发与预算", { exact: true }).click();
+  await page.locator("#budget-concurrency").fill("3");
+  await page
+    .getByRole("button", { name: "保存子任务设置", exact: true })
+    .click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "已保存，仅影响后续任务预算" })
+    .waitFor();
+  assert.equal(app.tasks.preferences().concurrency, 3);
+  await page.getByRole("button", { name: "重新读取预算", exact: true }).click();
+  assert.equal(await page.locator("#budget-concurrency").inputValue(), "3");
   await page.goto(app.origin + "/model-config.html");
   await page.locator("#add-supplier").click();
   await page.locator("#provider-name").fill("界面验收供应商");
@@ -585,13 +643,15 @@ try {
     undefined,
   );
   await checkAgentUI(page, app, artifacts);
+  await checkTasksUI(page, app, artifacts);
+  await checkPreviewUI(page, app, project, artifacts);
   assert.deepEqual(errors, []);
   writeFileSync(
     join(artifacts, "geometry.json"),
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy; product Agent worker/tool streaming, safe Markdown, IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, draft recovery, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; bound preview selection → actual pi edit → refreshed output; IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

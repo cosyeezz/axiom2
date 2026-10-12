@@ -5,7 +5,9 @@ import "./styles/tokens.css";
 
 // Full-page navigation keeps the three supplied global stylesheets isolated.
 const Page = (
-  await (location.pathname === "/settings.html"
+  await (location.pathname === "/connect.html"
+    ? import("./pages/Connect.js")
+    : location.pathname === "/settings.html"
     ? import("./pages/Settings.js")
     : location.pathname === "/model-config.html"
       ? import("./pages/Models.js")
@@ -17,4 +19,4 @@ createRoot(document.getElementById("root")!).render(
     <Page />
   </>,
 );
-void connect();
+if (location.pathname !== "/connect.html") void connect();

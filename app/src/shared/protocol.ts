@@ -12,6 +12,7 @@ export interface Session {
   unread: boolean;
   updatedAt: number;
   runStatus?: import("./agent.js").Run["status"];
+  activeTasks?: boolean;
 }
 export interface Scope {
   workspaceId: string;

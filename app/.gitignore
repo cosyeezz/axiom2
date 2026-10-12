@@ -2,3 +2,10 @@ node_modules/
 dist/
 test-results/
 *.log
+/Axiom2*.exe
+/Axiom2*.msi
+/Axiom2*.dmg
+/Axiom2*.app
+/Axiom2*.deb
+/Axiom2*.AppImage
+/Axiom2*.rpm

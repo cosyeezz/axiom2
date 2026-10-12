@@ -12,11 +12,15 @@
     "start": "node dist/server/index.js",
     "test": "tsx --test tests/*.test.ts",
     "check:ui": "tsx tests/ui.check.ts",
-    "check:sdk": "tsx tests/sdk.check.ts"
+    "check:sdk": "tsx tests/sdk.check.ts",
+    "build:desktop": "vite build --config desktop/vite.config.ts",
+    "package:desktop": "npm run build:desktop && pake --config desktop/pake.json --json",
+    "check:desktop": "tsx tests/desktop.check.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
+    "highlight.js": "10.7.3",
     "marked": "18.0.11",
     "react": "19.3.0",
     "react-dom": "19.3.0",

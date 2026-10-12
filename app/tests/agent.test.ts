@@ -266,6 +266,17 @@ test(
         workspaceId: w.id,
       }) as Session;
       const otherScope = { workspaceId: w.id, sessionId: other.id };
+      assert.equal(
+        (
+          (await call("agent.receipt", { requestId }, scope)) as {
+            status: string;
+          }
+        ).status,
+        "committed",
+      );
+      await assert.rejects(call("agent.receipt", { requestId }, otherScope), {
+        code: "REQUEST_SCOPE_MISMATCH",
+      });
       await call(
         "agent.model",
         {
@@ -299,7 +310,7 @@ test(
       );
       const before = app.agents.thread(scope).ids;
       await app.close();
-      app = await startServer({ root, port: 0 });
+      app = await start({ root, port: 0 });
       assert.deepEqual(app.agents.thread(scope).ids, before);
       assert.equal(count, 6, "restart must not replay");
       assert.deepEqual(
@@ -327,7 +338,7 @@ test(
         .get(scope.sessionId)!.file as string;
       await app.close();
       writeFileSync(file, "damaged");
-      app = await startServer({ root, port: 0 });
+      app = await start({ root, port: 0 });
       assert.match(app.agents.thread(scope).error!, /损坏/);
       await assert.rejects(
         call("prompt", { text: "must not silently recover" }),
@@ -364,7 +375,7 @@ test(
         )
         .run(app.agents.info(otherScope).run!.id);
       await app.close();
-      app = await startServer({ root, port: 0 });
+      app = await start({ root, port: 0 });
       assert.equal(app.agents.info(otherScope).run!.status, "interrupted");
       assert.equal(app.agents.info(otherScope).run!.cleanup, "unconfirmed");
       assert.equal(count, 8, "crash recovery cannot resend");

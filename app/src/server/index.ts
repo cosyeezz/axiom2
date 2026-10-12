@@ -11,6 +11,9 @@ import { configuration } from "./models.js";
 import { ModelService } from "./model-service.js";
 import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
+import { Tasks } from "./tasks.js";
+import { Preferences } from "./preferences.js";
+import { Previews } from "./preview/service.js";
 import {
   AppError,
   object,
@@ -48,6 +51,7 @@ export async function startServer(
   let seq = 0,
     origin = "";
   const models = new ModelService(store.root);
+  const preferences = new Preferences(store);
   let config: Configuration = await configuration(store.root);
   let configurationRead = 0,
     shuttingDown = false;
@@ -57,7 +61,9 @@ export async function startServer(
     const next = await configuration(store.root);
     if (reading === configurationRead) {
       config = next;
+      if (!config.error) preferences.prune(await models.read());
       publish("configuration");
+      publish("favorites");
     }
   };
   const authenticated = (req: IncomingMessage) =>
@@ -72,6 +78,7 @@ export async function startServer(
   const subscriptions = new Map<WebSocket, Set<string>>();
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
+    if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
     if (scope === "authentication") return null;
     const parts = scope.split(":");
@@ -80,6 +87,7 @@ export async function startServer(
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "tasks") return tasks.list(target);
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
     if (parts.length === 3 && parts[0] === "thread")
       return agents.thread(target);
@@ -107,8 +115,10 @@ export async function startServer(
       if (scopes.has(scope)) send(ws, event);
   };
   const agents = new Agents(store, models, publish);
+  const tasks = new Tasks(agents);
+  const previews = new Previews(store, tasks, () => origin);
   models.beforeLogout = (providers, confirmed) =>
-    agents.stopProviders(providers, confirmed);
+    tasks.stopProviders(providers, confirmed);
   const logins = new Logins(
     models,
     (owner, state) =>
@@ -194,18 +204,28 @@ export async function startServer(
             await refreshConfiguration();
           }
         } else if (
+          c.op.startsWith("preview.") ||
+          c.op.startsWith("annotation.")
+        ) {
+          data = await previews.command(c);
+        } else if (c.op.startsWith("favorites.")) {
+          data = await preferences.command(c, config);
+          publish("favorites");
+        } else if (
           c.op === "prompt" ||
           c.op.startsWith("agent.") ||
+          c.op.startsWith("task.") ||
           c.op === "thread.history" ||
           c.op === "message.get"
         )
-          data = await agents.command(c);
-        else if (c.op === "session.delete")
-          data = await models.serial(() => agents.remove(c));
+          data = await tasks.command(c);
+        else if (c.op === "session.delete") data = await previews.remove(c);
+        else if (c.op === "draft.list")
+          data = store.drafts(c.workspaceId, c.sessionId);
         else if (c.op === "draft.get")
           data = store.draft(c.workspaceId, c.sessionId, c.params!.viewId);
         else if (c.op === "request.get")
-          data = store.receipt(c.params!.requestId);
+          data = store.receipt(c.params!.requestId, c);
         else data = store.execute(c);
         if (c.op === "workspace.open") publish("workspaces");
         if (c.op.startsWith("session.")) {
@@ -253,7 +273,13 @@ export async function startServer(
       res.setHeader("Referrer-Policy", "no-referrer");
       res.setHeader("X-Frame-Options", "DENY");
       res.setHeader("Cache-Control", "no-store");
-      if (!local(req)) {
+      const landingNavigation =
+        req.headers.host === new URL(origin).host &&
+        req.method === "GET" &&
+        req.headers["sec-fetch-mode"] === "navigate" &&
+        req.headers["sec-fetch-dest"] === "document" &&
+        req.url === "/";
+      if (!local(req) && !landingNavigation) {
         res.writeHead(403);
         res.end("来源校验失败");
         return;
@@ -405,6 +431,8 @@ export async function startServer(
     store,
     refreshConfiguration,
     agents,
+    tasks,
+    previews,
     close: async () => {
       shuttingDown = true;
       for (const ws of sockets.clients) {
@@ -414,7 +442,8 @@ export async function startServer(
       sockets.close();
       await Promise.allSettled(inFlight);
       await logins.close();
-      await agents.close();
+      await previews.close();
+      await tasks.close();
       await vite?.close();
       await new Promise<void>((r) => server.close(() => r()));
       store.close();

@@ -15,6 +15,8 @@ import { WebSocket } from "ws";
 import { Store } from "../src/server/storage.js";
 import { configuration } from "../src/server/models.js";
 import { startServer } from "../src/server/index.js";
+import { Preferences } from "../src/server/preferences.js";
+import { ModelService } from "../src/server/model-service.js";
 import type { Command, Session, Workspace } from "../src/shared/protocol.js";
 
 const temporary = () => mkdtempSync(join(tmpdir(), "axiom-check-"));
@@ -142,11 +144,20 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
     );
     assert.equal(store.draft(a.id, s.id, "tab-a").text, "草稿 A");
     assert.equal(store.draft(a.id, s.id, "tab-b").text, "草稿 B");
+    assert.equal(store.drafts(a.id, s.id).length, 2);
+    assert.throws(() => store.drafts(b.id, s.id), { code: "SCOPE_MISMATCH" });
+    // Upgrade an existing database without inventing ownership for old receipts.
+    store.db.exec(
+      "ALTER TABLE requests DROP COLUMN scope; ALTER TABLE external_requests DROP COLUMN scope",
+    );
     store.close();
     store = new Store(root);
     assert.equal(store.session(a.id, s.id).title, "中文会话");
     assert.equal(store.session(a.id, s.id).pinned, true);
     assert.equal(store.draft(a.id, s.id, "tab-a").revision, 1);
+    assert.deepEqual(store.receipt(creation.requestId, { workspaceId: a.id }), {
+      status: "uncertain",
+    });
     assert.deepEqual(store.receipt(creation.requestId), {
       status: "committed",
       data: s,
@@ -211,6 +222,41 @@ test("Model summaries: only explicitly configured + authenticated models, no sec
       },
     ]);
     assert.ok(!JSON.stringify(available).includes("TEST-ONLY"));
+    const store = new Store(root);
+    try {
+      const preferences = new Preferences(store),
+        models = new ModelService(root);
+      const favorite = {
+        requestId: randomUUID(),
+        op: "favorites.set",
+        params: {
+          provider: "axiom-local-check",
+          id: "only-configured",
+          favorite: true,
+        },
+      };
+      await preferences.command(favorite, available);
+      assert.equal(preferences.favorites().length, 1);
+      writeFileSync(join(dir, "auth.json"), "{}");
+      preferences.prune(await models.read());
+      assert.equal(
+        preferences.favorites().length,
+        1,
+        "temporary authentication loss must not delete favorites",
+      );
+      writeFileSync(join(dir, "models.json"), '{"providers":{}}');
+      preferences.prune(await models.read());
+      assert.deepEqual(preferences.favorites(), []);
+      await assert.rejects(
+        preferences.command(
+          { ...favorite, requestId: randomUUID() },
+          await configuration(root),
+        ),
+        { code: "MODEL_UNAVAILABLE" },
+      );
+    } finally {
+      store.close();
+    }
     writeFileSync(join(dir, "models.json"), "{invalid-secret-config");
     assert.ok((await configuration(root)).error);
     assert.equal(
@@ -324,12 +370,43 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
     first.ws.close();
     await once(first.ws, "close");
     const second = await connect();
+    assert.equal(
+      (await second.call({ op: "request.get", params: { requestId } })).error
+        .code,
+      "REQUEST_SCOPE_MISMATCH",
+    );
     const receipt = await second.call({
       op: "request.get",
+      workspaceId: w.id,
       params: { requestId },
     });
     assert.equal(receipt.data.status, "committed");
     assert.equal(receipt.data.data.id, s.id);
+    assert.equal(
+      (
+        await second.call({
+          op: "agent.receipt",
+          workspaceId: w.id,
+          sessionId: s.id,
+          params: { requestId },
+        })
+      ).error.code,
+      "REQUEST_SCOPE_MISMATCH",
+    );
+    // Pre-upgrade receipts with unknown ownership expose no data and never invite replay.
+    app.store.db
+      .prepare("UPDATE requests SET scope=NULL WHERE id=?")
+      .run(requestId);
+    assert.deepEqual(
+      (
+        await second.call({
+          op: "request.get",
+          workspaceId: w.id,
+          params: { requestId },
+        })
+      ).data,
+      { status: "uncertain" },
+    );
     const duplicate = await second.call({
       op: "session.create",
       workspaceId: w.id,

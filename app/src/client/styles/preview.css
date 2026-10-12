@@ -1,0 +1,65 @@
+.preview-dialog {
+  width: min(1200px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.preview-dialog::backdrop {
+  background: color-mix(in oklch, var(--bg) 76%, transparent);
+}
+.preview-dialog .row {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.preview-dialog .row > .meta {
+  flex: 1;
+  min-width: 180px;
+}
+.preview-dialog form {
+  display: grid;
+  gap: 12px;
+}
+.preview-dialog label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.preview-dialog .input {
+  max-width: 100%;
+  min-height: 44px;
+}
+.preview-dialog iframe {
+  width: 100%;
+  height: 55dvh;
+  border: 1px solid var(--border);
+  background: white;
+}
+.annotation-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 12px;
+}
+.annotation-card code,
+.annotation-card p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.preview-dialog > p {
+  margin: 12px 0 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .preview-dialog {
+    padding: 12px;
+    width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .preview-dialog iframe {
+    height: 45dvh;
+  }
+}

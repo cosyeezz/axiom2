@@ -42,7 +42,7 @@ export function command<T>(
   op: string,
   params: Record<string, unknown> = {},
   target: { workspaceId?: string; sessionId?: string } = {},
-  requestId = crypto.randomUUID(),
+  requestId: string = crypto.randomUUID(),
 ): Promise<T> {
   if (socket?.readyState !== WebSocket.OPEN)
     return Promise.reject(new AppError("DISCONNECTED", "尚未连接，操作未发送"));

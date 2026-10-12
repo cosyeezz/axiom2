@@ -49,7 +49,7 @@ export async function checkAgentUI(
       chunk({
         role: "assistant",
         content:
-          "## 实际输出\n\n**已写入文件**。\n\n<script>window.pwned=true</script>\n\n[危险链接](javascript:alert(1))\n\n",
+          "## 实际输出\n\n**已写入文件**。\n\n```javascript\nconst safe = '<img src=x onerror=alert(1)>';\n```\n\n<script>window.pwned=true</script>\n\n[危险链接](javascript:alert(1))\n\n",
       });
       const timer = setInterval(() => chunk({ content: "流式内容。 " }), 80);
       res.on("close", () => clearInterval(timer));
@@ -96,7 +96,17 @@ export async function checkAgentUI(
         !(document.querySelector("#prompt") as HTMLTextAreaElement)?.disabled,
     );
     await page.locator("#model-picker > summary").click();
-    await page.getByRole("button", { name: /Browser Fixture/ }).click();
+    await page
+      .locator("#model-picker .model-row")
+      .filter({ hasText: "Browser Fixture" })
+      .hover();
+    await page
+      .getByRole("button", { name: "收藏模型：Browser Fixture", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "取消收藏：Browser Fixture", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: /^Browser Fixture/ }).click();
     await page
       .getByRole("button", { name: "确认模型设置", exact: true })
       .click();
@@ -107,6 +117,16 @@ export async function checkAgentUI(
     await page.getByRole("button", { name: "发送消息", exact: true }).click();
     await page.waitForFunction(() =>
       document.querySelector("#messages")?.textContent?.includes("实际输出"),
+    );
+    await page.locator(".code-card .tok-keyword").first().waitFor();
+    assert.equal(await page.locator(".code-card img").count(), 0);
+    await page
+      .getByRole("button", { name: "复制代码", exact: true })
+      .first()
+      .click();
+    assert.equal(
+      await page.evaluate(() => navigator.clipboard.readText()),
+      "const safe = '<img src=x onerror=alert(1)>';",
     );
     const view = await page.evaluate(() =>
       JSON.parse(sessionStorage.getItem("view")!),
@@ -126,13 +146,11 @@ export async function checkAgentUI(
     await page
       .locator("#prompt")
       .evaluate((n: HTMLTextAreaElement) => n.setSelectionRange(2, 6));
-    await page
-      .locator("#prompt")
-      .dispatchEvent("keydown", {
-        key: "Enter",
-        code: "Enter",
-        isComposing: true,
-      });
+    await page.locator("#prompt").dispatchEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      isComposing: true,
+    });
     await page.waitForTimeout(250);
     assert.deepEqual(
       await page
@@ -217,6 +235,16 @@ export async function checkAgentUI(
       "流式期间中文草稿",
     );
     assert.equal(count, 2, "reload cannot resend");
+    await page.locator("#model-picker > summary").click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "取消收藏：Browser Fixture", exact: true })
+        .getAttribute("aria-pressed"),
+      "true",
+    );
+    await page
+      .getByRole("searchbox", { name: "搜索模型或供应商" })
+      .press("Escape");
     await page.getByRole("button", { name: "显式继续", exact: true }).click();
     await page.waitForFunction(
       () => !!document.querySelector(".send.is-running"),

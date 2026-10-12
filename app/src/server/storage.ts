@@ -10,6 +10,7 @@ import {
   type Command,
   type Draft,
   type Session,
+  type Scope,
   type Workspace,
 } from "../shared/protocol.js";
 
@@ -41,7 +42,24 @@ export class Store {
       CREATE TABLE IF NOT EXISTS agent_sessions(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,selection TEXT,file TEXT,environment TEXT,usage TEXT);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,status TEXT NOT NULL,selection TEXT NOT NULL,startedAt INTEGER NOT NULL,endedAt INTEGER,error TEXT,cleanup TEXT NOT NULL DEFAULT 'pending');
       UPDATE runs SET status='interrupted',endedAt=COALESCE(endedAt,unixepoch()*1000),error='服务中断；未自动重做。清理状态待核实。',cleanup='unconfirmed' WHERE cleanup='pending';
+      CREATE TABLE IF NOT EXISTS task_parents(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,frozen INTEGER NOT NULL DEFAULT 0,defaultModel TEXT);
+      CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL,parentSessionId TEXT NOT NULL,sessionId TEXT NOT NULL UNIQUE,anchor TEXT NOT NULL,description TEXT NOT NULL,role TEXT NOT NULL,status TEXT NOT NULL,runId TEXT REFERENCES runs(id),budgets TEXT NOT NULL,createdAt INTEGER NOT NULL,error TEXT,FOREIGN KEY(workspaceId,parentSessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE,FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS task_inputs(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,body TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,runId TEXT REFERENCES runs(id),createdAt INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_results(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,runId TEXT NOT NULL UNIQUE REFERENCES runs(id) ON DELETE CASCADE,body TEXT NOT NULL,delivery TEXT NOT NULL DEFAULT 'pending');
+      UPDATE tasks SET status='interrupted',error='服务中断；队列保留，未自动续跑。' WHERE status IN ('queued','starting','running','wrapping','stopping','summarizing');
+      UPDATE task_parents SET frozen=1;
+      UPDATE task_inputs SET state='uncertain' WHERE state IN ('starting','inflight');
+      UPDATE task_inputs SET state='held' WHERE state='queued';
     `);
+    // Null on older receipts means unknown ownership, never an application-wide read grant.
+    for (const table of ["requests", "external_requests"])
+      if (
+        !this.db
+          .prepare(`PRAGMA table_info(${table})`)
+          .all()
+          .some((column) => column.name === "scope")
+      )
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN scope TEXT`);
   }
   workspaces(): Workspace[] {
     return (
@@ -62,17 +80,18 @@ export class Store {
     return (
       this.db
         .prepare(
-          "SELECT sessions.*,(SELECT status FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) AS runStatus FROM sessions WHERE workspaceId=? ORDER BY pinned DESC,updatedAt DESC,id",
+          "SELECT sessions.*,(SELECT status FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) AS runStatus,EXISTS(SELECT 1 FROM tasks WHERE parentSessionId=sessions.id AND status IN ('queued','starting','running','wrapping','stopping','summarizing')) AS activeTasks FROM sessions WHERE workspaceId=? AND NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id) ORDER BY pinned DESC,updatedAt DESC,id",
         )
         .all(w.id) as unknown as Session[]
     ).map((s) => ({ ...s, pinned: !!s.pinned, unread: !!s.unread }));
   }
   session(workspaceId: unknown, sessionId: unknown): Session {
-    const s = this.sessions(workspaceId).find(
-      (s) => s.id === text(sessionId, "会话标识"),
-    );
+    const w = this.workspace(workspaceId);
+    const s = this.db
+      .prepare("SELECT * FROM sessions WHERE workspaceId=? AND id=?")
+      .get(w.id, text(sessionId, "会话标识")) as unknown as Session | undefined;
     if (!s) throw new AppError("SCOPE_MISMATCH", "会话不属于该工作空间");
-    return s;
+    return { ...s, pinned: !!s.pinned, unread: !!s.unread };
   }
   draft(workspaceId: unknown, sessionId: unknown, viewId: unknown): Draft {
     const s = this.session(workspaceId, sessionId);
@@ -85,24 +104,46 @@ export class Store {
       ? { ...JSON.parse(row.body as string), revision: Number(row.revision) }
       : { text: "", attachment: null, revision: 0 };
   }
-  receipt(requestId: unknown): { status: string; data?: unknown } {
+  drafts(workspaceId: unknown, sessionId: unknown) {
+    const s = this.session(workspaceId, sessionId);
+    return this.db
+      .prepare(
+        "SELECT viewId,body,revision FROM drafts WHERE workspaceId=? AND sessionId=? ORDER BY rowid DESC LIMIT 20",
+      )
+      .all(s.workspaceId, s.id)
+      .map((row) => ({
+        viewId: row.viewId,
+        ...JSON.parse(String(row.body)),
+        revision: Number(row.revision),
+      }));
+  }
+  private requestScope(scope: Partial<Scope>) {
+    return JSON.stringify([scope.workspaceId ?? null, scope.sessionId ?? null]);
+  }
+  receipt(
+    requestId: unknown,
+    scope?: Partial<Scope>,
+  ): { status: string; data?: unknown } {
     const id = text(requestId, "请求标识");
     const row = this.db
-      .prepare("SELECT response FROM requests WHERE id=?")
-      .get(id);
-    if (row)
-      return { status: "committed", data: JSON.parse(row.response as string) };
-    const external = this.db
-      .prepare("SELECT state,response FROM external_requests WHERE id=?")
-      .get(id);
-    return external
-      ? {
-          status: String(external.state),
-          ...(external.response
-            ? { data: JSON.parse(external.response as string) }
-            : {}),
-        }
-      : { status: "not_found" };
+      .prepare(
+        "SELECT 'committed' AS state,response,scope FROM requests WHERE id=? UNION ALL SELECT state,response,scope FROM external_requests WHERE id=?",
+      )
+      .get(id, id);
+    if (!row) return { status: "not_found" };
+    // Internal duplicate checks still validate the original full command hash on execute/external.
+    if (scope) {
+      if (row.scope === null) return { status: "uncertain" };
+      if (row.scope !== this.requestScope(scope))
+        throw new AppError(
+          "REQUEST_SCOPE_MISMATCH",
+          "回执不属于此工作空间／会话",
+        );
+    }
+    return {
+      status: String(row.state),
+      ...(row.response ? { data: JSON.parse(String(row.response)) } : {}),
+    };
   }
   async external(
     command: Command,
@@ -132,8 +173,10 @@ export class Store {
       );
     }
     this.db
-      .prepare("INSERT INTO external_requests VALUES(?,?,'pending',NULL)")
-      .run(id, hash);
+      .prepare(
+        "INSERT INTO external_requests(id,hash,state,response,scope) VALUES(?,?,'pending',NULL,?)",
+      )
+      .run(id, hash, this.requestScope(command));
     try {
       const result = await run();
       this.db
@@ -187,8 +230,8 @@ export class Store {
     try {
       const result = this.mutate(command);
       this.db
-        .prepare("INSERT INTO requests VALUES(?,?,?)")
-        .run(id, hash, JSON.stringify(result));
+        .prepare("INSERT INTO requests(id,hash,response,scope) VALUES(?,?,?,?)")
+        .run(id, hash, JSON.stringify(result), this.requestScope(command));
       this.db.exec("COMMIT");
       return result;
     } catch (error) {
