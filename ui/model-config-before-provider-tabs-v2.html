@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>模型服务 · 配置 · AXIOM</title>
+<style>
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #08090a;              /* marketing black — hero canvas */
+  --surface:      #191a1b;              /* elevated surface — cards, dropdowns */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f7f8f8;                      /* near-white primary text */
+  --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
+  --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
+  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* ultra-subtle divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* 用户配色：暖橙交互、金黄收藏、绿色完成，替代蓝紫色。 */
+  --accent:        oklch(0.76 0.13 55);
+  --accent-on:     #08090a;
+  --accent-hover:  oklch(0.84 0.11 65);
+  --accent-active: oklch(0.88 0.09 65);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #27a644;                   /* Linear green */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Linear's display range 72px→10px; the 8 schema slots map the
+   * key stops. 64px secondary-hero lives inline in components.html. */
+  --text-xs:   12px;                    /* label / micro */
+  --text-sm:   14px;                    /* caption large / link small */
+  --text-base: 16px;                    /* body — standard reading */
+  --text-lg:   18px;                    /* body large — feature descriptions */
+  --text-xl:   24px;                    /* heading 2 */
+  --text-2xl:  32px;                    /* heading 1 */
+  --text-3xl:  48px;                    /* display — section headlines */
+  --text-4xl:  72px;                    /* display XL — hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: Linear's signature "engineered" compression.
+   * h2 (32px) → 1.13; h3 (24px) → 1.33 per DESIGN.md spec.
+   * --tracking-display: -0.022em = -1.584px / 72px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.022em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Whitespace Philosophy. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px for buttons/inputs (comfortable), 8px cards, 12px panels. */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* On dark surfaces: luminance stepping, not opaque drop shadows.
+     --elev-raised uses semi-transparent border-as-shadow technique. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.4) 0px 2px 4px,
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
+     indicator visible on the near-black #08090a canvas. */
+  --focus-ring:
+    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}
+/* Existing seed primitives, consolidated for the dense configuration workspace. */
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:dark;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 var(--font-body);font-feature-settings:"cv01","ss03";-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button,input,select{font:inherit}
+button{cursor:pointer;color:var(--fg);background:transparent;border:0}
+button,a{transition:background var(--motion-fast),border-color var(--motion-fast)}
+button:hover,a:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+:is(button,a,input,select):focus-visible{outline:2px solid var(--accent-hover);outline-offset:3px}
+h1,h2,h3{font-family:var(--font-display);font-weight:510;margin:0;letter-spacing:var(--tracking-display);text-wrap:balance}
+p{margin:0;text-wrap:pretty}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+[hidden]{display:none!important}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:510;flex-shrink:0}
+.btn-ghost{border-color:transparent}
+.btn-primary{background:var(--accent);color:var(--accent-on);border-color:transparent}
+.btn-primary:hover{background:var(--accent-hover);color:var(--accent-on)}
+.btn-primary:active{background:var(--accent-active);color:var(--accent-on)}
+.icon-btn{width:44px;height:44px;display:inline-grid;place-items:center;flex-shrink:0;border-radius:var(--radius-sm)}
+.icon-btn svg{width:16px;height:16px}
+.row,.row-between{display:flex;align-items:center;gap:12px;min-width:0}
+.row-between{justify-content:space-between}
+.meta{font-size:12px;color:var(--muted)}
+.num,code{font:12px var(--font-mono);font-variant-numeric:tabular-nums}
+.card{background:color-mix(in oklch,var(--fg) 2%,transparent);border:1px solid var(--border);border-radius:var(--radius-md)}
+.tag{display:inline-flex;align-items:center;min-height:24px;padding:1px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;color:var(--fg-2)}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{display:flex;align-items:center;gap:4px;min-height:20px;font-size:12px;color:var(--fg-2)}
+.input{width:100%;min-width:0;min-height:46px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--fg);background:color-mix(in oklch,var(--fg) 2%,transparent);font-size:13px}
+.input.num{font-size:12px}
+.input:hover{border-color:color-mix(in oklch,var(--fg) 28%,transparent)}
+.input::placeholder{color:var(--muted)}
+/* Reuse the workbench's native, customizable picker for all configuration selects. */
+select.input{padding-right:24px;cursor:pointer;font-weight:510}
+select option{background:var(--surface);color:var(--fg);font-weight:400}
+@supports (appearance:base-select){
+ select.input{appearance:base-select;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-inline:12px}
+ select.input::picker(select){appearance:base-select;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);padding:4px;box-shadow:var(--elev-raised);min-width:anchor-size(width);max-width:calc(100vw - 24px);max-height:min(320px,50dvh);margin-block:6px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) var(--surface);font:13px/1.6 var(--font-body);font-feature-settings:"cv01","ss03"}
+ select.input::picker-icon{content:"";width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);flex-shrink:0;margin-inline:4px;color:var(--fg)}
+ select.input:open{background:color-mix(in oklch,var(--fg) 4%,var(--bg));color:var(--fg);border-color:color-mix(in oklch,var(--fg) 28%,transparent)}
+ select.input:open::picker-icon{transform:translateY(2px) rotate(225deg)}
+ select.input option{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;border-radius:var(--radius-sm);white-space:normal;overflow-wrap:anywhere}
+ select.input option:checked{background:color-mix(in oklch,var(--fg) 7%,var(--surface));color:var(--fg);font-weight:510}
+ select.input option:hover,select.input option:focus{background:color-mix(in oklch,var(--fg) 12%,var(--surface));color:var(--fg)}
+ select.input option:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
+ select.input option::checkmark{order:1;margin-left:auto;color:var(--fg)}
+}
+.field-help{font-size:11px;color:var(--muted);line-height:1.7;overflow-wrap:anywhere}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.settings-app{display:grid;grid-template-columns:176px minmax(0,1fr);height:100dvh;min-height:0}
+.settings-sidebar{padding:16px 12px;border-right:1px solid var(--border);background:color-mix(in oklch,var(--bg) 55%,var(--surface));display:flex;flex-direction:column;gap:24px;min-width:0;min-height:0;overflow:auto}
+.back-link{justify-content:flex-start;width:100%;color:var(--fg-2)}
+.back-link svg{width:16px}
+.settings-brand{padding:0 12px;font-size:16px;font-weight:510;letter-spacing:-.02em}
+.sidebar-label{font-size:12px;color:var(--muted);padding:0 12px;margin:16px 0 8px}
+.settings-nav{min-height:44px;padding:10px 12px;display:flex;align-items:center;border-radius:var(--radius-sm);font-size:13px;color:var(--fg-2);margin-bottom:4px}
+.settings-nav[aria-current=page]{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}
+.sidebar-note{margin-top:auto;padding:12px;font-size:11px;color:var(--muted);line-height:1.8}
+.settings-main,.container{display:flex;flex-direction:column;min-width:0;min-height:0}
+.container{flex:1;width:100%}
+.topnav{min-height:60px;padding:8px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
+.topnav .row{gap:8px;font-size:12px;color:var(--muted)}
+.topnav strong{color:var(--fg-2);font-weight:510}
+.toolbar-actions{flex-wrap:wrap;justify-content:flex-end}
+.topnav .save-state,.model-save-state{font-size:12px;color:var(--muted)}
+.mobile-back{display:none}
+.mobile-config-link{display:inline-flex;align-items:center;min-height:44px;padding:4px 8px;border-radius:var(--radius-sm)}
+.page-heading{padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
+.page-heading>div{min-width:0}
+.page-heading h1{font-size:20px;line-height:1.4;margin-bottom:4px}
+.page-heading p{font-size:12px;color:var(--muted)}
+.page-heading .tag{flex-shrink:0}
+.config-tabs{display:flex;gap:8px;padding:0 24px;border-bottom:1px solid var(--border);flex-shrink:0}
+.config-tab{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 12px;position:relative;color:var(--fg-2);font-size:13px;font-weight:510;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.config-tab[aria-selected=true]{color:var(--fg);background:color-mix(in oklch,var(--fg) 4%,transparent)}
+.config-tab[aria-selected=true]::after{content:'';position:absolute;inset:auto 12px 0;height:2px;background:var(--fg)}
+.config-tab:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}
+.config-tab:hover .meta{color:var(--fg-2)}
+.draft-indicator{font-size:11px;color:var(--fg-2)}
+.configuration-layout{display:grid;grid-template-columns:216px minmax(0,1fr);flex:1;min-height:0;min-width:0}
+.supplier-panel{padding:12px;border-right:1px solid var(--border);display:flex;flex-direction:column;min-width:0;min-height:0;background:color-mix(in oklch,var(--fg) 1%,transparent)}
+.supplier-toolbar{display:flex;align-items:center;justify-content:space-between;padding-left:8px;gap:8px;margin-bottom:8px}
+.supplier-toolbar h2{font-size:12px;color:var(--fg-2)}
+.add-supplier{width:44px;padding:0}
+.supplier-search{margin-bottom:12px}
+.supplier-list{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.supplier-option{width:100%;min-height:60px;flex-shrink:0;display:flex;align-items:center;text-align:left;border:1px solid transparent;border-radius:var(--radius-sm);padding:8px 10px}
+.supplier-option[aria-current=true]{background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:var(--border)}
+.supplier-option:hover{background:color-mix(in oklch,var(--fg) 11%,transparent);color:var(--fg)}
+.supplier-option:hover small{color:var(--fg-2)}
+.supplier-option>span{min-width:0;width:100%}
+.supplier-option strong{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:13px;font-weight:510}
+.supplier-name{min-width:0;overflow-wrap:anywhere}
+.supplier-option .tag{min-height:20px;border:0;padding:0;font:11px/20px var(--font-mono);flex-shrink:0}
+.supplier-option small{display:block;font-size:11px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.list-empty{padding:16px 8px;font-size:12px;color:var(--muted)}
+.supplier-detail{padding:0 24px 20px;min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable}
+#provider-form{width:100%;max-width:1040px}
+.detail-heading{padding:16px 0;border-bottom:1px solid var(--border-soft);gap:16px;align-items:flex-start}
+.provider-heading-copy{min-width:0}
+.detail-heading h2{font-size:17px;line-height:1.5;overflow-wrap:anywhere}
+.detail-heading .meta{font-size:11px;margin-top:2px;overflow-wrap:anywhere}
+.detail-heading .tag{flex-shrink:0;margin-top:2px}
+.section{padding:16px 0}
+.section-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.section-heading h3{font-size:13px}
+.section-heading p{font-size:11px;color:var(--muted)}
+.connection-fields{display:grid;gap:16px}
+.key-field{position:relative}
+.key-field input{padding-right:56px}
+.key-field button{position:absolute;right:1px;top:1px;bottom:1px;height:44px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.save-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-top:12px;border-top:1px solid var(--border-soft)}
+.save-bar>div{min-width:0}
+.save-bar .meta{font-size:11px;line-height:1.8}
+.save-bar .btn{font-size:12px}
+.feedback{font-size:12px;color:var(--fg-2);overflow-wrap:anywhere}
+.feedback:not(:empty){margin-top:8px}
+.prototype-note{padding:12px 0;margin-top:16px;border:0;border-top:1px solid var(--border-soft);background:transparent;border-radius:0;font-size:11px;color:var(--muted);line-height:1.8;max-width:1040px}
+.empty-details{padding:48px 16px;text-align:center}
+.empty-details h2{font-size:20px;margin-bottom:8px}
+.empty-details p{font-size:13px;color:var(--muted)}
+.model-registry{padding:16px 24px 24px;flex:1;min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.model-heading{gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.model-heading>div:first-child{min-width:0}
+.model-heading h3{font-size:13px;line-height:1.5}
+.model-heading p{font-size:11px;color:var(--muted);margin-top:4px}
+.model-tools{display:flex;gap:8px;align-items:center;min-width:0;max-width:100%;flex-wrap:wrap}
+.model-tools .input{width:240px}
+.model-table{border-radius:var(--radius-sm)}
+.ds-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.ds-table th,.ds-table td{text-align:left;padding:6px 12px;border-bottom:1px solid var(--border-soft);overflow-wrap:anywhere;vertical-align:middle}
+.ds-table th{height:36px;font-weight:400;font-size:11px;color:var(--muted);background:color-mix(in oklch,var(--fg) 2%,transparent)}
+.ds-table td{height:56px}
+.ds-table th.name-col{width:calc((100% - 112px)*.26)}
+.ds-table th.supplier-col{width:calc((100% - 112px)*.2)}
+.ds-table th.id-col{width:calc((100% - 112px)*.35)}
+.ds-table th.reasoning-col{width:calc((100% - 112px)*.19)}
+.ds-table th.actions-col{width:112px;text-align:right}
+.ds-table tr:last-child td{border-bottom:0}
+.ds-table tbody tr:hover{background:color-mix(in oklch,var(--fg) 3%,transparent)}
+.ds-table tbody tr:hover .model-id{color:var(--fg-2)}
+.model-name{display:block;font-size:13px;font-weight:510;color:var(--fg)}
+.model-id{display:block;color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.supplier-col{color:var(--fg-2)}
+.model-actions{display:flex;justify-content:flex-end;gap:0}
+.model-actions button{color:var(--fg-2)}
+.model-actions button:hover{color:var(--fg)}
+.mobile-model-provider,.mobile-model-id,.mobile-model-reasoning{display:none}
+.model-empty{padding:32px 16px;text-align:center;font-size:13px;color:var(--muted)}
+.model-empty strong{display:block;margin-bottom:6px;color:var(--fg-2);font-weight:510}
+.model-empty .btn{display:flex;margin:16px auto 0;width:max-content;max-width:100%}
+.inline-model-editor{padding:16px;margin-bottom:16px;background:color-mix(in oklch,var(--fg) 2%,transparent);border:1px solid var(--border);border-radius:var(--radius-md)}
+.inline-model-editor h2{font-size:15px;line-height:1.5;margin-bottom:12px}
+.inline-model-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.inline-model-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.inline-model-actions .feedback{flex:1;min-width:0;margin:0}
+.inline-model-editor .btn{font-size:12px}
+.settings-dialog{width:min(460px,calc(100% - 32px));max-height:90dvh;padding:24px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
+.settings-dialog::backdrop{background:color-mix(in oklch,var(--bg) 80%,transparent)}
+.settings-dialog h2{font-size:20px;margin-bottom:8px}
+.settings-dialog p{font-size:12px;color:var(--muted);margin-bottom:24px}
+.dialog-actions{justify-content:flex-end;flex-wrap:wrap}
+@media(max-width:1200px){
+ .settings-app{grid-template-columns:152px minmax(0,1fr)}
+ .configuration-layout{grid-template-columns:200px minmax(0,1fr)}
+ .topnav,.page-heading,.config-tabs{padding-inline:16px}
+ .supplier-detail,.model-registry{padding-inline:16px}
+ .topnav .save-state{display:none}
+ .inline-model-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:960px){
+ .grid-2{grid-template-columns:minmax(0,1fr)}
+ .ds-table .reasoning-col{display:none}
+ .ds-table th.name-col{width:calc((100% - 112px)*.3)}
+ .ds-table th.supplier-col{width:calc((100% - 112px)*.24)}
+ .ds-table th.id-col{width:calc((100% - 112px)*.46)}
+ .mobile-model-reasoning{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+}
+@media(max-width:800px){
+ .settings-app{height:auto;min-height:100dvh;grid-template-columns:minmax(0,1fr)}
+ .settings-sidebar{display:none}
+ .topnav{position:sticky;top:0;z-index:5;background:var(--bg)}
+ .mobile-back{display:inline-grid}
+ .configuration-layout{grid-template-columns:minmax(0,1fr)}
+ .supplier-panel{border-right:0;border-bottom:1px solid var(--border);padding:8px 16px 12px}
+ .supplier-toolbar{margin-bottom:4px;padding-left:0}
+ .supplier-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:176px;flex:auto;scrollbar-gutter:auto}
+ .supplier-search{margin-bottom:8px}
+ .supplier-detail,.model-registry{overflow:visible;scrollbar-gutter:auto}
+ .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .model-tools{width:100%;flex-wrap:nowrap}
+ .model-tools .input{flex:1;width:auto;min-width:0}
+}
+@media(max-width:600px){
+ .topnav{flex-wrap:wrap;gap:4px;padding:8px 16px}
+ .topnav>.row:first-child{flex:1 1 100%}
+ .toolbar-actions{width:100%;justify-content:flex-end}
+ .toolbar-actions .btn{flex:1}
+ .page-heading{padding-block:12px}
+ .page-heading .tag{display:none}
+ .config-tabs{gap:4px}
+ .config-tab{padding-inline:10px}
+ .grid-2,.inline-model-fields{grid-template-columns:minmax(0,1fr)}
+ .detail-heading{flex-wrap:wrap;gap:8px}
+ .section-heading{gap:4px}
+ .section-heading p{flex-basis:100%}
+ .save-bar{flex-wrap:wrap;gap:8px}
+ .save-bar .btn{margin-left:auto}
+ .ds-table .supplier-col,.ds-table .id-col{display:none}
+ .ds-table th.name-col{width:calc(100% - 104px)}
+ .ds-table th.actions-col{width:104px}
+ .ds-table th,.ds-table td{padding:8px}
+ .mobile-model-provider{display:block;font-size:11px;color:var(--fg-2);margin-top:4px}
+ .mobile-model-id{display:block;font:11px/1.6 var(--font-mono);color:var(--muted);overflow-wrap:anywhere}
+ .model-heading{gap:12px}
+ .model-tools{gap:8px}
+ .model-tools .btn{padding-inline:10px}
+ .inline-model-editor{padding:12px}
+ .inline-model-actions .feedback:not(:empty){flex-basis:100%}
+ .settings-dialog{padding:20px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="settings-app" data-od-id="settings-app">
+<aside class="settings-sidebar" data-od-id="settings-sidebar" aria-label="配置导航">
+<a class="btn btn-ghost back-link" href="coding-agent-v2-before-subagent-modal-v2.html" data-od-id="return-workspace"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h15"/></svg>返回工作台</a>
+<nav aria-label="配置模块" data-od-id="settings-modules"><div class="settings-brand">配置</div><p class="sidebar-label">通用</p><a href="settings.html" class="settings-nav" data-od-id="settings-overview-nav">配置概览</a><p class="sidebar-label">AI 与连接</p><a href="model-config.html" class="settings-nav" aria-current="page" data-od-id="model-settings-nav">模型服务</a></nav>
+<p class="sidebar-note">AXIOM · 本地配置<br>配置与工作空间独立</p>
+</aside>
+<main class="settings-main" id="content" data-od-id="model-config-panel">
+<header class="topnav" data-od-id="settings-toolbar"><div class="row"><a class="icon-btn mobile-back" href="settings.html" aria-label="返回配置概览" data-od-id="mobile-return-settings"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></a><a class="mobile-config-link" href="settings.html" data-od-id="mobile-config-link">配置</a><span aria-hidden="true">/</span><strong>模型服务</strong></div><span class="model-save-state" id="model-save-state" hidden>模型修改即时保存</span><div class="row toolbar-actions" id="provider-toolbar-actions"><span class="save-state" id="toolbar-save-state" role="status" aria-live="polite">无未保存修改</span><button class="btn btn-ghost" type="button" id="reset-provider" data-od-id="reset-provider" disabled>撤销修改</button><button class="btn btn-primary" type="submit" form="provider-form" id="save-provider" data-od-id="save-provider">保存供应商</button></div></header>
+<div class="container">
+<div class="page-heading" data-od-id="settings-heading"><div><h1 data-od-id="model-config-title">模型服务</h1><p>先配置并保存供应商，再为模型选择已配置的供应商。</p></div><span class="tag">本地配置</span></div>
+<nav class="config-tabs" role="tablist" aria-label="模型服务配置" data-od-id="model-service-tabs"><button class="config-tab" id="suppliers-tab" type="button" role="tab" aria-selected="true" aria-controls="suppliers-screen" data-od-id="suppliers-tab">供应商<span class="meta num" id="suppliers-tab-count"></span><span class="draft-indicator" id="supplier-draft-indicator" hidden>未保存</span></button><button class="config-tab" id="models-tab" type="button" role="tab" aria-selected="false" aria-controls="models-screen" tabindex="-1" data-od-id="models-tab">模型<span class="meta num" id="models-tab-count"></span></button></nav>
+<div class="configuration-layout" id="suppliers-screen" role="tabpanel" aria-labelledby="suppliers-tab" data-od-id="suppliers-screen">
+<section class="supplier-panel" data-od-id="supplier-panel" aria-labelledby="supplier-heading"><div class="supplier-toolbar"><h2 id="supplier-heading" data-od-id="supplier-heading">供应商 <span class="meta num" id="supplier-count"></span></h2><button class="btn btn-ghost add-supplier" id="add-supplier" type="button" aria-label="添加供应商" title="添加供应商" data-od-id="add-supplier"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><input id="supplier-search" type="search" class="input supplier-search" placeholder="搜索供应商" aria-label="搜索供应商" data-od-id="supplier-search"><div id="supplier-list" class="supplier-list" data-od-id="supplier-list"></div></section>
+<div class="supplier-detail" id="supplier-detail" data-od-id="supplier-detail">
+<form id="provider-form">
+<div class="row-between detail-heading" data-od-id="provider-heading"><div class="provider-heading-copy"><h2 id="provider-title" data-od-id="provider-title">OpenAI</h2><p class="meta" id="provider-summary"></p></div><span class="tag" id="provider-state">示例 · 未连接</span></div>
+<section class="section" data-od-id="connection-settings" aria-labelledby="connection-heading"><div class="section-heading"><h3 id="connection-heading" data-od-id="connection-heading">连接信息</h3><p>保存后即可在模型配置中选择</p></div><div class="connection-fields">
+<div class="grid-2"><div class="field"><label for="provider-name">供应商名称</label><input id="provider-name" class="input" required maxlength="80" autocomplete="off" placeholder="例如：本地模型服务" data-od-id="provider-name"></div><div class="field"><label for="provider-protocol">接口协议</label><select class="input" id="provider-protocol" data-od-id="provider-protocol"><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option></select></div></div>
+<div class="grid-2"><div class="field"><label for="provider-url">接口地址</label><input class="input num" id="provider-url" type="url" required maxlength="2048" spellcheck="false" placeholder="https://api.example.com/v1" aria-describedby="url-help" data-od-id="provider-url"><span class="field-help" id="url-help">填写基础地址，支持 HTTP / HTTPS。</span></div>
+<div class="field"><label for="provider-key">API 密钥 <span class="meta">（可选）</span></label><div class="key-field"><input class="input num" id="provider-key" type="password" autocomplete="off" maxlength="4096" spellcheck="false" placeholder="输入 API 密钥" aria-describedby="key-help" data-od-id="provider-key"><button class="icon-btn" type="button" id="toggle-key" aria-label="显示 API 密钥" aria-pressed="false" data-od-id="toggle-key"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><span class="field-help" id="key-help">密钥仅临时保留，不写入浏览器存储。</span></div></div>
+</div></section>
+<div class="save-bar" data-od-id="configuration-actions"><div><p class="meta" id="save-hint">保存供应商后，才可将模型绑定到该供应商。</p><p class="feedback" id="feedback" role="status" aria-live="polite" data-od-id="configuration-feedback"></p></div><button class="btn btn-ghost" id="delete-supplier" type="button" data-od-id="delete-supplier">删除供应商</button></div>
+</form>
+<div class="empty-details" id="empty-details" hidden data-od-id="no-suppliers"><h2>添加供应商</h2><p>使用供应商列表旁的「添加供应商」按钮，填写并保存连接信息。</p></div>
+<div class="card prototype-note" data-od-id="configuration-scope"><p>本地原型 · 保存不代表连接验证成功。密钥仅在本页临时保留，刷新或离开后清除。</p></div>
+</div>
+</div>
+<section class="model-registry" id="models-screen" role="tabpanel" aria-labelledby="models-tab" hidden data-od-id="configured-models"><div class="row-between model-heading"><div><h3 id="models-heading" data-od-id="models-heading">已配置模型 <span class="meta num" id="model-count"></span></h3><p id="model-provider-hint" class="field-help">统一管理模型，供应商仅从已保存的配置中选取。</p></div><div class="model-tools"><input class="input" id="model-filter" type="search" placeholder="搜索模型或供应商" aria-label="搜索全部已配置模型" data-od-id="model-filter"><button class="btn" id="add-model" type="button" data-od-id="add-model"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>添加模型</button></div></div>
+<section class="inline-model-editor" id="model-editor" hidden aria-labelledby="model-editor-heading" data-od-id="model-editor">
+<form id="model-form"><h2 id="model-editor-heading" data-od-id="model-editor-heading">添加模型</h2><div class="inline-model-fields">
+<div class="field"><label for="new-model-provider">供应商</label><select class="input" id="new-model-provider" required data-od-id="new-model-provider"></select><span class="field-help">仅显示已保存的供应商。</span></div>
+<div class="field"><label for="new-model-id">模型 ID</label><input class="input num" id="new-model-id" required maxlength="160" autocomplete="off" spellcheck="false" placeholder="供应商提供的模型 ID" data-od-id="new-model-id"></div>
+<div class="field"><label for="new-model-name">显示名称</label><input class="input" id="new-model-name" maxlength="80" autocomplete="off" placeholder="留空时使用模型 ID" data-od-id="new-model-name"></div>
+<div class="field"><label for="new-model-reasoning">思考设置</label><select class="input" id="new-model-reasoning" data-od-id="new-model-reasoning"><option value="none">不设置</option><option value="levels">低 / 中 / 高</option><option value="toggle">关闭 / 开启深度思考</option><option value="auto">自动</option></select><span class="field-help">请确认模型支持对应参数。</span></div>
+</div><div class="inline-model-actions"><p class="feedback" id="model-error" role="status" aria-live="polite" data-od-id="model-error"></p><button class="btn btn-ghost" type="button" id="cancel-model-edit" data-od-id="cancel-model-edit">取消</button><button class="btn btn-primary" type="submit" data-od-id="confirm-model-edit">保存模型</button></div></form>
+</section>
+<div class="card model-table"><table class="ds-table" aria-label="全部已配置供应商的模型"><thead><tr><th class="name-col" scope="col">显示名称</th><th class="supplier-col" scope="col">供应商</th><th class="id-col" scope="col">模型 ID</th><th class="reasoning-col" scope="col">思考设置</th><th class="actions-col" scope="col">操作</th></tr></thead><tbody id="models-body"></tbody></table><div class="model-empty" id="model-empty" hidden><div id="model-empty-message"></div><button class="btn" type="button" id="go-to-suppliers" data-od-id="go-to-suppliers">前往配置供应商</button></div></div><p class="feedback" id="model-feedback" role="status" aria-live="polite" data-od-id="model-feedback"></p><div class="card prototype-note" data-od-id="model-configuration-scope"><p>模型增删改即时保存；供应商下拉仅显示已保存连接信息的配置。尚未接入实际服务或工作台模型列表。</p></div></section>
+</div>
+</main></div>
+<dialog class="settings-dialog" id="confirm-dialog" aria-labelledby="confirm-heading" data-od-id="confirm-dialog"><h2 id="confirm-heading" data-od-id="confirm-heading">确认操作</h2><p id="confirm-description"></p><div class="row dialog-actions"><button class="btn btn-ghost" type="button" data-close="confirm-dialog" data-od-id="cancel-confirmation">取消</button><button class="btn" type="button" id="confirm-action" data-od-id="confirm-action">确认</button></div></dialog>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const storageKey='coding-agent-model-config-v1';
+const reasoningNames={none:'不设置',levels:'低 / 中 / 高',toggle:'开关',auto:'自动'};
+const protocols={openai:'OpenAI 兼容',anthropic:'Anthropic',google:'Google Gemini'};
+const initialProviders=[
+ {id:'openai',name:'OpenAI',protocol:'openai',url:'https://api.openai.com/v1',configured:false,models:[]},
+ {id:'anthropic',name:'Anthropic',protocol:'anthropic',url:'https://api.anthropic.com',configured:false,models:[]},
+ {id:'google',name:'Google',protocol:'google',url:'https://generativelanguage.googleapis.com/v1beta',configured:false,models:[]}
+];
+function validEndpoint(value){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!!url.hostname&&!url.username&&!url.password;}catch{return false;}}
+function validProviders(value){return Array.isArray(value)&&value.length<=100&&new Set(value.map(p=>p?.id)).size===value.length&&value.every(p=>p&&typeof p.id==='string'&&/^[a-z0-9-]+$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()&&p.name.length<=80&&Object.hasOwn(protocols,p.protocol)&&typeof p.url==='string'&&p.url.length<=2048&&(p.url===''||validEndpoint(p.url))&&typeof p.configured==='boolean'&&Array.isArray(p.models)&&p.models.length<=200&&new Set(p.models.map(m=>m?.id)).size===p.models.length&&p.models.every(m=>m&&typeof m.id==='string'&&m.id.trim()&&m.id.length<=160&&typeof m.name==='string'&&m.name.trim()&&m.name.length<=160&&Object.hasOwn(reasoningNames,m.reasoning)));}
+// Keys never enter persistent storage. A desktop credential vault is needed for real integration.
+function publicProviders(list){return list.map(p=>({id:p.id,name:p.name,protocol:p.protocol,url:p.url,configured:p.configured,models:p.models.map(m=>({id:m.id,name:m.name,reasoning:m.reasoning}))}));}
+let providers=structuredClone(initialProviders),selected='openai',loadMessage='';
+try{const raw=localStorage.getItem(storageKey);if(raw!==null){const saved=JSON.parse(raw);if(!saved||saved.version!==1||!validProviders(saved.providers))throw new Error('Invalid configuration');providers=publicProviders(saved.providers);selected=providers.some(p=>p.id===saved.selected)?saved.selected:providers[0]?.id;}}catch{loadMessage='配置读取失败，正在展示预置示例；保存前请确认，原有记录尚未覆盖。';}
+let draft=null,addingProvider=false,editingModel=null,confirmation=null,activeConfigTab='suppliers';
+const dialogReturns=new Map(),keys=new Map();
+function currentProvider(){return providers.find(p=>p.id===selected);}
+function isDirty(){if(!draft)return false;return addingProvider||JSON.stringify(draft)!==JSON.stringify(currentProvider());}
+function syncSaveState(){const dirty=isDirty();$('save-hint').textContent=dirty?'供应商连接信息有未保存修改。':'保存供应商后，才可将模型绑定到该供应商。';$('toolbar-save-state').textContent=dirty?'供应商有未保存修改':'供应商无未保存修改';$('reset-provider').disabled=!dirty;$('save-provider').disabled=!draft;$('supplier-draft-indicator').hidden=!dirty;$('reset-provider').textContent=addingProvider?'取消新增':'撤销修改';$('delete-supplier').hidden=addingProvider;}
+function switchConfigTab(tab,focus=false){
+ if(!['suppliers','models'].includes(tab))return;
+ activeConfigTab=tab;
+ for(const name of ['suppliers','models']){const active=name===tab;$(name+'-screen').hidden=!active;$(name+'-tab').setAttribute('aria-selected',String(active));$(name+'-tab').setAttribute('tabindex',active?'0':'-1');}
+ $('provider-toolbar-actions').hidden=tab!=='suppliers';$('model-save-state').hidden=tab!=='models';
+ if(tab==='models')renderModels();
+ if(focus)$(tab+'-tab').focus();
+}
+function configuredProviders(){return providers.filter(p=>p.configured&&validEndpoint(p.url));}
+function modelEntries(){return configuredProviders().flatMap(p=>p.models.map((m,index)=>({provider:p.id,index,m})));}
+function updateDraft(){if(!draft)return;draft.name=$('provider-name').value;draft.protocol=$('provider-protocol').value;draft.url=$('provider-url').value;keys.set(draft.id,$('provider-key').value);syncSaveState();}
+function matchesQuery(query,...values){const terms=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean),text=values.join(' ').toLocaleLowerCase();return terms.every(term=>text.includes(term));}
+function persist(next,nextSelected,message){try{localStorage.setItem(storageKey,JSON.stringify({version:1,providers:publicProviders(next),selected:nextSelected}));providers=next;selected=nextSelected;loadMessage='';return true;}catch{$('feedback').textContent=message||'保存失败，修改仍保留在页面中，请检查浏览器存储空间后重试。';return false;}}
+function renderSuppliers(){
+ const pending=addingProvider&&draft;
+ $('supplier-count').textContent=providers.length+(pending?1:0);
+ $('suppliers-tab-count').textContent=providers.length+(pending?1:0);
+ const visible=providers.filter(p=>matchesQuery($('supplier-search').value,p.name,protocols[p.protocol]));
+ const pendingRow=pending?`<button type="button" class="supplier-option" data-provider="${escapeHTML(draft.id)}" data-od-id="supplier-draft" aria-current="true"><span><strong><span class="supplier-name">${escapeHTML(draft.name.trim()||'新供应商')}</span><span class="tag">草稿</span></strong><small>${escapeHTML(protocols[draft.protocol])} · 未保存</small></span></button>`:'';
+ $('supplier-list').innerHTML=pendingRow+(visible.map(p=>`<button type="button" class="supplier-option" data-provider="${escapeHTML(p.id)}" data-od-id="supplier-${escapeHTML(p.id)}" aria-current="${!addingProvider&&p.id===selected}"><span><strong><span class="supplier-name">${escapeHTML(p.name)}</span><span class="tag" aria-label="${p.models.length} 个模型">${p.models.length}</span></strong><small>${escapeHTML(protocols[p.protocol])} · ${p.configured?'已配置':(initialProviders.some(item=>item.id===p.id)?'示例':'未配置')}</small></span></button>`).join('')||(pending?'':'<p class="list-empty">'+(providers.length?'没有匹配的供应商':'尚未添加供应商')+'</p>'));
+ $('add-supplier').disabled=providers.length>=100;
+}
+function renderModels(){
+ const entries=modelEntries(),eligible=configuredProviders();
+ const visible=entries.map((entry,i)=>({...entry,i})).filter(({m,provider})=>matchesQuery($('model-filter').value,m.name,m.id,providers.find(p=>p.id===provider).name));
+ $('model-count').textContent=$('model-filter').value.trim()?visible.length+' / '+entries.length:entries.length;
+ $('models-tab-count').textContent=entries.length;
+ $('models-body').innerHTML=visible.map(({m,provider,index,i})=>{const name=escapeHTML(providers.find(p=>p.id===provider).name);return `<tr data-od-id="configured-model-${provider}-${index}"><td><span class="model-name">${escapeHTML(m.name)}</span><span class="mobile-model-provider">${name}</span><code class="mobile-model-id">${escapeHTML(m.id)}</code><span class="mobile-model-reasoning">思考：${escapeHTML(reasoningNames[m.reasoning])}</span></td><td class="supplier-col">${name}</td><td class="id-col"><code class="model-id">${escapeHTML(m.id)}</code></td><td class="reasoning-col">${escapeHTML(reasoningNames[m.reasoning])}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${provider}-${index}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${provider}-${index}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`;}).join('');
+ $('model-empty').hidden=!!visible.length;
+ $('go-to-suppliers').hidden=!!eligible.length;
+ $('model-empty-message').innerHTML=!eligible.length?'<strong>请先保存供应商</strong>填写供应商连接信息并点击「保存供应商」，然后添加模型。':entries.length?'<strong>没有匹配的模型</strong>请修改模型或供应商搜索条件。':'<strong>尚未配置模型</strong>点击「添加模型」，从下拉列表中选择已配置供应商。';
+ $('add-model').disabled=!$('model-editor').hidden||!eligible.some(p=>p.models.length<200);
+ $('model-provider-hint').textContent=eligible.length?'统一管理所有模型；供应商仅从已保存的配置中选取。':'请先保存至少一个供应商的连接信息，才能添加模型。';
+ const p=addingProvider?draft:currentProvider();if(p)$('provider-summary').textContent=protocols[p.protocol]+' · '+p.models.length+' 个模型';
+ syncSaveState();
+}
+function renderProvider(){
+ if(addingProvider&&draft&&!providers.some(p=>p.id===draft.id))keys.delete(draft.id);
+ addingProvider=false;renderSuppliers();const p=currentProvider();
+ $('provider-form').hidden=!p;$('empty-details').hidden=!!p;
+ if(!p){draft=null;renderModels();return;}
+ fillProvider(p);
+}
+function fillProvider(p){
+ $('supplier-detail').scrollTop=0;
+ draft=structuredClone(p);$('provider-form').hidden=false;$('empty-details').hidden=true;$('provider-title').textContent=addingProvider?'添加供应商':p.name;$('provider-state').textContent=addingProvider?'新增 · 未保存':p.configured?'已配置':(initialProviders.some(item=>item.id===p.id)?'预置 · 待配置':'未配置');
+ $('provider-name').value=p.name;$('provider-protocol').value=p.protocol;$('provider-url').value=p.url;$('provider-key').value=keys.get(p.id)||'';$('provider-key').type='password';$('toggle-key').setAttribute('aria-label','显示 API 密钥');$('toggle-key').setAttribute('aria-pressed','false');$('provider-url').setCustomValidity('');$('provider-name').setCustomValidity('');$('feedback').textContent=loadMessage;renderModels();
+}
+function showDialog(id){dialogReturns.set(id,document.activeElement);$(id).showModal();}
+function askConfirmation(title,description,label,action){confirmation=action;$('confirm-heading').textContent=title;$('confirm-description').textContent=description;$('confirm-action').textContent=label;showDialog('confirm-dialog');}
+function switchProvider(id){if(addingProvider&&id===draft?.id){$('provider-name').focus({preventScroll:true});return;}if(!providers.some(p=>p.id===id)||(id===selected&&!addingProvider))return;const change=()=>{selected=id;renderProvider();};if(isDirty())askConfirmation('放弃未保存的修改？','当前供应商的修改尚未保存，切换后将丢失这些修改。','放弃并切换',change);else change();}
+function validateDraft(){
+ if(!draft.name.trim())return '请输入供应商名称。';
+ if(providers.some(p=>p.id!==draft.id&&p.name.trim().toLocaleLowerCase()===draft.name.trim().toLocaleLowerCase()))return '供应商名称已存在，请使用不同名称。';
+ if(!validEndpoint(draft.url))return '请输入有效的 HTTP 或 HTTPS 地址，不要在地址中包含用户名或密码。';
+ return '';
+}
+function saveProvider(){
+ if(!draft)return false;
+ updateDraft();const error=validateDraft();if(error){$('feedback').textContent=error;return false;}
+ const next=publicProviders(providers),saved={...draft,name:draft.name.trim(),url:draft.url.trim(),configured:true};
+ if(addingProvider)next.push(saved);else next[next.findIndex(p=>p.id===selected)]=saved;
+ if(!validProviders(next)){$('feedback').textContent='配置信息无效，请检查供应商与模型字段。';return false;}
+ if(!persist(next,draft.id))return false;renderProvider();$('feedback').textContent='供应商已保存，可进入「模型」页签添加模型。密钥仅在本页临时保留。';return true;
+}
+function closeModel(){
+ $('model-editor').hidden=true;editingModel=null;renderModels();($('add-model').disabled?$('model-filter'):$('add-model')).focus();
+}
+function openModel(index=null){
+ if(!$('model-editor').hidden){$('model-error').textContent='请先保存或取消当前模型编辑。';return false;}
+ const eligible=configuredProviders();if(!eligible.length){$('model-feedback').textContent='请先保存供应商连接信息。';return false;}
+ editingModel=index===null?null:modelEntries()[index];if(index!==null&&!editingModel)return false;
+ const model=editingModel?.m||{id:'',name:'',reasoning:'none'};
+ $('new-model-provider').innerHTML=eligible.map(p=>`<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)}</option>`).join('');
+ $('new-model-provider').value=editingModel?.provider||(eligible.some(p=>p.id===selected&&p.models.length<200)?selected:eligible.find(p=>p.models.length<200)?.id||eligible[0].id);
+ $('model-editor-heading').textContent=index===null?'添加模型':'编辑模型';$('new-model-id').value=model.id;$('new-model-name').value=model.name;$('new-model-reasoning').value=model.reasoning;$('new-model-id').setCustomValidity('');$('model-error').textContent='';$('model-editor').hidden=false;switchConfigTab('models');$('models-screen').scrollTop=0;$('new-model-provider').focus({preventScroll:true});return true;
+}
+function commitModels(next){
+ if(!validProviders(next)){$('model-error').textContent='模型配置无效，请检查字段。';return false;}
+ if(!persist(next,selected)){$('model-error').textContent='保存失败，表单内容已保留，请检查浏览器存储后重试。';return false;}
+ if(draft&&!addingProvider)draft.models=structuredClone(currentProvider().models);
+ renderSuppliers();renderModels();return true;
+}
+$('provider-form').onsubmit=e=>{e.preventDefault();saveProvider();};
+for(const tab of ['suppliers','models']){
+ $(tab+'-tab').onclick=()=>switchConfigTab(tab);
+ $(tab+'-tab').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();switchConfigTab(e.key==='Home'?'suppliers':e.key==='End'?'models':activeConfigTab==='suppliers'?'models':'suppliers',true);});
+}
+$('go-to-suppliers').onclick=()=>{switchConfigTab('suppliers');(currentProvider()?$('provider-url'):$('add-supplier')).focus();};
+$('supplier-search').addEventListener('input',renderSuppliers);
+$('model-filter').addEventListener('input',renderModels);
+$('reset-provider').onclick=()=>{if(addingProvider){keys.delete(draft.id);renderProvider();$('add-supplier').focus();return;}if(isDirty())askConfirmation('撤销未保存的修改？','恢复当前供应商上次保存的连接信息；已保存的模型与临时密钥不受影响。','撤销修改',()=>{renderProvider();$('feedback').textContent='已恢复上次保存的配置。';});};
+for(const id of ['provider-name','provider-url','provider-protocol','provider-key'])$(id).addEventListener('input',()=>{if(id==='provider-name'||id==='provider-url')$(id).setCustomValidity('');updateDraft();if(addingProvider&&(id==='provider-name'||id==='provider-protocol'))renderSuppliers();$('feedback').textContent='';});
+$('provider-name').addEventListener('change',()=>{if(!$('provider-name').value.trim())$('provider-name').setCustomValidity('请输入供应商名称');});
+$('provider-url').addEventListener('change',()=>{if($('provider-url').value&&!validEndpoint($('provider-url').value))$('provider-url').setCustomValidity('请输入 HTTP 或 HTTPS 地址，且不要包含用户名或密码');});
+$('toggle-key').onclick=()=>{const show=$('provider-key').type==='password';$('provider-key').type=show?'text':'password';$('toggle-key').setAttribute('aria-label',show?'隐藏 API 密钥':'显示 API 密钥');$('toggle-key').setAttribute('aria-pressed',String(show));};
+$('supplier-list').onclick=e=>{const button=e.target.closest('[data-provider]');if(button)switchProvider(button.dataset.provider);};
+$('add-supplier').onclick=()=>{
+ if(providers.length>=100)return;
+ if(isDirty()){$('feedback').textContent=addingProvider?'请先保存或取消当前新增供应商。':'请先保存或撤销当前供应商的修改，再添加供应商。';$('provider-name').focus();return;}
+ addingProvider=true;fillProvider({id:'provider-'+crypto.randomUUID(),name:'',protocol:'openai',url:'',configured:false,models:[]});renderSuppliers();$('supplier-list').scrollTop=0;$('feedback').textContent='填写名称与接口地址后保存；取消新增不会写入本地配置。';$('provider-name').focus();
+};
+$('cancel-model-edit').onclick=closeModel;
+$('add-model').onclick=()=>openModel();
+$('models-body').onclick=e=>{const edit=e.target.closest('[data-edit-model]'),remove=e.target.closest('[data-delete-model]');if(edit){openModel(Number(edit.dataset.editModel));return;}if(remove){const entry=modelEntries()[Number(remove.dataset.deleteModel)];if(!entry)return;askConfirmation('删除模型？','将从供应商移除「'+entry.m.name+'」，确认后立即保存到本地。','删除模型',()=>{const next=publicProviders(providers);next.find(p=>p.id===entry.provider).models.splice(entry.index,1);if(!commitModels(next)){$('model-feedback').textContent='删除失败，模型未被移除，请检查浏览器存储后重试。';return;}$('model-feedback').textContent='模型已删除并保存。';$('add-model').focus();});}};
+$('model-form').onsubmit=e=>{
+ e.preventDefault();const provider=$('new-model-provider').value,id=$('new-model-id').value.trim(),name=$('new-model-name').value.trim()||id,reasoning=$('new-model-reasoning').value;
+ const target=configuredProviders().find(p=>p.id===provider);
+ if(!target){$('model-error').textContent='请选择已保存连接信息的供应商。';return;}
+ if(!id||target.models.some((m,i)=>!(editingModel?.provider===provider&&editingModel.index===i)&&m.id===id)){$('model-error').textContent=id?'该供应商下的模型 ID 已存在。':'请输入模型 ID。';return;}
+ if(target.models.length>=200&&editingModel?.provider!==provider){$('model-error').textContent='每个供应商最多配置 200 个模型。';return;}
+ const next=publicProviders(providers);
+ if(editingModel){const source=next.find(p=>p.id===editingModel.provider);if(source?.models[editingModel.index]?.id!==editingModel.m.id){$('model-error').textContent='原模型已变更或被删除，请取消后重新选择模型。';return;}source.models.splice(editingModel.index,1);}
+ const models=next.find(p=>p.id===provider).models;
+ if(editingModel?.provider===provider)models.splice(editingModel.index,0,{id,name,reasoning});else models.push({id,name,reasoning});
+ if(!commitModels(next))return;
+ $('model-filter').value='';closeModel();$('model-feedback').textContent='模型已保存，绑定供应商：'+target.name+'。';
+};
+$('delete-supplier').onclick=()=>askConfirmation('删除供应商？','将删除「'+currentProvider().name+'」及其模型配置，此操作无法撤销。','删除供应商',()=>{const deleted=selected,next=providers.filter(p=>p.id!==deleted);if(!persist(next,next[0]?.id))return;keys.delete(deleted);renderProvider();dialogReturns.set('confirm-dialog',$('add-supplier'));$('add-supplier').focus();});
+$('confirm-action').onclick=()=>{const action=confirmation;confirmation=null;$('confirm-dialog').close();action?.();};
+for(const dialog of document.querySelectorAll('dialog')){dialog.addEventListener('keydown',e=>e.stopPropagation());dialog.addEventListener('close',()=>{if(dialog.id==='confirm-dialog')confirmation=null;const trigger=dialogReturns.get(dialog.id);if(trigger?.isConnected)trigger.focus({preventScroll:true});});}
+for(const button of document.querySelectorAll('[data-close]'))button.onclick=()=>$(button.dataset.close).close();
+// Unsaved edits are protected for both internal back links and browser navigation.
+window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
+for(const link of document.querySelectorAll('a'))link.addEventListener('click',e=>{if(link.getAttribute('href')==='model-config.html'){e.preventDefault();return;}if(!isDirty())return;e.preventDefault();askConfirmation('离开配置页面？','当前修改尚未保存，离开后将丢失。','放弃并离开',()=>{draft=null;window.location.href=link.getAttribute('href');});});
+renderProvider();switchConfigTab('suppliers');
+</script>
+</body>
+</html>

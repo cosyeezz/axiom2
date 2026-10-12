@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>编码助手 · 工作台</title>
+<style>
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #08090a;              /* marketing black — hero canvas */
+  --surface:      #191a1b;              /* elevated surface — cards, dropdowns */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f7f8f8;                      /* near-white primary text */
+  --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
+  --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
+  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* ultra-subtle divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #5e6ad2;             /* brand indigo — CTA backgrounds */
+  --accent-on:     #ffffff;
+  --accent-hover:  #828fff;             /* lighter saturated hover */
+  --accent-active: #4752c4;             /* darker pressed state */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #27a644;                   /* Linear green */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Linear's display range 72px→10px; the 8 schema slots map the
+   * key stops. 64px secondary-hero lives inline in components.html. */
+  --text-xs:   12px;                    /* label / micro */
+  --text-sm:   14px;                    /* caption large / link small */
+  --text-base: 16px;                    /* body — standard reading */
+  --text-lg:   18px;                    /* body large — feature descriptions */
+  --text-xl:   24px;                    /* heading 2 */
+  --text-2xl:  32px;                    /* heading 1 */
+  --text-3xl:  48px;                    /* display — section headlines */
+  --text-4xl:  72px;                    /* display XL — hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: Linear's signature "engineered" compression.
+   * h2 (32px) → 1.13; h3 (24px) → 1.33 per DESIGN.md spec.
+   * --tracking-display: -0.022em = -1.584px / 72px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.022em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Whitespace Philosophy. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px for buttons/inputs (comfortable), 8px cards, 12px panels. */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* On dark surfaces: luminance stepping, not opaque drop shadows.
+     --elev-raised uses semi-transparent border-as-shadow technique. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.4) 0px 2px 4px,
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
+     indicator visible on the near-black #08090a canvas. */
+  --focus-ring:
+    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}
+/* Seed primitives, bound to the active design system. Layout 7 is adapted
+   to conversation history and a message log rather than a marketing page. */
+*,*::before,*::after{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:dark}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 var(--font-body);font-feature-settings:"cv01","ss03";-webkit-font-smoothing:antialiased}button,input,textarea,select{font:inherit}button{cursor:pointer}button,a,input,textarea,select,summary{-webkit-tap-highlight-color:transparent}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:3px}button{color:var(--fg);border:0;background:transparent}button:hover{background:color-mix(in oklch,var(--fg) 8%,transparent)}button:disabled{opacity:.4;cursor:not-allowed}h1,h2,h3{font-family:var(--font-display);font-weight:510;text-wrap:balance;margin:0}p{text-wrap:pretty;margin:0 0 14px}svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.row,.row-between{display:flex;align-items:center;gap:12px}.row-between{justify-content:space-between}.stack{display:flex;flex-direction:column}.container{width:min(100%,820px);margin-inline:auto;padding-inline:28px}.meta{font-size:12px;color:var(--muted)}.num,code,pre{font-family:var(--font-mono);font-variant-numeric:tabular-nums}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-weight:510;transition:background var(--motion-fast)}.btn-ghost{border-color:transparent}.btn-primary{background:var(--accent);color:var(--accent-on)}.btn-primary:hover{background:var(--accent-active);color:var(--accent-on)}.card{background:color-mix(in oklch,var(--fg) 3%,transparent);border:1px solid var(--border);border-radius:var(--radius-md)}.tag{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted)}.input,.textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--fg);padding:10px 12px}.input::placeholder,.textarea::placeholder{color:var(--muted)}
+.app{height:100dvh;display:grid;grid-template-columns:268px minmax(0,1fr)}.sidebar{background:color-mix(in oklch,var(--bg) 55%,var(--surface));border-right:1px solid var(--border);padding:20px 14px 12px;display:flex;flex-direction:column;min-height:0}.brand{padding:0 10px 25px;gap:10px}.brand-mark{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--border);border-radius:8px;font:18px var(--font-mono);background:var(--surface)}.brand strong{font-size:16px;font-weight:590;letter-spacing:-.4px}.brand .tag{margin-left:auto}.new-chat{justify-content:space-between;background:color-mix(in oklch,var(--fg) 4%,transparent);margin-bottom:14px}.search{position:relative;margin:0 2px 24px}.search svg{position:absolute;top:13px;left:10px;color:var(--muted);width:16px}.search input{padding-left:34px;font-size:12px;min-height:44px;border-color:transparent}.search input:hover{border-color:var(--border)}.history{overflow-y:auto;flex:1;min-height:0}.group-label{padding:0 12px;margin:5px 0 9px;color:var(--muted);font-size:11px}.history-item{width:100%;display:flex;text-align:left;align-items:flex-start;gap:10px;border-radius:6px;min-height:60px;padding:10px 12px;margin-bottom:4px;border:1px solid transparent}.history-item svg{margin-top:4px;color:var(--muted);width:15px}.history-item span{min-width:0;overflow-wrap:anywhere}.history-item strong{display:block;font-weight:400;font-size:13px}.history-item small{display:block;font-size:11px;color:var(--muted);margin-top:3px}.history-item[aria-current=true]{background:color-mix(in oklch,var(--fg) 6%,transparent);border-color:var(--border)}.history-item[aria-current=true] strong{color:var(--fg);font-weight:510}.sidebar-foot{border-top:1px solid var(--border);padding:16px 10px 2px;display:flex;align-items:center;gap:10px}.avatar{width:30px;height:30px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border);border-radius:50%;font-size:12px}.sidebar-foot .meta{font-size:11px}.workspace{display:flex;flex-direction:column;min-width:0;min-height:0}.topnav{height:72px;min-height:72px;padding:0 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:16px}.breadcrumb{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}.breadcrumb strong{color:var(--fg-2);font-weight:510}.top-actions{display:flex;gap:10px;align-items:center}.top-actions .tag{white-space:nowrap}.icon-btn{width:44px;min-width:44px;height:44px;display:grid;place-items:center;border-radius:6px}.mobile-toggle{display:none}.thread{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}.thread-heading{padding-top:36px;padding-bottom:28px}.thread-heading h1{font-size:23px;letter-spacing:var(--tracking-display);margin-bottom:8px}.thread-heading .meta{display:flex;gap:8px;align-items:center}.log-row{padding:0 0 30px;display:grid;grid-template-columns:32px minmax(0,1fr);gap:14px;align-items:start}.message-author{font-size:13px;font-weight:590;display:flex;gap:10px;align-items:center;margin:3px 0 12px}.message-author small{font-size:11px;color:var(--muted);font-weight:400}.user-text{background:color-mix(in oklch,var(--fg) 4%,transparent);border:1px solid var(--border-soft);border-radius:0 10px 10px 10px;padding:14px 18px;color:var(--fg-2);line-height:1.8}.assistant-icon{border-radius:8px;font-family:var(--font-mono);color:var(--fg)}.message-body{color:var(--fg-2);line-height:1.85;overflow-wrap:anywhere}.message-body p:last-child{margin-bottom:0}.activity{font-size:12px;margin:18px 0;color:var(--muted);border:1px solid var(--border);border-radius:8px;background:color-mix(in oklch,var(--fg) 2%,transparent)}summary{cursor:pointer;padding:12px 14px;min-height:44px}summary:hover{color:var(--fg);background:color-mix(in oklch,var(--fg) 5%,transparent)}.activity-content{padding:0 16px 12px;line-height:2}.code-head{padding:4px 12px;border-bottom:1px solid var(--border);font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}.code-head .btn{font-size:11px}.code-card pre{margin:0;padding:16px 20px;font-size:12px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg-2)}.code-card .comment{color:var(--muted)}.note{margin-top:16px!important;font-size:13px}.reply-actions{display:flex;gap:2px;margin-top:10px}.reply-actions button{font-size:12px;color:var(--muted)}.reply-actions button:hover{color:var(--fg)}.composer-area{padding:14px 0 17px;background:var(--bg)}.composer{border:1px solid color-mix(in oklch,var(--fg) 19%,transparent);border-radius:12px;background:color-mix(in oklch,var(--fg) 3%,transparent);padding:14px 14px 10px}.composer:focus-within{border-color:var(--accent)}.composer textarea{display:block;border:0;outline:none;background:transparent;padding:2px 4px;resize:none;height:76px;max-height:180px;font-size:14px;line-height:1.7}.composer textarea:focus-visible{outline:0}.composer-tools{display:flex;align-items:center;justify-content:space-between;gap:10px}.composer-tools .row{gap:5px}.composer select{border:0;background:transparent;color:var(--fg-2);max-width:150px;min-height:44px;font-size:12px;padding:0 8px;border-radius:6px}.composer select:hover{background:var(--surface)}.send{width:40px;min-width:44px;padding:0;height:44px}.composer-foot{display:flex;justify-content:space-between;gap:10px;padding:10px 4px 0;font-size:11px;color:var(--muted)}.attachment{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2);overflow-wrap:anywhere}.attachment:empty{display:none}.empty-state{padding:70px 0;text-align:center}.empty-state h2{font-size:28px;letter-spacing:-.6px;margin:18px 0 10px}.empty-state p{color:var(--muted)}.empty-state .brand-mark{margin:auto;width:48px;height:48px}.quick-prompts{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:26px}.quick-prompts button{font-size:12px}.status{min-height:18px}.backdrop{display:none}.screen-reader{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(min-width:1600px){.container{width:880px}.thread-heading{padding-top:48px}.log-row{padding-bottom:36px}}
+@media(max-width:920px){.app{grid-template-columns:230px minmax(0,1fr)}.container{padding-inline:22px}.topnav{padding:0 20px}.top-actions .tag{display:none}.composer-foot span:last-child{display:none}}
+@media(max-width:640px){.app{grid-template-columns:minmax(0,1fr)}.sidebar{display:none}.app.history-open .sidebar{display:flex;position:fixed;left:0;top:0;bottom:0;width:280px;max-width:85vw;z-index:30}.app.history-open .backdrop{display:block;position:fixed;inset:0;background:color-mix(in oklch,var(--bg) 75%,transparent);z-index:20}.mobile-toggle{display:grid}.topnav{height:62px;min-height:62px;padding:0 10px;gap:6px}.breadcrumb{gap:6px}.breadcrumb>span{display:none}.top-actions{gap:0}.container{padding-inline:16px}.thread-heading{padding-top:26px}.thread-heading h1{font-size:21px}.log-row{grid-template-columns:26px minmax(0,1fr);gap:10px}.avatar{width:26px;height:26px}.code-card pre{padding:12px;font-size:11px}.composer-area{padding-top:8px}.composer-tools .row{gap:0}.composer select{max-width:125px}.composer-foot{font-size:10px}.user-text{padding:12px}.message-body{font-size:13px}}
+/* Refined workspace: compact navigation, open transcript, one quiet composer. */
+.app{grid-template-columns:248px minmax(0,1fr)}
+.sidebar{padding:20px 12px 12px;background:color-mix(in oklch,var(--bg) 70%,var(--surface));border-right-color:var(--border-soft)}
+.brand{height:48px;padding:0 10px;margin-bottom:20px;gap:10px}
+.brand-mark{width:28px;height:28px;border:0;background:transparent;font-size:21px;border-radius:0}
+.brand strong{font-size:15px;font-weight:510;letter-spacing:-.3px}
+.brand .icon-btn{margin-left:auto;color:var(--muted)}
+.new-chat{padding:8px 12px;margin:0 0 8px;background:color-mix(in oklch,var(--fg) 5%,transparent);border-color:var(--border-soft)}
+.new-chat .meta{font:11px var(--font-mono)}
+.search{margin:0 0 28px}.search input{font-size:13px;padding-left:35px}
+.group-label{font-size:11px;margin:0 0 10px;padding-left:12px}
+.history-item{min-height:48px;align-items:center;padding:10px 12px;gap:10px;margin-bottom:2px}
+.history-item svg{display:none}.history-item small{display:none}.history-item strong{font-size:13px;line-height:1.65}
+.history-item[aria-current=true]{border-color:transparent;background:color-mix(in oklch,var(--fg) 7%,transparent)}
+.history-item[aria-current=true]::after{content:'';width:5px;height:5px;flex:0 0 5px;background:var(--muted);border-radius:50%;margin-left:auto}
+.sidebar-foot{padding:16px 8px 4px;gap:12px;font-size:12px}.sidebar-foot .avatar{border-radius:8px;width:32px;height:32px}
+.sidebar-foot .meta{font-size:10px;margin-top:2px}
+.topnav{height:68px;min-height:68px;padding:0 24px;border:0;gap:16px}
+.topnav>.row{min-width:0;gap:10px}.breadcrumb{flex-wrap:nowrap;min-width:0;gap:8px}
+.breadcrumb>span{white-space:nowrap;font-size:12px}.breadcrumb h1{font-size:13px;font-weight:510;line-height:1.5;overflow-wrap:anywhere;letter-spacing:0}
+.top-actions{gap:8px}.top-actions .tag{border:0;padding:0;font-size:11px}
+.mobile-toggle{display:grid;color:var(--muted)}.icon-btn:hover{color:var(--fg)}
+.container{width:min(100%,824px);padding-inline:32px}
+.thread{scrollbar-gutter:stable}.thread-heading{padding:28px 0 32px}
+.thread-heading .meta{justify-content:center;font-size:11px;gap:12px}
+.thread-heading .meta::before,.thread-heading .meta::after{content:'';height:1px;background:var(--border-soft);width:40px}
+.log-row{display:block;padding:0 0 34px}.log-row>.avatar{display:none}
+.log-row:has(.user-text){display:flex;justify-content:flex-end;padding:0 0 40px}
+.log-row:has(.user-text)>div{max-width:88%}.log-row:has(.user-text) .message-author{display:none}
+.user-text{padding:15px 20px;background:color-mix(in oklch,var(--fg) 5%,transparent);border:1px solid var(--border-soft);border-radius:12px;color:var(--fg);font-size:14px;line-height:1.85}
+.message-author{margin:0 0 16px;font-weight:510;font-size:13px;gap:9px}
+.message-author::before{content:'›_';font:17px var(--font-mono);color:var(--fg);margin-right:2px}
+.message-author small{font-size:10px;border:1px solid var(--border);border-radius:4px;padding:0 5px}
+.message-body{font-size:14px;line-height:1.95}.activity{margin:15px 0;border:0;background:transparent;border-radius:0}
+.activity summary{padding:4px 0;min-height:44px;display:list-item;list-style-position:inside;font-size:12px}
+.activity summary:hover{background:transparent}.activity-content{padding:4px 16px 12px}
+.code-card{border-radius:10px;background:color-mix(in oklch,var(--fg) 2%,transparent);overflow:hidden}
+.code-head{padding:0 16px;min-height:48px;color:var(--muted);background:color-mix(in oklch,var(--fg) 2%,transparent)}
+.code-head .num{color:var(--fg-2);font-size:12px}.code-head .num::before{content:'TS';font-size:10px;color:var(--muted);margin-right:12px}
+.code-card pre{padding:20px 24px;font-size:12px;line-height:1.85}
+.note{margin-top:20px!important;font-size:13px}.note code{font-size:12px;background:color-mix(in oklch,var(--fg) 5%,transparent);padding:3px 5px;border-radius:4px}
+.reply-actions{margin-top:12px}.reply-actions .btn{min-height:44px;padding:8px 0;font-size:11px;gap:7px}.reply-actions svg{width:14px;height:14px}
+.composer-area{flex-shrink:0;padding:16px 0 max(16px,env(safe-area-inset-bottom));background:var(--bg)}
+.composer{padding:18px 16px 10px;border:1px solid color-mix(in oklch,var(--fg) 16%,transparent);border-radius:12px;background:color-mix(in oklch,var(--fg) 4%,var(--bg));transition:border-color var(--motion-fast)}
+.composer:focus-within{border-color:var(--muted)}
+.composer:has(textarea:focus-visible){outline:2px solid var(--accent-hover);outline-offset:3px}
+.composer textarea{height:70px;min-height:70px;max-height:160px;padding:0 4px 10px;font-size:14px;line-height:1.75;field-sizing:content}
+.composer-tools{padding-top:6px;gap:12px}.composer-tools>.row{gap:4px;min-width:0}
+.composer-tools .icon-btn{color:var(--muted)}.composer-tools .icon-btn:hover{color:var(--fg)}
+.composer select{font-size:12px;color:var(--fg-2);padding:0 8px;max-width:140px;cursor:pointer}
+.composer-tools .tool-separator{height:16px;width:1px;background:var(--border);margin:0 8px}
+.context-label{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}.context-label svg{width:14px;height:14px}
+.send{width:44px;height:44px;border-radius:8px}.send:disabled{background:color-mix(in oklch,var(--fg) 12%,transparent);color:var(--fg);border-color:transparent;opacity:.45}
+.composer-foot{padding:10px 2px 0;flex-wrap:wrap;font-size:10px;gap:4px 12px}
+.empty-state{padding:0 0 26px;text-align:left}.empty-state h2{font-size:32px;line-height:1.35;letter-spacing:var(--tracking-display);margin:0 0 12px}.empty-state p{font-size:14px;margin:0;color:var(--muted)}
+.empty-state .welcome-kicker{font:11px var(--font-mono);color:var(--muted);margin-bottom:20px;display:block}
+.quick-prompts{display:none;justify-content:flex-start;gap:8px;margin:18px 0 0}.quick-prompts .btn{font-size:12px;border-color:var(--border-soft);border-radius:6px;min-height:44px;color:var(--fg-2);padding:8px 12px;background:transparent}.quick-prompts .btn:hover{background:color-mix(in oklch,var(--fg) 7%,transparent);color:var(--fg)}
+.workspace:has(.empty-state){overflow-y:auto}.workspace:has(.empty-state) .topnav{flex-shrink:0}
+.workspace:has(.empty-state) .thread{flex:0 0 auto;overflow:visible;margin-top:auto;scrollbar-gutter:auto}
+.workspace:has(.empty-state) .thread-heading{display:none}
+.workspace:has(.empty-state) .composer-area{padding-top:0;padding-bottom:40px;margin-bottom:auto}
+.workspace:has(.empty-state) .quick-prompts{display:flex}.workspace:has(.empty-state) .composer textarea{height:96px}
+.workspace:has(.empty-state) .composer-foot{padding-top:14px}
+@media(min-width:641px){.app.sidebar-collapsed{grid-template-columns:minmax(0,1fr)}.app.sidebar-collapsed .sidebar{display:none}}
+@media(min-width:1600px){.container{width:880px}.thread-heading{padding-top:36px}.log-row{padding-bottom:40px}}
+@media(max-width:1000px){.app{grid-template-columns:218px minmax(0,1fr)}.container{padding-inline:24px}.breadcrumb>span{display:none}.context-label,.tool-separator{display:none}}
+@media(max-width:640px){
+ .app{grid-template-columns:minmax(0,1fr)}.sidebar{display:none}.topnav{height:60px;min-height:60px;padding:0 8px}.breadcrumb h1{font-size:12px}.top-actions .tag{display:none}
+ .container{width:100%;padding-inline:16px}.thread-heading{padding:20px 0 24px}.log-row:has(.user-text)>div{max-width:94%}.log-row:has(.user-text){padding-bottom:32px}.user-text{padding:12px 16px}.message-body{font-size:13px}.code-card pre{padding:16px;font-size:11px}
+ .composer-area{padding:10px 0 max(10px,env(safe-area-inset-bottom))}.composer{padding:14px 10px 8px}.composer textarea{font-size:16px;height:70px}.composer-foot{font-size:10px}.composer-foot span:last-child{display:none}
+ .empty-state{padding:32px 0 24px}.empty-state h2{font-size:27px}.empty-state p{font-size:13px}.workspace:has(.empty-state) .composer-area{padding-bottom:24px}.quick-prompts{gap:8px}.quick-prompts .btn{padding:8px 10px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0"><defs>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2Z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="m9 14 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7L14 3M7 16l9-9"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+</defs></svg>
+<div class="app" id="app" data-od-id="coding-workspace">
+<button class="backdrop" id="close-history" aria-label="关闭历史对话" data-od-id="close-history"></button>
+<aside class="sidebar" aria-label="对话历史" data-od-id="history-sidebar">
+<div class="row brand" data-od-id="workspace-brand"><span class="brand-mark" aria-hidden="true">&gt;_</span><strong>编码助手</strong><button class="icon-btn" id="collapse-history" aria-label="收起侧栏" data-od-id="collapse-sidebar"><svg><use href="#i-panel"/></svg></button></div>
+<button class="btn new-chat" id="new-chat" data-od-id="new-chat"><span class="row"><svg><use href="#i-plus"/></svg>新建对话</span><span class="meta">⌘ K</span></button>
+<div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input class="input" id="search" type="search" placeholder="搜索历史对话" aria-label="搜索历史对话" data-od-id="history-search"></div>
+<div class="history" id="history" data-od-id="history-list"></div>
+<div class="sidebar-foot"><span class="avatar">我</span><div><span>个人工作空间</span><div class="meta">对话保存在此浏览器</div></div></div>
+</aside>
+<main class="workspace" id="content" data-od-id="conversation-panel">
+<header class="topnav" data-od-id="conversation-toolbar"><div class="row"><button class="icon-btn mobile-toggle" id="toggle-history" aria-label="切换历史侧栏" aria-expanded="true" data-od-id="toggle-history"><svg><use href="#i-panel"/></svg></button><div class="breadcrumb"><span>对话</span><span>/</span><h1 id="chat-title" data-od-id="conversation-title">为搜索输入添加防抖</h1></div></div><div class="top-actions"><span class="tag">本地演示 · 未连接模型</span><button class="icon-btn" id="export" title="导出当前对话" aria-label="导出当前对话" data-od-id="export-chat"><svg><use href="#i-download"/></svg></button></div></header>
+<section class="thread" id="thread" aria-label="消息记录" data-od-id="conversation-log"><div class="container"><div class="thread-heading"><div class="meta"><span id="thread-label">示例对话</span></div></div><div id="messages"></div></div></section>
+<section class="composer-area" data-od-id="message-composer"><div class="container"><form class="composer" id="composer"><label class="screen-reader" for="prompt">描述你的编码任务</label><textarea class="textarea" id="prompt" maxlength="12000" placeholder="描述任务，或粘贴需要修改的代码…" data-od-id="message-input"></textarea><div class="attachment" id="attachment"></div><div class="composer-tools"><div class="row"><button class="icon-btn" type="button" id="attach" title="附加文本或代码文件" aria-label="附加文本或代码文件" data-od-id="attach-file"><svg><use href="#i-plus"/></svg></button><input type="file" id="file" hidden accept=".txt,.md,.js,.jsx,.ts,.tsx,.json,.py,.css,.html"><label class="screen-reader" for="mode">对话模式</label><select id="mode" data-od-id="agent-mode"><option value="code">编码</option><option value="plan">规划</option><option value="review">审查</option></select><span class="tool-separator" aria-hidden="true"></span><span class="context-label"><svg aria-hidden="true"><use href="#i-clip"/></svg>可附加代码文件</span></div><button class="btn btn-primary send" id="send" type="submit" aria-label="发送消息" title="发送消息" data-od-id="send-message" disabled><svg><use href="#i-arrow"/></svg></button></div></form><div class="quick-prompts" data-od-id="task-shortcuts"><button class="btn" data-prompt="帮我分析这段代码的潜在问题：" data-od-id="prompt-review">审查代码</button><button class="btn" data-prompt="请帮我规划以下功能的实现步骤：" data-od-id="prompt-plan">规划功能</button><button class="btn" data-prompt="请解释以下错误，并给出排查建议：" data-od-id="prompt-debug">排查错误</button></div><div class="composer-foot"><span class="status" id="status" role="status">本地演示，不会执行代码或修改文件</span><span>Enter 发送 · Shift + Enter 换行</span></div></div></section>
+</main></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const exampleCode=`import { useEffect, useState } from 'react';
+
+export function useDebounce<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debounced;
+}`;
+const initial=[{id:'sample-debounce',title:'为搜索输入添加防抖',group:'示例对话',messages:[{role:'user',text:'帮我写一个可复用的 useDebounce Hook，用于搜索输入。使用 TypeScript，并处理组件卸载时的定时器清理。'},{role:'assistant',text:'可以把防抖逻辑独立为一个 Hook。输入变化后重新计时，仅在用户停止输入时更新结果。',code:exampleCode}]},{id:'sample-review',title:'审查异步请求的错误处理',group:'示例对话',messages:[{role:'user',text:'审查异步请求时，应该优先检查哪些错误处理？'},{role:'assistant',text:'先检查 HTTP 状态码，再处理网络异常与请求取消。不要将所有错误都转换成空数组，否则调用方无法区分“没有数据”和“请求失败”。\n\n还需要确认：组件卸载时是否取消请求，以及旧请求是否可能覆盖新结果。'}]},{id:'sample-test',title:'为工具函数补充单元测试',group:'示例对话',messages:[{role:'user',text:'怎么为工具函数挑选最小的一组测试？'},{role:'assistant',text:'从输入边界开始：一个正常输入、一个空输入，以及一个能触发分支的边界值。请提供函数实现，我可以进一步梳理具体用例。'}]},{id:'sample-types',title:'理解 TypeScript 泛型约束',group:'示例对话',messages:[{role:'user',text:'泛型约束和直接使用接口有什么区别？'},{role:'assistant',text:'接口描述输入必须满足的结构；泛型约束在限制结构的同时，保留调用方传入的具体类型。需要让输入类型与返回类型关联时，泛型更合适。'}]}];
+let sessions=structuredClone(initial),active=sessions[0].id,attachment=null;
+const validSessions=x=>Array.isArray(x)&&x.length>0&&x.every(s=>s&&typeof s.id==='string'&&typeof s.title==='string'&&Array.isArray(s.messages)&&s.messages.every(m=>m&&['user','assistant'].includes(m.role)&&typeof m.text==='string'&&(m.code===undefined||typeof m.code==='string')));
+try{const saved=JSON.parse(localStorage.getItem('coding-agent-v1'));if(saved&&validSessions(saved.sessions)){sessions=saved.sessions;active=sessions.some(s=>s.id===saved.active)?saved.active:sessions[0].id;}}catch(e){$('status').textContent='本地记录不可用，本次对话仍可继续';}
+function current(){return sessions.find(s=>s.id===active);}
+function save(){try{localStorage.setItem('coding-agent-v1',JSON.stringify({sessions,active}));}catch(e){$('status').textContent='保存失败，请导出对话以免丢失';}}
+function history(){const q=$('search').value.trim().toLowerCase();$('history').innerHTML='<div class="group-label">对话记录</div>'+sessions.filter(s=>s.title.toLowerCase().includes(q)||s.messages.some(m=>m.text.toLowerCase().includes(q))).map(s=>`<button class="history-item" data-session="${escapeHTML(s.id)}" data-od-id="history-${escapeHTML(s.id)}" aria-current="${s.id===active}"><svg aria-hidden="true"><use href="#i-chat"/></svg><span><strong>${escapeHTML(s.title)}</strong><small>${s.group==='示例对话'?'示例对话':'本地对话'} · ${s.messages.length} 条消息</small></span></button>`).join('');if(!$('history').querySelector('button'))$('history').innerHTML+='<p class="meta" style="padding:12px">没有匹配的对话</p>';}
+function render(){history();const s=current();$('chat-title').textContent=s.title;$('thread-label').textContent=s.group==='示例对话'?'示例内容，未实际执行':'本地对话';$('messages').innerHTML=s.messages.length?s.messages.map((m,i)=>`<article class="log-row" data-od-id="message-${i}"><span class="avatar ${m.role==='assistant'?'assistant-icon':''}" aria-hidden="true">${m.role==='user'?'我':'›_'}</span><div><div class="message-author">${m.role==='user'?'你':'编码助手'}${m.role==='assistant'?'<small>示例回复</small>':''}</div><div class="message-body ${m.role==='user'?'user-text':''}">${escapeHTML(m.text).replace(/\n/g,'<br>')}</div>${m.code?`<details class="activity" data-od-id="implementation-notes"><summary>实现思路 · 延迟更新与定时器清理</summary><div class="activity-content">使用泛型保留输入类型<br>输入变化时取消上一轮计时<br>组件卸载时清理未完成的定时器</div></details><div class="card code-card" data-od-id="code-preview"><div class="code-head"><span class="num">useDebounce.ts</span><button class="btn btn-ghost" data-copy="${i}" data-od-id="copy-code"><svg><use href="#i-copy"/></svg>复制代码</button></div><pre><code>${escapeHTML(m.code)}</code></pre></div><p class="note message-body">在搜索组件中使用 <code>useDebounce(query, 300)</code>，再根据返回值触发请求。请求本身还需要单独处理取消和竞态。</p>`:''}${m.role==='assistant'?`<div class="reply-actions"><button class="btn btn-ghost" data-copy="${i}" data-od-id="copy-message-${i}" aria-label="复制回复"><svg><use href="#i-copy"/></svg>复制</button></div>`:''}</div></article>`).join(''):'<div class="empty-state"><span class="welcome-kicker">你的编码工作空间</span><h2 data-od-id="empty-title">今天，我们写点什么？</h2><p>从一个具体任务开始，其他的交给对话。</p></div>';}
+function closeHistory(){$('app').classList.remove('history-open');$('toggle-history').setAttribute('aria-expanded',String(!matchMedia('(max-width:640px)').matches&&!$('app').classList.contains('sidebar-collapsed')));}
+$('history').onclick=e=>{const b=e.target.closest('[data-session]');if(!b)return;active=b.dataset.session;render();save();closeHistory();$('thread').scrollTop=0;};
+$('search').oninput=history;
+$('new-chat').onclick=()=>{const empty=sessions.find(s=>!s.messages.length);if(empty)active=empty.id;else{active='chat-'+Date.now();sessions.unshift({id:active,title:'新对话',group:'本地对话',messages:[]});}$('search').value='';render();save();closeHistory();$('prompt').focus();};
+function toggleHistory(){if(matchMedia('(max-width:640px)').matches){const open=$('app').classList.toggle('history-open');$('toggle-history').setAttribute('aria-expanded',String(open));if(open)$('search').focus();else $('toggle-history').focus();}else{const collapsed=$('app').classList.toggle('sidebar-collapsed');$('toggle-history').setAttribute('aria-expanded',String(!collapsed));$('toggle-history').focus();}}
+$('toggle-history').onclick=toggleHistory;$('collapse-history').onclick=toggleHistory;$('close-history').onclick=()=>{closeHistory();$('toggle-history').focus();};
+$('prompt').oninput=()=>{$('send').disabled=!$('prompt').value.trim();};
+$('prompt').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('new-chat').click();}if(e.key==='Escape'&&$('app').classList.contains('history-open')){closeHistory();$('toggle-history').focus();}});
+$('composer').onsubmit=e=>{e.preventDefault();const text=$('prompt').value.trim();if(!text)return;const s=current();if(!s.messages.length)s.title=text.slice(0,32);s.messages.push({role:'user',text:text+(attachment?'\n\n附件：'+attachment.name+'\n'+attachment.text:'')});const mode=$('mode').value;const reply={code:'编码任务已记录。接入模型后，这里将显示代码建议与执行过程。',plan:'规划任务已记录。接入模型后，这里将拆解实现步骤与验证方案。',review:'审查任务已记录。接入模型后，这里将呈现问题定位与修改建议。'};s.messages.push({role:'assistant',text:reply[mode]+'\n\n当前为本地交互演示：消息已保存在会话中，没有调用模型，也没有执行或修改任何代码。'});$('prompt').value='';$('send').disabled=true;attachment=null;$('attachment').replaceChildren();$('file').value='';render();save();$('thread').scrollTop=$('thread').scrollHeight;};
+$('content').onclick=async e=>{const p=e.target.closest('[data-prompt]');if(p){$('prompt').value=p.dataset.prompt;$('prompt').dispatchEvent(new Event('input'));$('prompt').focus();return;}const b=e.target.closest('[data-copy]');if(!b)return;const m=current().messages[Number(b.dataset.copy)];try{await navigator.clipboard.writeText(m.code||m.text);$('status').textContent='已复制到剪贴板';}catch(err){$('status').textContent='无法访问剪贴板，请选中文本手动复制';}};
+$('attach').onclick=()=>$('file').click();
+$('file').onchange=async()=>{const f=$('file').files[0];if(!f)return;if(f.size>100000){$('status').textContent='请使用小于 100 KB 的文本或代码文件';$('file').value='';return;}try{attachment={name:f.name,text:await f.text()};$('attachment').textContent=f.name;const remove=document.createElement('button');remove.type='button';remove.className='btn btn-ghost';remove.textContent='移除';remove.dataset.odId='remove-attachment';remove.onclick=()=>{attachment=null;$('file').value='';$('attachment').replaceChildren();};$('attachment').append(remove);$('status').textContent='附件仅在本地读取，不会上传';}catch(e){$('status').textContent='文件读取失败，请重新选择';}};
+$('export').onclick=()=>{const s=current();const text=s.title+'\n\n'+s.messages.map(m=>(m.role==='user'?'你':'编码助手')+'\n'+m.text+(m.code?'\n\n'+m.code:'')).join('\n\n');const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='编码对话.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('status').textContent='已导出当前对话';};
+// Small runnable integrity check: run in the browser console with runChecks().
+window.runChecks=()=>{console.assert(escapeHTML('<script>"&')==='&lt;script&gt;&quot;&amp;','转义检查');console.assert(validSessions(initial)&&!validSessions([{id:'bad'}]),'会话验证');console.assert(current()&&document.querySelectorAll('.history-item').length>0,'会话渲染');return '检查完成';};
+closeHistory();
+render();
+</script>
+</body>
+</html>

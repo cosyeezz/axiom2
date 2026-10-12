@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>模型配置 · AXIOM</title>
+<style>
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #08090a;              /* marketing black — hero canvas */
+  --surface:      #191a1b;              /* elevated surface — cards, dropdowns */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f7f8f8;                      /* near-white primary text */
+  --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
+  --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
+  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
+  --border-soft: rgba(255, 255, 255, 0.05);   /* ultra-subtle divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* 用户配色：暖橙交互、金黄收藏、绿色完成，替代蓝紫色。 */
+  --accent:        oklch(0.76 0.13 55);
+  --accent-on:     #08090a;
+  --accent-hover:  oklch(0.84 0.11 65);
+  --accent-active: oklch(0.88 0.09 65);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #27a644;                   /* Linear green */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Linear's display range 72px→10px; the 8 schema slots map the
+   * key stops. 64px secondary-hero lives inline in components.html. */
+  --text-xs:   12px;                    /* label / micro */
+  --text-sm:   14px;                    /* caption large / link small */
+  --text-base: 16px;                    /* body — standard reading */
+  --text-lg:   18px;                    /* body large — feature descriptions */
+  --text-xl:   24px;                    /* heading 2 */
+  --text-2xl:  32px;                    /* heading 1 */
+  --text-3xl:  48px;                    /* display — section headlines */
+  --text-4xl:  72px;                    /* display XL — hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: Linear's signature "engineered" compression.
+   * h2 (32px) → 1.13; h3 (24px) → 1.33 per DESIGN.md spec.
+   * --tracking-display: -0.022em = -1.584px / 72px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.00;
+  --tracking-display: -0.022em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Whitespace Philosophy. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px for buttons/inputs (comfortable), 8px cards, 12px panels. */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* On dark surfaces: luminance stepping, not opaque drop shadows.
+     --elev-raised uses semi-transparent border-as-shadow technique. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.4) 0px 2px 4px,
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
+     indicator visible on the near-black #08090a canvas. */
+  --focus-ring:
+    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}
+/* Seed primitives: layouts 7 (supplier list) and 8 (model table), adapted to settings. */
+*,*::before,*::after{box-sizing:border-box}html{color-scheme:dark;-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 var(--font-body);font-feature-settings:"cv01","ss03";-webkit-font-smoothing:antialiased}a{color:inherit;text-decoration:none}button,input,select{font:inherit}button{cursor:pointer;color:var(--fg)}button,a{transition:background var(--motion-fast),border-color var(--motion-fast)}h1,h2,h3{font-family:var(--font-display);font-weight:510;margin:0;letter-spacing:var(--tracking-display);text-wrap:balance}p{margin:0;text-wrap:pretty}svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}button{background:transparent;border:0}button:hover,a:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}:is(button,a,input,select):focus-visible{outline:2px solid var(--accent-hover);outline-offset:3px}button:disabled{opacity:.4;cursor:not-allowed}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;font-weight:510}.btn-ghost{border-color:transparent}.btn-primary{background:var(--accent);color:var(--accent-on);border-color:transparent}.btn-primary:hover{background:var(--accent-hover);color:var(--accent-on)}.btn-primary:active{background:var(--accent-active);color:var(--accent-on)}.row,.row-between{display:flex;align-items:center;gap:12px}.row-between{justify-content:space-between}.container{width:100%;max-width:var(--container-max);margin-inline:auto;padding-inline:var(--space-8)}.section{padding-block:var(--space-6)}.meta{font-size:12px;color:var(--muted)}.num,code{font:12px var(--font-mono);font-variant-numeric:tabular-nums}.card{background:color-mix(in oklch,var(--fg) 2%,transparent);border:1px solid var(--border);border-radius:var(--radius-md)}.field{display:flex;flex-direction:column;gap:8px;min-width:0}.field label{font-size:13px;color:var(--fg-2)}.input{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--fg);background:color-mix(in oklch,var(--fg) 2%,transparent)}.input:hover{border-color:color-mix(in oklch,var(--fg) 28%,transparent)}.input::placeholder{color:var(--muted)}select option{background:var(--surface);color:var(--fg)}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.ds-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}.ds-table th,.ds-table td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--border-soft);overflow-wrap:anywhere}.ds-table th{font-weight:400;font-size:12px;color:var(--muted);background:color-mix(in oklch,var(--fg) 2%,transparent)}.ds-table tr:last-child td{border-bottom:0}.ds-table tbody tr:hover{background:color-mix(in oklch,var(--fg) 3%,transparent)}.ds-table tbody tr:hover .model-id{color:var(--fg-2)}.tag{display:inline-flex;align-items:center;min-height:22px;padding:1px 7px;border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--fg-2)}.log-row{border-top:1px solid var(--border-soft);padding:12px}.icon-btn{width:44px;height:44px;display:inline-grid;place-items:center;border-radius:var(--radius-sm);flex-shrink:0}.icon-btn svg{width:16px;height:16px}[hidden]{display:none!important}
+.settings-app{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:100dvh}.settings-sidebar{padding:24px 16px;border-right:1px solid var(--border);background:color-mix(in oklch,var(--bg) 55%,var(--surface));display:flex;flex-direction:column;gap:32px}.settings-sidebar .back-link{justify-content:flex-start;width:100%;color:var(--fg-2);font-size:13px}.back-link svg{width:16px}.sidebar-label{font-size:12px;color:var(--muted);padding:0 12px;margin-bottom:8px}.settings-nav{min-height:44px;padding:10px 12px;display:flex;align-items:center;gap:10px;border-radius:var(--radius-sm);background:color-mix(in oklch,var(--fg) 7%,transparent);font-size:13px}.settings-nav svg{width:16px;color:var(--fg-2)}.sidebar-note{margin-top:auto;padding:12px;font-size:11px;color:var(--muted)}.settings-main{min-width:0}.topnav{height:64px;border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;gap:12px}.topnav .row{gap:10px;font-size:12px;color:var(--muted)}.topnav strong{color:var(--fg-2);font-weight:510}.topnav .tag{font-size:11px}.page-heading{padding:32px 0 28px}.page-heading h1{font-size:28px;line-height:1.3;margin-bottom:8px}.page-heading p{font-size:13px;color:var(--muted)}.configuration-layout{display:grid;grid-template-columns:216px minmax(0,1fr);gap:32px;padding-bottom:32px;align-items:start}.supplier-panel{position:sticky;top:24px;min-width:0}.supplier-panel h2{font-size:13px;color:var(--fg-2);margin-bottom:16px}.supplier-list{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}.supplier-option{width:100%;min-height:68px;display:flex;align-items:center;gap:12px;text-align:left;border:1px solid transparent;border-radius:var(--radius-md);padding:12px}.supplier-option[aria-current=true]{background:color-mix(in oklch,var(--fg) 7%,transparent);border-color:var(--border)}.supplier-option:hover{background:color-mix(in oklch,var(--fg) 11%,transparent);color:var(--fg)}.supplier-option:hover :is(small,.tag){color:var(--fg-2)}.supplier-option>span{min-width:0;flex:1}.supplier-option strong{display:block;font-size:13px;font-weight:510;overflow-wrap:anywhere}.supplier-option small{display:block;font-size:11px;color:var(--muted);margin-top:3px}.supplier-option .tag{flex:0 0 auto;color:var(--muted);padding-inline:5px}.add-supplier{width:100%;justify-content:flex-start;font-size:12px;color:var(--fg-2)}.supplier-detail{min-width:0}.detail-heading{padding-bottom:24px;border-bottom:1px solid var(--border);gap:16px;align-items:flex-start}.detail-heading h2{font-size:22px;overflow-wrap:anywhere}.detail-heading .meta{margin-top:5px}.detail-heading .tag{margin-top:5px;white-space:nowrap}.section-heading{margin-bottom:20px}.section-heading h3{font-size:14px;margin-bottom:5px}.section-heading p{font-size:12px;color:var(--muted)}.connection-fields{display:grid;gap:20px}.key-field{position:relative}.key-field input{padding-right:52px}.key-field button{position:absolute;right:1px;top:1px}.field-help{font-size:11px;color:var(--muted);line-height:1.7}.model-section{border-top:1px solid var(--border);padding-top:24px}.model-heading{margin-bottom:16px;gap:16px}.model-heading h3{font-size:14px;line-height:1.5}.model-heading p{margin-top:5px;color:var(--muted);font-size:12px}.model-heading .btn{font-size:12px;flex-shrink:0}.model-table{overflow:hidden}.model-name{display:block;font-weight:510;color:var(--fg)}.model-id{display:block;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere}.model-actions{display:flex;justify-content:flex-end;gap:0}.model-actions button{color:var(--fg-2)}.model-actions button:hover{color:var(--fg)}.model-empty{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}.model-empty strong{display:block;margin-bottom:6px;color:var(--fg-2);font-weight:510}.save-bar{margin-top:24px;border-top:1px solid var(--border);padding-top:20px;display:flex;gap:16px;align-items:flex-start;justify-content:space-between}.save-bar .meta{line-height:1.8;max-width:420px}.save-actions{display:flex;gap:8px;flex-shrink:0}.save-actions .btn{min-width:88px}.feedback{min-height:24px;color:var(--fg-2);font-size:12px;margin-top:8px;overflow-wrap:anywhere}.prototype-note{padding:14px 16px;margin-top:24px;display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--muted);line-height:1.8}.prototype-note svg{margin-top:2px;width:16px}.settings-dialog{width:min(460px,calc(100% - 32px));max-height:90dvh;padding:24px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}.settings-dialog::backdrop{background:color-mix(in oklch,var(--bg) 80%,transparent)}.settings-dialog h2{font-size:20px;margin-bottom:8px}.settings-dialog p{font-size:12px;color:var(--muted);margin-bottom:24px}.settings-dialog .field+.field{margin-top:16px}.dialog-actions{justify-content:flex-end;margin-top:24px}.settings-dialog .input{background:var(--bg)}.empty-details{padding:80px 24px;text-align:center}.empty-details h2{font-size:20px;margin-bottom:10px}.empty-details p{color:var(--muted);font-size:13px}.mobile-back{display:none}
+@media(min-width:1500px){.configuration-layout{grid-template-columns:240px minmax(0,1fr);gap:48px}.container{padding-inline:48px}.page-heading{padding-top:40px}}
+@media(max-width:1100px){.settings-app{grid-template-columns:184px minmax(0,1fr)}.container{padding-inline:24px}.configuration-layout{grid-template-columns:180px minmax(0,1fr);gap:24px}.settings-sidebar{padding-inline:12px}.topnav{padding-inline:24px}.save-bar{flex-wrap:wrap}.save-actions{margin-left:auto}}
+@media(max-width:920px){.grid-2{grid-template-columns:minmax(0,1fr)}.settings-app{grid-template-columns:160px minmax(0,1fr)}.configuration-layout{grid-template-columns:minmax(0,1fr);gap:24px}.supplier-panel{position:static}.supplier-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}.supplier-option{padding:10px;min-height:64px}.supplier-panel .add-supplier{width:auto}.supplier-panel h2{margin-bottom:12px}.detail-heading{padding-bottom:20px}}
+@media(max-width:640px){.settings-app{grid-template-columns:minmax(0,1fr)}.settings-sidebar{display:none}.mobile-back{display:inline-grid}.topnav{padding-inline:12px;height:60px}.topnav .tag{display:none}.container{padding-inline:20px}.page-heading{padding:24px 0}.page-heading h1{font-size:24px}.configuration-layout{padding-bottom:24px}.ds-table th,.ds-table td{padding:10px 8px}.ds-table .reasoning-col{display:none}.model-table th:first-child{width:60%!important}.model-table th:last-child{width:40%!important}.model-actions{flex-wrap:wrap}.model-actions button{width:44px}.model-heading{align-items:flex-start}.detail-heading h2{font-size:20px}.save-bar .meta{max-width:none}.save-actions{width:100%;justify-content:flex-end}.settings-dialog{padding:20px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="settings-app" data-od-id="settings-app">
+<aside class="settings-sidebar" data-od-id="settings-sidebar" aria-label="配置导航">
+<a class="btn btn-ghost back-link" href="coding-agent-v2-before-subagent-modal-v2.html" data-od-id="return-workspace"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h15"/></svg>返回工作台</a>
+<div><p class="sidebar-label">配置</p><a href="model-config.html" class="settings-nav" aria-current="page" data-od-id="model-settings-nav"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4M9 9h6v6H9Z"/></svg>模型配置</a></div>
+<p class="sidebar-note">AXIOM · 本地配置<br>配置与工作空间独立</p>
+</aside>
+<main class="settings-main" id="content" data-od-id="model-config-panel">
+<header class="topnav" data-od-id="settings-toolbar"><div class="row"><a class="icon-btn mobile-back" href="coding-agent-v2-before-subagent-modal-v2.html" aria-label="返回工作台" data-od-id="mobile-return-workspace"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></a><span>配置</span><span aria-hidden="true">/</span><strong>模型配置</strong></div><span class="tag">本地原型</span></header>
+<div class="container">
+<div class="page-heading" data-od-id="settings-heading"><h1 data-od-id="model-config-title">模型配置</h1><p>管理供应商的连接信息，以及可用的模型列表。</p></div>
+<div class="configuration-layout">
+<section class="supplier-panel" data-od-id="supplier-panel" aria-labelledby="supplier-heading"><h2 id="supplier-heading" data-od-id="supplier-heading">供应商 <span class="meta num" id="supplier-count"></span></h2><div id="supplier-list" class="supplier-list" data-od-id="supplier-list"></div><button class="btn btn-ghost add-supplier" id="add-supplier" type="button" data-od-id="add-supplier"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>添加供应商</button></section>
+<div class="supplier-detail" id="supplier-detail" data-od-id="supplier-detail">
+<form id="provider-form">
+<div class="row-between detail-heading" data-od-id="provider-heading"><div><h2 id="provider-title" data-od-id="provider-title">OpenAI</h2><p class="meta" id="provider-summary"></p></div><span class="tag" id="provider-state">未配置</span></div>
+<section class="section" data-od-id="connection-settings" aria-labelledby="connection-heading"><div class="section-heading"><h3 id="connection-heading" data-od-id="connection-heading">连接信息</h3><p>设置接口地址与认证方式，模型 ID 需与供应商保持一致。</p></div><div class="connection-fields">
+<div class="grid-2"><div class="field"><label for="provider-name">供应商名称</label><input id="provider-name" class="input" required maxlength="80" autocomplete="off" data-od-id="provider-name"></div><div class="field"><label for="provider-protocol">接口协议</label><select class="input" id="provider-protocol" data-od-id="provider-protocol"><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option></select></div></div>
+<div class="field"><label for="provider-url">接口地址</label><input class="input num" id="provider-url" type="url" required maxlength="2048" spellcheck="false" placeholder="https://api.example.com/v1" aria-describedby="url-help" data-od-id="provider-url"><span class="field-help" id="url-help">支持 HTTPS 或本地 HTTP 地址，请填写基础地址而非完整请求路径。</span></div>
+<div class="field"><label for="provider-key">API 密钥 <span class="meta">（可选）</span></label><div class="key-field"><input class="input num" id="provider-key" type="password" autocomplete="off" maxlength="4096" spellcheck="false" placeholder="输入 API 密钥" aria-describedby="key-help" data-od-id="provider-key"><button class="icon-btn" type="button" id="toggle-key" aria-label="显示 API 密钥" aria-pressed="false" data-od-id="toggle-key"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><span class="field-help" id="key-help">密钥仅在本页临时保留，不写入浏览器存储；刷新或离开页面后清除。</span></div>
+</div></section>
+<section class="model-section" data-od-id="configured-models" aria-labelledby="models-heading"><div class="row-between model-heading"><div><h3 id="models-heading" data-od-id="models-heading">模型 <span class="meta num" id="model-count"></span></h3><p>按供应商返回的模型 ID 添加，也可修改显示名称。</p></div><button class="btn" id="add-model" type="button" data-od-id="add-model"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>添加模型</button></div><div class="card model-table"><table class="ds-table" aria-label="当前供应商的模型配置"><thead><tr><th style="width:55%">模型 / 模型 ID</th><th class="reasoning-col" style="width:23%">思考设置</th><th style="width:22%;text-align:right">操作</th></tr></thead><tbody id="models-body"></tbody></table><div class="model-empty" id="model-empty" hidden><strong>尚未添加模型</strong>添加模型后，可在这里编辑和管理。</div></div></section>
+<div class="save-bar" data-od-id="configuration-actions"><div><p class="meta" id="save-hint">修改后保存，配置将保留在此浏览器。</p><p class="feedback" id="feedback" role="status" aria-live="polite" data-od-id="configuration-feedback"></p></div><div class="save-actions"><button class="btn btn-ghost" id="delete-supplier" type="button" data-od-id="delete-supplier">删除供应商</button><button class="btn btn-primary" type="submit" id="save-provider" data-od-id="save-provider">保存配置</button></div></div>
+</form>
+<div class="card prototype-note" data-od-id="configuration-scope"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg><p>此页为配置原型：可保存供应商与模型信息，暂不发起网络请求，也不改变工作台的模拟模型列表。预置模型仅用于演示，不代表账户已获授权。</p></div>
+</div>
+<div class="empty-details" id="empty-details" hidden data-od-id="no-suppliers"><h2>添加你的第一个供应商</h2><p>从左侧添加供应商，然后配置接口地址与模型。</p></div>
+</div>
+</div>
+</main></div>
+<dialog class="settings-dialog" id="provider-dialog" aria-labelledby="new-provider-heading" data-od-id="provider-dialog"><form id="new-provider-form"><h2 id="new-provider-heading" data-od-id="new-provider-heading">添加供应商</h2><p>支持自定义供应商及 OpenAI 兼容接口。</p><div class="field"><label for="new-provider-name">供应商名称</label><input class="input" id="new-provider-name" required maxlength="80" autocomplete="off" placeholder="例如：本地模型服务" data-od-id="new-provider-name"></div><div class="field"><label for="new-provider-protocol">接口协议</label><select class="input" id="new-provider-protocol" data-od-id="new-provider-protocol"><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option></select></div><p class="feedback" id="new-provider-error" role="status"></p><div class="row dialog-actions"><button class="btn btn-ghost" type="button" data-close="provider-dialog" data-od-id="cancel-add-supplier">取消</button><button class="btn" type="submit" data-od-id="confirm-add-supplier">添加供应商</button></div></form></dialog>
+<dialog class="settings-dialog" id="model-dialog" aria-labelledby="model-dialog-heading" data-od-id="model-dialog"><form id="model-form"><h2 id="model-dialog-heading" data-od-id="model-dialog-heading">添加模型</h2><p>模型 ID 将用于请求，显示名称仅用于界面展示。</p><div class="field"><label for="new-model-id">模型 ID</label><input class="input num" id="new-model-id" required maxlength="160" autocomplete="off" spellcheck="false" placeholder="供应商提供的模型 ID" data-od-id="new-model-id"></div><div class="field"><label for="new-model-name">显示名称</label><input class="input" id="new-model-name" maxlength="80" autocomplete="off" placeholder="留空时使用模型 ID" data-od-id="new-model-name"></div><div class="field"><label for="new-model-reasoning">思考设置</label><select class="input" id="new-model-reasoning" data-od-id="new-model-reasoning"><option value="none">不设置</option><option value="levels">低 / 中 / 高</option><option value="toggle">关闭 / 开启深度思考</option><option value="auto">自动</option></select><span class="field-help">仅配置界面选项，请确认模型支持对应参数。</span></div><p class="feedback" id="model-error" role="status"></p><div class="row dialog-actions"><button class="btn btn-ghost" type="button" data-close="model-dialog" data-od-id="cancel-model-edit">取消</button><button class="btn" type="submit" data-od-id="confirm-model-edit">保存模型</button></div></form></dialog>
+<dialog class="settings-dialog" id="confirm-dialog" aria-labelledby="confirm-heading" data-od-id="confirm-dialog"><h2 id="confirm-heading" data-od-id="confirm-heading">确认操作</h2><p id="confirm-description"></p><div class="row dialog-actions"><button class="btn btn-ghost" type="button" data-close="confirm-dialog" data-od-id="cancel-confirmation">取消</button><button class="btn" type="button" id="confirm-action" data-od-id="confirm-action">确认</button></div></dialog>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const storageKey='coding-agent-model-config-v1';
+const reasoningNames={none:'不设置',levels:'低 / 中 / 高',toggle:'开关',auto:'自动'};
+const protocols={openai:'OpenAI 兼容',anthropic:'Anthropic',google:'Google Gemini'};
+const initialProviders=[
+ {id:'openai',name:'OpenAI',protocol:'openai',url:'https://api.openai.com/v1',configured:false,models:[{id:'gpt-5',name:'GPT-5',reasoning:'levels'},{id:'o3',name:'o3',reasoning:'levels'}]},
+ {id:'anthropic',name:'Anthropic',protocol:'anthropic',url:'https://api.anthropic.com',configured:false,models:[{id:'claude-sonnet-4-20250514',name:'Claude Sonnet 4',reasoning:'toggle'}]},
+ {id:'google',name:'Google',protocol:'google',url:'https://generativelanguage.googleapis.com/v1beta',configured:false,models:[{id:'gemini-2.5-pro',name:'Gemini 2.5 Pro',reasoning:'auto'}]}
+];
+function validEndpoint(value){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!!url.hostname&&!url.username&&!url.password;}catch{return false;}}
+function validProviders(value){return Array.isArray(value)&&value.length<=100&&new Set(value.map(p=>p?.id)).size===value.length&&value.every(p=>p&&typeof p.id==='string'&&/^[a-z0-9-]+$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()&&p.name.length<=80&&Object.hasOwn(protocols,p.protocol)&&typeof p.url==='string'&&p.url.length<=2048&&(p.url===''||validEndpoint(p.url))&&typeof p.configured==='boolean'&&Array.isArray(p.models)&&p.models.length<=200&&new Set(p.models.map(m=>m?.id)).size===p.models.length&&p.models.every(m=>m&&typeof m.id==='string'&&m.id.trim()&&m.id.length<=160&&typeof m.name==='string'&&m.name.trim()&&m.name.length<=160&&Object.hasOwn(reasoningNames,m.reasoning)));}
+// Keys never enter persistent storage. A desktop credential vault is needed for real integration.
+function publicProviders(list){return list.map(p=>({id:p.id,name:p.name,protocol:p.protocol,url:p.url,configured:p.configured,models:p.models.map(m=>({id:m.id,name:m.name,reasoning:m.reasoning}))}));}
+let providers=structuredClone(initialProviders),selected='openai',loadMessage='';
+try{const raw=localStorage.getItem(storageKey);if(raw!==null){const saved=JSON.parse(raw);if(!saved||saved.version!==1||!validProviders(saved.providers))throw new Error('Invalid configuration');providers=publicProviders(saved.providers);selected=providers.some(p=>p.id===saved.selected)?saved.selected:providers[0]?.id;}}catch{loadMessage='配置读取失败，正在展示预置示例；保存前请确认，原有记录尚未覆盖。';}
+let draft=null,editingModel=null,confirmation=null;
+const dialogReturns=new Map(),keys=new Map();
+function currentProvider(){return providers.find(p=>p.id===selected);}
+function isDirty(){if(!draft)return false;return JSON.stringify(draft)!==JSON.stringify(currentProvider());}
+function updateDraft(){if(!draft)return;draft.name=$('provider-name').value;draft.protocol=$('provider-protocol').value;draft.url=$('provider-url').value;keys.set(selected,$('provider-key').value);$('save-hint').textContent=isDirty()?'有未保存的修改，保存后将保留在此浏览器。':'修改后保存，配置将保留在此浏览器。';}
+function persist(next,nextSelected,message){try{localStorage.setItem(storageKey,JSON.stringify({version:1,providers:publicProviders(next),selected:nextSelected}));providers=next;selected=nextSelected;loadMessage='';return true;}catch{$('feedback').textContent=message||'保存失败，修改仍保留在页面中，请检查浏览器存储空间后重试。';return false;}}
+function renderSuppliers(){
+ $('supplier-count').textContent=providers.length;
+ $('supplier-list').innerHTML=providers.map(p=>`<button type="button" class="supplier-option log-row" data-provider="${escapeHTML(p.id)}" data-od-id="supplier-${escapeHTML(p.id)}" aria-current="${p.id===selected}"><span><strong>${escapeHTML(p.name)}</strong><small>${p.models.length} 个模型 · ${escapeHTML(protocols[p.protocol])}</small></span><span class="tag">${p.configured?'已配置':(initialProviders.some(item=>item.id===p.id)?'示例':'未配置')}</span></button>`).join('');
+ $('add-supplier').disabled=providers.length>=100;
+}
+function renderModels(){
+ $('model-count').textContent=draft.models.length;
+ $('models-body').innerHTML=draft.models.map((m,i)=>`<tr data-od-id="configured-model-${selected}-${i}"><td><span class="model-name">${escapeHTML(m.name)}</span><code class="model-id">${escapeHTML(m.id)}</code></td><td class="reasoning-col">${escapeHTML(reasoningNames[m.reasoning])}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${selected}-${i}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${selected}-${i}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`).join('');
+ $('model-empty').hidden=!!draft.models.length;$('add-model').disabled=draft.models.length>=200;
+ $('save-hint').textContent=isDirty()?'有未保存的修改，保存后将保留在此浏览器。':'修改后保存，配置将保留在此浏览器。';
+}
+function renderProvider(){
+ renderSuppliers();const p=currentProvider();
+ $('supplier-detail').hidden=!p;$('empty-details').hidden=!!p;
+ if(!p){draft=null;return;}
+ draft=structuredClone(p);$('provider-title').textContent=p.name;$('provider-summary').textContent=protocols[p.protocol]+' · '+p.models.length+' 个模型';$('provider-state').textContent=p.configured?'已配置':(initialProviders.some(item=>item.id===p.id)?'示例 · 未连接':'未配置');
+ $('provider-name').value=p.name;$('provider-protocol').value=p.protocol;$('provider-url').value=p.url;$('provider-key').value=keys.get(p.id)||'';$('provider-key').type='password';$('toggle-key').setAttribute('aria-label','显示 API 密钥');$('toggle-key').setAttribute('aria-pressed','false');$('provider-url').setCustomValidity('');$('provider-name').setCustomValidity('');$('feedback').textContent=loadMessage;renderModels();
+}
+function showDialog(id){dialogReturns.set(id,document.activeElement);$(id).showModal();}
+function askConfirmation(title,description,label,action){confirmation=action;$('confirm-heading').textContent=title;$('confirm-description').textContent=description;$('confirm-action').textContent=label;showDialog('confirm-dialog');}
+function switchProvider(id){if(!providers.some(p=>p.id===id)||id===selected)return;const change=()=>{selected=id;renderProvider();};if(isDirty())askConfirmation('放弃未保存的修改？','当前供应商的修改尚未保存，切换后将丢失这些修改。','放弃并切换',change);else change();}
+function validateDraft(){
+ if(!draft.name.trim())return '请输入供应商名称。';
+ if(providers.some(p=>p.id!==selected&&p.name.trim().toLocaleLowerCase()===draft.name.trim().toLocaleLowerCase()))return '供应商名称已存在，请使用不同名称。';
+ if(!validEndpoint(draft.url))return '请输入有效的 HTTP 或 HTTPS 地址，不要在地址中包含用户名或密码。';
+ return '';
+}
+function saveProvider(){
+ updateDraft();const error=validateDraft();if(error){$('feedback').textContent=error;return false;}
+ const next=publicProviders(providers),index=next.findIndex(p=>p.id===selected);next[index]={...draft,name:draft.name.trim(),url:draft.url.trim(),configured:true};
+ if(!validProviders(next)){$('feedback').textContent='配置信息无效，请检查供应商与模型字段。';return false;}
+ if(!persist(next,selected))return false;renderProvider();$('feedback').textContent='配置已保存；密钥仅在本页临时保留，尚未连接模型服务。';return true;
+}
+function openModel(index=null){editingModel=index;const model=index===null?{id:'',name:'',reasoning:'none'}:draft.models[index];$('model-dialog-heading').textContent=index===null?'添加模型':'编辑模型';$('new-model-id').value=model.id;$('new-model-name').value=model.name;$('new-model-reasoning').value=model.reasoning;$('new-model-id').setCustomValidity('');$('model-error').textContent='';showDialog('model-dialog');$('new-model-id').focus();}
+$('provider-form').onsubmit=e=>{e.preventDefault();saveProvider();};
+for(const id of ['provider-name','provider-url','provider-protocol','provider-key'])$(id).addEventListener('input',()=>{if(id==='provider-name'||id==='provider-url')$(id).setCustomValidity('');updateDraft();$('feedback').textContent='';});
+$('provider-name').addEventListener('change',()=>{if(!$('provider-name').value.trim())$('provider-name').setCustomValidity('请输入供应商名称');});
+$('provider-url').addEventListener('change',()=>{if($('provider-url').value&&!validEndpoint($('provider-url').value))$('provider-url').setCustomValidity('请输入 HTTP 或 HTTPS 地址，且不要包含用户名或密码');});
+$('toggle-key').onclick=()=>{const show=$('provider-key').type==='password';$('provider-key').type=show?'text':'password';$('toggle-key').setAttribute('aria-label',show?'隐藏 API 密钥':'显示 API 密钥');$('toggle-key').setAttribute('aria-pressed',String(show));};
+$('supplier-list').onclick=e=>{const button=e.target.closest('[data-provider]');if(button)switchProvider(button.dataset.provider);};
+$('add-supplier').onclick=()=>{if(providers.length>=100)return;$('new-provider-form').reset();$('new-provider-error').textContent='';showDialog('provider-dialog');$('new-provider-name').focus();};
+$('new-provider-form').onsubmit=e=>{
+ e.preventDefault();const name=$('new-provider-name').value.trim(),protocol=$('new-provider-protocol').value;
+ if(!name||providers.some(p=>p.name.trim().toLocaleLowerCase()===name.toLocaleLowerCase())){$('new-provider-error').textContent=name?'供应商名称已存在。':'请输入供应商名称。';return;}
+ const add=()=>{if(providers.length>=100)return;const id='provider-'+crypto.randomUUID();const next=[...providers,{id,name,protocol,url:'',configured:false,models:[]}];if(!persist(next,id)){$('new-provider-error').textContent='添加失败，请检查浏览器存储空间后重试。';return;}renderProvider();dialogReturns.set('provider-dialog',$('provider-url'));$('provider-dialog').close();$('provider-url').focus();$('feedback').textContent='供应商已添加，请填写接口地址并添加模型。';};
+ if(isDirty()){askConfirmation('放弃未保存的修改？','新增供应商前，当前供应商的未保存修改将被放弃。','放弃并添加',add);}else add();
+};
+$('add-model').onclick=()=>openModel();
+$('models-body').onclick=e=>{const edit=e.target.closest('[data-edit-model]'),remove=e.target.closest('[data-delete-model]');if(edit){openModel(Number(edit.dataset.editModel));return;}if(remove){const index=Number(remove.dataset.deleteModel);askConfirmation('删除模型？','将从当前供应商移除「'+draft.models[index].name+'」，保存配置后生效。','删除模型',()=>{draft.models.splice(index,1);renderModels();$('add-model').focus();});}};
+$('model-form').onsubmit=e=>{
+ e.preventDefault();const id=$('new-model-id').value.trim(),name=$('new-model-name').value.trim()||id,reasoning=$('new-model-reasoning').value;
+ if(!id||draft.models.some((m,i)=>i!==editingModel&&m.id===id)){$('model-error').textContent=id?'模型 ID 已存在。':'请输入模型 ID。';return;}
+ if(editingModel===null){if(draft.models.length>=200){$('model-error').textContent='每个供应商最多配置 200 个模型。';return;}draft.models.push({id,name,reasoning});}else draft.models[editingModel]={id,name,reasoning};
+ renderModels();$('model-dialog').close();$('add-model').focus();$('feedback').textContent='模型列表已更新，保存配置后生效。';
+};
+$('delete-supplier').onclick=()=>askConfirmation('删除供应商？','将删除「'+currentProvider().name+'」及其模型配置，此操作无法撤销。','删除供应商',()=>{const deleted=selected,next=providers.filter(p=>p.id!==deleted);if(!persist(next,next[0]?.id))return;keys.delete(deleted);renderProvider();dialogReturns.set('confirm-dialog',$('add-supplier'));$('add-supplier').focus();});
+$('confirm-action').onclick=()=>{const action=confirmation;confirmation=null;$('confirm-dialog').close();action?.();};
+for(const dialog of document.querySelectorAll('dialog')){dialog.addEventListener('keydown',e=>e.stopPropagation());dialog.addEventListener('close',()=>{if(dialog.id==='confirm-dialog')confirmation=null;const trigger=dialogReturns.get(dialog.id);if(trigger?.isConnected)trigger.focus({preventScroll:true});});}
+for(const button of document.querySelectorAll('[data-close]'))button.onclick=()=>$(button.dataset.close).close();
+// Unsaved edits are protected for both internal back links and browser navigation.
+window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue='';}});
+for(const link of document.querySelectorAll('a'))link.addEventListener('click',e=>{if(!isDirty())return;e.preventDefault();askConfirmation('离开配置页面？','当前修改尚未保存，离开后将丢失。','放弃并离开',()=>{draft=null;window.location.href=link.getAttribute('href');});});
+renderProvider();
+</script>
+</body>
+</html>
