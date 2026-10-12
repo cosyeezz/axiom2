@@ -13,7 +13,7 @@ This archive is the source of truth for turning the design into production code.
 - Primary entry: `coding-agent-v2-before-subagent-modal-v2.html`
 - HTML screens detected: 14
 - Stylesheets detected: 0
-- Script/component files detected: 13
+- Script/component files detected: 14
 - Supporting assets detected: 44
 
 ## Responsive contract
@@ -89,6 +89,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `duration-usage.check.cjs`
 - `estimated-cost.check.cjs`
 - `model-config.check.cjs`
+- `model-copy.check.cjs`
 - `model-picker.check.cjs`
 - `reasoning-levels.check.cjs`
 - `session-initialization.check.cjs`

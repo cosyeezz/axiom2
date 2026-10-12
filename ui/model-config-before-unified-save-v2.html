@@ -358,14 +358,32 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 #reasoning-level-options{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
 #reasoning-level-options label{position:relative;display:block;min-height:44px;cursor:pointer}
 #reasoning-level-options input[type=checkbox]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
-#reasoning-level-options label span{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:color-mix(in oklch,var(--fg) 2%,transparent);color:var(--fg);font:12px/1.5 var(--font-mono)}
-#reasoning-level-options label span::before{content:"";display:inline-grid;place-items:center;width:16px;height:16px;border:1px solid var(--muted);border-radius:2px;font:13px/1 var(--font-body)}
-#reasoning-level-options input:checked+span::before{content:"✓";background:var(--fg);border-color:var(--fg);color:var(--bg)}
-#reasoning-level-options label:hover span{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}
-#reasoning-level-options input:checked+span{background:color-mix(in oklch,var(--fg) 12%,transparent);border-color:color-mix(in oklch,var(--fg) 65%,transparent);color:var(--fg)}
-#reasoning-level-options input:checked:hover+span{background:color-mix(in oklch,var(--fg) 18%,transparent);color:var(--fg)}
+/* One shared checkbox recipe for all seven levels. */
+#reasoning-level-options label span{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:color-mix(in oklch,var(--fg) 2%,transparent);color:var(--fg);font:12px/1.5 var(--font-mono);transition:background var(--motion-fast),border-color var(--motion-fast),box-shadow var(--motion-fast);pointer-events:none}
+#reasoning-level-options label span::before{content:"";flex-shrink:0;width:16px;height:16px;border:1.5px solid var(--muted);border-radius:4px;transition:background var(--motion-fast),border-color var(--motion-fast)}
+#reasoning-level-options label:hover span{background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:color-mix(in oklch,var(--fg) 28%,transparent);color:var(--fg)}
+#reasoning-level-options input:not(:checked):hover+span::before{border-color:var(--fg)}
+#reasoning-level-options input:checked+span{background:color-mix(in oklch,var(--accent) 10%,var(--bg));border-color:color-mix(in oklch,var(--accent) 55%,var(--border));box-shadow:inset 0 -2px 0 var(--accent);color:var(--fg)}
+#reasoning-level-options input:checked+span::before{background:var(--accent);border-color:var(--accent)}
+#reasoning-level-options input:checked+span::after{content:"";position:absolute;left:16px;top:50%;width:10px;height:10px;transform:translateY(-50%);background:var(--accent-on);mask:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"%3E%3Cpath d="M2 6l2.5 2.5L10 3" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E') center/contain no-repeat;pointer-events:none}
+#reasoning-level-options input:checked:hover+span{background:color-mix(in oklch,var(--accent) 18%,var(--bg));border-color:var(--accent);color:var(--fg)}
+#reasoning-level-options input:checked:active+span{background:color-mix(in oklch,var(--accent) 24%,var(--bg));color:var(--fg)}
 #reasoning-level-options input:focus-visible+span{outline:2px solid var(--accent-hover);outline-offset:2px}
 #reasoning-legacy-note{flex-basis:100%;font-size:11px;color:var(--fg-2)}
+/* Only the annotated model table: compact, independent copy actions. */
+#configured-model-table .copyable-value{display:flex;align-items:center;gap:4px;min-width:0}
+#configured-model-table .copyable-value>span,#configured-model-table .copyable-value>code{min-width:0;overflow-wrap:anywhere}
+#configured-model-table .copy-model-value{color:var(--fg-2);margin-left:auto}
+#configured-model-table .copy-model-value:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}
+#configured-model-table .copy-model-value:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
+#configured-model-table .mobile-model-id .copy-model-value{display:none}
+#model-copy-feedback{caption-side:bottom;text-align:left;color:var(--fg-2);font-size:12px;overflow-wrap:anywhere}
+#model-copy-feedback:not(:empty){padding:6px 12px;border-top:1px solid var(--border-soft)}
+@media(max-width:600px){
+ #configured-model-table .mobile-model-id{display:flex;align-items:center;gap:4px;min-width:0}
+ #configured-model-table .mobile-model-id>code{min-width:0;overflow-wrap:anywhere}
+ #configured-model-table .mobile-model-id .copy-model-value{display:inline-grid}
+}
 </style>
 </head>
 <body>
@@ -412,7 +430,7 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 </div>
 <div class="inline-model-actions"><p class="feedback" id="model-error" role="status" aria-live="polite" data-od-id="model-error"></p><button class="btn btn-ghost" type="button" id="cancel-model-edit" data-od-id="cancel-model-edit">取消</button><button class="btn btn-primary" type="submit" data-od-id="confirm-model-edit">保存模型</button></div></form>
 </section>
-<div class="card model-table"><table class="ds-table" aria-label="当前供应商的模型"><thead><tr><th class="name-col" scope="col">显示名称</th><th class="id-col" scope="col">模型 ID</th><th class="reasoning-col" scope="col">思考设置</th><th class="actions-col" scope="col">操作</th></tr></thead><tbody id="models-body"></tbody></table><div class="model-empty" id="model-empty" hidden><div id="model-empty-message"></div><button class="btn" type="button" id="go-to-suppliers" data-od-id="go-to-suppliers">前往连接配置</button></div></div><p class="feedback" id="model-feedback" role="status" aria-live="polite" data-od-id="model-feedback"></p><div class="card prototype-note" data-od-id="model-configuration-scope"><p>模型增删改即时保存，覆盖项随模型保存；认证、令牌、密码等敏感字段的值仅在本页临时保留。尚未接入实际服务或工作台模型列表。</p></div></section>
+<div class="card model-table"><table class="ds-table" id="configured-model-table" data-od-id="configured-model-table" aria-label="当前供应商的模型"><caption id="model-copy-feedback" role="status" aria-live="polite" aria-atomic="true" data-od-id="model-copy-feedback"></caption><thead><tr><th class="name-col" scope="col">显示名称</th><th class="id-col" scope="col">模型 ID</th><th class="reasoning-col" scope="col">思考设置</th><th class="actions-col" scope="col">操作</th></tr></thead><tbody id="models-body"></tbody></table><div class="model-empty" id="model-empty" hidden><div id="model-empty-message"></div><button class="btn" type="button" id="go-to-suppliers" data-od-id="go-to-suppliers">前往连接配置</button></div></div><p class="feedback" id="model-feedback" role="status" aria-live="polite" data-od-id="model-feedback"></p><div class="card prototype-note" data-od-id="model-configuration-scope"><p>模型增删改即时保存，覆盖项随模型保存；认证、令牌、密码等敏感字段的值仅在本页临时保留。尚未接入实际服务或工作台模型列表。</p></div></section>
 </div>
 </div>
 </div>
@@ -539,7 +557,8 @@ function renderModels(){
  const visible=entries.map((entry,i)=>({...entry,i})).filter(({m})=>matchesQuery($('model-filter').value,m.name,m.id));
  $('model-count').textContent=$('model-filter').value.trim()?visible.length+' / '+entries.length:entries.length;
  $('models-tab-count').textContent=entries.length;
- $('models-body').innerHTML=visible.map(({m,provider,index,i})=>`<tr data-od-id="configured-model-${provider}-${index}"><td><span class="model-name">${escapeHTML(m.name)}</span><code class="mobile-model-id">${escapeHTML(m.id)}</code><span class="mobile-model-reasoning">思考：${escapeHTML(reasoningLabel(m.reasoning))}</span></td><td class="id-col"><code class="model-id">${escapeHTML(m.id)}</code></td><td class="reasoning-col">${escapeHTML(reasoningLabel(m.reasoning))}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${provider}-${index}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${provider}-${index}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`).join('');
+ const copyButton=(field,i,provider,index,mobile='')=>`<button type="button" class="icon-btn copy-model-value" data-copy-field="${field}" data-copy-model="${i}" data-od-id="copy-model-${field}-${provider}-${index}${mobile}" aria-label="复制模型${field==='name'?'名称':' ID'}" title="复制${field==='name'?'名称':' ID'}"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button>`;
+ $('models-body').innerHTML=visible.map(({m,provider,index,i})=>`<tr data-od-id="configured-model-${provider}-${index}"><td><div class="copyable-value"><span class="model-name">${escapeHTML(m.name)}</span>${copyButton('name',i,provider,index)}</div><div class="mobile-model-id"><code>${escapeHTML(m.id)}</code>${copyButton('id',i,provider,index,'-mobile')}</div><span class="mobile-model-reasoning">思考：${escapeHTML(reasoningLabel(m.reasoning))}</span></td><td class="id-col"><div class="copyable-value"><code class="model-id">${escapeHTML(m.id)}</code>${copyButton('id',i,provider,index)}</div></td><td class="reasoning-col">${escapeHTML(reasoningLabel(m.reasoning))}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${provider}-${index}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${provider}-${index}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`).join('');
  $('model-empty').hidden=!!visible.length;
  $('go-to-suppliers').hidden=!!eligible;
  $('model-empty-message').innerHTML=!eligible?'<strong>请先保存当前供应商</strong>在「连接配置」中填写并保存连接信息，然后添加模型。':entries.length?'<strong>没有匹配的模型</strong>请修改模型名称或 ID 搜索条件。':'<strong>当前供应商尚未配置模型</strong>点击「添加模型」，模型将自动归属当前供应商。';
@@ -619,6 +638,27 @@ $('add-supplier').onclick=()=>{
 };
 $('cancel-model-edit').onclick=closeModel;
 $('add-model').onclick=()=>openModel();
+$('configured-model-table').addEventListener('click',async e=>{
+ const button=e.target.closest('[data-copy-field]');if(!button||button.disabled)return;
+ const field=button.dataset.copyField,model=modelEntries()[Number(button.dataset.copyModel)]?.m;
+ if(!model||!['name','id'].includes(field))return;
+ const label=field==='name'?'模型名称':'模型 ID',feedback=$('model-copy-feedback');
+ clearTimeout(button.copyTimer);if(button.copyIcon)button.innerHTML=button.copyIcon;
+ button.setAttribute('aria-label','复制'+label);button.title='复制'+label;
+ button.disabled=true;feedback.textContent='';
+ try{
+  try{await navigator.clipboard.writeText(model[field]);}
+  catch{
+   const input=document.createElement('textarea');input.value=model[field];input.setAttribute('aria-label','临时复制内容');input.style.cssText='position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none';feedback.append(input);
+   try{input.select();if(!document.execCommand('copy'))throw new Error('Copy denied');}
+   finally{input.remove();button.focus({preventScroll:true});}
+  }
+  feedback.textContent=label+'已复制';button.setAttribute('aria-label',label+'已复制');button.title='已复制';
+  button.copyIcon??=button.innerHTML;button.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>';
+  button.copyTimer=setTimeout(()=>{button.innerHTML=button.copyIcon;button.setAttribute('aria-label','复制'+label);button.title='复制'+label;},1800);
+ }catch{feedback.textContent='复制失败，请选中文字后手动复制。';}
+ finally{button.disabled=false;}
+});
 $('models-body').onclick=e=>{const edit=e.target.closest('[data-edit-model]'),remove=e.target.closest('[data-delete-model]');if(edit){openModel(Number(edit.dataset.editModel));return;}if(remove){const entry=modelEntries()[Number(remove.dataset.deleteModel)];if(!entry)return;askConfirmation('删除模型？','将从供应商移除「'+entry.m.name+'」，确认后立即保存到本地。','删除模型',()=>{const next=publicProviders(providers);next.find(p=>p.id===entry.provider).models.splice(entry.index,1);if(!commitModels(next)){$('model-feedback').textContent='删除失败，模型未被移除，请检查浏览器存储后重试。';return;}$('model-feedback').textContent='模型已删除并保存。';$('add-model').focus();});}};
 $('model-form').onsubmit=e=>{
  e.preventDefault();const provider=selected,id=$('new-model-id').value.trim(),name=$('new-model-name').value.trim()||id,reasoning=readReasoningSelection();

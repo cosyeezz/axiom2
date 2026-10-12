@@ -67,7 +67,11 @@ for(const reasoning of ['unlimited',['unlimited'],['low','low'],['auto'],null,{}
  invalid[0].models=[{id:'bad',name:'非法值',reasoning}];assert(!app.api.validProviders(invalid));
 }
 assert(html.includes('#model-reasoning-field{grid-column:1 / -1;'));
-assert(html.includes('#reasoning-level-options input:checked+span::before{content:"✓";'));
+assert(html.includes('#reasoning-level-options input:checked+span::before{background:var(--accent);'));
+assert(html.includes('#reasoning-level-options input:checked+span::after{content:"";'));
+assert(html.includes('box-shadow:inset 0 -2px 0 var(--accent)'));
+assert(!html.match(/#reasoning-level-options \[data-od-id=/),'All levels must use the same shared style');
+assert(!html.includes('content:"✓"'),'Use the shared vector checkmark, not a font glyph');
 assert(html.includes('#reasoning-level-options input:focus-visible+span'));
 assert(!group.includes('type="radio"'));assert(!html.includes('scrollIntoView'));
 console.log('通过：七档多选、取消勾选、全选与空选、保存恢复、编辑回填、取消保护、旧值兼容、非法值校验与独立行样式');
