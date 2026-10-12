@@ -1,0 +1,24 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync('coding-agent-v2.html','utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+new vm.Script(script);
+const context=vm.createContext({assert});
+vm.runInContext(`let sessions=[],workspaceId='existing-space',saves=0; const runs=new Map(); function save(){saves++;}\n`+script.slice(script.indexOf('function sessionState('),script.indexOf('function stateIcon('))+`
+seedStatusExamples();
+assert.equal(sessions.length,4);
+assert.deepEqual(Array.from(sessions,s=>sessionState(s)).join(','),'running,unread,idle,completed');
+assert.ok(sessions.every(s=>s.workspaceId==='existing-space'&&s.group==='状态示例'));
+sessions[0].title='保留重命名';sessions[0].pinned=true;
+seedStatusExamples();assert.equal(sessions.length,4);assert.equal(saves,1);
+assert.equal(sessions[0].title,'保留重命名');assert.equal(sessionState(sessions[0]),'running');
+sessions[1].unread=false;assert.equal(sessionState(sessions[1]),'completed');
+delete sessions[0].demoRunning;assert.equal(sessionState(sessions[0]),'idle');
+runs.set(sessions[0].id,{});assert.equal(sessionState(sessions[0]),'running');
+`,context);
+vm.runInContext(script.slice(script.indexOf('function stateIcon('),script.indexOf('function markCurrentRead(')),context);
+vm.runInContext(`function escapeHTML(s){return s;} for(const state of ['idle','completed','running','unread']){const s=sessions.find(s=>s.id==='status-example-'+state);runs.clear();s.demoRunning=state==='running';s.unread=state==='unread';const icon=stateIcon(s);if(state==='idle'||state==='completed')assert.equal(icon,'');else{assert.ok(icon.includes('session-state '+state));assert.ok(icon.includes('fill="currentColor"'));assert.ok(!icon.includes('<path'));}}`,context);
+assert.ok(!html.includes('class="session-label"'));
+assert.ok(html.includes('.session-state.running{color:var(--success)}'));
+assert.ok(html.includes('.session-state.unread{color:oklch(0.7 0.16 250)}'));
+assert.ok(script.includes('delete s.demoRunning;'));
+console.log('通过：四种状态、已有空间补齐、重复加载、重命名与置顶保留、未读转已读、继续运行、脚本语法');

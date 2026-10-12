@@ -1,0 +1,12 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const html = fs.readFileSync(require('node:path').join(__dirname, 'coding-agent-v2.html'), 'utf8');
+assert.ok(html.includes('class="gauge-needle" d="m12 14 4-4"'));
+assert.ok(html.includes('@keyframes usage-sweep'));
+assert.ok(!html.includes('gauge-fill'));
+assert.ok(!html.includes('updateContextGauge'));
+assert.ok(html.includes('id="duration-usage"'));
+assert.ok(html.includes('id="context-percent" aria-label="上下文占用率未知">· —%'));
+new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
+console.log('仪表图标恢复与脚本语法检查通过');

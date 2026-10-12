@@ -1,0 +1,387 @@
+{
+  "schema": "open-design.design-manifest.v1",
+  "title": "9600d738-2b59-4f4a-ad87-27efd8d6ad11",
+  "entryFile": "coding-agent-v2-before-subagent-modal-v2.html",
+  "sourceFiles": {
+    "all": [
+      "coding-agent-preview.png",
+      "coding-agent-running.check.cjs",
+      "coding-agent-v2-before-subagent-modal-v2.html",
+      "coding-agent-v2.html",
+      "coding-agent.check.cjs",
+      "coding-agent.html",
+      "context-gauge.check.cjs",
+      "conversation-markdown.check.cjs",
+      "duration-usage.check.cjs",
+      "estimated-cost.check.cjs",
+      "image-1.png",
+      "image-10.png",
+      "image-11.png",
+      "image-12.png",
+      "image-13.png",
+      "image-14.png",
+      "image-15.png",
+      "image-16.png",
+      "image-17.png",
+      "image-18.png",
+      "image-19.png",
+      "image-2.png",
+      "image-3.png",
+      "image-4.png",
+      "image-5.png",
+      "image-6.png",
+      "image-7.png",
+      "image-8.png",
+      "image-9.png",
+      "image.png",
+      "model-config-before-compact-ui-v2.html",
+      "model-config-before-inline-create-v2.html",
+      "model-config-before-layout-fix-v2.html",
+      "model-config-before-provider-flow-v2.html",
+      "model-config-before-provider-tabs-v2.html",
+      "model-config-before-single-page-v2.html",
+      "model-config-before-tabs-v2.html",
+      "model-config-before-unified-save-v2.html",
+      "model-config-v2.html",
+      "model-config.check.cjs",
+      "model-config.html",
+      "model-picker.check.cjs",
+      "PixPin_2026-10-11_01-31-18.png",
+      "PixPin_2026-10-11_01-34-11.png",
+      "PixPin_2026-10-11_03-03-05.png",
+      "PixPin_2026-10-11_03-03-29.png",
+      "PixPin_2026-10-11_03-07-43.png",
+      "PixPin_2026-10-11_03-11-11.png",
+      "PixPin_2026-10-11_03-13-43.png",
+      "PixPin_2026-10-11_07-02-22.png",
+      "PixPin_2026-10-11_07-05-47.png",
+      "PixPin_2026-10-11_07-10-39.png",
+      "PixPin_2026-10-11_07-23-50.png",
+      "PixPin_2026-10-11_07-42-04-1.png",
+      "PixPin_2026-10-11_07-42-04.png",
+      "PixPin_2026-10-11_07-42-42.png",
+      "PixPin_2026-10-11_07-55-31.png",
+      "PixPin_2026-10-11_08-08-54.png",
+      "PixPin_2026-10-11_08-18-11.png",
+      "PixPin_2026-10-11_08-51-22.png",
+      "PixPin_2026-10-11_09-05-52.png",
+      "PixPin_2026-10-11_09-06-17.png",
+      "PixPin_2026-10-11_19-57-23.png",
+      "PixPin_2026-10-11_23-16-00.png",
+      "reasoning-levels.check.cjs",
+      "screenshot-2026-10-12T09-41-31-049Z.png",
+      "session-initialization.check.cjs",
+      "session-status-examples.check.cjs",
+      "settings.html",
+      "subagent-conversation.check.cjs",
+      "workspace-selection.check.cjs"
+    ],
+    "html": [
+      "coding-agent-v2-before-subagent-modal-v2.html",
+      "coding-agent-v2.html",
+      "coding-agent.html",
+      "model-config-before-compact-ui-v2.html",
+      "model-config-before-inline-create-v2.html",
+      "model-config-before-layout-fix-v2.html",
+      "model-config-before-provider-flow-v2.html",
+      "model-config-before-provider-tabs-v2.html",
+      "model-config-before-single-page-v2.html",
+      "model-config-before-tabs-v2.html",
+      "model-config-before-unified-save-v2.html",
+      "model-config-v2.html",
+      "model-config.html",
+      "settings.html"
+    ],
+    "css": [],
+    "scriptsAndComponents": [
+      "coding-agent-running.check.cjs",
+      "coding-agent.check.cjs",
+      "context-gauge.check.cjs",
+      "conversation-markdown.check.cjs",
+      "duration-usage.check.cjs",
+      "estimated-cost.check.cjs",
+      "model-config.check.cjs",
+      "model-picker.check.cjs",
+      "reasoning-levels.check.cjs",
+      "session-initialization.check.cjs",
+      "session-status-examples.check.cjs",
+      "subagent-conversation.check.cjs",
+      "workspace-selection.check.cjs"
+    ],
+    "assets": [
+      "coding-agent-preview.png",
+      "image-1.png",
+      "image-10.png",
+      "image-11.png",
+      "image-12.png",
+      "image-13.png",
+      "image-14.png",
+      "image-15.png",
+      "image-16.png",
+      "image-17.png",
+      "image-18.png",
+      "image-19.png",
+      "image-2.png",
+      "image-3.png",
+      "image-4.png",
+      "image-5.png",
+      "image-6.png",
+      "image-7.png",
+      "image-8.png",
+      "image-9.png",
+      "image.png",
+      "PixPin_2026-10-11_01-31-18.png",
+      "PixPin_2026-10-11_01-34-11.png",
+      "PixPin_2026-10-11_03-03-05.png",
+      "PixPin_2026-10-11_03-03-29.png",
+      "PixPin_2026-10-11_03-07-43.png",
+      "PixPin_2026-10-11_03-11-11.png",
+      "PixPin_2026-10-11_03-13-43.png",
+      "PixPin_2026-10-11_07-02-22.png",
+      "PixPin_2026-10-11_07-05-47.png",
+      "PixPin_2026-10-11_07-10-39.png",
+      "PixPin_2026-10-11_07-23-50.png",
+      "PixPin_2026-10-11_07-42-04-1.png",
+      "PixPin_2026-10-11_07-42-04.png",
+      "PixPin_2026-10-11_07-42-42.png",
+      "PixPin_2026-10-11_07-55-31.png",
+      "PixPin_2026-10-11_08-08-54.png",
+      "PixPin_2026-10-11_08-18-11.png",
+      "PixPin_2026-10-11_08-51-22.png",
+      "PixPin_2026-10-11_09-05-52.png",
+      "PixPin_2026-10-11_09-06-17.png",
+      "PixPin_2026-10-11_19-57-23.png",
+      "PixPin_2026-10-11_23-16-00.png",
+      "screenshot-2026-10-12T09-41-31-049Z.png"
+    ]
+  },
+  "screens": [
+    {
+      "file": "coding-agent-v2-before-subagent-modal-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "coding-agent-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "coding-agent.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-compact-ui-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-inline-create-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-layout-fix-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-provider-flow-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-provider-tabs-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-single-page-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-tabs-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-before-unified-save-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config-v2.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "model-config.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    },
+    {
+      "file": "settings.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    }
+  ],
+  "screenFilePolicy": {
+    "mode": "screen-file-first",
+    "entryFileRole": "primary-screen",
+    "rules": [
+      "Each distinct user-facing screen or surface must be delivered and implemented as its own file/route.",
+      "If a landing page is present or requested, keep it in landing.html and do not merge it into the product app screen.",
+      "When multiple HTML screens exist, index.html is a launcher/overview only; it must not be treated as the combined final UI.",
+      "Keep product app screens, landing pages, platform screens, and OS widget surfaces separate in production code."
+    ]
+  },
+  "appModules": [
+    "Identify domain-specific in-app modules from the exported UI; do not reduce them to generic cards.",
+    "For each major module, implement purpose, default/loading/empty/error/success states, and responsive behavior.",
+    "Keep app modules separate from OS home-screen widgets in the production component model."
+  ],
+  "osWidgets": [
+    "If the export includes home-screen, lock-screen, Live Activity, tablet glance, or Android widget surfaces, implement them as platform quick-access surfaces outside the app UI.",
+    "If none are present, do not invent OS widgets unless the product requirements request them."
+  ],
+  "landingPage": {
+    "detection": "Inspect files and screen names for a marketing/landing page surface. If present, keep it separate from product app screens.",
+    "requiredSections": [
+      "hero",
+      "value props",
+      "product proof/screenshots",
+      "feature proof",
+      "CTA"
+    ]
+  },
+  "tokens": {
+    "source": [
+      "coding-agent-v2-before-subagent-modal-v2.html"
+    ],
+    "required": [
+      "background",
+      "surface",
+      "foreground",
+      "muted text",
+      "border",
+      "accent",
+      "radius",
+      "shadow",
+      "spacing",
+      "type scale",
+      "motion"
+    ],
+    "note": "Extract/freeze tokens before framework implementation so coding tools do not substitute default theme colors or typography."
+  },
+  "interactions": {
+    "source": [
+      "coding-agent-running.check.cjs",
+      "coding-agent.check.cjs",
+      "context-gauge.check.cjs",
+      "conversation-markdown.check.cjs",
+      "duration-usage.check.cjs",
+      "estimated-cost.check.cjs",
+      "model-config.check.cjs",
+      "model-picker.check.cjs",
+      "reasoning-levels.check.cjs",
+      "session-initialization.check.cjs",
+      "session-status-examples.check.cjs",
+      "subagent-conversation.check.cjs",
+      "workspace-selection.check.cjs"
+    ],
+    "requiredStates": [
+      "default",
+      "hover",
+      "focus",
+      "active",
+      "disabled",
+      "loading",
+      "empty",
+      "error",
+      "success"
+    ],
+    "requiredBehaviors": [
+      "forms/validation where present",
+      "tabs/filters where present",
+      "dialogs/sheets/drawers where present",
+      "copy/generate/share actions where present",
+      "player or quick controls where present"
+    ],
+    "note": "If the prototype is static, derive missing behavior from visible controls and document it before coding."
+  },
+  "responsiveViewports": [
+    {
+      "name": "mobile-compact",
+      "width": 360,
+      "height": 800,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "mobile-standard",
+      "width": 390,
+      "height": 844,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "mobile-large",
+      "width": 430,
+      "height": 932,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "foldable-small-tablet",
+      "width": 600,
+      "height": 960,
+      "category": "foldable-tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "tablet-portrait",
+      "width": 820,
+      "height": 1180,
+      "category": "tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "tablet-landscape",
+      "width": 1024,
+      "height": 768,
+      "category": "tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768,
+      "category": "desktop",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "category": "desktop",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "wide",
+      "width": 1920,
+      "height": 1080,
+      "category": "wide",
+      "mustAvoidHorizontalScroll": true
+    }
+  ],
+  "implementationChecklist": [
+    "Open entryFile first and map screens, modules, tokens, and interactions.",
+    "Extract tokens before writing framework components.",
+    "Implement app-specific modules with real states instead of generic card grids.",
+    "Preserve or rebuild JS interactions for meaningful UX actions.",
+    "Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.",
+    "Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces."
+  ]
+}
