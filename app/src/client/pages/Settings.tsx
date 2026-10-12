@@ -1,10 +1,105 @@
-import { SettingsSidebar } from '../components.js';
-import { useConnection, useScope } from '../transport.js';
-import type { Configuration } from '../../shared/protocol.js';
-import '../styles/settings.css';
-const empty: Configuration = { revision: '', providerCount: 0, modelCount: 0, available: [], dataRoot: '' };
+import { SettingsSidebar } from "../components.js";
+import { useConnection, useScope } from "../transport.js";
+import type { Configuration } from "../../shared/protocol.js";
+import "../styles/settings.css";
+const empty: Configuration = {
+  revision: "",
+  providerCount: 0,
+  modelCount: 0,
+  available: [],
+  dataRoot: "",
+};
 
 export default function Settings() {
-  const config = useScope('configuration', empty), connection = useConnection();
-  return <div className="settings-app"><SettingsSidebar page="overview"/><main className="settings-main settings-overview-main" id="content"><header className="topnav"><div className="row"><a className="icon-btn mobile-back" href="/" aria-label="返回工作台"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></a><span>配置</span><span aria-hidden="true">/</span><strong>概览</strong></div><span className="tag">本地配置</span></header><div className="container"><div className="overview-intro"><h1>配置</h1><p>集中管理 AXIOM 的应用配置，独立于当前工作空间与会话。</p></div><section className="overview-section" aria-labelledby="module-heading"><h2 id="module-heading">AI 与连接</h2><a className="log-row module-row" href="/model-config.html"><div><h3>模型服务</h3><p>管理供应商、接口地址、认证与模型列表</p></div><span className="meta" id="model-config-summary">{config.error ? '配置读取失败' : config.revision ? `${config.providerCount} 个供应商 · ${config.modelCount} 个模型` : '正在读取配置…'}</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></a><p className="overview-message" role="status">{config.error || `${connection}；${config.available.length} 个配置模型通过 pi 可用性检查。保存不代表远端连接验证成功。`}</p></section><section className="overview-section" aria-labelledby="scope-heading"><h2 id="scope-heading">存储与隐私</h2><dl className="scope-list"><div className="scope-row"><dt>配置作用域</dt><dd>本机应用 · 不随工作空间切换</dd></div><div className="scope-row"><dt>供应商与模型</dt><dd>独立 pi 配置目录中的 models.json；配置发布尚未接入</dd></div><div className="scope-row"><dt>API 密钥</dt><dd>由服务端 pi 的 auth.json 管理；不回传已保存明文凭据，不写入浏览器存储</dd></div><div className="scope-row"><dt>服务连接</dt><dd>{connection} · 主 Agent 尚未接入</dd></div><div className="scope-row"><dt>数据目录</dt><dd style={{ overflowWrap: 'anywhere' }}>{config.dataRoot || '等待服务提供目录'}</dd></div></dl></section><p className="overview-footnote">工作空间、会话索引与草稿存入本机 SQLite；数据不写入项目目录。</p></div></main></div>;
+  const config = useScope("configuration", empty),
+    connection = useConnection();
+  return (
+    <div className="settings-app">
+      <SettingsSidebar page="overview" />
+      <main className="settings-main settings-overview-main" id="content">
+        <header className="topnav">
+          <div className="row">
+            <a
+              className="icon-btn mobile-back"
+              href="/"
+              aria-label="返回工作台"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m15 5-7 7 7 7" />
+              </svg>
+            </a>
+            <span>配置</span>
+            <span aria-hidden="true">/</span>
+            <strong>概览</strong>
+          </div>
+          <span className="tag">本地配置</span>
+        </header>
+        <div className="container">
+          <div className="overview-intro">
+            <h1>配置</h1>
+            <p>集中管理 AXIOM 的应用配置，独立于当前工作空间与会话。</p>
+          </div>
+          <section
+            className="overview-section"
+            aria-labelledby="module-heading"
+          >
+            <h2 id="module-heading">AI 与连接</h2>
+            <a className="log-row module-row" href="/model-config.html">
+              <div>
+                <h3>模型服务</h3>
+                <p>管理供应商、接口地址、认证与模型列表</p>
+              </div>
+              <span className="meta" id="model-config-summary">
+                {config.error
+                  ? "配置读取失败"
+                  : config.revision
+                    ? `${config.providerCount} 个供应商 · ${config.modelCount} 个模型`
+                    : "正在读取配置…"}
+              </span>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </a>
+            <p className="overview-message" role="status">
+              {config.error ||
+                `${connection}；${config.available.length} 个配置模型通过 pi 可用性检查。保存不代表远端连接验证成功。`}
+            </p>
+          </section>
+          <section className="overview-section" aria-labelledby="scope-heading">
+            <h2 id="scope-heading">存储与隐私</h2>
+            <dl className="scope-list">
+              <div className="scope-row">
+                <dt>配置作用域</dt>
+                <dd>本机应用 · 不随工作空间切换</dd>
+              </div>
+              <div className="scope-row">
+                <dt>供应商与模型</dt>
+                <dd>独立 pi 配置目录中的 models.json；配置发布尚未接入</dd>
+              </div>
+              <div className="scope-row">
+                <dt>API 密钥</dt>
+                <dd>
+                  由服务端 pi 的 auth.json
+                  管理；不回传已保存明文凭据，不写入浏览器存储
+                </dd>
+              </div>
+              <div className="scope-row">
+                <dt>服务连接</dt>
+                <dd>{connection} · 主 Agent 尚未接入</dd>
+              </div>
+              <div className="scope-row">
+                <dt>数据目录</dt>
+                <dd style={{ overflowWrap: "anywhere" }}>
+                  {config.dataRoot || "等待服务提供目录"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+          <p className="overview-footnote">
+            工作空间、会话索引与草稿存入本机 SQLite；数据不写入项目目录。
+          </p>
+        </div>
+      </main>
+    </div>
+  );
 }
