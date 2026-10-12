@@ -11,6 +11,7 @@ export interface Session {
   pinned: boolean;
   unread: boolean;
   updatedAt: number;
+  runStatus?: import("./agent.js").Run["status"];
 }
 export interface Scope {
   workspaceId: string;
@@ -29,6 +30,7 @@ export interface ModelSummary {
   provider: string;
   id: string;
   name: string;
+  levels: import("./agent.js").Thinking[];
 }
 export interface Configuration {
   revision: string;
@@ -79,6 +81,22 @@ export function text(value: unknown, name: string, max = 200): string {
   )
     throw new AppError("INVALID_INPUT", `${name} 无效（1–${max} 字符）`);
   return value.trim();
+}
+export function attachmentInput(value: unknown): Attachment | null {
+  if (value == null) return null;
+  const a = object(value),
+    name = text(a.name, "附件名称", 255);
+  if (
+    !/\.(txt|md|js|jsx|ts|tsx|json|py|css|html)$/i.test(name) ||
+    typeof a.text !== "string" ||
+    new TextEncoder().encode(a.text).byteLength > 100000 ||
+    a.text.includes("\0")
+  )
+    throw new AppError(
+      "INVALID_ATTACHMENT",
+      "仅支持小于 100 KB 的文本或代码文件",
+    );
+  return { name, text: a.text };
 }
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))

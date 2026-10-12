@@ -22,6 +22,7 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
   const root = temporary();
   let store = new Store(root);
   try {
+    assert.throws(() => new Store(root), { code: "SERVICE_ALREADY_RUNNING" });
     const run = (
       op: string,
       params = {},
@@ -88,7 +89,7 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
       );
     }
     assert.throws(() => run("prompt", { text: "do not run" }, a.id, s.id), {
-      code: "AGENT_NOT_READY",
+      code: "UNKNOWN_OPERATION",
     });
     assert.throws(() => run("session.delete", {}, a.id, s.id), {
       code: "CONFIRMATION_REQUIRED",
@@ -206,6 +207,7 @@ test("Model summaries: only explicitly configured + authenticated models, no sec
         provider: "axiom-local-check",
         id: "only-configured",
         name: "Explicit",
+        levels: ["off"],
       },
     ]);
     assert.ok(!JSON.stringify(available).includes("TEST-ONLY"));
@@ -344,7 +346,7 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
           params: { text: "never send" },
         })
       ).error.code,
-      "AGENT_NOT_READY",
+      "MODEL_UNAVAILABLE",
     );
     const observer = await connect();
     await observer.call({

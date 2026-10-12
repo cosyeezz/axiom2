@@ -1,6 +1,6 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { command, useConnection, useScope } from "../transport.js";
-import { useDraft, updateDraft } from "../drafts.js";
+import { useDraft, updateDraft, clearSubmittedDraft } from "../drafts.js";
 import { Dialog, Icon, PanelIcon } from "../components.js";
 import {
   scopeKey,
@@ -9,7 +9,15 @@ import {
   type Session,
   type Workspace,
 } from "../../shared/protocol.js";
+import { AgentThread as Thread, ModelPicker } from "../chat.js";
+import {
+  agentScope,
+  emptyAgent,
+  running,
+  runLabels,
+} from "../../shared/agent.js";
 import "../styles/workbench.css";
+import "../styles/chat.css";
 
 const noWorkspaces: Workspace[] = [],
   noSessions: Session[] = [];
@@ -370,6 +378,15 @@ function History({
   const snapshot = useScope<Session[] | null>(`sessions:${workspace.id}`, null);
   const sessions = snapshot ?? noSessions;
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const current = sessions.find((s) => s.id === selected);
+    if (current?.unread && document.visibilityState === "visible")
+      void command(
+        "session.read",
+        {},
+        { workspaceId: workspace.id, sessionId: selected },
+      ).catch(() => {});
+  }, [snapshot, selected]);
   const [editing, setEditing] = useState<Session | null>(null),
     [title, setTitle] = useState("");
   useEffect(() => {
@@ -448,6 +465,18 @@ function History({
                       <span>
                         <span className="session-title-line">
                           <strong>{s.title}</strong>
+                          {(s.unread ||
+                            ["starting", "running", "stopping"].includes(
+                              s.runStatus ?? "",
+                            )) && (
+                            <svg
+                              className={`session-state ${s.unread ? "unread" : "running"}`}
+                              viewBox="0 0 12 12"
+                              aria-label={s.unread ? "未读" : "运行中"}
+                            >
+                              <circle cx="6" cy="6" r="3" fill="currentColor" />
+                            </svg>
+                          )}
                         </span>
                         <small>
                           <span className="session-detail">
@@ -458,7 +487,8 @@ function History({
                               minute: "2-digit",
                               hour12: false,
                             })}{" "}
-                            · 尚未运行
+                            ·{" "}
+                            {s.runStatus ? runLabels[s.runStatus] : "尚未运行"}
                           </span>
                         </small>
                       </span>
@@ -583,134 +613,90 @@ function Title({
     </div>
   );
 }
-const Thread = memo(function Thread({ scope }: { scope: Scope | null }) {
-  return (
-    <section className="thread" id="thread" aria-label="消息记录">
-      <div className="container thread-content">
-        <div id="messages">
-          <section className="session-init" aria-label="会话初始化信息">
-            <details className="session-environment">
-              <summary>
-                <Icon name="chevron" />
-                <span>会话环境</span>
-                <small>
-                  {scope?.sessionId ? "主会话 · 未初始化" : "尚未创建会话"}
-                </small>
-              </summary>
-              <header className="session-init-head">
-                <span>会话初始化</span>
-                <span>主 Agent 尚未接入</span>
-              </header>
-              <div className="session-init-body">
-                <p>
-                  当前没有运行中的 pi 会话；尚未加载模型、系统提示词或编码工具。
-                </p>
-              </div>
-            </details>
-          </section>
-          <div className="empty-state">
-            <h2>从一个想法，一行代码开始。</h2>
-            <p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
-            <div className="quick-prompts">
-              {[
-                ["审查代码", "帮我分析这段代码的潜在问题："],
-                ["规划功能", "请帮我规划以下功能的实现步骤："],
-                ["排查错误", "请解释以下错误，并给出排查建议："],
-              ].map(([label, text]) => (
-                <button
-                  className="btn"
-                  key={label}
-                  disabled={!scope?.sessionId}
-                  onClick={() => {
-                    updateDraft(scope!, { text });
-                    document.getElementById("prompt")?.focus();
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-});
-function ModelPicker() {
-  const config = useScope("configuration", noConfig);
-  const [query, setQuery] = useState("");
-  return (
-    <details
-      className="model-picker"
-      id="model-picker"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.currentTarget.open = false;
-          e.currentTarget.querySelector("summary")?.focus();
-        }
-      }}
-    >
-      <summary aria-label="选择供应商、模型与思考等级">
-        <span>未选择模型</span>
-        <Icon name="chevron" />
-      </summary>
-      <div className="model-popover" aria-label="模型选择">
-        <label className="model-search">
-          <Icon name="search" />
-          <input
-            type="search"
-            placeholder="搜索模型或供应商…"
-            aria-label="搜索模型或供应商"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <div className="model-list">
-          <p className="model-empty" role="status">
-            {config.error ||
-              (config.available.length
-                ? "模型选择将在主会话接入后开放。"
-                : "暂无可用模型，请先配置模型服务。")}
-          </p>
-          <a className="model-option" href="/model-config.html">
-            前往模型服务
-          </a>
-        </div>
-        <div className="model-footer">
-          <span className="effort-heading">思考</span>
-          <div className="effort-options">—</div>
-          <div className="model-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="取消模型设置"
-              onClick={(e) => {
-                e.currentTarget.closest("details")!.open = false;
-              }}
-            >
-              <Icon name="close" />
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="确认模型设置"
-              disabled
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m5 12 4 4L19 6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </details>
-  );
-}
 function Composer({ scope }: { scope: Scope }) {
+  const info = useScope(agentScope(scope), emptyAgent),
+    config = useScope("configuration", noConfig),
+    connection = useConnection();
+  const active = running(info.run),
+    selected = config.available.some(
+      (m) =>
+        m.provider === info.selection?.provider && m.id === info.selection.id,
+    );
+  const pendingKey = `pending:${scopeKey(scope)}`;
+  const [busy, setBusy] = useState(false),
+    [uncertain, setUncertain] = useState(() => {
+      try {
+        return (
+          JSON.parse(sessionStorage.getItem(pendingKey) || "null")?.requestId ??
+          ""
+        );
+      } catch {
+        return "";
+      }
+    });
+  const latestDraft = useRef({ text: "", attachment: null } as Pick<
+    import("../../shared/protocol.js").Draft,
+    "text" | "attachment"
+  >);
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null),
     file = useRef<HTMLInputElement>(null),
     [error, setError] = useState("");
+  latestDraft.current = draft;
+  const submit = async (op = "prompt") => {
+    if (
+      busy ||
+      (!active && uncertain) ||
+      connection !== "已连接本地服务" ||
+      (!active && !selected)
+    )
+      return;
+    const captured = latestDraft.current,
+      requestId = crypto.randomUUID();
+    setBusy(true);
+    setError("");
+    let sent = false;
+    try {
+      if (!active)
+        sessionStorage.setItem(
+          pendingKey,
+          JSON.stringify({
+            requestId,
+            op: active ? "agent.stop" : op,
+            text: captured.text,
+            attachment: captured.attachment,
+          }),
+        );
+      sent = true;
+      await command(
+        active ? "agent.stop" : op,
+        active
+          ? { runId: info.run!.id }
+          : op !== "prompt"
+            ? {}
+            : { text: captured.text, attachment: captured.attachment },
+        scope,
+        requestId,
+      );
+      if (!active && op === "prompt") clearSubmittedDraft(scope, captured);
+      if (!active) sessionStorage.removeItem(pendingKey);
+    } catch (e) {
+      if (!active && (e as { code?: string }).code === "UNCERTAIN")
+        setUncertain(requestId);
+      else if (!active) {
+        try {
+          sessionStorage.removeItem(pendingKey);
+        } catch {}
+      }
+      setError(
+        sent
+          ? (e as Error).message
+          : "浏览器恢复记录无法保存，未发送任务。请检查浏览器存储。",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     const node = input.current!;
     node.style.height = "44px";
@@ -723,7 +709,7 @@ function Composer({ scope }: { scope: Scope }) {
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
-            setError("主 Agent 尚未接入，草稿已保留；未发起模型请求。");
+            void submit();
           }}
         >
           <label className="screen-reader" htmlFor="prompt">
@@ -745,7 +731,7 @@ function Composer({ scope }: { scope: Scope }) {
                 e.keyCode !== 229
               ) {
                 e.preventDefault();
-                setError("主 Agent 尚未接入，草稿已保留；未发起模型请求。");
+                if (!active) void submit();
               }
             }}
           />
@@ -801,20 +787,95 @@ function Composer({ scope }: { scope: Scope }) {
                   }
                 }}
               />
-              <ModelPicker />
+              <ModelPicker scope={scope} />
             </div>
             <button
-              className="btn btn-primary send"
+              className={`btn btn-primary send${active ? " is-running" : ""}`}
               type="submit"
-              aria-label="发送消息"
-              title="主 Agent 尚未接入"
-              disabled
+              aria-label={active ? "停止执行" : "发送消息"}
+              title={
+                active
+                  ? "停止此会话"
+                  : selected
+                    ? "发送消息"
+                    : "请先选择可用模型"
+              }
+              disabled={
+                busy ||
+                (!active && !!uncertain) ||
+                connection !== "已连接本地服务" ||
+                (!active &&
+                  (!selected ||
+                    (!draft.text.trim() && !draft.attachment) ||
+                    info.run?.cleanup === "unconfirmed"))
+              }
             >
-              <Icon name="arrow" />
+              {active ? (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              ) : (
+                <Icon name="arrow" />
+              )}
             </button>
           </div>
         </form>
-        <Usage />
+        {!active &&
+          info.run &&
+          ["cancelled", "interrupted", "failed"].includes(info.run.status) && (
+            <button
+              className="btn"
+              disabled={
+                busy ||
+                !!uncertain ||
+                !selected ||
+                info.run.cleanup !== "confirmed"
+              }
+              onClick={() => void submit("agent.continue")}
+            >
+              显式继续
+            </button>
+          )}
+        {uncertain && (
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const receipt = await command<{ status: string }>(
+                  "agent.receipt",
+                  { requestId: uncertain },
+                  scope,
+                );
+                setError(
+                  `请求状态：${receipt.status}。草稿保留；不会自动重发。`,
+                );
+                if (
+                  ["committed", "failed", "not_found"].includes(receipt.status)
+                ) {
+                  const pending = JSON.parse(
+                    sessionStorage.getItem(pendingKey) || "null",
+                  );
+                  if (
+                    receipt.status === "committed" &&
+                    pending?.op === "prompt"
+                  )
+                    clearSubmittedDraft(scope, pending);
+                  sessionStorage.removeItem(pendingKey);
+                  setUncertain("");
+                }
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            核实发送状态（不重发）
+          </button>
+        )}
+        <Usage scope={scope} />
         <Connection extra={error || draft.error} />
       </div>
     </section>
@@ -864,32 +925,54 @@ function Connection({ extra = "" }: { extra?: string }) {
   return (
     <div className="composer-foot">
       <span className="status" role="status">
-        {extra || status + " · 主 Agent 尚未接入"}
+        {extra || status}
       </span>
       <span>Enter 发送 · Shift + Enter 换行</span>
     </div>
   );
 }
-function Usage() {
+function Usage({ scope }: { scope?: Scope }) {
+  const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
+    usage = info.usage;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running(info.run)) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [info.run?.id, info.run?.status]);
+  const elapsed = info.run
+    ? ((info.run.endedAt ?? now) - info.run.startedAt) / 1000
+    : null;
+  const cacheTotal = usage
+    ? usage.input + usage.cacheRead + usage.cacheWrite
+    : 0;
   return (
     <div className="usage" aria-label="Token、缓存、耗时与预计花费统计">
       <div className="usage-row">
         <span
           className="usage-metric"
           data-od-id="context-capacity"
-          title="上下文占用：未知"
+          title={
+            usage
+              ? `主会话累计 Token：${usage.total}；上下文为 pi 估算`
+              : "上下文占用：未知"
+          }
         >
           <svg className="usage-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3.34 19a10 10 0 1 1 17.32 0" />
             <path className="gauge-needle" d="m12 14 4-4" />
           </svg>
-          <strong>—</strong>
-          <strong>· —%</strong>
+          <strong>{usage?.context?.tokens?.toLocaleString() ?? "—"}</strong>
+          <strong>· {usage?.context?.percent?.toFixed(1) ?? "—"}%</strong>
         </span>
         <span
           className="usage-metric"
           data-od-id="cache-tokens"
-          title="缓存命中率：未知"
+          title={
+            usage
+              ? `主会话缓存读取 ${usage.cacheRead} · 写入 ${usage.cacheWrite}`
+              : "缓存命中率：未知"
+          }
         >
           <svg className="usage-icon" viewBox="0 0 24 24" aria-hidden="true">
             <g className="cache-body">
@@ -898,29 +981,38 @@ function Usage() {
             </g>
             <path className="cache-bolt" d="m19 12-4 6h4l-1 4 5-7h-4z" />
           </svg>
-          <strong>—%</strong>
+          <strong>
+            {usage && cacheTotal
+              ? ((usage.cacheRead / cacheTotal) * 100).toFixed(0)
+              : "—"}
+            %
+          </strong>
         </span>
         <span
           className="usage-metric"
           data-od-id="run-duration"
-          title="执行耗时：未知"
+          title="当前执行耗时（服务端起止时间）"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
           </svg>
-          <strong>—</strong>
+          <strong>
+            {elapsed != null ? `${Math.max(0, elapsed).toFixed(0)}s` : "—"}
+          </strong>
         </span>
         <span
           className="usage-metric"
           data-od-id="estimated-cost"
-          title="预计费用：未知"
+          title="主会话累计预计费用（pi 定价）；未提供价格显示未知"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 6v12m3-9h-4.5a2 2 0 0 0 0 4h3a2 2 0 0 1 0 4H9" />
           </svg>
-          <strong>—</strong>
+          <strong>
+            {usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}
+          </strong>
         </span>
       </div>
     </div>

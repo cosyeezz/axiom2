@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { Configuration } from "../shared/protocol.js";
 
 export async function configuration(root: string): Promise<Configuration> {
@@ -59,7 +60,12 @@ export async function configuration(root: string): Promise<Configuration> {
       })
     )
       .filter((m) => allowed.has(`${m.provider}/${m.id}`))
-      .map((m) => ({ provider: m.provider, id: m.id, name: m.name }));
+      .map((m) => ({
+        provider: m.provider,
+        id: m.id,
+        name: m.name,
+        levels: getSupportedThinkingLevels(m),
+      }));
   } catch {
     // Never return pi parser errors: they can include secret configuration values.
     result.error =

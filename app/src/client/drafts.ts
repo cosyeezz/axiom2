@@ -79,6 +79,17 @@ export function updateDraft(
     }, 300),
   );
 }
+export function clearSubmittedDraft(
+  scope: Scope,
+  submitted: Pick<Draft, "text" | "attachment">,
+) {
+  const current = get(scope);
+  if (
+    current.text === submitted.text &&
+    JSON.stringify(current.attachment) === JSON.stringify(submitted.attachment)
+  )
+    updateDraft(scope, { text: "", attachment: null });
+}
 export function useDraft(scope: Scope) {
   const key = scopeKey(scope);
   return useSyncExternalStore(

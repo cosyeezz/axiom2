@@ -10,6 +10,7 @@ import { Store } from "./storage.js";
 import { configuration } from "./models.js";
 import { ModelService } from "./model-service.js";
 import { Logins } from "./auth.js";
+import { Agents } from "./agents.js";
 import {
   AppError,
   object,
@@ -78,6 +79,12 @@ export async function startServer(
       return store.sessions(parts[1]);
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
+    const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
+    if (parts.length === 3 && parts[0] === "thread")
+      return agents.thread(target);
+    if (parts.length === 4 && parts[0] === "message")
+      return agents.message(target, parts[3]);
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
   };
   const send = (ws: WebSocket, value: unknown) => {
@@ -99,6 +106,9 @@ export async function startServer(
     for (const [ws, scopes] of subscriptions)
       if (scopes.has(scope)) send(ws, event);
   };
+  const agents = new Agents(store, models, publish);
+  models.beforeLogout = (providers, confirmed) =>
+    agents.stopProviders(providers, confirmed);
   const logins = new Logins(
     models,
     (owner, state) =>
@@ -137,7 +147,7 @@ export async function startServer(
           const scope = text(c.params!.scope, "订阅范围", 300),
             data = snapshots(scope);
           const scopes = subscriptions.get(ws)!;
-          if (scopes.size >= 100 && !scopes.has(scope))
+          if (scopes.size >= 500 && !scopes.has(scope))
             throw new AppError("LIMIT", "订阅数量超限");
           scopes.add(scope);
           // JS run-to-completion puts this snapshot and following mutations on one cursor boundary.
@@ -183,7 +193,16 @@ export async function startServer(
           } finally {
             await refreshConfiguration();
           }
-        } else if (c.op === "draft.get")
+        } else if (
+          c.op === "prompt" ||
+          c.op.startsWith("agent.") ||
+          c.op === "thread.history" ||
+          c.op === "message.get"
+        )
+          data = await agents.command(c);
+        else if (c.op === "session.delete")
+          data = await models.serial(() => agents.remove(c));
+        else if (c.op === "draft.get")
           data = store.draft(c.workspaceId, c.sessionId, c.params!.viewId);
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId);
@@ -368,16 +387,24 @@ export async function startServer(
       sockets.emit("connection", ws, req),
     );
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port ?? 4317, "127.0.0.1", resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.port ?? 4317, "127.0.0.1", resolve);
+    });
+  } catch (error) {
+    sockets.close();
+    await vite?.close();
+    store.close();
+    throw error;
+  }
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   return {
     origin,
     accessUrl: `${origin}/#access=${bootstrap}`,
     store,
     refreshConfiguration,
+    agents,
     close: async () => {
       shuttingDown = true;
       for (const ws of sockets.clients) {
@@ -387,6 +414,7 @@ export async function startServer(
       sockets.close();
       await Promise.allSettled(inFlight);
       await logins.close();
+      await agents.close();
       await vite?.close();
       await new Promise<void>((r) => server.close(() => r()));
       store.close();

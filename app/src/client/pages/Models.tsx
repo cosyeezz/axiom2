@@ -83,7 +83,11 @@ export default function Models() {
       void load();
     }
   }, [connection]);
-  const save = async (confirmLogout = false, allowCommands = false) => {
+  const save = async (
+    confirmLogout = false,
+    allowCommands = false,
+    confirmStop = false,
+  ) => {
     setBusy(true);
     try {
       await command("configuration.save", {
@@ -91,6 +95,7 @@ export default function Models() {
         providers,
         confirmLogout,
         allowCommands,
+        confirmStop,
       });
       setNeedsReconcile(true);
       if (await load())
@@ -104,22 +109,28 @@ export default function Models() {
         setNeedsReconcile(true);
       if (
         e.code === "LOGOUT_CONFIRMATION_REQUIRED" ||
-        e.code === "COMMAND_AUTHORIZATION_REQUIRED"
+        e.code === "COMMAND_AUTHORIZATION_REQUIRED" ||
+        e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED"
       )
         setDecision({
           title:
             e.code === "LOGOUT_CONFIRMATION_REQUIRED"
               ? "确认供应商级退出登录？"
-              : "允许执行配置命令？",
+              : e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED"
+                ? "停止受影响的执行？"
+                : "允许执行配置命令？",
           text:
             e.message +
             (e.code === "LOGOUT_CONFIRMATION_REQUIRED"
               ? "受影响供应商及其模型的请求头覆盖也将清除，以移除备用认证来源；外部环境变量不改写。"
-              : "只应允许你自己配置并理解的命令。"),
+              : e.code === "COMMAND_AUTHORIZATION_REQUIRED"
+                ? "只应允许你自己配置并理解的命令。"
+                : "停止不回滚已修改的项目文件。"),
           proceed: () =>
             void save(
               confirmLogout || e.code === "LOGOUT_CONFIRMATION_REQUIRED",
               allowCommands || e.code === "COMMAND_AUTHORIZATION_REQUIRED",
+              confirmStop || e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED",
             ),
         });
     } finally {
@@ -205,7 +216,7 @@ export default function Models() {
       setFeedback("已保留其他供应商的草稿；顶部保存才会发布配置。");
     });
   };
-  const removeProvider = (provider: Provider) => {
+  const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
       title: "删除供应商？",
       text: provider.originalId
@@ -229,6 +240,7 @@ export default function Models() {
               (p) => p.providerId !== provider.providerId,
             ),
             confirmLogout: true,
+            confirmStop: stopConfirmed,
           });
           setNeedsReconcile(true);
           if (await load())
@@ -240,6 +252,12 @@ export default function Models() {
           if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN"].includes(e.code ?? ""))
             setNeedsReconcile(true);
           setFeedback(e.message);
+          if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
+            setDecision({
+              title: "停止受影响的执行？",
+              text: e.message + "停止不回滚项目文件。",
+              proceed: () => removeProvider(provider, true),
+            });
         } finally {
           setBusy(false);
         }

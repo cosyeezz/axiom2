@@ -4,6 +4,7 @@ import { basename, isAbsolute, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import {
   AppError,
+  attachmentInput,
   object,
   text,
   type Command,
@@ -14,8 +15,20 @@ import {
 
 export class Store {
   readonly db: DatabaseSync;
+  private readonly lease: DatabaseSync;
   constructor(readonly root: string) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
+    // A separate SQLite exclusive lock is released by the OS on a crash; no stale PID guessing.
+    this.lease = new DatabaseSync(join(root, "service-lock.sqlite"));
+    try {
+      this.lease.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE");
+    } catch {
+      this.lease.close();
+      throw new AppError(
+        "SERVICE_ALREADY_RUNNING",
+        "此数据目录已有服务运行，不能启动第二个执行管理器。",
+      );
+    }
     this.db = new DatabaseSync(join(root, "axiom.sqlite"));
     this.db
       .exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;
@@ -25,6 +38,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,hash TEXT NOT NULL,response TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS external_requests(id TEXT PRIMARY KEY,hash TEXT NOT NULL,state TEXT NOT NULL,response TEXT);
       UPDATE external_requests SET state='uncertain' WHERE state='pending';
+      CREATE TABLE IF NOT EXISTS agent_sessions(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,selection TEXT,file TEXT,environment TEXT,usage TEXT);
+      CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,status TEXT NOT NULL,selection TEXT NOT NULL,startedAt INTEGER NOT NULL,endedAt INTEGER,error TEXT,cleanup TEXT NOT NULL DEFAULT 'pending');
+      UPDATE runs SET status='interrupted',endedAt=COALESCE(endedAt,unixepoch()*1000),error='服务中断；未自动重做。清理状态待核实。',cleanup='unconfirmed' WHERE cleanup='pending';
     `);
   }
   workspaces(): Workspace[] {
@@ -46,7 +62,7 @@ export class Store {
     return (
       this.db
         .prepare(
-          "SELECT * FROM sessions WHERE workspaceId=? ORDER BY pinned DESC,updatedAt DESC,id",
+          "SELECT sessions.*,(SELECT status FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) AS runStatus FROM sessions WHERE workspaceId=? ORDER BY pinned DESC,updatedAt DESC,id",
         )
         .all(w.id) as unknown as Session[]
     ).map((s) => ({ ...s, pinned: !!s.pinned, unread: !!s.unread }));
@@ -112,7 +128,7 @@ export class Store {
       }
       throw new AppError(
         "UNCERTAIN",
-        "外部操作处理中或结果待核实；请读取当前配置，不自动重做。",
+        "操作处理中或结果待核实；请读取当前状态，不自动重做。",
       );
     }
     this.db
@@ -132,7 +148,7 @@ export class Store {
           ? error
           : new AppError(
               "UNCERTAIN",
-              "外部操作状态待核实，请读取当前配置和认证状态。",
+              "操作状态待核实，请读取对应会话或配置状态。",
             );
       try {
         this.db
@@ -145,7 +161,7 @@ export class Store {
       } catch {
         throw new AppError(
           "UNCERTAIN",
-          "操作回执未保存；请重新读取配置和认证状态，勿重复提交。",
+          "操作回执未保存；请重新读取会话或配置状态，勿重复提交。",
         );
       }
       throw safe;
@@ -227,6 +243,8 @@ export class Store {
       this.db
         .prepare("UPDATE sessions SET pinned=? WHERE id=?")
         .run(Number(p.pinned), s.id);
+    } else if (c.op === "session.read") {
+      this.db.prepare("UPDATE sessions SET unread=0 WHERE id=?").run(s.id);
     } else if (c.op === "session.delete") {
       if (p.confirmed !== true)
         throw new AppError("CONFIRMATION_REQUIRED", "删除会话需要确认");
@@ -236,22 +254,7 @@ export class Store {
       const view = text(p.viewId, "查看实例");
       if (typeof p.text !== "string" || p.text.length > 12000)
         throw new AppError("INVALID_INPUT", "草稿不能超过 12000 字符");
-      let attachment = null;
-      if (p.attachment !== null && p.attachment !== undefined) {
-        const a = object(p.attachment),
-          name = text(a.name, "附件名称", 255);
-        if (
-          !/\.(txt|md|js|jsx|ts|tsx|json|py|css|html)$/i.test(name) ||
-          typeof a.text !== "string" ||
-          Buffer.byteLength(a.text) > 100000 ||
-          a.text.includes("\0")
-        )
-          throw new AppError(
-            "INVALID_ATTACHMENT",
-            "仅支持小于 100 KB 的文本或代码文件",
-          );
-        attachment = { name, text: a.text };
-      }
+      const attachment = attachmentInput(p.attachment);
       const current = this.draft(s.workspaceId, s.id, view);
       if (p.revision !== current.revision)
         throw new AppError("REVISION_CONFLICT", "草稿已更新，请重新读取");
@@ -272,15 +275,11 @@ export class Store {
           JSON.stringify({ text: draft.text, attachment }),
         );
       return draft;
-    } else if (c.op === "prompt") {
-      throw new AppError(
-        "AGENT_NOT_READY",
-        "主 Agent 尚未接入，未发起模型请求",
-      );
     } else throw new AppError("UNKNOWN_OPERATION", "不支持的操作");
     return this.session(s.workspaceId, s.id);
   }
   close() {
     this.db.close();
+    this.lease.close();
   }
 }

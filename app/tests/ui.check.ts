@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { checkAgentUI } from "./agent-ui.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-ui-")),
   artifacts = resolve("test-results");
@@ -583,13 +584,14 @@ try {
     JSON.parse(readFileSync(configPath, "utf8")).providers["axiom-ui-check"],
     undefined,
   );
+  await checkAgentUI(page, app, artifacts);
   assert.deepEqual(errors, []);
   writeFileSync(
     join(artifacts, "geometry.json"),
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy. Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy; product Agent worker/tool streaming, safe Markdown, IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

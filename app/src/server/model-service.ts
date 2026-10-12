@@ -177,6 +177,7 @@ export class ModelService {
   readonly dir: string;
   private tail: Promise<unknown> = Promise.resolve();
   authActive = false;
+  beforeLogout?: (providers: string[], confirmed: boolean) => Promise<void>;
   constructor(readonly root: string) {
     this.dir = join(root, "pi");
   }
@@ -604,6 +605,12 @@ export class ModelService {
           throw new AppError(
             "REVISION_CONFLICT",
             "验证期间配置已改变；未覆盖，请重新读取。",
+          );
+        await this.beforeLogout?.([...logout], draft.confirmStop === true);
+        if (digest(await this.raw()) !== revision)
+          throw new AppError(
+            "REVISION_CONFLICT",
+            "停止执行期间配置已改变；请重新读取。",
           );
         for (const providerId of logout) {
           await runtime.logout(providerId);
