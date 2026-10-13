@@ -8,16 +8,16 @@ export function ModelEditor({
   editor,
   setEditor,
   p,
-  patch,
+  stageEditor,
+  discardEditor,
   feedback,
-  setFeedback,
 }: {
   editor: Model;
   setEditor: (m: Model | null) => void;
   p: Provider;
-  patch: (p: Partial<Provider>) => void;
+  stageEditor: () => unknown;
+  discardEditor: (proceed: () => void) => void;
   feedback: string;
-  setFeedback: (s: string) => void;
 }) {
   return (
     <section
@@ -28,25 +28,7 @@ export function ModelEditor({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!editor.id.trim()) return;
-          if (
-            p.models.some(
-              (m) => m.key !== editor.key && m.id === editor.id.trim(),
-            )
-          ) {
-            setFeedback("模型 ID 不能重复");
-            return;
-          }
-          const m = {
-            ...editor,
-            id: editor.id.trim(),
-            name: editor.name.trim() || editor.id.trim(),
-          };
-          patch({
-            models: [...p.models.filter((old) => old.key !== m.key), m],
-          });
-          setEditor(null);
-          setFeedback("已结束行内编辑；仍是未保存草稿。");
+          stageEditor();
         }}
       >
         <h2 id="model-editor-heading">
@@ -85,6 +67,7 @@ export function ModelEditor({
               id="reasoning-level-options"
               role="group"
               aria-labelledby="model-reasoning-label"
+              aria-describedby="reasoning-help"
             >
               {levels.map((level) => (
                 <label key={level}>
@@ -108,9 +91,9 @@ export function ModelEditor({
                 </label>
               ))}
             </div>
-            <span className="field-help">
-              多选模型支持的等级；none 对应 pi 的 off。保存时映射
-              thinkingLevelMap；会话每次只选择一个等级。
+            <span className="field-help" id="reasoning-help">
+              选择模型支持的等级；再次点击可取消，未选时不配置思考等级。统一点击顶部「保存」后生效。none
+              对应 pi 的 off；保存时校验实际模型能力。
             </span>
           </div>
         </div>
@@ -133,7 +116,7 @@ export function ModelEditor({
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => setEditor(null)}
+            onClick={() => discardEditor(() => setEditor(null))}
           >
             取消
           </button>

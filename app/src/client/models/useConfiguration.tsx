@@ -44,6 +44,41 @@ export function useConfiguration() {
     proceed: () => void;
   } | null>(null);
   const p = providers.find((p) => p.id === selected);
+  const editorDirty =
+    !!editor &&
+    JSON.stringify(editor) !==
+      JSON.stringify(
+        p?.models.find((m) => m.key === editor.key) ?? {
+          key: editor.key,
+          id: "",
+          name: "",
+          levels: ["none"],
+          headers: [],
+          body: [],
+        },
+      );
+  // One staging path for Finish, top Save (including a hidden editor), and supplier switches.
+  const stageEditor = (): Provider[] | null => {
+    if (!editor || !p) return providers;
+    const id = editor.id.trim();
+    if (!id || p.models.some((m) => m.key !== editor.key && m.id === id)) {
+      setFeedback(id ? "模型 ID 不能重复" : "请输入模型 ID。");
+      setTab("models");
+      return null;
+    }
+    const model = { ...editor, id, name: editor.name.trim() || id };
+    const models = p.models.some((m) => m.key === model.key)
+      ? p.models.map((m) => (m.key === model.key ? model : m))
+      : [...p.models, model];
+    const next = providers.map((item) =>
+      item.id === p.id ? { ...item, models } : item,
+    );
+    setProviders(next);
+    setEditor(null);
+    setDirty(true);
+    setFeedback("已结束行内编辑；仍是未保存草稿。");
+    return next;
+  };
   const load = async () => {
     setBusy(true);
     try {
@@ -80,11 +115,13 @@ export function useConfiguration() {
     allowCommands = false,
     confirmStop = false,
   ) => {
+    const next = stageEditor();
+    if (!next) return;
     setBusy(true);
     try {
       await command("configuration.save", {
         revision,
-        providers,
+        providers: next,
         confirmLogout,
         allowCommands,
         confirmStop,
@@ -201,12 +238,10 @@ export function useConfiguration() {
     });
   const select = (id: string) => {
     if (id === selected) return;
-    discardEditor(() => {
-      setSelected(id);
-      setEditor(null);
-      setShowKey(false);
-      setFeedback("已保留其他供应商的草稿；顶部保存才会发布配置。");
-    });
+    if (!stageEditor()) return;
+    setSelected(id);
+    setShowKey(false);
+    setFeedback("已保留其他供应商的草稿；顶部保存才会发布配置。");
   };
   const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
@@ -288,7 +323,8 @@ export function useConfiguration() {
     connection,
     revision,
     templates,
-    dirty,
+    dirty: dirty || editorDirty,
+    stageEditor,
     busy,
     needsReconcile,
     login,

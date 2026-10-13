@@ -13,9 +13,9 @@ export function ModelRegistry({
   editor,
   setEditor,
   discardEditor,
+  stageEditor,
   patch,
   feedback,
-  setFeedback,
   copyFeedback,
   copyButton,
   rows,
@@ -28,9 +28,9 @@ export function ModelRegistry({
   editor: Model | null;
   setEditor: (m: Model | null) => void;
   discardEditor: (fn: () => void) => void;
+  stageEditor: () => unknown;
   patch: (p: Partial<Provider>) => void;
   feedback: string;
-  setFeedback: (s: string) => void;
   copyFeedback: string;
   copyButton: (v: string, k: string) => ReactNode;
   rows: Model[];
@@ -87,7 +87,7 @@ export function ModelRegistry({
       </div>
       {editor && (
         <ModelEditor
-          {...{ editor, setEditor, p, patch, feedback, setFeedback }}
+          {...{ editor, setEditor, p, stageEditor, discardEditor, feedback }}
         />
       )}
       <div className="card model-table">

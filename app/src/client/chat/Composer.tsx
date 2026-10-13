@@ -74,7 +74,9 @@ export function Composer({
             ref={input}
             id={promptId}
             maxLength={12000}
-            placeholder="描述任务或粘贴代码，支持 Markdown 与彩色重点提示…"
+            placeholder="Ask axiom…"
+            lang="en"
+            data-od-id="message-input"
             value={draft.text}
             onChange={(e) => updateDraft(scope, { text: e.target.value })}
             onKeyDown={(e) => {
@@ -232,7 +234,9 @@ export function EmptyComposer() {
             className="textarea"
             id="prompt"
             aria-label="描述你的编码任务"
-            placeholder="描述任务或粘贴代码，支持 Markdown 与彩色重点提示…"
+            placeholder="Ask axiom…"
+            lang="en"
+            data-od-id="message-input"
             disabled
           />
           <div className="composer-tools">

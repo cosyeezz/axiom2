@@ -52,13 +52,17 @@ export async function checkTasksUI(
       res.end("data: [DONE]\n\n");
     } else if (
       main ||
+      !body.tools?.length ||
       JSON.stringify(body.messages.at(-1)).includes("工作已停止：")
     ) {
       chunk({
         role: "assistant",
         content: main
           ? "主会话回复已结束，子任务继续运行。"
-          : "工作已停止，没有核实修改，没有回滚。",
+          : !body.tools?.length &&
+              !JSON.stringify(body.messages.at(-1)).includes("工作已停止：")
+            ? "子会话独立快照摘要"
+            : "工作已停止，没有核实修改，没有回滚。",
       });
       chunk({}, "stop");
       res.end("data: [DONE]\n\n");
@@ -191,6 +195,46 @@ export async function checkTasksUI(
       .last()
       .waitFor();
     const stoppedTask = app.tasks.list(scope!).tasks[0];
+    const childTrigger = dialog.locator(
+      '[data-od-id="background-compression-trigger"]',
+    );
+    await childTrigger.click();
+    await dialog
+      .locator(
+        '[data-od-id="background-compression-trigger"][data-state="completed"]',
+      )
+      .waitFor();
+    await childTrigger.click();
+    const compression = page.getByRole("dialog", {
+      name: "后台压缩",
+      exact: true,
+    });
+    await compression.getByText(/子会话独立快照摘要/).waitFor();
+    assert.equal(
+      app.agents.compressions.info(scope!),
+      null,
+      "child compression never overwrites parent status",
+    );
+    assert.equal(
+      await compression.evaluate((el) => el.getBoundingClientRect().height),
+      page.viewportSize()!.height,
+    );
+    await compression
+      .getByRole("button", { name: "关闭压缩详情，返回会话" })
+      .press("Escape");
+    await compression.waitFor({ state: "detached" });
+    assert.ok(
+      await dialog.isVisible(),
+      "Escape closes only the top compression sheet",
+    );
+    assert.ok(
+      await childTrigger.evaluate((el) => el === document.activeElement),
+    );
+    assert.equal(
+      await dialog.locator("textarea").inputValue(),
+      "子窗口独立中文草稿",
+    );
+    assert.equal(await page.locator("#prompt").inputValue(), "父会话保留草稿");
     app.store.db
       .prepare("INSERT INTO task_inputs VALUES(?,?,?,'steer','held',NULL,?)")
       .run(

@@ -89,6 +89,8 @@ export async function startServer(
     const target = { workspaceId: parts[1], sessionId: parts[2] };
     if (parts.length === 3 && parts[0] === "tasks") return tasks.list(target);
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
+    if (parts.length === 3 && parts[0] === "compression")
+      return agents.compressions.info(target);
     if (parts.length === 3 && parts[0] === "thread")
       return agents.thread(target);
     if (parts.length === 4 && parts[0] === "message")
@@ -208,6 +210,8 @@ export async function startServer(
           c.op.startsWith("annotation.")
         ) {
           data = await previews.command(c);
+        } else if (c.op.startsWith("compression.")) {
+          data = await agents.compressions.command(c);
         } else if (c.op.startsWith("favorites.")) {
           data = await preferences.command(c, config);
           publish("favorites");

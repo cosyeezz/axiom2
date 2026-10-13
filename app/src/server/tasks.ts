@@ -121,6 +121,7 @@ export class Tasks {
     const outcomes = await Promise.allSettled([
       this.agents.stop(scope),
       this.scheduler.stop(owned, "父会话整体停止"),
+      ...owned.map((row) => this.agents.compressions.stop(target(row))),
     ]);
     this.agents.publish(tasksScope(scope), this.records.list(scope));
     if (
@@ -138,6 +139,8 @@ export class Tasks {
   }
   async stopProviders(providers: string[], confirmed: boolean) {
     const affected = this.agents.affected(providers);
+    // Check every affected kind before stopping anything without explicit confirmation.
+    this.agents.compressions.checkProviders(providers, confirmed);
     const queued = this.records
       .rows("WHERE status='queued'")
       .filter((row) =>

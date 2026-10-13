@@ -14,6 +14,7 @@ import { startServer } from "../src/server/index.js";
 import { checkAgentUI } from "./agent-ui.js";
 import { checkTasksUI } from "./tasks-ui.js";
 import { checkPreviewUI } from "./preview-ui.js";
+import { checkCompressionUI } from "./compression-ui.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-ui-")),
   artifacts = resolve("test-results");
@@ -391,9 +392,39 @@ try {
   await page
     .getByRole("button", { name: "编辑模型：验收模型名称", exact: true })
     .click();
+  await design.goto(refOrigin + "/model-config.html");
+  await design.locator("#models-tab").click();
+  await design.locator("#add-model").click();
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
+    await design.setViewportSize({ width, height });
     await overflow(page, `models ${width}`);
+    const columns = (el: Element) =>
+      getComputedStyle(el).gridTemplateColumns.split(" ").length;
+    assert.equal(
+      await page.locator(".inline-model-fields").evaluate(columns),
+      await design.locator(".inline-model-fields").evaluate(columns),
+    );
+    const style = (el: Element) => {
+      const s = getComputedStyle(el);
+      return [
+        s.borderRadius,
+        s.backgroundColor,
+        s.boxShadow,
+        s.fontFamily,
+        s.minHeight,
+      ];
+    };
+    assert.deepEqual(
+      await page
+        .locator("#reasoning-level-options label span")
+        .first()
+        .evaluate(style),
+      await design
+        .locator("#reasoning-level-options label span")
+        .first()
+        .evaluate(style),
+    );
     assert.equal(
       await page
         .getByRole("checkbox", { name: "high", exact: true })
@@ -444,6 +475,47 @@ try {
     !browserState.includes("界面验收供应商"),
     "configuration drafts never persist in browser storage",
   );
+  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
+  await page.locator("#add-supplier").click();
+  await page.locator("#provider-name").fill("切换验证供应商");
+  await page
+    .locator(".supplier-option")
+    .filter({ hasText: "界面验收供应商" })
+    .click();
+  await page.getByRole("tab", { name: /模型配置/ }).click();
+  await page
+    .getByRole("button", { name: "编辑模型：尚未完成的编辑", exact: true })
+    .click();
+  await page.locator("#new-model-name").fill("验收模型名称");
+  await page.getByRole("checkbox", { name: "max", exact: true }).uncheck();
+  await page
+    .locator(".supplier-option")
+    .filter({ hasText: "切换验证供应商" })
+    .click();
+  await page
+    .locator(".supplier-option")
+    .filter({ hasText: "界面验收供应商" })
+    .click();
+  await page
+    .getByRole("button", { name: "编辑模型：验收模型名称", exact: true })
+    .click();
+  assert.equal(
+    await page.getByRole("checkbox", { name: "max", exact: true }).isChecked(),
+    false,
+  );
+  assert.equal(
+    await page.getByRole("checkbox", { name: "high", exact: true }).isChecked(),
+    true,
+  );
+  await page.locator("#new-model-id").fill("");
+  await page.getByRole("tab", { name: /连接配置/ }).click();
+  await page.locator("#save-provider").click();
+  await page.locator("#new-model-id").waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#new-model-id").inputValue(),
+    "",
+    "invalid hidden editor is preserved for correction",
+  );
   await page.locator("#reset-provider").click();
   await page
     .getByRole("dialog")
@@ -483,7 +555,9 @@ try {
   await page.locator("#add-model").click();
   await page.locator("#new-model-id").fill("ui-model");
   await page.getByRole("checkbox", { name: "high", exact: true }).check();
-  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
+  // Top Save also includes the unfinished model form hidden behind the connection tab.
+  await page.getByRole("tab", { name: /连接配置/ }).click();
+  assert.equal(await page.locator("#save-provider").isDisabled(), false);
   await page.locator("#save-provider").click();
   await page.waitForFunction(() =>
     document.body.innerText.includes("已发布配置"),
@@ -643,6 +717,7 @@ try {
     undefined,
   );
   await checkAgentUI(page, app, artifacts);
+  await checkCompressionUI(page, design, app, artifacts, sizes);
   await checkTasksUI(page, app, artifacts);
   await checkPreviewUI(page, app, project, artifacts);
   assert.deepEqual(errors, []);
@@ -651,7 +726,7 @@ try {
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, draft recovery, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; bound preview selection → actual pi edit → refreshed output; IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy, hidden inline-editor top Save, two-column reasoning styles; context ring boundaries/unknown ARIA, real background snapshot compression, cancel/retry/no-replay/focus, nine-viewport compression sheet vs design and reduced motion; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, draft recovery, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; bound preview selection → actual pi edit → refreshed output; IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

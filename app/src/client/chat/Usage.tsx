@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useScope } from "../transport.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
+import { Compression } from "./Compression.js";
 export function Usage({ scope }: { scope?: Scope }) {
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
     usage = info.usage,
@@ -18,25 +19,68 @@ export function Usage({ scope }: { scope?: Scope }) {
   const cacheTotal = usage
     ? usage.input + usage.cacheRead + usage.cacheWrite
     : 0;
+  const context = usage?.context;
+  const percent =
+    context?.tokens != null &&
+    Number.isFinite(context.tokens) &&
+    context.tokens >= 0 &&
+    Number.isFinite(context.window) &&
+    context.window > 0
+      ? Math.min(100, (context.tokens / context.window) * 100)
+      : null;
+  const contextLabel =
+    percent == null
+      ? "上下文占用率未知"
+      : `上下文占用率 ${Math.round(percent)}%（pi 估算）`;
   return (
-    <div className="usage" aria-label="Token、缓存、耗时与预计花费统计">
+    <div
+      className="usage"
+      data-od-id="token-usage"
+      role="group"
+      aria-label="Token、缓存、耗时与预计花费统计"
+    >
       <div className="usage-row">
-        <span
-          className="usage-metric"
-          data-od-id="context-capacity"
-          title={
-            usage
-              ? `${label}累计 Token：${usage.total}；上下文为 pi 估算`
-              : "上下文占用：未知"
-          }
-        >
-          <svg className="usage-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-            <path className="gauge-needle" d="m12 14 4-4" />
-          </svg>
-          <strong>{usage?.context?.tokens?.toLocaleString() ?? "—"}</strong>
-          <strong>· {usage?.context?.percent?.toFixed(1) ?? "—"}%</strong>
-        </span>
+        <div className="context-controls" data-od-id="context-controls">
+          <span
+            className="usage-metric"
+            data-od-id="context-capacity"
+            title={`${contextLabel}；${label}累计 Token：${usage?.total ?? "—"}`}
+          >
+            <svg
+              className="usage-icon"
+              viewBox="0 0 24 24"
+              role="progressbar"
+              aria-label={contextLabel}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent ?? undefined}
+            >
+              <circle
+                className="context-ring-track"
+                cx="12"
+                cy="12"
+                r="9"
+                strokeDasharray={percent == null ? "2 3" : undefined}
+              />
+              <circle
+                className="context-ring-fill"
+                cx="12"
+                cy="12"
+                r="9"
+                pathLength="100"
+                strokeDasharray="100 100"
+                strokeDashoffset={100 - (percent ?? 0)}
+                transform="rotate(-90 12 12)"
+              />
+            </svg>
+            <span className="screen-reader">上下文占用：</span>
+            <strong>{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
+            <strong aria-label={contextLabel}>
+              · {percent == null ? "—" : Math.round(percent)}%
+            </strong>
+          </span>
+          <Compression key={scope?.sessionId ?? "empty"} scope={scope} />
+        </div>
         <span
           className="usage-metric"
           data-od-id="cache-tokens"
@@ -47,11 +91,14 @@ export function Usage({ scope }: { scope?: Scope }) {
           }
         >
           <svg className="usage-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <g className="cache-body">
-              <ellipse cx="11" cy="5" rx="8" ry="3" />
-              <path d="M3 5v14c0 1.7 3.6 3 8 3M19 5v5M3 12c0 1.7 3.6 3 8 3" />
+            <g>
+              <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
+              <path d="M4 13h4" />
             </g>
-            <path className="cache-bolt" d="m19 12-4 6h4l-1 4 5-7h-4z" />
+            <g stroke="var(--accent-hover)">
+              <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" />
+              <path d="M16 17h4" />
+            </g>
           </svg>
           <strong>
             {usage && cacheTotal
@@ -79,8 +126,8 @@ export function Usage({ scope }: { scope?: Scope }) {
           title={`${label}累计预计费用（pi 定价）；未提供价格显示未知`}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 6v12m3-9h-4.5a2 2 0 0 0 0 4h3a2 2 0 0 1 0 4H9" />
+            <line x1="12" x2="12" y1="2" y2="22" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
           <strong>
             {usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}

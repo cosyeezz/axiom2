@@ -100,10 +100,12 @@ svg{stroke-width:1.8}
 /* Color stays on glyphs only; labels and unknown usage values remain neutral. */
 #new-chat svg{color:var(--accent-hover)}
 #add-workspace svg{color:color-mix(in oklch,var(--warn) 75%,var(--fg))}
-[data-od-id="context-capacity"] svg{color:var(--accent-hover)}
+[data-od-id="context-capacity"] svg{color:var(--accent-hover);stroke-width:2.5}
+[data-od-id="context-capacity"] .context-ring-track{stroke:color-mix(in oklch,var(--muted) 40%,transparent)}
+[data-od-id="context-capacity"] .context-ring-fill{stroke:currentColor;stroke-linecap:butt;transition:stroke-dashoffset var(--motion-base) var(--ease-standard)}
 [data-od-id="cache-tokens"] svg{color:color-mix(in oklch,var(--success) 75%,var(--fg))}
 [data-od-id="run-duration"] svg{color:var(--fg-2)}
-[data-od-id="estimated-cost"] svg{color:color-mix(in oklch,var(--warn) 60%,var(--fg-2))}
+[data-od-id="estimated-cost"] svg{color:var(--warn);stroke-width:2}
 /* All four metrics share one icon box, centerline and monoline weight. */
 .usage-icon .gauge-needle{transform-origin:12px 14px}
 .usage-metric:hover .gauge-needle{animation:usage-sweep 1.8s ease-in-out 1}
@@ -331,3 +333,35 @@ svg{stroke-width:1.8}
 @media(max-width:640px){.log-row{padding-bottom:24px}.markdown h1{font-size:21px}.markdown h2{font-size:18px}.markdown h3{font-size:16px}.activity-hint{font-size:10px}.session-environment>details{margin-left:0}}
 @media(prefers-reduced-motion:reduce){.activity>summary>svg{transition:none}}
 .config-entry{color:var(--fg);text-decoration:none;border-radius:var(--radius-sm);min-height:60px;flex-shrink:0}.config-entry:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}.config-entry:active{background:color-mix(in oklch,var(--fg) 12%,transparent);color:var(--fg)}.config-entry:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}.config-entry .avatar{width:32px;height:32px}.config-entry .avatar svg{width:17px;height:17px}.config-chevron{width:14px;height:14px;margin-left:auto;color:var(--fg-2)}
+/* Background compression: context-adjacent launcher and session-scoped detail page. */
+.context-controls{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-width:0}
+.compression-trigger{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--fg-2);font-size:12px;white-space:nowrap}
+.compression-trigger:hover{color:var(--fg);background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:var(--border)}
+.compression-trigger:active{background:color-mix(in oklch,var(--fg) 12%,transparent);color:var(--fg)}
+.compression-trigger svg{width:20px;height:20px;stroke-width:2.2}.compression-trigger[data-state=running]{color:var(--accent-hover)}
+.compression-trigger[data-state=running] svg{animation:run-spin 2.8s linear infinite}
+.compression-page{position:fixed;inset:0 0 0 auto;margin:0;width:min(520px,100%);height:100dvh;max-width:100%;max-height:100dvh;padding:0;background:var(--bg);color:var(--fg);border:0;border-left:1px solid var(--border);overflow:hidden}
+.compression-page::backdrop{background:color-mix(in oklch,var(--bg) 45%,transparent)}
+.compression-page[open]{display:flex;flex-direction:column}
+.compression-page>header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:72px;padding:12px 20px 12px 24px;border-bottom:1px solid var(--border);flex-shrink:0}
+.compression-page h2{font-size:18px}.compression-page h3{font-size:14px}.compression-page header p{font-size:12px;color:var(--muted);margin:2px 0 0}
+.compression-body{flex:1;min-height:0;overflow:auto;padding:24px;overflow-wrap:anywhere}.compression-body section+section{margin-top:28px}
+.compression-status{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-weight:510}.compression-status svg{width:20px;height:20px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.compression-status[data-state=running]{color:var(--accent-hover)}.compression-status[data-state=running] svg{animation:run-spin 2.8s linear infinite}
+.compression-status[data-state=completed]{color:color-mix(in oklch,var(--success) 55%,var(--fg))}
+.compression-body p{font-size:13px;color:var(--muted);margin:0;line-height:1.8}
+.compression-facts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0 0;padding:16px 0;border-block:1px solid var(--border)}
+.compression-facts dt{font-size:12px;color:var(--muted)}.compression-facts dd{margin:4px 0 0;font-size:14px;color:var(--fg-2)}
+.compression-steps{list-style:none;margin:16px 0 0;padding:0}.compression-steps li{display:flex;align-items:flex-start;gap:12px;position:relative;padding:0 0 20px}.compression-steps li:last-child{padding-bottom:0}
+.compression-step-number{display:grid;place-items:center;width:24px;height:24px;flex-shrink:0;border:1px solid var(--border);border-radius:50%;font:11px var(--font-mono);color:var(--muted)}
+.compression-steps li[data-phase=done] .compression-step-number{background:color-mix(in oklch,var(--fg) 10%,transparent);color:var(--fg)}
+.compression-steps li[data-phase=current] .compression-step-number{border-color:var(--fg-2);color:var(--fg)}.compression-steps strong{font-size:13px;font-weight:510}.compression-steps small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.compression-preview{margin-top:12px;padding:16px}.compression-preview article+article{border-top:1px solid var(--border);margin-top:16px;padding-top:16px}.compression-preview h4{font-size:12px;font-weight:510;margin:0 0 8px;color:var(--fg-2)}.compression-preview pre{font:13px/1.8 var(--font-body);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--fg-2)}
+.compression-page>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px max(16px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0}.compression-page footer small{font-size:12px;color:var(--muted)}.compression-page footer button{font-size:13px;flex-shrink:0}
+@media(max-width:640px){.context-controls{gap:4px}.compression-page{border:0}.compression-body{padding:20px}.compression-page>header,.compression-page>footer{padding-inline:20px}}
+@media(prefers-reduced-motion:reduce){.compression-trigger svg,.compression-status svg{animation:none!important}}
+/* Keep usage glyphs aligned and equally sized in every compression state. */
+[data-od-id="token-usage"] .usage-metric{min-height:44px;gap:8px}
+[data-od-id="token-usage"] svg{display:block;width:18px;height:18px;flex:0 0 18px;align-self:center;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Refined prompt hint, scoped to the marked input only. */
+[data-od-id="message-input"]::placeholder{font-size:16px;font-weight:510;letter-spacing:-0.01em;color:var(--muted);opacity:1}

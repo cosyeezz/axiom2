@@ -37,6 +37,7 @@ export default function Models() {
     save,
     patch,
     discardEditor,
+    stageEditor,
     add,
     select,
     removeProvider,
@@ -86,12 +87,8 @@ export default function Models() {
             <button
               className="btn btn-primary"
               id="save-provider"
-              disabled={
-                busy || needsReconcile || !dirty || !!editor || !revision
-              }
-              title={
-                editor ? "请先完成或取消行内编辑" : "发布到应用独立的 pi 配置"
-              }
+              disabled={busy || needsReconcile || !dirty || !revision}
+              title={"包含当前行内编辑，统一发布到应用独立的 pi 配置"}
               onClick={() => void save()}
             >
               {busy ? "处理中…" : needsReconcile ? "请先重新读取" : "保存"}
@@ -265,9 +262,9 @@ export default function Models() {
                       editor,
                       setEditor,
                       discardEditor,
+                      stageEditor,
                       patch,
                       feedback,
-                      setFeedback,
                       copyFeedback,
                       copyButton,
                       rows,

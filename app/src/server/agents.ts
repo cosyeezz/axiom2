@@ -23,7 +23,9 @@ import {
 import type { WorkerInput } from "./agent-worker.js";
 import { AgentViews } from "./agents/views.js";
 import { AgentRuns } from "./agents/runs.js";
+import { Compressions } from "./compressions.js";
 export class Agents {
+  readonly compressions: Compressions;
   private readonly views: AgentViews;
   private readonly runs: AgentRuns;
   set onEvent(value: AgentRuns["onEvent"]) {
@@ -59,17 +61,21 @@ export class Agents {
   signal(scope: Scope, id: string, value: Record<string, unknown>) {
     return this.runs.signal(scope, id, value);
   }
-  stop(scope: Scope, options: Parameters<AgentRuns["stop"]>[1] = {}) {
-    return this.runs.stop(scope, options);
+  async stop(scope: Scope, options: Parameters<AgentRuns["stop"]>[1] = {}) {
+    await Promise.all([
+      this.runs.stop(scope, options),
+      this.compressions.stop(scope),
+    ]);
   }
   affected(providers: string[]) {
     return this.runs.affected(providers);
   }
-  stopProviders(providers: string[], confirmed: boolean) {
+  async stopProviders(providers: string[], confirmed: boolean) {
+    await this.compressions.stopProviders(providers, confirmed);
     return this.runs.stopProviders(providers, confirmed);
   }
-  close() {
-    return this.runs.close();
+  async close() {
+    await Promise.all([this.runs.close(), this.compressions.close()]);
   }
   constructor(
     readonly store: Store,
@@ -78,6 +84,7 @@ export class Agents {
   ) {
     this.views = new AgentViews(store, publish);
     this.runs = new AgentRuns(store, this.views, publish);
+    this.compressions = new Compressions(this);
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS project_trust(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id),trusted INTEGER NOT NULL CHECK(trusted IN (0,1)))",
     );

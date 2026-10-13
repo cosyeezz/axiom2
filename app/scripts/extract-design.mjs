@@ -12,10 +12,11 @@ for (const [target, name] of [['workbench', 'coding-agent-v2-before-subagent-mod
   writeFileSync(root + `src/client/styles/${target}.css`, style);
 }
 const additional = read('model-config-before-unified-save-v2.html');
-const css = additional.match(/#model-reasoning-field\{[\s\S]*?(?=<\/style>)/)[0];
+// The active model page now owns reasoning styles; the auxiliary page only adds copy controls.
+const css = additional.match(/\/\* Only the annotated model table:[\s\S]*?(?=<\/style>)/)[0];
 writeFileSync(root + 'src/client/styles/model-interactions.css', css);
 const sprite = workbench.match(/<svg aria-hidden="true" style="position:absolute;width:0;height:0">[\s\S]*?<\/svg>/)[0];
 writeFileSync(root + 'src/client/icons.svg', sprite);
-const license = workbench.match(/<!-- SVG source:[\s\S]*?-->/)[0].slice(5, -3);
+const license = [...workbench.matchAll(/<!-- (?:SVG source:|Lucide layout-list)[\s\S]*?-->/g)].map(([text]) => text.slice(5, -3).trimEnd()).join('\n\n');
 writeFileSync(root + 'src/client/ICONS-LICENSE.txt', license.trimEnd() + '\n');
 console.log('Extracted design styles, SVG symbols and licenses into app/src/client only.');
