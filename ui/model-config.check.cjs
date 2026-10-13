@@ -7,7 +7,7 @@ function create(storage=new Map()){
  const nodes=new Map(),callbacks=new Map();let fail=false,writes=0,serial=0;
  const node=id=>{
   assert(ids.has(id),'Missing control: '+id);
-  if(!nodes.has(id))nodes.set(id,{id,value:'',type:'password',innerHTML:'',textContent:'',hidden:id==='model-editor',disabled:false,isConnected:true,attributes:{},listeners:{},querySelector(){return null;},focus(){doc.activeElement=this;},setAttribute(k,v){this.attributes[k]=v;},setCustomValidity(v){this.validity=v;},addEventListener(k,fn){this.listeners[k]=fn;},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});
+  if(!nodes.has(id))nodes.set(id,{id,value:'',type:'password',innerHTML:'',textContent:'',hidden:id==='model-editor',disabled:false,isConnected:true,attributes:{},listeners:{},querySelector(){return null;},querySelectorAll(){return ['none','minimal','low','medium','high','xhigh','max'].map(level=>{const checkbox=node('reasoning-'+level);checkbox.value=level;checkbox.name='model-reasoning-level';return checkbox;});},focus(){doc.activeElement=this;},setAttribute(k,v){this.attributes[k]=v;},setCustomValidity(v){this.validity=v;},addEventListener(k,fn){this.listeners[k]=fn;},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});
   return nodes.get(id);
  };
  const links=[...html.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/g)].map(m=>({listeners:{},getAttribute:()=>m[1],addEventListener(k,fn){this.listeners[k]=fn;}}));

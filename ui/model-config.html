@@ -260,7 +260,22 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 .model-empty .btn{display:flex;margin:16px auto 0;width:max-content;max-width:100%}
 .inline-model-editor{padding:12px;margin-bottom:8px;background:color-mix(in oklch,var(--fg) 2%,transparent);border:1px solid var(--border);border-radius:var(--radius-md)}
 .inline-model-editor h2{font-size:15px;line-height:1.5;margin-bottom:8px}
-.inline-model-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.inline-model-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#model-reasoning-field{grid-column:1 / -1;margin-top:4px}
+#reasoning-level-options{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+#reasoning-level-options label{position:relative;display:block;min-height:44px;cursor:pointer}
+#reasoning-level-options input[type=checkbox]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+#reasoning-level-options label span{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:color-mix(in oklch,var(--fg) 2%,transparent);color:var(--fg);font:12px/1.5 var(--font-mono);transition:background var(--motion-fast),border-color var(--motion-fast),box-shadow var(--motion-fast);pointer-events:none}
+#reasoning-level-options label span::before{content:"";flex-shrink:0;width:16px;height:16px;border:1.5px solid var(--muted);border-radius:4px;transition:background var(--motion-fast),border-color var(--motion-fast)}
+#reasoning-level-options label:hover span{background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:color-mix(in oklch,var(--fg) 28%,transparent);color:var(--fg)}
+#reasoning-level-options input:not(:checked):hover+span::before{border-color:var(--fg)}
+#reasoning-level-options input:checked+span{background:color-mix(in oklch,var(--accent) 10%,var(--bg));border-color:color-mix(in oklch,var(--accent) 55%,var(--border));box-shadow:inset 0 -2px 0 var(--accent);color:var(--fg)}
+#reasoning-level-options input:checked+span::before{background:var(--accent);border-color:var(--accent)}
+#reasoning-level-options input:checked+span::after{content:"";position:absolute;left:16px;top:50%;width:10px;height:10px;transform:translateY(-50%);background:var(--accent-on);mask:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"%3E%3Cpath d="M2 6l2.5 2.5L10 3" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E') center/contain no-repeat;pointer-events:none}
+#reasoning-level-options input:checked:hover+span{background:color-mix(in oklch,var(--accent) 18%,var(--bg));border-color:var(--accent);color:var(--fg)}
+#reasoning-level-options input:checked:active+span{background:color-mix(in oklch,var(--accent) 24%,var(--bg));color:var(--fg)}
+#reasoning-level-options input:focus-visible+span{outline:2px solid var(--accent-hover);outline-offset:2px}
+#reasoning-legacy-note{flex-basis:100%;font-size:11px;color:var(--fg-2)}
 .inline-model-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap}
 .inline-model-actions .feedback{flex:1;min-width:0;margin:0}
 .inline-model-editor .btn{font-size:12px}
@@ -393,7 +408,7 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 <form id="model-form"><h2 id="model-editor-heading" data-od-id="model-editor-heading">添加模型</h2><div class="inline-model-fields">
 <div class="field"><label for="new-model-id">模型 ID</label><input class="input num" id="new-model-id" required maxlength="160" autocomplete="off" spellcheck="false" placeholder="供应商提供的模型 ID" data-od-id="new-model-id"></div>
 <div class="field"><label for="new-model-name">显示名称</label><input class="input" id="new-model-name" maxlength="80" autocomplete="off" placeholder="留空时使用模型 ID" data-od-id="new-model-name"></div>
-<div class="field"><label for="new-model-reasoning">思考设置</label><select class="input" id="new-model-reasoning" data-od-id="new-model-reasoning"><option value="none">不设置</option><option value="levels">低 / 中 / 高</option><option value="toggle">关闭 / 开启深度思考</option><option value="auto">自动</option></select><span class="field-help">请确认模型支持对应参数。</span></div>
+<div class="field" id="model-reasoning-field" data-od-id="model-reasoning-field"><label id="model-reasoning-label">思考等级 <span class="meta">（可多选）</span></label><div id="reasoning-level-options" role="group" aria-labelledby="model-reasoning-label" aria-describedby="reasoning-help" data-od-id="new-model-reasoning"><input type="hidden" id="new-model-reasoning" value="none"><label title="不设置"><input id="reasoning-none" type="checkbox" name="model-reasoning-level" value="none" aria-label="none（不设置）" checked data-od-id="reasoning-none"><span>none</span></label><label title="最低"><input id="reasoning-minimal" type="checkbox" name="model-reasoning-level" value="minimal" aria-label="minimal（最低）" data-od-id="reasoning-minimal"><span>minimal</span></label><label title="低"><input id="reasoning-low" type="checkbox" name="model-reasoning-level" value="low" aria-label="low（低）" data-od-id="reasoning-low"><span>low</span></label><label title="中"><input id="reasoning-medium" type="checkbox" name="model-reasoning-level" value="medium" aria-label="medium（中）" data-od-id="reasoning-medium"><span>medium</span></label><label title="高"><input id="reasoning-high" type="checkbox" name="model-reasoning-level" value="high" aria-label="high（高）" data-od-id="reasoning-high"><span>high</span></label><label title="更高"><input id="reasoning-xhigh" type="checkbox" name="model-reasoning-level" value="xhigh" aria-label="xhigh（更高）" data-od-id="reasoning-xhigh"><span>xhigh</span></label><label title="最高"><input id="reasoning-max" type="checkbox" name="model-reasoning-level" value="max" aria-label="max（最高）" data-od-id="reasoning-max"><span>max</span></label><span id="reasoning-legacy-note" hidden>保留旧版设置；勾选等级后替换。</span></div><span class="field-help" id="reasoning-help">选择模型支持的等级；再次点击可取消，未选时不配置思考等级。统一点击顶部「保存」后生效。</span></div>
 </div>
 <div class="override-grid" data-od-id="model-request-overrides">
 <section class="override-editor" id="model-header-overrides" data-od-id="model-header-overrides" aria-labelledby="model-header-heading"><div class="override-heading"><h3 id="model-header-heading" data-od-id="model-header-heading">请求头覆盖</h3><button class="btn btn-ghost" type="button" data-add-override data-od-id="add-model-header">＋ 添加一项</button></div><div class="override-rows" id="model-header-rows"></div><p class="field-help">模型优先；未设置的 key 沿用供应商配置。</p></section>
@@ -412,7 +427,21 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 const $=id=>document.getElementById(id);
 const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const storageKey='coding-agent-model-config-v1';
-const reasoningNames={none:'不设置',levels:'低 / 中 / 高',toggle:'开关',auto:'自动'};
+const reasoningNames={none:'不设置',minimal:'最低',low:'低',medium:'中',high:'高',xhigh:'更高',max:'最高',levels:'低 / 中 / 高',toggle:'开关',auto:'自动'};
+const reasoningLevels=['none','minimal','low','medium','high','xhigh','max'];
+function validReasoning(value){return Array.isArray(value)?value.length<=reasoningLevels.length&&new Set(value).size===value.length&&value.every(level=>reasoningLevels.includes(level)):typeof value==='string'&&Object.hasOwn(reasoningNames,value);}
+function readReasoningSelection(){const value=$('new-model-reasoning').value;return value.startsWith('[')?JSON.parse(value):value;}
+function reasoningLabel(value){return Array.isArray(value)?value.map(level=>reasoningNames[level]).join(' / ')||'不设置':reasoningNames[value];}
+function syncReasoningSelection(){
+ const value=readReasoningSelection(),selected=Array.isArray(value)?value:[value];
+ for(const checkbox of $('reasoning-level-options').querySelectorAll('input[type=checkbox]'))checkbox.checked=selected.includes(checkbox.value);
+ $('reasoning-legacy-note').hidden=!['levels','toggle','auto'].includes(value);
+}
+$('reasoning-level-options').addEventListener('change',e=>{
+ if(e.target.name!=='model-reasoning-level')return;
+ const selected=[...$('reasoning-level-options').querySelectorAll('input[type=checkbox]')].filter(input=>input.checked).map(input=>input.value);
+ $('new-model-reasoning').value=JSON.stringify(selected);syncReasoningSelection();$('model-error').textContent='';syncSaveState();
+});
 const protocols={openai:'OpenAI 兼容',anthropic:'Anthropic',google:'Google Gemini'};
 const initialProviders=[
  {id:'openai',name:'OpenAI',protocol:'openai',url:'https://api.openai.com/v1',configured:true,models:[]},
@@ -441,7 +470,7 @@ function validOverrides(item){return Object.entries(overrideKinds).every(([kind,
 function cleanOverrides(item){return Object.fromEntries(Object.values(overrideKinds).map(prop=>[prop,(item[prop]||[]).filter(row=>row.key.trim()||row.value).map(row=>({key:row.key.trim(),value:row.value}))]));}
 // Sensitive override values stay in memory, like the existing API key field.
 function persistentOverrides(prop,rows){return rows.map(row=>{let sensitive=sensitiveKey(row.key);if(prop==='bodyOverrides'){try{const inspect=value=>value&&typeof value==='object'&&Object.entries(value).some(([key,v])=>sensitiveKey(key)||inspect(v));sensitive||=!!inspect(JSON.parse(row.value));}catch{}}return {key:row.key,value:sensitive?'':row.value};});}
-function validProviders(value){return Array.isArray(value)&&value.length<=100&&new Set(value.map(p=>p?.id)).size===value.length&&value.every(p=>p&&typeof p.id==='string'&&/^[a-z0-9-]+$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()&&p.name.length<=80&&Object.hasOwn(protocols,p.protocol)&&typeof p.url==='string'&&p.url.length<=2048&&(p.url===''||validEndpoint(p.url))&&typeof p.configured==='boolean'&&validOverrides(p)&&Array.isArray(p.models)&&p.models.length<=200&&new Set(p.models.map(m=>m?.id)).size===p.models.length&&p.models.every(m=>m&&typeof m.id==='string'&&m.id.trim()&&m.id.length<=160&&typeof m.name==='string'&&m.name.trim()&&m.name.length<=160&&Object.hasOwn(reasoningNames,m.reasoning)&&validOverrides(m)));}
+function validProviders(value){return Array.isArray(value)&&value.length<=100&&new Set(value.map(p=>p?.id)).size===value.length&&value.every(p=>p&&typeof p.id==='string'&&/^[a-z0-9-]+$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()&&p.name.length<=80&&Object.hasOwn(protocols,p.protocol)&&typeof p.url==='string'&&p.url.length<=2048&&(p.url===''||validEndpoint(p.url))&&typeof p.configured==='boolean'&&validOverrides(p)&&Array.isArray(p.models)&&p.models.length<=200&&new Set(p.models.map(m=>m?.id)).size===p.models.length&&p.models.every(m=>m&&typeof m.id==='string'&&m.id.trim()&&m.id.length<=160&&typeof m.name==='string'&&m.name.trim()&&m.name.length<=160&&validReasoning(m.reasoning)&&validOverrides(m)));}
 // Keys never enter persistent storage. A desktop credential vault is needed for real integration.
 function publicProviders(list){return list.map(p=>({id:p.id,name:p.name,protocol:p.protocol,url:p.url,configured:p.configured,...cleanOverrides(p),models:p.models.map(m=>({id:m.id,name:m.name,reasoning:m.reasoning,...cleanOverrides(m)}))}));}
 let providers=structuredClone(initialProviders),selected='openai',loadMessage='',savePreset=false;
@@ -486,7 +515,7 @@ for(const scope of ['provider','model'])for(const kind of Object.keys(overrideKi
 }
 function currentProvider(){return providers.find(p=>p.id===selected);}
 function isDirty(){return addingProvider||JSON.stringify(publicProviders(providers))!==JSON.stringify(publicProviders(savedProviders))||[...new Set([...keys.keys(),...savedKeys.keys()])].some(id=>(keys.get(id)||'')!==(savedKeys.get(id)||''));}
-function isModelDirty(){if($('model-editor').hidden)return false;const m=editingModel?.m||{id:'',name:'',reasoning:'none'};return $('new-model-id').value!==m.id||$('new-model-name').value!==m.name||$('new-model-reasoning').value!==m.reasoning||JSON.stringify(modelOverrides)!==JSON.stringify({headerOverrides:m.headerOverrides||[],bodyOverrides:m.bodyOverrides||[]});}
+function isModelDirty(){if($('model-editor').hidden)return false;const m=editingModel?.m||{id:'',name:'',reasoning:'none'};return $('new-model-id').value!==m.id||$('new-model-name').value!==m.name||JSON.stringify(readReasoningSelection())!==JSON.stringify(m.reasoning)||JSON.stringify(modelOverrides)!==JSON.stringify({headerOverrides:m.headerOverrides||[],bodyOverrides:m.bodyOverrides||[]});}
 function hasUnsavedChanges(){return isDirty()||isModelDirty();}
 function syncSaveState(){
  const dirty=hasUnsavedChanges(),saved=savedProvider(selected),p=draft;
@@ -526,7 +555,7 @@ function renderModels(){
  const visible=entries.map((entry,i)=>({...entry,i})).filter(({m})=>matchesQuery($('model-filter').value,m.name,m.id));
  $('model-count').textContent=$('model-filter').value.trim()?visible.length+' / '+entries.length:entries.length;
  $('models-tab-count').textContent=entries.length;
- $('models-body').innerHTML=visible.map(({m,provider,index,i})=>`<tr data-od-id="configured-model-${provider}-${index}"><td><span class="model-name">${escapeHTML(m.name)}${JSON.stringify(m)!==JSON.stringify(savedProvider(provider)?.models.find(item=>item.id===m.id))?'<span class="pending-label">待保存</span>':''}</span><code class="mobile-model-id">${escapeHTML(m.id)}</code><span class="mobile-model-reasoning">思考：${escapeHTML(reasoningNames[m.reasoning])}</span></td><td class="id-col"><code class="model-id">${escapeHTML(m.id)}</code></td><td class="reasoning-col">${escapeHTML(reasoningNames[m.reasoning])}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${provider}-${index}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${provider}-${index}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`).join('');
+ $('models-body').innerHTML=visible.map(({m,provider,index,i})=>`<tr data-od-id="configured-model-${provider}-${index}"><td><span class="model-name">${escapeHTML(m.name)}${JSON.stringify(m)!==JSON.stringify(savedProvider(provider)?.models.find(item=>item.id===m.id))?'<span class="pending-label">待保存</span>':''}</span><code class="mobile-model-id">${escapeHTML(m.id)}</code><span class="mobile-model-reasoning">思考：${escapeHTML(reasoningLabel(m.reasoning))}</span></td><td class="id-col"><code class="model-id">${escapeHTML(m.id)}</code></td><td class="reasoning-col">${escapeHTML(reasoningLabel(m.reasoning))}</td><td><div class="model-actions"><button type="button" class="icon-btn" data-edit-model="${i}" data-od-id="edit-model-${provider}-${index}" aria-label="编辑 ${escapeHTML(m.name)}" title="编辑模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg></button><button type="button" class="icon-btn" data-delete-model="${i}" data-od-id="delete-model-${provider}-${index}" aria-label="删除 ${escapeHTML(m.name)}" title="删除模型"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button></div></td></tr>`).join('');
  $('model-empty').hidden=!!visible.length;
  $('go-to-suppliers').hidden=!!eligible;
  $('model-empty-message').innerHTML=!eligible?'<strong>请先保存当前供应商</strong>在「连接配置」中填写并保存连接信息，然后添加模型。':entries.length?'<strong>没有匹配的模型</strong>请修改模型名称或 ID 搜索条件。':'<strong>当前供应商尚未配置模型</strong>点击「添加模型」，模型将自动归属当前供应商。';
@@ -581,7 +610,7 @@ function openModel(index=null){
  editingModel=index===null?null:modelEntries()[index];if(index!==null&&!editingModel)return false;
  const model=editingModel?.m||{id:'',name:'',reasoning:'none'};
  modelOverrides=structuredClone({headerOverrides:model.headerOverrides||[],bodyOverrides:model.bodyOverrides||[]});for(const kind of Object.keys(overrideKinds))renderOverrides('model',kind);
- $('model-editor-heading').textContent=index===null?'添加模型':'编辑模型';$('new-model-id').value=model.id;$('new-model-name').value=model.name;$('new-model-reasoning').value=model.reasoning;$('new-model-id').setCustomValidity('');$('model-error').textContent='';$('model-editor').hidden=false;switchConfigTab('models');$('models-screen').scrollTop=0;$('new-model-id').focus({preventScroll:true});return true;
+ $('model-editor-heading').textContent=index===null?'添加模型':'编辑模型';$('new-model-id').value=model.id;$('new-model-name').value=model.name;$('new-model-reasoning').value=Array.isArray(model.reasoning)?JSON.stringify(model.reasoning):model.reasoning;syncReasoningSelection();$('new-model-id').setCustomValidity('');$('model-error').textContent='';$('model-editor').hidden=false;switchConfigTab('models');$('models-screen').scrollTop=0;$('new-model-id').focus({preventScroll:true});return true;
 }
 function commitModels(models){
  currentProvider().models=models;if(draft)draft.models=structuredClone(models);
@@ -616,7 +645,7 @@ $('cancel-model-edit').onclick=()=>{if(isModelDirty())askConfirmation('取消当
 $('add-model').onclick=()=>openModel();
 $('models-body').onclick=e=>{const edit=e.target.closest('[data-edit-model]'),remove=e.target.closest('[data-delete-model]');if(edit){openModel(Number(edit.dataset.editModel));return;}if(remove){if(!$('model-editor').hidden){$('model-error').textContent='请先完成或取消当前编辑，再删除模型。';return;}const entry=modelEntries()[Number(remove.dataset.deleteModel)];if(!entry)return;askConfirmation('标记删除模型？','「'+entry.m.name+'」将在点击顶部「保存」后删除；保存前可通过「放弃修改」恢复。','标记删除',()=>{const models=structuredClone(currentProvider().models);models.splice(entry.index,1);commitModels(models);$('model-feedback').textContent='模型待删除，点击顶部「保存」后生效。';$('add-model').focus();});}};
 function stageModel(){
- const provider=selected,id=$('new-model-id').value.trim(),name=$('new-model-name').value.trim()||id,reasoning=$('new-model-reasoning').value;
+ const provider=selected,id=$('new-model-id').value.trim(),name=$('new-model-name').value.trim()||id,reasoning=readReasoningSelection();
  const target=modelProvider();
  if(!target||$('model-editor').hidden||editingModel&&editingModel.provider!==provider){$('model-error').textContent='请先选择并保存当前供应商的连接信息，再重新编辑模型。';return false;}
  if(!id||target.models.some((m,i)=>!(editingModel?.provider===provider&&editingModel.index===i)&&m.id===id)){$('model-error').textContent=id?'该供应商下的模型 ID 已存在。':'请输入模型 ID。';return;}

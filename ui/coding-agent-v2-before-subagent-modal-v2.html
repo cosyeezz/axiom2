@@ -206,10 +206,12 @@ svg{stroke-width:1.8}
 /* Color stays on glyphs only; labels and unknown usage values remain neutral. */
 #new-chat svg{color:var(--accent-hover)}
 #add-workspace svg{color:color-mix(in oklch,var(--warn) 75%,var(--fg))}
-[data-od-id="context-capacity"] svg{color:var(--accent-hover)}
+[data-od-id="context-capacity"] svg{color:var(--accent-hover);stroke-width:2.5}
+[data-od-id="context-capacity"] .context-ring-track{stroke:color-mix(in oklch,var(--muted) 40%,transparent)}
+[data-od-id="context-capacity"] .context-ring-fill{stroke:currentColor;stroke-linecap:butt;transition:stroke-dashoffset var(--motion-base) var(--ease-standard)}
 [data-od-id="cache-tokens"] svg{color:color-mix(in oklch,var(--success) 75%,var(--fg))}
 [data-od-id="run-duration"] svg{color:var(--fg-2)}
-[data-od-id="estimated-cost"] svg{color:color-mix(in oklch,var(--warn) 60%,var(--fg-2))}
+[data-od-id="estimated-cost"] svg{color:var(--warn);stroke-width:2}
 /* All four metrics share one icon box, centerline and monoline weight. */
 .usage-icon .gauge-needle{transform-origin:12px 14px}
 .usage-metric:hover .gauge-needle{animation:usage-sweep 1.8s ease-in-out 1}
@@ -437,6 +439,38 @@ svg{stroke-width:1.8}
 @media(max-width:640px){.log-row{padding-bottom:24px}.markdown h1{font-size:21px}.markdown h2{font-size:18px}.markdown h3{font-size:16px}.activity-hint{font-size:10px}.session-environment>details{margin-left:0}}
 @media(prefers-reduced-motion:reduce){.activity>summary>svg{transition:none}}
 .config-entry{color:var(--fg);text-decoration:none;border-radius:var(--radius-sm);min-height:60px;flex-shrink:0}.config-entry:hover{background:color-mix(in oklch,var(--fg) 8%,transparent);color:var(--fg)}.config-entry:active{background:color-mix(in oklch,var(--fg) 12%,transparent);color:var(--fg)}.config-entry:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}.config-entry .avatar{width:32px;height:32px}.config-entry .avatar svg{width:17px;height:17px}.config-chevron{width:14px;height:14px;margin-left:auto;color:var(--fg-2)}
+/* Background compression: context-adjacent launcher and session-scoped detail page. */
+.context-controls{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-width:0}
+.compression-trigger{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--fg-2);font-size:12px;white-space:nowrap}
+.compression-trigger:hover{color:var(--fg);background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:var(--border)}
+.compression-trigger:active{background:color-mix(in oklch,var(--fg) 12%,transparent);color:var(--fg)}
+.compression-trigger svg{width:20px;height:20px;stroke-width:2.2}.compression-trigger[data-state=running]{color:var(--accent-hover)}
+.compression-trigger[data-state=running] svg{animation:run-spin 2.8s linear infinite}
+.compression-page{position:fixed;inset:0 0 0 auto;margin:0;width:min(520px,100%);height:100dvh;max-width:100%;max-height:100dvh;padding:0;background:var(--bg);color:var(--fg);border:0;border-left:1px solid var(--border);overflow:hidden}
+.compression-page::backdrop{background:color-mix(in oklch,var(--bg) 45%,transparent)}
+.compression-page[open]{display:flex;flex-direction:column}
+.compression-page>header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:72px;padding:12px 20px 12px 24px;border-bottom:1px solid var(--border);flex-shrink:0}
+.compression-page h2{font-size:18px}.compression-page h3{font-size:14px}.compression-page header p{font-size:12px;color:var(--muted);margin:2px 0 0}
+.compression-body{flex:1;min-height:0;overflow:auto;padding:24px;overflow-wrap:anywhere}.compression-body section+section{margin-top:28px}
+.compression-status{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-weight:510}.compression-status svg{width:20px;height:20px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.compression-status[data-state=running]{color:var(--accent-hover)}.compression-status[data-state=running] svg{animation:run-spin 2.8s linear infinite}
+.compression-status[data-state=completed]{color:color-mix(in oklch,var(--success) 55%,var(--fg))}
+.compression-body p{font-size:13px;color:var(--muted);margin:0;line-height:1.8}
+.compression-facts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0 0;padding:16px 0;border-block:1px solid var(--border)}
+.compression-facts dt{font-size:12px;color:var(--muted)}.compression-facts dd{margin:4px 0 0;font-size:14px;color:var(--fg-2)}
+.compression-steps{list-style:none;margin:16px 0 0;padding:0}.compression-steps li{display:flex;align-items:flex-start;gap:12px;position:relative;padding:0 0 20px}.compression-steps li:last-child{padding-bottom:0}
+.compression-step-number{display:grid;place-items:center;width:24px;height:24px;flex-shrink:0;border:1px solid var(--border);border-radius:50%;font:11px var(--font-mono);color:var(--muted)}
+.compression-steps li[data-phase=done] .compression-step-number{background:color-mix(in oklch,var(--fg) 10%,transparent);color:var(--fg)}
+.compression-steps li[data-phase=current] .compression-step-number{border-color:var(--fg-2);color:var(--fg)}.compression-steps strong{font-size:13px;font-weight:510}.compression-steps small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.compression-preview{margin-top:12px;padding:16px}.compression-preview article+article{border-top:1px solid var(--border);margin-top:16px;padding-top:16px}.compression-preview h4{font-size:12px;font-weight:510;margin:0 0 8px;color:var(--fg-2)}.compression-preview pre{font:13px/1.8 var(--font-body);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--fg-2)}
+.compression-page>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px max(16px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0}.compression-page footer small{font-size:12px;color:var(--muted)}.compression-page footer button{font-size:13px;flex-shrink:0}
+@media(max-width:640px){.context-controls{gap:4px}.compression-page{border:0}.compression-body{padding:20px}.compression-page>header,.compression-page>footer{padding-inline:20px}}
+@media(prefers-reduced-motion:reduce){.compression-trigger svg,.compression-status svg{animation:none!important}}
+/* Keep usage glyphs aligned and equally sized in every compression state. */
+[data-od-id="token-usage"] .usage-metric{min-height:44px;gap:8px}
+[data-od-id="token-usage"] svg{display:block;width:18px;height:18px;flex:0 0 18px;align-self:center;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Refined prompt hint, scoped to the marked input only. */
+[data-od-id="message-input"]::placeholder{font-size:16px;font-weight:510;letter-spacing:-0.01em;color:var(--muted);opacity:1}
 </style>
 </head>
 <body>
@@ -502,10 +536,23 @@ SOFTWARE.
 <main class="workspace" id="content" data-od-id="conversation-panel">
 <header class="topnav" data-od-id="conversation-toolbar"><div class="row"><button class="icon-btn mobile-toggle" id="toggle-history" aria-label="收起侧栏" title="收起侧栏" aria-controls="history-sidebar" aria-expanded="true" data-od-id="toggle-history"><svg class="sidebar-motion" viewBox="0 0 24 24" aria-hidden="true"><rect class="panel-fill" x="4" y="5" width="5" height="14" rx="1"/><rect x="3" y="4" width="18" height="16" rx="3"/><path class="panel-divider" d="M9 5v14"/><path class="panel-arrow" d="m16 9-3 3 3 3"/></svg></button><div class="title-block"><h1 id="chat-title" data-od-id="conversation-title">为搜索输入添加防抖</h1><div class="title-meta" data-od-id="conversation-metadata"><span id="title-path" data-od-id="workspace-title-path"></span><span class="path-actions"><button type="button" class="icon-btn" id="copy-workspace-path" aria-label="复制工作空间路径" title="复制工作空间路径" data-od-id="copy-workspace-path"><svg aria-hidden="true"><use href="#i-copy"/></svg></button><button type="button" class="icon-btn" id="open-workspace-path" aria-label="打开工作空间目录选择器" title="打开工作空间目录（浏览器目录选择器）" data-od-id="open-workspace-path"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 10V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1M3 10h19l-4 10H3Z"/></svg></button></span></div></div></div></header>
 <section class="thread" id="thread" aria-label="消息记录" data-od-id="conversation-log"><div class="container thread-content"><div id="messages"></div></div></section>
-<section class="composer-area" data-od-id="message-composer"><div class="container"><form class="composer" id="composer"><label class="screen-reader" for="prompt">描述你的编码任务</label><textarea class="textarea" id="prompt" maxlength="12000" placeholder="描述任务或粘贴代码，支持 Markdown 与彩色重点提示…" data-od-id="message-input"></textarea><div class="attachment" id="attachment"></div><div class="composer-tools"><div class="row"><button class="icon-btn" type="button" id="attach" title="附加文本或代码文件" aria-label="附加文本或代码文件" data-od-id="attach-file"><svg><use href="#i-plus"/></svg></button><input type="file" id="file" hidden accept=".txt,.md,.js,.jsx,.ts,.tsx,.json,.py,.css,.html"><details class="model-picker" id="model-picker" data-od-id="model-picker"><summary id="model-trigger" aria-label="选择供应商、模型与思考等级" data-od-id="model-trigger"><span id="model-label">GPT-5</span><span class="effort-label" id="effort-label">· 中</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="model-popover" data-od-id="model-settings" aria-label="模型选择"><label class="model-search" data-od-id="model-search-field"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="model-search" type="search" placeholder="搜索模型或供应商…" aria-label="搜索模型或供应商" autocomplete="off" data-od-id="model-search"></label><div class="model-list" id="model-list" role="group" aria-label="模型与供应商（示例配置）" data-od-id="model-list"></div><div class="model-footer" data-od-id="model-footer"><span class="effort-heading" id="effort-heading">思考</span><div class="effort-options" id="effort-options" role="group" aria-labelledby="effort-heading" data-od-id="reasoning-level"></div><span id="model-selection" class="screen-reader" aria-live="polite"></span><div class="model-actions" role="group" aria-label="确认或取消模型设置" data-od-id="model-actions"><button type="button" class="icon-btn" id="cancel-model" aria-label="取消模型设置" title="取消" data-od-id="cancel-model"><svg aria-hidden="true"><use href="#i-close"/></svg></button><button type="button" class="icon-btn" id="confirm-model" aria-label="确认模型设置" title="确认" data-od-id="confirm-model"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button></div></div></div></details></div><button class="btn btn-primary send" id="send" type="submit" aria-label="发送消息" title="发送消息" data-od-id="send-message" disabled><svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></form><div class="usage" data-od-id="token-usage" role="group" aria-label="Token、缓存、耗时与预计花费统计"><div class="usage-row"><span class="usage-metric" data-od-id="context-capacity" title="上下文 Token 数量与占用率；数量为可见消息的本地估算"><svg class="usage-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path class="gauge-needle" d="m12 14 4-4"/></svg><span class="screen-reader">上下文占用：</span><strong id="context-usage">0</strong><strong id="context-percent" aria-label="上下文占用率未知">· —%</strong></span><span class="usage-metric" data-od-id="cache-tokens" title="缓存命中率"><svg class="usage-icon" viewBox="0 0 24 24" aria-hidden="true"><g class="cache-body"><ellipse cx="11" cy="5" rx="8" ry="3"/><path d="M3 5v14c0 1.7 3.6 3 8 3M19 5v5M3 12c0 1.7 3.6 3 8 3"/></g><path class="cache-bolt" d="m19 12-4 6h4l-1 4 5-7h-4z"/></svg><span class="screen-reader">缓存命中率：</span><strong>—%</strong></span><span class="usage-metric" data-od-id="run-duration" title="本次或最近一次模拟运行耗时；完成或停止后保留"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="screen-reader">耗时：</span><strong id="duration-usage">—</strong></span><span class="usage-metric" data-od-id="estimated-cost" title="本次或最近一次回复的预计花费（美元）；未接入计费数据时不显示金额"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v12m3-9h-4.5a2 2 0 0 0 0 4h3a2 2 0 0 1 0 4H9"/></svg><span class="screen-reader">预计花费：</span><strong id="cost-usage">—</strong></span></div></div><div class="composer-foot"><span class="status" id="status" role="status"></span><span>Enter 发送 · Shift + Enter 换行</span></div></div></section>
+<section class="composer-area" data-od-id="message-composer"><div class="container"><form class="composer" id="composer"><label class="screen-reader" for="prompt">描述你的编码任务</label><textarea class="textarea" id="prompt" maxlength="12000" placeholder="Ask axiom…" lang="en" data-od-id="message-input"></textarea><div class="attachment" id="attachment"></div><div class="composer-tools"><div class="row"><button class="icon-btn" type="button" id="attach" title="附加文本或代码文件" aria-label="附加文本或代码文件" data-od-id="attach-file"><svg><use href="#i-plus"/></svg></button><input type="file" id="file" hidden accept=".txt,.md,.js,.jsx,.ts,.tsx,.json,.py,.css,.html"><details class="model-picker" id="model-picker" data-od-id="model-picker"><summary id="model-trigger" aria-label="选择供应商、模型与思考等级" data-od-id="model-trigger"><span id="model-label">GPT-5</span><span class="effort-label" id="effort-label">· 中</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="model-popover" data-od-id="model-settings" aria-label="模型选择"><label class="model-search" data-od-id="model-search-field"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="model-search" type="search" placeholder="搜索模型或供应商…" aria-label="搜索模型或供应商" autocomplete="off" data-od-id="model-search"></label><div class="model-list" id="model-list" role="group" aria-label="模型与供应商（示例配置）" data-od-id="model-list"></div><div class="model-footer" data-od-id="model-footer"><span class="effort-heading" id="effort-heading">思考</span><div class="effort-options" id="effort-options" role="group" aria-labelledby="effort-heading" data-od-id="reasoning-level"></div><span id="model-selection" class="screen-reader" aria-live="polite"></span><div class="model-actions" role="group" aria-label="确认或取消模型设置" data-od-id="model-actions"><button type="button" class="icon-btn" id="cancel-model" aria-label="取消模型设置" title="取消" data-od-id="cancel-model"><svg aria-hidden="true"><use href="#i-close"/></svg></button><button type="button" class="icon-btn" id="confirm-model" aria-label="确认模型设置" title="确认" data-od-id="confirm-model"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button></div></div></div></details></div><button class="btn btn-primary send" id="send" type="submit" aria-label="发送消息" title="发送消息" data-od-id="send-message" disabled><svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></form><div class="usage" data-od-id="token-usage" role="group" aria-label="Token、缓存、耗时与预计花费统计"><div class="usage-row"><div class="context-controls" data-od-id="context-controls"><span class="usage-metric" data-od-id="context-capacity" title="上下文 Token 数量与占用率；数量为可见消息的本地估算"><svg class="usage-icon" id="context-ring" viewBox="0 0 24 24" role="progressbar" aria-label="上下文占用率未知" aria-valuemin="0" aria-valuemax="100"><circle class="context-ring-track" cx="12" cy="12" r="9" stroke-dasharray="2 3"/><circle class="context-ring-fill" id="context-ring-fill" cx="12" cy="12" r="9" pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100" transform="rotate(-90 12 12)"/></svg><span class="screen-reader">上下文占用：</span><strong id="context-usage">0</strong><strong id="context-percent" aria-label="上下文占用率未知">· —%</strong></span><button type="button" class="compression-trigger" id="compression-trigger" data-od-id="background-compression-trigger" aria-controls="compression-page" aria-haspopup="dialog" aria-label="启动后台压缩" title="在后台压缩当前会话上下文（本地演示）" style="width:44px;min-width:44px;padding:0;justify-content:center"><svg aria-hidden="true" viewBox="0 0 24 24"><!-- Lucide layout-list · https://lucide.dev/icons/layout-list
+ISC License · Copyright (c) 2026 Lucide Icons and Contributors
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+--><g data-state="idle"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></g></svg><span class="screen-reader" id="compression-trigger-label" role="status" aria-live="polite">后台压缩</span></button></div><span class="usage-metric" data-od-id="cache-tokens" title="缓存命中率"><svg xmlns="http://www.w3.org/2000/svg" class="usage-icon lucide lucide-footprints" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M4 13h4"/></g><g stroke="var(--accent-hover)"><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/></g></svg><span class="screen-reader">缓存命中率：</span><strong>—%</strong></span><span class="usage-metric" data-od-id="run-duration" title="本次或最近一次模拟运行耗时；完成或停止后保留"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="screen-reader">耗时：</span><strong id="duration-usage">—</strong></span><span class="usage-metric" data-od-id="estimated-cost" title="本次或最近一次回复的预计花费（美元）；未接入计费数据时不显示金额"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="screen-reader">预计花费：</span><strong id="cost-usage">—</strong></span></div></div><div class="composer-foot"><span class="status" id="status" role="status"></span><span>Enter 发送 · Shift + Enter 换行</span></div></div></section>
 </main></div>
 <dialog class="workspace-dialog" id="rename-dialog" aria-labelledby="rename-heading" data-od-id="rename-dialog"><form id="rename-form"><h2 id="rename-heading" data-od-id="rename-heading">重命名会话</h2><p>修改名称不会影响消息内容或置顶状态。</p><div class="field"><label for="rename-title">会话标题</label><input class="input" id="rename-title" maxlength="120" required autocomplete="off" data-od-id="rename-title" aria-describedby="rename-error"><span id="rename-error" class="workspace-error" role="status"></span></div><div class="row"><button class="btn btn-ghost" id="rename-cancel" type="button" data-od-id="rename-cancel">取消</button><button class="btn" type="submit" data-od-id="rename-save">保存名称</button></div></form></dialog>
 <dialog class="subagent-dialog" id="subagent-dialog" aria-labelledby="subagent-dialog-title chat-title" aria-describedby="subagent-dialog-description" data-od-id="subagent-dialog"><header class="subagent-dialog-head" data-od-id="subagent-dialog-header"><div class="subagent-dialog-heading"><span id="subagent-dialog-description">子代理会话 · 本地演示</span><strong id="subagent-dialog-title" data-od-id="subagent-dialog-title"></strong></div><span id="subagent-dialog-state" role="status" aria-live="polite" data-od-id="subagent-dialog-state"></span><button class="icon-btn" type="button" id="close-subagent" aria-label="关闭子代理会话，返回主对话" title="返回主对话（Esc）" data-od-id="close-subagent"><svg aria-hidden="true"><use href="#i-close"/></svg></button></header></dialog>
+<dialog class="compression-page" id="compression-page" aria-labelledby="compression-heading" aria-describedby="compression-demo-note" data-od-id="background-compression-page">
+<header data-od-id="compression-header"><div><h2 id="compression-heading" data-od-id="compression-heading">后台压缩</h2><p>当前会话 · 后台任务详情</p></div><button type="button" class="icon-btn" id="close-compression" title="返回会话（Esc）" aria-label="关闭压缩详情，返回会话" data-od-id="close-compression"><svg aria-hidden="true"><use href="#i-close"/></svg></button></header>
+<div class="compression-body">
+<section data-od-id="compression-overview"><div class="compression-status" id="compression-state" role="status" aria-live="polite"></div><p id="compression-description"></p><dl class="compression-facts"><div><dt>所属会话</dt><dd id="compression-session" data-od-id="compression-session"></dd></div><div><dt>已用时间</dt><dd class="num" id="compression-duration" data-od-id="compression-duration"></dd></div><div><dt>压缩前 · 本地估算</dt><dd class="num" id="compression-before" data-od-id="compression-before"></dd></div><div><dt>压缩后</dt><dd id="compression-after" data-od-id="compression-after"></dd></div></dl></section>
+<section data-od-id="compression-progress"><h3 data-od-id="compression-progress-heading">处理阶段</h3><ol class="compression-steps" id="compression-steps" data-od-id="compression-steps"></ol></section>
+<section data-od-id="compression-summary"><div class="row-between"><h3 data-od-id="compression-summary-heading">摘要预览</h3><span class="meta">本地演示</span></div><div class="card compression-preview" id="compression-preview" data-od-id="compression-preview"></div></section>
+<section data-od-id="compression-safety"><h3 data-od-id="compression-safety-heading">上下文保留</h3><p style="margin-top:8px" id="compression-boundary"></p><p style="margin-top:8px" id="compression-demo-note">本地交互演示，未调用压缩模型或替换上下文。完成后仅展示原文摘录，不代表真实压缩结果。</p></section>
+</div><footer data-od-id="compression-footer"><small id="compression-footer-note">返回会话不影响后台任务</small><button type="button" class="btn" id="compression-action" data-od-id="compression-action">取消任务</button></footer>
+</dialog>
 <input type="file" id="workspace-directory" webkitdirectory multiple hidden aria-label="选择工作空间目录" data-od-id="workspace-directory">
 <script id="markdown-engine">
 /* Marked — MIT License. Copyright (c) 2011-2025, Christopher Jeffrey.
@@ -907,13 +954,78 @@ function formatDuration(ms){
 function formatEstimatedCost(usd){
  return Number.isFinite(usd)&&usd>=0?'US$'+usd.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:4}):'—';
 }
+// ponytail: timed local demo only; replace stages and excerpts with real task events and a model summary when connected.
+const compressions=new Map();
+let compressionViewId=null;
+const compressionLabels={running:'进行中',completed:'已完成',cancelled:'已取消'};
+function compressionStage(job){return job.state!=='running'?3:Math.min(2,Math.floor((Date.now()-job.started)/5000));}
+function startCompression(id=active){
+ const s=findSession(id);if(!s||!s.messages.length||compressions.get(id)?.state==='running')return false;
+ const snapshot=s.messages.map(m=>({role:m.role,text:m.text,code:m.code||''}));
+ const job={id,state:'running',started:Date.now(),snapshot,before:snapshot.reduce((sum,m)=>sum+estimateTokens(m.text+m.code),0),timer:null};
+ compressions.set(id,job);
+ job.timer=setInterval(()=>{if(Date.now()-job.started>=15000){job.state='completed';job.finished=Date.now();clearInterval(job.timer);}renderCompression();},500);
+ renderCompression();return true;
+}
+function renderCompression(){
+ const job=compressions.get(active),button=$('compression-trigger');
+ button.dataset.state=job?.state||'idle';button.disabled=!current()?.messages.length&&!job;
+ const label=job?compressionLabels[job.state]+' · 查看':'后台压缩';
+ if($('compression-trigger-label').textContent!==label)$('compression-trigger-label').textContent=label;
+ const icon=button.querySelector('svg > g');
+ if(icon.dataset.state!==button.dataset.state){
+  icon.dataset.state=button.dataset.state;
+  icon.innerHTML=job&&job.state!=='completed'?`<path d="${job.state==='running'?'M21 12a9 9 0 1 1-9-9':'m6 6 12 12m0-12L6 18'}"/>`:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/>';
+ }
+ button.setAttribute('aria-label',job?`后台压缩${compressionLabels[job.state]}，查看详情`:'启动后台压缩');
+ button.title=job?'查看当前会话的压缩任务详情':'启动后台压缩（本地演示）；再次点击查看详情';
+ if(!$('compression-page').open)return;
+ const task=compressions.get(compressionViewId),s=findSession(compressionViewId);if(!task||!s)return;
+ const stage=compressionStage(task),running=task.state==='running',done=task.state==='completed';
+ const status=$('compression-state');
+ if(status.dataset.state!==task.state){status.dataset.state=task.state;status.innerHTML=`<svg aria-hidden="true" viewBox="0 0 24 24"><path d="${running?'M21 12a9 9 0 1 1-9-9':done?'m5 12 4 4L19 6':'m6 6 12 12m0-12L6 18'}"/></svg><span>${running?'压缩进行中':done?'压缩演示已完成':'压缩已取消'}</span>`;}
+ $('compression-description').textContent=running?'正在后台整理会话上下文，你可以返回会话继续操作。':done?'演示流程结束，原始消息与上下文均未改变。':'任务已停止，原始消息与上下文均未改变。';
+ $('compression-session').textContent=s.title;
+ $('compression-duration').textContent=formatDuration((task.finished||Date.now())-task.started);
+ $('compression-before').textContent=task.before.toLocaleString('zh-CN')+' Token';
+ $('compression-after').textContent=running?'等待结果':done?'未接入压缩服务':'—';
+ const stageKey=task.id+'-'+task.started+'-'+task.state+'-'+stage;
+ if($('compression-steps').dataset.phase!==stageKey){$('compression-steps').dataset.phase=stageKey;$('compression-steps').innerHTML=[['锁定上下文快照',`截至第 ${task.snapshot.length} 条消息，后续新增消息不纳入本次任务`],['整理关键信息','演示摘要整理阶段，不调用模型'],['生成摘要预览','演示原文摘录，不自动应用']].map(([title,description],i)=>`<li data-phase="${task.state==='cancelled'?'cancelled':done||i<stage?'done':i===stage?'current':'pending'}" data-od-id="compression-step-${i}"><span class="compression-step-number">${done||running&&i<stage?'✓':i+1}</span><div><strong>${title}</strong><small>${description}</small></div></li>`).join('');
+ $('compression-preview').innerHTML=done?'<p style="margin-bottom:12px">原文摘录预览 · 非模型摘要</p>'+[task.snapshot.find(m=>m.role==='user'),task.snapshot.findLast(m=>m.role==='assistant')].filter(Boolean).map((m,i)=>`<article data-od-id="compression-excerpt-${i}"><h4>${m.role==='user'?'用户请求 · 摘录':'助手回复 · 摘录'}</h4><pre>${escapeHTML(m.text.slice(0,240))}${m.text.length>240?'…':''}</pre></article>`).join(''):`<p>${running?'摘要尚未生成，完成后将在这里展示预览。':'本次任务已取消，没有生成摘要。'}</p>`;}
+ $('compression-boundary').textContent=`本次任务基于前 ${task.snapshot.length} 条消息。新增消息不受影响；取消不会删除或覆盖原始内容。`;
+ $('compression-footer-note').textContent=running?'返回会话不影响后台任务':'原始上下文已保留';
+ $('compression-action').textContent=running?'取消任务':'重新压缩';
+}
+function openCompression(){
+ if(!compressions.has(active))return;
+ compressionViewId=active;$('compression-page').showModal();renderCompression();$('close-compression').focus();
+}
+$('compression-trigger').onclick=()=>{if(compressions.has(active))openCompression();else startCompression();};
+$('close-compression').onclick=()=>$('compression-page').close();
+$('compression-page').addEventListener('close',()=>{compressionViewId=null;$('compression-trigger').focus({preventScroll:true});});
+$('compression-page').addEventListener('keydown',e=>{e.stopPropagation();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k')e.preventDefault();});
+$('compression-action').onclick=()=>{const job=compressions.get(compressionViewId);if(!job)return;if(job.state==='running'){clearInterval(job.timer);job.state='cancelled';job.finished=Date.now();renderCompression();}else startCompression(compressionViewId);};
+function updateContextCapacity(total,limit){
+ const metric=document.querySelector('[data-od-id="context-capacity"]'),ring=$('context-ring');
+ const capacity=Number(limit??metric.dataset.contextLimit),used=Number(total);
+ const percent=Number.isFinite(capacity)&&capacity>0&&Number.isFinite(used)&&used>=0?Math.min(100,used/capacity*100):null;
+ const label=percent===null?'上下文占用率未知；尚未配置模型上下文容量':`上下文占用率 ${Math.round(percent)}%（本地估算）`;
+ $('context-ring-fill').setAttribute('stroke-dashoffset',String(100-(percent??0)));
+ if(percent===null){ring.removeAttribute('aria-valuenow');ring.querySelector('.context-ring-track').setAttribute('stroke-dasharray','2 3');}
+ else{ring.setAttribute('aria-valuenow',String(percent));ring.querySelector('.context-ring-track').removeAttribute('stroke-dasharray');}
+ ring.setAttribute('aria-label',label);metric.title=label+'；上下文 '+used.toLocaleString('zh-CN')+' Token';
+ $('context-percent').textContent=percent===null?'· —%':`· ${Math.round(percent)}%`;
+ $('context-percent').setAttribute('aria-label',label);
+}
 function updateUsage(){
+ renderCompression();
  const messages=current().messages,run=runs.get(active);
  const tokens=m=>estimateTokens(m?m.text+(m.code||''):'');
  const output=run?estimateTokens(run.partial||''):tokens(messages.findLast(m=>m.role==='assistant'));
  const total=messages.reduce((sum,m)=>sum+tokens(m),0)+(run?output:0);
  const format=n=>n.toLocaleString('zh-CN');
  $('context-usage').textContent=format(total);
+ updateContextCapacity(total,current().modelConfig?.contextWindowTokens);
  $('duration-usage').textContent=formatDuration(run?Math.max(0,Date.now()-run.started):messages.findLast(m=>m.role==='assistant')?.durationMs);
  // ponytail: no price assumptions; bind provider cost in USD when billing data is connected.
  $('cost-usage').textContent=formatEstimatedCost(run?run.estimatedCostUsd:messages.findLast(m=>m.role==='assistant')?.estimatedCostUsd);
