@@ -146,6 +146,12 @@ test(
         ).startServer as typeof startServer)
       : startServer;
     app = await start({ root, port: 0 });
+    const acceptedInputs = new Set<string>();
+    const taskEvent = app.tasks["event"].bind(app.tasks);
+    app.tasks["event"] = (scope, run, event) => {
+      taskEvent(scope, run, event);
+      if (event.type === "input-accepted") acceptedInputs.add(event.id);
+    };
     try {
       const w = app.store.execute({
         requestId: randomUUID(),
@@ -202,11 +208,15 @@ test(
         "child did not start",
       );
       const runId = app.tasks.list(scope).tasks[0].runId;
-      await call("task.append", {
+      const steering = await call("task.append", {
         taskId: live.id,
         text: "LIVE-STEER",
         mode: "steer",
-      });
+      }) as { inputId: string };
+      await wait(
+        () => acceptedInputs.has(steering.inputId),
+        "live steer did not reach pi",
+      );
       liveTurn();
       await wait(
         () => app.tasks.list(scope).tasks[0].results.length === 1,
