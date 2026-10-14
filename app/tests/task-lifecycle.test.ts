@@ -171,8 +171,8 @@ test(
         budgets: {
           ...defaultBudgets,
           concurrency: 1,
-          // Includes worker startup; leave headroom for concurrent CI tests.
-          workMs: 20000,
+          // Live handoff must not race the separate deadline scenario below.
+          workMs: 60000,
         },
       });
       await call("prompt", { text: "Delegate lifecycle tests" });
@@ -222,6 +222,9 @@ test(
       );
       await wait(() => !running(app.agents.info(scope).run), "parent idle");
       await call("agent.stop", { runId: app.agents.info(scope).run!.id });
+      await call("task.preferences.save", {
+        budgets: { ...defaultBudgets, concurrency: 1, workMs: 20000 },
+      });
       await call("task.append", { taskId: live.id, text: "SECOND-BUDGET" });
       await wait(
         () => app.tasks.list(scope).tasks[0].results.length === 2,
