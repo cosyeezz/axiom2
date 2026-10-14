@@ -4,12 +4,12 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, rename, access } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
-const { createUpdater, newer } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
+const { createUpdater, newer, execute } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
 const base = "https://github.com/cosyeezz/axiom2/releases/download/";
 const oldVersion = "0.2.3", nextVersion = "0.3.0";
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function gate() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
-async function fixture(t: TestContext, options: { source?: boolean } = {}) {
+async function fixture(t: TestContext, options: { source?: boolean; brokenControl?: boolean } = {}) {
   const temporary = await mkdtemp(join(tmpdir(), "axiom-update-"));
   t.after(() => rm(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const root = join(temporary, "data");
@@ -19,6 +19,10 @@ async function fixture(t: TestContext, options: { source?: boolean } = {}) {
     await mkdir(join(path, "bin"), { recursive: true });
     await writeFile(join(path, "package.json"), JSON.stringify({ name: "@cosyeezz/axiom2", version }));
     await writeFile(join(path, "bin/axiom2.mjs"), "// fixture executable\n");
+    if (options.brokenControl && version === nextVersion) {
+      await writeFile(join(path, "bin/axiom2.mjs"), await readFile(new URL("../../bin/axiom2.mjs", import.meta.url)));
+      await writeFile(join(path, "bin/service.mjs"), "export const broken = ; // simulate a damaged control module\n");
+    }
   }
   await packageAt(packageRoot, oldVersion);
   await mkdir(root);
@@ -29,6 +33,7 @@ async function fixture(t: TestContext, options: { source?: boolean } = {}) {
   const calls: string[] = [];
   let state = "running", failInstall = false, failNewStart = false, failOldStart = false, concurrentStart = false;
   let runtimeVersion: string | null | undefined;
+  let refuseStop = false;
   let holdInstall: ReturnType<typeof gate> | null = null;
   const installEntered = gate();
   const command = async (_node: string, args: string[]) => {
@@ -50,9 +55,14 @@ async function fixture(t: TestContext, options: { source?: boolean } = {}) {
       return "";
     }
     const version = JSON.parse(await readFile(join(dirname(dirname(args[0])), "package.json"), "utf8")).version;
+    if (options.brokenControl && version === nextVersion) {
+      calls.push(`${args[1]}:${version}`);
+      return execute(_node, args, { env: { ...process.env, AXIOM_DATA_DIR: root } });
+    }
     if (args[1] === "--version") return version;
     const action = args[1]; calls.push(`${action}:${version}`);
     if (action === "stop") {
+      if (refuseStop) return JSON.stringify({ state: "stopping", active: [] });
       state = "stopped";
       if (concurrentStart) {
         concurrentStart = false; state = "running";
@@ -72,6 +82,7 @@ async function fixture(t: TestContext, options: { source?: boolean } = {}) {
   const updater = createUpdater({ root, fetcher, command, isAlive: (pid: number) => pid === process.pid });
   const installedVersion = async () => JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")).version;
   return { root, packageRoot, cli, bytes, release, calls, updater, command, installedVersion, packageAt, state: () => state,
+    refuseStop: () => { refuseStop = true; },
     reportVersion: (value: string | null) => { runtimeVersion = value; },
     raceStart: () => { concurrentStart = true; },
     failInstall: () => { failInstall = true; }, failNew: () => { failNewStart = true; }, failOld: (value: boolean) => { failOldStart = value; },
@@ -141,6 +152,51 @@ test("failed new-service startup restores the previous program and running servi
   assert.equal(await f.installedVersion(), oldVersion);
   assert.equal(f.state(), "running");
   assert.equal(result.recovery, false);
+});
+
+test("a candidate with a valid version but broken control imports rolls back using the backup CLI", async (t) => {
+  const f = await fixture(t, { brokenControl: true });
+  await f.updater.check();
+  const result = await f.updater.runJob("service", nextVersion);
+  assert.equal(result.job.phase, "error");
+  assert.match(result.job.message, /已恢复之前的服务程序/);
+  assert.ok(f.calls.includes(`--version:${nextVersion}`));
+  assert.ok(f.calls.includes(`start:${nextVersion}`));
+  assert.equal(await f.installedVersion(), oldVersion);
+  assert.equal(f.state(), "running");
+  assert.equal(result.recovery, false);
+  assert.equal(JSON.parse(await readFile(join(f.root, "installation.json"), "utf8")).cli, f.cli);
+});
+
+test("explicit recovery bypasses an existing candidate CLI whose control imports are broken", async (t) => {
+  const f = await fixture(t, { brokenControl: true });
+  const { backup } = await recoveryRecord(f);
+  await rename(f.packageRoot, backup);
+  await f.packageAt(f.packageRoot, nextVersion);
+  assert.equal(await execute(process.execPath, [f.cli, "--version"]), nextVersion);
+  for (const action of ["status", "stop", "start"]) {
+    await assert.rejects(execute(process.execPath, [f.cli, action, "--json"], { env: { ...process.env, AXIOM_DATA_DIR: f.root } }), /Unexpected token/);
+  }
+  const result = await f.updater.runJob("recover");
+  assert.equal(result.job.phase, "complete", result.job.message);
+  assert.equal(await f.installedVersion(), oldVersion);
+  assert.equal(f.state(), "running");
+  assert.equal(result.recovery, false);
+  assert.equal(JSON.parse(await readFile(join(f.root, "installation.json"), "utf8")).cli, f.cli);
+});
+
+test("backup control must confirm shutdown before recovery can move a damaged candidate", async (t) => {
+  const f = await fixture(t, { brokenControl: true });
+  const { backup } = await recoveryRecord(f);
+  await rename(f.packageRoot, backup);
+  await f.packageAt(f.packageRoot, nextVersion);
+  f.refuseStop();
+  const result = await f.updater.runJob("recover");
+  assert.equal(result.job.phase, "error");
+  assert.match(result.job.message, /尚未确认服务停止/);
+  assert.equal(result.recovery, true);
+  assert.equal(await f.installedVersion(), nextVersion);
+  assert.equal(JSON.parse(await readFile(join(backup, "package.json"), "utf8")).version, oldVersion);
 });
 
 test("failed rollback remains recoverable on a later explicit retry", async (t) => {

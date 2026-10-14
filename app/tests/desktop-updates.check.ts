@@ -75,8 +75,17 @@ try {
   await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).click();
+  await page.getByText("应用内更新与恢复要求此安装仅用于当前数据目录。", { exact: false }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "确认更新服务", exact: true }).evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth;
+  }), true, "Shared-install restriction must leave confirmation accessible in a narrow window");
+  await mkdir("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/desktop-update-confirm-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "暂不更新", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   assert.equal((await control("status")).state, "running", "Cancelling update confirmation must leave the service running");
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).click();
   await page.getByRole("button", { name: "确认更新服务", exact: true }).click();
@@ -118,7 +127,6 @@ try {
   await page.getByRole("button", { name: "运行安装器", exact: true }).waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
-  await mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/desktop-update-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "test-results/desktop-update.png", fullPage: true });

@@ -212,7 +212,9 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     await progress("restoring", "正在恢复之前的服务版本…");
     if (await exists(transaction.backup)) {
       await verifyPreviousPackage(transaction.backup, transaction);
-      const runner = { ...installed, cli: await exists(installed.cli) ? installed.cli : join(transaction.backup, "bin/axiom2.mjs") };
+      // The candidate's version command can work even when its control module
+      // cannot load. Use the verified backup to stop it before moving any files.
+      const runner = { ...installed, cli: join(transaction.backup, "bin/axiom2.mjs") };
       await stopService(runner);
       await reserveService();
       try {

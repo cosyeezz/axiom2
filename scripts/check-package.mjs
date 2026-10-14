@@ -1,12 +1,12 @@
 // Exercise the actual release tarball in an isolated global npm prefix.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath, rename } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createUpdater } from "../app/desktop/updater.mjs";
 import { tmpdir } from "node:os";
-import { join, resolve, relative } from "node:path";
+import { join, resolve, relative, dirname } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -19,7 +19,7 @@ assert.equal(pkg.version, app.version);
 assert.ok(process.env.npm_execpath, "Run through npm run check:package");
 const temporary = await mkdtemp(join(tmpdir(), "axiom2-package-"));
 const npm = (args) => execFileSync(process.execPath, [process.env.npm_execpath, ...args], {
-  cwd: root, encoding: "utf8", timeout: 240_000, maxBuffer: 10_000_000,
+  cwd: root, encoding: "utf8", timeout: 600_000, maxBuffer: 10_000_000,
 });
 let child;
 let cli;
@@ -140,6 +140,30 @@ try {
     assert.equal(control("stop").state, "stopped");
     console.log(`PASS: staged update with npm default strategy ${strategy}; dependency paths, worker imports and self-shim isolation`);
   }
+  // Reproduce an interrupted switch whose candidate CLI can report a version
+  // but cannot import any control command. Recovery must use the real backup.
+  const recoveryId = randomBytes(16).toString("hex");
+  const recoveryStage = join(dirname(installed), `.axiom2-update-${recoveryId}`);
+  const recoveryBackup = join(dirname(installed), `.axiom2-backup-${recoveryId}`);
+  const recoveryRoot = join(temporary, "data");
+  await mkdir(recoveryStage);
+  await rename(installed, recoveryBackup);
+  await mkdir(join(installed, "bin"), { recursive: true });
+  await writeFile(join(installed, "package.json"), JSON.stringify({ name: pkg.name, version: "999.0.0" }));
+  await writeFile(cli, await readFile(join(recoveryBackup, "bin/axiom2.mjs")));
+  await writeFile(join(installed, "bin/service.mjs"), "export const broken = ;\n");
+  assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), "999.0.0");
+  assert.throws(() => control("status"));
+  await writeFile(join(recoveryRoot, "updates/transaction.json"), JSON.stringify({ id: recoveryId, stage: recoveryStage, backup: recoveryBackup,
+    packageRoot: installed, cli, node: process.execPath, previousVersion: pkg.version, version: "999.0.0", wasRunning: true }));
+  const recoveryUpdater = createUpdater({ root: recoveryRoot, env: serviceEnv });
+  const recovered = await recoveryUpdater.runJob("recover");
+  assert.equal(recovered.job.phase, "complete", recovered.job.message);
+  assert.equal(recovered.recovery, false);
+  assert.equal(control("status").version, pkg.version);
+  assert.equal((await request(control("status").url)).status, 200);
+  assert.equal(control("stop").state, "stopped");
+  console.log("PASS: real backup control restores a candidate with broken service imports and restarts the expected backend");
   console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
 } finally {
   if (cli && serviceEnv) { try { control("stop"); } catch {} }
