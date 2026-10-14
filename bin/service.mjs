@@ -235,12 +235,16 @@ export async function serve(background = false, { initialize: bootService = init
     url: app?.accessUrl, background, active: app && !closing ? active() : [], log });
   const finish = () => finishing ||= (async () => {
     const service = await boot.catch(() => undefined);
-    await service?.close();
-    if ((await metadata())?.token === token) await rm(descriptor, { force: true });
-    await clearStartup(token);
-    await rm(cancellation(token), { force: true });
-    control.closeAllConnections();
-    await new Promise((resolve) => control.close(resolve));
+    try {
+      await service?.close();
+      if ((await metadata())?.token === token) await rm(descriptor, { force: true });
+      await clearStartup(token);
+      await rm(cancellation(token), { force: true });
+    } finally {
+      // An I/O failure during cleanup must not leave an unpublished listener alive.
+      control.closeAllConnections();
+      await new Promise((resolve) => control.close(resolve));
+    }
   })();
   const shutdown = async () => {
     closing = true;
