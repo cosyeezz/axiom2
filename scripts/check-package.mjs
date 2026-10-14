@@ -17,7 +17,9 @@ assert.deepEqual(pkg.dependencies, app.dependencies, "Root and app runtime depen
 assert.deepEqual(pkg.devDependencies, app.devDependencies, "Root and app build dependencies must match");
 assert.equal(pkg.version, app.version);
 assert.ok(process.env.npm_execpath, "Run through npm run check:package");
-const temporary = await mkdtemp(join(tmpdir(), "axiom2-package-"));
+// Node canonicalizes macOS /var aliases when registering the CLI. Recovery
+// fixtures must use that same identity when constructing their journal.
+const temporary = await realpath(await mkdtemp(join(tmpdir(), "axiom2-package-")));
 const npm = (args) => execFileSync(process.execPath, [process.env.npm_execpath, ...args], {
   cwd: root, encoding: "utf8", timeout: 600_000, maxBuffer: 10_000_000,
 });
