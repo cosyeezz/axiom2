@@ -107,7 +107,13 @@ export async function stop() {
   const deadline = Date.now() + 40_000;
   while (Date.now() < deadline) {
     // Only wait for this exact instance. A concurrently started replacement is never stopped.
-    try { await request(meta, "status"); } catch { return await status(); }
+    try { await request(meta, "status"); } catch {
+      const latest = await metadata();
+      if (latest?.token !== meta.token) return await status();
+      const current = await status();
+      if (current.state === "stopped") return current;
+      // A transient control connection failure is not proof that shutdown finished.
+    }
     await delay(200);
   }
   throw Error(`服务仍在退出，尚未确认停止。请稍后刷新状态；日志：${log}`);
