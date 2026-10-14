@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import "../styles/connect.css";
 
-type Service = { state: "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
+type Service = { state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
 type Action = "status" | "start" | "stop" | "open";
-const labels = { running: "服务运行中", stopped: "服务已停止", stopping: "服务正在退出", missing: "需要安装服务", unmanaged: "端口已被占用" };
+const labels = { starting: "服务正在启动", running: "服务运行中", stopped: "服务已停止", stopping: "服务正在退出", missing: "需要安装服务", unmanaged: "端口已被占用" };
 function invoke(action: Action): Promise<Service> {
   const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args: object) => Promise<Service> } }).__TAURI_INTERNALS__;
   if (!bridge) return Promise.reject(new Error("服务控制需要在 Axiom2 桌面客户端中使用。浏览器用户可以在终端运行 axiom2 start。"));
@@ -42,6 +42,7 @@ export default function Connect() {
     else if (dialog.current?.open) { dialog.current.close(); stopButton.current?.focus(); }
   }, [confirm]);
   const running = service?.state === "running";
+  const starting = service?.state === "starting";
   const missing = service?.state === "missing";
   return (
     <main className="connect-page">
@@ -56,12 +57,12 @@ export default function Connect() {
         <section className="connect-panel" aria-label="本地服务控制">
           <div className="connect-panel-top"><span>本地服务</span><button className="connect-refresh" onClick={() => void act("status")} disabled={!!busy}>刷新状态 <span aria-hidden="true">↻</span></button></div>
           <div className="connect-status" role="status" aria-live="polite"><span className={`connect-dot ${running ? "is-running" : ""}`} /><h2>{busy === "start" ? "正在启动服务…" : busy === "stop" ? "正在关闭服务…" : service ? labels[service.state] : "正在检查服务…"}</h2></div>
-          <p className="connect-status-detail">{busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
+          <p className="connect-status-detail">{busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : starting ? "正在准备后台服务，可以等待就绪或关闭服务。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
           <dl className="connect-details"><div><dt>连接地址</dt><dd>{service?.url || "http://127.0.0.1:4317/"}</dd></div><div><dt>运行中的会话</dt><dd>{running ? `${service.active.length}${service.active.length >= 20 ? "+" : ""}` : "—"}</dd></div></dl>
           {service?.message && <p className="connect-message">{service.message}</p>}
           {error && <p className="connect-error" role="alert">{error}</p>}
           <div className="connect-actions">
-            {running ? <><button className="connect-primary" disabled={!!busy} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={!!busy} onClick={() => setConfirm(true)}>关闭后台服务</button></>
+            {starting ? <button ref={stopButton} className="connect-secondary" disabled={!!busy} onClick={() => setConfirm(true)}>关闭后台服务</button> : running ? <><button className="connect-primary" disabled={!!busy} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={!!busy} onClick={() => setConfirm(true)}>关闭后台服务</button></>
               : <button className="connect-primary" disabled={!!busy || !service || service.state !== "stopped"} onClick={() => void act("start")}>{busy === "start" ? "正在启动…" : "启动后台服务"}<span aria-hidden="true">→</span></button>}
           </div>
           <p className="connect-footnote">关闭服务会停止正在运行的任务。{running && service.background === false ? "当前服务由终端启动。" : "不会随系统登录自动启动。"}</p>

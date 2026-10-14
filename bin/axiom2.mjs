@@ -6,7 +6,7 @@ const json = args.includes("--json");
 const command = args.filter((arg) => arg !== "--json");
 const report = (value) => console.log(json ? JSON.stringify(value) : value.state === "running"
   ? `Axiom2 服务运行中：${value.url}\n运行中的会话：${value.active.length}\n日志：${value.log}`
-  : value.state === "stopped" ? "Axiom2 服务已停止。" : value.message || "Axiom2 服务正在退出。");
+  : value.state === "stopped" ? "Axiom2 服务已停止。" : value.message || (value.state === "starting" ? "Axiom2 服务正在启动。" : "Axiom2 服务正在退出。"));
 try {
   if (Number(process.versions.node.split(".")[0]) < 24) throw Error("Axiom2 需要 Node.js 24+，请从 https://nodejs.org/ 安装后重试。");
   if (command.length === 1 && ["help", "--help", "-h"].includes(command[0])) {

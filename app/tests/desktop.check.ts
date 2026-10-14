@@ -1,6 +1,6 @@
 // Exercise the real Pake WebView2 + Rust bridge against an isolated service.
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, copyFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, execFile } from "node:child_process";
@@ -52,6 +52,33 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "Controller must fit narrow windows");
   await page.screenshot({ path: "test-results/desktop-service-mobile.png" });
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Hold a real detached daemon inside initialization, then stop it through Rust/UI.
+  const fixture = join(root, "fixture");
+  await mkdir(fixture);
+  await copyFile(resolve("../bin/service.mjs"), join(fixture, "service.mjs"));
+  const fixtureCli = join(fixture, "axiom2.mjs");
+  await copyFile(resolve("tests/fixtures/service-startup-cli.mjs"), fixtureCli);
+  await writeFile(join(data, "bootstrap-gate"), "");
+  const fixtureCommand = (action: string) => promisify(execFile)(process.execPath, [fixtureCli, action], {
+    env: { ...env, TEST_CONTROL_TIMEOUT: "1000" }, timeout: 15000,
+  });
+  const timedOutStart = fixtureCommand("start").then(() => { throw Error("Blocked initialization unexpectedly completed"); }, (error) => JSON.parse(error.stdout));
+  for (let i = 0; ; i++) {
+    try { await stat(join(data, "initializing")); break; } catch { if (i >= 100) throw Error("Fixture did not initialize"); await delay(100); }
+  }
+  assert.match((await timedOutStart).message, /仍在启动/);
+  await page.getByRole("heading", { name: "服务正在启动", exact: true }).waitFor();
+  await page.getByRole("button", { name: "关闭后台服务", exact: true }).click();
+  await page.getByRole("button", { name: "确认关闭服务", exact: true }).click();
+  for (let i = 0; ; i++) {
+    if (JSON.parse((await fixtureCommand("status")).stdout).state === "stopping") break;
+    if (i >= 50) throw Error("Desktop did not stop the initializing service");
+    await delay(100);
+  }
+  await writeFile(join(data, "initialize-gate"), "");
+  await page.getByRole("heading", { name: "服务已停止", exact: true }).waitFor();
+  assert.equal(JSON.parse((await fixtureCommand("status")).stdout).state, "stopped");
+  await writeFile(join(data, "installation.json"), JSON.stringify({ node: process.execPath, cli }));
   await page.getByRole("button", { name: "启动后台服务" }).click();
   await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor({ timeout: 50_000 });
   assert.equal((await control("status")).background, true);
@@ -84,9 +111,11 @@ try {
   native.kill();
   await delay(1000);
   assert.equal((await control("status")).state, "running", "Closing desktop must preserve detached service");
-  console.log("PASS: real Windows Pake/WebView2 offline controller, native start/status/open, stop confirmation/cancel, graceful stop, restart and service survival after client exit.");
+  console.log("PASS: real Windows Pake/WebView2 offline controller, native start/status/open, initialization cancellation, stop confirmation/cancel, graceful stop, restart and service survival after client exit.");
 } finally {
   native.kill();
+  await writeFile(join(data, "bootstrap-gate"), "").catch(() => {});
+  await writeFile(join(data, "initialize-gate"), "").catch(() => {});
   try { await control("stop"); } catch {}
   try { await browser?.close(); } catch {}
   await delay(500);
