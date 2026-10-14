@@ -621,7 +621,12 @@ export async function startServer(
       await logins.close();
       await tasks.close();
       await vite?.close();
-      await new Promise<void>((r) => server.close(() => r()));
+      await new Promise<void>((r) => {
+        server.close(() => r());
+        // Tasks and owned operations have settled. Slow/incomplete HTTP clients
+        // must not keep the service and its storage lock alive indefinitely.
+        server.closeAllConnections();
+      });
       store.close();
     },
   };
