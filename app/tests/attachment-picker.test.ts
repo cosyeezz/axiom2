@@ -6,7 +6,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { windowsOpenSource } from "../src/server/open-dialog-scripts.js";
 import { WindowsOpenHost } from "../src/server/windows-open-host.js";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { request } from "node:http";
 import { randomUUID } from "node:crypto";

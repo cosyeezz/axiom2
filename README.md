@@ -208,4 +208,4 @@ npm audit --omit=dev
 
 设计更新先独立提交，再按 `docs/ui-sync.md` 的设计提交差异移植至 `app/`，不整目录覆盖已接入功能。采用提交在完整设计验收前不提前提升。源码发布到 `https://github.com/cosyeezz/axiom2`，安装包与桌面二进制通过 Releases 分发，不提交到 Git。
 
-根目录 `package.json` 是分发入口，依赖版本与 `app/package.json` 保持一致；pi 同系列的七个运行包均显式固定为 `1.1.0`，避免子依赖范围升级造成导出接口不兼容；`npm-shrinkwrap.json` 记录并随包携带构建使用的完整依赖树；`npm ci` 自动构建，`npm run check:package` 校验依赖一致性，并在隔离全局目录安装实际 tarball、启动服务、访问页面与脚本资源、检查跨站请求被拒绝。`npm pack --ignore-scripts` 打包已经构建的产物；Release 将 tarball 命名为 `axiom2.tgz`，同一版本的服务与客户端文件共同生成 `SHA256SUMS.txt`。安装脚本只消费 Release，不在用户机器编译前端。GitHub Actions 提供三平台构建／测试以及手动触发 Windows／macOS Pake 构建；CI 构建不替代原生交互验收。
+根目录 `package.json` 是分发入口，依赖版本与 `app/package.json` 保持一致；pi 同系列的七个运行包均显式固定为 `1.1.0`，避免子依赖范围升级造成导出接口不兼容；`npm-shrinkwrap.json` 记录并随包携带构建使用的完整依赖树；`npm ci` 自动构建，`npm run check:package` 校验依赖一致性，并在隔离全局目录安装实际 tarball、启动服务、访问页面与脚本资源、检查跨站请求被拒绝。`npm pack --ignore-scripts` 打包已经构建的产物；Release 将 tarball 命名为 `axiom2.tgz`，同一版本的服务与客户端文件共同生成 `SHA256SUMS.txt`。安装脚本只消费 Release，不在用户机器编译前端。GitHub Actions 提供三平台构建／测试以及手动触发 Windows／macOS Pake 构建；测试环境显式安装文件补全所需的 fd，涉及原生路径／会话的夹具使用真实临时目录，兼容 macOS `/var` 别名与 Windows 短路径。CI 构建不替代原生交互验收。
