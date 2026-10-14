@@ -32,10 +32,7 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: npm ci
       - run: npm --prefix app run build:desktop
-      - run: npm install --global pake-cli@3.16.2
-      - name: Package desktop client
-        working-directory: app
-        run: pake --config desktop/pake.json --targets ${{ matrix.target }}
+      - run: node scripts/build-desktop.mjs --targets ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

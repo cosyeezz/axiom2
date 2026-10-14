@@ -24,10 +24,10 @@ curl -fsSL https://raw.githubusercontent.com/cosyeezz/axiom2/master/install.sh |
 
 ```sh
 npm install -g https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz
-axiom2
+axiom2 start
 ```
 
-安装后再次使用只需运行 `axiom2`，然后打开 `http://127.0.0.1:4317/` 或 Pake 客户端。服务在当前终端前台运行，须保留终端；Ctrl+C 退出。当前没有后台守护或登录自启。`axiom2 --help` 查看帮助，`axiom2 --version` 查看版本。安装路径由 `npm prefix -g` 决定；全局目录无写权限时请使用用户级 Node.js 安装或 npm prefix。
+一行安装完成后会启动后台服务并返回终端；再次使用可在 Pake 控制页点击“启动后台服务”，或运行 `axiom2 start`。`axiom2 status` 查看状态，`axiom2 stop` 正常停止服务；直接运行 `axiom2` 仍支持前台运行、Ctrl+C 退出。后台进程不依赖终端或客户端窗口，但不注册登录自启，也不在崩溃后自动重启。`axiom2 --help` 查看帮助，`axiom2 --version` 查看版本。安装路径由 `npm prefix -g` 决定；全局目录无写权限时请使用用户级 Node.js 安装或 npm prefix。
 
 | Pake 客户端 | 下载与使用 |
 | --- | --- |
@@ -36,9 +36,9 @@ axiom2
 | SHA-256 校验 | [SHA256SUMS.txt](https://github.com/cosyeezz/axiom2/releases/latest/download/SHA256SUMS.txt) |
 | macOS / Linux | 当前使用浏览器；尚无发布并验收的原生客户端 |
 
-**先启动服务，再打开客户端。** Pake 只包含桌面连接入口，不包含 Node.js、pi 或后端，自动连接本机 `4317` 端口；Windows 需要 WebView2 Runtime。客户端未签名，系统可能提示未知发布者。关闭客户端不会退出服务。服务和客户端均为早期预览，真实供应商、OAuth 与原生安装交互仍有未验收项，详见下文。
+**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。工作台在独立窗口打开，控制页始终保留；后台停止后工作台窗口关闭，可在控制页重新启动。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
-更新：先结束任务并 Ctrl+C 退出旧服务，重跑安装命令后重新启动，刷新浏览器／Pake。卸载：退出服务后运行 `npm uninstall -g @cosyeezz/axiom2`；会话数据和共享 pi 配置保留，Windows 客户端在系统设置中单独卸载。
+更新：先通过客户端“关闭后台服务”或 `axiom2 stop` 停止旧服务，再运行安装命令；客户端也需下载对应新版。v0.1.x 前台服务需先在原终端按 Ctrl+C 退出。卸载：停止服务后运行 `npm uninstall -g @cosyeezz/axiom2`；会话数据和共享 pi 配置保留，Windows 客户端在系统设置中单独卸载。
 
 ## 从源码启动与使用
 
@@ -62,7 +62,7 @@ npm start
 
 默认数据目录：Windows `%APPDATA%/Axiom2`；macOS `~/Library/Application Support/Axiom2`；Linux `$XDG_DATA_HOME/Axiom2` 或 `~/.local/share/Axiom2`。`axiom.sqlite` 保存管理数据，`pi/` 保存应用资源／设置，模型配置与认证使用共享 pi 目录，`sessions/` 保存 pi JSONL，`run-models/` 保存主／子执行的临时模型配置快照，`compression-snapshots/` 保存运行中的临时压缩快照及固定配置；模型保存、登录与退出登录会影响终端 pi 的同一配置，请留意供应商级退出提示；旧版应用的 `pi/models.json` 与 `pi/auth.json` 不自动覆盖或合并到共享目录，可通过 `AXIOM_PI_DIR` 显式继续使用。同一数据目录只允许一个服务管理器。执行快照按数据目录隔离，启动时只清理本数据目录的残留，不扫描或清理共享 pi 目录中的运行文件。
 
-退出服务：终端按 Ctrl+C，等待拥有的执行终止及退出流程完成。关闭浏览器或桌面窗口仅关闭客户端。配置目录不承诺磁盘加密或系统密钥库；需要备份时先停止服务，再复制整个数据目录。
+退出服务：在客户端点击“关闭后台服务”并确认，或运行 `axiom2 stop`；前台模式也可按 Ctrl+C。退出会结束拥有的执行并保存状态；关闭浏览器或桌面窗口仅关闭客户端。数据目录中的 `service.log` 保存后台启动与运行日志，`installation.json` 记录本机 Node.js／CLI 路径，`service-control.json` 保存本次运行的本机控制通道凭据；不要分享后者。配置目录不承诺磁盘加密或系统密钥库；需要备份时先停止服务，再复制整个数据目录。
 
 ## 已实现能力与边界
 
@@ -139,17 +139,16 @@ Windows x64 产物通过 [GitHub Releases](https://github.com/cosyeezz/axiom2/re
 - `app/Axiom2.msi`：安装包。
 - `app/Axiom2.exe`：独立可执行文件。
 
-桌面壳是**本地连接入口**，不包含 Node.js、pi 或后端。先按上文安装／启动服务，桌面窗口自动连接 `http://127.0.0.1:4317/`，不需要输入地址或 token。OAuth 弹窗提供可复制的授权链接，在系统浏览器中打开并完成 pi 授权，凭据与终端 pi 共享。`app/Axiom2.exe` 和 `app/Axiom2.msi` 已重新打包包含此入口变更；原生自动连接验收因本机 4317 端口已占用尚未完成。需要 Windows WebView2 Runtime。未经代码签名／信誉认证，系统可能提示未知发布者；仅运行自己构建或已核对来源的产物。
+桌面壳包含本地服务控制页及原生启动／停止桥接，不包含 Node.js、pi 或后端。控制页随客户端打包，从本地加载，不会在服务未启动时跳转到连接错误页。工作台在服务就绪后单独打开，沿用原有 Web 产品及 Host／Origin／禁止 iframe 的安全限制；远程工作台不能调用原生服务控制命令。OAuth 提供可复制的授权链接，由系统浏览器完成 pi 授权。Windows 需要 WebView2 Runtime；客户端未经代码签名。
 
-重新构建需要 Pake **3.16.2**、Rust/Cargo 与目标平台原生构建工具（Windows MSVC、WebView2；macOS Xcode；Linux WebKitGTK 等）：
+重新构建需要 Node.js、Rust/Cargo 与目标平台原生构建工具（Windows MSVC、WebView2；macOS Xcode；Linux WebKitGTK 等）；脚本自动在隔离目录安装固定版本 Pake **3.16.2**：
 
 ```sh
-npm install -g pake-cli@3.16.2
 cd app
 npm run package:desktop
 ```
 
-配置在 `app/desktop/pake.json`；`package:desktop` 输出机器可读构建结果。已成功生成 Windows MSI 和 EXE，产物／日志不提交 Git。`npm run check:desktop` 在已连接且解锁的 Windows 桌面上启动已构建 EXE，通过原生 UI Automation 检查连接、设置导航和关闭客户端后服务存活；可用 `AXIOM_DESKTOP_BINARY` 指定 EXE。本次运行环境为断开的 Windows 会话，原生交互验收未通过，**安装包构建成功不等于安装／桌面功能已验收**。真实 OAuth 系统浏览器跳转及 macOS/Linux 打包／运行也未验收。
+配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs` 后构建，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP 检查离线控制页、启动／状态／工作台、停止确认与取消、重启及关闭客户端后服务存活。先在仓库根目录运行 `node scripts/build-desktop.mjs --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 接入，正式产物不带调试入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
 
 ## 自动检查与验收状态
 
@@ -189,8 +188,8 @@ npm audit --omit=dev
 | 会话图片图标与预览 | `tests/sent-image.test.ts` 验证实时／历史元数据、旧原生图片按消息归属读取、无字节订阅／持久回执及路径权限不放宽；`tests/message-images.check.ts` 通过真实上传／预览与消息展示夹具验证图标、9 种视口、键盘／关闭／遮罩／焦点、迟到回执、刷新及文件失效；`tests/image-preview-product.check.ts` 验证生产构建中粘贴图片预览，无模型执行 |
 | 工作空间管理与恢复专项 | `tests/workspaces.test.ts`、`tests/folder-response.test.ts` 通过：旧库迁移、改名／置顶／移出再恢复、活动操作阻断、最近空间跨服务重启及 WS 更新；`tests/workspace-management.check.ts` 通过：行内改名／IME、悬停按钮、删除确认／最后空间空态、全新浏览器存储恢复、多窗口互不切换、旧服务空 404 提示及移动端布局。Pake 原生关闭／重开仍待实机验收 |
 | 工作空间目录选择专项 | `tests/folder-picker.test.ts` 的 9 项后端检查及 `tests/workspace-picker.check.ts` 通过：平台命令、中文路径、取消／超时／进程清理、来源校验、并发拒绝；浏览器直接请求选择器、取消不创建、选择后默认授权并创建会话、打开失败与错误重试及 390/1440 宽度无溢出。测试模拟原生选择器响应，使用真实服务创建工作空间／会话；Windows 原生目录选择另由统一打开组件实机检查覆盖。 |
-| Windows 打包 | Pake 生成 MSI／EXE 成功；原生交互受当前桌面环境限制，未验收安装流程 |
-| 尚未通过的发布门槛 | 完整 UI-01 逐状态视觉对照、真实远端供应商／OAuth、原生桌面端到端、macOS/Linux 实机、广泛性能与异常进程组合测试 |
+| Windows 桌面 | MSI／EXE 构建成功；独立标识的真实 Pake／WebView2 测试通过：离线控制页、原生启动／状态／打开工作台、取消／确认停止、重启、关闭客户端后服务存活、远程页面不能控制服务及窄窗口布局。MSI 安装交互仍未验收 |
+| 尚未通过的发布门槛 | 完整 UI-01 逐状态视觉对照、真实远端供应商／OAuth、MSI 安装与完整桌面业务端到端、macOS/Linux 实机、广泛性能与异常进程组合测试 |
 
 所有自动模型请求使用**隔离回环协议夹具**，但调用产品里的真实 pi 会话／工作进程／工具；不是产品假回复，也不代表远端供应商验收。OAuth 测试验证桥接归属、提示和取消，不访问真实授权服务。测试通过不宣称任意项目命令的后代都能终止或外部副作用已经回滚。Agent 停止没有人工清理确认流程。
 
@@ -203,9 +202,9 @@ npm audit --omit=dev
 - `app/src/server/tasks/`：记录、命令、调度与预算、结果交付分别管理；通过现有 Agent 运行核心执行。
 - `app/src/server/model-service.ts`、`models/draft.ts`、`auth.ts`：配置发布、字段映射校验与原生认证。
 - `app/src/server/storage.ts`：保存应用管理数据。
-- `app/src/shared/`：实际共享协议；`app/tests/`：检查；`app/desktop/`：桌面连接页及打包配置。
+- `app/src/shared/`：实际共享协议；`app/tests/`：检查；`app/desktop/`：本地服务控制页入口、原生桥接及打包配置。
 - `app/` 根目录原有 HTML／图片／检查脚本是保留的原型副本，不是产品入口。
 
 设计更新先独立提交，再按 `docs/ui-sync.md` 的设计提交差异移植至 `app/`，不整目录覆盖已接入功能。采用提交在完整设计验收前不提前提升。源码发布到 `https://github.com/cosyeezz/axiom2`，安装包与桌面二进制通过 Releases 分发，不提交到 Git。
 
-根目录 `package.json` 是分发入口，依赖版本与 `app/package.json` 保持一致；pi 同系列的七个运行包均显式固定为 `1.1.0`，避免子依赖范围升级造成导出接口不兼容；`npm-shrinkwrap.json` 记录并随包携带构建使用的完整依赖树；`npm ci` 自动构建，`npm run check:package` 校验依赖一致性，并在隔离全局目录安装实际 tarball、启动服务、访问页面与脚本资源、检查跨站请求被拒绝。`npm pack --ignore-scripts` 打包已经构建的产物；Release 将 tarball 命名为 `axiom2.tgz`，同一版本的服务与客户端文件共同生成 `SHA256SUMS.txt`。安装脚本只消费 Release，不在用户机器编译前端。GitHub Actions 提供三平台构建／测试以及手动触发 Windows／macOS Pake 构建；测试环境显式安装文件补全所需的 fd，涉及原生路径／会话的夹具使用真实临时目录，兼容 macOS `/var` 别名与 Windows 短路径。CI 构建不替代原生交互验收。
+根目录 `package.json` 是分发入口，依赖版本与 `app/package.json` 保持一致；pi 同系列的七个运行包均显式固定为 `1.1.0`，避免子依赖范围升级造成导出接口不兼容；`npm-shrinkwrap.json` 记录并随包携带构建使用的完整依赖树；`npm ci` 自动构建，`npm run check:package` 校验依赖一致性，并在隔离全局目录安装实际 tarball、启动服务、访问页面与脚本资源、检查跨站请求被拒绝，并验证前台／后台启动、相对数据目录、重复启动、正常停止、控制通道认证及不会停止无关监听进程。`npm pack --ignore-scripts` 打包已经构建的产物；Release 将 tarball 命名为 `axiom2.tgz`，同一版本的服务与客户端文件共同生成 `SHA256SUMS.txt`。安装脚本只消费 Release，不在用户机器编译前端。GitHub Actions 提供三平台构建／测试以及手动触发 Windows／macOS Pake 构建；测试环境显式安装文件补全所需的 fd，涉及原生路径／会话的夹具使用真实临时目录，兼容 macOS `/var` 别名与 Windows 短路径。CI 构建不替代原生交互验收。

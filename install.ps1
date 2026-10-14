@@ -9,5 +9,5 @@ if ($LASTEXITCODE -ne 0 -or [int]($axiomNodeVersion.TrimStart('v').Split('.')[0]
 if ($LASTEXITCODE -ne 0) { throw 'Axiom2 installation failed. Service was not started.' }
 $axiomPrefix = (& npm.cmd prefix --global).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the npm global installation.' }
-& (Join-Path $axiomPrefix 'axiom2.cmd')
+& (Join-Path $axiomPrefix 'axiom2.cmd') start
 if ($LASTEXITCODE -ne 0) { throw 'Axiom2 exited with an error.' }

@@ -10,4 +10,4 @@ if ! node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit
 fi
 npm install --global 'https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz'
 axiom_prefix=$(npm prefix --global)
-exec "$axiom_prefix/bin/axiom2"
+exec "$axiom_prefix/bin/axiom2" start
