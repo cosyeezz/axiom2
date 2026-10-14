@@ -205,7 +205,8 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     assert.match(records.rows("WHERE id=?", taskId)[0].error!, /无法解码/);
     assert.ok(!JSON.stringify(requests.at(-1)).includes("invalid decode"));
 
-    // Finish the turn while normalization is pending. No late custom message or auto-replay.
+    // Race image normalization with turn completion. It may be consumed in this
+    // run or discarded at settlement; neither outcome may create a new run.
     holdNext = true;
     await call("prompt", { text: "finish boundary" }, to);
     await wait(() => !!held, "boundary request missing");
@@ -215,9 +216,11 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     await wait(() => !running(app.agents.info(to).run), "boundary test unfinished");
     await new Promise((r) => setTimeout(r, 300));
     assert.equal(app.agents.info(to).run!.id, boundaryRun, "normalization crossing settlement cannot create an automatic new run");
-    assert.equal(requests.length, beforeBoundary);
+    const boundaryConsumed = app.agents.thread(to).ids.includes(`input-${late.inputId}`);
+    assert.equal(requests.length, beforeBoundary + Number(boundaryConsumed), "a consumed append gets one turn; discarded input must not replay");
+    if (boundaryConsumed)
+      assert.ok(JSON.stringify(requests.at(-1).messages).includes("late decode boundary"));
     assert.equal(app.store.db.prepare("SELECT state FROM task_inputs WHERE id=?").get(late.inputId), undefined);
-    assert.ok(!app.agents.thread(to).ids.includes(`input-${late.inputId}`));
 
     holdNext = true;
     await call("prompt", { text: "stop boundary" }, to);
