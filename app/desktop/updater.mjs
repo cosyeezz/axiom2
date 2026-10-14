@@ -20,6 +20,7 @@ export function newer(a, b) {
 const exists = async (path) => { try { await access(path); return true; } catch (error) { if (error.code === "ENOENT") return false; throw error; } };
 const alive = (pid) => { if (!Number.isInteger(pid) || pid < 1) return false; try { process.kill(pid, 0); return true; } catch (error) { return error.code !== "ESRCH"; } };
 async function json(path, fallback = null) { try { return JSON.parse(await readFile(path, "utf8")); } catch (error) { if (error.code === "ENOENT") return fallback; throw error; } }
+// Atomic visibility for process recovery; not a power-loss durability guarantee.
 async function atomic(path, value) {
   const temporary = `${path}.${randomBytes(8).toString("hex")}.tmp`;
   try { await writeFile(temporary, JSON.stringify(value), { mode: 0o600, flag: "wx" }); await rename(temporary, path); }
@@ -144,7 +145,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const release = await json(releaseFile);
     const current = await job();
     const recovery = !!await json(journalFile);
-    if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新意外中断，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
+    if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
     if (current) { delete current.pid; delete current.token; delete current.installer; }
     return { serviceVersion: installed.version, managed: installed.managed, release: release ? validateRelease(release) : null,
       job: current, recovery, log };
@@ -196,13 +197,21 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   function validateTransaction(value, installed) {
     const parent = dirname(installed.packageRoot);
     if (!value || value.packageRoot !== installed.packageRoot || value.node !== installed.node || value.cli !== installed.cli ||
+        !versionPattern.test(value.previousVersion) || typeof value.wasRunning !== "boolean" ||
         !/^[a-f0-9]{32}$/.test(value.id) || value.backup !== join(parent, `.axiom2-backup-${value.id}`) || value.stage !== join(parent, `.axiom2-update-${value.id}`)) throw Error("更新恢复记录无效，请使用安装命令修复。");
     return value;
+  }
+  async function verifyPreviousPackage(path, transaction) {
+    const pkg = await json(join(path, "package.json"));
+    if (pkg?.name !== "@cosyeezz/axiom2" || pkg.version !== transaction.previousVersion || !await exists(join(path, "bin/axiom2.mjs"))) {
+      throw Error("旧程序版本与恢复记录不符，恢复未完成，请使用安装命令修复。");
+    }
   }
   async function restore(installed) {
     const transaction = validateTransaction(await json(journalFile), installed);
     await progress("restoring", "正在恢复之前的服务版本…");
     if (await exists(transaction.backup)) {
+      await verifyPreviousPackage(transaction.backup, transaction);
       const runner = { ...installed, cli: await exists(installed.cli) ? installed.cli : join(transaction.backup, "bin/axiom2.mjs") };
       await stopService(runner);
       await reserveService();
@@ -211,10 +220,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
         await rename(transaction.backup, installed.packageRoot);
       } finally { await releaseService(); }
     }
+    await verifyPreviousPackage(installed.packageRoot, transaction);
     await atomic(registration, { node: installed.node, cli: installed.cli });
     if (transaction.wasRunning) {
       const result = await control(installed, "start");
       if (result.state !== "running") throw Error("旧版本已恢复，但服务尚未启动，请查看日志。");
+      // Legacy backends do not report a running version. Verify it whenever the
+      // protocol provides one, without making v0.2.x rollback impossible.
+      if (result.version != null && result.version !== transaction.previousVersion) throw Error("运行中的服务版本与恢复记录不符，恢复尚未确认。");
     }
     await rm(journalFile);
   }
@@ -227,9 +240,11 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const ready = join(stage, "ready");
     await mkdir(stage, { mode: 0o700 }); // Permission failure happens before stopping the service.
     await progress("preparing", "正在准备新版服务，当前服务仍可运行…");
-    await command(installed.node, [await npmCli(installed.node), "install", "--prefix", stage, "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save=false", archive], { env: environment, timeoutMs: 600_000, log });
+    // Shallow keeps this direct package's complete dependency tree inside its
+    // own node_modules, regardless of the user's default npm install strategy.
+    // Move that tree intact; the staging prefix's self bin shims stay behind.
+    await command(installed.node, [await npmCli(installed.node), "install", "--prefix", stage, "--install-strategy=shallow", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save=false", archive], { env: environment, timeoutMs: 600_000, log });
     await rename(join(stage, "node_modules/@cosyeezz/axiom2"), ready);
-    await rename(join(stage, "node_modules"), join(ready, "node_modules"));
     const pkg = await json(join(ready, "package.json"));
     if (pkg?.name !== "@cosyeezz/axiom2" || pkg.version !== release.version) throw Error("安装包版本不匹配，未更改当前服务。");
     const reported = await command(installed.node, [join(ready, "bin/axiom2.mjs"), "--version"], { env: environment });
@@ -265,7 +280,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const installed = await installation();
     if (kind === "recover") {
       await restore(installed);
-      await progress("complete", "之前的服务版本已恢复。", { running: false });
+      await progress("complete", "之前的服务程序已恢复。", { running: false });
       return;
     }
     if (await json(journalFile)) throw Error("上次更新尚未恢复，请先恢复旧版本。");

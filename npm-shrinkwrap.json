@@ -1,12 +1,12 @@
 {
   "name": "@cosyeezz/axiom2",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@cosyeezz/axiom2",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "license": "UNLICENSED",
       "dependencies": {
         "@earendil-works/chord": "1.1.0",

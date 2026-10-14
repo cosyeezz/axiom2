@@ -1,11 +1,12 @@
 // Exercise the actual release tarball in an isolated global npm prefix.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { createUpdater } from "../app/desktop/updater.mjs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -103,26 +104,42 @@ try {
   // baseline uses the current runtime with an older version marker; native
   // Windows checks additionally upgrade the actual published v0.2.3 runtime.
   const installedPackage = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
-  await writeFile(join(installed, "package.json"), JSON.stringify({ ...installedPackage, version: "0.0.0" }));
-  const beforeUpdate = control("start");
-  const archive = await readFile(join(temporary, packed.filename));
-  const archiveUrl = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/axiom2.tgz`;
-  const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: [{ name: "axiom2.tgz", size: archive.length,
-    digest: `sha256:${createHash("sha256").update(archive).digest("hex")}`, browser_download_url: archiveUrl }] };
-  const updater = createUpdater({ root: join(temporary, "data"), env: serviceEnv, fetcher: async (url) => {
-    if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
-    assert.equal(url, archiveUrl);
-    return new Response(archive);
-  } });
-  await updater.check();
-  const updated = await updater.runJob("service", pkg.version);
-  assert.equal(updated.job.phase, "complete", updated.job.message);
-  assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
-  const afterUpdate = control("status");
-  assert.equal(afterUpdate.version, pkg.version);
-  assert.notEqual(afterUpdate.pid, beforeUpdate.pid);
-  assert.equal((await request(afterUpdate.url)).status, 200);
-  assert.equal(control("stop").state, "stopped");
+  for (const strategy of ["hoisted", "nested"]) {
+    await writeFile(join(installed, "package.json"), JSON.stringify({ ...installedPackage, version: "0.0.0" }));
+    const beforeUpdate = control("start");
+    const archive = await readFile(join(temporary, packed.filename));
+    const archiveUrl = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/axiom2.tgz`;
+    const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: [{ name: "axiom2.tgz", size: archive.length,
+      digest: `sha256:${createHash("sha256").update(archive).digest("hex")}`, browser_download_url: archiveUrl }] };
+    const updater = createUpdater({ root: join(temporary, "data"), env: { ...serviceEnv, npm_config_install_strategy: strategy }, fetcher: async (url) => {
+      if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
+      assert.equal(url, archiveUrl);
+      return new Response(archive);
+    } });
+    await updater.check();
+    const updated = await updater.runJob("service", pkg.version);
+    assert.equal(updated.job.phase, "complete", updated.job.message);
+    assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
+    const afterUpdate = control("status");
+    assert.equal(afterUpdate.version, pkg.version);
+    assert.notEqual(afterUpdate.pid, beforeUpdate.pid);
+    assert.equal((await request(afterUpdate.url)).status, 200);
+    const dependencyRoot = await realpath(join(installed, "node_modules"));
+    for (const dependency of Object.keys(pkg.dependencies)) {
+      const location = relative(dependencyRoot, await realpath(join(dependencyRoot, dependency)));
+      assert.ok(!location.startsWith("..") && !/^[A-Za-z]:/.test(location), `Dependency escaped the installed program: ${dependency}`);
+    }
+    for (const shim of ["axiom2", "axiom2.cmd", "axiom2.ps1"]) {
+      await assert.rejects(access(join(installed, "node_modules/.bin", shim)), { code: "ENOENT" });
+    }
+    for (const worker of ["agent-worker.js", "compression-worker.js"]) {
+      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist/server", worker)).href], {
+        cwd: temporary, env: serviceEnv, encoding: "utf8", timeout: 30_000,
+      });
+    }
+    assert.equal(control("stop").state, "stopped");
+    console.log(`PASS: staged update with npm default strategy ${strategy}; dependency paths, worker imports and self-shim isolation`);
+  }
   console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
 } finally {
   if (cli && serviceEnv) { try { control("stop"); } catch {} }
