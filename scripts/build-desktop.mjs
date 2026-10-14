@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, writeFile, rm, symlink } from "node:fs/promises";
 import { spawn, execFileSync } from "node:child_process";
 import { dirname, join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { instrumentInstaller } from "./desktop-test-bridge.mjs";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const testInstance = process.argv.includes("--test-instance");
 const toolchain = join(repo, "artifacts", "pake-toolchain");
@@ -38,6 +39,7 @@ if (testInstance) {
   const args = 'format!("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled --remote-debugging-port={}", std::env::var("AXIOM_DESKTOP_DEBUG_PORT").unwrap().parse::<u16>().unwrap())';
   await writeFile(windowPath, windowSource.replace(needle, `window_builder = window_builder.additional_browser_args(&${args});`));
   bridge = bridge.replace('additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled")', `additional_browser_args(&${args})`);
+  bridge = instrumentInstaller(bridge);
 }
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 let updater = await readFile(join(repo, "app/desktop/updater.mjs"), "utf8");
