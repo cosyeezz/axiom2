@@ -21,13 +21,26 @@ jobs:
           node-version: '24'
           cache: npm
       - name: Install fd for native file completion tests
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           case "$RUNNER_OS" in
             Linux) sudo apt-get update && sudo apt-get install -y fd-find ;;
             macOS) brew install fd ;;
-            Windows) choco install fd -y --no-progress ;;
           esac
+      - name: Install fd on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'fd.zip'
+          Invoke-WebRequest 'https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7') { throw 'fd checksum mismatch' }
+          $directory = Join-Path $env:RUNNER_TEMP 'fd'
+          Expand-Archive $archive $directory
+          $binary = Get-ChildItem $directory -Filter fd.exe -Recurse | Select-Object -First 1
+          if (-not $binary) { throw 'fd.exe missing' }
+          & $binary.FullName --version
+          $binary.DirectoryName >> $env:GITHUB_PATH
       - run: npm ci
       - run: npm test
       - run: npm run check:package

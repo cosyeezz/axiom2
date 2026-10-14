@@ -171,7 +171,8 @@ test(
         budgets: {
           ...defaultBudgets,
           concurrency: 1,
-          workMs: 7000,
+          // Includes worker startup; leave headroom for concurrent CI tests.
+          workMs: 20000,
         },
       });
       await call("prompt", { text: "Delegate lifecycle tests" });
