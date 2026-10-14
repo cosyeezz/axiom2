@@ -45,6 +45,15 @@ let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
 lib = "mod axiom_service;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service,");
+const closeMarker = '.on_window_event(move |_window, _event| {';
+if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
+lib = lib.replace(closeMarker, closeMarker + `
+            // The controller owns the desktop lifetime, never the detached service.
+            if _window.label() == "pake" && matches!(_event, tauri::WindowEvent::CloseRequested { .. }) {
+                _window.app_handle().exit(0);
+                return;
+            }
+`);
 await writeFile(libPath, lib);
 const configPath = join(template, "src-tauri/tauri.conf.json");
 const config = JSON.parse(await readFile(configPath, "utf8"));
@@ -58,7 +67,7 @@ const cargo = await readFile(cargoPath, "utf8");
 await writeFile(cargoPath, cargo.replace(/^version = "[^"]+"/m, `version = "${version}"`));
 const extra = process.argv.slice(2).filter((arg) => arg !== "--test-instance");
 if (testInstance) extra.push("--identifier", "local.axiom2.desktop.test", "--name", "Axiom2-ServiceTest");
-const child = spawn(process.execPath, [join(template, "dist/cli.js"), "--config", "desktop/pake.json", ...extra], {
+const child = spawn(process.execPath, [join(template, "dist/cli.js"), "--config", "desktop/pake.json", ...extra, "--app-version", version], {
   cwd: join(repo, "app"), env: process.env, stdio: "inherit",
 });
 child.once("error", (error) => { console.error(error); process.exitCode = 1; });

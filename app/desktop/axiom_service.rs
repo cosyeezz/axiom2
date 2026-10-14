@@ -80,12 +80,24 @@ pub async fn axiom_service(window: WebviewWindow, action: String) -> Result<Valu
         if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") { let _ = workbench.close(); }
         if open { return Err("服务尚未就绪，请先启动后台服务。".into()); }
     } else if open {
+        let target = tauri::Url::parse(result["url"].as_str().ok_or("缺少工作台地址")?).map_err(|e| e.to_string())?;
+        if target.scheme() != "http" || target.host_str() != Some("127.0.0.1") || !target.username().is_empty() || target.password().is_some() { return Err("工作台地址不合法".into()); }
+        if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") {
+            if workbench.url().map_err(|e| e.to_string())?.origin() != target.origin() {
+                // Navigation is pinned to the origin at creation. Rebuild when the
+                // service moves, and wait until Tauri releases the old window label.
+                workbench.destroy().map_err(|e| e.to_string())?;
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while window.app_handle().get_webview_window("axiom-workbench").is_some() {
+                    if Instant::now() >= deadline { return Err("旧工作台尚未关闭，请稍后重试。".into()); }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            }
+        }
         if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") {
             workbench.show().map_err(|e| e.to_string())?;
             workbench.set_focus().map_err(|e| e.to_string())?;
         } else {
-            let target = tauri::Url::parse(result["url"].as_str().ok_or("缺少工作台地址")?).map_err(|e| e.to_string())?;
-            if target.scheme() != "http" || target.host_str() != Some("127.0.0.1") || !target.username().is_empty() || target.password().is_some() { return Err("工作台地址不合法".into()); }
             let origin = target.origin();
             let builder = WebviewWindowBuilder::new(window.app_handle(), "axiom-workbench", WebviewUrl::External(target))
                 .title("Axiom2 · 工作台").inner_size(1440.0, 900.0).min_inner_size(360.0, 600.0)

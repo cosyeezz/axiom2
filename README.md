@@ -36,7 +36,7 @@ axiom2 start
 | SHA-256 校验 | [SHA256SUMS.txt](https://github.com/cosyeezz/axiom2/releases/latest/download/SHA256SUMS.txt) |
 | macOS / Linux | 当前使用浏览器；尚无发布并验收的原生客户端 |
 
-**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。工作台在独立窗口打开，控制页始终保留；后台停止后工作台窗口关闭，可在控制页重新启动。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
+**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。工作台在独立窗口打开；服务地址变化时，重新打开会替换旧地址窗口。后台停止后工作台窗口关闭，可在控制页重新启动。单独关闭工作台会保留控制页；关闭控制页会退出整个桌面客户端，再次启动时恢复控制入口。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
 更新：先通过客户端“关闭后台服务”或 `axiom2 stop` 停止旧服务，再运行安装命令；客户端也需下载对应新版。v0.1.x 前台服务需先在原终端按 Ctrl+C 退出。卸载：停止服务后运行 `npm uninstall -g @cosyeezz/axiom2`；会话数据和共享 pi 配置保留，Windows 客户端在系统设置中单独卸载。
 
@@ -148,7 +148,7 @@ cd app
 npm run package:desktop
 ```
 
-配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs` 后构建，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP 检查离线控制页、启动／状态／工作台、停止确认与取消、重启及关闭客户端后服务存活。先在仓库根目录运行 `node scripts/build-desktop.mjs --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 接入，正式产物不带调试入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
+配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs` 后构建，桌面版本统一从根 `package.json` 传入，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP 与原生窗口关闭请求检查离线控制页、启动／状态／工作台、停止确认与取消、重启、两个窗口的关闭顺序、客户端重新打开、服务换端口后的工作台重建及正常／强制退出客户端后服务存活。先在仓库根目录运行 `node scripts/build-desktop.mjs --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 接入，正式产物不带调试入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
 
 ## 自动检查与验收状态
 
@@ -188,7 +188,7 @@ npm audit --omit=dev
 | 会话图片图标与预览 | `tests/sent-image.test.ts` 验证实时／历史元数据、旧原生图片按消息归属读取、无字节订阅／持久回执及路径权限不放宽；`tests/message-images.check.ts` 通过真实上传／预览与消息展示夹具验证图标、9 种视口、键盘／关闭／遮罩／焦点、迟到回执、刷新及文件失效；`tests/image-preview-product.check.ts` 验证生产构建中粘贴图片预览，无模型执行 |
 | 工作空间管理与恢复专项 | `tests/workspaces.test.ts`、`tests/folder-response.test.ts` 通过：旧库迁移、改名／置顶／移出再恢复、活动操作阻断、最近空间跨服务重启及 WS 更新；`tests/workspace-management.check.ts` 通过：行内改名／IME、悬停按钮、删除确认／最后空间空态、全新浏览器存储恢复、多窗口互不切换、旧服务空 404 提示及移动端布局。Pake 原生关闭／重开仍待实机验收 |
 | 工作空间目录选择专项 | `tests/folder-picker.test.ts` 的 9 项后端检查及 `tests/workspace-picker.check.ts` 通过：平台命令、中文路径、取消／超时／进程清理、来源校验、并发拒绝；浏览器直接请求选择器、取消不创建、选择后默认授权并创建会话、打开失败与错误重试及 390/1440 宽度无溢出。测试模拟原生选择器响应，使用真实服务创建工作空间／会话；Windows 原生目录选择另由统一打开组件实机检查覆盖。 |
-| Windows 桌面 | MSI／EXE 构建成功；独立标识的真实 Pake／WebView2 测试通过：离线控制页、原生启动／状态／打开工作台、取消／确认停止、重启、关闭客户端后服务存活、远程页面不能控制服务及窄窗口布局。MSI 安装交互仍未验收 |
+| Windows 桌面 | MSI／EXE 构建成功；独立标识的真实 Pake／WebView2 测试通过：离线控制页、原生启动／状态／打开工作台、取消／确认停止、重启、系统窗口关闭请求、控制页关闭后重新启动、服务换端口后的工作台重建、正常／强制退出客户端后服务存活、远程页面不能控制服务及窄窗口布局。MSI 安装交互仍未验收 |
 | 尚未通过的发布门槛 | 完整 UI-01 逐状态视觉对照、真实远端供应商／OAuth、MSI 安装与完整桌面业务端到端、macOS/Linux 实机、广泛性能与异常进程组合测试 |
 
 所有自动模型请求使用**隔离回环协议夹具**，但调用产品里的真实 pi 会话／工作进程／工具；不是产品假回复，也不代表远端供应商验收。OAuth 测试验证桥接归属、提示和取消，不访问真实授权服务。测试通过不宣称任意项目命令的后代都能终止或外部副作用已经回滚。Agent 停止没有人工清理确认流程。
