@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import DesktopUpdates from "./DesktopUpdates.js";
 import "../styles/connect.css";
 
 type Service = { state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
@@ -13,6 +14,7 @@ function invoke(action: Action): Promise<Service> {
 export default function Connect() {
   const [service, setService] = useState<Service | null>(null);
   const [busy, setBusy] = useState<Action | null>(null);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -42,6 +44,7 @@ export default function Connect() {
     else if (dialog.current?.open) { dialog.current.close(); stopButton.current?.focus(); }
   }, [confirm]);
   const running = service?.state === "running";
+  const blocked = !!busy || updating;
   const starting = service?.state === "starting";
   const missing = service?.state === "missing";
   return (
@@ -56,20 +59,21 @@ export default function Connect() {
         </section>
         <section className="connect-panel" aria-label="本地服务控制">
           <div className="connect-panel-top"><span>本地服务</span><button className="connect-refresh" onClick={() => void act("status")} disabled={!!busy}>刷新状态 <span aria-hidden="true">↻</span></button></div>
-          <div className="connect-status" role="status" aria-live="polite"><span className={`connect-dot ${running ? "is-running" : ""}`} /><h2>{busy === "start" ? "正在启动服务…" : busy === "stop" ? "正在关闭服务…" : service ? labels[service.state] : "正在检查服务…"}</h2></div>
-          <p className="connect-status-detail">{busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : starting ? "正在准备后台服务，可以等待就绪或关闭服务。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
+          <div className="connect-status" role="status" aria-live="polite"><span className={`connect-dot ${running ? "is-running" : ""}`} /><h2>{updating ? "正在更新服务…" : busy === "start" ? "正在启动服务…" : busy === "stop" ? "正在关闭服务…" : service ? labels[service.state] : "正在检查服务…"}</h2></div>
+          <p className="connect-status-detail">{updating ? "可在下方查看更新进度，完成后再打开工作台。" : busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : starting ? "正在准备后台服务，可以等待就绪或关闭服务。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
           <dl className="connect-details"><div><dt>连接地址</dt><dd>{service?.url || "http://127.0.0.1:4317/"}</dd></div><div><dt>运行中的会话</dt><dd>{running ? `${service.active.length}${service.active.length >= 20 ? "+" : ""}` : "—"}</dd></div></dl>
           {service?.message && <p className="connect-message">{service.message}</p>}
           {error && <p className="connect-error" role="alert">{error}</p>}
           <div className="connect-actions">
-            {starting ? <button ref={stopButton} className="connect-secondary" disabled={!!busy} onClick={() => setConfirm(true)}>关闭后台服务</button> : running ? <><button className="connect-primary" disabled={!!busy} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={!!busy} onClick={() => setConfirm(true)}>关闭后台服务</button></>
-              : <button className="connect-primary" disabled={!!busy || !service || service.state !== "stopped"} onClick={() => void act("start")}>{busy === "start" ? "正在启动…" : "启动后台服务"}<span aria-hidden="true">→</span></button>}
+            {starting ? <button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button> : running ? <><button className="connect-primary" disabled={blocked} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button></>
+              : <button className="connect-primary" disabled={blocked || !service || service.state !== "stopped"} onClick={() => void act("start")}>{busy === "start" ? "正在启动…" : "启动后台服务"}<span aria-hidden="true">→</span></button>}
           </div>
           <p className="connect-footnote">关闭服务会停止正在运行的任务。{running && service.background === false ? "当前服务由终端启动。" : "不会随系统登录自动启动。"}</p>
         </section>
       </div>
+      <DesktopUpdates service={service} serviceBusy={!!busy} onBusyChange={setUpdating} onServiceChange={() => void act("status")} />
       <details className="connect-install" open={missing || undefined}>
-        <summary>首次使用 / 更新服务 <span>一行命令安装</span></summary>
+        <summary>首次安装 / 手动修复 <span>一行命令安装</span></summary>
         <p>先安装 Node.js 24 或更新版本，再在终端运行以下命令。更新前先关闭服务；安装完成后点击“刷新状态”。</p>
         <div className="connect-command"><code>{command}</code><button onClick={() => { void navigator.clipboard.writeText(command).then(() => setCopied(true), () => setError("复制失败，请手动复制安装命令。")); }}>{copied ? "已复制" : "复制命令"}</button></div>
         {service?.log && <p className="connect-log">服务日志：<code>{service.log}</code></p>}

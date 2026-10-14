@@ -23,7 +23,8 @@ axiom2 --version   显示安装版本
 浏览器 / Pake 地址：http://127.0.0.1:4317/
 Pake 内置服务控制页，可以启动和关闭后台服务；未注册登录自启。
 AXIOM_DATA_DIR 可指定数据目录，AXIOM_PI_DIR 可指定 pi 配置目录。
-更新前请先运行 axiom2 stop，再重新运行安装命令。
+更新：在 Pake 控制页“版本与更新”检查并更新后台或客户端。
+手动更新前请先运行 axiom2 stop，再重新运行安装命令。
 卸载：npm uninstall -g @cosyeezz/axiom2（保留用户数据与 pi 配置）`);
   } else if (command.length === 1 && ["--version", "-v"].includes(command[0])) {
     console.log(JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version);

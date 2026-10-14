@@ -233,6 +233,7 @@ export async function serve(background = false, { initialize: bootService = init
     record = await reserve();
   }
   const { token } = record;
+  const version = (await readJson(new URL("../package.json", import.meta.url)))?.version || null;
   let app, closing = false, controlPort = 0, finishing;
   let resolveBoot, rejectBoot;
   const boot = new Promise((resolve, reject) => { resolveBoot = resolve; rejectBoot = reject; });
@@ -242,7 +243,7 @@ export async function serve(background = false, { initialize: bootService = init
     OR EXISTS(SELECT 1 FROM tasks t WHERE t.parentSessionId=s.id AND t.status IN ('queued','starting','running','wrapping','stopping','summarizing'))
     OR EXISTS(SELECT 1 FROM compressions c WHERE c.sessionId=s.id AND json_extract(c.body,'$.state')='running') LIMIT 20`).all().map((row) => String(row.title || "未命名会话").slice(0, 160));
   const snapshot = () => ({ state: closing ? "stopping" : app ? "running" : "starting", instance: token, pid: process.pid,
-    url: app?.accessUrl, background, active: app && !closing ? active() : [], log });
+    url: app?.accessUrl, background, version, active: app && !closing ? active() : [], log });
   const finish = () => finishing ||= (async () => {
     const service = await boot.catch(() => undefined);
     try {

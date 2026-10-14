@@ -40,11 +40,17 @@ if (testInstance) {
   bridge = bridge.replace('additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled")', `additional_browser_args(&${args})`);
 }
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
+let updater = await readFile(join(repo, "app/desktop/updater.mjs"), "utf8");
+if (testInstance) {
+  updater = updater.replace('"https://api.github.com/repos/cosyeezz/axiom2/releases/latest"', '(process.env.AXIOM_UPDATE_TEST_ORIGIN ? process.env.AXIOM_UPDATE_TEST_ORIGIN + "/latest" : "https://api.github.com/repos/cosyeezz/axiom2/releases/latest")')
+    .replace('"https://github.com/cosyeezz/axiom2/releases/download/"', '(process.env.AXIOM_UPDATE_TEST_ORIGIN ? process.env.AXIOM_UPDATE_TEST_ORIGIN + "/download/" : "https://github.com/cosyeezz/axiom2/releases/download/")');
+}
+await writeFile(join(template, "src-tauri/src/axiom_updater.mjs"), updater);
 const libPath = join(template, "src-tauri/src/lib.rs");
 let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
-lib = "mod axiom_service;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service,");
+lib = "mod axiom_service;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update,");
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
 lib = lib.replace(closeMarker, closeMarker + `

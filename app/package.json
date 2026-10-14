@@ -1,6 +1,6 @@
 {
   "name": "axiom2",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,7 +15,8 @@
     "check:sdk": "tsx tests/sdk.check.ts",
     "build:desktop": "vite build --config desktop/vite.config.ts",
     "package:desktop": "npm run build:desktop && node ../scripts/build-desktop.mjs",
-    "check:desktop": "tsx tests/desktop.check.ts"
+    "check:desktop": "tsx tests/desktop.check.ts",
+    "check:desktop-update": "tsx tests/desktop-updates.check.ts"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",

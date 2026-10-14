@@ -1,7 +1,9 @@
 // Exercise the actual release tarball in an isolated global npm prefix.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createUpdater } from "../app/desktop/updater.mjs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -97,7 +99,31 @@ try {
     assert.throws(() => control("start"));
     assert.equal(unrelated.listening, true);
   } finally { await new Promise((resolve) => unrelated.close(resolve)); }
-  console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop and unrelated-process protection`);
+  // Exercise the updater with a real tarball and isolated npm installation. The
+  // baseline uses the current runtime with an older version marker; native
+  // Windows checks additionally upgrade the actual published v0.2.3 runtime.
+  const installedPackage = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
+  await writeFile(join(installed, "package.json"), JSON.stringify({ ...installedPackage, version: "0.0.0" }));
+  const beforeUpdate = control("start");
+  const archive = await readFile(join(temporary, packed.filename));
+  const archiveUrl = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/axiom2.tgz`;
+  const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: [{ name: "axiom2.tgz", size: archive.length,
+    digest: `sha256:${createHash("sha256").update(archive).digest("hex")}`, browser_download_url: archiveUrl }] };
+  const updater = createUpdater({ root: join(temporary, "data"), env: serviceEnv, fetcher: async (url) => {
+    if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
+    assert.equal(url, archiveUrl);
+    return new Response(archive);
+  } });
+  await updater.check();
+  const updated = await updater.runJob("service", pkg.version);
+  assert.equal(updated.job.phase, "complete", updated.job.message);
+  assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
+  const afterUpdate = control("status");
+  assert.equal(afterUpdate.version, pkg.version);
+  assert.notEqual(afterUpdate.pid, beforeUpdate.pid);
+  assert.equal((await request(afterUpdate.url)).status, 200);
+  assert.equal(control("stop").state, "stopped");
+  console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
 } finally {
   if (cli && serviceEnv) { try { control("stop"); } catch {} }
   if (child && child.exitCode === null) {
