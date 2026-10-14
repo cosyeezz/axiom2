@@ -88,20 +88,30 @@ async function occupied() {
   });
 }
 async function inspect() {
-  // Read the reservation first so its handoff to the control descriptor has no gap.
-  const pending = await startup();
-  const meta = await metadata();
-  if (meta) {
-    try { return { value: await request(meta, "status"), token: meta.token }; } catch {}
+  // Re-read after reclaiming a dead owner: the same token can be handed off to
+  // a new PID while metadata() yields, or a different launch can reserve the row.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const pending = await startup();
+    const meta = await metadata();
+    if (meta) {
+      try { return { value: await request(meta, "status"), token: meta.token }; } catch {}
+    }
+    if (pending) {
+      if (alive(pending.pid)) return { value: { state: "starting", active: [], log, message: "服务正在启动，可等待就绪或关闭服务。" }, token: pending.token };
+      const reclaimed = startupDatabase((db) => db.prepare("DELETE FROM startup WHERE token=? AND pid=?").run(pending.token, pending.pid));
+      // Only the record whose PID was actually checked may be reclaimed. A
+      // failed compare-and-delete must also preserve its cancellation marker.
+      if (reclaimed?.changes) await rm(cancellation(pending.token), { force: true });
+      continue;
+    }
+    if (meta && Number.isInteger(meta.pid) && meta.pid > 0 && alive(meta.pid)) {
+      return { value: { state: "stopping", active: [], log, message: "控制通道暂不可用，尚未确认服务停止，请稍后刷新状态。" }, token: meta.token };
+    }
+    return { value: await occupied()
+      ? { state: "unmanaged", active: [], log, message: `端口 ${port} 已被占用，但不是可管理的 Axiom2 服务。若运行着旧版服务，请先在原终端退出，再启动后台服务。` }
+      : stopped() };
   }
-  if (pending) {
-    if (alive(pending.pid)) return { value: { state: "starting", active: [], log, message: "服务正在启动，可等待就绪或关闭服务。" }, token: pending.token };
-    await clearStartup(pending.token);
-    await rm(cancellation(pending.token), { force: true });
-  }
-  return { value: await occupied()
-    ? { state: "unmanaged", active: [], log, message: `端口 ${port} 已被占用，但不是可管理的 Axiom2 服务。若运行着旧版服务，请先在原终端退出，再启动后台服务。` }
-    : stopped() };
+  throw Error("服务实例正在变化，请稍后刷新状态。");
 }
 export async function status() { return (await inspect()).value; }
 async function reserve() {

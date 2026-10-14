@@ -62,7 +62,7 @@ npm start
 
 默认数据目录：Windows `%APPDATA%/Axiom2`；macOS `~/Library/Application Support/Axiom2`；Linux `$XDG_DATA_HOME/Axiom2` 或 `~/.local/share/Axiom2`。`axiom.sqlite` 保存管理数据，`pi/` 保存应用资源／设置，模型配置与认证使用共享 pi 目录，`sessions/` 保存 pi JSONL，`run-models/` 保存主／子执行的临时模型配置快照，`compression-snapshots/` 保存运行中的临时压缩快照及固定配置；模型保存、登录与退出登录会影响终端 pi 的同一配置，请留意供应商级退出提示；旧版应用的 `pi/models.json` 与 `pi/auth.json` 不自动覆盖或合并到共享目录，可通过 `AXIOM_PI_DIR` 显式继续使用。同一数据目录只允许一个服务管理器。执行快照按数据目录隔离，启动时只清理本数据目录的残留，不扫描或清理共享 pi 目录中的运行文件。
 
-退出服务：在客户端点击“关闭后台服务”并确认，或运行 `axiom2 stop`；前台模式也可按 Ctrl+C。退出会结束拥有的执行并保存状态；关闭浏览器或桌面窗口仅关闭客户端。数据目录中的 `service.log` 保存后台启动与运行日志，`installation.json` 记录本机 Node.js／CLI 路径，`service-startup.sqlite` 保存启动实例登记以协调并发启停，`service-control.json` 保存本次运行的本机控制通道凭据；启动登记和控制凭据均不要分享。配置目录不承诺磁盘加密或系统密钥库；需要备份时先停止服务，再复制整个数据目录。
+退出服务：在客户端点击“关闭后台服务”并确认，或运行 `axiom2 stop`；前台模式也可按 Ctrl+C。退出会结束拥有的执行并保存状态；控制通道暂时失联且记录的进程仍存活时，不确认“已停止”，需等待后续状态或退出超时。PID 仅用于存活探测，不用于强杀；若旧 PID 被复用，确认停止可能延迟或超时。关闭浏览器或桌面窗口仅关闭客户端。数据目录中的 `service.log` 保存后台启动与运行日志，`installation.json` 记录本机 Node.js／CLI 路径，`service-startup.sqlite` 保存启动实例登记以协调并发启停，`service-control.json` 保存本次运行的本机控制通道凭据；启动登记和控制凭据均不要分享。配置目录不承诺磁盘加密或系统密钥库；需要备份时先停止服务，再复制整个数据目录。
 
 ## 已实现能力与边界
 
@@ -174,7 +174,7 @@ npm audit --omit=dev
 | 检查 | 当前证据 |
 | --- | --- |
 | 类型与生产构建 | `npm run build` 通过 |
-| 服务及纯函数自动测试 | `npm test` 对应的全量测试 240 项通过，覆盖持久化迁移、执行边界、结果版本、工具／任务、压缩和错误处理；真实模型交互均使用隔离回环服务 |
+| 服务及纯函数自动测试 | `npm test` 对应的全量测试 242 项通过，覆盖持久化迁移、执行边界、结果版本、工具／任务、压缩和错误处理；真实模型交互均使用隔离回环服务 |
 | 重试、续接与阅读状态 | `tests/native-retry.test.ts` 验证 503／429 恢复、重试耗尽、401、不重复工具副作用、退避追加／停止、截断、无新增用户消息的续接及旧执行冲突、工具结果续接／缺失结果标记、子任务只读权限及不可变结果；`tests/retry-state.test.ts` 验证活动优先、旧版本确认、幂等、事务回滚与重启。`tests/retry-session.check.ts` 验证运行／未读并存、可见性／遮挡／滚动阅读边界、SVG 图标重试不新增用户消息且保留草稿、子任务仍活动时侧栏状态正确、消息末尾无独立状态行，以及 390／820／1440 宽度；`session-attention.check.ts`、`session-order.check.ts` 验证重连和置顶冷却 |
 | 自动会话标题 | `tests/title-storage.test.ts` 验证命名状态、手动优先、旧库迁移及主子隔离；`tests/session-title.test.ts` 验证标题识别与流式／历史过滤；`tests/title-generation.test.ts` 源码及编译后回环测试通过，覆盖真实 pi 工具多轮请求、无额外调用、漏报／截断／取消重试、WebSocket 手动改名竞态、重启与并行会话隔离。未以真实远端模型验收标题质量 |
 | 子代理只读限制 | `tests/subagent-readonly.test.ts` 使用真实 pi 工作进程和回环模型验证白名单、伪造写入／shell／递归工具调用失败、全局／项目默认工具及同名扩展不能绕过、恢复仍只读，以及主 Agent 保留写入和扩展；`tests/tasks.test.ts` 覆盖调研读取与追问生命周期。源码与编译产物专项均通过 |
