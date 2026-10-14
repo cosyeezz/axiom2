@@ -1,14 +1,21 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { AppError } from "../shared/protocol.js";
+import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
+import { imageDisplayText, imagesInput } from "./images.js";
 import type { ChatMessage } from "../shared/agent.js";
+import { stripSessionTitle } from "./session-title.js";
+import { compactionDisplay } from "./compaction-display.js";
+import { thinkingDisplay } from "./thinking-display.js";
+import { outputTruncated } from "./execution-outcome.js";
+import { modelRequestError } from "./error-message.js";
 
 export const toolKey = (runId: string, callId: string) =>
   `${runId}-${createHash("sha256").update(callId).digest("hex").slice(0, 24)}`;
 
-// Only display fields cross IPC/WS. Provider diagnostics, signatures and arbitrary details do not.
+// Only display fields cross IPC/WS. Error messages are bounded and credential-redacted;
+// provider signatures and arbitrary diagnostic objects are not forwarded.
 export function chatMessage(
   message: any,
   id: string,
@@ -36,18 +43,63 @@ export function chatMessage(
       .join("\n") ||
     message.summary ||
     "";
-  const thinking = content
+  // Display-only projection: keep native JSON and delivery identifiers untouched for the agent.
+  if (message.role === "custom" && message.customType === "axiom-result") {
+    const labels = {
+      completed: "子代理已完成",
+      cancelled: "子代理已取消",
+      failed: "子代理执行失败",
+      interrupted: "子代理执行中断",
+    };
+    let state: NonNullable<ChatMessage["taskNotice"]> = "unknown";
+    let resultId: string | undefined;
+    try {
+      const payload = JSON.parse(text), status = payload?.status;
+      if (typeof payload?.resultId === "string" && payload.resultId.length <= 200) resultId = payload.resultId;
+      if (typeof status === "string" && Object.hasOwn(labels, status))
+        state = status as keyof typeof labels;
+    } catch { /* Legacy or malformed notices must never leak their raw payload. */ }
+    return { id, role: "notice", text: state === "unknown" ? "收到子代理状态通知" : labels[state], taskNotice: state, ...(resultId ? { resultId } : {}) };
+  }
+  const imageBlocks = content.filter((c: any) => c.type === "image");
+  const metadata = message.axiomImages ?? message.details?.images;
+  const images: NonNullable<ChatMessage["images"]> = imageBlocks.map((c: any, i: number) => ({
+    id: metadata?.[i]?.id ?? `imag${i + 1}`,
+    name: metadata?.[i]?.name ?? `图片 ${i + 1}`,
+    mimeType: c.mimeType,
+  }));
+  const isInput = message.role === "user" || (message.role === "custom" && message.customType === "axiom-append");
+  // Inline mapping is the outer suffix when legacy inline and path attachments coexist.
+  const display = isInput ? attachmentDisplay(imageDisplayText(text, imageBlocks.length)) : { text, attachments: [] };
+  for (const attachment of display.attachments) if (attachment.kind === "image") {
+    const mimeTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
+    images.push({ id: attachment.id!, name: attachment.name, path: attachment.path!,
+      // A display hint only; files.preview detects actual bytes and enforces supported types.
+      mimeType: mimeTypes[extname(attachment.path!).toLowerCase()] ?? "application/octet-stream" });
+  }
+  const assistantDisplay = message.role === "assistant"
+    ? thinkingDisplay(stripSessionTitle(display.text, streaming), streaming)
+    : { text: display.text, thinking: "", active: false };
+  const thinking = [content
     .filter((c: any) => c.type === "thinking")
     .map((c: any) => c.thinking)
-    .join("\n");
+    .join("\n"), assistantDisplay.thinking].filter(Boolean).join("\n\n");
+  const thinkingActive = message.role === "assistant" && streaming &&
+    (assistantDisplay.active || content.at(-1)?.type === "thinking");
   return {
     id,
-    role: ["custom", "compactionSummary"].includes(message.role)
+    // User-authored Steering/follow-up shares user presentation in live and history views.
+    // Keep the native custom message unchanged; result notifications remain notices.
+    role: isInput ? "user" : ["custom", "compactionSummary"].includes(message.role)
       ? "notice"
       : message.role,
-    text,
+    text: assistantDisplay.text,
+    ...(images.length ? { images } : {}),
     ...(thinking ? { thinking } : {}),
+    ...(thinkingActive ? { thinkingActive: true } : {}),
     streaming,
+    ...(message.compression ? { compression: message.compression } : {}),
+    inputIds: message.axiomInputIds ?? (message.details?.axiomInput ? [message.details.axiomInput] : undefined),
     ...(message.role === "assistant"
       ? {
           calls: content
@@ -59,15 +111,15 @@ export function chatMessage(
             })),
           status: streaming
             ? "running"
-            : message.stopReason === "error"
+            : ["error", "length"].includes(message.stopReason)
               ? "failed"
               : message.stopReason === "aborted"
                 ? "cancelled"
                 : "completed",
+          ...(message.stopReason === "length" ? { error: outputTruncated } : {}),
           ...(message.stopReason === "error"
             ? {
-                error:
-                  "模型请求失败；请检查认证、额度、接口与网络。供应商原始错误未转发。",
+                error: modelRequestError(message.errorMessage),
               }
             : {}),
         }
@@ -75,7 +127,7 @@ export function chatMessage(
     ...(message.role === "toolResult"
       ? {
           toolName: message.toolName,
-          toolCallId: message.toolCallId,
+          toolCallId: message.axiomRunId ? toolKey(message.axiomRunId, message.toolCallId) : message.toolCallId,
           durationMs: message.durationMs,
           status: message.isError ? "failed" : "completed",
         }
@@ -97,14 +149,11 @@ export function boundedMessage(message: ChatMessage): ChatMessage {
 }
 export function openTranscript(file: string, cwd: string): SessionManager {
   try {
-    // pi can recover partial files; product recovery must not silently treat damage as success.
-    const lines = readFileSync(file, "utf8")
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
+    // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
+    const header = JSON.parse(readFileSync(file, "utf8").split("\n", 1)[0]);
     if (
-      lines[0]?.type !== "session" ||
-      resolve(lines[0]?.cwd ?? "") !== resolve(cwd)
+      header?.type !== "session" ||
+      resolve(header?.cwd ?? "") !== resolve(cwd)
     )
       throw Error();
     return SessionManager.open(file);
@@ -115,43 +164,37 @@ export function openTranscript(file: string, cwd: string): SessionManager {
     );
   }
 }
-export function transcriptMessages(manager: SessionManager): ChatMessage[] {
-  const branch = manager.getBranch();
-  const recorded = new Set(
-    branch.flatMap((e) =>
-      e.type === "message" ? [(e.message as any).axiomId] : [],
-    ),
-  );
-  return branch.flatMap((entry): ChatMessage[] => {
-    if (entry.type === "custom" && entry.customType === "axiom-request") {
-      const data = entry.data as { runId: string; text: string };
-      return !recorded.has(data.runId)
-        ? [
-            {
-              id: data.runId,
-              role: "user",
-              text: data.text,
-              error: "请求已受理，但尚未确认进入模型上下文。不会自动重新发送。",
-            },
-          ]
-        : [];
-    }
+// One identity adapter for both metadata views and on-demand native image lookup.
+function transcriptEntries(manager: SessionManager): { message: any; id: string }[] {
+  return manager.buildSessionProjection().entries.flatMap(({ sourceEntry: entry, messages }) => {
+    if (!messages.length) return [];
+    if (entry.type === "compaction") return [{ message: { role: "compactionSummary", summary: entry.summary,
+      compression: compactionDisplay(entry, manager.getBranch()) }, id: entry.id }];
     if (entry.type === "custom_message" && entry.display) {
-      const m = chatMessage(
-        { role: "custom", content: entry.content, display: true },
-        (entry.details as any)?.axiomInput
-          ? `input-${(entry.details as any).axiomInput}`
-          : entry.id,
-      );
-      return m ? [m] : [];
+      return [{
+        message: messages[0],
+        id: (entry.details as any)?.axiomInput ? `input-${(entry.details as any).axiomInput}` : entry.id,
+      }];
     }
     if (entry.type !== "message") return [];
-    const m = entry.message as any;
-    const converted = chatMessage(
-      m,
-      m.axiomId ??
-        (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id),
-    );
+    const m = messages[0] as any;
+    return [{ message: m, id: m.axiomId ?? (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id) }];
+  });
+}
+export function transcriptMessages(manager: SessionManager): ChatMessage[] {
+  return transcriptEntries(manager).flatMap(({ message, id }) => {
+    const converted = chatMessage(message, id);
     return converted ? [converted] : [];
   });
+}
+/** Read only a displayed native block from the bound current branch; never follow paths. */
+export function transcriptImage(manager: SessionManager, messageId: string, imageId: string): ImageAttachment {
+  const entry = transcriptEntries(manager).find(({ id }) => id === messageId);
+  const view = entry && chatMessage(entry.message, entry.id);
+  const images = view?.images?.filter((image) => !image.path) ?? [];
+  const index = images.findIndex((image) => image.id === imageId);
+  if (!entry || index < 0) throw new AppError("NOT_FOUND", "图片不存在或不属于此消息");
+  const block = entry.message.content.filter((c: any) => c.type === "image")[index];
+  // Reuse strict MIME/signature/base64 and per-image bounds; don't trust JSONL metadata.
+  return imagesInput([{ ...images[index], data: block.data }])[0];
 }

@@ -20,7 +20,7 @@ import { ModelService } from "../src/server/model-service.js";
 import type { Command, Session, Workspace } from "../src/shared/protocol.js";
 
 const temporary = () => mkdtempSync(join(tmpdir(), "axiom-check-"));
-test("SQLite: authorization, ownership, idempotency, draft revisions and restart", () => {
+test("SQLite: authorization, ownership, idempotency, no server drafts and restart", () => {
   const root = temporary();
   let store = new Store(root);
   try {
@@ -98,54 +98,9 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
     });
     run("session.rename", { title: "中文会话" }, a.id, s.id);
     run("session.pin", { pinned: true }, a.id, s.id);
-    const draft = {
-      viewId: "tab-a",
-      revision: 0,
-      text: "草稿 A",
-      attachment: { name: "代码.ts", text: "const a = 1;" },
-    };
-    run("draft.save", draft, a.id, s.id);
-    assert.throws(() => run("draft.save", draft, a.id, s.id), {
-      code: "REVISION_CONFLICT",
-    });
-    assert.throws(
-      () =>
-        run(
-          "draft.save",
-          {
-            ...draft,
-            revision: 1,
-            attachment: { name: "secret.exe", text: "invalid" },
-          },
-          a.id,
-          s.id,
-        ),
-      { code: "INVALID_ATTACHMENT" },
-    );
-    assert.throws(
-      () =>
-        run(
-          "draft.save",
-          {
-            ...draft,
-            revision: 1,
-            attachment: { name: "large.txt", text: "中".repeat(40000) },
-          },
-          a.id,
-          s.id,
-        ),
-      { code: "INVALID_ATTACHMENT" },
-    );
-    run(
-      "draft.save",
-      { ...draft, viewId: "tab-b", text: "草稿 B" },
-      a.id,
-      s.id,
-    );
-    assert.equal(store.draft(a.id, s.id, "tab-a").text, "草稿 A");
-    assert.equal(store.draft(a.id, s.id, "tab-b").text, "草稿 B");
-    assert.equal(store.drafts(a.id, s.id).length, 2);
-    assert.throws(() => store.drafts(b.id, s.id), { code: "SCOPE_MISMATCH" });
+    for (const op of ["draft.save", "draft.get", "draft.list"])
+      assert.throws(() => run(op, { viewId: "tab-a", text: "not persisted" }, a.id, s.id), { code: "UNKNOWN_OPERATION" });
+    assert.equal(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='drafts'").get(), undefined);
     // Upgrade an existing database without inventing ownership for old receipts.
     store.db.exec(
       "ALTER TABLE requests DROP COLUMN scope; ALTER TABLE external_requests DROP COLUMN scope",
@@ -154,7 +109,7 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
     store = new Store(root);
     assert.equal(store.session(a.id, s.id).title, "中文会话");
     assert.equal(store.session(a.id, s.id).pinned, true);
-    assert.equal(store.draft(a.id, s.id, "tab-a").revision, 1);
+    assert.equal(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='drafts'").get(), undefined);
     assert.deepEqual(store.receipt(creation.requestId, { workspaceId: a.id }), {
       status: "uncertain",
     });
@@ -172,7 +127,7 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
     store.db.exec("DROP TRIGGER fail_write");
     run("session.delete", { confirmed: true }, a.id, s.id);
     assert.equal(
-      store.db.prepare("SELECT count(*) AS n FROM drafts").get()!.n,
+      store.sessions(a.id).length,
       0,
     );
     assert.equal(readFileSync(join(root, "axiom.sqlite")).length > 0, true);
@@ -182,9 +137,12 @@ test("SQLite: authorization, ownership, idempotency, draft revisions and restart
   }
 });
 
-test("Model summaries: only explicitly configured + authenticated models, no secrets", async () => {
+test("Model summaries: only explicitly configured + authenticated models, no secrets", async (t) => {
   const root = temporary(),
     dir = join(root, "pi");
+  const previousPi = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = dir;
+  t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
   mkdirSync(dir);
   try {
     assert.deepEqual((await configuration(root)).available, []);
@@ -268,12 +226,15 @@ test("Model summaries: only explicitly configured + authenticated models, no sec
   }
 });
 
-test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation replay", async () => {
-  const root = temporary(),
-    app = await startServer({ root, port: 0 });
+test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation replay", async (t) => {
+  const root = temporary();
+  const previousPi = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "pi");
+  t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
+  const app = await startServer({ root, port: 0 });
   const clients: WebSocket[] = [];
   try {
-    assert.equal((await fetch(app.origin + "/api/status")).status, 401);
+    assert.equal((await fetch(app.origin + "/api/status")).status, 200);
     assert.equal(
       (
         await fetch(app.origin + "/api/status", {
@@ -282,14 +243,13 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       ).status,
       403,
     );
-    const access = new URLSearchParams(
-      new URL(app.accessUrl).hash.slice(1),
-    ).get("access")!;
+    assert.equal(new URL(app.accessUrl).hash, "");
+    const access = "";
     assert.equal(
       (
         await fetch(app.origin + "/api/access", {
           method: "POST",
-          headers: { Origin: app.origin, "X-Axiom-Access": "bad" },
+          headers: { Origin: "https://evil.example" },
         })
       ).status,
       403,
@@ -299,7 +259,8 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       headers: { Origin: app.origin, "X-Axiom-Access": access },
     });
     assert.equal(login.status, 204);
-    const cookie = login.headers.get("set-cookie")!.split(";")[0];
+    assert.equal(login.headers.get("set-cookie"), null);
+    const cookie = "";
     assert.equal(
       (await fetch(app.origin + "/api/status", { headers: { Cookie: cookie } }))
         .status,
@@ -351,6 +312,39 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
     });
     assert.equal(created.ok, true);
     const s = created.data as Session;
+    await first.call({ op: "subscribe", params: { scope: "pinned-sessions" } });
+    const otherPath = join(root, "pinned-project");
+    mkdirSync(otherPath);
+    const otherWorkspace = (await first.call({
+      op: "workspace.open", params: { path: otherPath, authorized: true },
+    })).data as Workspace;
+    const otherSession = (await first.call({
+      op: "session.create", workspaceId: otherWorkspace.id,
+    })).data as Session;
+    const latestPins = () => first.messages.filter(
+      (m) => m.type === "snapshot" && m.scope === "pinned-sessions",
+    ).at(-1)!.data as Session[];
+    for (const session of [s, otherSession]) {
+      await first.call({
+        op: "session.pin", workspaceId: session.workspaceId, sessionId: session.id,
+        params: { pinned: true },
+      });
+    }
+    assert.deepEqual(new Set(latestPins().map((s) => s.id)), new Set([s.id, otherSession.id]));
+    assert.equal((await first.call({
+      op: "session.rename", workspaceId: w.id, sessionId: otherSession.id,
+      params: { title: "wrong owner" },
+    })).ok, false);
+    await first.call({
+      op: "session.rename", workspaceId: otherWorkspace.id, sessionId: otherSession.id,
+      params: { title: "global pin renamed" },
+    });
+    assert.equal(latestPins().find((s) => s.id === otherSession.id)?.title, "global pin renamed");
+    await first.call({
+      op: "session.pin", workspaceId: otherWorkspace.id, sessionId: otherSession.id,
+      params: { pinned: false },
+    });
+    assert.deepEqual(latestPins().map((s) => s.id), [s.id]);
     const snap = await first.call({
       op: "subscribe",
       params: { scope: `session:${w.id}:${s.id}` },
@@ -385,7 +379,7 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
     assert.equal(
       (
         await second.call({
-          op: "agent.receipt",
+          op: "request.get",
           workspaceId: w.id,
           sessionId: s.id,
           params: { requestId },

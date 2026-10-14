@@ -1,14 +1,21 @@
-import { useEffect, useRef } from "react";
-import { useConnection, useScope } from "../transport.js";
+import { useEffect, useRef, useState } from "react";
+import { useConnection, useConnectionState, useScope } from "../transport.js";
 import { useDraft, updateDraft } from "../drafts.js";
 import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
-import { agentScope, emptyAgent, running } from "../../shared/agent.js";
+import { agentScope, emptyAgent, running, type Selection } from "../../shared/agent.js";
 import { tasksScope, emptyTasks, taskActive } from "../../shared/tasks.js";
+import { canContinue } from "../../shared/session-state.js";
+import { useOptimistic } from "./optimistic.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { Usage } from "./Usage.js";
 import { useSubmission } from "./useSubmission.js";
-import { DraftRecovery } from "./DraftRecovery.js";
+import { AttachmentList, AttachmentPicker } from "./Attachments.js";
+import { useFileCompletion } from "./useFileCompletion.js";
+import { AnnotationTray } from "./ReplyAnnotations.js";
+import { clearSentAnnotations } from "./reply-annotations.js";
+import { messageLengthError, messageTextLimit } from "./message-limit.js";
+import { SteeringQueue } from "./SteeringQueue.js";
 const noConfig: Configuration = {
   revision: "",
   providerCount: 0,
@@ -27,6 +34,8 @@ export function Composer({
     tasks = useScope(!nested ? tasksScope(scope) : null, emptyTasks),
     config = useScope("configuration", noConfig),
     connection = useConnection();
+  const connected = useConnectionState().connected;
+  const pending = useOptimistic(scope);
   const active = nested
       ? info.task
         ? taskActive(info.task.status)
@@ -38,17 +47,27 @@ export function Composer({
         m.provider === info.selection?.provider && m.id === info.selection.id,
     );
   const draft = useDraft(scope),
-    input = useRef<HTMLTextAreaElement>(null),
-    file = useRef<HTMLInputElement>(null);
-  const { busy, error, setError, uncertain, submit, reconcile } = useSubmission(
+    input = useRef<HTMLTextAreaElement>(null);
+  const [reading, setReading] = useState(false);
+  const lastEscape = useRef<number | null>(null);
+  useEffect(() => { lastEscape.current = null; }, [scope.workspaceId, scope.sessionId]);
+  const completion = useFileCompletion(scope, draft.text, input);
+  const hasContent = !!(draft.text.trim() || draft.attachment || draft.attachments?.length || draft.images?.length);
+  const lengthError = messageLengthError(draft.text);
+  const imageSelection = running(info.run) ? info.run!.selection : info.selection;
+  const imageModel = config.available.find(
+    (m) => m.provider === imageSelection?.provider && m.id === imageSelection.id,
+  );
+  const imageUnsupported = !!draft.images?.length && !!imageModel && !imageModel.input?.includes("image");
+  const { busy, error, setError, submit, recall } = useSubmission(
     scope,
-    draft,
     {
       active,
       nested,
       selected,
-      connected: connection === "已连接本地服务",
+      connected,
       runId: info.run?.id,
+      task: info.task,
     },
   );
   useEffect(() => {
@@ -59,27 +78,60 @@ export function Composer({
   return (
     <section className="composer-area">
       <div className="container">
+        <SteeringQueue scope={scope} />
+        <AnnotationTray scope={scope} disabled={busy || !connected || (!active && !selected)}
+          send={(items, text) => void submit(active ? "append" : "prompt", {
+            draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items),
+          })} />
+
+        <AttachmentList scope={scope} draft={draft} reading={reading} />
         <form
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
-            void submit();
+            if (active) void submit("stop");
+            else if (!reading && !imageUnsupported && hasContent) void submit();
           }}
         >
           <label className="screen-reader" htmlFor={promptId}>
             描述你的编码任务
           </label>
+          {completion.popup}
           <textarea
+            {...completion.bindings}
             className="textarea"
             ref={input}
             id={promptId}
-            maxLength={12000}
+            maxLength={messageTextLimit}
             placeholder="Ask axiom…"
+            title={`${active ? "Enter 追加 Steering" : "Enter 发送"} · Shift+Enter 换行 · 双击 Esc 撤回排队内容`}
             lang="en"
             data-od-id="message-input"
             value={draft.text}
-            onChange={(e) => updateDraft(scope, { text: e.target.value })}
+            onChange={(e) => {
+              lastEscape.current = null;
+              if (lengthError && error === lengthError) setError("");
+              updateDraft(scope, { text: e.target.value });
+            }}
+            onBlur={() => { lastEscape.current = null; completion.bindings.onBlur(); }}
             onKeyDown={(e) => {
+              if (completion.keyDown(e)) { lastEscape.current = null; return; }
+              if (e.key === "Escape") {
+                if (e.nativeEvent.isComposing || e.keyCode === 229 || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+                  lastEscape.current = null;
+                  return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.repeat || reading || busy) { lastEscape.current = null; return; }
+                const now = performance.now();
+                if (lastEscape.current !== null && now - lastEscape.current <= 500) {
+                  lastEscape.current = null;
+                  void recall();
+                } else lastEscape.current = now;
+                return;
+              }
+              lastEscape.current = null;
               if (
                 e.key === "Enter" &&
                 !e.shiftKey &&
@@ -87,80 +139,27 @@ export function Composer({
                 e.keyCode !== 229
               ) {
                 e.preventDefault();
-                if (!active || nested)
-                  void submit(nested && active ? "append" : "prompt");
+                if (!e.repeat && !reading && !imageUnsupported && hasContent)
+                  void submit(active ? "append" : "prompt");
               }
             }}
           />
-          <div className="attachment">
-            {draft.attachment && (
-              <>
-                {draft.attachment.name}
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="移除附件"
-                  onClick={() => updateDraft(scope, { attachment: null })}
-                >
-                  <Icon name="close" />
-                </button>
-              </>
-            )}
-          </div>
           <div className="composer-tools">
             <div className="row">
-              <button
-                type="button"
-                className="icon-btn attach-button"
-                id={nested ? undefined : "attach"}
-                aria-label="附加文本或代码文件"
-                onClick={() => file.current?.click()}
-              >
-                <Icon name="plus" />
-              </button>
-              <input
-                ref={file}
-                type="file"
-                hidden
-                accept=".txt,.md,.js,.jsx,.ts,.tsx,.json,.py,.css,.html"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!f) return;
-                  const owner = { ...scope };
-                  try {
-                    if (
-                      f.size > 100000 ||
-                      !/\.(txt|md|js|jsx|ts|tsx|json|py|css|html)$/i.test(
-                        f.name,
-                      )
-                    )
-                      throw Error("请使用小于 100 KB 的文本或代码文件");
-                    const text = await f.text();
-                    if (text.includes("\0")) throw Error("附件不是文本文件");
-                    updateDraft(owner, { attachment: { name: f.name, text } });
-                  } catch (e) {
-                    setError((e as Error).message);
-                  }
-                }}
-              />
+              <AttachmentPicker scope={scope} nested={nested} input={input} onBusy={setReading} onError={setError} />
               <ModelPicker scope={scope} nested={nested} />
-              {nested && active && (
-                <button
-                  type="button"
-                  className="btn append-button"
-                  disabled={
-                    busy ||
-                    connection !== "已连接本地服务" ||
-                    !!uncertain ||
-                    (!draft.text.trim() && !draft.attachment)
-                  }
-                  onClick={() => void submit("append")}
-                >
-                  发送追问
-                </button>
-              )}
             </div>
+            <div className="composer-actions">
+            {!active && canContinue(info.run) && <button
+              type="button" className="icon-btn retry-action" aria-label="重试"
+              title="从中断处重试，保留已有工具结果"
+              disabled={busy || !connected || !selected || pending.length > 0}
+              onClick={() => void submit("continue")}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 10a9 9 0 1 1 2.8 8.5M3 4v6h6" />
+              </svg>
+            </button>}
             <button
               className={`btn btn-primary send${active ? " is-running" : ""}`}
               type="submit"
@@ -174,12 +173,10 @@ export function Composer({
               }
               disabled={
                 busy ||
-                (!active && !!uncertain) ||
                 connection !== "已连接本地服务" ||
                 (!active &&
                   (!selected ||
-                    (!draft.text.trim() && !draft.attachment) ||
-                    info.run?.cleanup === "unconfirmed"))
+                    reading || imageUnsupported || !!lengthError || !hasContent))
               }
             >
               {active ? (
@@ -190,42 +187,19 @@ export function Composer({
                 <Icon name="arrow" />
               )}
             </button>
+            </div>
           </div>
         </form>
-        {!nested && <ModelPicker scope={scope} childDefault />}
-        {!active &&
-          info.run &&
-          ["cancelled", "interrupted", "failed"].includes(info.run.status) && (
-            <button
-              className="btn"
-              disabled={
-                busy ||
-                !!uncertain ||
-                !selected ||
-                info.run.cleanup !== "confirmed"
-              }
-              onClick={() => void submit("agent.continue")}
-            >
-              显式继续
-            </button>
-          )}
-        {uncertain && (
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() => void reconcile()}
-          >
-            核实发送状态（不重发）
-          </button>
-        )}
         <Usage scope={scope} />
-        <Connection extra={error || draft.error} />
-        <DraftRecovery scope={scope} />
+        <Connection active={active} extra={lengthError || error || (imageUnsupported ? "当前模型不支持图片，请选择支持图片的模型或移除图片。" : "")} />
       </div>
     </section>
   );
 }
-export function EmptyComposer() {
+export function EmptyComposer({ onSelect, openWorkspace }: {
+  onSelect?: (selection: Selection) => Promise<void>;
+  openWorkspace: () => void;
+}) {
   return (
     <section className="composer-area">
       <div className="container">
@@ -244,12 +218,16 @@ export function EmptyComposer() {
               <button
                 className="icon-btn"
                 id="attach"
-                aria-label="附加文本或代码文件"
+                aria-label="添加附件"
                 disabled
               >
                 <Icon name="plus" />
               </button>
-              <ModelPicker />
+              {onSelect ? <ModelPicker onSelect={onSelect} /> : (
+                <button type="button" className="btn btn-ghost" onClick={openWorkspace}>
+                  打开工作空间以选择模型
+                </button>
+              )}
             </div>
             <button
               className="btn btn-primary send"
@@ -266,14 +244,13 @@ export function EmptyComposer() {
     </section>
   );
 }
-function Connection({ extra = "" }: { extra?: string }) {
-  const status = useConnection();
+function Connection({ extra = "", active = false }: { extra?: string; active?: boolean }) {
   return (
     <div className="composer-foot">
       <span className="status" role="status">
-        {extra || status}
+        {extra}
       </span>
-      <span>Enter 发送 · Shift + Enter 换行</span>
+      <span>{active ? "Enter 追加 Steering" : "Enter 发送"} · Shift + Enter 换行 · 双击 Esc 撤回排队内容</span>
     </div>
   );
 }

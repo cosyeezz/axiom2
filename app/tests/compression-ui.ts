@@ -3,6 +3,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { startServer } from "../src/server/index.js";
 
 export async function checkCompressionUI(
@@ -68,7 +69,7 @@ export async function checkCompressionUI(
       [150, 100, 100],
       [20, 0, null],
       [20, -1, null],
-      [null, 100, null],
+      [null, 0, null], // A known capacity now allows a read-only pi history estimate.
     ]) {
       app.store.db
         .prepare("UPDATE agent_sessions SET usage=? WHERE sessionId=?")
@@ -111,14 +112,14 @@ export async function checkCompressionUI(
     );
     await page.locator("#prompt").fill("压缩期间继续编辑的中文草稿");
     await trigger.click();
+    await dialog.waitFor();
+    assert.equal(requests.length, 0, "opening the compression page does not start a model request");
+    assert.equal(app.agents.compressions.info(scope), null);
+    await dialog.getByRole("button", { name: "开始压缩", exact: true }).click();
     await page.waitForSelector(
       '[data-od-id="background-compression-trigger"][data-state="running"]',
     );
-    assert.equal(
-      await dialog.count(),
-      0,
-      "first click starts in background, not a modal",
-    );
+    await close();
     await page.locator("#prompt").focus();
     await page
       .locator("#prompt")
@@ -245,9 +246,13 @@ export async function checkCompressionUI(
     assert.equal(await dialog.locator("script").count(), 0);
     assert.equal(await page.evaluate(() => (window as any).pwned), undefined);
     complete = false;
-    await dialog.getByRole("button", { name: "重新压缩", exact: true }).click();
+    const file = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file;
+    const manager = SessionManager.open(String(file));
+    manager.appendMessage({ role: "user", content: "压缩后的新增上下文，用于再次压缩取消测试", timestamp: Date.now() });
+    app.agents.refresh(scope);
+    await dialog.getByRole("button", { name: "再次压缩", exact: true }).click();
     await dialog.locator('.compression-status[data-state="running"]').waitFor();
-    await dialog.getByRole("button", { name: "取消任务", exact: true }).click();
+    await dialog.getByRole("button", { name: "取消压缩", exact: true }).click();
     await dialog
       .locator('.compression-status[data-state="cancelled"]')
       .waitFor();
@@ -262,8 +267,14 @@ export async function checkCompressionUI(
     assert.equal(requests.length, before, "reload cannot resubmit compression");
     await page.locator("#new-chat").click();
     await page.waitForSelector(
-      '[data-od-id="background-compression-trigger"][data-state="idle"]:disabled',
+      '[data-od-id="background-compression-trigger"][data-state="idle"]:enabled',
     );
+    await trigger.click();
+    await dialog.waitFor();
+    assert.equal(await dialog.getByRole("button", { name: "开始压缩", exact: true }).isDisabled(), true);
+    await dialog.getByText("此会话尚无消息可压缩。", { exact: true }).waitFor();
+    assert.equal(requests.length, before, "opening an empty session cannot submit compression");
+    await close();
   } finally {
     await app.agents.compressions.stop(scope);
     fixture.closeAllConnections();

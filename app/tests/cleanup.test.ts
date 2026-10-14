@@ -16,11 +16,14 @@ import { startServer } from "../src/server/index.js";
 import type { Workspace, Session } from "../src/shared/protocol.js";
 
 test(
-  "Forced cleanup: real pi tool ignoring abort, owned descendant termination, conservative recovery and deletion",
+  "Forced stop: uncooperative pi tool and owned descendants terminate; fresh prompt and deletion need no confirmation",
   { timeout: 45000 },
-  async () => {
+  async (t) => {
     const root = mkdtempSync(join(tmpdir(), "axiom-cleanup-")),
       project = join(root, "project");
+    const previousPi = process.env.AXIOM_PI_DIR;
+    process.env.AXIOM_PI_DIR = join(root, "pi");
+    t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
     mkdirSync(project);
     mkdirSync(join(root, "pi/extensions"), { recursive: true });
     // Deliberately uncooperative installed resource, confined to this test's isolated application directory.
@@ -29,11 +32,17 @@ test(
       `import {spawn} from 'node:child_process';import {writeFileSync} from 'node:fs';
 export default function(pi){pi.registerTool({name:'stubborn',label:'stubborn',description:'Test uncooperative execution',parameters:{type:'object',properties:{}},async execute(){const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});writeFileSync('owned-processes.json',JSON.stringify({worker:process.pid,child:child.pid}));await new Promise(()=>{});}});}`,
     );
+    let requests = 0;
     const fixture = createServer(async (req, res) => {
+      requests++;
       for await (const _ of req) {
         /* drain */
       }
       res.writeHead(200, { "Content-Type": "text/event-stream" });
+      if (requests > 1) {
+        res.end(`data: ${JSON.stringify({ id: "fresh", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta: { role: "assistant", content: "Fresh prompt completed." }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       for (const [delta, finish_reason] of [
         [
           {
@@ -111,10 +120,9 @@ export default function(pi){pi.registerTool({name:'stubborn',label:'stubborn',de
         readFileSync(join(project, "owned-processes.json"), "utf8"),
       );
       const at = Date.now();
-      await assert.rejects(
-        app.agents.stop(scope, { summary: false, cleanupMs: 1000 }),
-        { code: "CLEANUP_UNCONFIRMED" },
-      );
+      const file = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(s.id)!.file;
+      await app.agents.stop(scope);
+      assert.equal(requests, 1, "stopping must not issue a summary request");
       assert.ok(Date.now() - at < 10000, "owned termination must be bounded");
       for (const pid of [pids.worker, pids.child]) {
         for (let i = 0; i < 100; i++) {
@@ -127,30 +135,17 @@ export default function(pi){pi.registerTool({name:'stubborn',label:'stubborn',de
         }
         assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
       }
-      assert.equal(
-        app.agents.info(scope).run!.cleanup,
-        "unconfirmed",
-        "a forced exit is not cooperative cleanup proof",
-      );
-      await assert.rejects(call("agent.continue"), {
-        code: "CLEANUP_UNCONFIRMED",
-      });
+      assert.equal(app.agents.info(scope).run!.status, "cancelled");
+      assert.ok(!("cleanup" in app.agents.info(scope).run!));
+      await call("prompt", { text: "Fresh work immediately after forced stop" });
+      for (let i = 0; i < 400 && !app.agents.info(scope).run!.endedAt; i++)
+        await new Promise((r) => setTimeout(r, 25));
+      assert.equal(app.agents.info(scope).run!.status, "completed");
+      assert.equal(requests, 2);
+      assert.equal(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(s.id)!.file, file);
       await app.close();
       app = await start({ root, port: 0 });
-      assert.equal(app.agents.info(scope).run!.cleanup, "unconfirmed");
-      await assert.rejects(
-        app.tasks.remove({
-          requestId: randomUUID(),
-          op: "session.delete",
-          params: { confirmed: true },
-          ...scope,
-        }),
-        { code: "CLEANUP_UNCONFIRMED" },
-      );
-      await call("agent.confirm-cleanup", {
-        runId: app.agents.info(scope).run!.id,
-        confirmed: true,
-      });
+      assert.equal(requests, 2, "restart cannot replay requests");
       await app.tasks.remove({
         requestId: randomUUID(),
         op: "session.delete",

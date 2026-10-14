@@ -40,7 +40,9 @@ export class Tasks {
       this.scheduler.kick();
     };
     // Restart restores reports only; no worker launch or input replay.
-    for (const row of this.records.rows("WHERE tasks.runId IS NOT NULL")) {
+    for (const row of this.records.rows(
+      "WHERE tasks.runId IS NOT NULL AND EXISTS (SELECT 1 FROM workspaces WHERE workspaces.id=tasks.workspaceId AND archived=0)",
+    )) {
       const run = agents.info(target(row)).run;
       if (
         run &&
@@ -60,6 +62,9 @@ export class Tasks {
   }
   preferences() {
     return this.records.preferences();
+  }
+  settings() {
+    return this.records.settings();
   }
   result(scope: Scope, taskId: unknown, resultId: unknown) {
     return this.delivery.result(scope, taskId, resultId);
@@ -121,40 +126,35 @@ export class Tasks {
     const outcomes = await Promise.allSettled([
       this.agents.stop(scope),
       this.scheduler.stop(owned, "父会话整体停止"),
-      ...owned.map((row) => this.agents.compressions.stop(target(row))),
+      ...owned.map(async (row) => {
+        await this.agents.releaseIdle(target(row));
+        await this.agents.compressions.stop(target(row));
+      }),
     ]);
     this.agents.publish(tasksScope(scope), this.records.list(scope));
-    if (
-      outcomes.some((o) => o.status === "rejected") ||
-      this.records
-        .rows("WHERE parentSessionId=?", scope.sessionId)
-        .some(
-          (row) => this.agents.info(target(row)).run?.cleanup === "unconfirmed",
-        )
-    )
-      throw new AppError(
-        "CLEANUP_UNCONFIRMED",
-        "父／子执行已请求停止，仍有清理待核实",
-      );
+    const failed = outcomes.find((o) => o.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
   }
   async stopProviders(providers: string[], confirmed: boolean) {
     const affected = this.agents.affected(providers);
     // Check every affected kind before stopping anything without explicit confirmation.
     this.agents.compressions.checkProviders(providers, confirmed);
-    const queued = this.records
-      .rows("WHERE status='queued'")
-      .filter((row) =>
-        providers.includes(
-          this.agents.info(target(row)).selection?.provider ?? "",
-        ),
-      );
+    // Archived workspaces retain history, but are not valid execution scopes.
+    const rows = this.records.rows(
+      "WHERE EXISTS (SELECT 1 FROM workspaces WHERE workspaces.id=tasks.workspaceId AND archived=0)",
+    );
+    const queued = rows.filter((row) =>
+      row.status === "queued" && providers.includes(
+        this.agents.info(target(row)).selection?.provider ?? "",
+      ),
+    );
     if ((affected.length || queued.length) && !confirmed)
       throw new AppError(
         "ACTIVE_RUNS_CONFIRMATION_REQUIRED",
         `需先停止受影响会话／排队子任务：${[...affected.map((s) => s.title), ...queued.map((t) => t.description.slice(0, 120))].join("、")}。确认后才退出登录。`,
       );
     const children: Row[] = [];
-    for (const row of this.records.rows()) {
+    for (const row of rows) {
       const selection = this.agents.info(target(row)).selection;
       if (
         (selection && providers.includes(selection.provider)) ||

@@ -1,62 +1,73 @@
-import { useEffect, useState } from "react";
-import { command, useScope } from "../transport.js";
-import { Dialog, Icon } from "../components.js";
-import { runLabels } from "../../shared/agent.js";
+import { useEffect, useRef, useState } from "react";
+import { command, scopeOrder, useScope } from "../transport.js";
+import { Icon } from "../components.js";
+import { DeleteIcon } from "../DeleteIcon.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
+import { sessionState } from "../../shared/session-state.js";
+import { compareSessions, isPrioritySession, isTopSession } from "./session-order.js";
 import type { Scope, Session, Workspace } from "../../shared/protocol.js";
+import { useSessionAttention } from "./useSessionAttention.js";
 const noSessions: Session[] = [];
 export function History({
   workspace,
+  workspaces,
   selected,
   select,
   onError,
 }: {
-  workspace: Workspace;
-  selected: string;
+  workspace?: Workspace;
+  workspaces: Workspace[];
+  selected: Scope | null;
   select: (scope: Scope) => void;
   onError: (error: string) => void;
 }) {
-  const snapshot = useScope<Session[] | null>(`sessions:${workspace.id}`, null);
-  const sessions = snapshot ?? noSessions;
-  const [query, setQuery] = useState("");
-  useEffect(() => {
-    const current = sessions.find((s) => s.id === selected);
-    if (current?.unread && document.visibilityState === "visible")
-      void command(
-        "session.read",
-        {},
-        { workspaceId: workspace.id, sessionId: selected },
-      ).catch(() => {});
-  }, [snapshot, selected]);
-  const [editing, setEditing] = useState<Session | null>(null),
-    [title, setTitle] = useState("");
-  const [managing, setManaging] = useState<Session | null>(null);
-  useEffect(() => {
-    if (
-      snapshot &&
-      !sessions.some((s) => s.id === selected) &&
-      (selected || sessions[0])
-    )
-      select({ workspaceId: workspace.id, sessionId: sessions[0]?.id ?? "" });
-  }, [snapshot, selected]);
-  const filtered = sessions.filter((s) =>
-    s.title.toLowerCase().includes(query.toLowerCase()),
+  useSessionAttention(selected);
+  const snapshot = useScope<Session[] | null>(workspace ? `sessions:${workspace.id}` : null, null);
+  const sessions = [...(snapshot ?? noSessions)].sort(compareSessions);
+  const pinnedSessions = useScope<Session[]>("pinned-sessions", noSessions);
+  // Keep the viewed session subscribed even if it leaves the global top group.
+  const viewedSessions = useScope<Session[] | null>(
+    selected ? `sessions:${selected.workspaceId}` : null, null,
   );
+  const [query, setQuery] = useState("");
+  // Defer crossing groups during editing/confirmation so the row stays mounted.
+  const [heldRows, setHeldRows] = useState<Record<string, { session: Session; top: boolean }>>({});
+  const holdRow = (session: Session, top: boolean, hold: boolean) => {
+    setHeldRows((previous) => {
+      const next = { ...previous };
+      if (hold) next[session.id] = { session, top };
+      else delete next[session.id];
+      return next;
+    });
+  };
+  useEffect(() => {
+    if (!workspace || !snapshot) return;
+    // A foreign pinned session is valid independently of the sidebar's list.
+    if (selected?.sessionId && (!viewedSessions || viewedSessions.some((s) => s.id === selected.sessionId))) return;
+    if (selected?.sessionId || sessions[0])
+      select({ workspaceId: workspace.id, sessionId: sessions[0]?.id ?? "" });
+  }, [snapshot, viewedSessions, selected?.sessionId]);
+  // The global top subscription overlaps the current workspace; render each ID once.
+  const overlapping = scopeOrder(workspace ? `sessions:${workspace.id}` : "") >= scopeOrder("pinned-sessions")
+    ? [...pinnedSessions, ...sessions] : [...sessions, ...pinnedSessions];
+  const filtered = [...new Map([
+    ...Object.values(heldRows).map(({ session }) => session),
+    ...overlapping,
+  ].map((s) => [s.id, s])).values()]
+    .filter((s) => s.title.toLowerCase().includes(query.toLowerCase()))
+    .sort(compareSessions);
   const run = async (
     op: string,
     params: Record<string, unknown>,
     s: Session,
   ) => {
     try {
-      await command(op, params, { workspaceId: workspace.id, sessionId: s.id });
+      await command(op, params, { workspaceId: s.workspaceId, sessionId: s.id });
       return true;
     } catch (e) {
       onError((e as Error).message);
       return false;
     }
-  };
-  const rename = (s: Session) => {
-    setEditing(s);
-    setTitle(s.title);
   };
   return (
     <>
@@ -73,7 +84,8 @@ export function History({
       </div>
       <div className="history" id="history">
         {[true, false].map((pinned) => {
-          const rows = filtered.filter((s) => s.pinned === pinned);
+          const rows = filtered.filter((s) => (heldRows[s.id]?.top ?? isTopSession(s)) === pinned &&
+            (pinned || s.workspaceId === workspace?.id));
           return (
             (rows.length > 0 || !pinned) && (
               <section
@@ -85,91 +97,19 @@ export function History({
                   {pinned ? "置顶" : "对话记录"}
                 </div>
                 {rows.map((s) => (
-                  <div className="history-row" key={s.id}>
-                    <button
-                      className="history-item"
-                      aria-current={s.id === selected}
-                      title={`${s.title} · 双击重命名（F2），Delete 删除`}
-                      onClick={() =>
-                        select({ workspaceId: workspace.id, sessionId: s.id })
-                      }
-                      onDoubleClick={() => rename(s)}
-                      onKeyDown={(e) => {
-                        if (e.key === "F2") rename(s);
-                        if (
-                          e.key === "Delete" &&
-                          confirm("删除会话？此操作不删除项目文件。")
-                        )
-                          void run("session.delete", { confirmed: true }, s);
-                      }}
-                    >
-                      <span>
-                        <span className="session-title-line">
-                          <strong>{s.title}</strong>
-                          {(s.unread ||
-                            s.activeTasks ||
-                            ["starting", "running", "stopping"].includes(
-                              s.runStatus ?? "",
-                            )) && (
-                            <svg
-                              className={`session-state ${s.unread ? "unread" : "running"}`}
-                              viewBox="0 0 12 12"
-                              aria-label={s.unread ? "未读" : "运行中"}
-                            >
-                              <circle cx="6" cy="6" r="3" fill="currentColor" />
-                            </svg>
-                          )}
-                        </span>
-                        <small>
-                          <span className="session-detail">
-                            {new Date(s.updatedAt).toLocaleString("zh-CN", {
-                              month: "2-digit",
-                              day: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              hour12: false,
-                            })}{" "}
-                            ·{" "}
-                            {s.activeTasks
-                              ? "子任务活动中"
-                              : s.runStatus
-                                ? runLabels[s.runStatus]
-                                : "尚未运行"}
-                          </span>
-                        </small>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn session-manage"
-                      aria-label={`管理会话：${s.title}`}
-                      onClick={() => setManaging(s)}
-                    >
-                      <span aria-hidden="true">⋯</span>
-                    </button>
-                    <button
-                      className="icon-btn session-pin"
-                      aria-label={`${s.pinned ? "取消置顶" : "置顶会话"}：${s.title}`}
-                      aria-pressed={s.pinned}
-                      onClick={() =>
-                        void run("session.pin", { pinned: !s.pinned }, s)
-                      }
-                    >
-                      <svg aria-hidden="true" viewBox="0 0 24 24">
-                        <path
-                          d={
-                            s.pinned
-                              ? "M5 5h14M12 10v10m-5-5 5 5 5-5"
-                              : "M5 5h14M12 20V10m-5 5 5-5 5 5"
-                          }
-                        />
-                      </svg>
-                    </button>
-                  </div>
+                  <HistoryRow
+                    key={s.id}
+                    session={s}
+                    selected={s.id === selected?.sessionId}
+                    workspacePath={pinned ? workspaces.find((w) => w.id === s.workspaceId)?.path : undefined}
+                    select={select}
+                    run={run}
+                    hold={(value) => holdRow(s, pinned, value)}
+                  />
                 ))}
                 {!rows.length && (
                   <p className="meta" style={{ padding: 12 }}>
-                    {query ? "没有匹配的对话" : "暂无其他对话"}
+                    {query ? "没有匹配的对话" : workspace ? "暂无其他对话" : "请先打开工作空间"}
                   </p>
                 )}
               </section>
@@ -177,72 +117,168 @@ export function History({
           );
         })}
       </div>
-      {managing && (
-        <Dialog title="管理会话" onClose={() => setManaging(null)}>
-          <p>{managing.title}</p>
-          <div className="row">
-            <button
-              className="btn"
-              onClick={() => {
-                rename(managing);
-                setManaging(null);
-              }}
-            >
-              重命名
-            </button>
-            <button
-              className="btn"
-              onClick={async () => {
-                if (
-                  confirm("删除会话？停止所属任务，不删除项目文件。") &&
-                  (await run("session.delete", { confirmed: true }, managing))
-                )
-                  setManaging(null);
-              }}
-            >
-              删除会话
-            </button>
-            <button className="btn" onClick={() => setManaging(null)}>
-              取消
-            </button>
-          </div>
-        </Dialog>
-      )}
-      {editing && (
-        <Dialog title="重命名会话" onClose={() => setEditing(null)}>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (await run("session.rename", { title }, editing))
-                setEditing(null);
-            }}
-          >
-            <p>修改名称不会影响消息内容或置顶状态。</p>
-            <div className="field">
-              <label htmlFor="rename-title">会话标题</label>
-              <input
-                className="input"
-                id="rename-title"
-                required
-                autoFocus
-                maxLength={120}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div className="row">
-              <button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() => setEditing(null)}
-              >
-                取消
-              </button>
-              <button className="btn">保存名称</button>
-            </div>
-          </form>
-        </Dialog>
-      )}
     </>
+  );
+}
+
+function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: {
+  session: Session;
+  selected: boolean;
+  workspacePath?: string;
+  select: (scope: Scope) => void;
+  run: (op: string, params: Record<string, unknown>, session: Session) => Promise<boolean>;
+  hold: (value: boolean) => void;
+}) {
+  const [deleting, setDeleting] = useState<Session | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(s.title);
+  const [saving, setSaving] = useState(false);
+  const editingRef = useRef(false);
+  const savingRef = useRef(false);
+  const composing = useRef(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const rename = () => {
+    hold(true);
+    setTitle(s.title);
+    editingRef.current = true;
+    setEditing(true);
+  };
+  const finish = (restoreFocus: boolean) => {
+    editingRef.current = false;
+    setEditing(false);
+    hold(false);
+    if (restoreFocus) requestAnimationFrame(() => {
+      const target = button.current ?? document.querySelector<HTMLButtonElement>(
+        `[data-session-id="${CSS.escape(s.id)}"] button.history-item`,
+      );
+      target?.focus();
+    });
+  };
+  const save = async (restoreFocus: boolean) => {
+    if (!editingRef.current || savingRef.current) return;
+    const nextTitle = title.trim();
+    if (!nextTitle || nextTitle === s.title) {
+      finish(restoreFocus);
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    const saved = await run("session.rename", { title: nextTitle }, s);
+    savingRef.current = false;
+    setSaving(false);
+    // A delayed acknowledgement must not steal focus from the composer or another row.
+    const stillFocused = document.activeElement === input.current;
+    if (saved) finish(restoreFocus && stillFocused);
+    // On failure keep the draft in place for correction or retry.
+    else if (restoreFocus && stillFocused) input.current?.focus();
+  };
+  const remove = () => { hold(true); setDeleting(s); };
+  const state = sessionState(s);
+  const content = (
+    <span>
+      <span className="session-title-line">
+        {isPrioritySession(s) && (
+          <svg
+            className={`session-state ${state.indicator}`}
+            viewBox="0 0 12 12"
+            aria-label={state.indicatorLabel}
+          >
+            <title>{state.active && s.unread ? `${state.label}，有未读结果` : state.label}</title>
+            <circle cx="6" cy="6" r="3" fill="currentColor" />
+          </svg>
+        )}
+        {editing ? (
+          <input
+            ref={input}
+            className="session-title-input"
+            aria-label="会话标题"
+            aria-busy={saving}
+            autoFocus
+            maxLength={120}
+            readOnly={saving}
+            value={title}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setTitle(e.target.value)}
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={() => { composing.current = false; }}
+            onBlur={() => { void save(false); }}
+            onKeyDown={(e) => {
+              if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void save(true);
+              } else if (e.key === "Escape" && !savingRef.current) {
+                e.preventDefault();
+                finish(true);
+              }
+            }}
+          />
+        ) : <strong>{s.title}</strong>}
+      </span>
+      <small>
+        <span className="session-detail">
+          {new Date(s.updatedAt).toLocaleString("zh-CN", {
+            month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+          })}{" "}·{" "}
+          {state.label}
+        </span>
+      </small>
+      {workspacePath && (
+        <small className="session-workspace-path" title={workspacePath}>
+          <span className="session-detail">{workspacePath}</span>
+        </small>
+      )}
+    </span>
+  );
+  return (
+    <div className="history-row" data-editing={editing} data-session-id={s.id}>
+      {deleting && <ConfirmDialog title="删除会话" subject={deleting.title}
+        description="停止所属任务，不删除项目文件。" confirmLabel="删除会话" danger
+        onClose={() => { setDeleting(null); hold(false); }}
+        onConfirm={() => command("session.delete", { confirmed: true }, {
+          workspaceId: deleting.workspaceId, sessionId: deleting.id,
+        })} />}
+      {editing ? (
+        <div className="history-item" aria-current={selected}>{content}</div>
+      ) : (
+        <button
+          ref={button}
+          type="button"
+          className="history-item"
+          aria-current={selected}
+          title={`${s.title} · 双击重命名（F2），Delete 删除`}
+          onClick={() => select({ workspaceId: s.workspaceId, sessionId: s.id })}
+          onDoubleClick={rename}
+          onKeyDown={(e) => {
+            if (e.key === "F2") { e.preventDefault(); rename(); }
+            if (e.key === "Delete") { e.preventDefault(); remove(); }
+          }}
+        >{content}</button>
+      )}
+      <div className="session-actions">
+        <button
+          type="button"
+          className="icon-btn session-pin"
+          aria-label={`${s.pinned ? "取消置顶" : "置顶会话"}：${s.title}`}
+          title={s.pinned ? "取消置顶" : "置顶会话"}
+          aria-pressed={s.pinned}
+          onClick={() => void run("session.pin", { pinned: !s.pinned }, s)}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d={s.pinned ? "M5 5h14M12 10v10m-5-5 5 5 5-5" : "M5 5h14M12 20V10m-5 5 5-5 5 5"} />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="icon-btn session-delete"
+          aria-label={`删除会话：${s.title}`}
+          title="删除会话"
+          onClick={remove}
+        >
+          <DeleteIcon />
+        </button>
+      </div>
+    </div>
   );
 }

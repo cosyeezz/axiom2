@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage } from "node:http";
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
@@ -7,13 +8,20 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Store } from "./storage.js";
+import { SessionAttention } from "./session-attention.js";
+import { Files } from "./files.js";
+import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
+import { OpenDialog } from "./open-dialog.js";
+import { AttachmentPicker, AttachmentPickerError, type PickAttachments } from "./attachment-picker.js";
+import { imagePayloadLimit } from "./images.js";
 import { configuration } from "./models.js";
 import { ModelService } from "./model-service.js";
 import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
 import { Tasks } from "./tasks.js";
 import { Preferences } from "./preferences.js";
-import { Previews } from "./preview/service.js";
+import { compressionPreferencesScope } from "../shared/compression.js";
+import { taskPreferencesScope } from "../shared/tasks.js";
 import {
   AppError,
   object,
@@ -37,16 +45,15 @@ export function dataRoot() {
           "Axiom2",
         );
 }
-const same = (a: string, b: string) =>
-  Buffer.byteLength(a) === Buffer.byteLength(b) &&
-  timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export async function startServer(
-  options: { root?: string; port?: number; dev?: boolean } = {},
+  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments } = {},
 ) {
   const store = new Store(options.root ?? dataRoot());
-  const bootstrap = randomBytes(32).toString("hex"),
-    cookie = randomBytes(32).toString("hex");
+  const files = new Files(store, (scope, id) => agents.message(scope, id, true));
+  const openDialog = new OpenDialog();
+  const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
+  const attachmentPicker = new AttachmentPicker(options.pickAttachments, undefined, openDialog);
   const streamId = randomUUID();
   let seq = 0,
     origin = "";
@@ -56,6 +63,7 @@ export async function startServer(
   let configurationRead = 0,
     shuttingDown = false;
   const inFlight = new Set<Promise<void>>();
+  const workspaceOperations = new Map<string, number>();
   const refreshConfiguration = async () => {
     const reading = ++configurationRead;
     const next = await configuration(store.root);
@@ -66,18 +74,18 @@ export async function startServer(
       publish("favorites");
     }
   };
-  const authenticated = (req: IncomingMessage) =>
-    (req.headers.cookie ?? "")
-      .split(";")
-      .some((s) => same(s.trim(), `axiom=${cookie}`));
   const local = (req: IncomingMessage) =>
     req.headers.host === new URL(origin).host &&
     (!req.headers.origin || req.headers.origin === origin) &&
     req.headers["sec-fetch-site"] !== "cross-site";
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: 200_000 });
+  const sockets = new WebSocketServer({ noServer: true, maxPayload: imagePayloadLimit });
   const subscriptions = new Map<WebSocket, Set<string>>();
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
+    if (scope === "workspace-preferences") return store.workspacePreferences();
+    if (scope === compressionPreferencesScope) return store.compressionPreferences();
+    if (scope === taskPreferencesScope) return tasks.settings();
+    if (scope === "pinned-sessions") return store.pinnedSessions();
     if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
     if (scope === "authentication") return null;
@@ -91,34 +99,97 @@ export async function startServer(
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
     if (parts.length === 3 && parts[0] === "compression")
       return agents.compressions.info(target);
+    if (parts.length === 3 && parts[0] === "messages")
+      return agents.messages(target);
     if (parts.length === 3 && parts[0] === "thread")
       return agents.thread(target);
     if (parts.length === 4 && parts[0] === "message")
       return agents.message(target, parts[3]);
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
   };
+  const outgoing = new WeakMap<WebSocket, { queue: { payload: string; cost: number }[]; bytes: number; sending: boolean }>();
   const send = (ws: WebSocket, value: unknown) => {
-    // No final events are silently discarded; a slow viewer reconnects to a fresh snapshot.
-    if (ws.bufferedAmount > 1_000_000) {
-      ws.close(1013, "请重连读取快照");
-      return;
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const state = outgoing.get(ws) ?? { queue: [], bytes: 0, sending: false };
+    outgoing.set(ws, state);
+    const payload = JSON.stringify(value);
+    // A complete history snapshot may exceed 1 MiB. Serialize writes so its
+    // following receipt does not disconnect an otherwise healthy viewer.
+    // Additional queued deltas remain bounded; never silently drop final events.
+    const snapshot = value as Partial<Snapshot>;
+    const cost = snapshot.type === "snapshot" && snapshot.scope?.startsWith("messages:")
+      ? Math.min(Buffer.byteLength(payload), 200_000) : Buffer.byteLength(payload);
+    if (state.sending && state.bytes + cost > 1_000_000) {
+      ws.close(1013, "请重连读取快照"); return;
     }
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value));
+    state.queue.push({ payload, cost }); state.bytes += cost;
+    const drain = () => {
+      if (state.sending || ws.readyState !== WebSocket.OPEN) return;
+      const next = state.queue.shift();
+      if (!next) return;
+      state.bytes -= next.cost; state.sending = true;
+      ws.send(next.payload, (error) => {
+        state.sending = false;
+        if (error) { ws.close(); return; }
+        drain();
+      });
+    };
+    drain();
   };
-  const publish = (scope: string, data: unknown = snapshots(scope)) => {
+  let attention: SessionAttention | undefined;
+  const publish = (scope: string, data?: unknown) => {
+    if (scope.startsWith("sessions:")) attention?.observe(scope.slice("sessions:".length));
     const event: Snapshot = {
       type: "snapshot",
       scope,
       streamId,
       seq: ++seq,
-      data,
+      data: data === undefined ? snapshots(scope) : data,
     };
-    for (const [ws, scopes] of subscriptions)
-      if (scopes.has(scope)) send(ws, event);
+    const collection = scope.startsWith("message:") ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : null;
+    for (const [ws, scopes] of subscriptions) {
+      if (scopes.has(scope) || (collection && scopes.has(collection))) send(ws, event);
+    }
+    // All session summary changes (including background runs/tasks) refresh pins.
+    if (scope.startsWith("sessions:")) publish("pinned-sessions");
   };
   const agents = new Agents(store, models, publish);
   const tasks = new Tasks(agents);
-  const previews = new Previews(store, tasks, () => origin);
+  attention = new SessionAttention(store, publish);
+  store.beforeArchiveWorkspace = (workspaceId) => {
+    if (workspaceOperations.get(workspaceId))
+      throw new AppError("WORKSPACE_BUSY", "工作空间仍有操作处理中；请等待完成或先停止，再移除。");
+    // Include active child sessions as well as their parent.
+    for (const row of store.db.prepare("SELECT id FROM sessions WHERE workspaceId=?").all(workspaceId)) {
+      const scope = { workspaceId, sessionId: String(row.id) };
+      if (agents.active(scope))
+        throw new AppError("WORKSPACE_BUSY", "工作空间仍有活动执行；请先停止后再移除。");
+    }
+  };
+  const publishWorkspace = (c: Command, data: unknown) => {
+    if (c.op === "workspace.select") {
+      // A persisted startup preference, never a command to navigate other viewers.
+      publish("workspace-preferences");
+      return;
+    }
+    publish("workspaces");
+    if (c.op !== "workspace.delete" && c.op !== "workspace.open") return;
+    publish("workspace-preferences");
+    publish("pinned-sessions");
+    const id = c.op === "workspace.open" ? (data as { id: string }).id : c.workspaceId;
+    const visible = store.workspaces().some((w) => w.id === id);
+    const affected = new Set([...subscriptions.values()].flatMap((scopes) => [...scopes]).filter((scope) => scope.split(":")[1] === id));
+    for (const scope of affected) {
+      if (!visible) publish(scope, scope.startsWith("sessions:") ? [] : null);
+      else {
+        // A previously removed session can have been deleted before the workspace reopened.
+        try { publish(scope); } catch (error) {
+          if (!(error instanceof AppError)) throw error;
+          publish(scope, scope.startsWith("sessions:") ? [] : null);
+        }
+      }
+    }
+  };
   models.beforeLogout = (providers, confirmed) =>
     tasks.stopProviders(providers, confirmed);
   const logins = new Logins(
@@ -138,11 +209,13 @@ export async function startServer(
     send(ws, { type: "hello", streamId });
     ws.on("close", () => {
       subscriptions.delete(ws);
+      attention?.disconnect(ws);
       logins.disconnect(ws);
     });
     ws.on("error", () => ws.close());
     const handle = async (raw: RawData) => {
       let requestId = "";
+      let operationWorkspace: string | undefined;
       try {
         const value = object(JSON.parse(raw.toString()));
         requestId = text(value.requestId, "请求标识");
@@ -177,8 +250,21 @@ export async function startServer(
           send(ws, { type: "receipt", requestId, ok: true, data: {} });
           return;
         }
+        if (c.op === "session.view") {
+          attention!.view(ws, { workspaceId: text(c.workspaceId, "工作空间标识"), sessionId: text(c.sessionId, "会话标识") }, c.params!.active);
+          send(ws, { type: "receipt", requestId, ok: true, data: {} });
+          return;
+        }
+        // Register before an async service queues admission through model locks.
+        // A workspace deletion is synchronous and must not overtake an admitted operation.
+        if (c.workspaceId && c.op !== "workspace.delete") {
+          operationWorkspace = c.workspaceId;
+          workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
+        }
         let data: unknown;
-        if (c.op === "configuration.get") {
+        if (c.op.startsWith("files.")) {
+          data = await files.command(c);
+        } else if (c.op === "configuration.get") {
           await refreshConfiguration();
           data = await models.read();
         } else if (c.op === "auth.start")
@@ -205,11 +291,6 @@ export async function startServer(
           } finally {
             await refreshConfiguration();
           }
-        } else if (
-          c.op.startsWith("preview.") ||
-          c.op.startsWith("annotation.")
-        ) {
-          data = await previews.command(c);
         } else if (c.op.startsWith("compression.")) {
           data = await agents.compressions.command(c);
         } else if (c.op.startsWith("favorites.")) {
@@ -219,20 +300,24 @@ export async function startServer(
           c.op === "prompt" ||
           c.op.startsWith("agent.") ||
           c.op.startsWith("task.") ||
-          c.op === "thread.history" ||
-          c.op === "message.get"
+          c.op === "message.get" ||
+          c.op === "message.image"
         )
           data = await tasks.command(c);
-        else if (c.op === "session.delete") data = await previews.remove(c);
-        else if (c.op === "draft.list")
-          data = store.drafts(c.workspaceId, c.sessionId);
-        else if (c.op === "draft.get")
-          data = store.draft(c.workspaceId, c.sessionId, c.params!.viewId);
+        else if (c.op === "session.delete")
+          data = await models.serial(() => tasks.remove(c));
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId, c);
         else data = store.execute(c);
-        if (c.op === "workspace.open") publish("workspaces");
+        if (c.op.startsWith("workspace.")) publishWorkspace(c, data);
         if (c.op.startsWith("session.")) {
+          if (c.op === "session.read")
+            publish(`thread:${c.workspaceId}:${c.sessionId}`);
+          if (c.op === "session.rename") {
+            const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! };
+            const run = agents.info(scope).run;
+            if (run) agents.signal(scope, run.id, { type: "title-settled" });
+          }
           publish(`sessions:${c.workspaceId}`);
           if (c.op === "session.delete")
             publish(`session:${c.workspaceId}:${c.sessionId}`, null);
@@ -253,6 +338,12 @@ export async function startServer(
                   message: "请求未完成，数据未确认保存；请检查服务或请求格式。",
                 },
         });
+      } finally {
+        if (operationWorkspace) {
+          const remaining = (workspaceOperations.get(operationWorkspace) ?? 1) - 1;
+          if (remaining) workspaceOperations.set(operationWorkspace, remaining);
+          else workspaceOperations.delete(operationWorkspace);
+        }
       }
     };
     ws.on("message", (raw) => {
@@ -283,35 +374,111 @@ export async function startServer(
         req.headers["sec-fetch-mode"] === "navigate" &&
         req.headers["sec-fetch-dest"] === "document" &&
         req.url === "/";
+      const url = new URL(req.url!, origin);
       if (!local(req) && !landingNavigation) {
-        res.writeHead(403);
-        res.end("来源校验失败");
+        if (url.pathname === "/api/workspace/pick-folder" || url.pathname === "/api/attachments/pick") {
+          res.writeHead(403, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "来源校验失败" }));
+        } else {
+          res.writeHead(403);
+          res.end("来源校验失败");
+        }
         return;
       }
-      const url = new URL(req.url!, origin);
+      if (url.pathname === "/api/workspace/pick-folder") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (req.headers.origin !== origin) {
+          res.writeHead(403);
+          res.end(JSON.stringify({ error: "来源校验失败" }));
+          return;
+        }
+        if (req.method !== "POST") {
+          res.writeHead(405, { Allow: "POST" });
+          res.end(JSON.stringify({ error: "请使用 POST 请求选择文件夹" }));
+          return;
+        }
+        const controller = new AbortController();
+        const disconnect = () => controller.abort();
+        req.once("aborted", disconnect);
+        res.once("close", disconnect);
+        try {
+          if (shuttingDown) throw new FolderPickerError("服务正在退出", 503);
+          const path = await folderPicker.select(controller.signal);
+          if (!res.destroyed) res.end(JSON.stringify({ path }));
+        } catch (error) {
+          if (!res.destroyed) {
+            res.writeHead(error instanceof FolderPickerError ? error.status : 500);
+            res.end(JSON.stringify({ error: error instanceof FolderPickerError ? error.message : "无法打开系统文件夹选择器" }));
+          }
+        } finally {
+          req.removeListener("aborted", disconnect);
+          res.removeListener("close", disconnect);
+        }
+        return;
+      }
+      if (url.pathname === "/api/attachments/pick") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (req.headers.origin !== origin) {
+          res.writeHead(403);
+          res.end(JSON.stringify({ error: "来源校验失败" }));
+          return;
+        }
+        if (req.method !== "POST") {
+          res.writeHead(405, { Allow: "POST" });
+          res.end(JSON.stringify({ error: "请使用 POST 请求选择附件" }));
+          return;
+        }
+        const controller = new AbortController();
+        const disconnect = () => controller.abort();
+        req.once("aborted", disconnect);
+        res.once("close", disconnect);
+        try {
+          if (shuttingDown) throw new AttachmentPickerError("服务正在退出", 503);
+          const workspaceId = text(url.searchParams.get("workspaceId"), "工作空间标识");
+          const sessionId = text(url.searchParams.get("sessionId"), "会话标识");
+          const validate = () => {
+            store.session(workspaceId, sessionId);
+            const workspace = store.workspace(workspaceId);
+            if (!workspace.authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
+            return workspace;
+          };
+          const workspace = validate();
+          const kind = url.searchParams.get("kind") ?? "mixed";
+          const multiple = url.searchParams.get("multiple") ?? "true";
+          if ((kind !== "file" && kind !== "folder" && kind !== "mixed") || (multiple !== "true" && multiple !== "false"))
+            throw new AttachmentPickerError("打开窗口的选择模式无效", 400);
+          const items = await attachmentPicker.select(workspace.path, controller.signal, kind, multiple === "true");
+          if (shuttingDown) throw new AttachmentPickerError("服务正在退出", 503);
+          controller.signal.throwIfAborted();
+          if (validate().path !== workspace.path) throw new AttachmentPickerError("工作空间路径已改变，请重新选择附件", 409);
+          if (!res.destroyed) {
+            files.registerPicked({ workspaceId, sessionId }, items);
+            res.end(JSON.stringify({ items }));
+          }
+        } catch (error) {
+          if (!res.destroyed) {
+            res.writeHead(error instanceof AttachmentPickerError ? error.status : error instanceof AppError ? error.code === "AUTHORIZATION_REQUIRED" ? 403 : error.code === "NOT_FOUND" ? 404 : 400 : 500);
+            res.end(JSON.stringify({ error: error instanceof AttachmentPickerError || error instanceof AppError ? error.message : "无法打开系统附件选择器" }));
+          }
+        } finally {
+          req.removeListener("aborted", disconnect);
+          res.removeListener("close", disconnect);
+        }
+        return;
+      }
       if (url.pathname === "/api/access" && req.method === "POST") {
-        const token = req.headers["x-axiom-access"];
-        if (
-          typeof token !== "string" ||
-          !same(token, bootstrap) ||
-          req.headers.origin !== origin
-        ) {
+        if (req.headers.origin !== origin) {
           res.writeHead(403);
           res.end("访问校验失败");
           return;
         }
-        res.setHeader(
-          "Set-Cookie",
-          `axiom=${cookie}; HttpOnly; SameSite=Strict; Path=/`,
-        );
         res.writeHead(204);
         res.end();
         return;
       }
       if (url.pathname.startsWith("/api/")) {
         if (
-          !authenticated(req) ||
-          (req.headers.origin && req.headers.origin !== origin)
+          req.headers.origin && req.headers.origin !== origin
         ) {
           res.writeHead(401);
           res.end("请使用服务启动时的访问链接");
@@ -408,7 +575,7 @@ export async function startServer(
       if (!vite) socket.destroy();
       return;
     }
-    if (!local(req) || !authenticated(req) || req.headers.origin !== origin) {
+    if (!local(req) || req.headers.origin !== origin) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
       return;
@@ -418,27 +585,33 @@ export async function startServer(
     );
   });
   try {
+    // Preparation never opens a window; keep compiler startup out of the first click.
+    // A missing desktop component must not prevent the rest of the service from starting.
+    await openDialog.prepare().catch(() => {});
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
     });
   } catch (error) {
+    await openDialog.close();
     sockets.close();
     await vite?.close();
+    attention.close();
     store.close();
     throw error;
   }
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   return {
     origin,
-    accessUrl: `${origin}/#access=${bootstrap}`,
+    accessUrl: `${origin}/`,
     store,
     refreshConfiguration,
     agents,
     tasks,
-    previews,
     close: async () => {
       shuttingDown = true;
+      attention.close();
+      await openDialog.close();
       for (const ws of sockets.clients) {
         logins.disconnect(ws);
         ws.terminate();
@@ -446,7 +619,6 @@ export async function startServer(
       sockets.close();
       await Promise.allSettled(inFlight);
       await logins.close();
-      await previews.close();
       await tasks.close();
       await vite?.close();
       await new Promise<void>((r) => server.close(() => r()));
@@ -458,8 +630,9 @@ if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
+  process.env.AXIOM_PI_DIR ||= getAgentDir();
   const port = Number(process.env.AXIOM_PORT ?? 4317);
-  if (!Number.isInteger(port) || port < 0 || port > 65535)
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw Error("AXIOM_PORT 无效");
   const app = await startServer({ port, dev: process.argv.includes("--dev") });
   console.log(

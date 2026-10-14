@@ -1,10 +1,14 @@
 import { memo, type ReactNode } from "react";
-import { marked, type Token } from "marked";
+import type { Token } from "marked";
 import { CodeBlock } from "./CodeBlock.js";
+import { markdown, markdownImagePath } from "../../shared/markdown.js";
+import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
 // Render token AST as React nodes, never untrusted HTML. Raw HTML stays literal.
-function tokens(items: Token[]): ReactNode {
+type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
+function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer): ReactNode {
   return items.map((t: any, i) => {
-    const inner = () => (t.tokens ? tokens(t.tokens) : t.text);
+    const render = () => {
+    const inner = () => (t.tokens ? tokens(t.tokens, images) : t.text);
     switch (t.type) {
       case "space":
         return null;
@@ -40,13 +44,19 @@ function tokens(items: Token[]): ReactNode {
                     aria-label="任务状态"
                   />
                 )}
-                {tokens(item.tokens)}
+                {tokens(item.tokens, images)}
               </li>
             ))}
           </Tag>
         );
       }
       case "link": {
+        // A linked picture opens our preview; do not nest a button inside a link.
+        let linkedImage = false;
+        if (images && t.tokens) markdown.walkTokens(t.tokens, (token) => {
+          if (token.type === "image") linkedImage = true;
+        });
+        if (linkedImage) return <span key={i}>{inner()}</span>;
         let safe = false;
         try {
           safe = ["http:", "https:", "mailto:"].includes(
@@ -62,7 +72,9 @@ function tokens(items: Token[]): ReactNode {
         );
       }
       case "image":
-        return <span key={i}>[图片：{t.text}]</span>;
+        return images && markdownImagePath(t.href) ?
+          <MarkdownImage key={`${i}:${images.scope.workspaceId}:${images.scope.sessionId}:${images.messageId}:${t.href}`} href={t.href} alt={t.text} owner={images} /> :
+          <span key={i}>[图片：{t.text}{images ? " · 仅支持本地绝对路径" : ""}]</span>;
       case "br":
         return <br key={i} />;
       case "hr":
@@ -74,7 +86,7 @@ function tokens(items: Token[]): ReactNode {
               <thead>
                 <tr>
                   {t.header.map((cell: any, j: number) => (
-                    <th key={j}>{tokens(cell.tokens)}</th>
+                    <th key={j}>{tokens(cell.tokens, images)}</th>
                   ))}
                 </tr>
               </thead>
@@ -82,7 +94,7 @@ function tokens(items: Token[]): ReactNode {
                 {t.rows.map((row: any[], j: number) => (
                   <tr key={j}>
                     {row.map((cell: any, k: number) => (
-                      <td key={k}>{tokens(cell.tokens)}</td>
+                      <td key={k}>{tokens(cell.tokens, images)}</td>
                     ))}
                   </tr>
                 ))}
@@ -93,8 +105,11 @@ function tokens(items: Token[]): ReactNode {
       default:
         return <span key={i}>{t.tokens ? inner() : (t.text ?? t.raw)}</span>;
     }
+    };
+    const node = render();
+    return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text }: { text: string }) => (
-  <>{tokens(marked.lexer(text))}</>
+export const Markdown = memo(({ text, images, renderBlock }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer }) => (
+  <>{tokens(markdown.lexer(text), images, renderBlock)}</>
 ));

@@ -1,0 +1,40 @@
+.annotation-toggle { position: relative; }
+.annotation-toggle[aria-pressed="true"] { color: var(--accent-hover); background: color-mix(in oklch, var(--fg) 8%, transparent); border-color: var(--border); }
+.annotation-count { position: absolute; top: 1px; right: 0; min-width: 15px; padding: 0 3px; border-radius: 8px; background: var(--surface); color: var(--accent-hover); font: 10px/15px var(--font-mono); }
+.annotation-shell:not(.annotation-block), .annotation-shell:not(.annotation-block) > .annotation-source { display: contents; }
+.annotation-block { position: relative; display: flow-root; padding-right: 34px; border-radius: 4px; }
+.annotation-source { border-radius: 4px; cursor: text; }
+::highlight(reply-annotation) { background-color: color-mix(in oklch, var(--accent-hover) 22%, transparent); text-decoration: underline; text-decoration-color: var(--accent-hover); }
+::highlight(reply-annotation-hover) { background-color: color-mix(in oklch, var(--accent-hover) 12%, transparent); }
+.annotation-popover { position: fixed; z-index: 100; width: min(400px, calc(100vw - 24px)); max-height: min(360px, calc(100dvh - 24px)); overflow: auto; border-radius: 8px; box-shadow: 0 12px 40px #0006; }
+.annotation-popover .annotation-editor { margin: 0; }
+.markdown .annotation-shell .annotation-source > p { margin-bottom: 12px; }
+.markdown > .annotation-shell:first-child > .annotation-source > :first-child { margin-top: 0; }
+.markdown > .annotation-shell:last-child > .annotation-source > :last-child { margin-bottom: 0; }
+.annotation-markers { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+.annotation-markers button { position: absolute; right: 0; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; border-radius: 5px; color: var(--accent-hover); font: 12px var(--font-mono); pointer-events: auto; }
+.annotation-markers .annotation-add { right: auto; width: 24px; min-height: 24px; border: 0; background: transparent; box-shadow: none; opacity: 0; font-size: 18px; color: var(--muted); }
+.annotation-markers .annotation-add:hover { background: transparent; color: var(--fg); }
+.annotation-block:hover .annotation-add, .annotation-block:focus-within .annotation-add { opacity: 1; }
+.annotation-marker { background: color-mix(in oklch, var(--accent-hover) 10%, var(--bg)); }
+.annotation-editor { padding: 12px; margin: 8px 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg-2); font-size: 12px; line-height: 1.6; }
+.annotation-quote { max-height: 88px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); border-left: 2px solid var(--border); padding-left: 10px; margin-bottom: 10px; }
+.annotation-editor textarea { display: block; width: 100%; min-height: 84px; max-height: 180px; resize: vertical; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 13px; }
+.annotation-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.annotation-editor-actions > span { flex: 1; color: var(--muted); font-size: 10px; }
+.annotation-editor-actions .btn { font-size: 12px; }
+.annotation-tray { border: 1px solid var(--border); border-radius: 8px; background: color-mix(in oklch, var(--fg) 2%, var(--bg)); margin-bottom: 10px; font-size: 12px; }
+.annotation-tray-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 4px 8px; }
+.annotation-tray-bar > span { flex: 1; min-width: 100px; color: var(--muted); padding: 4px; }
+.annotation-tray-bar .btn { font-size: 12px; padding-inline: 10px; }
+.annotation-tray > .annotation-editor { margin: 8px; max-height: 32dvh; overflow: auto; }
+.annotation-list { list-style: none; margin: 0; padding: 0 10px; max-height: min(240px, 28dvh); overflow: auto; border-top: 1px solid var(--border); }
+.annotation-list > li { display: flex; align-items: flex-start; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.annotation-list > li:last-child { border-bottom: 0; }
+.annotation-list-text { flex: 1; min-width: 0; }
+.annotation-locate { display: block; max-width: 100%; padding: 4px 0; color: var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.annotation-list-text p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.annotation-list .btn { font-size: 12px; }
+.annotation-error { margin: 6px 12px 10px; color: var(--warn); font-size: 12px; }
+@media (hover: none), (pointer: coarse) { .annotation-markers .annotation-add { opacity: 1; } }
+@media (max-width: 640px) { .annotation-editor { padding: 8px; } .annotation-editor-actions > span { flex-basis: 100%; } .annotation-block { padding-right: 30px; } }

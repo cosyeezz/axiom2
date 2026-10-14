@@ -1,14 +1,15 @@
 import type { Selection } from "../../shared/agent.js";
 import { randomUUID } from "node:crypto";
 import type { Store } from "../storage.js";
-import { AppError, text, type Scope } from "../../shared/protocol.js";
+import { AppError, text, type Scope, type ImageAttachment, type Draft } from "../../shared/protocol.js";
 import {
   defaultBudgets,
   type Task,
   type TaskBudgets,
   type TaskList,
+  type TaskPreferences,
 } from "../../shared/tasks.js";
-export type TaskRow = Omit<Task, "budgets" | "results" | "pending"> & {
+export type TaskRow = Omit<Task, "budgets" | "results"> & {
   role: string;
   budgets: string;
 };
@@ -30,10 +31,11 @@ export const parent = (t: TaskRow): Scope => ({
 export const failure = (e: unknown) =>
   e instanceof AppError
     ? e.message
-    : "子任务操作未确认完成；请核实记录，勿重复提交。";
+    : "子任务操作失败；未自动重试。";
 
 // Owns durable task relations and input queues; it does not start workers or publish events.
 export class TaskRecords {
+  readonly drafts = new Map<string, Draft>();
   private stopEpochs = new Map<string, number>();
   stopEpoch(scope: Scope) {
     return this.stopEpochs.get(scope.sessionId) ?? 0;
@@ -42,6 +44,11 @@ export class TaskRecords {
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS task_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL)",
     );
+    store.db.exec("CREATE TABLE IF NOT EXISTS task_model_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT)");
+    // Migrate the last explicit per-session choice once; null is a remembered inheritance choice.
+    store.db.exec(`INSERT OR IGNORE INTO task_model_preferences(id,selection)
+      SELECT 1,defaultModel FROM task_parents WHERE defaultModel IS NOT NULL ORDER BY rowid DESC LIMIT 1`);
+    store.db.exec("INSERT OR IGNORE INTO task_model_preferences(id,selection) VALUES(1,NULL)");
   }
   rows(where = "", ...params: (string | number)[]) {
     return this.store.db
@@ -75,7 +82,7 @@ export class TaskRecords {
     const { role: _role, ...rest } = row;
     return {
       ...rest,
-      budgets: JSON.parse(row.budgets),
+      budgets: this.budgets(row.budgets),
       results: this.store.db
         .prepare(
           "SELECT id,runId,body FROM task_results WHERE taskId=? ORDER BY rowid",
@@ -86,13 +93,6 @@ export class TaskRecords {
           runId: String(r.runId),
           status: JSON.parse(String(r.body)).status,
         })),
-      pending: Number(
-        this.store.db
-          .prepare(
-            "SELECT COUNT(*) AS n FROM task_inputs WHERE taskId=? AND state!='delivered'",
-          )
-          .get(row.id)!.n,
-      ),
     };
   }
   list(scope: Scope): TaskList {
@@ -107,16 +107,25 @@ export class TaskRecords {
         scope.sessionId,
       ).map((t) => this.view(t)),
       frozen: !!row?.frozen,
-      defaultModel: row?.defaultModel
-        ? JSON.parse(String(row.defaultModel))
-        : null,
+      defaultModel: this.settings().selection,
+    };
+  }
+  budgets(body: string): TaskBudgets {
+    const saved = JSON.parse(body);
+    return {
+      concurrency: saved.concurrency ?? defaultBudgets.concurrency,
+      workMs: saved.workMs ?? defaultBudgets.workMs,
     };
   }
   preferences(): TaskBudgets {
     const row = this.store.db
       .prepare("SELECT body FROM task_settings WHERE id=1")
       .get();
-    return row ? JSON.parse(String(row.body)) : defaultBudgets;
+    return row ? this.budgets(String(row.body)) : { ...defaultBudgets };
+  }
+  settings(): TaskPreferences {
+    const row = this.store.db.prepare("SELECT selection FROM task_model_preferences WHERE id=1").get();
+    return { budgets: this.preferences(), selection: row?.selection ? JSON.parse(String(row.selection)) : null };
   }
   frozen(scope: Scope) {
     return !!this.store.db
@@ -131,11 +140,15 @@ export class TaskRecords {
       )
       .run(scope.sessionId);
   }
-  queue(taskId: string, body: string, mode: string) {
-    const id = randomUUID();
+  images(inputId: string): ImageAttachment[] {
+    const row = this.store.db.prepare("SELECT body FROM task_input_images WHERE inputId=?").get(inputId);
+    return row ? JSON.parse(String(row.body)) : [];
+  }
+  queue(taskId: string, body: string, mode: string, images: ImageAttachment[] = [], id: string = randomUUID()) {
     this.store.db
       .prepare("INSERT INTO task_inputs VALUES(?,?,?,?,'queued',NULL,?)")
       .run(id, taskId, body, mode, Date.now());
+    if (images.length) this.store.db.prepare("INSERT INTO task_input_images VALUES(?,?)").run(id, JSON.stringify(images));
     return id;
   }
   inputs(row: TaskRow, state: string) {
@@ -146,12 +159,14 @@ export class TaskRecords {
       .all(row.id, state) as unknown as TaskInput[];
   }
   deliver(row: TaskRow, ids: string[]) {
-    for (const id of ids)
+    for (const id of ids) {
+      this.drafts.delete(id);
       this.store.db
         .prepare(
-          "UPDATE task_inputs SET state='delivered' WHERE id=? AND taskId=?",
+          "DELETE FROM task_inputs WHERE id=? AND taskId=?",
         )
         .run(id, row.id);
+    }
   }
   create(
     scope: Scope,

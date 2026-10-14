@@ -51,9 +51,6 @@ function TaskWindow({
     ref = useRef<HTMLDialogElement>(null);
   const [report, setReport] = useState<TaskResult | null>(null),
     [error, setError] = useState("");
-  const [pending, setPending] = useState<
-    { id: string; body: string; mode: string; state: string }[]
-  >([]);
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement;
     ref.current!.showModal();
@@ -110,9 +107,7 @@ function TaskWindow({
             <div className="title-block">
               <h1>{task.description}</h1>
               <div className="title-meta">
-                工作 {task.budgets.workMs / 1000}s · 收尾{" "}
-                {task.budgets.wrapMs / 1000}s · 总结上限{" "}
-                {task.budgets.summaryMs / 1000}s
+                工作预算 {task.budgets.workMs / 1000}s
               </div>
             </div>
           </header>
@@ -120,61 +115,8 @@ function TaskWindow({
             <details>
               <summary>
                 执行与交付 · {task.results.length} 次
-                {task.pending ? ` · ${task.pending} 条待处理／核实` : ""}
               </summary>
               {task.error && <p className="execution-alert">{task.error}</p>}
-              {task.pending > 0 && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={async () => {
-                    try {
-                      setPending(
-                        await command(
-                          "task.pending",
-                          { taskId: task.id },
-                          scope,
-                        ),
-                      );
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  查看待处理输入（不重发）
-                </button>
-              )}
-              {pending.map((input) => (
-                <div key={input.id}>
-                  <p>
-                    {input.state} · {input.mode} · {input.id}
-                  </p>
-                  <pre>{input.body}</pre>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={async () => {
-                      try {
-                        const [full] = await command<typeof pending>(
-                          "task.pending",
-                          { taskId: task.id, inputId: input.id },
-                          scope,
-                        );
-                        if (full)
-                          setPending((rows) =>
-                            rows.map((row) =>
-                              row.id === full.id ? full : row,
-                            ),
-                          );
-                      } catch (e) {
-                        setError((e as Error).message);
-                      }
-                    }}
-                  >
-                    读取完整输入
-                  </button>
-                </div>
-              ))}
               {task.results.map((r, i) => (
                 <button
                   type="button"

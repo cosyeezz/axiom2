@@ -10,14 +10,20 @@ import {
   emptyAgent,
   threadScope,
   emptyThread,
+  type Selection,
 } from "../../shared/agent.js";
 import {
   compressionScope,
-  compressionLabels,
+  compressionPreferencesScope,
+  type CompressionPreferences,
   type Compression as Job,
 } from "../../shared/compression.js";
 import { command, useConnection, useScope } from "../transport.js";
-import { CompressionDetail, CompressionIcon } from "./CompressionDetail.js";
+import {
+  CompressionDetail,
+  CompressionIcon,
+  compressionStatusLabel,
+} from "./CompressionDetail.js";
 
 export function Compression({ scope }: { scope?: Scope }) {
   const job = useScope<Job | null>(
@@ -30,6 +36,8 @@ export function Compression({ scope }: { scope?: Scope }) {
     scope ? scopeKey(scope) : null,
     null,
   );
+  const preferences = useScope<CompressionPreferences | null>(compressionPreferencesScope, null);
+  const selection = preferences?.selection ?? info.selection;
   const connection = useConnection();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -50,11 +58,23 @@ export function Compression({ scope }: { scope?: Scope }) {
       setError("操作已返回，但无法清除本地标识；保留以便核实。");
     }
   };
-  const state = job?.state ?? "idle",
-    active = state === "running";
+  const state = job?.state ?? "idle";
+  const startUnavailable = connection !== "已连接本地服务"
+    ? "尚未连接本地服务，请连接后操作。"
+    : !preferences ? "正在读取全局压缩模型设置…"
+    : !thread.ids.length ? "此会话尚无消息可压缩。"
+    : !selection ? "请先选择压缩模型。" : "";
+  const saveModel = async (selection: Selection) => {
+    setBusy(true);
+    try {
+      await command("compression.preferences.save", { selection });
+      setError("");
+    } finally { setBusy(false); }
+  };
   const id = `compression-${scope?.sessionId ?? "empty"}`;
   const run = async (op: "compression.start" | "compression.cancel") => {
-    if (!scope || busy || (pending && op === "compression.start")) return;
+    if (!scope || busy || pending ||
+      (op === "compression.start" && (job?.state === "running" || startUnavailable))) return;
     const requestId = crypto.randomUUID();
     try {
       // Persist intent before sending; uncertainty never causes a second model request.
@@ -69,7 +89,7 @@ export function Compression({ scope }: { scope?: Scope }) {
     try {
       await command(
         op,
-        op === "compression.cancel" ? { id: job?.id } : {},
+        op === "compression.cancel" ? { id: job?.id } : { selection },
         scope,
         requestId,
       );
@@ -115,44 +135,28 @@ export function Compression({ scope }: { scope?: Scope }) {
         data-state={state}
         aria-controls={id}
         aria-haspopup="dialog"
-        aria-label={
-          job
-            ? `后台压缩${compressionLabels[job.state]}，查看详情`
-            : "启动后台压缩"
-        }
-        title={
-          job
-            ? "查看当前会话的压缩任务详情"
-            : "在后台压缩已保存上下文的快照；仅预览，不自动应用"
-        }
+        aria-label={job ? `打开后台压缩 · ${compressionStatusLabel(job)}` : "打开后台压缩"}
+        title="打开压缩页面：选择模型、开始压缩或取消任务"
         style={{
           width: 44,
           minWidth: 44,
           padding: 0,
           justifyContent: "center",
         }}
-        disabled={
-          !job &&
-          (!scope ||
-            !thread.ids.length ||
-            !info.selection ||
-            !!pending ||
-            busy ||
-            connection !== "已连接本地服务")
-        }
-        onClick={() => (job ? setOpen(true) : void run("compression.start"))}
+        disabled={!scope}
+        onClick={() => setOpen(true)}
       >
         <CompressionIcon state={state} />
         <span className="screen-reader" role="status" aria-live="polite">
-          {job ? `${compressionLabels[job.state]} · 查看` : "后台压缩"}
+          {job ? `${compressionStatusLabel(job)} · 查看` : "后台压缩"}
         </span>
       </button>
-      {error && (
+      {!open && error && (
         <span className="compression-feedback" role="status">
           {error}
         </span>
       )}
-      {pending && (
+      {!open && pending && (
         <button
           type="button"
           className="compression-trigger"
@@ -162,19 +166,23 @@ export function Compression({ scope }: { scope?: Scope }) {
           核实压缩状态（不重发）
         </button>
       )}
-      {open && job && (
+      {open && (
         <CompressionDetail
           id={id}
           job={job}
           title={session?.title ?? "当前会话"}
+          selection={selection}
+          contextWindow={info.usage?.context?.window}
+          inherited={!preferences?.selection}
+          onSelect={saveModel}
+          startUnavailable={startUnavailable}
           busy={busy || connection !== "已连接本地服务"}
           error={error}
           pending={!!pending}
           onReconcile={() => void reconcile()}
           onClose={() => setOpen(false)}
-          onAction={() =>
-            void run(active ? "compression.cancel" : "compression.start")
-          }
+          onStart={() => void run("compression.start")}
+          onCancel={() => void run("compression.cancel")}
         />
       )}
     </>

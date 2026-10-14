@@ -86,15 +86,22 @@ export async function checkAgentUI(
     );
     await app.refreshConfiguration();
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => {
+      const view = JSON.parse(sessionStorage.getItem("view")!);
+      sessionStorage.setItem("view", JSON.stringify({ ...view, sessionId: "" }));
+    });
+    await page.addInitScript(() => {
+      const NativeWebSocket = window.WebSocket;
+      window.WebSocket = class extends NativeWebSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          (window as any).testSocket = this;
+        }
+      };
+    });
     await page.goto(app.origin);
-    await page.waitForFunction(() =>
-      document.body.innerText.includes("已连接本地服务"),
-    );
-    await page.locator("#new-chat").click();
-    await page.waitForFunction(
-      () =>
-        !(document.querySelector("#prompt") as HTMLTextAreaElement)?.disabled,
-    );
+    await page.locator('.connection-status[data-connected="true"]').waitFor();
+    assert.equal(await page.locator("#prompt").isDisabled(), true);
     await page.locator("#model-picker > summary").click();
     await page
       .locator("#model-picker .model-row")
@@ -113,6 +120,14 @@ export async function checkAgentUI(
     await page.waitForFunction(
       () => !document.querySelector("#model-picker[open]"),
     );
+    await page.waitForFunction(
+      () => !(document.querySelector("#prompt") as HTMLTextAreaElement)?.disabled,
+    );
+    const selectedScope = await page.evaluate(() => JSON.parse(sessionStorage.getItem("view")!));
+    assert.equal(app.agents.info(selectedScope).selection?.id, "fixture");
+    await page.evaluate(() => (window as any).testSocket.close());
+    await page.locator('.connection-status[data-connected="false"]').waitFor();
+    await page.locator('.connection-status[data-connected="true"]').waitFor();
     await page.locator("#prompt").fill("请创建文件并持续输出");
     await page.getByRole("button", { name: "发送消息", exact: true }).click();
     await page.waitForFunction(() =>
@@ -191,7 +206,7 @@ export async function checkAgentUI(
       .filter({ hasText: "工具调用" })
       .first()
       .click();
-    await page.locator(".tool-call > summary").first().click();
+    await page.locator(".tool-detail").first().waitFor({ state: "visible" });
     await page.waitForFunction(() =>
       document.querySelector(".tool-call")?.textContent?.includes("已完成"),
     );
@@ -220,7 +235,9 @@ export async function checkAgentUI(
       });
     }
     await page.getByRole("button", { name: "停止执行", exact: true }).click();
-    await page.waitForSelector('button:has-text("显式继续")');
+    await page.waitForFunction(() => !document.querySelector(".send.is-running"));
+    assert.equal(await page.getByRole("button", { name: /显式继续|确认清理/ }).count(), 0);
+    assert.equal(await page.locator("#prompt").inputValue(), "流式期间中文草稿");
     assert.equal(app.agents.info(view).run!.status, "cancelled");
     assert.equal(count, 2);
     await page.reload();
@@ -232,7 +249,7 @@ export async function checkAgentUI(
     );
     assert.equal(
       await page.locator("#prompt").inputValue(),
-      "流式期间中文草稿",
+      "",
     );
     assert.equal(count, 2, "reload cannot resend");
     await page.locator("#model-picker > summary").click();
@@ -245,7 +262,8 @@ export async function checkAgentUI(
     await page
       .getByRole("searchbox", { name: "搜索模型或供应商" })
       .press("Escape");
-    await page.getByRole("button", { name: "显式继续", exact: true }).click();
+    await page.locator("#prompt").fill("停止后的新消息");
+    await page.getByRole("button", { name: "发送消息", exact: true }).click();
     await page.waitForFunction(
       () => !!document.querySelector(".send.is-running"),
     );

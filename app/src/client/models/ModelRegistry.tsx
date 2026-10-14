@@ -4,6 +4,7 @@ import type {
   ProviderDraft as Provider,
 } from "../../shared/models.js";
 import { Icon } from "../components.js";
+import { DeleteIcon } from "../DeleteIcon.js";
 import { ModelEditor } from "./ModelEditor.js";
 export function ModelRegistry({
   p,
@@ -170,7 +171,7 @@ export function ModelRegistry({
                         })
                       }
                     >
-                      <Icon name="close" />
+                      <DeleteIcon />
                     </button>
                   </div>
                 </td>

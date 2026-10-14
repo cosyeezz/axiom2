@@ -1,0 +1,35 @@
+/* Keep stacking local to each message scroller, including child-session windows. */
+.thread { isolation: isolate; }
+.thread [data-sticky-disclosure], .task-results > details[open] > summary {
+  position: sticky;
+  top: calc(var(--disclosure-top, 0px) + 8px);
+  z-index: var(--disclosure-layer, 1);
+  background: var(--disclosure-surface, var(--bg));
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+  box-shadow: inset 0 1px 0 var(--border), 0 1px 0 var(--border-soft);
+}
+/* Hide scrolled text in the top clearance, without covering nested headers. */
+.thread details:not(details details) > [data-sticky-disclosure]::before,
+.task-results > details[open] > summary::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  height: 8px;
+  left: -1px;
+  right: -1px;
+  background: var(--bg);
+  pointer-events: none;
+}
+.thread [data-sticky-disclosure]:hover, .task-results > details[open] > summary:hover {
+  background: color-mix(in oklch, var(--fg) 5%, var(--disclosure-surface, var(--bg)));
+}
+.thread :is(.tool-activity, .thinking-block, .task-operation) {
+  --disclosure-surface: color-mix(in oklch, var(--fg) 2%, var(--bg));
+}
+.thread .compaction-card {
+  --disclosure-surface: color-mix(in oklch, var(--surface) 55%, var(--bg));
+}
+/* Clip rounded cards without introducing a scroll ancestor that traps sticky headers. */
+.thread .task-operation { overflow: clip; }
+.thread [data-sticky-disclosure]:focus-visible { outline-offset: -3px; }

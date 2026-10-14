@@ -6,15 +6,16 @@ import {
   AppError,
   object,
   text,
-  attachmentInput,
+  attachmentsInput,
   type Scope,
   type Command,
 } from "../../shared/protocol.js";
 import type { Run, Selection } from "../../shared/agent.js";
-import { tasksScope, taskActive, type TaskTool } from "../../shared/tasks.js";
+import { tasksScope, taskPreferencesScope, taskActive, type TaskTool } from "../../shared/tasks.js";
 import { TaskRecords, parent } from "./records.js";
 import { TaskDelivery } from "./delivery.js";
 import { TaskScheduler } from "./scheduler.js";
+import { imagesInput } from "../images.js";
 // User commands and model tools share validation, receipts and per-task serialization.
 export class TaskCommands {
   private locks = new Map<string, Promise<unknown>>();
@@ -55,7 +56,7 @@ export class TaskCommands {
     const allowed: Record<TaskTool, string[]> = {
       delegate: ["context", "tasks"],
       append: ["taskId", "text", "mode"],
-      cancel_task: ["taskId", "mode", "reason"],
+      cancel_task: ["taskId", "reason"],
       read_result: ["taskId", "resultId"],
     };
     if (Object.keys(object(params)).some((k) => !allowed[name].includes(k)))
@@ -116,10 +117,10 @@ export class TaskCommands {
             : text(t.systemPrompt, "职责补充", 4000),
       };
     });
-    const selection =
-      this.records.list(scope).defaultModel ??
-      this.agents.info(scope).selection;
     const config = await configuration(this.store.root);
+    const selection =
+      this.records.settings().selection ??
+      this.agents.info(scope).selection;
     if (
       !selection ||
       !config.available.some(
@@ -165,48 +166,52 @@ export class TaskCommands {
   async command(c: Command): Promise<unknown> {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
-    if (c.op === "task.preferences.get") return this.records.preferences();
-    if (c.op === "task.preferences.save")
-      return this.store.external(c, async () => {
-        const values = object(p.budgets),
-          bounds = {
-            concurrency: [1, 16],
-            workMs: [1000, 86400000],
-            wrapMs: [0, 3600000],
-            summaryMs: [1000, 60000],
-            cleanupMs: [1000, 10000],
-          };
-        for (const [key, [min, max]] of Object.entries(bounds))
-          if (
-            !Number.isInteger(values[key]) ||
-            Number(values[key]) < min ||
-            Number(values[key]) > max
-          )
+    if (c.op === "task.preferences.get") return this.records.settings();
+    if (c.op === "task.preferences.save" || c.op === "task.default-model")
+      return this.serial("global-preferences", () => this.store.external(c, async () => {
+        if (c.op === "task.default-model" && this.records.child(scope))
+          throw new AppError("RECURSIVE_DELEGATION", "子会话没有默认子模型");
+        if (!Object.keys(p).length || Object.keys(p).some((key) => !["budgets", "selection"].includes(key)))
+          throw new AppError("INVALID_INPUT", "子代理设置参数无效");
+        const patch = p.budgets === undefined ? {} : object(p.budgets);
+        const bounds = { concurrency: [1, 16], workMs: [1000, 86400000] };
+        for (const [key, value] of Object.entries(patch)) {
+          const range = bounds[key as keyof typeof bounds];
+          if (!range || !Number.isInteger(value) || Number(value) < range[0] || Number(value) > range[1])
             throw new AppError("INVALID_INPUT", `预算 ${key} 超出允许范围`);
-        const budgets = Object.fromEntries(
-          Object.keys(bounds).map((k) => [k, values[k]]),
-        );
-        this.store.db
-          .prepare(
+        }
+        let selection: Selection | null | undefined;
+        if (p.selection !== undefined) {
+          selection = p.selection === null ? null : object(p.selection) as unknown as Selection;
+          if (selection && Object.keys(selection).some((key) => !["provider", "id", "thinking"].includes(key)))
+            throw new AppError("INVALID_INPUT", "子模型参数无效");
+          if (selection) {
+            const config = await configuration(this.store.root);
+            if (!config.available.some((m) => m.provider === selection!.provider && m.id === selection!.id && m.levels.includes(selection!.thinking)))
+              throw new AppError("MODEL_UNAVAILABLE", "子模型不可用");
+            selection = { provider: selection.provider, id: selection.id, thinking: selection.thinking };
+          }
+        }
+        const budgets = { ...this.records.preferences(), ...patch };
+        this.store.db.exec("BEGIN IMMEDIATE");
+        try {
+          if (p.budgets !== undefined) this.store.db.prepare(
             "INSERT INTO task_settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",
-          )
-          .run(JSON.stringify(budgets));
-        this.scheduler.kick();
-        return budgets;
-      });
+          ).run(JSON.stringify(budgets));
+          if (selection !== undefined) this.store.db.prepare("UPDATE task_model_preferences SET selection=? WHERE id=1")
+            .run(selection ? JSON.stringify(selection) : null);
+          this.store.db.exec("COMMIT");
+        } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+        if (p.budgets !== undefined) this.scheduler.preferencesChanged();
+        this.agents.publish(taskPreferencesScope, this.records.settings());
+        // Keep older task-list subscribers consistent with the global default.
+        for (const row of selection === undefined ? [] : this.store.db.prepare("SELECT s.id,s.workspaceId FROM task_parents p JOIN sessions s ON s.id=p.sessionId JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0").all()) {
+          const parent = { workspaceId: String(row.workspaceId), sessionId: String(row.id) };
+          this.agents.publish(tasksScope(parent), this.records.list(parent));
+        }
+        return c.op === "task.default-model" ? this.records.list(scope) : this.records.settings();
+      }));
     const child = this.records.child(scope);
-    if (c.op === "task.pending") {
-      const row = this.records.own(scope, p.taskId);
-      const inputId =
-        p.inputId === undefined ? null : text(p.inputId, "输入标识");
-      return this.store.db
-        .prepare(
-          inputId
-            ? "SELECT id,body,mode,state,runId FROM task_inputs WHERE taskId=? AND id=?"
-            : "SELECT id,substr(body,1,500) AS body,mode,state,runId FROM task_inputs WHERE taskId=? AND state!='delivered' ORDER BY createdAt,rowid",
-        )
-        .all(...(inputId ? [row.id, inputId] : [row.id]));
-    }
     if (c.op === "task.result")
       return this.delivery.result(scope, p.taskId, p.resultId);
     if (c.op === "task.append" || c.op === "task.cancel") {
@@ -219,40 +224,18 @@ export class TaskCommands {
         ),
       );
     }
-    if (c.op === "task.default-model")
-      return this.store.external(c, async () => {
-        if (child)
-          throw new AppError("RECURSIVE_DELEGATION", "子会话没有默认子模型");
-        const selection =
-          p.selection === null
-            ? null
-            : (object(p.selection) as unknown as Selection);
-        const config = await configuration(this.store.root);
-        if (
-          selection &&
-          !config.available.some(
-            (m) =>
-              m.provider === selection.provider &&
-              m.id === selection.id &&
-              m.levels.includes(selection.thinking),
-          )
-        )
-          throw new AppError("MODEL_UNAVAILABLE", "子模型不可用");
-        this.store.db
-          .prepare(
-            "INSERT INTO task_parents(sessionId,defaultModel) VALUES(?,?) ON CONFLICT(sessionId) DO UPDATE SET defaultModel=excluded.defaultModel",
-          )
-          .run(scope.sessionId, selection ? JSON.stringify(selection) : null);
-        this.agents.publish(tasksScope(scope), this.records.list(scope));
-        return this.records.list(scope);
-      });
+
+    if (c.op === "agent.recall" && child) {
+      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "撤回不接受额外参数");
+      return this.serial(child.id, () => this.store.external(c, () =>
+        this.scheduler.recall(this.records.own(parent(child), child.id))));
+    }
     if (c.op === "agent.stop")
       return this.store.external(c, async () => {
         if (p.runId !== this.agents.info(scope).run?.id)
           throw new AppError("RUN_MISMATCH", "执行已变化，未停止其他执行");
         if (child) {
           const response = this.scheduler.cancel(child, {
-            mode: "summary",
             reason: "用户停止子会话",
           });
           return response;
@@ -260,25 +243,31 @@ export class TaskCommands {
         await this.stopParent(scope);
         return this.agents.info(scope);
       });
-    if (child && (c.op === "prompt" || c.op === "agent.continue")) {
-      const attachment = attachmentInput(p.attachment);
-      const body =
-        c.op === "agent.continue"
-          ? "请检查已保存的对话和文件状态，只继续未完成部分，不盲目重放命令。"
-          : text(p.text || (attachment ? "请检查附件。" : ""), "追问", 12000);
+    if (child && c.op === "agent.resume") {
+      if (typeof p.expectedRunId !== "string" || Object.keys(p).some((key) => key !== "expectedRunId"))
+        throw new AppError("INVALID_INPUT", "重试只接受原执行标识。");
+      return this.serial(child.id, () => this.store.external(c, async () =>
+        this.scheduler.resume(this.records.own(parent(child), child.id), p.expectedRunId as string, c.requestId)));
+    }
+    if (child && c.op === "prompt") {
+      const images = imagesInput(p.images);
+      const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
+      const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "追问", 12000);
       return this.serial(child.id, () =>
         this.store.external(c, async () =>
           this.scheduler.append(this.records.own(parent(child), child.id), {
-            text: body,
-            attachment,
+            text: typeof p.text === "string" ? p.text : body,
+            attachments,
+            images,
             mode: p.mode ?? "steer",
-          }),
+            expectedRunId: p.expectedRunId,
+          }, true, c.requestId),
         ),
       );
     }
     const fresh = this.store.receipt(c.requestId).status === "not_found";
     const newWork =
-      fresh && !child && ["prompt", "agent.continue"].includes(c.op);
+      fresh && !child && (c.op === "prompt" || c.op === "agent.resume");
     const stopEpoch = this.records.stopEpoch(scope);
     const result = await this.agents.command(
       c,
@@ -291,7 +280,7 @@ export class TaskCommands {
               )
                 throw new AppError(
                   "PARENT_FROZEN",
-                  "发送期间父会话已停止；未启动，请核实后发送新要求。",
+                  "发送期间父会话已停止；未启动，请发送新要求。",
                 );
             },
           }

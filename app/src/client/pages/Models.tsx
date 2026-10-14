@@ -10,6 +10,8 @@ export default function Models() {
     config,
     connection,
     revision,
+    storage,
+    saved,
     templates,
     dirty,
     busy,
@@ -68,7 +70,7 @@ export default function Models() {
           </div>
           <div className="row toolbar-actions">
             <span className="save-state" data-dirty={dirty} role="status">
-              {dirty ? "有未保存修改" : "无未保存修改"}
+              {dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}
             </span>
             <button
               className="btn btn-ghost"
@@ -88,10 +90,10 @@ export default function Models() {
               className="btn btn-primary"
               id="save-provider"
               disabled={busy || needsReconcile || !dirty || !revision}
-              title={"包含当前行内编辑，统一发布到应用独立的 pi 配置"}
+              title={"包含当前行内编辑，统一发布到共享 pi 配置"}
               onClick={() => void save()}
             >
-              {busy ? "处理中…" : needsReconcile ? "请先重新读取" : "保存"}
+              {busy ? "处理中…" : needsReconcile ? "请先重新读取" : saved ? "已保存" : "保存"}
             </button>
             <button
               className="btn btn-ghost"
@@ -111,6 +113,9 @@ export default function Models() {
             </button>
           </div>
         </header>
+        <p className="configuration-feedback" role="status" aria-live="polite" aria-atomic="true" data-saved={saved}>
+          {feedback || config.error || (connection !== "已连接本地服务" ? connection : "")}
+        </p>
         <div className="container" inert={busy} aria-busy={busy}>
           <div className="configuration-layout">
             <section
@@ -239,6 +244,7 @@ export default function Models() {
                   <ProviderConnection
                     {...{
                       p,
+                      storage,
                       tab,
                       templates,
                       patch,

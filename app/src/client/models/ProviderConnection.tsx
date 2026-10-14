@@ -5,6 +5,7 @@ import type {
 import { Headers, BodyOverrides } from "./Overrides.js";
 export function ProviderConnection({
   p,
+  storage,
   tab,
   templates,
   patch,
@@ -19,6 +20,7 @@ export function ProviderConnection({
   removeProvider,
 }: {
   p: Provider;
+  storage: ModelConfiguration["storage"];
   tab: string;
   templates: ModelConfiguration["templates"];
   patch: (p: Partial<Provider>) => void;
@@ -153,10 +155,15 @@ export function ProviderConnection({
                     maxLength={4096}
                     spellCheck={false}
                     placeholder={
-                      p.auth?.configured
-                        ? "已配置；留空保持不变"
-                        : "输入 API 密钥"
+                      p.clearKey
+                        ? "保存后清除认证"
+                        : p.auth?.source === "stored" && p.auth.type === "api_key"
+                          ? "••••••••（已保存，输入可替换）"
+                          : p.auth?.configured
+                            ? "已配置认证；留空保持不变"
+                            : "输入 API 密钥"
                     }
+                    aria-describedby="provider-key-status"
                     value={p.key}
                     onChange={(e) =>
                       patch({
@@ -178,9 +185,22 @@ export function ProviderConnection({
                     </svg>
                   </button>
                 </div>
-                <span className="field-help">
-                  已保存密钥不回传；空白保持原认证，输入替换。
+                <span className="field-help" id="provider-key-status" role="status">
+                  {p.clearKey
+                    ? "待清除认证，保存后生效。"
+                    : p.key
+                      ? "新密钥尚未保存，请点击顶部「保存」。"
+                      : p.auth?.source === "stored" && p.auth.type === "api_key"
+                        ? "API 密钥已保存到本地。为保护密钥不显示原文，留空保持不变。"
+                        : p.auth?.source === "stored" && p.auth.type === "oauth"
+                          ? "已保存 OAuth 登录凭据；留空保持当前认证。"
+                          : "输入密钥后点击顶部「保存」；留空保持原认证。"}
                 </span>
+                {storage && (
+                  <span className="field-help credential-path">
+                    密钥保存位置：<code>{storage.authPath}</code>
+                  </span>
+                )}
                 <label>
                   <input
                     type="checkbox"
@@ -241,6 +261,11 @@ export function ProviderConnection({
             <p className="meta">
               统一点击顶部「保存」后发布。草稿仅保留在本页内存。
             </p>
+            {storage && (
+              <p className="meta credential-path">
+                模型配置位置：<code>{storage.modelsPath}</code>
+              </p>
+            )}
             <p className="feedback" role="status">
               {feedback}
             </p>

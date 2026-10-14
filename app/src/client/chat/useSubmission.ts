@@ -1,112 +1,120 @@
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { command } from "../transport.js";
-import { clearSubmittedDraft } from "../drafts.js";
-import { scopeKey, type Draft, type Scope } from "../../shared/protocol.js";
+import {
+  clearSubmittedDraft,
+  draftContent,
+  getDraft,
+} from "../drafts.js";
+import { AppError, type Draft, type Scope } from "../../shared/protocol.js";
+import { optimisticStart, optimisticState } from "./optimistic.js";
+import { beginRecall, finishRecall, pendingRecall, reconcileInputs, beginResume, finishResume, pendingResume } from "./reconcile-inputs.js";
+import { messageLengthError } from "./message-limit.js";
+import { rejectSubmission, setSubmissionError, useSubmissionError } from "./submission-feedback.js";
 
 // A request belongs to the captured session/draft even if its receipt arrives after navigation.
 export function useSubmission(
   scope: Scope,
-  draft: Draft,
   state: {
     active: boolean;
     nested: boolean;
     selected: boolean;
     connected: boolean;
     runId?: string;
+    task?: { id: string; parentSessionId: string };
   },
 ) {
-  const key = `pending:${scopeKey(scope)}`;
   const inFlight = useRef(false);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const [uncertain, setUncertain] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem(key) || "null")?.requestId ?? "";
-    } catch {
-      return "";
-    }
-  });
-  async function submit(op = "prompt") {
-    const stopping = state.active && op === "prompt";
+  const [busy, setBusy] = useState(false);
+  const error = useSubmissionError(scope);
+  const setError = (message: string) => setSubmissionError(scope, message);
+  async function submit(op: "prompt" | "append" | "stop" | "continue" = "prompt", provided?: { draft: Draft; onStart: () => void }) {
+    const continuing = op === "continue";
+    const stopping = op === "stop";
     if (
       inFlight.current ||
       !state.connected ||
-      (!stopping && uncertain) ||
-      (!state.active && !state.selected)
+      (!stopping && !state.active && !state.selected)
     )
       return;
+    if (continuing && pendingResume(scope)) {
+      void reconcileInputs(scope).catch(() => {});
+      return;
+    }
+    const current = provided?.draft ?? getDraft(scope);
+    if (!stopping && !continuing) {
+      const lengthError = messageLengthError(current.text);
+      if (lengthError) { setError(lengthError); return; }
+    }
+    if (!stopping && !continuing && !current.text.trim() && !current.attachment && !current.attachments?.length && !current.images?.length) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
-    const requestId = crypto.randomUUID(),
-      captured = { text: draft.text, attachment: draft.attachment };
-    let sent = false;
+    const captured = draftContent(current);
+    const requestId = crypto.randomUUID();
+    if (continuing) beginResume(scope, requestId);
+    if (!stopping && !continuing) flushSync(() => {
+      optimisticStart(scope, requestId, captured, state.active);
+      if (provided) provided.onStart();
+      else clearSubmittedDraft(scope, captured);
+    });
     try {
-      if (!stopping)
-        sessionStorage.setItem(
-          key,
-          JSON.stringify({
-            requestId,
-            op: op === "append" ? "prompt" : op,
-            ...captured,
-          }),
-        );
-      sent = true;
-      await command(
-        stopping ? "agent.stop" : op === "append" ? "prompt" : op,
-        stopping
-          ? { runId: state.runId }
-          : op === "agent.continue"
-            ? {}
-            : { ...captured, ...(state.nested ? { mode: "steer" } : {}) },
-        scope,
+      const task = stopping && state.nested ? state.task : undefined;
+      const receipt = await command<{ runId?: string; inputId?: string }>(
+        continuing ? "agent.resume" : stopping ? (task ? "task.cancel" : "agent.stop") : "prompt",
+        continuing ? { expectedRunId: state.runId } : stopping
+          ? (task ? { taskId: task.id } : { runId: state.runId })
+          : { ...captured, ...(state.nested || state.active ? { mode: "steer" } : {}) },
+        task ? { ...scope, sessionId: task.parentSessionId } : scope,
         requestId,
       );
-      if (!stopping && op !== "agent.continue")
-        clearSubmittedDraft(scope, captured);
-      if (!stopping) sessionStorage.removeItem(key);
+      if (continuing) finishResume(scope, requestId);
+      else if (!stopping) optimisticState(scope, requestId, "accepted", receipt.inputId ?? receipt.runId, receipt.inputId ? true : receipt.runId ? false : undefined);
     } catch (e) {
-      if (!stopping && (e as { code?: string }).code === "UNCERTAIN")
-        setUncertain(requestId);
-      else if (!stopping) {
-        try {
-          sessionStorage.removeItem(key);
-        } catch {}
-      }
-      setError(
-        sent
-          ? (e as Error).message
-          : "浏览器恢复记录无法保存，未发送任务。请检查浏览器存储。",
-      );
+      if (continuing) {
+        if ((e as AppError).code === "UNCERTAIN") {
+          setError("重试结果待确认，正在读取原回执；不会重复启动。");
+          void reconcileInputs(scope).catch(() => {});
+        } else {
+          finishResume(scope, requestId);
+          setError((e as Error).message);
+        }
+      } else if (stopping) setError((e as Error).message);
+      else if ((e as AppError).code === "UNCERTAIN") {
+        optimisticState(scope, requestId, "uncertain");
+        void reconcileInputs(scope).catch(() => {});
+      } else rejectSubmission(scope, requestId, (e as Error).message);
     } finally {
       inFlight.current = false;
       setBusy(false);
     }
   }
-  async function reconcile() {
-    if (inFlight.current) return;
+  async function recall() {
+    if (inFlight.current || !state.connected) return false;
+    if (pendingRecall(scope)) {
+      setError("撤回结果尚未确认，正在读取原回执；不会再次撤回或重发。");
+      void reconcileInputs(scope).catch(() => {});
+      return false;
+    }
     inFlight.current = true;
     setBusy(true);
+    setError("");
+    const requestId = crypto.randomUUID();
+    beginRecall(scope, requestId);
     try {
-      const receipt = await command<{ status: string }>(
-        "agent.receipt",
-        { requestId: uncertain },
-        scope,
-      );
-      setError(`请求状态：${receipt.status}。不会自动重发。`);
-      if (["committed", "failed", "not_found"].includes(receipt.status)) {
-        const pending = JSON.parse(sessionStorage.getItem(key) || "null");
-        if (receipt.status === "committed" && pending?.op === "prompt")
-          clearSubmittedDraft(scope, pending);
-        sessionStorage.removeItem(key);
-        setUncertain("");
-      }
+      const data = await command<{ drafts: Draft[]; ids?: string[] }>("agent.recall", {}, scope, requestId);
+      finishRecall(scope, requestId, data);
+      const { drafts } = data;
+      if (!drafts.length) setError("没有可撤回的排队内容；已执行的输入不会撤回。");
+      return drafts.length > 0;
     } catch (e) {
-      setError((e as Error).message);
+      if ((e as AppError).code !== "UNCERTAIN") finishRecall(scope, requestId);
+      setError((e as AppError).code === "UNCERTAIN" ? "撤回结果未确认；将只读取原回执，不会再次执行。" : (e as Error).message);
+      return false;
     } finally {
       inFlight.current = false;
       setBusy(false);
     }
   }
-  return { busy, error, setError, uncertain, submit, reconcile };
+  return { busy, error, setError, submit, recall };
 }

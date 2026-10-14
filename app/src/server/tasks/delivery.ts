@@ -31,7 +31,7 @@ export class TaskDelivery {
     await Promise.allSettled(this.jobs);
   }
   parentSettled(scope: Scope, run: Run) {
-    if (run.status === "completed" && run.cleanup === "confirmed")
+    if (run.status === "completed")
       this.reconcilePending(scope);
     else this.reconcileNotifications(scope);
     this.notify(scope);
@@ -63,12 +63,10 @@ export class TaskDelivery {
         )
       : null;
   }
-  save(row: Row, run: Run, resume: boolean) {
+  save(row: Row, run: Run) {
     if (row.runId !== run.id) return;
     let report = "未取得可靠的最终回复。",
-      known: string[] = [],
-      ids: string[] = [],
-      readable = true;
+      known: string[] = [];
     try {
       const entries = this.manager(target(row))?.getEntries() ?? [];
       const messages = entries.flatMap((e) =>
@@ -89,40 +87,15 @@ export class TaskDelivery {
       known = messages
         .filter((m) => m.role === "toolResult")
         .map((m) => `${m.toolName}：${m.isError ? "失败" : "已记录返回"}`);
-      ids = entries.flatMap((e) =>
-        e.type === "custom_message" && (e.details as any)?.axiomInput
-          ? [(e.details as any).axiomInput]
-          : [],
-      );
-      if (messages.some((m) => m.role === "user" && m.axiomId === run.id))
-        for (const entry of entries)
-          if (
-            entry.type === "custom" &&
-            entry.customType === "axiom-request" &&
-            (entry.data as any)?.runId === run.id
-          )
-            ids.push(...((entry.data as any)?.inputIds ?? []));
     } catch {
-      readable = false;
       report = "会话文件无法读取，不能宣称结果完整；原文件保留。";
     }
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
-      this.records.deliver(row, ids);
-      this.store.db
-        .prepare(
-          "UPDATE task_inputs SET state=?,runId=NULL WHERE taskId=? AND state IN ('starting','inflight')",
-        )
-        .run(
-          readable &&
-            resume &&
-            run.status === "completed" &&
-            run.cleanup === "confirmed"
-            ? "queued"
-            : "held",
-          row.id,
-        );
-      const status = ["stopping", "summarizing", "cancelled"].includes(
+      // Inputs belong to this live execution only. Pi owns delivered conversation;
+      // exit never turns unacknowledged inputs into a new model request.
+      this.store.db.prepare("DELETE FROM task_inputs WHERE taskId=?").run(row.id);
+      const status = ["stopping", "cancelled"].includes(
         row.status,
       )
         ? "cancelled"
@@ -140,35 +113,26 @@ export class TaskDelivery {
         status,
         report,
         reason: row.error || run.error,
-        cleanup: run.cleanup,
         startedAt: run.startedAt,
         endedAt: run.endedAt ?? Date.now(),
         unfinished:
           status === "completed"
             ? ["模型报告不等于全部验收通过；请核对交付中的未验证项。"]
             : ["任务未正常完成；只保留已记录产出，未自动重做。"],
-        sideEffects: `${known.length ? known.slice(-30).join("；") : "未记录工具返回"}。文件及外部副作用未回滚；${run.cleanup === "confirmed" ? "工作进程已正常清理" : "外部进程清理待核实"}。`,
+        sideEffects: `${known.length ? known.slice(-30).join("；") : "未记录工具返回"}。文件及外部副作用未回滚。`,
       };
-      this.store.db
+      const inserted = this.store.db
         .prepare(
           "INSERT OR IGNORE INTO task_results(id,taskId,runId,body) VALUES(?,?,?,?)",
         )
-        .run(result.id, row.id, run.id, JSON.stringify(result));
+        .run(result.id, row.id, run.id, JSON.stringify(result)).changes;
       this.store.db
         .prepare("UPDATE tasks SET status=?,error=? WHERE id=? AND runId=?")
         .run(status, result.reason, row.id, run.id);
-      this.store.db
-        .prepare("UPDATE sessions SET unread=1,updatedAt=? WHERE id=?")
-        .run(Date.now(), row.parentSessionId);
-      if (
-        readable &&
-        resume &&
-        run.cleanup === "confirmed" &&
-        this.records.inputs(row, "queued").length
-      )
-        this.store.db
-          .prepare("UPDATE tasks SET status='queued' WHERE id=?")
-          .run(row.id);
+      if (inserted) {
+        this.store.recordResult(row.sessionId, run.id, "run");
+        this.store.recordResult(row.parentSessionId, result.id, "task");
+      }
       this.store.db.exec("COMMIT");
     } catch (e) {
       this.store.db.exec("ROLLBACK");
@@ -249,7 +213,6 @@ export class TaskDelivery {
                 )
                 .run(result.id);
             } else {
-              if (run?.cleanup === "unconfirmed") break;
               this.store.db
                 .prepare(
                   "UPDATE task_results SET delivery='inflight' WHERE id=?",
@@ -269,7 +232,7 @@ export class TaskDelivery {
                       if (this.closing || this.records.frozen(scope))
                         throw new AppError(
                           "PARENT_FROZEN",
-                          "父会话已停止，通知保留待核实",
+                          "父会话已停止，不自动启动结果处理",
                         );
                     },
                   },

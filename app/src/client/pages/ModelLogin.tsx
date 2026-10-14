@@ -96,16 +96,15 @@ export function ModelLogin({
             : state?.message || "正在启动认证…")}
       </p>
       {state?.url && !disconnected && !closing && (
-        <p>
-          <a
-            className="btn"
-            href={state.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            打开供应商授权页面
-          </a>
-        </p>
+        <div>
+          <label htmlFor="oauth-url">在系统浏览器打开以下授权链接（不要在桌面窗口内打开）</label>
+          <input id="oauth-url" className="input" readOnly value={state.url}
+            onFocus={(e) => e.currentTarget.select()} />
+          <button className="btn" type="button" onClick={() => {
+            void navigator.clipboard.writeText(state.url!).catch(() =>
+              setError("复制失败，请选中上方链接手动复制到浏览器。"));
+          }}>复制授权链接</button>
+        </div>
       )}
       {state?.userCode && !disconnected && !closing && (
         <p>

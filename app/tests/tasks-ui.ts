@@ -12,11 +12,20 @@ export async function checkTasksUI(
   app: Awaited<ReturnType<typeof startServer>>,
   artifacts: string,
 ) {
+  const checkDelegationOrder = async () => {
+    const cards = page.locator("#messages .subagents").first();
+    await cards.waitFor();
+    assert.ok(await cards.isVisible(), "delegation owns its dedicated card");
+    assert.equal(await page.locator('#messages .tool-heading[data-tool="delegate"]').count(), 0, "no duplicate delegation tool row");
+    assert.equal(await cards.locator(".delegation-toggle, .task-call-detail").count(), 0);
+    assert.ok(!(await cards.locator("header").innerText()).includes("独立 pi 会话"));
+  };
   let count = 0;
   const fixture = createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
     const body = JSON.parse(raw);
+    assert.ok(!JSON.stringify(body.messages.at(-1)).includes("工作已停止："), "UI stop must not request a summary");
     count++;
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.flushHeaders();
@@ -106,6 +115,7 @@ export async function checkTasksUI(
     await page.locator("#prompt").fill("委派两个独立子任务");
     await page.getByRole("button", { name: "发送消息", exact: true }).click();
     await page.waitForSelector(".subagent");
+    await checkDelegationOrder();
     scope = await page.evaluate(() =>
       JSON.parse(sessionStorage.getItem("view")!),
     );
@@ -190,10 +200,8 @@ export async function checkTasksUI(
     await dialog
       .getByRole("button", { name: "第 1 次 · 已停止", exact: true })
       .click();
-    await dialog
-      .getByText("工作已停止，没有核实修改，没有回滚。", { exact: true })
-      .last()
-      .waitFor();
+    await dialog.getByText(/文件及外部副作用未回滚/).last().waitFor();
+    assert.equal(await dialog.getByRole("button", { name: /显式继续|确认清理/ }).count(), 0);
     const stoppedTask = app.tasks.list(scope!).tasks[0];
     const childTrigger = dialog.locator(
       '[data-od-id="background-compression-trigger"]',
@@ -235,27 +243,13 @@ export async function checkTasksUI(
       "子窗口独立中文草稿",
     );
     assert.equal(await page.locator("#prompt").inputValue(), "父会话保留草稿");
-    app.store.db
-      .prepare("INSERT INTO task_inputs VALUES(?,?,?,'steer','held',NULL,?)")
-      .run(
-        crypto.randomUUID(),
-        stoppedTask.id,
-        "保留待核实输入".repeat(100),
-        Date.now(),
-      );
-    app.agents.publish(
-      `tasks:${scope!.workspaceId}:${scope!.sessionId}`,
-      app.tasks.list(scope!),
-    );
-    await dialog
-      .getByRole("button", { name: "查看待处理输入（不重发）", exact: true })
-      .click();
-    await dialog
-      .getByRole("button", { name: "读取完整输入", exact: true })
-      .click();
-    await dialog
-      .getByText("保留待核实输入".repeat(100), { exact: true })
-      .waitFor();
+    assert.equal(await dialog.getByRole("button", { name: "查看待处理输入（不重发）", exact: true }).count(), 0);
+    const previousRun = stoppedTask.runId;
+    await dialog.locator("textarea").fill("停止后的普通新追问");
+    await dialog.getByRole("button", { name: "发送消息", exact: true }).click();
+    await page.waitForFunction(() => !!document.querySelector(".subagent-dialog .send.is-running"));
+    assert.notEqual(app.tasks.list(scope!).tasks[0].runId, previousRun);
+    assert.equal(await page.locator("#prompt").inputValue(), "父会话保留草稿");
     await dialog
       .getByRole("button", { name: "关闭子代理会话，返回主对话" })
       .click();
@@ -270,6 +264,7 @@ export async function checkTasksUI(
     await page.waitForSelector(".subagent");
     await page.waitForTimeout(250);
     assert.equal(count, before, "reload must not restart children");
+    await checkDelegationOrder();
   } finally {
     if (scope) await app.tasks.stopParent(scope).catch(() => {});
     fixture.closeAllConnections();

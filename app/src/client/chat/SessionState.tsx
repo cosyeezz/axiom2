@@ -1,17 +1,13 @@
-import { useState } from "react";
-import { command, useScope } from "../transport.js";
+import { useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
   agentScope,
   emptyAgent,
-  running,
   runLabels,
 } from "../../shared/agent.js";
-import { taskLabels } from "../../shared/tasks.js";
 import type { Scope } from "../../shared/protocol.js";
 export function Environment({ scope }: { scope: Scope }) {
-  const info = useScope(agentScope(scope), emptyAgent),
-    [error, setError] = useState("");
+  const info = useScope(agentScope(scope), emptyAgent);
   return (
     <section className="session-init" aria-label="会话初始化信息">
       <details className="session-environment">
@@ -35,7 +31,7 @@ export function Environment({ scope }: { scope: Scope }) {
           <p>
             {info.environment
               ? `工作目录：${info.environment.cwd}`
-              : "尚未加载模型、系统提示词与工具；请先选择可用模型。"}
+              : "首次发送时加载模型、项目资源与工具。"}
           </p>
           {info.environment && (
             <>
@@ -44,86 +40,27 @@ export function Environment({ scope }: { scope: Scope }) {
                 技能：{info.environment.skills.join("、") || "无"} ·
                 已加载扩展：{info.environment.extensions}
               </p>
+              {info.environment.retry && <p>
+                自动重试：{info.environment.retry.enabled ? `最多 ${info.environment.retry.maxRetries} 次，基础等待 ${info.environment.retry.baseDelayMs / 1000} 秒` : "已关闭"}
+                {`；会话等待上限 ${info.environment.retry.maxAgentDelayMs / 1000} 秒；供应商层 ${info.environment.retry.provider.maxRetries ?? 0} 次`}
+              </p>}
               {info.environment.warnings.map((w, i) => (
                 <p key={i}>{w}</p>
               ))}
             </>
           )}
-          <button
-            className="btn"
-            disabled={running(info.run)}
-            onClick={async () => {
-              if (
-                !confirm(
-                  "授权加载此项目的 pi 设置、技能、扩展与依赖？项目扩展可以执行任意代码。仅应信任你审查过的项目。",
-                )
-              )
-                return;
-              try {
-                await command(
-                  "agent.trust",
-                  { trusted: true, confirmed: true },
-                  scope,
-                );
-                setError("已授权，下次执行按 pi 规则加载。");
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            授权项目资源
-          </button>
-          <p role="status">{error}</p>
+          <p>系统提示词</p>
+          {typeof info.environment?.systemPrompt === "string" ? (
+            <pre className="session-system-prompt" aria-label="系统提示词">
+              {info.environment.systemPrompt || "（空）"}
+            </pre>
+          ) : (
+            <p>{info.environment
+              ? "此会话尚未记录系统提示词，下次执行时加载并展示。"
+              : "尚未初始化，首次发送后展示实际生效的系统提示词。"}</p>
+          )}
         </div>
       </details>
     </section>
-  );
-}
-export function RunState({ scope }: { scope: Scope }) {
-  const info = useScope(agentScope(scope), emptyAgent),
-    [error, setError] = useState("");
-  if (!info.run)
-    return info.task ? (
-      <p className="run-state" role="status">
-        {taskLabels[info.task.status]}
-      </p>
-    ) : null;
-  return (
-    <div className={running(info.run) ? "run-state" : "meta"} role="status">
-      {running(info.run) && <span className="run-spinner" />}
-      <span>
-        {info.phase && running(info.run)
-          ? info.phase
-          : info.task
-            ? taskLabels[info.task.status]
-            : runLabels[info.run.status]}
-        {info.run.error && ` · ${info.run.error}`}
-      </span>
-      {!running(info.run) && info.run.cleanup === "unconfirmed" && (
-        <button
-          className="btn"
-          onClick={async () => {
-            if (
-              !confirm(
-                "我已检查并终止上次执行可能残留的命令和进程。确认后才允许继续；这不会回滚文件。",
-              )
-            )
-              return;
-            try {
-              await command(
-                "agent.confirm-cleanup",
-                { confirmed: true, runId: info.run!.id },
-                scope,
-              );
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          确认已清理
-        </button>
-      )}
-      {error}
-    </div>
   );
 }

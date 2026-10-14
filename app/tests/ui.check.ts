@@ -13,7 +13,6 @@ import { chromium, type Page } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { checkAgentUI } from "./agent-ui.js";
 import { checkTasksUI } from "./tasks-ui.js";
-import { checkPreviewUI } from "./preview-ui.js";
 import { checkCompressionUI } from "./compression-ui.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-ui-")),
@@ -121,43 +120,11 @@ try {
   await openWorkspace(project);
   await page.locator("#prompt").fill("项目 A 中文草稿");
   await page.waitForTimeout(450);
-  const recoveryScope = await page.evaluate(() =>
-    JSON.parse(sessionStorage.getItem("view")!),
-  );
-  app.store.execute({
-    requestId: crypto.randomUUID(),
-    op: "draft.save",
-    ...recoveryScope,
-    params: {
-      viewId: "recovery-check",
-      revision: 0,
-      text: "另一窗口恢复副本",
-      attachment: null,
-    },
-  });
-  await page.locator(".draft-recovery > summary").click();
-  await page.getByRole("button", { name: "读取草稿副本", exact: true }).click();
-  const copy = page
-    .locator(".draft-recovery > div")
-    .filter({ hasText: "另一窗口恢复副本" });
-  page.once("dialog", (d) => d.dismiss());
-  await copy.getByRole("button", { name: "恢复此草稿" }).click();
-  assert.equal(await page.locator("#prompt").inputValue(), "项目 A 中文草稿");
-  page.once("dialog", (d) => d.accept());
-  await copy.getByRole("button", { name: "恢复此草稿" }).click();
-  assert.equal(await page.locator("#prompt").inputValue(), "另一窗口恢复副本");
-  await page.locator(".draft-recovery > summary").click();
-  await page.locator("#prompt").fill("项目 A 中文草稿");
-  await page
-    .getByRole("button", { name: /^管理会话：/ })
-    .first()
-    .click();
-  await page
-    .getByRole("dialog", { name: "管理会话", exact: true })
-    .getByRole("button", { name: "重命名", exact: true })
-    .click();
-  await page.locator("#rename-title").fill("会话 A");
-  await page.getByRole("button", { name: "保存名称" }).click();
+  assert.equal(await page.locator(".draft-recovery").count(), 0);
+  assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((key) => key.startsWith("draft:"))), false, "unsent text is page-memory only");
+  await page.locator(".history-item").first().dblclick();
+  await page.getByRole("textbox", { name: "会话标题", exact: true }).fill("会话 A");
+  await page.getByRole("textbox", { name: "会话标题", exact: true }).press("Enter");
   await page.waitForFunction(
     () => document.querySelector("#chat-title")?.textContent === "会话 A",
   );
@@ -169,6 +136,7 @@ try {
   await page.locator("#prompt").fill("会话 B 草稿");
   await page.getByRole("button", { name: /^会话 A/, exact: false }).click();
   assert.equal(await page.locator("#prompt").inputValue(), "项目 A 中文草稿");
+  await page.locator(".history-row").filter({ has: page.locator("strong", { hasText: /^会话 A$/ }) }).hover();
   await page
     .getByRole("button", { name: "置顶会话：会话 A", exact: true })
     .click();
@@ -199,11 +167,35 @@ try {
     .press("Escape");
   await page.reload();
   await ready();
-  assert.equal(await page.locator("#prompt").inputValue(), "项目 A 中文草稿");
+  assert.equal(await page.locator("#prompt").inputValue(), "", "refresh does not restore unsent text");
+  await page.locator("#prompt").fill("项目 A 中文草稿");
   await openWorkspace(other);
   await page.locator("#prompt").fill("项目 B 独立草稿");
+  const pins = page.getByRole("region", { name: "置顶会话", exact: true });
+  await pins.getByRole("button", { name: /^会话 A/ }).waitFor();
+  assert.equal(await page.locator('.history-item').count(), 2);
+  await page.getByRole("searchbox", { name: "搜索置顶和当前空间的会话" }).fill("会话 A");
+  assert.equal(await page.locator('.history-item').count(), 1);
+  await pins.getByRole("button", { name: /^会话 A/ }).click();
+  await page.waitForFunction(() =>
+    document.querySelector("#workspace-picker summary strong")?.textContent === "项目 A" &&
+    (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "项目 A 中文草稿",
+  );
+  await page.locator("#workspace-picker > summary").click();
+  await page.getByRole("button", { name: "项目 B", exact: true }).click();
+  await page.waitForFunction(() =>
+    (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "项目 B 独立草稿",
+  );
+  // Pin actions must use the foreign session's owner, not the viewed workspace.
+  await pins.locator(".history-row").hover();
+  await pins.getByRole("button", { name: "取消置顶：会话 A", exact: true }).click();
+  await pins.waitFor({ state: "hidden" });
+  assert.equal(await page.locator('.history-item').count(), 1);
   await page.locator("#workspace-picker > summary").click();
   await page.getByRole("button", { name: "项目 A", exact: true }).click();
+  await page.getByRole("button", { name: /^会话 A/ }).click();
+  await page.locator(".history-row").filter({ has: page.locator("strong", { hasText: /^会话 A$/ }) }).hover();
+  await page.getByRole("button", { name: "置顶会话：会话 A", exact: true }).click();
   await page.waitForFunction(
     () =>
       (document.querySelector("#prompt") as HTMLTextAreaElement)?.value ===
@@ -256,7 +248,7 @@ try {
     "项目 B",
   );
   await delayed.close();
-  // Deletion in another viewer clears the stale selection without touching its draft.
+  // Deletion in another viewer clears the stale selection; reload has no persisted draft.
   const current = await page.evaluate(() =>
     JSON.parse(sessionStorage.getItem("view")!),
   );
@@ -274,10 +266,10 @@ try {
   );
   assert.equal(
     await page.evaluate(
-      (key) => JSON.parse(sessionStorage.getItem(key)!).text,
+      (key) => sessionStorage.getItem(key),
       `draft:session:${current.workspaceId}:${current.sessionId}`,
     ),
-    "项目 A 中文草稿",
+    null,
   );
   await design.goto(
     refOrigin + "/coding-agent-v2-before-subagent-modal-v2.html",
@@ -350,18 +342,19 @@ try {
       fullPage: true,
     });
   }
-  await page.getByText("子任务并发与预算", { exact: true }).click();
-  await page.locator("#budget-concurrency").fill("3");
-  await page
-    .getByRole("button", { name: "保存子任务设置", exact: true })
-    .click();
-  await page
-    .getByRole("status")
-    .filter({ hasText: "已保存，仅影响后续任务预算" })
-    .waitFor();
+  assert.equal(await page.getByText("子任务并发与预算", { exact: true }).count(), 0);
+  await page.goto(app.origin);
+  await page.getByRole("button", { name: "子代理设置", exact: true }).click();
+  const taskSettings = page.getByRole("dialog", { name: "子代理设置", exact: true });
+  const concurrencyInput = taskSettings.getByRole("spinbutton", { name: "同时运行的子任务", exact: true });
+  await concurrencyInput.fill("3");
+  await concurrencyInput.press("Enter");
+  await taskSettings.getByRole("status").filter({ hasText: "已全局保存并生效" }).waitFor();
   assert.equal(app.tasks.preferences().concurrency, 3);
-  await page.getByRole("button", { name: "重新读取预算", exact: true }).click();
-  assert.equal(await page.locator("#budget-concurrency").inputValue(), "3");
+  await taskSettings.getByRole("button", { name: "关闭子代理设置" }).click();
+  await page.getByRole("button", { name: "子代理设置", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector<HTMLInputElement>(".subagent-budget-field input")?.value === "3");
+  assert.equal(await concurrencyInput.inputValue(), "3");
   await page.goto(app.origin + "/model-config.html");
   await page.locator("#add-supplier").click();
   await page.locator("#provider-name").fill("界面验收供应商");
@@ -719,14 +712,13 @@ try {
   await checkAgentUI(page, app, artifacts);
   await checkCompressionUI(page, design, app, artifacts, sizes);
   await checkTasksUI(page, app, artifacts);
-  await checkPreviewUI(page, app, project, artifacts);
   assert.deepEqual(errors, []);
   writeFileSync(
     join(artifacts, "geometry.json"),
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy, hidden inline-editor top Save, two-column reasoning styles; context ring boundaries/unknown ARIA, real background snapshot compression, cancel/retry/no-replay/focus, nine-viewport compression sheet vs design and reduced motion; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, draft recovery, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; bound preview selection → actual pi edit → refreshed output; IME/focus/menu preservation, stop/continue and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy, hidden inline-editor top Save, two-column reasoning styles; context ring boundaries/unknown ARIA, real background snapshot compression, cancel/retry/no-replay/focus, nine-viewport compression sheet vs design and reduced motion; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, memory-only drafts, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; IME/focus/menu preservation, stop/fresh prompt and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

@@ -167,9 +167,6 @@ try {
       description: "Test-only independent cancellation registration",
       parameters: Type.Object({
         taskId: text,
-        mode: Type.Optional(
-          Type.Union([Type.Literal("summary"), Type.Literal("immediate")]),
-        ),
         reason: Type.Optional(text),
       }),
       execute: checked,

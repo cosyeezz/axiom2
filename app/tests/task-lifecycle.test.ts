@@ -6,7 +6,6 @@ import {
   mkdirSync,
   writeFileSync,
   rmSync,
-  existsSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -23,18 +22,20 @@ const wait = async (check: () => boolean, label: string, ms = 25000) => {
   }
 };
 test(
-  "Task lifecycle: model append/cancel tools, queue cancellation, live handoff, hard budget, summary tool guard, restart uncertainty",
+  "Task lifecycle: append/cancel tools, queue cancellation, live handoff, work deadline without summary, restart uncertainty",
   { timeout: 120000 },
-  async () => {
+  async (t) => {
     const root = mkdtempSync(join(tmpdir(), "axiom-lifecycle-")),
       project = join(root, "project");
+    const previousPi = process.env.AXIOM_PI_DIR;
+    process.env.AXIOM_PI_DIR = join(root, "pi");
+    t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
     mkdirSync(project);
     mkdirSync(join(root, "pi"));
     let app: Awaited<ReturnType<typeof startServer>>;
     const bodies: any[] = [],
       observed = new Set<string>();
-    let liveTurn: () => void = () => {},
-      summaryMode: "blocked-tool" | "timeout" = "blocked-tool";
+    let liveTurn: () => void = () => {};
     const fixture = createServer(async (req, res) => {
       let raw = "";
       for await (const c of req) raw += c;
@@ -104,19 +105,12 @@ test(
         else if (!prior("cancel_task"))
           tool("cancel_task", {
             taskId: ids[1],
-            mode: "immediate",
             reason: "Cancel queued child",
           });
         else answer("Parent done; notices are not polled.");
       } else if (last.includes("工作已停止：")) {
         observed.add("summary");
-        assert.equal(names.length, 0);
-        if (summaryMode === "timeout") return;
-        // A provider can emit tool calls even when tools=[]: verify the guard, not just the request.
-        tool("write", {
-          path: "forbidden-summary.txt",
-          content: "must never happen",
-        });
+        answer("Unexpected stop-summary request");
       } else if (all.includes("SECOND-BUDGET")) {
         return;
       } else if (all.includes("LIVE-STEER")) answer("Live steer processed.");
@@ -178,9 +172,6 @@ test(
           ...defaultBudgets,
           concurrency: 1,
           workMs: 7000,
-          wrapMs: 1000,
-          summaryMs: 1000,
-          cleanupMs: 3000,
         },
       });
       await call("prompt", { text: "Delegate lifecycle tests" });
@@ -232,24 +223,20 @@ test(
       await call("agent.stop", { runId: app.agents.info(scope).run!.id });
       await call("task.append", { taskId: live.id, text: "SECOND-BUDGET" });
       await wait(
-        () => app.tasks.list(scope).tasks[0].status === "wrapping",
-        "work deadline did not wrap",
-      );
-      await wait(
         () => app.tasks.list(scope).tasks[0].results.length === 2,
         "hard deadline did not stop",
       );
-      assert.ok(observed.has("summary"));
-      assert.ok(!existsSync(join(project, "forbidden-summary.txt")));
+      assert.ok(!observed.has("summary"), "work deadline must not request a summary");
       assert.equal(app.tasks.list(scope).tasks[0].status, "cancelled");
       const result = app.tasks.result(
         scope,
         live.id,
         app.tasks.list(scope).tasks[0].results[1].id,
       );
-      assert.match(result.reason ?? "", /硬截止/);
-      // Retrying cancellation does not produce another result; held input survives restart without delivery.
-      await call("task.cancel", { taskId: live.id, mode: "immediate" });
+      assert.match(result.reason ?? "", /预算|时限|截止/);
+      assert.ok(!("cleanup" in result));
+      // Retrying cancellation does not produce another result; stale input is discarded on restart.
+      await call("task.cancel", { taskId: live.id });
       assert.equal(app.tasks.list(scope).tasks[0].results.length, 2);
       app.store.db
         .prepare("INSERT INTO task_inputs VALUES(?,?,?,'steer','inflight',?,?)")
@@ -265,29 +252,23 @@ test(
       app = await start({ root, port: 0 });
       await new Promise((r) => setTimeout(r, 200));
       assert.equal(bodies.length, before);
-      const pending = (await call("task.pending", {
-        taskId: live.id,
-      })) as any[];
-      assert.ok(
-        pending.some(
-          (p) => p.state === "uncertain" && p.body === "UNCERTAIN-INPUT",
-        ),
-      );
+      assert.equal(app.store.db.prepare("SELECT count(*) AS n FROM task_inputs WHERE taskId=?").get(live.id)!.n, 0, "restart discards undelivered input, never creates a recovery queue");
+      await assert.rejects(call("task.pending", { taskId: live.id }), { code: "UNKNOWN_OPERATION" });
       assert.ok(app.tasks.list(scope).frozen);
       assert.ok(!app.tasks.list(scope).tasks.some((t) => taskActive(t.status)));
-      // Explicit fresh work remains possible after the freeze. Summary timeout is bounded.
-      summaryMode = "timeout";
+      // Explicit fresh work remains possible after freeze without a recovery gate.
       await call("task.append", {
         taskId: live.id,
         text: "SECOND-BUDGET timeout",
       });
       await wait(
         () => app.tasks.list(scope).tasks[0].results.length === 3,
-        "summary timeout did not settle",
+        "fresh work budget did not settle",
         25000,
       );
       assert.equal(app.tasks.list(scope).tasks[0].status, "cancelled");
       assert.deepEqual(app.tasks.result(scope, live.id, result.id), result);
+      assert.ok(!observed.has("summary"), "neither deadline may start summary work");
       assert.equal(app.tasks.list(scope).tasks[1].id, queued.id);
       // Stop wins over a prompt waiting for the config writer; a late acknowledgement must not unfreeze it.
       let release!: () => void;
@@ -299,7 +280,7 @@ test(
       );
       await wait(() => !!release, "configuration lock unavailable");
       const raced = call("prompt", { text: "must not start after Stop" });
-      const rejected = assert.rejects(raced, { code: "PARENT_FROZEN" });
+      const rejected = assert.rejects(raced, { code: "AGENT_STOPPED" });
       await app.tasks.stopParent(scope);
       release();
       await lock;

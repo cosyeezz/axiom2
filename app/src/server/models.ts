@@ -7,7 +7,7 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { Configuration } from "../shared/protocol.js";
 
 export async function configuration(root: string): Promise<Configuration> {
-  const dir = join(root, "pi");
+  const dir = process.env.AXIOM_PI_DIR || join(root, "pi");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const result: Configuration = {
     revision: "",
@@ -54,6 +54,19 @@ export async function configuration(root: string): Promise<Configuration> {
       allowModelNetwork: false,
     });
     if (runtime.getError()) throw Error();
+    if (process.env.AXIOM_PI_DIR) {
+      for (const credential of await runtime.listCredentials()) {
+        if (Object.hasOwn(config.providers, credential.providerId)) continue;
+        result.providerCount++;
+        for (const model of runtime.getModels(credential.providerId))
+          allowed.add(`${model.provider}/${model.id}`);
+      }
+      // A provider-only configuration uses pi's native catalog.
+      for (const [provider, definition] of Object.entries(config.providers) as [string, any][])
+        if (!(definition.models?.length || Object.keys(definition.modelOverrides ?? {}).length))
+          for (const model of runtime.getModels(provider)) allowed.add(`${provider}/${model.id}`);
+      result.modelCount = allowed.size;
+    }
     result.available = (
       await runtime.getAvailable(undefined, {
         signal: AbortSignal.timeout(5000),
@@ -65,6 +78,7 @@ export async function configuration(root: string): Promise<Configuration> {
         id: m.id,
         name: m.name,
         levels: getSupportedThinkingLevels(m),
+        ...(m.input.includes("image") ? { input: m.input } : {}),
       }));
   } catch {
     // Never return pi parser errors: they can include secret configuration values.

@@ -1,94 +1,40 @@
 import { useSyncExternalStore } from "react";
-import { command } from "./transport.js";
 import {
   scopeKey,
-  type Attachment,
   type Draft,
   type Scope,
 } from "../shared/protocol.js";
 
-// New document = new viewing instance; sessionStorage restores drafts without sharing writes across tabs.
-const viewId = crypto.randomUUID();
-const drafts = new Map<string, Draft & { error: string }>();
+// Drafts live only in this page, keyed by workspace/session. Reloading discards them.
+export type DraftContent = Draft;
+const drafts = new Map<string, Draft>();
 const listeners = new Map<string, Set<() => void>>();
-const saves = new Map<string, Promise<void>>();
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
-function get(scope: Scope) {
+export function getDraft(scope: Scope) {
   const key = scopeKey(scope);
-  if (!drafts.has(key)) {
-    let text = "",
-      attachment: Attachment | null = null,
-      error = "";
-    try {
-      const saved = JSON.parse(
-        sessionStorage.getItem(`draft:${key}`) || "null",
-      );
-      if (saved) {
-        text = saved.text;
-        attachment = saved.attachment;
-      }
-    } catch {
-      error = "本地草稿无法读取，请检查浏览器存储。";
-    }
-    drafts.set(key, { text, attachment, revision: 0, error });
-  }
+  if (!drafts.has(key))
+    drafts.set(key, { text: "", attachment: null, attachments: [], images: [] });
   return drafts.get(key)!;
 }
 export function updateDraft(
   scope: Scope,
-  patch: Partial<Pick<Draft, "text" | "attachment">>,
+  patch: Partial<DraftContent>,
 ) {
-  const key = scopeKey(scope),
-    next = { ...get(scope), ...patch, error: "" };
-  try {
-    sessionStorage.setItem(
-      `draft:${key}`,
-      JSON.stringify({ text: next.text, attachment: next.attachment }),
-    );
-  } catch {
-    next.error = "浏览器草稿保存失败；请勿关闭页面。";
-  }
-  drafts.set(key, next);
+  const key = scopeKey(scope);
+  drafts.set(key, { ...getDraft(scope), ...patch });
   listeners.get(key)?.forEach((fn) => fn());
-  clearTimeout(timers.get(key));
-  timers.set(
-    key,
-    setTimeout(() => {
-      const save = (saves.get(key) || Promise.resolve()).then(async () => {
-        const captured = get(scope);
-        try {
-          // Reconcile a previous uncertain save before this new edit; never replay mutations on reconnect.
-          const current = await command<Draft>("draft.get", { viewId }, scope);
-          const saved = await command<Draft>(
-            "draft.save",
-            {
-              viewId,
-              text: captured.text,
-              attachment: captured.attachment,
-              revision: current.revision,
-            },
-            scope,
-          );
-          drafts.set(key, { ...get(scope), revision: saved.revision });
-        } catch (error) {
-          drafts.set(key, { ...get(scope), error: (error as Error).message });
-        }
-        listeners.get(key)?.forEach((fn) => fn());
-      });
-      saves.set(key, save);
-    }, 300),
-  );
 }
-export function clearSubmittedDraft(
-  scope: Scope,
-  submitted: Pick<Draft, "text" | "attachment">,
-) {
-  const current = get(scope);
-  if (
-    current.text === submitted.text &&
-    JSON.stringify(current.attachment) === JSON.stringify(submitted.attachment)
-  )
-    updateDraft(scope, { text: "", attachment: null });
+export function draftContent(draft: DraftContent): DraftContent {
+  return {
+    text: draft.text,
+    attachment: draft.attachment ? { ...draft.attachment } : null,
+    attachments: (draft.attachments ?? []).map((attachment) => ({ ...attachment })),
+    images: (draft.images ?? []).map((image) => ({ ...image })),
+  };
+}
+export function clearSubmittedDraft(scope: Scope, submitted: DraftContent) {
+  const current = getDraft(scope);
+  if (JSON.stringify(draftContent(current)) === JSON.stringify(draftContent(submitted)))
+    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [] });
 }
 export function useDraft(scope: Scope) {
   const key = scopeKey(scope);
@@ -101,6 +47,6 @@ export function useDraft(scope: Scope) {
         group.delete(fn);
       };
     },
-    () => get(scope),
+    () => getDraft(scope),
   );
 }

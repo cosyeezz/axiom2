@@ -72,6 +72,56 @@ test("external receipts: pending recovery never repeats side effects after resta
   }
 });
 
+test("shared pi directory: provider-only save survives restart and native credentials supply models", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-shared-"));
+  const previous = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "shared-pi");
+  try {
+    const service = new ModelService(root);
+    const draft = await service.read();
+    draft.providers = [{ ...provider(), providerId: "openai", models: [], key: "TEST-ONLY" }];
+    await service.save(draft);
+    const reloaded = await new ModelService(root).read();
+    assert.equal(reloaded.providers[0].providerId, "openai");
+    assert.equal(reloaded.providers[0].auth?.configured, true);
+    assert.ok((await configuration(root)).available.some((m) => m.provider === "openai"));
+    // pi login without a models.json entry must also be usable and editable.
+    writeFileSync(join(service.dir, "models.json"), '{"providers":{}}');
+    assert.ok((await configuration(root)).available.some((m) => m.provider === "openai"));
+    const imported = await service.read();
+    assert.equal(imported.providers[0].providerId, "openai");
+    await service.save(imported);
+    assert.equal((await service.read()).providers[0].auth?.configured, true);
+  } finally {
+    if (previous === undefined) delete process.env.AXIOM_PI_DIR;
+    else process.env.AXIOM_PI_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("API key save rejects a login that did not persist a credential", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-missing-credential-"));
+  const previous = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "pi");
+  try {
+    const service = new ModelService(root);
+    const createRuntime = service.runtime.bind(service);
+    service.runtime = async (path) => {
+      const runtime = await createRuntime(path);
+      runtime.login = async () => ({ type: "api_key", key: "TEST-ONLY-NOT-PERSISTED" });
+      return runtime;
+    };
+    const draft = await service.read();
+    draft.providers = [{ ...provider(), key: "TEST-ONLY-NOT-PERSISTED" }];
+    await assert.rejects(service.save(draft), { code: "PARTIAL_CONFIG_FAILURE" });
+    assert.deepEqual(await (await createRuntime()).listCredentials(), []);
+  } finally {
+    if (previous === undefined) delete process.env.AXIOM_PI_DIR;
+    else process.env.AXIOM_PI_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const model = (id: string): ModelDraft => ({
   key: id,
   id,
@@ -91,9 +141,12 @@ const provider = (): ProviderDraft => ({
   body: [],
   models: [model("one"), model("two")],
 });
-test("Model configuration: validation, atomic publish, pi credentials, redaction, conflicts and deletion", async () => {
-  const root = mkdtempSync(join(tmpdir(), "axiom-models-")),
-    service = new ModelService(root),
+test("Model configuration: validation, atomic publish, pi credentials, redaction, conflicts and deletion", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-models-"));
+  const previousPi = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "pi");
+  t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
+  const service = new ModelService(root),
     store = new Store(root);
   const path = join(root, "pi", "models.json");
   const key = "TEST-ONLY-LOCAL-KEY",
@@ -130,7 +183,19 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
     assert.ok(!JSON.stringify(draft).includes(key));
     assert.ok(!JSON.stringify(draft).includes(header));
     assert.equal(draft.providers[0].auth?.type, "api_key");
+    assert.equal(draft.providers[0].auth?.source, "stored");
+    assert.equal(draft.storage?.authPath, join(root, "pi", "auth.json"));
+    assert.equal(draft.storage?.modelsPath, path);
+    const persistedKey = () => JSON.parse(readFileSync(join(root, "pi", "auth.json"), "utf8"))["axiom-config-test"]?.key;
+    assert.ok(persistedKey() === key, "API key must be written to auth.json");
+    draft.providers[0].key = "TEST-ONLY-REPLACEMENT";
     await service.save(draft);
+    assert.ok(persistedKey() === "TEST-ONLY-REPLACEMENT", "replacement key must reach disk");
+    draft = await new ModelService(root).read();
+    assert.equal(draft.providers[0].key, "");
+    assert.equal(draft.providers[0].auth?.configured, true);
+    await service.save(draft);
+    assert.ok(persistedKey() === "TEST-ONLY-REPLACEMENT", "blank input must preserve the saved key");
     assert.equal(
       JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"]
         .headers["X-Test"],
@@ -311,9 +376,12 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
   }
 });
 
-test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-free events (fixture only)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "axiom-auth-")),
-    service = new ModelService(root);
+test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-free events (fixture only)", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-auth-"));
+  const previousPi = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "pi");
+  t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
+  const service = new ModelService(root);
   const states: { owner: object; state: AuthState }[] = [],
     owner = {},
     foreign = {};

@@ -25,13 +25,28 @@ const wait = async (check: () => boolean, message: string, timeout = 20000) => {
 test(
   "Product main agent: isolated workers, real pi write/read tools, cancellation, selections, durable recovery and no replay (loopback)",
   { timeout: 90000 },
-  async () => {
+  async (t) => {
     const root = mkdtempSync(join(tmpdir(), "axiom-agent-")),
       project = join(root, "project");
+    const previousPi = process.env.AXIOM_PI_DIR;
+    process.env.AXIOM_PI_DIR = join(root, "pi");
+    t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
     mkdirSync(project);
+    mkdirSync(join(project, ".pi", "extensions"), { recursive: true });
+    mkdirSync(join(project, ".pi", "skills", "fixture-skill"), { recursive: true });
+    writeFileSync(join(project, ".pi", "APPEND_SYSTEM.md"), "PROJECT_PROMPT_DEFAULT_TRUST");
+    writeFileSync(join(project, ".pi", "skills", "fixture-skill", "SKILL.md"),
+      "---\nname: fixture-skill\ndescription: Default-trust test skill\n---\nFixture skill instructions.\n");
+    writeFileSync(join(project, ".pi", "extensions", "fixture.ts"),
+      `export default function (pi) {
+        pi.on("before_agent_start", (event) => ({
+          systemPrompt: event.systemPrompt + "\\nPROJECT_EXTENSION_EFFECTIVE_PROMPT"
+        }));
+      }`);
     mkdirSync(join(root, "pi"));
     let count = 0,
-      stall = false;
+      stall = false,
+      providerFailure = false;
     const requests: any[] = [];
     const fixture = createServer(async (req, res) => {
       let raw = "";
@@ -39,6 +54,11 @@ test(
       const body = JSON.parse(raw);
       requests.push(body);
       count++;
+      if (providerFailure) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "Unsupported parameter: temperature; api_key=sk-fixture-secret", type: "invalid_request_error", code: "unsupported_parameter" } }));
+        return;
+      }
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
       if (stall) return;
@@ -175,6 +195,9 @@ test(
         workspaceId: w.id,
       }) as Session;
       const scope: Scope = { workspaceId: w.id, sessionId: s.id };
+      // Legacy explicit denials no longer gate this product's default authorization.
+      app.store.db.exec("CREATE TABLE IF NOT EXISTS project_trust(workspaceId TEXT PRIMARY KEY, trusted INTEGER NOT NULL)");
+      app.store.db.prepare("INSERT INTO project_trust VALUES(?,0)").run(w.id);
       const call = (
         op: string,
         params = {},
@@ -256,27 +279,35 @@ test(
         ),
       );
       assert.ok(app.agents.info(scope).usage!.total > 0);
-      assert.ok(app.agents.info(scope).environment!.tools.includes("write"));
+      const environment = app.agents.info(scope).environment!;
+      assert.ok(environment.tools.includes("write"));
+      assert.ok(environment.skills.includes("fixture-skill"));
+      assert.match(environment.systemPrompt!, /PROJECT_PROMPT_DEFAULT_TRUST/);
+      assert.match(environment.systemPrompt!, /PROJECT_EXTENSION_EFFECTIVE_PROMPT/);
+      assert.ok(!environment.warnings.some((warning) => warning.includes("尚未授权")));
+      assert.ok(requests[0].messages.some((message: any) =>
+        message.role === "system" && JSON.stringify(message.content).includes("PROJECT_EXTENSION_EFFECTIVE_PROMPT")));
+      await assert.rejects(call("agent.trust", { trusted: false, confirmed: true }), { code: "UNKNOWN_OPERATION" });
+      const pool = (app.agents as any).runs;
+      assert.equal(pool.idle.size, 1, "completed sessions remain warm");
+      const warmPid = pool.idle.get(scope.sessionId).live.child.pid;
       stall = true;
       await call("prompt", { text: "stall" });
       await wait(() => count === 5, "stall did not start");
+      assert.equal(pool.live.get(scope.sessionId).child.pid, warmPid, "next prompt reuses the live pi worker");
+      assert.equal(pool.idle.size, 0, "busy worker is not an idle LRU entry");
       const other = app.store.execute({
         requestId: randomUUID(),
         op: "session.create",
         workspaceId: w.id,
       }) as Session;
       const otherScope = { workspaceId: w.id, sessionId: other.id };
-      assert.equal(
-        (
-          (await call("agent.receipt", { requestId }, scope)) as {
-            status: string;
-          }
-        ).status,
-        "committed",
-      );
-      await assert.rejects(call("agent.receipt", { requestId }, otherScope), {
+      assert.equal(app.store.receipt(requestId, scope).status, "committed");
+      assert.throws(() => app.store.receipt(requestId, otherScope), {
         code: "REQUEST_SCOPE_MISMATCH",
       });
+      for (const op of ["agent.receipt", "agent.continue", "agent.confirm-cleanup"])
+        await assert.rejects(call(op, { requestId }, scope), { code: "UNKNOWN_OPERATION" });
       await call(
         "agent.model",
         {
@@ -301,7 +332,9 @@ test(
       );
       await call("agent.stop", { runId: app.agents.info(scope).run!.id });
       assert.equal(app.agents.info(scope).run!.status, "cancelled");
-      assert.equal(app.agents.info(scope).run!.cleanup, "confirmed");
+      assert.ok(!("cleanup" in app.agents.info(scope).run!));
+      assert.equal(count, 6, "stop must not ask the model for a summary");
+      const boundFile = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file;
       assert.ok(running(app.agents.info(otherScope).run));
       await call(
         "agent.stop",
@@ -309,9 +342,11 @@ test(
         otherScope,
       );
       const before = app.agents.thread(scope).ids;
+      const savedPrompt = app.agents.info(scope).environment!.systemPrompt;
       await app.close();
       app = await start({ root, port: 0 });
       assert.deepEqual(app.agents.thread(scope).ids, before);
+      assert.equal(app.agents.info(scope).environment!.systemPrompt, savedPrompt);
       assert.equal(count, 6, "restart must not replay");
       assert.deepEqual(
         await call("prompt", params, scope, requestId),
@@ -319,10 +354,10 @@ test(
       );
       assert.equal(count, 6, "duplicate accepted request must not replay");
       stall = false;
-      await call("agent.continue");
+      await call("prompt", { text: "Fresh message after stop and restart" });
       await wait(
         () => !running(app.agents.info(scope).run),
-        "continue did not finish",
+        "fresh prompt after stop did not finish",
       );
       assert.equal(count, 7);
       assert.equal(app.agents.info(scope).run!.status, "completed");
@@ -336,6 +371,28 @@ test(
       const file = app.store.db
         .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
         .get(scope.sessionId)!.file as string;
+      assert.equal(file, boundFile, "fresh prompt reopens the same pi JSONL");
+      const entries = readFileSync(file, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      assert.ok(!entries.some((entry) => entry.customType === "axiom-request"), "no duplicate request transcript");
+      assert.ok(requests[6].messages.some((message: any) => JSON.stringify(message).includes("captured attachment")), "context comes from the bound pi history");
+      providerFailure = true;
+      await call("prompt", { text: "Show the provider rejection" });
+      await wait(() => !running(app.agents.info(scope).run), "provider failure did not settle");
+      assert.equal(count, 8);
+      const failedRun = app.agents.info(scope).run!;
+      assert.equal(failedRun.status, "failed");
+      assert.match(failedRun.error!, /400.*Unsupported parameter: temperature/s);
+      assert.doesNotMatch(failedRun.error!, /sk-fixture-secret/);
+      const failedMessage = app.agents.thread(scope).ids.map((id) => app.agents.message(scope, id))
+        .find((message) => message?.status === "failed" && message.error?.includes("Unsupported parameter"));
+      assert.ok(failedMessage, "failed assistant message preserves provider cause");
+      assert.equal(failedMessage.error, failedRun.error);
+      await app.close();
+      app = await start({ root, port: 0 });
+      assert.equal(app.agents.info(scope).run!.error, failedRun.error, "run cause survives restart");
+      assert.equal(app.agents.message(scope, failedMessage.id)?.error, failedMessage.error, "history retains the same redacted cause");
+      assert.equal(count, 8, "reading failure history must not retry");
+      providerFailure = false;
       await app.close();
       writeFileSync(file, "damaged");
       app = await start({ root, port: 0 });
@@ -347,7 +404,7 @@ test(
       assert.equal(readFileSync(file, "utf8"), "damaged");
       stall = true;
       await call("prompt", { text: "stop before provider logout" }, otherScope);
-      await wait(() => count === 8, "revocation run did not start");
+      await wait(() => count === 9, "revocation run did not start");
       const models = app.agents.models,
         draft = await models.read();
       await assert.rejects(
@@ -362,23 +419,23 @@ test(
         confirmStop: true,
       });
       assert.equal(app.agents.info(otherScope).run!.status, "cancelled");
-      assert.equal(app.agents.info(otherScope).run!.cleanup, "confirmed");
+      assert.ok(!("cleanup" in app.agents.info(otherScope).run!));
       await assert.rejects(
         call("prompt", { text: "deleted model cannot execute" }, otherScope),
         { code: "MODEL_UNAVAILABLE" },
       );
-      assert.equal(count, 8);
-      // A crash record is blocked until explicitly reconciled, even when no worker exists after restart.
+      assert.equal(count, 9);
+      // Crash recovery marks the record interrupted, without a cleanup confirmation gate.
       app.store.db
         .prepare(
-          "UPDATE runs SET status='running',cleanup='pending' WHERE id=?",
+          "UPDATE runs SET status='running' WHERE id=?",
         )
         .run(app.agents.info(otherScope).run!.id);
       await app.close();
       app = await start({ root, port: 0 });
       assert.equal(app.agents.info(otherScope).run!.status, "interrupted");
-      assert.equal(app.agents.info(otherScope).run!.cleanup, "unconfirmed");
-      assert.equal(count, 8, "crash recovery cannot resend");
+      assert.ok(!("cleanup" in app.agents.info(otherScope).run!));
+      assert.equal(count, 9, "crash recovery cannot resend");
     } finally {
       await app.close();
       fixture.closeAllConnections();

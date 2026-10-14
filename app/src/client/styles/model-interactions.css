@@ -1,3 +1,9 @@
+/* Model configuration feedback stays visible beside the save controls. */
+.configuration-feedback{flex-shrink:0;margin:0;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);color:var(--fg-2);font-size:12px;overflow-wrap:anywhere}
+.configuration-feedback:empty{display:none}
+.configuration-feedback[data-saved=true]{color:var(--fg);border-left:3px solid var(--success)}
+.credential-path{overflow-wrap:anywhere;min-width:0}
+.credential-path code{font-size:inherit;white-space:normal}
 /* Only the annotated model table: compact, independent copy actions. */
 #configured-model-table .copyable-value{display:flex;align-items:center;gap:4px;min-width:0}
 #configured-model-table .copyable-value>span,#configured-model-table .copyable-value>code{min-width:0;overflow-wrap:anywhere}

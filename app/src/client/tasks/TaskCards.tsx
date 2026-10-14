@@ -1,4 +1,9 @@
 import { createContext, memo, useContext } from "react";
+import { messageScope, type ChatMessage } from "../../shared/agent.js";
+import { Icon } from "../components.js";
+import { toolPreview, type ToolCall } from "../chat/tool-summary.js";
+import { callObject, taskCallLabel, taskCallStatus } from "./task-call.js";
+import "../styles/task-calls.css";
 import { useScope } from "../transport.js";
 import type { Scope } from "../../shared/protocol.js";
 import {
@@ -37,33 +42,39 @@ export function TaskState({ task }: { task: Task }) {
 }
 export const TaskCards = memo(function TaskCards({
   scope,
-  anchors,
+  call,
+  message,
 }: {
   scope: Scope;
-  anchors: string[];
+  call: ToolCall;
+  message: ChatMessage;
 }) {
   const list = useScope(tasksScope(scope), emptyTasks),
     open = useContext(OpenTask);
-  const tasks = list.tasks.filter((t) => anchors.includes(t.anchor));
-  if (!tasks.length) return null;
+  const result = useScope<ChatMessage | null>(messageScope(scope, `tool-${call.id}`), null);
+  const tasks = list.tasks.filter((t) => t.anchor === call.id);
+  const input = callObject(call.input);
+  const definitions = Array.isArray(input?.tasks) ? input.tasks.map((item: unknown) =>
+    item && typeof item === "object" && "task" in item && typeof item.task === "string" ? item.task : "准备子任务") : [];
+  const status = taskCallStatus(result, message);
+  const label = taskCallLabel("delegate", status, callObject(result?.text ?? ""));
+  const showFeedback = status === "failed" || status === "cancelled" || !tasks.length;
   return (
-    <section className="subagents" aria-label="子代理协作">
+    <section className="subagents delegation-card" data-tool="delegate" data-status={showFeedback ? status : "completed"} aria-label="子代理协作">
       <header className="subagents-head">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 6v10a3 3 0 0 0 3 3h8M6 8h11" />
-          <circle cx="6" cy="4" r="2" />
-          <circle cx="19" cy="8" r="2" />
-          <circle cx="19" cy="19" r="2" />
-        </svg>
+        <Icon name="tool-delegate" />
         <strong>子代理协作</strong>
-        <span>
-          {tasks.filter((t) => t.status === "completed").length} /{" "}
-          {tasks.length} 已完成
-        </span>
-        <small>{list.frozen ? "自动处理已冻结" : "独立 pi 会话"}</small>
+        {tasks.length > 0 ? <span>{tasks.filter((t) => t.status === "completed").length} / {tasks.length} 已完成</span> : <span className="task-operation-status" role="status">{status === "running" && <span className="execution-pulse" aria-hidden="true" />}{label}</span>}
       </header>
+      {showFeedback && <div className="delegation-feedback">
+        {status === "failed" ? <p className="task-call-error" role="alert">{tasks.length > 0 && "委派失败 · "}{toolPreview(result)}</p> : tasks.length > 0 ? <p className="task-call-meta">{label}</p> : null}
+        {!tasks.length && <div className="delegation-pending">
+          {(definitions.length ? definitions : ["准备子任务"]).map((description, index) => <p key={index} title={description}>{description}</p>)}
+          {status === "completed" && <span className="task-call-meta">委派已受理，等待任务记录同步</span>}
+        </div>}
+      </div>}
       {tasks.map((t) => (
-        <div className="subagent-card" key={t.id}>
+        <div className="subagent-card" key={t.id} data-task-id={t.id} data-result-ids={JSON.stringify(t.results.map((result) => result.id))}>
           <button
             type="button"
             className="subagent"
@@ -72,10 +83,10 @@ export const TaskCards = memo(function TaskCards({
             onClick={() => open(t.id)}
           >
             <span className="agent-identity">
-              <strong>{t.description}</strong>
+              <strong title={t.description}>{t.description}</strong>
               <small>
                 {t.results.length} 次交付 ·{" "}
-                {t.pending ? `${t.pending} 条待处理／核实` : "查看消息与工具"}
+                查看消息与工具
               </small>
             </span>
             <TaskState task={t} />
@@ -83,6 +94,7 @@ export const TaskCards = memo(function TaskCards({
               <path d="M14 4h6v6m0-6-9 9M10 5H5v14h14v-5" />
             </svg>
           </button>
+          {t.error && <p className="task-call-error" role="alert">{t.error}</p>}
         </div>
       ))}
     </section>

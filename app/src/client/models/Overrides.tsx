@@ -1,4 +1,4 @@
-import { Icon } from "../components.js";
+import { DeleteIcon } from "../DeleteIcon.js";
 import { samplingKeys, type OverrideRow as Row } from "../../shared/models.js";
 export function Headers({
   rows,
@@ -70,7 +70,7 @@ export function Headers({
               aria-label={`删除第 ${i + 1} 项`}
               onClick={() => change(rows.filter((r) => r.id !== row.id))}
             >
-              <Icon name="close" />
+              <DeleteIcon />
             </button>
           </div>
         ))}
@@ -151,7 +151,7 @@ export function BodyOverrides({
               aria-label={`删除第 ${i + 1} 项请求体覆盖`}
               onClick={() => change(rows.filter((row) => row.id !== r.id))}
             >
-              <Icon name="close" />
+              <DeleteIcon />
             </button>
           </div>
         ))}

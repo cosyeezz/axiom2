@@ -1,0 +1,11 @@
+/* Shared by the inline context card and the compression detail sheet. */
+.markdown.compression-summary { font-size: 13px; line-height: 1.85; color: var(--fg-2); }
+.markdown.compression-summary p { margin: 0 0 12px; font-size: inherit; line-height: inherit; color: inherit; }
+.markdown.compression-summary :is(h1, h2, h3, h4, h5, h6) { margin: 22px 0 10px; font-weight: 590; line-height: 1.5; color: var(--fg); }
+.markdown.compression-summary h1 { font-size: 20px; }
+.markdown.compression-summary h2 { font-size: 17px; }
+.markdown.compression-summary h3 { font-size: 15px; }
+.markdown.compression-summary :is(h4, h5, h6) { font-size: 13px; }
+.markdown.compression-summary > :first-child { margin-top: 0; }
+.markdown.compression-summary > :last-child { margin-bottom: 0; }
+.markdown.compression-summary .code-card pre { margin: 0; padding: 14px 16px; font: 12px/1.8 var(--font-mono); }

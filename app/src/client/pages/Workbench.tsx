@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { command, useScope } from "../transport.js";
+import { command } from "../transport.js";
 import { Icon, PanelIcon } from "../components.js";
 import {
   scopeKey,
@@ -10,29 +10,42 @@ import {
 import { AgentThread as Thread } from "../chat/AgentThread.js";
 import { Composer, EmptyComposer } from "../chat/Composer.js";
 import { TaskViews } from "../tasks/TaskViews.js";
-import { PreviewPanel } from "../preview/PreviewPanel.js";
 import { History } from "../workspaces/SessionHistory.js";
-import { OpenFolder, Title } from "../workspaces/WorkspaceControls.js";
+import { WorkspacePicker } from "../workspaces/WorkspacePicker.js";
+import { useWorkspaceView } from "../workspaces/useWorkspaceView.js";
+import { pickWorkspaceFolder, Title } from "../workspaces/WorkspaceControls.js";
 import "../styles/workbench.css";
 import "../styles/chat.css";
-const noWorkspaces: Workspace[] = [];
-function initialView(): Scope | null {
-  try {
-    return JSON.parse(sessionStorage.getItem("view") || "null");
-  } catch {
-    return null;
-  }
-}
-
 export default function Workbench() {
-  const workspaces = useScope("workspaces", noWorkspaces);
-  const [view, setView] = useState<Scope | null>(initialView);
-  const navigation = useRef(0);
+  const [error, setError] = useState("");
+  const { workspaces, workspaceId, view, select: selectView, selectSession, navigation } = useWorkspaceView(setError);
   const [collapsed, setCollapsed] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
-  const [previewScope, setPreviewScope] = useState<Scope | null>(null);
-  const [openFolder, setOpenFolder] = useState(false),
-    [error, setError] = useState("");
+  const [pickingFolder, setPickingFolder] = useState(false);
+  const folderRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => folderRequest.current?.abort(), []);
+  const chooseFolder = async () => {
+    if (folderRequest.current) return;
+    const controller = new AbortController();
+    folderRequest.current = controller;
+    setPickingFolder(true);
+    setError("");
+    try {
+      const path = await pickWorkspaceFolder(controller.signal);
+      if (controller.signal.aborted || path === null) return;
+      const opened = await command<Workspace>("workspace.open", { path, authorized: true });
+      if (controller.signal.aborted) return;
+      select({ workspaceId: opened.id, sessionId: "" });
+      await create(opened.id);
+    } catch (e) {
+      if (!controller.signal.aborted) setError((e as Error).message);
+    } finally {
+      if (folderRequest.current === controller) {
+        folderRequest.current = null;
+        setPickingFolder(false);
+      }
+    }
+  };
   const mobile = useRef(matchMedia("(max-width:640px)"));
   const [isMobile, setIsMobile] = useState(mobile.current.matches);
   useEffect(() => {
@@ -43,20 +56,15 @@ export default function Workbench() {
     mobile.current.addEventListener("change", change);
     return () => mobile.current.removeEventListener("change", change);
   }, []);
-  const workspace = workspaces.find((w) => w.id === view?.workspaceId);
+  const workspace = workspaces.find((w) => w.id === workspaceId);
+  const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
   const select = (next: Scope) => {
-    navigation.current++;
-    setView(next);
-    try {
-      sessionStorage.setItem("view", JSON.stringify(next));
-    } catch {
-      setError("查看位置无法保存；当前页面仍可使用。");
-    }
+    selectView(next);
     setMobileOpen(false);
   };
   const create = async (id = workspace?.id) => {
     if (!id) {
-      setOpenFolder(true);
+      void chooseFolder();
       return;
     }
     const startedAt = navigation.current;
@@ -72,8 +80,6 @@ export default function Workbench() {
       setError((e as Error).message);
     }
   };
-  const switchWorkspace = (w: Workspace) =>
-    select({ workspaceId: w.id, sessionId: "" });
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (
@@ -125,52 +131,14 @@ export default function Workbench() {
             <PanelIcon />
           </button>
         </div>
-        <details
-          className="workspace-picker"
-          id="workspace-picker"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") e.currentTarget.open = false;
-          }}
-        >
-          <summary aria-label="切换工作空间">
-            <Icon name="workspace" />
-            <span className="workspace-copy">
-              <strong>{workspace?.name || "选择工作空间"}</strong>
-            </span>
-            <Icon name="chevron" />
-          </summary>
-          <div className="workspace-menu">
-            <div className="workspace-list">
-              {workspaces.map((w) => (
-                <button
-                  className="workspace-option"
-                  key={w.id}
-                  aria-current={w.id === workspace?.id}
-                  title={w.path}
-                  onClick={(e) => {
-                    switchWorkspace(w);
-                    e.currentTarget.closest("details")!.open = false;
-                  }}
-                >
-                  <Icon name="workspace" />
-                  <span className="workspace-copy">
-                    <strong>{w.name}</strong>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button
-              id="add-workspace"
-              onClick={(e) => {
-                e.currentTarget.closest("details")!.open = false;
-                setOpenFolder(true);
-              }}
-            >
-              <Icon name="folder-plus" />
-              打开文件夹…
-            </button>
-          </div>
-        </details>
+        <WorkspacePicker
+          workspaces={workspaces}
+          workspace={workspace}
+          select={(w) => select({ workspaceId: w.id, sessionId: "" })}
+          picking={pickingFolder}
+          choose={() => void chooseFolder()}
+          onError={setError}
+        />
         <button
           className="btn new-chat"
           id="new-chat"
@@ -179,34 +147,14 @@ export default function Workbench() {
           <Icon name="new-chat" />
           <span>新建会话</span>
         </button>
-        {workspace ? (
-          <History
-            key={workspace.id}
-            workspace={workspace}
-            selected={view?.sessionId ?? ""}
-            select={select}
-            onError={setError}
-          />
-        ) : (
-          <>
-            <div className="search">
-              <Icon name="search" />
-              <input
-                className="input"
-                type="search"
-                placeholder="搜索会话"
-                aria-label="搜索置顶和当前空间的会话"
-                disabled
-              />
-            </div>
-            <div className="history">
-              <div className="group-label">对话记录</div>
-              <p className="meta" style={{ padding: 12 }}>
-                请先打开工作空间
-              </p>
-            </div>
-          </>
-        )}
+        <History
+          key={workspace?.id ?? "empty"}
+          workspace={workspace}
+          workspaces={workspaces}
+          selected={view}
+          select={(next) => { selectSession(next); setMobileOpen(false); }}
+          onError={setError}
+        />
         <a
           className="sidebar-foot config-entry"
           href="/settings.html"
@@ -255,24 +203,34 @@ export default function Workbench() {
               >
                 <PanelIcon />
               </button>
-              <Title workspace={workspace} scope={view} onError={setError} />
+              <Title workspace={viewedWorkspace} scope={view} onError={setError} />
             </div>
-            <button
-              className="btn"
-              disabled={!view?.sessionId}
-              onClick={() => setPreviewScope(view)}
-            >
-              预览与评论
-            </button>
           </header>
           <Thread
             key={view ? "thread:" + scopeKey(view) : "empty"}
             scope={view}
           />
-          {view?.sessionId && workspace ? (
+          {view?.sessionId && viewedWorkspace ? (
             <Composer key={scopeKey(view)} scope={view} />
           ) : (
-            <EmptyComposer />
+            <EmptyComposer
+              openWorkspace={() => void chooseFolder()}
+              onSelect={workspace ? async (selection) => {
+                const startedAt = navigation.current;
+                const session = await command<Session>(
+                  "session.create", {}, { workspaceId: workspace.id },
+                );
+                const scope = { workspaceId: workspace.id, sessionId: session.id };
+                try {
+                  await command("agent.model", { selection }, scope);
+                } catch (e) {
+                  setError((e as Error).message);
+                  throw e;
+                } finally {
+                  if (navigation.current === startedAt) select(scope);
+                }
+              } : undefined}
+            />
           )}
           {error && (
             <p className="execution-alert" role="alert">
@@ -288,22 +246,6 @@ export default function Workbench() {
           )}
         </main>
       </TaskViews>
-      {previewScope && (
-        <PreviewPanel
-          key={scopeKey(previewScope)}
-          scope={previewScope}
-          onClose={() => setPreviewScope(null)}
-        />
-      )}
-      {openFolder && (
-        <OpenFolder
-          close={() => setOpenFolder(false)}
-          opened={(w) => {
-            setOpenFolder(false);
-            void create(w.id);
-          }}
-        />
-      )}
     </div>
   );
 }

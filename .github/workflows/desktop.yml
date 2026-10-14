@@ -1,0 +1,44 @@
+name: Build Axiom2 Desktop
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x64
+            artifact: Axiom2-Windows-x64
+            output: |
+              app/Axiom2.msi
+              app/Axiom2.exe
+          - os: macos-latest
+            target: universal
+            artifact: Axiom2-macOS-universal
+            output: app/Axiom2.dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: npm ci
+      - run: npm --prefix app run build:desktop
+      - run: npm install --global pake-cli@3.16.2
+      - name: Package desktop client
+        working-directory: app
+        run: pake --config desktop/pake.json --targets ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.output }}
+          if-no-files-found: error
+          retention-days: 30

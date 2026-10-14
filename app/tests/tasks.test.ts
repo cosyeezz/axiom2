@@ -7,9 +7,10 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  existsSync,
   rmSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { startServer } from "../src/server/index.js";
@@ -31,10 +32,14 @@ const wait = async (check: () => boolean, description: string, ms = 35000) => {
 test(
   "Product subagents: four tools, durable queue, isolation, notifications, cancellation, follow-up, budgets and frozen restart (loopback)",
   { timeout: 120000 },
-  async () => {
+  async (t) => {
     const root = mkdtempSync(join(tmpdir(), "axiom-tasks-")),
       cwd = join(root, "project");
+    const previousPi = process.env.AXIOM_PI_DIR;
+    process.env.AXIOM_PI_DIR = join(root, "pi");
+    t.after(() => { if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi; });
     mkdirSync(cwd);
+    writeFileSync(join(cwd, "evidence.txt"), "read-only research evidence");
     mkdirSync(join(root, "pi"));
     const requests: any[] = [];
     let holdAll = false;
@@ -85,7 +90,7 @@ test(
           {
             context: "ONLY-SHARED-CONTEXT",
             tasks: [
-              { task: "child-A: write child-A.txt and report" },
+              { task: "child-A: inspect evidence.txt and report suggested changes" },
               { task: "child-B: inspect only and report" },
               { task: "child-C: inspect only and report" },
             ],
@@ -132,8 +137,8 @@ test(
             "Stopped summary. Existing output only; not verified, no rollback.",
         });
         chunk({}, "stop");
-      } else if (all.includes("child-A") && !all.includes('"name":"write"'))
-        tool("write", { path: "child-A.txt", content: "actual child output" });
+      } else if (all.includes("child-A") && !all.includes('"name":"read"'))
+        tool("read", { path: "evidence.txt" });
       else {
         chunk({
           role: "assistant",
@@ -223,10 +228,10 @@ test(
             .length === 1,
         "child A did not finish",
       );
-      assert.equal(
-        readFileSync(join(cwd, "child-A.txt"), "utf8"),
-        "actual child output",
-      );
+      assert.equal(readFileSync(join(cwd, "evidence.txt"), "utf8"), "read-only research evidence");
+      assert.equal(existsSync(join(cwd, "child-A.txt")), false);
+      assert.ok(requests.some((body) => body.messages.some((m: any) =>
+        m.role === "tool" && JSON.stringify(m.content).includes("read-only research evidence"))), "child actually read project evidence");
       await wait(
         () =>
           app.tasks.list(scope).tasks.find((t) => t.id === c.id)!.results
@@ -240,6 +245,7 @@ test(
       assert.ok(childRequests.length >= 3);
       for (const body of childRequests) {
         assert.ok(!JSON.stringify(body.messages).includes("PARENT-PRIVATE"));
+        assert.deepEqual(body.tools.map((t: any) => t.function.name).sort(), ["find", "grep", "ls", "read"]);
         assert.ok(
           taskToolNames.every(
             (n) => !(body.tools ?? []).some((t: any) => t.function.name === n),
@@ -278,13 +284,13 @@ test(
       const cancelId = randomUUID();
       await call(
         "task.cancel",
-        { taskId: b.id, mode: "summary" },
+        { taskId: b.id, reason: "Explicit test cancellation" },
         scope,
         cancelId,
       );
       await call(
         "task.cancel",
-        { taskId: b.id, mode: "summary" },
+        { taskId: b.id, reason: "Explicit test cancellation" },
         scope,
         cancelId,
       );
@@ -292,13 +298,15 @@ test(
         () =>
           app.tasks.list(scope).tasks.find((t) => t.id === b.id)!.results
             .length === 1,
-        "summary cancellation did not finish",
+        "forced cancellation did not finish",
       );
       const stopped = app.tasks.list(scope).tasks.find((t) => t.id === b.id)!;
       assert.equal(stopped.status, "cancelled");
       const result = app.tasks.result(scope, b.id, stopped.results[0].id);
-      assert.equal(result.cleanup, "confirmed");
-      assert.match(result.report, /Stopped summary/);
+      assert.ok(!("cleanup" in result));
+      assert.equal(result.reason, "Explicit test cancellation");
+      assert.ok(!requests.some((body) => JSON.stringify(body.messages.at(-1)).includes("工作已停止：")), "cancellation never asks the model for a summary");
+      const boundChildFile = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(b.sessionId)!.file;
       await call("task.append", { taskId: b.id, text: "explicit-followup" });
       await wait(
         () =>
@@ -311,8 +319,41 @@ test(
         result,
         "old result is immutable",
       );
+      assert.equal(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(b.sessionId)!.file, boundChildFile, "follow-up retains the bound pi JSONL");
       const childScope = { workspaceId: w.id, sessionId: b.sessionId };
       assert.equal(app.tasks.child(childScope)!.id, b.id);
+      const pool = (app.agents as any).runs;
+      const cached = pool.idle.get(b.sessionId);
+      assert.ok(cached, "completed child has a reusable worker");
+      assert.equal(dirname(cached.input.modelsFile), join(root, "run-models"));
+      const previousPid = cached.live.child.pid;
+      rmSync(cached.input.modelsFile);
+      await call("task.append", { taskId: b.id, text: "explicit-followup after missing snapshot" });
+      await wait(() => app.tasks.list(scope).tasks.find((t) => t.id === b.id)!.results.length === 3,
+        "follow-up after missing snapshot did not settle");
+      const recovered = app.tasks.list(scope).tasks.find((t) => t.id === b.id)!;
+      assert.equal(recovered.status, "completed", recovered.error ?? "follow-up failed");
+      assert.notEqual(pool.idle.get(b.sessionId)?.live.child.pid, previousPid, "missing snapshot retires the old owner before cold start");
+      assert.equal(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(b.sessionId)!.file, boundChildFile);
+      assert.deepEqual(app.tasks.result(scope, b.id, stopped.results[0].id), result);
+      const launchWorker = pool.launchWorker;
+      pool.launchWorker = async function (target: Scope, ...args: unknown[]) {
+        if (target.sessionId === b.sessionId) throw new Error("EACCES: fixture snapshot denied; api_key=sk-startup-secret");
+        return launchWorker.call(this, target, ...args);
+      };
+      try {
+        await call("task.append", { taskId: b.id, text: "explicit-followup with startup failure" });
+        await wait(() => app.tasks.list(scope).tasks.find((t) => t.id === b.id)!.results.length === 4,
+          "startup failure did not produce a result");
+        const failed = app.tasks.list(scope).tasks.find((t) => t.id === b.id)!;
+        assert.equal(failed.status, "failed");
+        assert.match(failed.error!, /EACCES: fixture snapshot denied/);
+        assert.doesNotMatch(failed.error!, /sk-startup-secret/);
+        assert.equal(app.agents.info(childScope).run!.error, failed.error);
+        assert.equal(app.tasks.result(scope, b.id, failed.results.at(-1)!.id).reason, failed.error);
+        assert.ok(!requests.some((body) => JSON.stringify(body.messages).includes("explicit-followup with startup failure")),
+          "failed startup never sends the input to the model");
+      } finally { pool.launchWorker = launchWorker; }
       await wait(
         () => !running(app.agents.info(scope).run),
         "parent still running",
@@ -328,8 +369,12 @@ test(
           "running",
         "child did not restart",
       );
-      const beforeStop = requests.length;
-      await call("agent.stop", { runId: app.agents.info(scope).run!.id });
+      // Worker running precedes HTTP arrival. Observe the actual child request before stopping.
+      const isParentRequest = (body: any) => (body.tools ?? []).some((tool: any) => tool.function.name === "delegate");
+      await wait(() => requests.some((body) => !isParentRequest(body) && JSON.stringify(body.messages).includes("stall for parent stop")), "child stop fixture request did not arrive");
+      const parentRunBeforeStop = app.agents.info(scope).run!.id;
+      await call("agent.stop", { runId: parentRunBeforeStop });
+      const parentRequestsAfterStop = requests.filter(isParentRequest).length;
       assert.ok(app.tasks.list(scope).frozen);
       await wait(
         () =>
@@ -339,7 +384,9 @@ test(
         "parent stop did not stop child",
       );
       await new Promise((r) => setTimeout(r, 250));
-      assert.equal(requests.length, beforeStop, "frozen parent must not wake");
+      assert.equal(requests.filter(isParentRequest).length, parentRequestsAfterStop, "frozen parent must not issue another model request");
+      assert.equal(app.agents.info(scope).run!.id, parentRunBeforeStop, "stop cannot create a new parent notification run");
+      assert.ok(!running(app.agents.info(scope).run), "frozen parent has no active execution");
       const beforeRestart = requests.length;
       await app.close();
       app = await start({ root, port: 0 });
@@ -355,31 +402,18 @@ test(
         beforeRestart,
         "restart cannot replay tasks or notices",
       );
-      writeFileSync(join(cwd, "index.html"), "<h1>Child preview</h1>");
-      const preview = (await app.previews.command({
-        requestId: randomUUID(),
-        op: "preview.open",
-        ...childScope,
-        params: { mode: "static", directory: ".", authorized: true },
-      })) as { origin: string };
-      const previewPort = Number(new URL(preview.origin).port);
-      await app.previews.remove({
+      await app.agents.models.serial(() => app.tasks.remove({
         requestId: randomUUID(),
         op: "session.delete",
         ...scope,
         params: { confirmed: true },
-      });
+      }));
       assert.throws(() => app.store.session(w.id, b.sessionId), {
         code: "SCOPE_MISMATCH",
       });
-      await assert.rejects(
-        fetch(`http://127.0.0.1:${previewPort}/`),
-        "parent deletion must close child-owned preview gateways",
-      );
-      assert.equal(
-        readFileSync(join(cwd, "child-A.txt"), "utf8"),
-        "actual child output",
-      );
+      assert.equal(readFileSync(join(cwd, "evidence.txt"), "utf8"), "read-only research evidence");
+      for (const body of requests.filter((body) => !isParentRequest(body)))
+        assert.deepEqual(body.tools.map((t: any) => t.function.name).sort(), ["find", "grep", "ls", "read"], "follow-ups also remain read-only");
     } catch (e) {
       mkdirSync("test-results", { recursive: true });
       writeFileSync(

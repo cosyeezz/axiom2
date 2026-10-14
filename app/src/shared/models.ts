@@ -66,6 +66,7 @@ export interface ProviderDraft {
 export interface ModelConfiguration {
   revision: string;
   providers: ProviderDraft[];
+  storage?: { modelsPath: string; authPath: string };
   templates: { id: string; name: string; api: string; url: string }[];
 }
 export interface AuthState {

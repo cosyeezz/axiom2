@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
@@ -21,7 +21,15 @@ export function ModelPicker({
   scope,
   nested = false,
   childDefault = false,
+  onDefaultSelect,
+  onSelect,
+  value,
+  disabled = false,
 }: {
+  value?: Selection | null;
+  onDefaultSelect?: (selection: Selection | null) => Promise<void>;
+  disabled?: boolean;
+  onSelect?: (selection: Selection) => Promise<void>;
   scope?: Scope;
   nested?: boolean;
   childDefault?: boolean;
@@ -35,12 +43,37 @@ export function ModelPicker({
       childDefault && scope ? tasksScope(scope) : null,
       emptyTasks,
     );
-  const selection = childDefault ? tasks.defaultModel : info.selection;
+  const selection = value !== undefined ? value : childDefault ? tasks.defaultModel : info.selection;
   const [query, setQuery] = useState(""),
     [draft, setDraft] = useState<Selection | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const details = useRef<HTMLDetailsElement>(null);
+  const effortId = useId();
+  useEffect(() => {
+    if (onDefaultSelect) setDraft(selection);
+  }, [selection, onDefaultSelect]);
+  const choose = async (next: Selection | null) => {
+    setDraft(next);
+    if (!onDefaultSelect) return;
+    setBusy(true);
+    setError("");
+    try { await onDefaultSelect(next); }
+    catch (e) { setDraft(selection); setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const close = () => {
+    if (!details.current) return;
+    details.current.open = false;
+    details.current.querySelector("summary")?.focus();
+  };
+  const models = config.available
+    .filter((m) =>
+      `${m.provider} ${m.name} ${m.id}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    )
+    .sort((a, b) => Number(favorite(b)) - Number(favorite(a)));
   const chosen = config.available.find(
     (m) => m.provider === draft?.provider && m.id === draft.id,
   );
@@ -48,23 +81,29 @@ export function ModelPicker({
     <details
       ref={details}
       className="model-picker"
-      id={nested || childDefault ? undefined : "model-picker"}
+      id={nested || childDefault || onSelect ? undefined : "model-picker"}
       onToggle={(e) => {
+        if (e.currentTarget.open && disabled) {
+          e.currentTarget.open = false;
+          return;
+        }
         if (e.currentTarget.open) {
           setDraft(selection);
+          setQuery("");
           setError("");
         }
       }}
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
+        if (e.key === "Escape" && e.currentTarget.open) {
           e.preventDefault();
           e.stopPropagation();
-          e.currentTarget.open = false;
-          e.currentTarget.querySelector("summary")?.focus();
+          close();
         }
       }}
     >
       <summary
+        aria-disabled={disabled || undefined}
+        onClick={(e) => { if (disabled) e.preventDefault(); }}
         aria-label={
           childDefault ? "选择默认子模型" : "选择供应商、模型与思考等级"
         }
@@ -90,44 +129,41 @@ export function ModelPicker({
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <div className="model-list">
+        <div className="model-list" aria-label="可用模型" aria-busy={busy}>
           {childDefault && (
             <button
               type="button"
               className="model-option"
               aria-pressed={!draft}
-              onClick={() => setDraft(null)}
+              disabled={busy || disabled}
+              onClick={() => void choose(null)}
             >
               继承创建时的主会话模型
             </button>
           )}
-          {config.available
-            .filter((m) =>
-              `${m.provider} ${m.name} ${m.id}`
-                .toLowerCase()
-                .includes(query.trim().toLowerCase()),
-            )
-            .sort((a, b) => Number(favorite(b)) - Number(favorite(a)))
-            .map((m) => (
+          {models.map((m) => (
               <div className="model-row" key={`${m.provider}/${m.id}`}>
                 <button
                   type="button"
                   className="model-option"
+                  disabled={busy || disabled}
+                  title={`${m.name}\n${m.provider} / ${m.id}`}
                   aria-pressed={
                     draft?.provider === m.provider && draft.id === m.id
                   }
                   onClick={() =>
-                    setDraft({
+                    void choose({
                       provider: m.provider,
                       id: m.id,
-                      thinking: m.levels.includes(draft?.thinking!)
-                        ? draft!.thinking
+                      thinking: draft && m.levels.includes(draft.thinking)
+                        ? draft.thinking
                         : m.levels[0],
                     })
                   }
                 >
-                  <span>
-                    {m.name} <small>[{m.provider}]</small>
+                  <span className="model-copy">
+                    <span className="model-name">{m.name}</span>
+                    <small className="model-provider-name">{m.provider}</small>
                   </span>
                   <svg
                     className="model-check"
@@ -165,61 +201,67 @@ export function ModelPicker({
               {config.error || "暂无可用模型，请先配置模型服务。"}
             </p>
           )}
-          <a className="model-option" href="/model-config.html">
-            前往模型服务
-          </a>
+          {!!config.available.length && !models.length && (
+            <p className="model-empty" role="status">
+              没有匹配的模型，试试其他名称或供应商。
+            </p>
+          )}
         </div>
+        <fieldset className="model-reasoning" disabled={busy || disabled}>
+          <legend>思考等级</legend>
+          {chosen ? (
+            <div className="model-levels">
+              {chosen.levels.map((level) => (
+                <label className="model-level" key={level}>
+                  <input
+                    type="radio"
+                    name={effortId}
+                    value={level}
+                    checked={draft!.thinking === level}
+                    onChange={() => void choose({ ...draft!, thinking: level })}
+                  />
+                  <span>{level === "off" ? "none" : level}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p>{childDefault && !draft ? "随主会话模型继承" : "选择模型后设置"}</p>
+          )}
+        </fieldset>
         <div className="model-footer">
-          <span className="effort-heading">思考</span>
-          <div className="effort-options">
-            {chosen ? (
-              <select
-                aria-label="思考等级"
-                value={draft!.thinking}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft!,
-                    thinking: e.target.value as Selection["thinking"],
-                  })
-                }
-              >
-                {chosen.levels.map((l) => (
-                  <option key={l} value={l}>
-                    {l === "off" ? "none" : l}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              "—"
-            )}
-          </div>
-          <div className="model-actions">
+          <a className="model-manage" href="/model-config.html">模型服务</a>
+          {onDefaultSelect ? <span role="status">{busy ? "保存中…" : "选择后自动保存"}</span> : <div className="model-actions">
             <button
               type="button"
-              className="icon-btn"
+              className="model-cancel"
               aria-label="取消模型设置"
-              onClick={() => {
-                details.current!.open = false;
-              }}
+              disabled={busy}
+              onClick={close}
             >
-              <Icon name="close" />
+              取消
             </button>
             <button
               type="button"
-              className="icon-btn"
+              className="model-confirm"
               aria-label="确认模型设置"
               disabled={
-                !scope || (!chosen && !(childDefault && !draft)) || busy
+                disabled || (!scope && !onSelect) ||
+                (!(chosen && draft && chosen.levels.includes(draft.thinking)) && !(childDefault && !draft)) || busy
               }
               onClick={async () => {
                 setBusy(true);
+                setError("");
                 try {
-                  await command(
-                    childDefault ? "task.default-model" : "agent.model",
-                    { selection: draft },
-                    scope,
-                  );
-                  details.current!.open = false;
+                  if (draft && onSelect) {
+                    await onSelect(draft);
+                  } else if (scope) {
+                    await command(
+                      childDefault ? "task.default-model" : "agent.model",
+                      { selection: draft },
+                      scope,
+                    );
+                  }
+                  close();
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -227,18 +269,16 @@ export function ModelPicker({
                 }
               }}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m5 12 4 4L19 6" />
-              </svg>
+              {busy ? "保存中…" : "确认"}
             </button>
-          </div>
+          </div>}
         </div>
         {running(info.run) && (
           <p className="meta">
             当前执行：{info.run!.selection.id}；确认的选择用于下次执行。
           </p>
         )}
-        {error && <p className="execution-alert">{error}</p>}
+        {error && <p className="execution-alert" role="alert">{error}</p>}
       </div>
     </details>
   );

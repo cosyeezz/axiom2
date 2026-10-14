@@ -28,7 +28,7 @@ export function taskTools(
       name: "delegate",
       label: "委派子任务",
       description:
-        "异步委派 1–8 个独立子任务。context 必须给出背景，task 给出目标、范围和交付要求；并行任务不要修改相同文件。返回 taskIds、排队状态和预算，不等待结果。子任务结束后收到 taskId/runId/resultId 通知，再用 read_result 读取；不要轮询。子代理不能继续委派。",
+        "异步委派 1–8 个独立只读调研子任务，用于调查、分析和审查，不用于实施修改。context 必须给出背景，task 给出目标、范围和交付要求。子代理仅有 read、grep、find、ls，不能修改文件、执行 shell 或加载外部扩展；所有修改与命令验证由主代理完成。返回 taskIds、排队状态和预算，不等待结果。子任务结束后收到 taskId/runId/resultId 通知，再用 read_result 读取；不要轮询。子代理不能继续委派。",
       parameters: Type.Object(
         {
           context: text,
@@ -53,7 +53,7 @@ export function taskTools(
       name: "append",
       label: "追问子任务",
       description:
-        "补充本主会话所属子任务。steer（默认）在 pi 安全边界送达，followUp 在当前工作结束后送达。结束后追问沿用同一子会话并创建新执行。追加不延长本次预算；不要用作进度查询。",
+        "补充本主会话所属只读调研子任务，追问不能提升权限，修改仍由主代理执行。steer（默认）在 pi 安全边界送达，followUp 在当前工作结束后送达。结束后追问沿用同一子会话并创建新执行。追加不延长本次预算；不要用作进度查询。",
       parameters: Type.Object(
         {
           taskId: id,
@@ -68,11 +68,10 @@ export function taskTools(
       name: "cancel_task",
       label: "停止子任务",
       description:
-        "停止指定子任务，其他任务不受影响。summary（默认）先停止工具，再作限时禁工具总结；immediate 不请求总结。返回受理回执，最终结果经完成通知读取；停止不回滚文件。",
+        "直接强制停止指定子任务，其他任务不受影响，不再请求模型总结。返回受理回执，已有结果经完成通知读取；停止不回滚文件或外部副作用。",
       parameters: Type.Object(
         {
           taskId: id,
-          mode: Type.Optional(StringEnum(["summary", "immediate"])),
           reason: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
         },
         { additionalProperties: false },

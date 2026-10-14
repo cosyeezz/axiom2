@@ -28,25 +28,32 @@ export function Dialog({
   onClose,
   children,
   className = "workspace-dialog",
+  describedBy,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  describedBy?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement;
     ref.current!.showModal();
-    return () => trigger?.focus({ preventScroll: true });
+    return () => {
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    };
   }, []);
   return (
     <dialog
       ref={ref}
       className={className}
       aria-label={title}
+      aria-describedby={describedBy}
+      onKeyDown={(e) => e.stopPropagation()}
       onCancel={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       }}
     >

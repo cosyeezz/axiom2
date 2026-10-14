@@ -8,6 +8,8 @@ import {
 import type { Selection } from "../shared/agent.js";
 import { ModelService } from "./model-service.js";
 import { openTranscript } from "./transcript.js";
+import { compactionInstructions } from "./compaction-display.js";
+import { compressionError } from "./compression-error.js";
 
 export interface CompressionInput {
   root: string;
@@ -42,7 +44,10 @@ async function run(input: CompressionInput) {
       input.selection.provider,
       input.selection.id,
     );
-    if (!model || runtime.getError()) throw Error();
+    const configurationError = runtime.getError();
+    // Parser diagnostics may echo arbitrary secret configuration values.
+    if (configurationError) throw Error("压缩模型配置读取失败，请检查供应商配置；原配置未修改。");
+    if (!model) throw Error("所选压缩模型不可用，请检查供应商与模型配置。");
     // Snapshot-only summarization: no project resources, extension hooks or coding tools.
     const settingsManager = SettingsManager.inMemory({
       cacheWarming: "off",
@@ -72,14 +77,26 @@ async function run(input: CompressionInput) {
       sessionManager: openTranscript(input.file, input.cwd),
       noTools: "all",
     }));
-    if (session.thinkingLevel !== input.selection.thinking) throw Error();
+    if (session.thinkingLevel !== input.selection.thinking)
+      throw Error("压缩模型未能使用所选思考等级，请重新选择模型设置。");
     session.subscribe((event) => {
       if (event.type === "compaction_start") send({ type: "phase" });
     });
     if (cancelled) return send({ type: "cancelled" });
-    const result = await session.compact();
+    // Pi 1.1.0 drops customInstructions in generateTurnPrefixSummary (split turns).
+    // This session only compacts snapshots: include the same requirement in every
+    // native summary request, without another model call or persisted chat message.
+    const stream = session.agent.streamFunction;
+    session.agent.streamFunction = (model, context, options) => stream(model, {
+      ...context,
+      messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }],
+    }, options);
+    const result = await session.compact(compactionInstructions);
+    const entry = session.sessionManager.getLeafEntry();
+    if (entry?.type !== "compaction") throw Error("pi 未生成有效的原生压缩记录，摘要未应用。");
     send({
       type: "completed",
+      entry,
       summary: result.summary,
       before: result.tokensBefore,
       after: result.estimatedTokensAfter ?? null,
@@ -94,8 +111,8 @@ async function run(input: CompressionInput) {
             }
           : null,
     });
-  } catch {
-    send({ type: cancelled ? "cancelled" : "failed" });
+  } catch (error) {
+    send(cancelled ? { type: "cancelled" } : { type: "failed", error: compressionError(error) });
   } finally {
     session?.dispose();
     if (process.connected)

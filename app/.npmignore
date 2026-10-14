@@ -1,0 +1,4 @@
+# npm uses this file instead of .gitignore so the release can include dist/.
+node_modules/
+test-results/
+*.log

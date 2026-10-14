@@ -18,6 +18,8 @@ export function useConfiguration() {
   const config = useScope("configuration", empty),
     connection = useConnection();
   const [revision, setRevision] = useState("");
+  const [storage, setStorage] = useState<ModelConfiguration["storage"]>();
+  const [saved, setSaved] = useState(false);
   const [templates, setTemplates] = useState<ModelConfiguration["templates"]>(
     [],
   );
@@ -86,6 +88,8 @@ export function useConfiguration() {
       setProviders(data.providers);
       setRevision(data.revision);
       setTemplates(data.templates);
+      setStorage(data.storage);
+      setSaved(false);
       setSelected((old) =>
         data.providers.some((p) => p.id === old)
           ? old
@@ -117,6 +121,8 @@ export function useConfiguration() {
   ) => {
     const next = stageEditor();
     if (!next) return;
+    setSaved(false);
+    setFeedback("正在保存配置和密钥…");
     setBusy(true);
     try {
       await command("configuration.save", {
@@ -127,10 +133,14 @@ export function useConfiguration() {
         confirmStop,
       });
       setNeedsReconcile(true);
-      if (await load())
+      if (await load()) {
+        setSaved(true);
         setFeedback(
-          "配置已发布并刷新目录；配置有效不代表远端认证或模型调用成功。",
+          next.some((provider) => provider.key.trim())
+            ? "保存成功：配置和 API 密钥已写入本地文件。密钥不回显，留空可保留已保存的密钥。"
+            : "保存成功：配置已写入本地文件，模型目录已刷新。",
         );
+      }
     } catch (error) {
       const e = error as Error & { code?: string };
       setFeedback(e.message);
@@ -166,36 +176,9 @@ export function useConfiguration() {
       setBusy(false);
     }
   };
-  useEffect(() => {
-    const leave = (e: BeforeUnloadEvent) => {
-      if (dirty || editor || busy) e.preventDefault();
-    };
-    const navigate = (e: MouseEvent) => {
-      const link = (e.target as Element).closest("a[href]");
-      if (
-        (!dirty && !editor && !busy) ||
-        !link ||
-        link.getAttribute("target") === "_blank" ||
-        e.ctrlKey ||
-        e.metaKey ||
-        e.shiftKey
-      )
-        return;
-      e.preventDefault();
-      setDecision({
-        title: "离开模型服务？",
-        text: "当前草稿尚未保存，离开会丢失草稿及临时密钥。取消可留在本页继续编辑。",
-        proceed: () => location.assign(link.getAttribute("href")!),
-      });
-    };
-    window.addEventListener("beforeunload", leave);
-    document.addEventListener("click", navigate);
-    return () => {
-      window.removeEventListener("beforeunload", leave);
-      document.removeEventListener("click", navigate);
-    };
-  }, [dirty, editor, busy]);
   const patch = (change: Partial<Provider>) => {
+    setSaved(false);
+    setFeedback("");
     setDirty(true);
     setProviders((all) =>
       all.map((item) => (item.id === selected ? { ...item, ...change } : item)),
@@ -322,6 +305,8 @@ export function useConfiguration() {
     config,
     connection,
     revision,
+    storage,
+    saved: saved && !dirty && !editorDirty,
     templates,
     dirty: dirty || editorDirty,
     stageEditor,

@@ -13,7 +13,7 @@ const root = mkdtempSync(join(tmpdir(), "axiom-desktop-"));
 const start = (
   await import(new URL("../dist/server/index.js", import.meta.url).href)
 ).startServer as typeof startServer;
-const app = await start({ root: join(root, "data"), port: 0 });
+const app = await start({ root: join(root, "data"), port: 4317 });
 mkdirSync("test-results", { recursive: true });
 try {
   await new Promise<void>((done, reject) => {

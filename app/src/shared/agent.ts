@@ -15,6 +15,23 @@ export interface Selection {
   id: string;
   thinking: Thinking;
 }
+export type RunPhase = "initializing" | "requesting" | "generating" | "executing_tools" | "retry_wait" | "retrying" | "compacting" | "settling";
+export interface RetryInfo {
+  runId: string;
+  episodeId: string;
+  attempt: number;
+  maxAttempts: number;
+  state: "waiting" | "retrying" | "succeeded" | "exhausted" | "cancelled";
+  nextRetryAt?: number;
+  message?: string;
+}
+export interface RetrySettings {
+  enabled: boolean;
+  maxRetries: number;
+  baseDelayMs: number;
+  maxAgentDelayMs: number;
+  provider: { maxRetries?: number; maxRetryDelayMs: number; timeoutMs?: number };
+}
 export interface Run {
   id: string;
   sessionId: string;
@@ -30,23 +47,30 @@ export interface Run {
   startedAt: number;
   endedAt: number | null;
   error: string | null;
-  cleanup: "pending" | "confirmed" | "unconfirmed";
+  reasonCode?: string | null;
+  phase?: RunPhase | null;
+  retry?: RetryInfo | null;
+  resumedFromRunId?: string | null;
 }
 export interface AgentInfo {
+  activeTaskCount?: number;
+  queue?: { id: string; text: string; mode: "steer" | "followUp" }[];
   task?: {
     id: string;
     parentSessionId: string;
     status: import("./tasks.js").TaskStatus;
   };
-  phase?: string;
   selection: Selection | null;
   run: Run | null;
   environment: {
     cwd: string;
+    /** Absent only in environment snapshots saved before prompt inspection. */
+    systemPrompt?: string;
     tools: string[];
     skills: string[];
     extensions: number;
     warnings: string[];
+    retry?: RetrySettings;
   } | null;
   usage: {
     input: number;
@@ -59,6 +83,8 @@ export interface AgentInfo {
       tokens: number | null;
       window: number;
       percent: number | null;
+      /** Content-based pi estimate while post-compaction provider usage is unavailable. */
+      estimated?: boolean;
     } | null;
   } | null;
 }
@@ -67,6 +93,12 @@ export interface ChatMessage {
   role: "user" | "assistant" | "toolResult" | "notice";
   text: string;
   thinking?: string;
+  thinkingActive?: boolean;
+  /** Display-only terminal task notice; native result payload stays in the agent context. */
+  taskNotice?: "completed" | "cancelled" | "failed" | "interrupted" | "unknown";
+  resultId?: string;
+  /** Metadata only. Paths use files.preview; native blocks use message.image + this message's id. */
+  images?: (Omit<import("./protocol.js").ImageAttachment, "data"> & { path?: string })[];
   calls?: { id: string; name: string; input: string }[];
   toolName?: string;
   toolCallId?: string;
@@ -75,11 +107,27 @@ export interface ChatMessage {
   error?: string;
   streaming?: boolean;
   truncated?: boolean;
+  compression?: { number: number; title: string; before: number; after: number | null };
+  inputIds?: string[];
 }
 export interface ThreadIndex {
   ids: string[];
-  before: string | null;
+  groups?: {
+    id: string;
+    ids: string[];
+    activity: boolean;
+    /** These message IDs contribute only thinking; their task cards stay outside. */
+    thinkingOnlyIds?: string[];
+    /** Thinking is already rendered in the preceding activity group. */
+    hideThinking?: boolean;
+  }[];
   error?: string;
+  /** Reading watermark published with this rendered context, never inferred from the sidebar. */
+  resultVersion?: number;
+  readVersion?: number;
+  resultTasks?: { taskId: string; resultId: string }[];
+  runId?: string;
+  runStatus?: Run["status"];
 }
 export const agentScope = (s: Scope) => `agent:${s.workspaceId}:${s.sessionId}`;
 export const threadScope = (s: Scope) =>
@@ -92,9 +140,10 @@ export const emptyAgent: AgentInfo = {
   environment: null,
   usage: null,
 };
-export const emptyThread: ThreadIndex = { ids: [], before: null };
-export const running = (run: Run | null | undefined) =>
-  !!run && ["starting", "running", "stopping"].includes(run.status);
+export const emptyThread: ThreadIndex = { ids: [] };
+export const activeStatus = (status: string | null | undefined) =>
+  ["starting", "running", "stopping"].includes(status ?? "");
+export const running = (run: Run | null | undefined) => activeStatus(run?.status);
 export const runLabels: Record<Run["status"], string> = {
   starting: "正在初始化",
   running: "执行中",

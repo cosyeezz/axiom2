@@ -42,18 +42,13 @@ try {
     [IO.File]::WriteAllLines($env:AXIOM_DESKTOP_SCREENSHOT+'.txt', [string[]]@($names), [Text.Encoding]::UTF8)
     throw "Desktop control unavailable: $name"
   }
-  $button=Wait-Named '连接本地服务'
-  $input=$window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit))
-  if(!$input){throw 'Desktop access-link input unavailable'}
-  $input.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($env:AXIOM_DESKTOP_ACCESS)
-  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   $null=Wait-Named '已连接本地服务'
-  $null=Wait-Named '预览与评论'
+  $null=Wait-Named '新建会话'
   Screenshot
   $settings=Wait-Named '打开应用配置'
   $settings.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   $null=Wait-Named '子任务并发与预算'
-  Write-Output 'PASS: packaged Windows window connected to dynamic-port local service and opened product settings.'
+  Write-Output 'PASS: packaged Windows window automatically connected to fixed-port local service and opened product settings.'
 } finally {
   if (!$process.HasExited) { $null=$process.CloseMainWindow(); if(!$process.WaitForExit(5000)){$process.Kill()} }
 }

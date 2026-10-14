@@ -59,7 +59,7 @@ export class ModelService {
   authActive = false;
   beforeLogout?: (providers: string[], confirmed: boolean) => Promise<void>;
   constructor(readonly root: string) {
-    this.dir = join(root, "pi");
+    this.dir = process.env.AXIOM_PI_DIR || join(root, "pi");
   }
   // ponytail: one application config writer; split locks only if independent config domains become necessary.
   serial<T>(run: () => Promise<T>): Promise<T> {
@@ -122,6 +122,9 @@ export class ModelService {
         "REVISION_CONFLICT",
         "读取期间配置已改变；请重新读取。",
       );
+    if (process.env.AXIOM_PI_DIR)
+      for (const credential of await runtime.listCredentials())
+        config.providers[credential.providerId] ??= {};
     return { raw, config, runtime, revision: digest(raw) };
   }
   async read(): Promise<ModelConfiguration> {
@@ -180,6 +183,10 @@ export class ModelService {
     return {
       revision,
       providers,
+      storage: {
+        modelsPath: join(this.dir, "models.json"),
+        authPath: join(this.dir, "auth.json"),
+      },
       templates: runtime.getProviders().map((p) => ({
         id: p.id,
         name: p.name,
@@ -264,10 +271,19 @@ export class ModelService {
           });
           credentialsChanged = true;
         }
-        await active.getAvailable(undefined, {
+        // Reopen the on-disk store: an in-memory login alone must not count as saved.
+        const persisted = await this.runtime();
+        const stored = await persisted.listCredentials();
+        for (const providerId of keys.keys())
+          if (!stored.some((c) => c.providerId === providerId && c.type === "api_key"))
+            throw new AppError(
+              "CREDENTIAL_NOT_PERSISTED",
+              "未能从本地认证文件重新读取已保存的 API 密钥。",
+            );
+        await persisted.getAvailable(undefined, {
           signal: AbortSignal.timeout(5000),
         });
-        if (active.getError()) throw Error();
+        if (persisted.getError()) throw Error();
         return { revision: digest(raw), loggedOut: [...logout] };
       } catch (error) {
         if (

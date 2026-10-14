@@ -5,6 +5,21 @@ import {
   type Compression,
 } from "../../shared/compression.js";
 import { Icon } from "../components.js";
+import type { Selection } from "../../shared/agent.js";
+import { ModelPicker } from "./ModelPicker.js";
+import { CompressionSummary } from "./CompressionSummary.js";
+import { AutoCompressionSettings } from "./AutoCompressionSettings.js";
+
+export function compressionStatusLabel(job: Compression) {
+  if (job.state === "completed") return "已应用";
+  if (job.state !== "running") return compressionLabels[job.state];
+  return {
+    snapshot: "等待安全点快照",
+    summarizing: "后台生成原生摘要",
+    applying: "等待新的安全点应用",
+    done: "确认应用结果",
+  }[job.phase];
+}
 
 export function CompressionIcon({
   state,
@@ -20,7 +35,7 @@ export function CompressionIcon({
           <path d="M21 12a9 9 0 1 1-9-9" />
         ) : ["cancelled", "failed", "interrupted"].includes(state) ? (
           <path d="m6 6 12 12m0-12L6 18" />
-        ) : detail ? (
+        ) : detail && state === "completed" ? (
           <path d="m5 12 4 4L19 6" />
         ) : (
           <>
@@ -45,23 +60,36 @@ export function CompressionDetail({
   pending,
   onReconcile,
   onClose,
-  onAction,
+  onStart,
+  onCancel,
+  selection,
+  inherited,
+  onSelect,
+  startUnavailable,
+  contextWindow,
 }: {
+  contextWindow?: number | null;
   id: string;
-  job: Compression;
+  job: Compression | null;
+  selection: Selection | null;
+  inherited: boolean;
+  onSelect: (selection: Selection) => Promise<void>;
+  startUnavailable: string;
   title: string;
   busy: boolean;
   error: string;
   pending: boolean;
   onReconcile: () => void;
   onClose: () => void;
-  onAction: () => void;
+  onStart: () => void;
+  onCancel: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     close = useRef<HTMLButtonElement>(null);
+  const backdrop = useRef(false);
   const [now, setNow] = useState(Date.now());
-  const active = job.state === "running",
-    done = job.state === "completed";
+  const active = job?.state === "running",
+    done = job?.state === "completed";
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement;
     ref.current!.showModal();
@@ -75,12 +103,21 @@ export function CompressionDetail({
   }, [active]);
   const steps = [
     [
-      "锁定上下文快照",
-      `已保存的 ${job.messageCount} 条上下文消息；流式尾部及后续新增消息不纳入本次任务`,
+      "等待安全点快照",
+      !job || job.phase === "snapshot"
+        ? "等待会话安全边界，保存完整上下文快照；不打断当前请求"
+        : `快照包含 ${job.messageCount} 条上下文消息；快照后的新增消息单独保留`,
     ],
-    ["整理关键信息", "使用所选模型与 pi 原生压缩；不调用编码工具"],
-    ["生成摘要预览", "仅保存快照结果，不自动替换当前会话上下文"],
+    ["后台生成原生摘要", "使用所选模型与 pi 原生压缩；不调用编码工具"],
+    [
+      "等待新的安全点应用",
+      "校验快照仍兼容后自动应用；原始历史与新增消息保留，冲突不应用",
+    ],
   ];
+  const outside = (x: number, y: number) => {
+    const box = ref.current!.getBoundingClientRect();
+    return x < box.left || x > box.right || y < box.top || y > box.bottom;
+  };
   // Outside usage/child layout: the sheet keeps the design's full-viewport geometry.
   return createPortal(
     <dialog
@@ -90,6 +127,14 @@ export function CompressionDetail({
       data-od-id="background-compression-page"
       aria-labelledby={`${id}-heading`}
       aria-describedby={`${id}-note`}
+      onPointerDown={(e) => {
+        backdrop.current = e.target === e.currentTarget && outside(e.clientX, e.clientY);
+      }}
+      onPointerCancel={() => { backdrop.current = false; }}
+      onClick={(e) => {
+        if (backdrop.current && e.target === e.currentTarget && outside(e.clientX, e.clientY)) onClose();
+        backdrop.current = false;
+      }}
       onCancel={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -104,7 +149,7 @@ export function CompressionDetail({
       <header>
         <div>
           <h2 id={`${id}-heading`}>后台压缩</h2>
-          <p>当前会话 · 后台任务详情</p>
+          <p>当前会话 · 压缩设置与任务</p>
         </div>
         <button
           ref={close}
@@ -118,27 +163,43 @@ export function CompressionDetail({
         </button>
       </header>
       <div className="compression-body">
+        <section className="compression-settings" aria-label="压缩模型设置">
+          <h3>压缩模型</h3>
+          <ModelPicker nested value={selection} disabled={busy || pending} onSelect={onSelect} />
+          <p>{inherited ? "尚未设置全局压缩模型，默认使用当前会话模型。" : "已全局记忆，主／子会话共用，刷新和重启后保留。"}选择仅用于压缩，不改变聊天模型。</p>
+          {active && <p>本次任务：{job!.selection.provider} / {job!.selection.id}；修改模型仅影响下一次压缩。</p>}
+        </section>
+        <AutoCompressionSettings contextWindow={contextWindow} />
         <section>
           <div
             className="compression-status"
-            data-state={job.state}
+            data-state={job?.state ?? "idle"}
             role="status"
             aria-live="polite"
           >
-            <CompressionIcon state={job.state} detail />
-            <span>
-              {active ? "压缩进行中" : `压缩${compressionLabels[job.state]}`}
-            </span>
+            <CompressionIcon state={job?.state ?? "idle"} detail />
+            <span>{job ? compressionStatusLabel(job) : "准备压缩"}{job?.trigger === "auto" ? " · 自动触发" : ""}</span>
           </div>
           <p>
-            {job.error ??
+            {!job ? "选择模型后点击开始压缩。摘要将在后台生成，并在安全点应用。" :
               (active
-                ? "正在后台整理会话上下文，你可以返回会话继续操作。"
+                ? job.phase === "snapshot"
+                  ? "正在等待会话安全边界以保存快照，你可以返回会话继续操作。"
+                  : job.phase === "summarizing"
+                    ? "正在后台生成 pi 原生摘要，完成后将等待新的安全点自动应用。"
+                    : "摘要已生成，正在等待安全边界校验并应用；尚未完成应用。"
                 : done
-                  ? "快照压缩已完成，原始消息与当前会话上下文均未改变。"
-                  : "任务已停止，原始消息与上下文均未改变。")}
+                  ? "压缩摘要已应用到当前会话上下文，原始历史与快照后的新增消息均已保留。"
+                  : "任务已停止，本次摘要未应用；原始历史与新增消息保留。")}
           </p>
+          {(job?.error || job?.state === "failed" || job?.state === "interrupted") && (
+            <div className="compression-error" role="alert">
+              <strong>{job?.state === "failed" ? "失败原因" : job?.state === "interrupted" ? "中断原因" : "任务说明"}</strong>
+              <p>{job?.error?.trim() || "未收到具体错误原因，请检查模型配置和服务状态后重试。"}</p>
+            </div>
+          )}
           {error && <p role="status">{error}</p>}
+          {!active && startUnavailable && <p role="status">{startUnavailable}</p>}
           {pending && (
             <button
               className="btn"
@@ -157,27 +218,23 @@ export function CompressionDetail({
             <div>
               <dt>已用时间</dt>
               <dd className="num">
-                {Math.max(
-                  0,
-                  ((job.endedAt ?? now) - job.startedAt) / 1000,
-                ).toFixed(0)}
-                s
+                {job ? `${Math.max(0, ((job.endedAt ?? now) - job.startedAt) / 1000).toFixed(0)}s` : "—"}
               </dd>
             </div>
             <div>
               <dt>压缩前 · pi 估算</dt>
               <dd className="num">
-                {job.before?.toLocaleString("zh-CN") ?? "—"} Token
+                {job?.before?.toLocaleString("zh-CN") ?? "—"} Token
               </dd>
             </div>
             <div>
               <dt>压缩后 · 快照估算</dt>
               <dd>
-                {active
-                  ? "等待结果"
-                  : job.after == null
-                    ? "—"
-                    : `${job.after.toLocaleString("zh-CN")} Token`}
+                {job?.after == null
+                  ? active
+                    ? "等待结果"
+                    : "—"
+                  : `${job.after.toLocaleString("zh-CN")} Token`}
               </dd>
             </div>
           </dl>
@@ -186,23 +243,28 @@ export function CompressionDetail({
           <h3>处理阶段</h3>
           <ol className="compression-steps">
             {steps.map(([heading, description], i) => {
-              const current = job.phase === "snapshot" ? 0 : 1;
-              const phase = done
+              const current = {
+                snapshot: 0,
+                summarizing: 1,
+                applying: 2,
+                done: 3,
+              }[job?.phase ?? "snapshot"];
+              const phase = !job ? "pending" : done || i < current
                 ? "done"
-                : !active
-                  ? "cancelled"
-                  : i < current
-                    ? "done"
-                    : i === current
-                      ? "current"
-                      : "pending";
+                : i > current ? "pending"
+                : active ? "current"
+                : job.state === "failed" ? "failed" : "cancelled";
+              const phaseLabel = {
+                pending: "等待中", done: "已完成", current: "进行中",
+                failed: "失败", cancelled: "已停止",
+              }[phase];
               return (
-                <li key={heading} data-phase={phase}>
-                  <span className="compression-step-number">
-                    {phase === "done" ? "✓" : i + 1}
+                <li key={heading} data-phase={phase} aria-current={phase === "current" ? "step" : undefined}>
+                  <span className="compression-step-number" aria-hidden="true">
+                    {phase === "done" ? "✓" : phase === "failed" ? "!" : i + 1}
                   </span>
                   <div>
-                    <strong>{heading}</strong>
+                    <strong>{heading}<span className="screen-reader"> · {phaseLabel}</span></strong>
                     <small>{description}</small>
                   </div>
                 </li>
@@ -212,20 +274,22 @@ export function CompressionDetail({
         </section>
         <section>
           <div className="row-between">
-            <h3>摘要预览</h3>
-            <span className="meta">pi · 不自动应用</span>
+            <h3>压缩摘要</h3>
+            <span className="meta">
+              pi · {done ? "已应用" : active ? "安全点自动应用" : "未应用"}
+            </span>
           </div>
           <div className="card compression-preview">
-            {done ? (
+            {job?.summary ? (
               <article>
-                <h4>模型摘要 · {job.selection.id}</h4>
-                <pre>{job.summary}</pre>
+                <h4 className="compression-preview-label">模型摘要 · {job.selection.id}</h4>
+                <CompressionSummary text={job.summary} />
               </article>
             ) : (
               <p>
                 {active
-                  ? "摘要尚未生成，完成后将在这里展示预览。"
-                  : "本次任务没有已确认的摘要。"}
+                  ? "摘要尚未生成，生成后将在这里展示；应用结果以任务状态为准。"
+                  : job ? "本次任务没有已确认的摘要。" : "开始压缩后，摘要与应用结果将在这里展示。"}
               </p>
             )}
           </div>
@@ -233,32 +297,40 @@ export function CompressionDetail({
         <section>
           <h3>上下文保留</h3>
           <p style={{ marginTop: 8 }}>
-            本次任务基于启动时已保存的上下文。新增消息不受影响；取消不会删除或覆盖原始内容。
+            本次任务基于安全点保存的上下文快照。应用后保留原始历史与快照后的新增消息；失败、取消或冲突时不应用摘要。
           </p>
           <p id={`${id}-note`} style={{ marginTop: 8 }}>
-            压缩仅作用于独立快照，不会降低当前会话的占用率。原会话仍由 pi
-            管理自动压缩；本任务最多运行两分钟。
+            摘要在后台生成，并在新的安全点自动应用。快照估算不包含后续新增消息，当前占用以会话圆环为准。
           </p>
-          {job.usage && (
+          {job?.usage && (
             <p style={{ marginTop: 8 }}>
               本次摘要用量：{job.usage.total.toLocaleString("zh-CN")} Token ·
               预计花费{" "}
               {job.usage.cost == null ? "—" : `US$${job.usage.cost.toFixed(4)}`}
-              （不计入主／子会话统计）
+              {done
+                ? "（已计入所属 pi 会话统计；此处为该次明细，请勿重复相加）"
+                : active
+                  ? "（应用后计入所属 pi 会话统计；此处仅为该次明细）"
+                  : "（摘要未应用；此处仅为该次请求明细）"}
             </p>
           )}
         </section>
       </div>
       <footer>
-        <small>{active ? "返回会话不影响后台任务" : "原始上下文已保留"}</small>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy || (!active && pending)}
-          onClick={onAction}
-        >
-          {active ? "取消任务" : "重新压缩"}
-        </button>
+        <small>
+          {active ? "返回会话不影响后台任务" : "压缩不会删除原始历史"}
+        </small>
+        <div className="compression-actions">
+          {active && <button type="button" className="btn" disabled={busy || pending} onClick={onCancel}>取消压缩</button>}
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || pending || active || !!startUnavailable}
+            onClick={onStart}
+          >
+            {active ? "压缩进行中" : job ? "再次压缩" : "开始压缩"}
+          </button>
+        </div>
       </footer>
     </dialog>,
     document.body,

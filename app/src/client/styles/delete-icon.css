@@ -1,0 +1,2 @@
+svg.delete-icon { display: block; stroke: none; }
+button:enabled:is(:hover, :focus-visible) > .delete-icon { color: #991b1b; }

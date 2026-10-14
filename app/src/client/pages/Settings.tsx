@@ -1,5 +1,4 @@
 import { SettingsSidebar } from "../components.js";
-import { TaskSettings } from "../tasks/TaskSettings.js";
 import { useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
 import "../styles/settings.css";
@@ -66,7 +65,6 @@ export default function Settings() {
                 `${connection}；${config.available.length} 个配置模型通过 pi 可用性检查。保存不代表远端连接验证成功。`}
             </p>
           </section>
-          <TaskSettings />
           <section className="overview-section" aria-labelledby="scope-heading">
             <h2 id="scope-heading">存储与隐私</h2>
             <dl className="scope-list">
@@ -76,7 +74,7 @@ export default function Settings() {
               </div>
               <div className="scope-row">
                 <dt>供应商与模型</dt>
-                <dd>独立 pi 配置目录中的 models.json；校验后原子发布</dd>
+                <dd>共享 pi 配置目录中的 models.json；校验后原子发布</dd>
               </div>
               <div className="scope-row">
                 <dt>API 密钥</dt>

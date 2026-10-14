@@ -3,6 +3,9 @@ import { useScope } from "../transport.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { Compression } from "./Compression.js";
+import { TaskSettings } from "../tasks/TaskSettings.js";
+import { AnnotationToggle } from "./ReplyAnnotations.js";
+import { formatDuration } from "./duration.js";
 export function Usage({ scope }: { scope?: Scope }) {
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
     usage = info.usage,
@@ -31,7 +34,7 @@ export function Usage({ scope }: { scope?: Scope }) {
   const contextLabel =
     percent == null
       ? "上下文占用率未知"
-      : `上下文占用率 ${Math.round(percent)}%（pi 估算）`;
+      : `上下文占用率 ${Math.round(percent)}%（${context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算"}）`;
   return (
     <div
       className="usage"
@@ -74,12 +77,11 @@ export function Usage({ scope }: { scope?: Scope }) {
               />
             </svg>
             <span className="screen-reader">上下文占用：</span>
-            <strong>{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
+            <strong>{context?.estimated && context.tokens != null ? "≈" : ""}{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
             <strong aria-label={contextLabel}>
               · {percent == null ? "—" : Math.round(percent)}%
             </strong>
           </span>
-          <Compression key={scope?.sessionId ?? "empty"} scope={scope} />
         </div>
         <span
           className="usage-metric"
@@ -116,9 +118,7 @@ export function Usage({ scope }: { scope?: Scope }) {
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
           </svg>
-          <strong>
-            {elapsed != null ? `${Math.max(0, elapsed).toFixed(0)}s` : "—"}
-          </strong>
+          <strong>{formatDuration(elapsed)}</strong>
         </span>
         <span
           className="usage-metric"
@@ -133,6 +133,11 @@ export function Usage({ scope }: { scope?: Scope }) {
             {usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}
           </strong>
         </span>
+      </div>
+      <div className="usage-settings" role="group" aria-label="批注、子代理与压缩设置">
+        <AnnotationToggle scope={scope} />
+        <TaskSettings />
+        <Compression key={scope?.sessionId ?? "empty"} scope={scope} />
       </div>
     </div>
   );
