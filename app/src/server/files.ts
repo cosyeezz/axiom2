@@ -20,7 +20,7 @@ export async function findFd(): Promise<string> {
     const candidate = join(dir, name);
     try {
       const { stdout } = await exec(candidate, ["--version"], { timeout: 1500, maxBuffer: 4096, windowsHide: true });
-      if (/^fd\s+\d/m.test(stdout)) return candidate;
+      if (/^(?:fd|fdfind)\s+\d/m.test(stdout)) return candidate;
     } catch { /* Try next installed candidate; no automatic downloads. */ }
   }
   throw new AppError("FILE_COMPLETION_UNAVAILABLE", "原生 @ 文件补全需要 fd；请安装 fd（或 fdfind）到 PATH，或先通过 pi 安装其工具。");
