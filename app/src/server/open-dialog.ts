@@ -25,19 +25,22 @@ export function nativeOpenDialog(dependencies: { platform?: NodeJS.Platform; spa
   const platform = dependencies.platform ?? process.platform;
   // Injected process adapters use a virtual command; production always prepares the trusted GUI host.
   const host = platform === "win32" && !dependencies.spawn ? new WindowsOpenHost() : undefined;
+  // Compatibility adapters without a prepare/close lifecycle must not retain an idle child.
+  let keepWarm = false;
   const pick: PickPaths = async (options, signal) => {
     signal.throwIfAborted();
     const unavailable = () => new OpenDialogError(platform === "linux"
       ? "无法打开系统选择器：需要 Python 3、PyGObject 和 GTK 3（Debian/Ubuntu: python3-gi gir1.2-gtk-3.0），并在图形桌面会话中运行服务"
       : "无法打开系统选择器，请确认系统组件与图形桌面会话可用", 503);
-    let command: { file: string; args: string[] };
-    try { command = host ? await host.prepare() : openDialogCommand(platform); }
-    catch { throw unavailable(); }
-    signal.throwIfAborted();
+    let command: { file: string; args: string[] } | undefined, prepared: ChildProcess | undefined;
+    try {
+      if (host) prepared = await host.take(keepWarm, signal);
+      else command = openDialogCommand(platform);
+    } catch { signal.throwIfAborted(); throw unavailable(); }
     return new Promise<string[]>((resolve, reject) => {
       let child: ChildProcess;
       try {
-        child = (dependencies.spawn ?? spawn)(command.file, command.args, {
+        child = prepared ?? (dependencies.spawn ?? spawn)(command!.file, command!.args, {
           shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
           env: { ...process.env, AXIOM_OPEN_OPTIONS: JSON.stringify({ ...options, title: options.title ?? "打开" }) },
         });
@@ -55,8 +58,7 @@ export function nativeOpenDialog(dependencies: { platform?: NodeJS.Platform; spa
       child.stderr?.on("data", (chunk: Buffer) => collect(chunk, false));
       signal.addEventListener("abort", abort, { once: true });
       process.once("exit", terminate);
-      if (signal.aborted) abort();
-      child.once("error", () => { failure = unavailable(); });
+      child.once("error", () => { failure ??= unavailable(); });
       child.once("close", (code) => {
         signal.removeEventListener("abort", abort);
         process.removeListener("exit", terminate);
@@ -71,9 +73,13 @@ export function nativeOpenDialog(dependencies: { platform?: NodeJS.Platform; spa
           resolve(paths);
         } catch { reject(new OpenDialogError("系统选择器返回了无效的路径列表")); }
       });
+      if (signal.aborted) abort();
+      else if (prepared) child.stdin!.end(JSON.stringify({ ...options, title: options.title ?? "打开" }) + "\n", "utf8", (error?: Error | null) => {
+        if (error) { failure ??= unavailable(); terminate(); }
+      });
     });
   };
-  pick.prepare = async () => { await host?.prepare(); };
+  pick.prepare = async () => { keepWarm = true; await host?.prepare(); };
   pick.close = async () => { await host?.close(); };
   return pick;
 }
@@ -127,10 +133,8 @@ export class OpenDialog {
   async close() {
     this.closed = true;
     const active = this.active;
-    if (active) {
-      active.controller.abort(new OpenDialogError("服务正在退出", 503));
-      await active.done.catch(() => {});
-    }
+    active?.controller.abort(new OpenDialogError("服务正在退出", 503));
     await this.pick.close?.();
+    await active?.done.catch(() => {});
   }
 }

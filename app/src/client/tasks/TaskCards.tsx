@@ -1,6 +1,8 @@
 import { createContext, memo, useContext } from "react";
-import { messageScope, type ChatMessage } from "../../shared/agent.js";
+import { type ChatMessage } from "../../shared/agent.js";
+import { useThreadMessage } from "../chat/OriginalConversation.js";
 import { Icon } from "../components.js";
+import { BubbleLoadingIcon } from "../StatusIcons.js";
 import { toolPreview, type ToolCall } from "../chat/tool-summary.js";
 import { callObject, taskCallLabel, taskCallStatus } from "./task-call.js";
 import "../styles/task-calls.css";
@@ -25,17 +27,9 @@ export function TaskState({ task }: { task: Task }) {
           : "waiting";
   return (
     <span className="agent-state" data-state={state}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          d={
-            state === "completed"
-              ? "m5 12 4 4L19 6"
-              : state === "running"
-                ? "M20 12a8 8 0 1 1-8-8"
-                : "M12 5v9m0 4v1"
-          }
-        />
-      </svg>
+      {state === "running" ? <BubbleLoadingIcon /> : <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d={state === "completed" ? "m5 12 4 4L19 6" : "M12 5v9m0 4v1"} />
+      </svg>}
       <span className="agent-state-label">{taskLabels[task.status]}</span>
     </span>
   );
@@ -51,7 +45,7 @@ export const TaskCards = memo(function TaskCards({
 }) {
   const list = useScope(tasksScope(scope), emptyTasks),
     open = useContext(OpenTask);
-  const result = useScope<ChatMessage | null>(messageScope(scope, `tool-${call.id}`), null);
+  const result = useThreadMessage(scope, `tool-${call.id}`);
   const tasks = list.tasks.filter((t) => t.anchor === call.id);
   const input = callObject(call.input);
   const definitions = Array.isArray(input?.tasks) ? input.tasks.map((item: unknown) =>
@@ -69,7 +63,7 @@ export const TaskCards = memo(function TaskCards({
       {showFeedback && <div className="delegation-feedback">
         {status === "failed" ? <p className="task-call-error" role="alert">{tasks.length > 0 && "委派失败 · "}{toolPreview(result)}</p> : tasks.length > 0 ? <p className="task-call-meta">{label}</p> : null}
         {!tasks.length && <div className="delegation-pending">
-          {(definitions.length ? definitions : ["准备子任务"]).map((description, index) => <p key={index} title={description}>{description}</p>)}
+          {(definitions.length ? definitions : ["准备子任务"]).map((description, index) => <p key={index} data-tooltip={description}>{description}</p>)}
           {status === "completed" && <span className="task-call-meta">委派已受理，等待任务记录同步</span>}
         </div>}
       </div>}
@@ -78,12 +72,13 @@ export const TaskCards = memo(function TaskCards({
           <button
             type="button"
             className="subagent"
+            data-status={t.error || t.status === "interrupted" ? "failed" : t.status}
             aria-haspopup="dialog"
             aria-label={`打开子会话：${t.description}`}
             onClick={() => open(t.id)}
           >
             <span className="agent-identity">
-              <strong title={t.description}>{t.description}</strong>
+              <strong data-tooltip={t.description}>{t.description}</strong>
               <small>
                 {t.results.length} 次交付 ·{" "}
                 查看消息与工具

@@ -5,19 +5,20 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Store } from "./storage.js";
 import { SessionAttention } from "./session-attention.js";
 import { Files } from "./files.js";
 import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
 import { OpenDialog } from "./open-dialog.js";
+import { FileManager, FileManagerError } from "./file-manager.js";
 import { AttachmentPicker, AttachmentPickerError, type PickAttachments } from "./attachment-picker.js";
 import { imagePayloadLimit } from "./images.js";
 import { configuration } from "./models.js";
 import { ModelService } from "./model-service.js";
 import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
+import { Costs } from "./costs.js";
 import { Tasks } from "./tasks.js";
 import { Preferences } from "./preferences.js";
 import { compressionPreferencesScope } from "../shared/compression.js";
@@ -50,8 +51,10 @@ export async function startServer(
   options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments } = {},
 ) {
   const store = new Store(options.root ?? dataRoot());
+  const costs = new Costs(store);
   const files = new Files(store, (scope, id) => agents.message(scope, id, true));
   const openDialog = new OpenDialog();
+  const fileManager = new FileManager();
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
   const attachmentPicker = new AttachmentPicker(options.pickAttachments, undefined, openDialog);
   const streamId = randomUUID();
@@ -95,6 +98,10 @@ export async function startServer(
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "costs") {
+      costs.owner(target);
+      return { revision: seq };
+    }
     if (parts.length === 3 && parts[0] === "tasks") return tasks.list(target);
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
     if (parts.length === 3 && parts[0] === "compression")
@@ -108,7 +115,7 @@ export async function startServer(
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
   };
   const outgoing = new WeakMap<WebSocket, { queue: { payload: string; cost: number }[]; bytes: number; sending: boolean }>();
-  const send = (ws: WebSocket, value: unknown) => {
+  const send = (ws: WebSocket, value: unknown, history = false) => {
     if (ws.readyState !== WebSocket.OPEN) return;
     const state = outgoing.get(ws) ?? { queue: [], bytes: 0, sending: false };
     outgoing.set(ws, state);
@@ -117,7 +124,7 @@ export async function startServer(
     // following receipt does not disconnect an otherwise healthy viewer.
     // Additional queued deltas remain bounded; never silently drop final events.
     const snapshot = value as Partial<Snapshot>;
-    const cost = snapshot.type === "snapshot" && snapshot.scope?.startsWith("messages:")
+    const cost = history || snapshot.type === "snapshot" && snapshot.scope?.startsWith("messages:")
       ? Math.min(Buffer.byteLength(payload), 200_000) : Buffer.byteLength(payload);
     if (state.sending && state.bytes + cost > 1_000_000) {
       ws.close(1013, "请重连读取快照"); return;
@@ -152,6 +159,14 @@ export async function startServer(
     }
     // All session summary changes (including background runs/tasks) refresh pins.
     if (scope.startsWith("sessions:")) publish("pinned-sessions");
+    // Only the independent accounting view is invalidated. No transcript reads
+    // occur when it is closed, and no chat/input subscription is refreshed.
+    if (/^(agent|compression|tasks|sessions|session):/.test(scope)) {
+      const workspaceId = scope.split(":")[1];
+      const watching = new Set([...subscriptions.values()].flatMap((scopes) => [...scopes])
+        .filter((key) => key.startsWith(`costs:${workspaceId}:`)));
+      for (const key of watching) publish(key, { revision: seq });
+    }
   };
   const agents = new Agents(store, models, publish);
   const tasks = new Tasks(agents);
@@ -262,7 +277,9 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
-        if (c.op.startsWith("files.")) {
+        if (c.op === "costs.get") {
+          data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
+        } else if (c.op.startsWith("files.")) {
           data = await files.command(c);
         } else if (c.op === "configuration.get") {
           await refreshConfiguration();
@@ -324,7 +341,7 @@ export async function startServer(
           else if (c.op !== "session.create")
             publish(`session:${c.workspaceId}:${c.sessionId}`);
         }
-        send(ws, { type: "receipt", requestId, ok: true, data });
+        send(ws, { type: "receipt", requestId, ok: true, data }, c.op === "agent.original");
       } catch (error) {
         send(ws, {
           type: "receipt",
@@ -495,24 +512,22 @@ export async function startServer(
           req.headers.origin === origin
         ) {
           const w = store.workspace(url.searchParams.get("id"));
-          const child =
-            process.platform === "win32"
-              ? spawn("explorer.exe", [w.path], { shell: false })
-              : spawn(
-                  process.platform === "darwin" ? "open" : "xdg-open",
-                  [w.path],
-                  { shell: false },
-                );
-          child.once("error", () => {
-            if (!res.headersSent) {
-              res.writeHead(500);
-              res.end("无法打开系统文件管理器");
+          const controller = new AbortController();
+          const disconnect = () => { if (!res.writableEnded) controller.abort(); };
+          req.once("aborted", disconnect);
+          res.once("close", disconnect);
+          try {
+            await fileManager.open(w.path, controller.signal);
+            if (!res.destroyed) { res.writeHead(204); res.end(); }
+          } catch (error) {
+            if (!res.destroyed) {
+              res.writeHead(error instanceof FileManagerError ? error.status : 500);
+              res.end(error instanceof FileManagerError ? error.message : "无法打开系统文件管理器");
             }
-          });
-          child.once("spawn", () => {
-            res.writeHead(204);
-            res.end();
-          });
+          } finally {
+            req.removeListener("aborted", disconnect);
+            res.removeListener("close", disconnect);
+          }
           return;
         }
         res.writeHead(404);
@@ -585,15 +600,15 @@ export async function startServer(
     );
   });
   try {
-    // Preparation never opens a window; keep compiler startup out of the first click.
+    // Preparation never opens a window; keep compilation/CLR/COM startup out of the first click.
     // A missing desktop component must not prevent the rest of the service from starting.
-    await openDialog.prepare().catch(() => {});
+    await Promise.all([openDialog.prepare().catch(() => {}), fileManager.prepare().catch(() => {})]);
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
     });
   } catch (error) {
-    await openDialog.close();
+    await Promise.all([openDialog.close(), fileManager.close()]);
     sockets.close();
     await vite?.close();
     attention.close();
@@ -611,7 +626,7 @@ export async function startServer(
     close: async () => {
       shuttingDown = true;
       attention.close();
-      await openDialog.close();
+      await Promise.all([openDialog.close(), fileManager.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);
         ws.terminate();

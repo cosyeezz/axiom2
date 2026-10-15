@@ -90,7 +90,7 @@ export default function Models() {
               className="btn btn-primary"
               id="save-provider"
               disabled={busy || needsReconcile || !dirty || !revision}
-              title={"包含当前行内编辑，统一发布到共享 pi 配置"}
+              data-tooltip={"包含当前行内编辑，统一发布到共享 pi 配置"}
               onClick={() => void save()}
             >
               {busy ? "处理中…" : needsReconcile ? "请先重新读取" : saved ? "已保存" : "保存"}

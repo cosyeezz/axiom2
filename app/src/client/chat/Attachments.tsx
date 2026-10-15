@@ -8,6 +8,7 @@ import { attachmentLimits, type Attachment, type Draft, type ImageAttachment, ty
 import { insertImageReferences, removeImageReferences } from "./image-placeholders.js";
 import { assignReferences, removeAttachmentReferences } from "./attachment-placeholders.js";
 import { ImagePreview } from "./ImagePreview.js";
+import { AttachmentSymbol } from "./AttachmentSymbol.js";
 import { openFileDialog } from "../OpenFileDialog.js";
 
 function base64(file: File): Promise<string> {
@@ -120,7 +121,7 @@ export function AttachmentPicker({ scope, nested, input, onBusy, onError }: {
   return <div className="attachment-picker">
     <button type="button" className="icon-btn attach-button" id={nested ? undefined : "attach"}
       aria-label={selecting ? "取消选择" : "添加附件"}
-      title={selecting ? "取消文件选择" : "选择文件、图片或文件夹（支持多选）"}
+      data-tooltip={selecting ? "取消文件选择" : "选择文件、图片或文件夹（支持多选）"}
       aria-busy={selecting} disabled={reading && !selecting}
       onClick={() => selecting ? request.current?.abort() : void select()}>
       <Icon name={selecting ? "close" : "plus"} />
@@ -149,16 +150,16 @@ export function AttachmentList({ scope, draft, reading }: { scope: Scope; draft:
     );
   }
   return <><div className="attachment" aria-label="待发送附件">
-    {draft.attachment && <span className="attachment-chip" title={draft.attachment.name}><span>{draft.attachment.name}</span><button type="button" className="icon-btn" aria-label={`移除附件：${draft.attachment.name}`} onClick={() => updateDraft(scope, { attachment: null })}><DeleteIcon /></button></span>}
-    {draft.attachments?.map((a, index) => <span className="attachment-chip" key={a.id ?? `${index}-${a.name}`} title={a.path ?? a.name}>
-      {a.kind === "image" ? <button type="button" className="image-label" aria-label={`预览图片：${a.id ?? a.name}`} aria-haspopup="dialog" onClick={() => openPreview(a)}>{a.id ?? a.name}</button> :
-        <span>{a.id ? `${a.id} · ${a.name}` : a.name}</span>}<button type="button" className="icon-btn" aria-label={`移除附件：${a.name}`} onClick={() => {
+    {draft.attachment && <span className="attachment-chip" data-tooltip={draft.attachment.name}><AttachmentSymbol kind="file" /><span>{draft.attachment.name}</span><button type="button" className="icon-btn" aria-label={`移除附件：${draft.attachment.name}`} onClick={() => updateDraft(scope, { attachment: null })}><DeleteIcon /></button></span>}
+    {draft.attachments?.map((a, index) => <span className="attachment-chip" key={a.id ?? `${index}-${a.name}`} data-tooltip={a.path ?? a.name}>
+      {a.kind === "image" ? <button type="button" className="image-label attachment-label" data-tooltip={`${a.id ?? ""} · ${a.name}`} aria-label={`预览图片：${a.id ?? a.name}`} aria-haspopup="dialog" onClick={() => openPreview(a)}><AttachmentSymbol kind="image" id={a.id} /><span className="attachment-name">{a.name}</span></button> :
+        <span className="attachment-label" aria-label={`${a.kind === "folder" ? "文件夹" : "文件"} ${a.id?.match(/\d+$/)?.[0] ?? ""}：${a.name}`}><AttachmentSymbol kind={a.kind} id={a.id} /><span className="attachment-name">{a.name}</span></span>}<button type="button" className="icon-btn" aria-label={`移除附件：${a.name}`} onClick={() => {
         const current = getDraft(scope);
         updateDraft(scope, { attachments: current.attachments?.filter((item) => item !== a),
           text: a.id ? removeAttachmentReferences(current.text, [a.id]) : current.text });
       }}><DeleteIcon /></button>
     </span>)}
-    {draft.images?.map((image) => <span className="attachment-chip" key={image.id} title={image.name}><button type="button" className="image-label" aria-label={`预览图片：${image.id}`} aria-haspopup="dialog" onClick={() => openPreview(image)}>{image.id}</button><button type="button" className="icon-btn" aria-label={`移除图片：${image.name}`} onClick={() => {
+    {draft.images?.map((image) => <span className="attachment-chip" key={image.id} data-tooltip={image.name}><button type="button" className="image-label attachment-label" aria-label={`预览图片：${image.id}`} aria-haspopup="dialog" onClick={() => openPreview(image)}><AttachmentSymbol kind="image" id={image.id} /><span className="attachment-name">{image.name}</span></button><button type="button" className="icon-btn" aria-label={`移除图片：${image.name}`} onClick={() => {
       const current = getDraft(scope);
       updateDraft(scope, { images: current.images?.filter((i) => i.id !== image.id), text: removeImageReferences(current.text, [image.id]) });
     }}><DeleteIcon /></button></span>)}

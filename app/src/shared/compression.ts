@@ -34,6 +34,8 @@ export interface Compression {
   summary: string;
   error: string | null;
   selection: { provider: string; id: string };
+  /** Per-request accounting, retained even when the summary is not applied. */
+  billing?: import("./costs.js").CostTotals;
   usage: {
     input: number;
     output: number;

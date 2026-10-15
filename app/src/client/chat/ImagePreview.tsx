@@ -35,7 +35,7 @@ export function ImagePreview({ image, loading = false, error = "", onClose }: {
       backdrop.current = false;
     }}>
     <header className="image-preview-header">
-      <div><h2 id={heading}>图片预览 · {image.id}</h2><p title={image.name}>{image.name}</p></div>
+      <div><h2 id={heading}>图片预览 · {image.id}</h2><p data-tooltip={image.name}>{image.name}</p></div>
       <button ref={close} type="button" className="icon-btn" aria-label="关闭图片预览" onClick={onClose}><Icon name="close" /></button>
     </header>
     <div className="image-preview-body">

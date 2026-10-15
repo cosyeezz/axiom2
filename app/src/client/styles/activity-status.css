@@ -3,17 +3,12 @@
 .tool-activity > summary > svg { grid-column: 3; grid-row: 1; justify-self: end; }
 .tool-activity > summary > .activity-ticker { grid-column: 2 / -1; grid-row: 2; width: 100%; }
 .activity-status { position: relative; display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; color: var(--muted); }
-.activity-status-glyph { position: relative; z-index: 1; width: 22px; height: 22px; background: currentColor; mask: center / contain no-repeat; }
-.activity-status[data-state="running"] .activity-status-glyph { mask-image: url("../assets/activity-planet.svg"); }
-.activity-status[data-state="completed"] .activity-status-glyph { mask-image: url("../assets/activity-completed.svg"); }
-.activity-status[data-state="running"], .activity-status[data-state="completed"] { color: var(--success); }
-.activity-status[data-state="running"]::before { content: ""; position: absolute; inset: 1px; border-radius: 50%; background: color-mix(in oklch, var(--success) 18%, transparent); box-shadow: 0 0 10px color-mix(in oklch, var(--success) 20%, transparent); animation: activity-breathe 2.4s ease-in-out infinite; }
-.activity-status[data-state="running"] .activity-status-glyph { animation: activity-glow 2.4s ease-in-out infinite; }
+.activity-status[data-state="running"] { color: var(--success); }
+.activity-status[data-state="completed"] { color: var(--success); }
 .activity-status[data-state="failed"] { color: var(--danger); }
 .activity-status[data-state="cancelled"], .activity-status[data-state="unknown"] { color: var(--warn); }
 .activity-status svg { width: 20px; height: 20px; }
+.activity-status .activity-status-dots { width: 24px; height: 24px; stroke: none; }
+.activity-status .activity-status-completed { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tool-activity > summary > svg:last-child { margin-left: auto; }
 .tool-activity .subagents, .tool-activity .task-operation { margin-block: 8px; }
-@keyframes activity-breathe { 0%, 100% { transform: scale(.8); opacity: .35; } 50% { transform: scale(1.25); opacity: 1; } }
-@keyframes activity-glow { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .activity-status[data-state="running"]::before, .activity-status[data-state="running"] .activity-status-glyph { animation: none; } }

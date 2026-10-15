@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { AppError, type Scope, type Draft } from "../../shared/protocol.js";
 import { agentScope, threadScope, type Run } from "../../shared/agent.js";
 import type { Store } from "../storage.js";
+import type { StopSource } from "../../shared/tasks.js";
 import type { WorkerInput } from "../agent-worker.js";
 import { AgentViews } from "./views.js";
 import { resourceIdentity } from "./resource-identity.js";
@@ -21,6 +22,7 @@ type Live = {
   finish?: { status: Run["status"]; error?: string; reasonCode?: string };
   storageFailed?: boolean;
   closed?: boolean;
+  receive?: (event: any) => void;
   timer?: NodeJS.Timeout;
   inputs: Map<string, { draft: Draft; mode: "steer" | "followUp"; pending: boolean; failed?: boolean }>;
   recalls: Map<string, { resolve: (ids: string[]) => void; reject: (error: Error) => void }>;
@@ -117,8 +119,25 @@ export class AgentRuns {
       live.finish
     )
       return false;
-    live.child.send({ ...value, runId }, () => {});
-    return true;
+    let reported = false;
+    const uncertain = () => {
+      if (reported || value.type !== "input") return;
+      reported = true;
+      // send() failure does not prove the worker received nothing. Report it
+      // after enqueue has installed its receipt waiter, without replaying.
+      const items = Array.isArray(value.notifications) ? value.notifications : [{ id: value.id }];
+      queueMicrotask(() => {
+        for (const item of items) live.receive?.({ type: "input-error", id: item.id, runId, uncertain: true,
+          error: "输入发送结果未获确认；须核对会话记录，未自动重发。" });
+      });
+    };
+    try {
+      live.child.send({ ...value, runId }, (error) => { if (error) uncertain(); });
+      return true; // false from child.send() is backpressure, not rejection.
+    } catch {
+      uncertain();
+      return value.type === "input";
+    }
   }
   private queueChanged(live: Live) {
     if (live.task) return; // TaskScheduler owns the child's queued + native projection.
@@ -194,9 +213,9 @@ export class AgentRuns {
     try { await this.launchWorker(scope, run, input, startup); }
     catch (error) {
       if (startup.settled) throw error;
-      run.status = (error as AppError).code === "AGENT_STOPPED" ? "cancelled" : "failed";
+      run.status = run.reasonCode?.endsWith("_STOPPED") || (error as AppError).code === "AGENT_STOPPED" ? "cancelled" : "failed";
       run.endedAt = Date.now(); run.error = errorMessage(error, "工作进程启动失败：未收到具体错误原因。");
-      this.store.finishRun(run.id, run.status, run.error, "WORKER_START_FAILED");
+      this.store.finishRun(run.id, run.status, run.error, run.reasonCode ?? "WORKER_START_FAILED");
       this.views.changed(scope);
       this.pending.delete(scope.sessionId);
       this.onSettled?.(scope, run);
@@ -283,7 +302,7 @@ export class AgentRuns {
           const input = live.inputs.get(event.id);
           const waiting = live.accepting.get(event.id);
           if (waiting) {
-            waiting.reject(new AppError("INPUT_REJECTED", event.error || "追加输入未送达；原输入已保留，未自动重发。"));
+            waiting.reject(new AppError(event.uncertain ? "UNCERTAIN" : "INPUT_REJECTED", event.error || "追加输入未送达；原输入已保留，未自动重发。"));
             live.accepting.delete(event.id);
             live.inputs.delete(event.id);
           } else if (input) { input.failed = true; input.pending = true; }
@@ -389,6 +408,7 @@ export class AgentRuns {
       if (settled) return;
       settled = true;
       startup.settled = true;
+      live.receive = undefined;
       child.removeListener("message", onMessage);
       child.removeListener("error", onError);
       child.removeListener("close", onClose);
@@ -444,6 +464,7 @@ export class AgentRuns {
         }
       }
     };
+    live.receive = onMessage;
     child.on("message", onMessage);
     child.once("error", onError);
     child.once("close", onClose);
@@ -483,25 +504,26 @@ export class AgentRuns {
       throw new AppError(code, message);
     }
   }
-  async stop(scope: Scope) {
+  async stop(scope: Scope, source: StopSource = "user") {
     this.store.session(scope.workspaceId, scope.sessionId);
     this.epochs.set(scope.sessionId, (this.epochs.get(scope.sessionId) ?? 0) + 1);
     const pending = this.pending.get(scope.sessionId);
     const starting = this.live.get(scope.sessionId);
-    if (pending && starting) this.stopLive(starting);
+    if (pending) pending.run.reasonCode ??= `${source.toUpperCase()}_STOPPED`;
+    if (pending && starting) this.stopLive(starting, source);
     if (pending) await pending.done;
     const idle = this.idle.get(scope.sessionId);
     if (idle) await this.retire(idle);
     await this.retiringSessions.get(scope.sessionId);
     const live = this.live.get(scope.sessionId);
     if (!live) return;
-    this.stopLive(live);
+    this.stopLive(live, source);
     await live.exit;
   }
-  private stopLive(live: Live) {
+  private stopLive(live: Live, source: StopSource = "user") {
     if (live.run.status === "stopping") return;
     live.run.status = "stopping";
-    live.finish = { status: "cancelled", reasonCode: "USER_STOPPED" };
+    live.finish = { status: "cancelled", reasonCode: `${source.toUpperCase()}_STOPPED` };
     this.store.db
       .prepare("UPDATE runs SET status='stopping' WHERE id=?")
       .run(live.run.id);
@@ -555,16 +577,16 @@ export class AgentRuns {
       );
     for (const entry of [...this.idle.values()])
       if (providers.includes(entry.live.run.selection.provider)) await this.retire(entry);
-    for (const scope of affected) await this.stop(scope);
+    for (const scope of affected) await this.stop(scope, "provider");
   }
   async close() {
     this.closing = true;
-    await Promise.all([...this.pending.values()].map((entry) => this.stop(entry.scope)));
+    await Promise.all([...this.pending.values()].map((entry) => this.stop(entry.scope, "shutdown")));
     await Promise.all([...this.idle.values()].map((entry) => this.retire(entry)));
     await Promise.all(this.retiring);
     await Promise.allSettled(
       [...this.live.values()].map((l) =>
-        this.stop(l.scope),
+        this.stop(l.scope, "shutdown"),
       ),
     );
   }

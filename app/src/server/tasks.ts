@@ -112,8 +112,11 @@ export class Tasks {
     if (row) this.scheduler.event(row, run, event);
     else {
       if (event.type === "running") this.delivery.notify(scope);
-      if (event.type === "delivered")
+      if (event.type === "input-error") this.delivery.rejected(scope, event.id, event.error, event.uncertain === true);
+      if (event.type === "delivered") {
         this.delivery.acknowledge(scope, event.ids);
+        this.delivery.notify(scope);
+      }
     }
   }
   command(c: Command) {
@@ -168,7 +171,7 @@ export class Tasks {
         children.push(row);
       }
     }
-    await this.scheduler.stop(children, "供应商认证将撤销");
+    await this.scheduler.stop(children, "供应商认证将撤销", "provider");
     await this.agents.stopProviders(providers, confirmed);
   }
   async remove(c: Command) {

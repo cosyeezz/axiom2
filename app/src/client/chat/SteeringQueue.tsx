@@ -8,10 +8,10 @@ export function SteeringQueue({ scope }: { scope: Scope }) {
   const pending = useOptimistic(scope).filter((item) => item.queued);
   const queue = info.queue ?? [];
   if (!queue.length && !pending.length) return null;
-  return <div className="steering-queue" aria-label="待执行消息" title="在输入框内双击 Esc 撤回排队内容并编辑">
+  return <div className="steering-queue" aria-label="待执行消息" data-tooltip="在输入框内双击 Esc 撤回排队内容并编辑">
     {queue.map((item) => <div className="steering-queue-item" key={item.id}>
       <span>{item.mode === "followUp" ? "Follow-up" : "Steering"}</span>
-      <span title={item.text}>{item.text}</span>
+      <span data-tooltip={item.text}>{item.text}</span>
     </div>)}
     {pending.filter((item) => !queue.some((entry) => entry.id === item.id || entry.id === item.inputId)).map((item) =>
       <div className="steering-queue-item" key={item.id}>

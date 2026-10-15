@@ -65,6 +65,7 @@ try {
   assert.equal(requests.length, 0);
 
   await trigger.click();
+  await dialog.waitFor();
   for (const [width, height] of [[360, 800], [390, 844], [1440, 900]]) {
     await page.setViewportSize({ width, height });
     const box = await dialog.boundingBox();

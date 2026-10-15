@@ -30,6 +30,7 @@ function fixture() {
   const agents = {
     store,
     info: () => ({ selection, run }),
+    assertContinuation: () => {},
     thread: () => ({ ids: [] }),
     active: () => !!run && ["running", "starting", "stopping"].includes(run.status),
     publish: () => {},
@@ -51,7 +52,8 @@ function fixture() {
     store.db.prepare("DELETE FROM task_inputs WHERE taskId=?").run(taskId);
     return run;
   };
-  return { store, scope, records, taskId, row, scheduler, delivery, stops, signals, activate,
+  return { store, scope, records, taskId, row, scheduler, delivery, stops, signals, activate, agents,
+    setRun: (value: Run | null) => { run = value; },
     release: () => releaseStop(),
     dispose: async () => { scheduler.closing = true; releaseStop(); await tick(); await tick(); store.close(); rmSync(root, { recursive: true, force: true }); },
   };
@@ -82,7 +84,7 @@ test("queued cancellation creates one result without a worker or cleanup state",
   } finally { await f.dispose(); }
 });
 
-test("running cancellation calls stop(scope) once and rejects stopping-time input", async () => {
+test("running cancellation stops once and repeated stop withdraws stopping-time input", async () => {
   const f = fixture();
   try {
     const run = f.activate();
@@ -90,9 +92,12 @@ test("running cancellation calls stop(scope) once and rejects stopping-time inpu
     assert.throws(() => f.scheduler.cancel(f.row(), { mode: "summary" }), { code: "INVALID_INPUT" });
     f.scheduler.cancel(f.row(), { reason: "stop now" });
     f.scheduler.cancel(f.row(), {});
-    assert.deepEqual(f.stops, [[target(f.row())]]);
+    assert.deepEqual(f.stops, [[target(f.row()), "user"]]);
     assert.equal(f.signals.length, 0, "stop never sends a summary prompt");
-    await assert.rejects(f.scheduler.append(f.row(), { text: "late" }), { code: "TASK_STOPPED" });
+    const receipt = await f.scheduler.append(f.row(), { text: "late" });
+    assert.equal(f.records.inputs(f.row(), "waiting")[0].id, receipt.inputId);
+    f.scheduler.cancel(f.row(), {});
+    assert.equal(f.records.list(f.scope).tasks[0].inputs!.find((input) => input.inputId === receipt.inputId)!.state, "cancelled");
     f.scheduler.settle(f.row(), { ...run, status: "cancelled", endedAt: Date.now() });
     assert.equal(f.row().status, "cancelled");
     assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM task_inputs").get()!.n, 0);
@@ -108,7 +113,7 @@ test("work deadline directly stops without wrapping or a second model request", 
     f.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(JSON.stringify({ concurrency: 1, workMs: 5 }), f.taskId);
     (f.scheduler as any).arm(f.row(), run);
     await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.deepEqual(f.stops, [[target(f.row())]]);
+    assert.deepEqual(f.stops, [[target(f.row()), "budget"]]);
     assert.equal(f.signals.length, 0);
     assert.equal(f.row().status, "stopping");
     assert.match(f.row().error!, /工作预算/);
@@ -152,7 +157,7 @@ test("live budget updates keep the original start and expire overdue running tas
     await new Promise((resolve) => setTimeout(resolve, 30));
     assert.equal(f.stops.length, 1, "does not restart the deadline from preference save time");
     assert.equal(f.row().status, "stopping");
-    assert.equal(f.signals.length, 0);
+    assert.equal(f.signals.filter((event) => event.type === "input").length, 0);
   } finally { await f.dispose(); }
 });
 
@@ -171,13 +176,13 @@ test("live budget extension replaces the old timer without resetting elapsed wor
   } finally { await f.dispose(); }
 });
 
-test("native live input modes survive, but unacknowledged inputs are not replayed", async () => {
+test("new inputs use Steering only and unacknowledged inputs are not replayed", async () => {
   const f = fixture();
   try {
     const run = f.activate();
     await f.scheduler.append(f.row(), { text: "steer", mode: "steer" });
-    await f.scheduler.append(f.row(), { text: "follow", mode: "followUp" });
-    assert.deepEqual(f.signals.map((event) => event.mode), ["steer", "followUp"]);
+    await assert.rejects(f.scheduler.append(f.row(), { text: "follow", mode: "followUp" }), { code: "INVALID_INPUT" });
+    assert.deepEqual(f.signals.map((event) => event.mode), ["steer"]);
     f.records.freeze(f.scope);
     f.scheduler.settle(f.row(), { ...run, status: "completed", endedAt: Date.now() });
     assert.equal(f.row().status, "completed");

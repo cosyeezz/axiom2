@@ -1,0 +1,29 @@
+.axiom-tooltip {
+  position: fixed;
+  inset: auto;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 20px));
+  max-height: min(320px, calc(100dvh - 20px));
+  margin: 0;
+  padding: 8px 11px;
+  overflow: auto;
+  visibility: hidden;
+  color: var(--fg-2);
+  background: #232527;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
+  font: 400 12px/1.6 var(--font-body);
+  letter-spacing: normal;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  animation: tooltip-appear 120ms ease-out;
+}
+
+.axiom-tooltip::backdrop { background: transparent; pointer-events: none; }
+@keyframes tooltip-appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .axiom-tooltip { animation: none; } }

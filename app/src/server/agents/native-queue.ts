@@ -14,6 +14,10 @@ function queues(session: AgentSession) {
     throw Error("Unsupported pi queue layout");
   return { steer, followUp };
 }
+export function nativeQueuedMessages(session: AgentSession): AgentMessage[] {
+  const { steer, followUp } = queues(session);
+  return [...steer, ...followUp];
+}
 function inputId(message: AgentMessage): string | undefined {
   if (message.role !== "custom" || message.customType !== "axiom-append") return;
   const id = (message.details as { axiomInput?: unknown } | undefined)?.axiomInput;

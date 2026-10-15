@@ -94,7 +94,7 @@ try {
   await page.locator("#prompt").fill("保留我的草稿");
   for (const width of [1440, 390, 360]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const selector of [".session-environment", ".compaction-card", ".log-row:not(.activity-message) .thinking-block", ".task-operation > details"]) {
+    for (const selector of [".session-environment", ".compaction-card", ".task-operation > details"]) {
       console.log(`Checking ${width}: ${selector}`);
       const block = page.locator(selector).first();
       const parent = block.locator('xpath=ancestor::details[contains(@class,"tool-activity")][1]');
@@ -128,25 +128,24 @@ try {
     const groupHeader = group.locator(":scope > summary");
     await groupHeader.click();
     const inner = group.locator(".thinking-block");
-    await inner.locator(":scope > summary").click();
+    assert.ok(await inner.locator(".thinking-body").isVisible());
+    assert.equal(await inner.locator(":scope > summary").count(), 0);
     await settled(page);
     await scrollInside(inner, 350);
     await settled(page);
-    const parentHeight = await pinned(groupHeader);
-    await pinned(inner.locator(":scope > summary"), parentHeight);
+    await pinned(groupHeader);
     const readingPosition = await page.locator("#thread").evaluate(node => node.scrollTop);
     views.messageChanged(scope, { ...messages[2], thinking: longText + `\n\n增量 ${width}` });
     views.flush(scope);
     await inner.getByText(`增量 ${width}`, { exact: true }).waitFor({ state: "attached" });
     await settled(page);
     assert.equal(await page.locator("#thread").evaluate(node => node.scrollTop), readingPosition, "streaming does not restart an already open block");
-    await pinned(inner.locator(":scope > summary"), await pinned(groupHeader));
+    await pinned(groupHeader);
     await page.screenshot({ path: join(artifacts, `${width}-nested.png`) });
     // Resize while pinned: offsets follow actual wrapping, without resetting disclosure state.
     await page.setViewportSize({ width: width === 1440 ? 390 : 1440, height: 900 });
     await settled(page);
-    await pinned(inner.locator(":scope > summary"), await pinned(groupHeader));
-    await inner.locator(":scope > summary").click();
+    await pinned(groupHeader);
     const tool = group.locator(".tool-call");
     assert.equal(await tool.locator(".tool-detail").count(), 0, "opening the group leaves tool content collapsed");
     await tool.locator(":scope > summary").click();
@@ -162,15 +161,15 @@ try {
     await tool.locator(":scope > summary").click();
     await settled(page);
     await startsAtBeginning(tool);
-    // Leave the nested thinking open to check that closing its parent resets it too.
-    await inner.locator(":scope > summary").click();
-    await settled(page);
+    // Closing the process releases thinking content; reopening displays it directly.
     await groupHeader.click();
+    assert.equal(await group.locator(".thinking-body").count(), 0);
     assert.equal(await group.getAttribute("open"), null);
     await groupHeader.click();
     await settled(page);
     await startsAtBeginning(group);
-    assert.equal(await group.locator(".tool-call[open], .thinking-block[open], .tool-detail, .thinking-body").count(), 0, "reopening the parent expands only its own layer");
+    assert.equal(await group.locator(".tool-call[open], .tool-detail").count(), 0, "tool details remain collapsed on reopening");
+    assert.ok(await inner.locator(".thinking-body").isVisible(), "thinking is directly visible on reopening");
     await groupHeader.click();
     await page.setViewportSize({ width, height: 900 });
     const delegation = page.locator(".delegation-card");
@@ -185,17 +184,17 @@ try {
   const childBlock = dialog.locator(".thinking-block");
   const childGroup = dialog.locator(".tool-activity");
   await childGroup.locator(":scope > summary").click();
-  await childBlock.locator(":scope > summary").click();
+  assert.ok(await childBlock.locator(".thinking-body").isVisible());
   await settled(page);
   const mainScroll = await page.locator("#thread").evaluate(node => node.scrollTop);
   await scrollInside(childBlock);
   await settled(page);
-  await pinned(childBlock.locator(":scope > summary"), await pinned(childGroup.locator(":scope > summary")));
+  await pinned(childGroup.locator(":scope > summary"));
   assert.equal(await page.locator("#thread").evaluate(node => node.scrollTop), mainScroll, "child scrolling does not move parent");
-  await childBlock.locator(":scope > summary").click();
-  await childBlock.locator(":scope > summary").click();
+  await childGroup.locator(":scope > summary").click();
+  await childGroup.locator(":scope > summary").click();
   await settled(page);
-  await startsAtBeginning(childBlock);
+  await startsAtBeginning(childGroup);
   assert.equal(await page.locator("#thread").evaluate(node => node.scrollTop), mainScroll, "reopening child leaves parent scroll untouched");
   await dialog.getByRole("button", { name: "关闭子代理会话，返回主对话" }).click();
   // Expanding at the conversation tail must override automatic bottom following.

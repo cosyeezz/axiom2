@@ -77,9 +77,14 @@ try {
   assert.equal(await group.locator(".tool-call > summary").count(), 5, "each tool has its own disclosure");
   assert.equal(await group.locator(".tool-detail").count(), 0, "opening the group only exposes the call list");
   const colors = new Map<string, string>();
-  for (const name of ["read", "edit", "bash", "custom_tool"]) {
+  for (const name of ["read", "bash", "custom_tool"]) {
     colors.set(name, await toolColor(group.locator(`.tool-heading[data-tool="${name}"]`).first(), name));
   }
+  const failedHeader = group.locator('.tool-call[data-status="failed"] > summary');
+  const failedColor = await toolColor(failedHeader.locator('.tool-heading'), "edit");
+  assert.notEqual(failedColor, unknownColor, "failed rows differ from normal rows");
+  assert.ok(await failedHeader.evaluate(node => [node, ...node.querySelectorAll('*')].every(child => getComputedStyle(child).color === getComputedStyle(node).color)), "every part of the failed row is red");
+  colors.set("edit", unknownColor);
   const shellHeadings = group.locator('.tool-heading[data-tool="bash"]');
   assert.equal(await shellHeadings.count(), 2, "powershell is displayed as bash");
   assert.equal(await toolColor(shellHeadings.nth(1), "bash"), colors.get("bash"), "powershell display alias uses bash color");
@@ -157,6 +162,16 @@ try {
   assert.equal(await group.locator(".activity-current").count(), 1);
   assert.equal(await toolColor(current, "edit"), colors.get("edit"), "collapsed edit matches expanded edit");
   await page.screenshot({ path: join(artifacts, "running-latest-1440.png") });
+  views.messageChanged(scope, { id: "tool-newest", role: "toolResult", text: "Error: target not found", status: "failed" });
+  views.flush(scope);
+  await page.waitForFunction(() => document.querySelector('.activity-current:not(.activity-current-out)')?.getAttribute('data-status') === 'failed');
+  assert.equal(await toolColor(current, "edit"), failedColor, "failed collapsed summary matches the failed row");
+  assert.ok(await current.evaluate(node => [node, ...node.querySelectorAll('*')].every(child => getComputedStyle(child).color === getComputedStyle(node).color)));
+  await group.screenshot({ path: join(artifacts, "failed-latest-1440.png") });
+  views.messageChanged(scope, { id: "tool-newest", role: "toolResult", text: "Done", status: "completed" });
+  views.flush(scope);
+  await page.waitForFunction(() => document.querySelector('.activity-current:not(.activity-current-out)')?.getAttribute('data-status') === 'completed');
+  assert.equal(await toolColor(current, "edit"), unknownColor, "status changes clear failure coloring");
   await page.reload();
   await page.waitForFunction(() => document.querySelector(".tool-activity > summary")?.textContent?.includes("7 项"));
   assert.equal(await group.count(), 1);
@@ -209,8 +224,149 @@ try {
   assert.equal((await single.innerText()).split("rg -n tool app/src/client/chat").length - 1, 1, "the command is shown exactly once");
   assert.equal(await single.locator(".tool-detail").count(), 1);
   await single.screenshot({ path: join(artifacts, "single-expanded.png") });
+  // A live run stays open between tool batches, including after reloading the view.
+  app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES('activity-live',?,'running','{}',?)").run(session.id, Date.now());
+  views.messageChanged(scope, { id: 'standalone-user', role: 'user', text: '检查独立思考', runId: 'activity-live' });
+  views.messageChanged(scope, { id: 'live-standalone', role: 'assistant', text: '独立正文', thinking: '独立思考', status: 'completed', runId: 'activity-live' });
+  views.messageChanged(scope, { id: "live-user", role: "user", text: "连续调用", runId: "activity-live" });
+  const publishLive = (message: ChatMessage) => {
+    views.messageChanged(scope, { ...message, runId: "activity-live" }); views.flush(scope);
+  };
+  publishLive({ id: "live-first", role: "assistant", text: "", status: "completed", calls: [call("live-read", "read", { path: "first.ts" })] });
+  publishLive({ id: "tool-live-read", role: "toolResult", text: "Done", status: "completed" });
+  views.changed(scope);
+  const live = page.locator('.tool-activity').last();
+  await live.locator('.activity-current').filter({ hasText: 'first.ts' }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'finished batch waits for the next model decision');
+  await page.reload();
+  await live.locator('.activity-current').filter({ hasText: 'first.ts' }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'reload retains the open run boundary');
+  const standalone = page.locator('.log-row').filter({ has: page.getByText('独立正文', { exact: true }) }).locator('.tool-activity');
+  assert.equal(await standalone.getAttribute('data-status'), 'completed', 'a new segment closes earlier standalone thinking in the same run');
+  publishLive({ id: 'live-standalone', role: 'assistant', text: '独立正文', thinking: '独立思考', status: 'failed', error: '等待原生重试' });
+  await page.getByText('等待原生重试', { exact: true }).waitFor();
+  assert.equal(await standalone.getAttribute('data-status'), 'failed', 'a failed attempt shows its own failure while the run continues');
+  publishLive({ id: 'live-standalone', role: 'assistant', text: '独立正文', thinking: '独立思考', status: 'completed' });
+  await live.evaluate(node => {
+    (window as any).activityTransitions = [];
+    new MutationObserver(records => (window as any).activityTransitions.push(...records.map(record => record.oldValue)))
+      .observe(node, { attributes: true, attributeFilter: ['data-status'], attributeOldValue: true });
+  });
+  for (let batch = 0; batch < 3; batch++) {
+    publishLive({ id: `live-batch-${batch}`, role: 'assistant', text: '', status: 'completed', calls: [call(`live-call-${batch}`, 'read', { path: `batch-${batch}.ts` })] });
+    publishLive({ id: `tool-live-call-${batch}`, role: 'toolResult', text: 'Done', status: 'completed' });
+    await live.locator('.activity-current:not(.activity-current-out)').filter({ hasText: `batch-${batch}.ts` }).waitFor();
+    await page.waitForTimeout(80);
+    assert.equal(await live.getAttribute('data-status'), 'running');
+  }
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), [], 'no intermediate completed/unknown frames between batches');
+  publishLive({ id: 'live-answer', role: 'assistant', text: '这一段已完成', status: 'completed' });
+  await page.getByText('这一段已完成', { exact: true }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'a reply boundary does not settle a still-active run');
+  publishLive({ id: 'live-answer', role: 'assistant', text: '', streaming: true, calls: [call('live-merged', 'read', { path: 'merged.ts' })] });
+  await live.locator('.activity-current:not(.activity-current-out)').filter({ hasText: 'merged.ts' }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'merged activity stays running without a completion round trip');
+  assert.equal(await live.locator('.activity-status-completed').count(), 0);
+  await live.locator(':scope > summary').click();
+  assert.equal(await live.locator('.tool-call').last().getAttribute('data-status'), 'running', 'merged rows still expose their true status');
+  publishLive({ id: 'live-answer', role: 'assistant', text: '', streaming: false, status: 'completed', calls: [call('live-merged', 'read', { path: 'merged.ts' })] });
+  publishLive({ id: 'tool-live-merged', role: 'toolResult', text: 'Done', status: 'completed' });
+  await live.locator('.tool-call').last().filter({ has: page.locator('[aria-label="已完成 · 耗时未知"]') }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'resumed process still waits between tool batches');
+  // Task notices have no run ID and must not hide the preceding messages' ownership.
+  views.messageChanged(scope, { id: 'live-notice', role: 'notice', text: '子代理已完成', taskNotice: 'completed' });
+  views.flush(scope);
+  publishLive({ id: 'live-final', role: 'assistant', text: '合并调用已结束', status: 'completed' });
+  await page.getByText('合并调用已结束', { exact: true }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'final reply still waits for run settlement');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), [], 'batches, reply boundaries and merges cause no status flicker');
+  const liveProcess = await live.elementHandle();
+  // A final process without a following reply closes only when the run settles.
+  publishLive({ id: 'settle-user', role: 'user', text: '收尾' });
+  publishLive({ id: 'settle-call', role: 'assistant', text: '', status: 'completed', calls: [call('settle-read', 'read', { path: 'settle.ts' })] });
+  publishLive({ id: 'tool-settle-read', role: 'toolResult', text: 'Done', status: 'completed' });
+  await live.locator('.activity-current').filter({ hasText: 'settle.ts' }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running');
+  assert.equal(await liveProcess!.getAttribute('data-status'), 'completed', 'the previous segment finishes when a new segment starts, before run settlement');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running'], 'the previous segment reaches completion once without bouncing');
+  app.store.db.prepare("UPDATE runs SET status='completed',endedAt=? WHERE id='activity-live'").run(Date.now());
+  views.changed(scope);
+  await live.locator('.activity-status-completed').waitFor();
+  assert.equal(await standalone.getAttribute('data-status'), 'completed');
+  assert.equal(await liveProcess!.getAttribute('data-status'), 'completed');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running'], 'the observed process transitions to completed exactly once');
+  app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES('activity-next',?,'running','{}',?)").run(session.id, Date.now());
+  views.changed(scope);
+  await page.waitForTimeout(100);
+  assert.equal(await liveProcess!.getAttribute('data-status'), 'completed', 'a different run cannot reopen a settled process');
+  assert.equal(await standalone.getAttribute('data-status'), 'completed', 'historical standalone thinking also remains settled');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running']);
+  // Reproduce the report: tools, a failed thinking request, then resumed tools in one run.
+  const publishNext = (...messages: ChatMessage[]) => {
+    for (const message of messages) views.messageChanged(scope, { ...message, runId: 'activity-next' });
+    views.flush(scope);
+  };
+  const beforeMergedCount = await page.locator('.tool-activity').count();
+  publishNext(
+    { id: 'three-user', role: 'user', text: '检查连续过程合并' },
+    { id: 'three-first', role: 'assistant', text: '', calls: [call('three-read', 'read', { path: 'finished.ts' })], status: 'completed' },
+    { id: 'tool-three-read', role: 'toolResult', text: 'Done', status: 'completed' },
+  );
+  await live.locator('.activity-current').filter({ hasText: 'finished.ts' }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running');
+  const mergedNode = await live.elementHandle();
+  await live.locator(':scope > summary').click();
+  publishNext({ id: 'three-failed', role: 'assistant', text: '', thinking: '请求中断前的思考', status: 'failed', error: '模型请求失败: Upstream HTTP/2 stream failed' });
+  await live.getByRole('alert').filter({ hasText: 'Upstream HTTP/2 stream failed' }).waitFor();
+  assert.equal(await page.locator('.tool-activity').count(), beforeMergedCount + 1, 'failed thinking joins the existing process');
+  assert.equal(await live.getAttribute('data-status'), 'running', 'recovery in an active run does not settle the process prematurely');
+  publishNext(
+    { id: 'three-next', role: 'assistant', text: '', calls: [call('three-next-read', 'read', { path: 'current.ts' })], status: 'completed' },
+    { id: 'tool-three-next-read', role: 'toolResult', text: 'Reading', status: 'running' },
+  );
+  await live.locator('.tool-call').last().getByText('current.ts', { exact: true }).waitFor();
+  assert.equal(await page.locator('.tool-activity').count(), beforeMergedCount + 1);
+  assert.ok(await mergedNode!.evaluate(node => node.isConnected && node.hasAttribute('open')), 'failure and recovery preserve the card and its open state');
+  assert.equal(await live.getAttribute('data-status'), 'running');
+  assert.equal(await live.locator('.tool-activity').count(), 0, 'merged attempts never create nested process cards');
+  assert.equal(await live.locator('.tool-call').count(), 2);
+  await page.locator('.thread').evaluate(node => { node.scrollTop = node.scrollHeight; });
+  await page.screenshot({ path: join(artifacts, 'merged-process-expanded.png') });
+  await live.locator(':scope > summary').click();
+  await live.locator('.activity-current:not(.activity-current-out)').filter({ hasText: 'current.ts' }).waitFor();
+  await page.screenshot({ path: join(artifacts, 'merged-process-collapsed.png') });
+  await page.reload();
+  await live.locator('.activity-current').filter({ hasText: 'current.ts' }).waitFor();
+  assert.equal(await page.locator('.tool-activity').count(), beforeMergedCount + 1, 'reload preserves one merged process');
+  assert.equal(await live.getAttribute('data-status'), 'running');
+  await live.locator(':scope > summary').click();
+  await live.getByRole('alert').filter({ hasText: 'Upstream HTTP/2 stream failed' }).waitFor();
+  await live.locator(':scope > summary').click();
+  publishNext({ id: 'tool-three-next-read', role: 'toolResult', text: 'Done', status: 'completed' });
+  publishNext({ id: 'three-reply', role: 'assistant', text: '恢复后的回复', status: 'completed' });
+  await page.getByText('恢复后的回复', { exact: true }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'running', 'the merged process waits through a provisional reply boundary');
+  app.store.db.prepare("UPDATE runs SET status='completed',endedAt=? WHERE id='activity-next'").run(Date.now());
+  views.changed(scope);
+  await live.locator('.activity-status-completed').waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'completed', 'successful continuation supersedes the earlier failed attempt');
+  await live.locator(':scope > summary').click();
+  await live.getByRole('alert').filter({ hasText: 'Upstream HTTP/2 stream failed' }).waitFor();
+  assert.equal(await page.locator('.tool-activity').count(), beforeMergedCount + 1);
+  // Error-only and stopped attempts also form one process, without empty nested cards.
+  publishNext({ id: 'terminal-error', role: 'assistant', text: '', status: 'failed', error: '无思考正文的请求失败' });
+  await live.locator('.activity-status[data-state="failed"]').waitFor();
+  await live.locator(':scope > summary').click();
+  await live.getByRole('alert').filter({ hasText: '无思考正文的请求失败' }).waitFor();
+  const terminalNode = await live.elementHandle();
+  publishNext({ id: 'terminal-stop', role: 'assistant', text: '', status: 'cancelled' });
+  await live.getByText('回复已停止', { exact: true }).waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'cancelled');
+  assert.ok(await terminalNode!.evaluate(node => node.isConnected && node.hasAttribute('open')));
+  assert.equal(await page.locator('.tool-activity').count(), beforeMergedCount + 2, 'the independent reply separates two processes, but error and stop remain merged');
+  assert.equal(await live.locator('.tool-activity').count(), 0);
   assert.deepEqual(errors, []);
-  console.log(`PASS: two-line collapse, layered tool disclosures, child reset on group reopen, automatic selected long input/output, streaming refresh, keyboard disclosure, colors, safe text, reload and 6 responsive widths. Screenshots: ${artifacts}`);
+  console.log(`PASS: merged consecutive tools, failed thinking and recovery; stable status across tool batches, provisional replies, merges and reload; run settlement, layered tool disclosures, streaming refresh, keyboard, colors and 6 responsive widths. Screenshots: ${artifacts}`);
 } finally {
   await browser?.close();
   await app?.close();

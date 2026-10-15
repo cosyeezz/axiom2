@@ -147,7 +147,7 @@ export function ModelPicker({
                   type="button"
                   className="model-option"
                   disabled={busy || disabled}
-                  title={`${m.name}\n${m.provider} / ${m.id}`}
+                  data-tooltip={`${m.name}\n${m.provider} / ${m.id}`}
                   aria-pressed={
                     draft?.provider === m.provider && draft.id === m.id
                   }
@@ -275,7 +275,7 @@ export function ModelPicker({
         </div>
         {running(info.run) && (
           <p className="meta">
-            当前执行：{info.run!.selection.id}；确认的选择用于下次执行。
+            当前执行：{info.run!.selection.provider} / {info.run!.selection.id} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}；模型和思考等级均在下次执行生效，本次追加消息仍沿用当前设置。
           </p>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}

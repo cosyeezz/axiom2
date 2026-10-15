@@ -164,7 +164,7 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     assert.equal(JSON.stringify(initial.messages).match(/image_url/g)?.length, 2); // key and type
     const live = await call("task.append", { taskId, text: "steer [imag1]", attachments: files, images: [{ ...image(), name: "live.png" }], mode: "steer" }) as any;
     const afterImage = await call("task.append", { taskId, text: "text after live image", mode: "steer" }) as any;
-    const follow = await call("task.append", { taskId, text: "follow [imag1]", images: [{ ...image(), name: "follow.png" }], mode: "followUp" }) as any;
+    const follow = await call("task.append", { taskId, text: "follow [imag1]", images: [{ ...image(), name: "follow.png" }], mode: "steer" }) as any;
     // Allow normalization to finish; arrival order, not decode speed, must order each pi queue.
     await new Promise((r) => setTimeout(r, 700));
     finish(held!); held = undefined;
@@ -180,7 +180,8 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     assert.ok(JSON.stringify(requests.at(-1)).includes("second-upload-body"));
     assert.ok(customViews.some((v) => v?.images?.some((i) => i.name === "follow.png")));
     assert.ok(customViews.every((v) => !JSON.stringify(v).includes(png)));
-    assert.ok(customViews.filter((v) => v?.images?.length).every((v) => !v!.text.includes("图片附件映射")));
+    for (const view of customViews.filter((v) => v?.images?.length))
+      assert.ok(!view!.text.includes("图片附件映射"), JSON.stringify(view));
     for (const name of ["queued-first.png", "queued-second.png", "live.png", "follow.png"]) {
       const message = requests.at(-1).messages.find((m: any) => m.role === "user" && JSON.stringify(m.content).includes(name));
       assert.ok(message, `missing independent image mapping for ${name}`);

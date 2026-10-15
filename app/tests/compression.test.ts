@@ -248,6 +248,11 @@ test(
       );
       assert.ok(app.agents.compressions.info(scope)!.after! > 0);
       assert.ok(app.agents.compressions.info(scope)!.usage!.total > 0);
+      const billing = app.agents.compressions.info(scope)!.billing!;
+      assert.ok(billing.records >= 1, "native summary requests persist separate accounting");
+      assert.equal(billing.unknownCost, 0);
+      assert.equal(billing.knownCost, app.agents.compressions.info(scope)!.usage!.cost);
+      assert.ok(billing.tokens.input > 0);
       const afterCompression = readFileSync(file, "utf8");
       assert.ok(afterCompression.startsWith(afterNewPrompt), "compression appends without rewriting history");
       const appended = afterCompression.slice(afterNewPrompt.length).trim().split("\n").map((line) => JSON.parse(line));
@@ -323,6 +328,8 @@ test(
       await call("compression.cancel", { id: cancelId });
       await settled();
       assert.equal(app.agents.compressions.info(scope)!.state, "cancelled");
+      assert.ok(app.agents.compressions.info(scope)!.billing!.records >= 1, "cancel retains the initiated model request");
+      assert.ok(app.agents.compressions.info(scope)!.billing!.unknownCost >= 1, "an aborted request without pricing is unknown, not free");
       assert.equal(existsSync(join(project, "unwanted.txt")), false);
       assert.equal(readFileSync(file, "utf8"), beforeCancelled, "cancel cannot apply a compaction");
       await app.agents.compressions.command({ op: "compression.preferences.save", requestId: randomUUID(), params: { selection: null } });

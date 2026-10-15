@@ -298,10 +298,24 @@ try {
   await currentStep.waitFor();
   assert.equal(await currentStep.count(), 1);
   assert.equal(await currentStep.getAttribute("aria-current"), "step");
-  const animation = () => currentStep.locator(".compression-step-number").evaluate((el) => getComputedStyle(el, "::after").animationName);
-  assert.equal(await animation(), "none", "reduced motion retains a static current-stage indicator");
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  assert.equal(await animation(), "run-spin");
+  for (const reducedMotion of ["reduce", "no-preference"] as const) {
+    await page.emulateMedia({ reducedMotion });
+    for (const icon of [currentStep.locator(".bubble-loading"), dialog.locator(".compression-status .bubble-loading"), trigger.locator(".bubble-loading")]) {
+      const frames = await icon.evaluate(node => {
+        const svg = node as SVGSVGElement;
+        svg.pauseAnimations();
+        svg.setCurrentTime(0.2);
+        const first = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        svg.setCurrentTime(0.7);
+        const second = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        svg.unpauseAnimations();
+        return { first, second, stroke: getComputedStyle(svg).stroke };
+      });
+      assert.equal(frames.first.length, 8);
+      assert.notDeepEqual(frames.first, frames.second, `compression bubbles animate in ${reducedMotion}`);
+      assert.equal(frames.stroke, "none");
+    }
+  }
   await page.screenshot({ path: "test-results/compression-page-running.png" });
   await closeOutside();
   assert.equal(server.agents.compressions.info(a)!.state, "running", "outside dismissal keeps compression running");
@@ -316,6 +330,8 @@ try {
   assert.equal(server.agents.compressions.info(a)?.state, "completed", JSON.stringify(server.agents.compressions.info(a)));
   await page.waitForSelector('[data-od-id="background-compression-trigger"][data-state="completed"]');
   assert.equal(await page.locator(".compaction-title").innerText(), "浏览器压缩验证", "split-turn topic reaches the collapsed card");
+  assert.equal(await page.locator(".compaction-icon .fold-icon path").count(), 6);
+  assert.equal(await trigger.locator("animate").count(), 0, "compression completion removes loading bubbles");
   assert.equal(await dialog.count(), 0, "completion does not reopen dialog");
   assert.deepEqual(await page.locator("#prompt").evaluate((el: HTMLTextAreaElement) => [el.value, el === document.activeElement, el.selectionStart, el.selectionEnd]), ["压缩不打扰聊天草稿", true, 2, 5]);
   assert.ok(readFileSync(a.file!, "utf8").startsWith(original), "compression preserves original JSONL history");

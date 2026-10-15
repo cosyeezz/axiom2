@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { nativeInputs, recallNativeInputs } from "./agents/native-queue.js";
+import { queueTaskNotifications } from "./agents/task-notifications.js";
 import { join } from "node:path";
 import {
   createAgentSession,
@@ -21,6 +23,7 @@ import { contextUsage } from "./context-usage.js";
 import { compressionError } from "./compression-error.js";
 import { errorMessage } from "./error-message.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
+import { lastRequestSelection, requestSelection, selectionChange } from "./request-selection.js";
 import { TITLE_INSTRUCTION, extractSessionTitle } from "./session-title.js";
 import { taskTools } from "./task-tools.js";
 import {
@@ -47,8 +50,8 @@ export interface WorkerInput {
   images?: ImageAttachment[];
   requestTitle?: boolean;
   requestId?: string;
-  task?: { id: string; role: string; inputIds: string[]; editable?: boolean };
-  notification?: { id: string; content: string };
+  task?: { id: string; role: string; inputIds: string[]; editable?: boolean; budget?: { workMs: number; elapsedMs: number; deadlineAt?: number } };
+  notification?: { id: string; content: string; items?: { id: string; content: string }[] };
 }
 let session: AgentSession | undefined,
   cancelled = false,
@@ -197,16 +200,19 @@ function callTask(
     else send({ type: "task-call", key, name, callId: id, params });
   });
 }
+let deliveryCursor = new PersistedInputCursor();
+const notificationIds = new Set<string>();
+const persistedNotifications = new Set<string>();
 function delivered() {
-  const ids =
-    session?.sessionManager
-      .getEntries()
-      .flatMap((e) =>
-        e.type === "custom_message" && (e.details as any)?.axiomInput
-          ? [(e.details as any).axiomInput]
-          : [],
-      ) ?? [];
-  if (ids.length) send({ type: "delivered", ids });
+  if (!activeInput) return;
+  try {
+    const { ids, notifications } = deliveryCursor.read(activeInput.file);
+    for (const id of notifications) persistedNotifications.add(id);
+    if (ids.length) send({ type: "delivered", ids });
+  } catch {
+    // A failed read or incomplete/corrupt transcript cannot confirm delivery.
+    // Settlement reconciles from disk; the cursor does not advance on failure.
+  }
 }
 const send = (value: unknown) => {
   if (process.connected) process.send?.({ ...(value as object), runId: activeInput?.runId });
@@ -219,6 +225,13 @@ process.on("disconnect", () => {
 process.on("message", (value: any) => {
   if (value.type === "shutdown") { void shutdown(); return; }
   if (value.type !== "start" && value.runId !== activeInput?.runId) return;
+  if (value.type === "budget" && activeInput?.task?.budget) {
+    activeInput.task.budget = { ...activeInput.task.budget, workMs: value.workMs, deadlineAt: value.deadlineAt };
+    if (session && accepting && !cancelled) void session.sendCustomMessage({ customType: "axiom-budget",
+      content: `工作预算已更新为 ${value.workMs}ms，截止时间 ${new Date(value.deadlineAt).toISOString()}；从原启动时间计算。`, display: false,
+    }, { triggerTurn: false }).catch(() => {});
+    return;
+  }
   if (value.type === "title-settled") {
     titleSettled = true;
     return;
@@ -270,7 +283,7 @@ process.on("message", (value: any) => {
   }
   if (value.type === "input") {
     if (cancelled || inputClosed) {
-      send({ type: "input-error", id: value.id });
+      for (const item of value.notifications ?? [{ id: value.id }]) send({ type: "input-error", id: item.id });
       return;
     }
     if (!value.notification) pendingInputs.set(value.id, { mode: value.mode === "followUp" ? "followUp" : "steer" });
@@ -281,6 +294,12 @@ process.on("message", (value: any) => {
       if (!value.notification && !pendingInputs.has(value.id)) return;
       if (!session || !accepting || !session.isStreaming || cancelled)
         throw Error("输入未进入安全交付边界");
+      if (value.notification) {
+        await queueTaskNotifications(session, value.notifications ?? [{ id: value.id, content: value.text }],
+          notificationIds, persistedNotifications, () => accepting && !cancelled && !!session?.isStreaming, send);
+        delivered();
+        return;
+      }
       const images = imagesInput(value.images);
       requireImageModel(session.model, images);
       const prepared = await prepareImages(images);
@@ -305,7 +324,7 @@ process.on("message", (value: any) => {
     }).catch((error) => {
       pendingInputs.delete(value.id);
       publishQueue();
-      send({ type: "input-error", id: value.id,
+      for (const item of value.notifications ?? [{ id: value.id }]) send({ type: "input-error", id: item.id,
         ...(error instanceof AppError ? { error: error.message } : {}) });
     });
   }
@@ -484,6 +503,14 @@ async function run(input: WorkerInput) {
       environment = environment ? { ...environment, systemPrompt: session.systemPrompt } : environment;
       requireImageModel(session.model, originalImages);
     }
+    deliveryCursor = new PersistedInputCursor();
+    notificationIds.clear();
+    persistedNotifications.clear();
+    for (const id of deliveryCursor.read(input.file).notifications) {
+      notificationIds.add(id);
+      persistedNotifications.add(id);
+    }
+    let previousSelection = lastRequestSelection(session.sessionManager.getBranch());
     send({ type: "ready", environment });
     let currentId = "",
       firstUser = true,
@@ -566,6 +593,15 @@ async function run(input: WorkerInput) {
         const m = event.message as any;
         m.axiomId ??= currentId || randomUUID();
         m.axiomRunId = input.runId;
+        if (m.role === "assistant") {
+          const effective = requestSelection(m, session!.thinkingLevel);
+          // Stream events are separate copies. Reattach on every event, including
+          // message_end before pi persists it. Failed or truncated recovery attempts
+          // may be omitted; carry their change until a retained response uses it.
+          m.axiomSelectionChange = selectionChange(previousSelection, effective);
+          if (event.type === "message_end" && effective && !["error", "length"].includes(m.stopReason))
+            previousSelection = effective;
+        }
         const message = chatMessage(
           m,
           m.axiomId,
@@ -621,12 +657,6 @@ async function run(input: WorkerInput) {
         setImmediate(() => {
           if (activeInput?.runId !== input.runId) return;
           delivered();
-          if (
-            event.message.role === "user" &&
-            (event.message as any).axiomId === input.runId &&
-            input.task
-          )
-            send({ type: "delivered", ids: input.task.inputIds });
         });
       }
       if (event.type === "auto_retry_start") {
@@ -652,24 +682,30 @@ async function run(input: WorkerInput) {
     if (!cancelled) {
       send({ type: "usage", usage: usage(), autoCheck: true });
       if (input.resume) {
+        if (input.task?.budget) await session.sendCustomMessage({ customType: "axiom-budget", display: false,
+          content: `本次工作预算 ${input.task.budget.workMs}ms，截止时间 ${new Date(input.task.budget.deadlineAt!).toISOString()}，此前任务链累计执行 ${input.task.budget.elapsedMs}ms。` }, { triggerTurn: false });
         await resumeSession(session, input.task?.inputIds[0] ?? input.requestId);
         send({ type: "context-rebuilt" });
-      } else if (input.notification)
-        await session.sendCustomMessage(
-          {
-            customType: "axiom-result",
-            content: input.notification.content,
-            display: true,
-            details: { axiomInput: input.notification.id },
-          },
-          { triggerTurn: true },
-        );
-      else if (!input.task?.editable || input.task.inputIds.every((id) => pendingInputs.has(id))) {
+      } else if (input.notification) {
+        const all = input.notification.items ?? [input.notification];
+        const items = all.filter((item) => !notificationIds.has(item.id));
+        for (const item of all) if (persistedNotifications.has(item.id)) send({ type: "delivered", ids: [item.id] });
+        for (const [index, item] of items.entries()) {
+          notificationIds.add(item.id);
+          await session.sendCustomMessage({ customType: "axiom-result", content: item.content, display: true,
+            details: { axiomInput: item.id } }, { triggerTurn: index === items.length - 1 });
+        }
+      } else if (!input.task?.editable || input.task.inputIds.every((id) => pendingInputs.has(id))) {
         // Claim the initial input synchronously before calling prompt: from this
         // point it is no longer an editable queue entry (including async preflight).
-        for (const id of input.task?.inputIds ?? []) pendingInputs.delete(id);
+        for (const id of input.task?.inputIds ?? []) {
+          pendingInputs.delete(id);
+          send({ type: "input-accepted", id });
+        }
         publishQueue();
-        await session.prompt(input.prompt, {
+        const budget = input.task?.budget;
+        const prompt = budget ? `本次执行预算：${budget.workMs}ms；截止时间：${new Date(budget.deadlineAt ?? Date.now() + budget.workMs).toISOString()}；此前任务链累计执行：${budget.elapsedMs}ms。追加不延长本次截止时间，请在预算内交付已有证据和未验证项。\n\n${input.prompt}` : input.prompt;
+        await session.prompt(prompt, {
           expandPromptTemplates: !input.task && !images.length,
           images: nativeImages(images),
         });

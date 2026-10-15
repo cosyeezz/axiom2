@@ -4,7 +4,7 @@ import type {
   ProviderDraft as Provider,
 } from "../../shared/models.js";
 import { Icon } from "../components.js";
-import { DeleteIcon } from "../DeleteIcon.js";
+import { DeleteButton } from "../DeleteButton.js";
 import { ModelEditor } from "./ModelEditor.js";
 export function ModelRegistry({
   p,
@@ -41,6 +41,10 @@ export function ModelRegistry({
     proceed: () => void;
   }) => void;
 }) {
+  const remove = (model: Model) => {
+    patch({ models: p.models.filter((item) => item.key !== model.key) });
+    if (editor?.key === model.key) setEditor(null);
+  };
   return (
     <section
       className="model-registry"
@@ -151,28 +155,20 @@ export function ModelRegistry({
                         <path d="m16 3 5 5-12 12H4v-5Z" />
                       </svg>
                     </button>
-                    <button
-                      className="icon-btn"
-                      aria-label={`删除模型：${m.name}`}
-                      onClick={() =>
+                    <DeleteButton
+                      label={`删除模型：${m.name}`}
+                      title="删除模型草稿"
+                      onDelete={() => remove(m)}
+                      onConfirm={() =>
                         setDecision({
                           title: "删除模型草稿？",
                           text: m.originalId
                             ? "先移出草稿；顶部保存时会退出整个供应商，同供应商其他模型也可能需要重新认证。"
                             : "该模型尚未发布；仅从本页草稿移除。",
-                          proceed: () => {
-                            patch({
-                              models: p.models.filter(
-                                (item) => item.key !== m.key,
-                              ),
-                            });
-                            if (editor?.key === m.key) setEditor(null);
-                          },
+                          proceed: () => remove(m),
                         })
                       }
-                    >
-                      <DeleteIcon />
-                    </button>
+                    />
                   </div>
                 </td>
               </tr>

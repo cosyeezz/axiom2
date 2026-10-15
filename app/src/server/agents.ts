@@ -5,7 +5,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Store } from "./storage.js";
 import { ModelService } from "./model-service.js";
 import { configuration } from "./models.js";
-import { openTranscript } from "./transcript.js";
+import { boundedMessage, openTranscript } from "./transcript.js";
 import {
   AppError,
   attachmentsInput,
@@ -22,6 +22,7 @@ import {
   type Run,
   type Selection,
 } from "../shared/agent.js";
+import type { StopSource } from "../shared/tasks.js";
 import type { WorkerInput } from "./agent-worker.js";
 import { AgentViews } from "./agents/views.js";
 import { AgentRuns } from "./agents/runs.js";
@@ -85,9 +86,9 @@ export class Agents {
     this.views.queues.set(scope.sessionId, queue);
     this.changed(scope);
   }
-  async stop(scope: Scope) {
+  async stop(scope: Scope, source: StopSource = "user") {
     await Promise.all([
-      this.runs.stop(scope),
+      this.runs.stop(scope, source),
       this.compressions.stop(scope),
     ]);
   }
@@ -161,6 +162,10 @@ export class Agents {
         queued: this.views.queues.get(scope.sessionId)?.some((item) => item.id === id) ?? false,
         receipt: this.store.receipt(id, scope) }));
     }
+    if (c.op === "agent.original") {
+      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "原始会话读取不接受额外参数");
+      return [...this.views.original(scope).values()].map(boundedMessage);
+    }
     if (c.op === "message.get")
       return this.message(scope, text(p.id, "消息标识"), true);
     if (c.op === "message.image") {
@@ -196,6 +201,14 @@ export class Agents {
           throw new AppError("SHUTTING_DOWN", "服务正在退出，未接受新操作");
         if (c.op === "prompt" && this.runs.active(scope)) {
           internal.beforeStart?.();
+          if (internal.notification) {
+            const items = internal.notification.items ?? [internal.notification];
+            const run = this.info(scope).run;
+            if (!run || run.status !== "running" || !this.runs.signal(scope, run.id, {
+              type: "input", id: items[0].id, text: items[0].content, notification: true, notifications: items, mode: "steer",
+            })) throw new AppError("NOTIFICATION_NOT_SENT", "通知未发送到父执行");
+            return { runId: run.id, status: "queued" };
+          }
           const images = imagesInput(p.images);
           const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
           const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
@@ -359,7 +372,8 @@ export class Agents {
             resume: resuming,
             requestTitle,
             images,
-            task: internal.task,
+            task: internal.task ? { ...internal.task, budget: internal.task.budget ? { ...internal.task.budget,
+              deadlineAt: run.startedAt + internal.task.budget.workMs } : undefined } : undefined,
             notification: internal.notification,
           });
         } catch (error) {

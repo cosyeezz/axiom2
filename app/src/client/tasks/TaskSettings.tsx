@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { command, useConnection, useScope } from "../transport.js";
 import { taskPreferencesScope, type TaskPreferences } from "../../shared/tasks.js";
 import type { Selection } from "../../shared/agent.js";
 import { Icon } from "../components.js";
 import { ModelPicker } from "../chat/ModelPicker.js";
+import { useSettingsPopover } from "../useSettingsPopover.js";
 
 export function TaskSettings() {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
   return <>
-    <button type="button" className="compression-trigger subagent-trigger"
-      data-od-id="subagent-settings-trigger" aria-label="子代理设置" title="子代理设置"
-      aria-haspopup="dialog" aria-expanded={open} aria-controls={id} onClick={() => setOpen(true)}>
+    <button ref={trigger} type="button" className="compression-trigger subagent-trigger"
+      data-od-id="subagent-settings-trigger" aria-label="子代理设置" data-tooltip="子代理设置"
+      aria-haspopup="dialog" aria-expanded={open} aria-controls={id} popoverTarget={id}
+      onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="9" y="2" width="6" height="6" rx="1" />
         <path d="M12 8v4M5 16v-4h14v4" />
@@ -20,52 +23,49 @@ export function TaskSettings() {
         <rect x="16" y="16" width="6" height="6" rx="1" />
       </svg>
     </button>
-    {open && <SettingsDialog id={id} onClose={() => setOpen(false)} />}
+    {open && <SettingsDialog id={id} trigger={trigger.current!} onClose={() => setOpen(false)} />}
   </>;
 }
-function SettingsDialog({ id, onClose }: { id: string; onClose: () => void }) {
+function SettingsDialog({ id, trigger, onClose }: { id: string; trigger: HTMLButtonElement; onClose: () => void }) {
   const preferences = useScope<TaskPreferences | null>(taskPreferencesScope, null);
   const connected = useConnection() === "已连接本地服务";
-  const dialog = useRef<HTMLDialogElement>(null);
+  const { panel, close, host } = useSettingsPopover(trigger, onClose);
   const [message, setMessage] = useState("");
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement;
-    dialog.current!.showModal();
-    return () => trigger?.focus({ preventScroll: true });
-  }, []);
   const saveModel = useCallback(async (selection: Selection | null) => {
     setMessage("");
     await command("task.preferences.save", { selection });
     setMessage("已全局保存，新的委派立即使用此选择。");
   }, []);
-  return createPortal(<dialog ref={dialog} id={id} className="subagent-settings"
+  return createPortal(<dialog ref={panel} open popover="auto" id={id} className="compression-page subagent-settings"
     aria-labelledby={`${id}-heading`} aria-describedby={`${id}-note`}
-    onCancel={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
-    onKeyDown={(e) => e.stopPropagation()}
-    onClick={(e) => { if (e.target === e.currentTarget) {
-      const box = e.currentTarget.getBoundingClientRect();
-      if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) onClose();
-    } }}>
+    onKeyDown={(e) => {
+      e.stopPropagation();
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") e.preventDefault();
+    }}>
     <header>
       <div><h2 id={`${id}-heading`}>子代理设置</h2><p id={`${id}-note`}>全局记忆 · 自动保存 · 实时生效</p></div>
-      <button className="icon-btn" type="button" aria-label="关闭子代理设置" title="关闭（Esc）" onClick={onClose}><Icon name="close" /></button>
+      <button ref={close} className="icon-btn" type="button" aria-label="关闭子代理设置" data-tooltip="返回会话（Esc）" onClick={onClose}><Icon name="close" /></button>
     </header>
-    <div className="subagent-settings-body">
+    <div className="compression-body">
       <section className="compression-settings" aria-label="默认子模型设置">
         <h3>默认模型与思考等级</h3>
         <ModelPicker childDefault value={preferences?.selection ?? null} onDefaultSelect={saveModel} disabled={!connected || !preferences} />
         <p className="meta">用于所有工作空间的新委派；继承时使用主会话模型。不会中断当前请求或覆盖已有子会话的独立选择。</p>
       </section>
       <section aria-label="子代理运行设置">
-        <BudgetField label="同时运行的子任务" name="concurrency" value={preferences?.budgets.concurrency} min={1} max={16} disabled={!connected}
-          hint="立即调整现有队列；降低上限不会强停正在运行的任务。" />
-        <BudgetField label="工作时限（秒）" name="workMs" value={preferences ? preferences.budgets.workMs / 1000 : undefined} min={1} max={86400} scale={1000} disabled={!connected}
-          hint="立即更新排队及运行中任务，从原启动时间计时；若已超时则停止。追加消息不重置计时。" />
+        <h3>运行设置</h3>
+        <div className="auto-compression-fields">
+          <BudgetField label="同时运行的子任务" name="concurrency" value={preferences?.budgets.concurrency} min={1} max={16} disabled={!connected}
+            hint="立即调整现有队列；降低上限不会强停正在运行的任务。" />
+          <BudgetField label="工作时限（秒）" name="workMs" value={preferences ? preferences.budgets.workMs / 1000 : undefined} min={1} max={86400} scale={1000} disabled={!connected}
+            hint="立即更新排队及运行中任务，从原启动时间计时；若已超时则停止。追加消息不重置计时。" />
+        </div>
+        <p>子代理始终仅限只读调研。</p>
       </section>
-      <p className="meta">设置保存在本机服务，跨会话、工作空间与窗口共享，刷新或重启后保留。子代理始终仅限只读调研。</p>
       <p role="status" className="meta">{!connected ? "连接断开，暂时无法保存设置。" : !preferences ? "正在读取全局设置…" : message}</p>
     </div>
-  </dialog>, document.body);
+    <footer><small>设置保存在本机服务，跨会话、工作空间与窗口共享，刷新或重启后保留。</small></footer>
+  </dialog>, host);
 }
 function BudgetField({ label, name, value, min, max, scale = 1, disabled, hint }: {
   label: string; name: "concurrency" | "workMs"; value?: number; min: number; max: number; scale?: number; disabled: boolean; hint: string;
@@ -90,7 +90,7 @@ function BudgetField({ label, name, value, min, max, scale = 1, disabled, hint }
     } catch (e) { if (revision.current === version) setMessage((e as Error).message); }
     finally { if (revision.current === version) setBusy(false); }
   };
-  return <div className="subagent-budget-field">
+  return <div className="auto-compression-field subagent-budget-field">
     <label htmlFor={id}>{label}</label>
     <input id={id} className="input" type="number" min={min} max={max} step="1" value={text}
       disabled={disabled || value === undefined || busy} aria-describedby={`${id}-hint ${id}-status`}

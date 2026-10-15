@@ -11,18 +11,24 @@ import {
 } from "./reply-annotations.js";
 import "../styles/annotations.css";
 
-// Lucide Message Square Text: https://lucide.dev/icons/message-square-text (ISC).
-function AnnotationIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" />
-    <path d="M7 11h10M7 15h6M7 7h8" />
+// User-provided comment bubble, shared by the toolbar and inline annotation action.
+function AnnotationIcon({ inlineHeight }: { inlineHeight?: number }) {
+  // Trim the inline SVG's transparent margins so its visible outline aligns with the text.
+  return <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em"
+    viewBox={inlineHeight === undefined ? "0 0 24 24" : "2 3 20 18.6"}
+    style={inlineHeight === undefined ? undefined : { height: inlineHeight, width: inlineHeight * 20 / 18.6 }} aria-hidden="true">
+    <path d="M0 0h24v24H0z" fill="none" stroke="none" />
+    <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      <path strokeWidth="1.5" d="M2.75 6.25a2.5 2.5 0 0 1 2.5-2.5h13.5a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1-2.5 2.5H12.5L8 20.85a.77.77 0 0 1-1.25-.6v-2.5h-1.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+      <path strokeWidth="2" d="M8 10.75h.01m3.99 0h.01m3.99 0h.01" />
+    </g>
   </svg>;
 }
 export function AnnotationToggle({ scope }: { scope?: Scope }) {
   const state = useAnnotations(scope, true);
   const label = state.enabled ? "关闭批注" : "开启批注";
   return <button type="button" className="compression-trigger annotation-toggle" aria-label={label}
-    title={`${label}${state.items.length ? ` · ${state.items.length} 条待发送` : ""}`} aria-pressed={state.enabled}
+    data-tooltip={`${label}${state.items.length ? ` · ${state.items.length} 条待发送` : ""}`} aria-pressed={state.enabled}
     disabled={!scope?.sessionId} onClick={() => scope && updateAnnotations(scope, { enabled: !state.enabled })}>
     <AnnotationIcon />
     {(state.items.length > 0 || !!state.editor) && <span className="annotation-count">{state.items.length || "·"}</span>}
@@ -123,7 +129,7 @@ function AnnotationBlock({ scope, messageId, block, source, children, eligible }
   const enabled = state.enabled && eligible;
   const candidate = useRef<Range | null>(null);
   const [error, setError] = useState("");
-  const [marker, setMarker] = useState<{ top: number; left: number } | null>(null);
+  const [marker, setMarker] = useState<{ top: number; left: number; iconHeight: number } | null>(null);
   const [positions, setPositions] = useState<Record<string, number>>({});
   const notes = useMemo(() => state.items.filter((item) => item.messageId === messageId && item.block === block && item.source === source),
     [state.items, messageId, block, source]);
@@ -161,10 +167,12 @@ function AnnotationBlock({ scope, messageId, block, source, children, eligible }
     if (tail.endContainer.nodeType === Node.TEXT_NODE && tail.endOffset > 0)
       tail.setStart(tail.endContainer, tail.endOffset - 1);
     else tail.collapse(false);
-    const rect = tail.getBoundingClientRect(), bounds = root.getBoundingClientRect();
+    const rect = tail.getBoundingClientRect(), bounds = root.parentElement!.getBoundingClientRect();
     if (!rect.height) { setMarker(null); return; }
-    const next = { top: Math.max(0, rect.top - bounds.top + (rect.height - 24) / 2), left: Math.max(0, rect.right - bounds.left + 4) };
-    setMarker((previous) => previous?.top === next.top && previous.left === next.left ? previous : next);
+    // The markers are positioned against the shell, which can start above the
+    // source (e.g. heading margins). Keep the visible bubble within this text row.
+    const next = { top: rect.top - bounds.top, left: Math.max(0, rect.right - bounds.left + 4), iconHeight: rect.height / 2 };
+    setMarker((previous) => previous?.top === next.top && previous.left === next.left && previous.iconHeight === next.iconHeight ? previous : next);
   }, []);
   useEffect(() => {
     if (!enabled) { previewRange(); setError(""); candidate.current = null; return; }
@@ -217,18 +225,12 @@ function AnnotationBlock({ scope, messageId, block, source, children, eligible }
     </div>
     {enabled && <div className="annotation-markers">
       {notes.filter((item, i) => !notes.slice(0, i).some((previous) => Math.abs((positions[previous.id] ?? 0) - (positions[item.id] ?? 0)) < 28)).map((item) => <button key={item.id} type="button" className="annotation-marker" style={{ top: positions[item.id] ?? 0 }}
-        aria-label={`编辑批注 ${state.items.indexOf(item) + 1}`} title={item.text} data-annotation-id={item.id}
+        aria-label={`编辑批注 ${state.items.indexOf(item) + 1}`} data-tooltip={item.text} data-annotation-id={item.id}
         onClick={() => edit(scope, item)}>{state.items.indexOf(item) + 1}</button>)}
-      <button ref={trigger} type="button" className="annotation-add" style={marker ?? { display: "none" }} aria-label="批注选中文字或这一句"
-        title="选中文字可精确批注；直接点击正文批注当前句、列表项或代码行"
+      <button ref={trigger} type="button" className="annotation-add" style={marker ? { top: marker.top, left: marker.left } : { display: "none" }} aria-label="批注选中文字或这一句"
+        data-tooltip="选中文字可精确批注；直接点击正文批注当前句、列表项或代码行"
         onMouseDown={(e) => e.preventDefault()} onClick={() => open(candidate.current ?? detail(body.current!))}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
-          <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2">
-            <path d="M12 8v3m0 0v3m0-3h3m-3 0H9" />
-            <path strokeLinejoin="round" d="M14 19c3.771 0 5.657 0 6.828-1.172S22 14.771 22 11s0-5.657-1.172-6.828S17.771 3 14 3h-4C6.229 3 4.343 3 3.172 4.172S2 7.229 2 11s0 5.657 1.172 6.828c.653.654 1.528.943 2.828 1.07" />
-            <path d="M14 19c-1.236 0-2.598.5-3.841 1.145c-1.998 1.037-2.997 1.556-3.489 1.225s-.399-1.355-.212-3.404L6.5 17.5" />
-          </g>
-        </svg>
+        <AnnotationIcon inlineHeight={marker?.iconHeight} />
       </button>
     </div>}
     {enabled && error && <p className="annotation-error" role="alert">{error}</p>}
@@ -248,13 +250,13 @@ export function AnnotationTray({ scope, disabled, send }: {
       {!!state.items.length && <><button type="button" className="btn btn-ghost" aria-expanded={state.expanded} aria-controls={id}
         onClick={() => updateAnnotations(scope, { expanded: !state.expanded })}>{state.expanded ? "收起" : "查看全部"}</button>
         <button type="button" className="btn" disabled={disabled || !!state.editor || tooLong}
-          title={state.editor ? "请先保存或取消正在编辑的批注" : "统一发送原文与批注意见"}
+          data-tooltip={state.editor ? "请先保存或取消正在编辑的批注" : "统一发送原文与批注意见"}
           onClick={() => send(state.items, prompt)}>发送批注</button></>}
     </div>
     {tooLong && <p className="annotation-error" role="alert">原文与批注合计超过 12,000 字，请缩短引用或减少本轮批注后发送。</p>}
     {state.editorInTray && state.editor && <AnnotationEditor scope={scope} item={state.editor} />}
     {state.expanded && <ol id={id} className="annotation-list">{state.items.map((item, i) => <li key={item.id}>
-      <div className="annotation-list-text"><button type="button" className="annotation-locate" title="定位原文" onClick={() => {
+      <div className="annotation-list-text"><button type="button" className="annotation-locate" data-tooltip="定位原文" onClick={() => {
         const target = document.getElementById(annotationAnchor(scope, item.messageId, item.block));
         if (target) {
           const root = target.querySelector<HTMLElement>(".annotation-source"), scroller = target.closest(".thread");

@@ -38,6 +38,45 @@ function fixture(t: TestContext) {
   return { runs, child, scope, run, input, cached, saved, settlements, sent, close, killed: () => killed };
 }
 
+for (const mode of ["sync-throw", "callback-error", "backpressure"] as const) {
+  test(`runtime IPC ${mode} preserves uncertainty and reports every notification once`, async (t) => {
+    const f = fixture(t);
+    await f.runs.launch(f.scope, f.run, f.input);
+    f.run.status = "running";
+    const events: any[] = [];
+    f.runs.onEvent = (_scope: unknown, _run: unknown, event: any) => events.push(event);
+    f.child.send = (value, callback) => {
+      f.sent.push(value.type);
+      if (mode === "sync-throw") throw Error("IPC failed api_key=sk-fixture-secret");
+      queueMicrotask(() => callback(mode === "callback-error" ? Error("IPC failed api_key=sk-fixture-secret") : undefined));
+      return false;
+    };
+    assert.equal(f.runs.signal(f.scope, f.run.id, { type: "input", id: "one", notification: true,
+      notifications: [{ id: "one", content: "first" }, { id: "two", content: "second" }], mode: "steer" }), true);
+    await new Promise(resolve => setImmediate(resolve));
+    const failures = events.filter(event => event.type === "input-error");
+    assert.equal(failures.length, mode === "backpressure" ? 0 : 2);
+    assert.ok(failures.every(event => event.uncertain === true && event.runId === f.run.id));
+    assert.doesNotMatch(JSON.stringify(events), /sk-fixture-secret/);
+    assert.deepEqual(f.sent, ["start", "input"], "transport failure never replays the input");
+    assert.equal(f.runs.active(f.scope), true, "an input transport failure cannot settle its owning run");
+  });
+}
+
+for (const mode of ["sync-throw", "callback-error"] as const) {
+  test(`runtime ${mode} rejects the input receipt as uncertain without waiting for timeout`, async (t) => {
+    const f = fixture(t);
+    await f.runs.launch(f.scope, f.run, f.input);
+    f.run.status = "running";
+    f.child.send = (_value, callback) => {
+      if (mode === "sync-throw") throw Error("IPC failed");
+      queueMicrotask(() => callback(Error("IPC failed")));
+      return true;
+    };
+    await assert.rejects(f.runs.enqueue(f.scope, "request", { text: "original", attachment: null, attachments: [], images: [] }, "original", "steer"), { code: "UNCERTAIN" });
+  });
+}
+
 for (const mode of ["sync-throw", "callback-error", "close-before-ack"] as const) {
   test(`startup ${mode} is uncertain, waits for exit, settles once, and never replays`, async (t) => {
     const f = fixture(t);

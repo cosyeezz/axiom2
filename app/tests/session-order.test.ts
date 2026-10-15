@@ -47,14 +47,17 @@ test("unviewed priority follows activity; sessions without a cooldown retain the
   assert.deepEqual(order([recent, target]), ["target", "recent"]);
 });
 
-test("viewed automatic pins stay above manual pins until expiry, then use normal workspace recency", () => {
+test("viewed idle pins expire, but activity overrides expired cooldowns", () => {
   const recent = session("recent", { updatedAt: 100 });
   const manual = session("manual", { pinned: true });
   const cooling = session("cooling", { updatedAt: 2, autoPinUntil: 123 });
   assert.deepEqual(order([recent, manual, cooling]), ["cooling", "manual", "recent"]);
   cooling.autoPinUntil = 0;
   cooling.runStatus = "running";
-  assert.equal(isPrioritySession(cooling), true, "running indicator survives returning to history");
+  assert.equal(isPrioritySession(cooling), true);
+  assert.equal(isTopSession(cooling), true, "running sessions always stay at the top");
+  assert.deepEqual(order([cooling, recent, manual]), ["cooling", "manual", "recent"]);
+  cooling.runStatus = "completed";
   assert.equal(isTopSession(cooling), false);
   assert.deepEqual(order([cooling, recent, manual]), ["manual", "recent", "cooling"]);
   cooling.unread = true;

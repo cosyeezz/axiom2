@@ -1,7 +1,9 @@
 import { memo, useState } from "react";
-import { command, useScope } from "../transport.js";
+import { command } from "../transport.js";
+import { useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
-import { messageScope, type ChatMessage } from "../../shared/agent.js";
+import { FoldIcon } from "../StatusIcons.js";
+import { type ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { TaskCards } from "../tasks/TaskCards.js";
 import { TaskOperation } from "../tasks/TaskOperation.js";
@@ -58,15 +60,13 @@ function CompactionCard({ m, scope, id }: { m: ChatMessage; scope: Scope; id: st
   return <details className="compaction-card" onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary>
       <span className="compaction-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 3v5h5M20 21v-5h-5M4 8l5-5M20 16l-5 5M4 12h16" />
-        </svg>
+        <FoldIcon />
       </span>
       <span className="compaction-heading">
         <span className="compaction-number">上下文压缩 <span>#{String(compression.number).padStart(2, "0")}</span></span>
         <span className="compaction-title">{compression.title}</span>
       </span>
-      <span className="compaction-tokens" title="pi 内容估算，不是计费用量">
+      <span className="compaction-tokens" data-tooltip="pi 内容估算，不是计费用量">
         <span className="compaction-token-values"><span>≈{compression.before.toLocaleString()}</span><span className="compaction-arrow" aria-label="压缩至">→</span><span className="compaction-token-after">{compression.after == null ? "—" : `≈${compression.after.toLocaleString()}`}</span></span>
         <span className="compaction-token-label">Token · 估算</span>
       </span>
@@ -89,6 +89,7 @@ export const Message = memo(function Message({
   activityOrder = 0,
   thinkingOnly = false,
   hideThinking = false,
+  activeRunId,
 }: {
   scope: Scope;
   id: string;
@@ -96,12 +97,13 @@ export const Message = memo(function Message({
   activityOrder?: number;
   thinkingOnly?: boolean;
   hideThinking?: boolean;
+  activeRunId?: string;
 }) {
-  const m = useScope<ChatMessage | null>(messageScope(scope, id), null);
+  const m = useThreadMessage(scope, id);
   if (!m || m.role === "toolResult") return null;
   if (!thinkingOnly && m.compression) return <CompactionCard m={m} scope={scope} id={id} />;
   if (!thinkingOnly && m.taskNotice) return <><ActivityMessageFact message={m} order={activityOrder} /><TaskNotice message={m} /></>;
-  const hasProcess = !!(m.thinking || m.thinkingActive || m.calls?.length);
+  const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive) || !thinkingOnly && m.calls?.length);
   const process = <>
     <ActivityMessageFact message={m} order={activityOrder} />
     {!hideThinking && (m.thinking || m.thinkingActive) && <Thinking text={m.thinking ?? ""} active={!!m.thinkingActive && !!m.streaming} />}
@@ -124,7 +126,7 @@ export const Message = memo(function Message({
         {!thinkingOnly && m.status === "cancelled" && (
           <p className="message-state">回复已停止</p>
         )}
-        {hasProcess && (inActivity ? process : <ActivityGroup>{process}</ActivityGroup>)}
+        {hasProcess && (inActivity ? process : <ActivityGroup messageIds={[m.id]} awaitingMore={!!activeRunId && m.runId === activeRunId}>{process}</ActivityGroup>)}
         {!thinkingOnly && <><div
           className={`message-body${m.role === "user" ? " user-text" : ""}${m.role === "assistant" && !inActivity && m.text ? " reply-body" : ""}${m.images?.length ? " has-image-attachments" : ""}`}
         >

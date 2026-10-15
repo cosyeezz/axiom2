@@ -24,7 +24,8 @@ try {
   const longTitle = "Pinned A · " + "长标题完整可用宽度测试".repeat(8);
   run("session.rename", { title: longTitle }, a.workspace.id, a.session.id);
   run("session.pin", { pinned: true }, a.workspace.id, a.session.id);
-  app.store.db.prepare("UPDATE sessions SET unread=1 WHERE id=?").run(a.session.id);
+  // Keep the unread fixture consistent with versioned read acknowledgements.
+  app.store.db.prepare("UPDATE sessions SET unread=1,resultVersion=1,readVersion=0 WHERE id=?").run(a.session.id);
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   const browserDialogs: string[] = [];
@@ -82,14 +83,26 @@ try {
   await item.waitFor();
   assert.equal(await item.evaluate((el) => el.tagName), "BUTTON");
   assert.equal(await row.locator(".session-workspace-path").textContent(), a.workspace.path);
-  assert.equal(await row.locator(".session-workspace-path").getAttribute("title"), a.workspace.path);
+  assert.equal(await row.locator(".session-workspace-path").getAttribute("data-tooltip"), a.workspace.path);
   assert.equal(await page.getByRole("region", { name: "当前空间对话", exact: true }).locator(".session-workspace-path").count(), 0);
   assert.equal(await page.locator(".history-item").count(), 2);
   assert.equal(await page.locator(".session-manage").count(), 0);
   assert.equal(await page.getByRole("button", { name: /^管理会话：/ }).count(), 0);
   assert.equal(await pins.locator(".session-title-line > :first-child").getAttribute("aria-label"), "未读");
-  assert.equal(await pins.locator(".session-state").evaluate((el) => getComputedStyle(el).width), "12px");
-  assert.equal(await pins.locator(".session-state circle").getAttribute("r"), "3");
+  assert.equal(await pins.locator(".session-state").evaluate((el) => getComputedStyle(el).width), "8px");
+  assert.equal(await pins.locator(".session-state.pulse-rings-multiple path").count(), 3);
+  const unreadFrames = await pins.locator(".session-state").evaluate(node => {
+    const svg = node as SVGSVGElement;
+    svg.pauseAnimations();
+    svg.setCurrentTime(0.3);
+    const first = svg.querySelector<SVGCircleElement>(".unread-solid-dot")!.r.animVal.value;
+    svg.setCurrentTime(0.8);
+    const second = svg.querySelector<SVGCircleElement>(".unread-solid-dot")!.r.animVal.value;
+    svg.unpauseAnimations();
+    return { first, second, stroke: getComputedStyle(svg).stroke };
+  });
+  assert.ok(unreadFrames.second > unreadFrames.first, "unread rings fill towards a solid dot even with reduced motion");
+  assert.equal(unreadFrames.stroke, "none");
   await search.fill("Pinned A");
   assert.equal(await page.locator(".history-item").count(), 1);
   await search.fill("");
@@ -346,7 +359,7 @@ try {
   }
   assert.deepEqual(browserDialogs, [], "no browser dialogs throughout session history scenarios");
   assert.deepEqual(errors, []);
-  console.log("PASS: global pins/search; hidden pointer-safe sibling actions, hover highlight, keyboard focus, full-width/ellipsized titles and stable row geometry; inline double-click/F2 rename, Enter/Escape/blur/blank/IME; owner-bound rename/pin/delete in-app confirmation Escape/cancel/accept, default/returned focus, keyboard navigation and narrow viewport without browser dialogs; navigation, drafts and leading status dot");
+  console.log("PASS: global pins/search; hidden pointer-safe sibling actions, hover highlight, keyboard focus, full-width/ellipsized titles and stable row geometry; inline double-click/F2 rename, Enter/Escape/blur/blank/IME; owner-bound rename/pin/delete in-app confirmation Escape/cancel/accept, default/returned focus, keyboard navigation and narrow viewport without browser dialogs; navigation, drafts and animated leading status icon");
 } finally {
   await browser.close();
   await app.close();

@@ -38,7 +38,7 @@ export function CopyReply({ message, scope }: { message: ChatMessage; scope: Sco
   }
   return <span className="message-actions" data-feedback={feedback || undefined}>
     <button type="button" aria-label="复制回复的 Markdown 原文" aria-busy={copying}
-      title={label || "复制回复"} onClick={() => void copy()}>
+      data-tooltip={label || "复制回复"} onClick={() => void copy()}>
       {feedback === "copied" ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> :
         <Icon name={feedback === "failed" ? "close" : "copy"} />}
     </button>

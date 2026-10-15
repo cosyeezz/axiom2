@@ -1,12 +1,42 @@
+Original conversation toolbar: Bootstrap Icons bi:filetype-raw, inline in chat/OriginalConversation.tsx.
+Source: https://icon-sets.iconify.design/bi/filetype-raw/
+The MIT License (MIT)
+Copyright (c) 2019-2024 The Bootstrap Authors
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
 SVG source: https://github.com/lucide-icons/lucide/tree/main/icons
-Process status SVGs: Phosphor Icons (regular Planet and Seal Check), https://phosphoricons.com/
-Sources: https://github.com/phosphor-icons/core/tree/main/assets/regular
-Local SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths, 22px display)
+Running process status: eos-icons:three-dots-loading (SUSE UX/UI team, MIT), inline in chat/ToolActivity.tsx.
+EOS source: https://icon-sets.iconify.design/eos-icons/three-dots-loading/
+Shared loading status: eos-icons:bubble-loading, official SVG animation in StatusIcons.tsx.
+EOS loading source: https://icon-sets.iconify.design/eos-icons/bubble-loading/
+Session title status: svg-spinners:pulse-rings-multiple (Utkarsh Verma, MIT), in StatusIcons.tsx. Running and unread indicators share the original ring paths, distinguished by color, with a custom 2-second transition to a solid dot, 2-second hold and 2-second reverse transition, repeating seamlessly every 6 seconds.
+SVG Spinners source: https://github.com/n3r4zzurr0/svg-spinners
+Compression card: Tabler fold, original paths with inward/outward arrow animation in StatusIcons.tsx.
+Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold.svg
+Completed process status: user-provided Tabler progress-check SVG, inline in chat/ToolActivity.tsx; original paths preserved with one-shot left-dash reveal, right-arc drawing and check drawing.
+Tabler icon: https://tabler.io/icons/icon/progress-check
+Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
+Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
+Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
+Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths)
 MIT License: Copyright (c) 2023 Phosphor Icons. Full text: assets/PHOSPHOR-LICENSE.txt
 Lucide: square-pen, folder-plus, gauge, database-zap, copy, x, chevron-down,
-network, inbox, message-square-plus, circle-stop, message-square-text, brain.
-Reply annotation toggle: https://lucide.dev/icons/message-square-text
-Official SVG: https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/message-square-text.svg
+network, inbox, message-square-plus, circle-stop, brain.
+Reply annotation toolbar and inline action: user-provided three-dot comment bubble SVG.
 Task card SVGs use the official paths with a 1.75px stroke at an 18px display size.
 ISC License
 Copyright (c) 2026 Lucide Icons and Contributors
@@ -20,6 +50,29 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+EOS Icons, SVG Spinners and Tabler Icons: MIT License
+Copyright (c) 2020 SUSE Software Solutions Germany GmbH (EOS Icons)
+Copyright (c) Utkarsh Verma (SVG Spinners)
+Copyright (c) 2020-2026 Paweł Kuna (Tabler Icons)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 Feather-derived x, chevron-down and inbox: MIT License
 Copyright (c) 2013-present Cole Bemis

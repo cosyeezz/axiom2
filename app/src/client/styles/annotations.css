@@ -1,4 +1,5 @@
 .annotation-toggle { position: relative; }
+.compression-trigger.annotation-toggle svg { width: 20px; height: 20px; }
 .annotation-toggle[aria-pressed="true"] { color: var(--accent-hover); background: color-mix(in oklch, var(--fg) 8%, transparent); border-color: var(--border); }
 .annotation-count { position: absolute; top: 1px; right: 0; min-width: 15px; padding: 0 3px; border-radius: 8px; background: var(--surface); color: var(--accent-hover); font: 10px/15px var(--font-mono); }
 .annotation-shell:not(.annotation-block), .annotation-shell:not(.annotation-block) > .annotation-source { display: contents; }
@@ -13,7 +14,9 @@
 .markdown > .annotation-shell:last-child > .annotation-source > :last-child { margin-bottom: 0; }
 .annotation-markers { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
 .annotation-markers button { position: absolute; right: 0; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; border-radius: 5px; color: var(--accent-hover); font: 12px var(--font-mono); pointer-events: auto; }
-.annotation-markers .annotation-add { right: auto; width: 24px; min-height: 24px; border: 0; background: transparent; box-shadow: none; opacity: 0; font-size: 18px; color: var(--muted); }
+.annotation-markers .annotation-add { right: auto; width: 24px; min-height: 24px; place-items: start center; border: 0; background: transparent; box-shadow: none; opacity: 0; font-size: 14px; color: var(--muted); }
+/* The tight SVG viewBox needs overflow for subpixel stroke antialiasing. */
+.annotation-markers .annotation-add svg { display: block; overflow: visible; }
 .annotation-markers .annotation-add:hover { background: transparent; color: var(--fg); }
 .annotation-block:hover .annotation-add, .annotation-block:focus-within .annotation-add { opacity: 1; }
 .annotation-marker { background: color-mix(in oklch, var(--accent-hover) 10%, var(--bg)); }

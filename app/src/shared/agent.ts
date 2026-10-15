@@ -15,6 +15,10 @@ export interface Selection {
   id: string;
   thinking: Thinking;
 }
+export interface SelectionChange {
+  from: Selection;
+  to: Selection;
+}
 export type RunPhase = "initializing" | "requesting" | "generating" | "executing_tools" | "retry_wait" | "retrying" | "compacting" | "settling";
 export interface RetryInfo {
   runId: string;
@@ -109,6 +113,9 @@ export interface ChatMessage {
   truncated?: boolean;
   compression?: { number: number; title: string; before: number; after: number | null };
   inputIds?: string[];
+  /** Display metadata from an actual model request, never the menu draft. */
+  selectionChange?: SelectionChange;
+  runId?: string;
 }
 export interface ThreadIndex {
   ids: string[];
@@ -120,6 +127,7 @@ export interface ThreadIndex {
     thinkingOnlyIds?: string[];
     /** Thinking is already rendered in the preceding activity group. */
     hideThinking?: boolean;
+    selectionChange?: SelectionChange;
   }[];
   error?: string;
   /** Reading watermark published with this rendered context, never inferred from the sidebar. */

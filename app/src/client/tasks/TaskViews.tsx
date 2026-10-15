@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import { AgentThread } from "../chat/AgentThread.js";
+import { OriginalConversationProvider } from "../chat/OriginalConversation.js";
+import { TaskReportBody } from "./TaskReportBody.js";
 import { OpenTask, TaskState } from "./TaskCards.js";
 import type { Scope } from "../../shared/protocol.js";
 import {
@@ -107,7 +109,7 @@ function TaskWindow({
             <div className="title-block">
               <h1>{task.description}</h1>
               <div className="title-meta">
-                工作预算 {task.budgets.workMs / 1000}s
+                工作预算 {task.budgets.workMs / 1000}s · 累计执行 {Math.round((task.elapsedMs ?? 0) / 1000)}s
               </div>
             </div>
           </header>
@@ -142,15 +144,17 @@ function TaskWindow({
               {report && (
                 <div>
                   <p>{report.sideEffects}</p>
-                  <pre>{report.report}</pre>
+                  <TaskReportBody key={report.id} scope={scope} report={report} />
                   <p>{report.unfinished.join("；")}</p>
                 </div>
               )}
               {error && <p role="alert">{error}</p>}
             </details>
           </div>
-          <AgentThread scope={child} nested />
-          {composer(child)}
+          <OriginalConversationProvider key={`${child.workspaceId}:${child.sessionId}`} scope={child}>
+            <AgentThread scope={child} nested />
+            {composer(child)}
+          </OriginalConversationProvider>
         </section>
       )}
     </dialog>

@@ -5,10 +5,20 @@ import { markdown, markdownImagePath } from "../../shared/markdown.js";
 import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
 // Render token AST as React nodes, never untrusted HTML. Raw HTML stays literal.
 type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
-function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer): ReactNode {
+function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false): ReactNode {
   return items.map((t: any, i) => {
     const render = () => {
-    const inner = () => (t.tokens ? tokens(t.tokens, images) : t.text);
+    const inner = () => (t.tokens ? tokens(t.tokens, images, undefined, compact) : t.text);
+    // The activity summary is a single-line disclosure control: no nested links,
+    // copy buttons, checkboxes, or block layout inside its Markdown preview.
+    if (compact) {
+      if (["heading", "paragraph", "blockquote"].includes(t.type)) return <span key={i}>{inner()}{" "}</span>;
+      if (t.type === "code") return <code key={i}>{t.text}{" "}</code>;
+      if (t.type === "link") return <span key={i}>{inner()}</span>;
+      if (t.type === "br" || t.type === "hr") return <span key={i}> </span>;
+      if (t.type === "list") return <span key={i}>{t.items.map((item: any, n: number) => <span key={n}>{item.task ? (item.checked ? "☑ " : "☐ ") : t.ordered ? `${(t.start || 1) + n}. ` : "• "}{tokens(item.tokens, images, undefined, true)}{" "}</span>)}</span>;
+      if (t.type === "table") return <span key={i}>{[t.header, ...t.rows].map((row: any[], n: number) => <span key={n}>{row.map((cell: any, j: number) => <span key={j}>{tokens(cell.tokens, images, undefined, true)}{" "}</span>)}</span>)}</span>;
+    }
     switch (t.type) {
       case "space":
         return null;
@@ -110,6 +120,6 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer }) => (
-  <>{tokens(markdown.lexer(text), images, renderBlock)}</>
+export const Markdown = memo(({ text, images, renderBlock, compact = false }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean }) => (
+  <>{tokens(markdown.lexer(text), images, renderBlock, compact)}</>
 ));

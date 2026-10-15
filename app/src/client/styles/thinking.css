@@ -1,17 +1,13 @@
-.thinking-block { margin: 4px 0 12px; color: var(--fg-2); border: 0; background: color-mix(in oklch, var(--fg) 2%, transparent); border-radius: 6px; }
-.thinking-block > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; list-style: none; font-size: 12px; }
-.thinking-block > summary::-webkit-details-marker { display: none; }
-.thinking-block .thinking-glyph { width: 14px; height: 14px; color: inherit; stroke-width: 2; }
-.thinking-label { font-style: italic; letter-spacing: .02em; }
-.thinking-dots { display: inline-flex; width: 18px; flex-shrink: 0; font-style: normal; overflow: visible; }
+.thinking-block { margin: 4px 0 12px; padding: 6px 2px; color: #9ca3af; border: 0; }
+.thinking-body { font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.thinking-block .thinking-body.markdown, .thinking-block .thinking-body.markdown * { color: #9ca3af; font-style: italic; font-weight: 400; }
+.thinking-body > :last-child { margin-bottom: 0; }
+.thinking-preview, .thinking-preview *, .thinking-indicator { color: #9ca3af; font-style: italic; font-weight: 400; }
+.thinking-preview { min-width: 0; white-space: nowrap; }
+.thinking-indicator { display: inline-flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
+.thinking-dots { display: inline-flex; width: 18px; flex-shrink: 0; overflow: visible; color: inherit; }
 .thinking-dots span { width: 5px; animation: thinking-dot 1.2s ease-in-out infinite; }
 .thinking-dots span:nth-child(2) { animation-delay: 150ms; }
 .thinking-dots span:nth-child(3) { animation-delay: 300ms; }
-.thinking-block > summary > svg:last-child { width: 12px; height: 12px; margin-left: auto; transition: transform 180ms ease; }
-.thinking-block[open] > summary > svg:last-child { transform: rotate(90deg); }
-.thinking-body { padding: 2px 12px 12px 32px; font-size: 12px; line-height: 1.8; font-style: italic; color: var(--fg-2); overflow-wrap: anywhere; }
-.thinking-block .thinking-body, .thinking-block .thinking-body * { font-weight: 400; }
-.thinking-body :is(code, pre) { font-style: normal; }
-.thinking-body > :last-child { margin-bottom: 0; }
 @keyframes thinking-dot { 0%, 70%, 100% { opacity: .3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
-@media (prefers-reduced-motion: reduce) { .thinking-dots span { animation: none; } .thinking-block > summary > svg:last-child { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .thinking-dots span { animation: none; } }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { command, scopeOrder, useScope } from "../transport.js";
 import { Icon } from "../components.js";
-import { DeleteIcon } from "../DeleteIcon.js";
+import { PulseRingsIcon } from "../StatusIcons.js";
+import { DeleteButton } from "../DeleteButton.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { sessionState } from "../../shared/session-state.js";
 import { compareSessions, isPrioritySession, isTopSession } from "./session-order.js";
@@ -34,6 +35,7 @@ export function History({
   const [heldRows, setHeldRows] = useState<Record<string, { session: Session; top: boolean }>>({});
   const holdRow = (session: Session, top: boolean, hold: boolean) => {
     setHeldRows((previous) => {
+      if (!hold && !previous[session.id]) return previous;
       const next = { ...previous };
       if (hold) next[session.id] = { session, top };
       else delete next[session.id];
@@ -130,6 +132,9 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   hold: (value: boolean) => void;
 }) {
   const [deleting, setDeleting] = useState<Session | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const removingRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(s.title);
   const [saving, setSaving] = useState(false);
@@ -138,7 +143,14 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   const composing = useRef(false);
   const button = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  // Hold across the click window, confirmation, and command so live grouping
+  // cannot replace the trigger between clicks or leave a deleted row behind.
+  useEffect(() => {
+    hold(editingRef.current || !!deleting || deletePending || removing);
+  }, [deleting, deletePending, removing]);
+  useEffect(() => () => hold(false), []);
   const rename = () => {
+    if (removingRef.current) return;
     hold(true);
     setTitle(s.title);
     editingRef.current = true;
@@ -173,21 +185,28 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
     // On failure keep the draft in place for correction or retry.
     else if (restoreFocus && stillFocused) input.current?.focus();
   };
-  const remove = () => { hold(true); setDeleting(s); };
+  const remove = () => { if (!removingRef.current) setDeleting(s); };
+  const removeNow = async () => {
+    if (removingRef.current) return;
+    removingRef.current = true;
+    setRemoving(true);
+    try {
+      await run("session.delete", { confirmed: true }, s);
+    } finally {
+      removingRef.current = false;
+      setRemoving(false);
+    }
+  };
   const state = sessionState(s);
   const content = (
     <span>
       <span className="session-title-line">
-        {isPrioritySession(s) && (
-          <svg
-            className={`session-state ${state.indicator}`}
-            viewBox="0 0 12 12"
-            aria-label={state.indicatorLabel}
-          >
-            <title>{state.active && s.unread ? `${state.label}，有未读结果` : state.label}</title>
-            <circle cx="6" cy="6" r="3" fill="currentColor" />
-          </svg>
-        )}
+        {isPrioritySession(s) && (state.active || !selected) && (state.active ? (
+          <PulseRingsIcon className="session-state running" label={state.indicatorLabel}
+            title={s.unread ? `${state.label}，有未读结果` : state.label} />
+        ) : (
+          <PulseRingsIcon className="session-state unread" label={state.indicatorLabel} title={state.label} />
+        ))}
         {editing ? (
           <input
             ref={input}
@@ -225,7 +244,7 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
         </span>
       </small>
       {workspacePath && (
-        <small className="session-workspace-path" title={workspacePath}>
+        <small className="session-workspace-path" data-tooltip={workspacePath}>
           <span className="session-detail">{workspacePath}</span>
         </small>
       )}
@@ -235,7 +254,7 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
     <div className="history-row" data-editing={editing} data-session-id={s.id}>
       {deleting && <ConfirmDialog title="删除会话" subject={deleting.title}
         description="停止所属任务，不删除项目文件。" confirmLabel="删除会话" danger
-        onClose={() => { setDeleting(null); hold(false); }}
+        onClose={() => setDeleting(null)}
         onConfirm={() => command("session.delete", { confirmed: true }, {
           workspaceId: deleting.workspaceId, sessionId: deleting.id,
         })} />}
@@ -247,7 +266,7 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
           type="button"
           className="history-item"
           aria-current={selected}
-          title={`${s.title} · 双击重命名（F2），Delete 删除`}
+          data-tooltip={`${s.title} · 双击重命名（F2），Delete 删除`}
           onClick={() => select({ workspaceId: s.workspaceId, sessionId: s.id })}
           onDoubleClick={rename}
           onKeyDown={(e) => {
@@ -260,8 +279,9 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
         <button
           type="button"
           className="icon-btn session-pin"
+          disabled={removing}
           aria-label={`${s.pinned ? "取消置顶" : "置顶会话"}：${s.title}`}
-          title={s.pinned ? "取消置顶" : "置顶会话"}
+          data-tooltip={s.pinned ? "取消置顶" : "置顶会话"}
           aria-pressed={s.pinned}
           onClick={() => void run("session.pin", { pinned: !s.pinned }, s)}
         >
@@ -269,15 +289,15 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
             <path d={s.pinned ? "M5 5h14M12 10v10m-5-5 5 5 5-5" : "M5 5h14M12 20V10m-5 5 5-5 5 5"} />
           </svg>
         </button>
-        <button
-          type="button"
+        <DeleteButton
           className="icon-btn session-delete"
-          aria-label={`删除会话：${s.title}`}
+          label={`删除会话：${s.title}`}
           title="删除会话"
-          onClick={remove}
-        >
-          <DeleteIcon />
-        </button>
+          disabled={removing}
+          onConfirm={remove}
+          onDelete={() => void removeNow()}
+          onPendingChange={setDeletePending}
+        />
       </div>
     </div>
   );

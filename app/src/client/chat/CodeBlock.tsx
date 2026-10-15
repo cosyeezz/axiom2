@@ -1,5 +1,5 @@
 /// <reference types="highlight.js" />
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import hljs from "highlight.js/lib/core.js";
 import javascript from "highlight.js/lib/languages/javascript.js";
 import typescript from "highlight.js/lib/languages/typescript.js";
@@ -41,6 +41,11 @@ function nodes(parent: Node): ReactNode {
 export const CodeBlock = memo(
   ({ text, language }: { text: string; language: string }) => {
     const [copied, setCopied] = useState("");
+    useEffect(() => {
+      if (copied !== "已复制") return;
+      const timer = setTimeout(() => setCopied(""), 1500);
+      return () => clearTimeout(timer);
+    }, [copied]);
     const highlighted = useMemo(() => {
       // ponytail: bounded named-language highlighting; huge/unknown blocks remain plain text.
       const lang = language.split(/\s+/)[0]?.toLowerCase();
@@ -63,8 +68,11 @@ export const CodeBlock = memo(
           <span>{language || "代码"}</span>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="icon-btn btn-ghost"
+            aria-label={copied === "复制失败" ? "复制失败，点击重试" : "复制代码"}
+            data-tooltip={copied || "复制代码"}
             onClick={async () => {
+              setCopied("");
               try {
                 await navigator.clipboard.writeText(text);
                 setCopied("已复制");
@@ -73,8 +81,11 @@ export const CodeBlock = memo(
               }
             }}
           >
-            {copied || "复制代码"}
+            {copied === "已复制" ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+            ) : <svg aria-hidden="true"><use href={`#i-${copied === "复制失败" ? "close" : "copy"}`} /></svg>}
           </button>
+          <span className="screen-reader" role="status" aria-live="polite">{copied}</span>
         </div>
         <pre>
           <code>{highlighted}</code>

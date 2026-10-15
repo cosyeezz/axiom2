@@ -17,7 +17,7 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 const mixed: PickedAttachment[] = [
   { name: "中文 notes.txt", path: join(external, "中文 notes.txt"), kind: "file" },
   { name: "pixel.png", path: join(external, "pixel.png"), kind: "image" },
-  { name: "空文件夹", path: join(external, "空文件夹"), kind: "folder" },
+  { name: "项目资料", path: join(external, "项目资料"), kind: "folder" },
   { name: "second.bin", path: join(external, "second.bin"), kind: "file" },
 ];
 writeFileSync(mixed[0].path, "DO NOT INLINE THIS FILE\n");
@@ -150,11 +150,45 @@ try {
   await page.getByRole("button", { name: "移除附件：second.bin", exact: true }).waitFor();
   assert.equal(await input.inputValue(), "前文[file1] [imag1] [folder1] [file2]后文");
   assert.deepEqual((await draft(owner)).attachments, mixed.map((item, i) => ({ ...item, id: ["file1", "imag1", "folder1", "file2"][i], text: "" })));
-  assert.deepEqual(await page.locator(".attachment-chip").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("title"))), mixed.map((item) => item.path));
+  assert.deepEqual(await page.locator(".attachment-chip").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-tooltip"))), mixed.map((item) => item.path));
   assert.equal(await page.locator(".attachment-chip img").count(), 0);
   assert.equal(commands.filter((c) => c.op === "files.upload").length, 0, "local paths must not upload or expand folder contents");
   assert.equal(await send.isEnabled(), true, "image path does not require a vision model");
   passed.push("direct + API; fixed 44px cancel trigger; unchanged composer geometry at nine widths; mixed selection and path labels");
+
+  const originalText = await input.inputValue();
+  const overlay = page.locator(".attachment-input-overlay");
+  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "all bound references render as icons");
+  assert.equal(await page.locator(".attachment-chip .attachment-symbol").count(), 4);
+  assert.deepEqual(await overlay.locator(".attachment-symbol small").allTextContents(), ["1", "1", "1", "2"]);
+  assert.equal(await page.locator('.attachment-label[aria-label^="文件夹"] .attachment-name').textContent(), "项目资料", "folder label uses this selection's name, not the workspace name");
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await eventually(async () => input.evaluate((node) => node.scrollHeight <= node.clientHeight + 1), "short wrapped input grows to show every line");
+    const screenshots = resolve("test-results/attachment-icons"); mkdirSync(screenshots, { recursive: true });
+    await page.locator(".composer-area").screenshot({ path: join(screenshots, `icons-${width}.png`) });
+    const geometry = await input.evaluate((node) => {
+      const layer = document.querySelector<HTMLElement>(".attachment-input-overlay")!;
+      const a = node.getBoundingClientRect(), b = layer.getBoundingClientRect();
+      return { x: Math.abs(a.x - b.x), y: Math.abs(a.y - b.y), width: Math.abs(node.clientWidth - b.width) };
+    });
+    assert.ok(geometry.x < 1 && geometry.y < 1 && geometry.width < 1, "mirror matches native textarea geometry");
+  }
+  await input.focus();
+  await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(5, 5));
+  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 3, "caret inside reference reveals editable text");
+  await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(node.value.length, node.value.length));
+  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "leaving reference restores icon");
+  await input.evaluate((node) => node.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
+  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 0, "IME exposes native text");
+  await input.evaluate((node) => node.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
+  await input.fill(`${"多行输入 abc\n".repeat(15)}${originalText} [file999]`);
+  await input.evaluate((node) => { node.scrollTop = node.scrollHeight; node.dispatchEvent(new Event("scroll")); });
+  await eventually(async () => input.evaluate((node) => Math.abs(node.scrollTop - document.querySelector(".attachment-input-overlay")!.scrollTop) < 1), "mirror tracks native scroll");
+  assert.equal(await overlay.locator(".attachment-reference-icon").count(), 4, "unknown references stay plain text");
+  await input.fill(originalText);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  passed.push("attachment icons at desktop/mobile widths; caret editing, IME, multiline scroll and unknown references preserve native text");
 
   await input.fill(`${await input.inputValue()} 再次[file1]`);
   await page.getByRole("button", { name: "移除附件：中文 notes.txt", exact: true }).click();

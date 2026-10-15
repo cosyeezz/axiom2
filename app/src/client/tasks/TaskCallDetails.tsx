@@ -3,7 +3,7 @@ import type { ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { taskLabels, taskToolName } from "../../shared/tasks.js";
 import { command } from "../transport.js";
-import { Markdown } from "../chat/Markdown.js";
+import { TaskReportBody } from "./TaskReportBody.js";
 import type { ToolCall } from "../chat/tool-summary.js";
 import { callObject, readTaskReport } from "./task-call.js";
 
@@ -46,7 +46,7 @@ export function TaskCallDetails({ scope, call, result, message }: {
     {report && <div className="task-report">
       <p className="task-call-meta">本次交付 · {taskLabels[report.status]}</p>
       {report.reason && <p className="task-call-error">{report.reason}</p>}
-      <div className="markdown"><Markdown text={report.report} /></div>
+      <TaskReportBody key={`${report.id}:${report.offset ?? 0}`} scope={scope} report={report} />
       {report.unfinished.length > 0 && <div className="task-report-notes"><span className="task-call-meta">未完成／未验证</span><ul>{report.unfinished.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
       {report.sideEffects && <p className="task-call-meta">{report.sideEffects}</p>}
     </div>}

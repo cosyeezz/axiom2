@@ -9,6 +9,7 @@ import {
 } from "../../shared/protocol.js";
 import { AgentThread as Thread } from "../chat/AgentThread.js";
 import { Composer, EmptyComposer } from "../chat/Composer.js";
+import { OriginalConversationProvider } from "../chat/OriginalConversation.js";
 import { TaskViews } from "../tasks/TaskViews.js";
 import { History } from "../workspaces/SessionHistory.js";
 import { WorkspacePicker } from "../workspaces/WorkspacePicker.js";
@@ -206,6 +207,7 @@ export default function Workbench() {
               <Title workspace={viewedWorkspace} scope={view} onError={setError} />
             </div>
           </header>
+          <OriginalConversationProvider key={view ? scopeKey(view) : "empty"} scope={view}>
           <Thread
             key={view ? "thread:" + scopeKey(view) : "empty"}
             scope={view}
@@ -232,6 +234,7 @@ export default function Workbench() {
               } : undefined}
             />
           )}
+          </OriginalConversationProvider>
           {error && (
             <p className="execution-alert" role="alert">
               {error}

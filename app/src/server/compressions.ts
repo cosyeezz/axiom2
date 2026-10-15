@@ -333,6 +333,8 @@ export class Compressions {
     child.on("message", (event: any) => {
       try {
         if (event.type === "closed") live.closed = true;
+        // A stopped request can still report real usage before its worker exits.
+        if (event.type === "billing") { job.billing = event.billing; this.save(live); }
         if (live.cancel) return;
         if (event.type === "phase") { job.phase = "summarizing"; this.save(live); }
         if (event.type === "completed") {

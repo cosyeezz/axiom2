@@ -53,12 +53,12 @@ export function taskTools(
       name: "append",
       label: "追问子任务",
       description:
-        "补充本主会话所属只读调研子任务，追问不能提升权限，修改仍由主代理执行。steer（默认）在 pi 安全边界送达，followUp 在当前工作结束后送达。结束后追问沿用同一子会话并创建新执行。追加不延长本次预算；不要用作进度查询。",
+        "补充本主会话所属只读调研子任务，追问不能提升权限，修改仍由主代理执行。steer（默认且唯一模式）在 pi 安全边界送达；停止中追加会等待旧执行退出后自动启动新执行，再次停止会撤销待续接要求。结束后追问沿用同一子会话并创建新执行。追加不延长本次预算；不要用作进度查询。",
       parameters: Type.Object(
         {
           taskId: id,
           text,
-          mode: Type.Optional(StringEnum(["steer", "followUp"])),
+          mode: Type.Optional(StringEnum(["steer"])),
         },
         { additionalProperties: false },
       ),
@@ -82,9 +82,9 @@ export function taskTools(
       name: "read_result",
       label: "读取子任务结果",
       description:
-        "读取完成通知指定的不可变结果，必须同时传 taskId 与 resultId。可重复读取，无副作用；不是任务进度查询工具。结果正文最多 16,000 字符，完整过程在子会话中。",
+        "读取完成通知指定的不可变结果，必须同时传 taskId 与 resultId。可重复读取，无副作用；不是任务进度查询工具。结果完整保存，单页最多 16,000 字符；truncated 为 true 时用 nextOffset 继续读取同一 resultId，直至结束。reportKind 区分最终回复、部分成果和系统事实。",
       parameters: Type.Object(
-        { taskId: id, resultId: id },
+        { taskId: id, resultId: id, offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 16000 })) },
         { additionalProperties: false },
       ),
       execute: execute("read_result"),

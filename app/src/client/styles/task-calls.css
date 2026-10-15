@@ -42,6 +42,13 @@
 .delegation-pending p + p { border-top: 1px solid var(--border-soft); padding-top: 8px; margin-top: 8px; }
 .delegation-feedback > .task-call-meta { padding: 8px 12px; margin: 0; }
 .log-row:has(.task-operation, .delegation-card):not(:has(.message-body .markdown, .message-images)) { padding-block: 0 2px; border-top: 0; }
+.task-operation[data-status="failed"] > details > summary,
+.task-operation[data-status="failed"] > details > summary *,
+.task-operation[data-status="failed"] > details > summary .task-operation-status,
+.delegation-card[data-status="failed"] > .subagents-head,
+.delegation-card[data-status="failed"] > .subagents-head *,
+.subagent-card > .subagent[data-status="failed"],
+.subagent-card > .subagent[data-status="failed"] * { color: #d99595; --tool-color: #d99595; }
 @media (max-width: 640px) {
   .task-operation > details > summary { gap: 8px; padding-inline: 10px; }
   .task-operation-heading { display: grid; gap: 0; }

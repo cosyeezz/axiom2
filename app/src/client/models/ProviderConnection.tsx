@@ -276,7 +276,7 @@ export function ProviderConnection({
             disabled={
               !!p.originalId && (dirty || !!editor || busy || needsReconcile)
             }
-            title={
+            data-tooltip={
               dirty && p.originalId
                 ? "请先保存或放弃未保存修改，再删除供应商"
                 : "确认后删除供应商并退出登录"

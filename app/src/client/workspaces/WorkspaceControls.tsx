@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useConnection, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import { openFileDialog } from "../OpenFileDialog.js";
@@ -16,7 +17,7 @@ function ConnectionStatus() {
   const status = useConnection();
   const connected = status === "已连接本地服务";
   return (
-    <span className="connection-status" data-connected={connected} role="status" aria-label={status} title={status}>
+    <span className="connection-status" data-connected={connected} role="status" aria-label={status} data-tooltip={status}>
       <span className="screen-reader">{status}</span>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M0 0h24v24H0z" fill="none" />
@@ -41,6 +42,7 @@ export function Title({
   scope: Scope | null;
   onError: (s: string) => void;
 }) {
+  const [revealing, setRevealing] = useState(false);
   const session = useScope<Session | null>(
     scope?.sessionId ? scopeKey(scope) : null,
     null,
@@ -52,7 +54,7 @@ export function Title({
         <h1 id="chat-title">{session?.title || "新对话"}</h1>
       </div>
       <div className="title-meta">
-        <span id="title-path" title={workspace?.path}>
+        <span id="title-path" data-tooltip={workspace?.path}>
           {workspace?.path || "未关联文件夹"}
         </span>
         <span className="path-actions">
@@ -70,14 +72,19 @@ export function Title({
           </button>
           <button
             className="icon-btn"
-            disabled={!workspace}
+            disabled={!workspace || revealing}
             aria-label="打开系统文件管理器"
+            aria-busy={revealing}
             onClick={async () => {
-              const response = await fetch(
-                `/api/workspace/reveal?id=${workspace!.id}`,
-                { method: "POST" },
-              );
-              if (!response.ok) onError("无法打开系统文件管理器");
+              setRevealing(true);
+              try {
+                const response = await fetch(
+                  `/api/workspace/reveal?id=${workspace!.id}`,
+                  { method: "POST" },
+                );
+                if (!response.ok) onError(await response.text() || "无法打开系统文件管理器");
+              } catch { onError("无法打开系统文件管理器"); }
+              finally { setRevealing(false); }
             }}
           >
             <Icon name="workspace" />

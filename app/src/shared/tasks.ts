@@ -35,6 +35,15 @@ export type TaskStatus =
   | "failed"
   | "cancelled"
   | "interrupted";
+export type TaskInputState = "queued" | "accepted" | "delivered" | "failed" | "cancelled";
+export type StopSource = "user" | "agent" | "budget" | "parent" | "shutdown" | "provider";
+export interface TaskInputReceipt {
+  inputId: string;
+  runId: string | null;
+  state: TaskInputState;
+  error: string | null;
+}
+export interface TaskStop { source: StopSource; reason: string; requestedAt: number }
 export interface Task {
   id: string;
   workspaceId: string;
@@ -47,6 +56,8 @@ export interface Task {
   createdAt: number;
   budgets: TaskBudgets;
   results: { id: string; runId: string; status: TaskStatus }[];
+  inputs?: TaskInputReceipt[];
+  elapsedMs?: number;
   error: string | null;
 }
 export interface TaskResult {
@@ -60,6 +71,13 @@ export interface TaskResult {
   endedAt: number;
   unfinished: string[];
   sideEffects: string;
+  reportKind?: "final" | "partial" | "system";
+  stop?: TaskStop;
+  elapsedMs?: number;
+  totalLength?: number;
+  offset?: number;
+  truncated?: boolean;
+  nextOffset?: number | null;
 }
 export interface TaskList {
   tasks: Task[];

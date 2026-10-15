@@ -21,7 +21,7 @@ const wireScope = (scope: string) => scope.startsWith("message:")
 const pinned = (key: string) => [...listeners.keys()].some((scope) => sessionKey(scope) === key);
 function sessionKey(scope: string) {
   const parts = scope.split(":");
-  return ["agent", "thread", "message", "messages", "session", "compression", "tasks"].includes(parts[0]) && parts.length >= 3
+  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs"].includes(parts[0]) && parts.length >= 3
     ? `${parts[1]}:${parts[2]}` : null;
 }
 function touchSession(scope: string) {

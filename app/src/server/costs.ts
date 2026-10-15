@@ -1,0 +1,96 @@
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { Scope } from "../shared/protocol.js";
+import type { Compression } from "../shared/compression.js";
+import { sumCosts, type CostCategory, type CostReport, type CostRow, type CostTotals } from "../shared/costs.js";
+import type { Store } from "./storage.js";
+import { openTranscript } from "./transcript.js";
+import { usageCost } from "./usage-cost.js";
+
+/** Read-only accounting over native history; independent from current context projection. */
+export class Costs {
+  constructor(private readonly store: Store) {}
+  owner(scope: Scope): Scope {
+    this.store.session(scope.workspaceId, scope.sessionId);
+    const task = this.store.db.prepare("SELECT parentSessionId FROM tasks WHERE workspaceId=? AND sessionId=?").get(scope.workspaceId, scope.sessionId);
+    const root = { ...scope, sessionId: task ? String(task.parentSessionId) : scope.sessionId };
+    this.store.session(root.workspaceId, root.sessionId);
+    return root;
+  }
+  get(requested: Scope): CostReport {
+    const scope = this.owner(requested), root = this.store.session(scope.workspaceId, scope.sessionId);
+    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.description,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
+    const sessions: CostReport["sessions"] = [{ id: root.id, title: root.title, taskId: null, status: null },
+      ...children.map((row) => ({ id: String(row.sessionId), title: String(row.description), taskId: String(row.id), status: String(row.status) }))];
+    const rows = new Map<string, CostRow>(), warnings: string[] = [];
+    for (const session of sessions) {
+      const add = (category: CostCategory, sourceId: string, source: string, totals: CostTotals,
+        provider: string | null = null, model: string | null = null, status?: string, timestamp?: number) => {
+        const id = JSON.stringify([session.id, category, sourceId, provider, model]);
+        const previous = rows.get(id);
+        rows.set(id, { id, category, sessionId: session.id, source, provider, model, ...(status ? { status } : {}),
+          ...(timestamp != null && Number.isFinite(timestamp) ? { timestamp } : {}),
+          ...sumCosts(previous ? [previous, totals] : [totals]) });
+      };
+      const stored = this.store.db.prepare("SELECT file,usage FROM agent_sessions WHERE sessionId=?").get(session.id);
+      const jobs = new Map<string, Compression>(this.store.db.prepare("SELECT id,body FROM compressions WHERE sessionId=? ORDER BY rowid").all(session.id)
+        .map((row) => [String(row.id), JSON.parse(String(row.body)) as Compression]));
+      const applied = new Set<string>();
+      let entries: SessionEntry[] = [];
+      if (stored?.file) {
+        try { entries = openTranscript(String(stored.file), this.store.workspace(scope.workspaceId).path).getEntries(); }
+        catch {
+          warnings.push(`${session.title}：原始用量记录不可读取，费用不完整。`);
+          add(session.taskId ? "subagent" : "main", "unavailable", "记录不可读取", usageCost(null));
+        }
+      } else if (stored?.usage) {
+        // A cached session sum cannot be separated safely from compression/tool charges.
+        warnings.push(`${session.title}：仅有历史累计值，缺少可核对的原始记录。`);
+        add(session.taskId ? "subagent" : "main", "unavailable", "缺少原始记录", usageCost(null));
+      }
+      for (const entry of entries) {
+        if (entry.type === "message") {
+          const message = entry.message;
+          if (message.role === "assistant") {
+            add(session.taskId ? "subagent" : "main", "agent", session.title, usageCost(message.usage), message.provider ?? null, message.responseModel ?? message.model ?? null);
+          } else if (message.role === "toolResult" && message.usage) {
+            // Tool usage is independent from the parent assistant request. Never infer
+            // a tool's model from the main agent's selected model.
+            add("tool", message.toolName, message.toolName, usageCost(message.usage));
+          }
+        } else if (entry.type === "compaction" || entry.type === "branch_summary") {
+          const details = entry.details as { axiomCompressionId?: unknown } | undefined;
+          const jobId = typeof details?.axiomCompressionId === "string" ? details.axiomCompressionId : null;
+          if (jobId && applied.has(jobId)) continue;
+          if (jobId) applied.add(jobId);
+          const job = jobId ? jobs.get(jobId) : undefined;
+          const totals = job?.billing ?? (entry.usage ? usageCost(entry.usage) : job ? this.jobUsage(job) : usageCost(null));
+          add("compression", jobId ?? entry.id, job ? this.jobLabel(job) : entry.type === "branch_summary" ? "分支摘要" : "原生压缩",
+            totals, job?.selection.provider ?? null, job?.selection.id ?? null, "已应用", job?.startedAt ?? Date.parse(entry.timestamp));
+        } else if (entry.type === "usage") {
+          const tool = entry.kind.startsWith("tool:") ? entry.kind.slice(5) : null;
+          add(tool ? "tool" : "other", entry.kind, tool || entry.kind, usageCost(entry.usage), entry.provider, entry.model);
+        }
+      }
+      for (const [id, job] of jobs) {
+        if (applied.has(id)) continue;
+        // Snapshot-only cancellation/startup rejection never requested a model.
+        if (!job.usage && !job.billing && job.phase === "snapshot") continue;
+        const states = { running: "进行中", completed: "已应用", failed: "失败 · 未应用", cancelled: "取消 · 未应用", interrupted: "中断 · 未应用" };
+        add("compression", id, this.jobLabel(job), this.jobUsage(job), job.selection.provider, job.selection.id,
+          job.state === "running" && job.phase === "applying" ? "等待应用" : states[job.state], job.startedAt);
+      }
+    }
+    const result = [...rows.values()];
+    return { scope, requestedSessionId: requested.sessionId, title: root.title, updatedAt: Date.now(), sessions,
+      rows: result, total: sumCosts(result), warnings };
+  }
+  private jobLabel(job: Compression) {
+    return job.trigger === "auto" ? "自动压缩" : "后台压缩";
+  }
+  private jobUsage(job: Compression): CostTotals {
+    if (job.billing) return job.billing;
+    if (!job.usage) return usageCost(null);
+    // Old jobs retained input/output and total cost, but not cache components.
+    return usageCost({ input: job.usage.input, output: job.usage.output, cost: { total: job.usage.cost } });
+  }
+}

@@ -412,8 +412,11 @@ test(
         code: "SCOPE_MISMATCH",
       });
       assert.equal(readFileSync(join(cwd, "evidence.txt"), "utf8"), "read-only research evidence");
-      for (const body of requests.filter((body) => !isParentRequest(body)))
+      for (const body of requests.filter((body) => !isParentRequest(body))) {
         assert.deepEqual(body.tools.map((t: any) => t.function.name).sort(), ["find", "grep", "ls", "read"], "follow-ups also remain read-only");
+        assert.match(JSON.stringify(body.messages), /本次执行预算：\d+ms；截止时间：/, "the actual pi request contains the execution budget and deadline");
+        assert.match(JSON.stringify(body.messages), /此前任务链累计执行：\d+ms/, "continuations receive the task chain's prior elapsed time");
+      }
     } catch (e) {
       mkdirSync("test-results", { recursive: true });
       writeFileSync(

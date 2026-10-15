@@ -11,6 +11,7 @@ import { ModelPicker } from "./ModelPicker.js";
 import { Usage } from "./Usage.js";
 import { useSubmission } from "./useSubmission.js";
 import { AttachmentList, AttachmentPicker } from "./Attachments.js";
+import { AttachmentInputOverlay } from "./AttachmentInputOverlay.js";
 import { useFileCompletion } from "./useFileCompletion.js";
 import { AnnotationTray } from "./ReplyAnnotations.js";
 import { clearSentAnnotations } from "./reply-annotations.js";
@@ -72,8 +73,19 @@ export function Composer({
   );
   useEffect(() => {
     const node = input.current!;
-    node.style.height = "44px";
-    node.style.height = `${Math.min(180, Math.max(44, node.scrollHeight))}px`;
+    const resize = () => {
+      node.style.height = "44px";
+      node.style.height = `${Math.min(180, Math.max(44, node.scrollHeight))}px`;
+    };
+    resize();
+    let width = node.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (node.clientWidth === width) return;
+      width = node.clientWidth;
+      resize();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
   }, [draft.text]);
   return (
     <section className="composer-area">
@@ -104,7 +116,7 @@ export function Composer({
             id={promptId}
             maxLength={messageTextLimit}
             placeholder="Ask axiom…"
-            title={`${active ? "Enter 追加 Steering" : "Enter 发送"} · Shift+Enter 换行 · 双击 Esc 撤回排队内容`}
+            data-tooltip={`${active ? "Enter 追加 Steering" : "Enter 发送"} · Shift+Enter 换行 · 双击 Esc 撤回排队内容`}
             lang="en"
             data-od-id="message-input"
             value={draft.text}
@@ -144,6 +156,7 @@ export function Composer({
               }
             }}
           />
+          <AttachmentInputOverlay input={input} draft={draft} />
           <div className="composer-tools">
             <div className="row">
               <AttachmentPicker scope={scope} nested={nested} input={input} onBusy={setReading} onError={setError} />
@@ -152,7 +165,7 @@ export function Composer({
             <div className="composer-actions">
             {!active && canContinue(info.run) && <button
               type="button" className="icon-btn retry-action" aria-label="重试"
-              title="从中断处重试，保留已有工具结果"
+              data-tooltip="从中断处重试，保留已有工具结果"
               disabled={busy || !connected || !selected || pending.length > 0}
               onClick={() => void submit("continue")}
             >
@@ -164,7 +177,7 @@ export function Composer({
               className={`btn btn-primary send${active ? " is-running" : ""}`}
               type="submit"
               aria-label={active ? "停止执行" : "发送消息"}
-              title={
+              data-tooltip={
                 active
                   ? "停止此会话"
                   : selected

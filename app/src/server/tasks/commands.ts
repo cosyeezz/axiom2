@@ -57,7 +57,7 @@ export class TaskCommands {
       delegate: ["context", "tasks"],
       append: ["taskId", "text", "mode"],
       cancel_task: ["taskId", "reason"],
-      read_result: ["taskId", "resultId"],
+      read_result: ["taskId", "resultId", "offset", "limit"],
     };
     if (Object.keys(object(params)).some((k) => !allowed[name].includes(k)))
       throw new AppError("INVALID_INPUT", "子任务工具包含未支持的参数");
@@ -89,8 +89,8 @@ export class TaskCommands {
         const row = this.records.own(scope, c.params!.taskId);
         if (name === "append") return this.scheduler.append(row, c.params!);
         if (name === "cancel_task")
-          return this.scheduler.cancel(row, c.params!);
-        return this.delivery.result(scope, row.id, c.params!.resultId);
+          return this.scheduler.cancel(row, c.params!, "agent");
+        return this.delivery.result(scope, row.id, c.params!.resultId, c.params!.offset, c.params!.limit);
       });
     return name === "append" || name === "cancel_task"
       ? this.serial(text(c.params!.taskId, "子任务标识"), invoke)
@@ -213,7 +213,7 @@ export class TaskCommands {
       }));
     const child = this.records.child(scope);
     if (c.op === "task.result")
-      return this.delivery.result(scope, p.taskId, p.resultId);
+      return this.delivery.result(scope, p.taskId, p.resultId, p.offset, p.limit);
     if (c.op === "task.append" || c.op === "task.cancel") {
       const row = this.records.own(scope, p.taskId);
       return this.serial(row.id, () =>
@@ -286,6 +286,10 @@ export class TaskCommands {
           }
         : {},
     );
+    if (!child && c.op === "agent.model") {
+      this.delivery.reconcilePending(scope);
+      this.delivery.notify(scope);
+    }
     if (newWork && this.records.stopEpoch(scope) === stopEpoch) {
       this.delivery.reconcilePending(scope);
       this.store.db

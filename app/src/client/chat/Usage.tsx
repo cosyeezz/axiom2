@@ -5,12 +5,16 @@ import type { Scope } from "../../shared/protocol.js";
 import { Compression } from "./Compression.js";
 import { TaskSettings } from "../tasks/TaskSettings.js";
 import { AnnotationToggle } from "./ReplyAnnotations.js";
+import { OriginalConversationToggle } from "./OriginalConversation.js";
 import { formatDuration } from "./duration.js";
+import { CostsPopover } from "../pages/Costs.js";
 export function Usage({ scope }: { scope?: Scope }) {
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
     usage = info.usage,
     label = info.task ? "子会话" : "主会话";
   const [now, setNow] = useState(Date.now());
+  const [costWindow, setCostWindow] = useState<{ scope: Scope; trigger: HTMLButtonElement } | null>(null);
+  useEffect(() => { setCostWindow(null); }, [scope?.workspaceId, scope?.sessionId]);
   useEffect(() => {
     if (!running(info.run)) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -47,7 +51,7 @@ export function Usage({ scope }: { scope?: Scope }) {
           <span
             className="usage-metric"
             data-od-id="context-capacity"
-            title={`${contextLabel}；${label}累计 Token：${usage?.total ?? "—"}`}
+            data-tooltip={`${contextLabel}；${label}累计 Token：${usage?.total ?? "—"}`}
           >
             <svg
               className="usage-icon"
@@ -86,7 +90,7 @@ export function Usage({ scope }: { scope?: Scope }) {
         <span
           className="usage-metric"
           data-od-id="cache-tokens"
-          title={
+          data-tooltip={
             usage
               ? `${label}缓存读取 ${usage.cacheRead} · 写入 ${usage.cacheWrite}`
               : "缓存命中率：未知"
@@ -112,7 +116,7 @@ export function Usage({ scope }: { scope?: Scope }) {
         <span
           className="usage-metric"
           data-od-id="run-duration"
-          title="当前执行耗时（服务端起止时间）"
+          data-tooltip="当前执行耗时（服务端起止时间）"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
@@ -120,22 +124,29 @@ export function Usage({ scope }: { scope?: Scope }) {
           </svg>
           <strong>{formatDuration(elapsed)}</strong>
         </span>
-        <span
-          className="usage-metric"
+        <button
+          type="button"
+          className="usage-metric cost-trigger"
+          aria-label="查看费用明细"
+          aria-haspopup="dialog"
+          aria-expanded={!!costWindow}
+          disabled={!scope}
+          onClick={(event) => setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget })}
           data-od-id="estimated-cost"
-          title={`${label}累计预计费用（pi 定价）；未提供价格显示未知`}
+          data-tooltip={`${label}累计预计费用（pi 定价）；点击查看主 Agent、各子 Agent、压缩与工具费用明细`}
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <line x1="12" x2="12" y1="2" y2="22" />
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="182 182 660 660" aria-hidden="true">
+            <path fill="currentColor" d="M559.7 488.8l-25.4-5.9V348.6c38 5.2 61.5 29 65.5 58.2c.5 4 3.9 6.9 7.9 6.9h44.9c4.7 0 8.4-4.1 8-8.8c-6.1-62.3-57.4-102.3-125.9-109.2V263c0-4.4-3.6-8-8-8h-28.1c-4.4 0-8 3.6-8 8v33c-70.8 6.9-126.2 46-126.2 119c0 67.6 49.8 100.2 102.1 112.7l24.7 6.3v142.7c-44.2-5.9-69-29.5-74.1-61.3c-.6-3.8-4-6.6-7.9-6.6H363c-4.7 0-8.4 4-8 8.7c4.5 55 46.2 105.6 135.2 112.1V761c0 4.4 3.6 8 8 8h28.4c4.4 0 8-3.6 8-8.1l-.2-31.7c78.3-6.9 134.3-48.8 134.3-124c-.1-69.4-44.2-100.4-109-116.4m-68.6-16.2c-5.6-1.6-10.3-3.1-15-5c-33.8-12.2-49.5-31.9-49.5-57.3c0-36.3 27.5-57 64.5-61.7zM534.3 677V543.3c3.1.9 5.9 1.6 8.8 2.2c47.3 14.4 63.2 34.4 63.2 65.1c0 39.1-29.4 62.6-72 66.4" />
           </svg>
           <strong>
             {usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}
           </strong>
-        </span>
+        </button>
+        {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} />}
       </div>
-      <div className="usage-settings" role="group" aria-label="批注、子代理与压缩设置">
+      <div className="usage-settings" role="group" aria-label="批注、原始会话、子代理与压缩设置">
         <AnnotationToggle scope={scope} />
+        <OriginalConversationToggle scope={scope} />
         <TaskSettings />
         <Compression key={scope?.sessionId ?? "empty"} scope={scope} />
       </div>

@@ -1,11 +1,12 @@
 // Windows desktop integration: drives the UNMODIFIED native host via UI Automation.
 // Requires an unlocked desktop; this is intentionally separate from headless unit tests.
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { WindowsOpenHost } from "../src/server/windows-open-host.js";
+import { AttachmentPicker } from "../src/server/attachment-picker.js";
 
 if (process.platform !== "win32") throw Error("This check requires a Windows desktop session.");
 const root = mkdtempSync(join(tmpdir(), "axiom-visible-picker-"));
@@ -49,7 +50,7 @@ for ($i = 0; $i -lt 60; $i++) {
 if ($null -eq $window -or -not [NativeProbe]::IsWindowVisible([IntPtr]$window.Current.NativeWindowHandle)) { throw ('Native dialog is not OS-visible: ' + [NativeProbe]::Windows([uint32]$env:AXIOM_PROBE_PID)) }
 $names = ConvertFrom-Json -InputObject $env:AXIOM_PROBE_NAMES
 $expectedCount = [int]$env:AXIOM_PROBE_COUNT
-if ($expectedCount -eq 0) {
+if ($expectedCount -eq 0 -and $env:AXIOM_PROBE_ACTION -ne 'folder') {
   [void][NativeProbe]::PostMessage($handle, 0x10, [IntPtr]::Zero, [IntPtr]::Zero)
   exit 0
 }
@@ -78,7 +79,14 @@ if ($selected -ne $expectedCount) {
   $summary = @($items | ForEach-Object { $_.Current.ControlType.ProgrammaticName + ':' + $_.Current.Name }) -join '; '
   throw "Expected $expectedCount selectable filesystem items, got $selected. $summary"
 }
-$buttonCondition = if ($env:AXIOM_PROBE_KIND -eq 'mixed') {
+$actualSelection = @($items | ForEach-Object {
+  $pattern = $null
+  if ($_.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern) -and $pattern.Current.IsSelected) { $_.Current.Name }
+})
+[Console]::WriteLine('SELECTION=' + ($actualSelection -join '|'))
+$buttonCondition = if ($env:AXIOM_PROBE_ACTION -eq 'folder') {
+  [System.Windows.Automation.Condition]::TrueCondition
+} elseif ($env:AXIOM_PROBE_KIND -eq 'mixed') {
   New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '选择所选项目')
 } else {
   New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '打开')
@@ -86,6 +94,7 @@ $buttonCondition = if ($env:AXIOM_PROBE_KIND -eq 'mixed') {
 $buttons = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttonCondition)
 $invoked = $false
 foreach ($button in $buttons) {
+  if ($env:AXIOM_PROBE_ACTION -eq 'folder' -and $button.Current.Name -notmatch '^选择.*文件夹') { continue }
   $target = $button
   for ($depth = 0; $depth -lt 4 -and $null -ne $target; $depth++) {
     $pattern = $null
@@ -113,23 +122,29 @@ if (-not $invoked) {
 `;
 const host = new WindowsOpenHost();
 try {
-  const command = await host.prepare();
-  for (const [kind, multiple, selected] of [
+  await host.prepare();
+  for (const [kind, multiple, selected, action = "selection", expected = selected] of [
     ["mixed", true, paths], ["mixed", false, [paths[2]]],
+    ["mixed", true, [paths[2]], "folder"],
+    ["mixed", true, [join(root, "second folder")], "folder"],
+    ["mixed", true, [paths[2], join(root, "second folder")]],
+    ["mixed", true, [paths[2], join(root, "second folder")], "folder"],
+    ["mixed", true, [paths[0], paths[2]], "folder", [paths[2]]],
+    ["mixed", true, [paths[0]], "folder", [root]],
+    ["mixed", true, [], "folder", [root]],
     ["folder", false, [paths[2]]], ["folder", true, [paths[2], join(root, "second folder")]],
     ["file", false, [paths[0]]], ["file", true, paths.slice(0, 2)], ["mixed", true, []],
   ] as const) {
-  const child = spawn(command.file, command.args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: {
-    ...process.env, AXIOM_OPEN_OPTIONS: JSON.stringify({ kind, multiple, title: "Axiom Open test", initialDirectory: root }),
-  } });
+  const child = await host.take();
   const stdout: Buffer[] = [], stderr: Buffer[] = [];
-  child.stdout.on("data", (b: Buffer) => stdout.push(b)); child.stderr.on("data", (b: Buffer) => stderr.push(b));
+  child.stdout!.on("data", (b: Buffer) => stdout.push(b)); child.stderr!.on("data", (b: Buffer) => stderr.push(b));
   const closed = new Promise<number | null>((resolve, reject) => { child.once("close", resolve); child.once("error", reject); });
+  child.stdin!.end(JSON.stringify({ kind, multiple, title: "Axiom Open test", initialDirectory: root }) + "\n", "utf8");
   const timer = setTimeout(() => child.kill("SIGKILL"), 25_000);
   try {
     const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(probe, "utf16le").toString("base64")], {
       timeout: 20_000, encoding: "utf8", windowsHide: true, env: { ...process.env, AXIOM_PROBE_PID: String(child.pid),
-        AXIOM_PROBE_KIND: kind, AXIOM_PROBE_COUNT: String(selected.length),
+        AXIOM_PROBE_KIND: kind, AXIOM_PROBE_ACTION: action, AXIOM_PROBE_COUNT: String(selected.length),
         AXIOM_PROBE_NAMES: JSON.stringify(selected.flatMap((path) => [basename(path), basename(path, extname(path))])),
       },
     });
@@ -137,8 +152,14 @@ try {
     const code = await closed;
     assert.equal(result.status, 0, `${result.stderr || result.error}\nHOST: ${Buffer.concat(stderr).toString()}`);
     assert.equal(code, 0, Buffer.concat(stderr).toString());
-    assert.deepEqual(JSON.parse(Buffer.concat(stdout).toString()).sort(), selected.map((path) => realpathSync(path)).sort());
-    console.log(`PASS: Explorer Open ${kind}, multiple=${multiple}, count=${selected.length}; OS-visible and exact paths.`);
+    const nativePaths: string[] = JSON.parse(Buffer.concat(stdout).toString());
+    assert.deepEqual([...nativePaths].sort(), expected.map((path) => realpathSync(path)).sort(), result.stdout + Buffer.concat(stderr).toString());
+    const adapter = new AttachmentPicker(async () => nativePaths);
+    try {
+      const attachments = await adapter.select(root, new AbortController().signal, kind, multiple);
+      assert.deepEqual(attachments.map((item) => item.name).sort(), expected.map((path) => basename(path)).sort(), "attachment names must follow this native selection");
+    } finally { await adapter.close(); }
+    console.log(`PASS: Explorer Open ${kind}, action=${action}, multiple=${multiple}, count=${expected.length}; exact native paths and attachment names.`);
   } finally { clearTimeout(timer); if (child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); await closed; } }
   }
 } finally { await host.close(); rmSync(root, { recursive: true, force: true }); }

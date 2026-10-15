@@ -100,7 +100,7 @@ test(
           tool("append", {
             taskId: ids[0],
             text: "MODEL-APPEND",
-            mode: "followUp",
+            mode: "steer",
           });
         else if (!prior("cancel_task"))
           tool("cancel_task", {
@@ -114,6 +114,7 @@ test(
       } else if (all.includes("SECOND-BUDGET")) {
         return;
       } else if (all.includes("LIVE-STEER")) answer("Live steer processed.");
+      else if (last.includes("MODEL-APPEND")) answer("Model Steering processed; next safe boundary.");
       else liveTurn = () => answer("Safe turn boundary.");
     });
     await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));

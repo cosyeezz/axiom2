@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Workspace } from "../../shared/protocol.js";
 import { Icon } from "../components.js";
-import { DeleteIcon } from "../DeleteIcon.js";
+import { DeleteButton } from "../DeleteButton.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { command } from "../transport.js";
 
@@ -204,7 +204,7 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
         onConfirm={() => command("workspace.delete", { confirmed: true }, { workspaceId: deleting.id })} />}
       {editing ? <div className="workspace-option" aria-current={selected}>{content}</div> : (
         <button ref={button} type="button" className="workspace-option" aria-current={selected}
-          aria-label={w.name} title={`${w.name} · ${w.path} · 双击重命名（F2），Delete 删除`}
+          aria-label={w.name} data-tooltip={`${w.name} · ${w.path} · 双击重命名（F2），Delete 删除`}
           onPointerDown={(e) => { if (e.detail > 1) cancelSelection(); }}
           onClick={(e) => { if (e.detail < 2) navigate(w, e.detail === 0); }}
           onDoubleClick={rename}
@@ -216,16 +216,16 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
       <div className="workspace-actions">
         <button type="button" className="icon-btn workspace-pin" disabled={busy}
           aria-label={`${w.pinned ? "取消置顶工作空间" : "置顶工作空间"}：${w.name}`}
-          title={w.pinned ? "取消置顶" : "置顶工作空间"} aria-pressed={w.pinned}
+          data-tooltip={w.pinned ? "取消置顶" : "置顶工作空间"} aria-pressed={w.pinned}
           onClick={() => void run("workspace.pin", { pinned: !w.pinned })}>
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d={w.pinned ? "M5 5h14M12 10v10m-5-5 5 5 5-5" : "M5 5h14M12 20V10m-5 5 5-5 5 5"} />
           </svg>
         </button>
-        <button type="button" className="icon-btn workspace-delete" disabled={busy}
-          aria-label={`删除工作空间：${w.name}`} title="删除工作空间" onClick={remove}>
-          <DeleteIcon />
-        </button>
+        <DeleteButton className="icon-btn workspace-delete" disabled={busy}
+          label={`删除工作空间：${w.name}`} title="删除工作空间" onConfirm={remove}
+          onPendingChange={(pending) => { if (pending) cancelSelection(); }}
+          onDelete={() => void run("workspace.delete", { confirmed: true })} />
       </div>
     </div>
   );

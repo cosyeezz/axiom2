@@ -3,16 +3,19 @@ import type { Session } from "./protocol.js";
 
 export const sessionPinCooldownMs = 5 * 60 * 1000;
 
-/** Activity indicators stay independent of whether a viewed session has returned to its workspace. */
+/** Main runs and queued/running children keep their parent session active. */
+export function isActiveSession(session: Session): boolean {
+  return !!session.activeTasks || !!session.activeTaskCount || activeStatus(session.runStatus);
+}
+
 export function isPrioritySession(session: Session): boolean {
-  return session.unread || !!session.activeTasks || !!session.activeTaskCount || activeStatus(session.runStatus);
+  return session.unread || isActiveSession(session);
 }
 
 export function isAutoTopSession(session: Session): boolean {
-  // The server expires deadlines only after the last foreground viewer leaves.
-  return session.unread || (session.autoPinUntil != null
-    ? session.autoPinUntil > 0
-    : isPrioritySession(session));
+  // Activity overrides persisted cooldowns, including deadlines from older versions.
+  // The server expires idle deadlines only after the last foreground viewer leaves.
+  return isPrioritySession(session) || (session.autoPinUntil != null && session.autoPinUntil > 0);
 }
 
 export function isTopSession(session: Session): boolean {

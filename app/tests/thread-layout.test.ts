@@ -158,7 +158,7 @@ test("threadGroups: task thinking and task calls stay together inside activity",
       for (const boundary of [
         { error: "出错" }, { status: "failed" as const }, { status: "cancelled" as const },
       ]) {
-        assert.deepEqual(threadGroups([before, { ...task, ...boundary }, after]), [group(true, "before"), group(false, "task"), group(true, "after")]);
+        assert.deepEqual(threadGroups([before, { ...task, ...boundary }, after]), [group(true, "before", "task", "after")]);
       }
       assert.deepEqual(threadGroups([before, message("user", "user"), task]), [group(true, "before"), group(false, "user"), group(true, "task")]);
     }
@@ -173,8 +173,8 @@ test("AgentViews: task thinking eligibility republishes layout but its deltas do
   const updates: [ChatMessage, boolean][] = [
     [withThinking, false], [{ ...withThinking, thinking: "继续检查" }, false],
     [{ ...withThinking, text: "正文出现" }, false],
-    [withThinking, false], [{ ...withThinking, status: "cancelled" }, true],
-    [withThinking, true], [task, false],
+    [withThinking, false], [{ ...withThinking, status: "cancelled" }, false],
+    [withThinking, false], [task, false],
   ];
   for (const [updated, layoutChanged] of updates) {
     events.length = 0;
@@ -185,15 +185,61 @@ test("AgentViews: task thinking eligibility republishes layout but its deltas do
   }
 });
 
+test("threadGroups: reply thinking stays with preceding activity while its body remains a boundary", () => {
+  const first = message("first", "assistant", true);
+  const second = message("second", "assistant", true);
+  for (const body of [
+    { text: "普通正文" },
+    { images: [{ id: "image", name: "image", mimeType: "image/png" }] },
+  ]) {
+    const reply = { ...thought("reply"), ...body };
+    for (const preceding of [first, thought("first")]) {
+      assert.deepEqual(threadGroups([preceding, message("result", "toolResult"), reply, second]), [
+        { ...group(true, "first", "reply"), thinkingOnlyIds: ["reply"] },
+        { ...group(false, "reply"), hideThinking: true },
+        group(true, "second"),
+      ]);
+    }
+    assert.deepEqual(threadGroups([reply, second]), [group(false, "reply"), group(true, "second")]);
+    assert.deepEqual(threadGroups([first, message("user", "user"), reply]), [
+      group(true, "first"), group(false, "user"), group(false, "reply"),
+    ]);
+  }
+});
+
+test("threadGroups: failed replies attach thinking to the previous process without another card before their body", () => {
+  for (const status of ["failed", "cancelled"] as const) {
+    const reply: ChatMessage = { ...thought("reply"), text: "保留的回复正文", status, error: status === "failed" ? "请求失败" : undefined };
+    assert.deepEqual(threadGroups([message("first", "assistant", true), reply, message("next", "assistant", true)]), [
+      { ...group(true, "first", "reply"), thinkingOnlyIds: ["reply"] },
+      { ...group(false, "reply"), hideThinking: true },
+      group(true, "next"),
+    ]);
+  }
+});
+
+test("AgentViews: reply thinking added or removed republishes layout, subsequent deltas do not", (t) => {
+  const first = message("first", "assistant", true);
+  const reply = message("reply");
+  const { views, scope, events } = fixture(t, [first, reply]);
+  const updates: [ChatMessage, boolean][] = [
+    [{ ...reply, thinking: "复核" }, true],
+    [{ ...reply, thinking: "继续复核", text: "正文增量" }, false],
+    [reply, true],
+  ];
+  for (const [updated, changed] of updates) {
+    events.length = 0;
+    views.messageChanged(scope, updated);
+    assert.equal(events.some(event => event.scope === threadScope(scope)), changed);
+    assert.deepEqual(views.thread(scope).groups, threadGroups([first, updated]));
+    views.flush(scope);
+  }
+});
+
 test("threadGroups: pure thinking never crosses visible boundaries", () => {
   const first = message("first", "assistant", true);
   const second = message("second", "assistant", true);
   for (const boundary of [
-    { ...thought("boundary"), text: "普通正文" },
-    { ...thought("boundary"), error: "出错" },
-    { ...thought("boundary"), status: "failed" as const },
-    { ...thought("boundary"), status: "cancelled" as const },
-    { ...thought("boundary"), images: [{ id: "image", name: "image", mimeType: "image/png" }] },
     { ...thought("boundary"), compression: { number: 1, title: "压缩", before: 100, after: 50 } },
     message("boundary", "user"), message("boundary", "notice"),
   ]) {
@@ -208,13 +254,24 @@ const failures: Partial<ChatMessage>[] = [
   { status: "cancelled" },
 ];
 
-test("threadGroups: assistant errors, failures and cancellations remain standalone boundaries", () => {
+test("threadGroups: failed/cancelled tools, thinking and error-only attempts join one process", () => {
   for (const failure of failures) {
+    for (const attempt of [
+      message("attempt", "assistant", true),
+      thought("attempt"),
+      { id: "attempt", role: "assistant" as const, text: "" },
+    ]) {
+      assert.deepEqual(threadGroups([
+        message("first", "assistant", true),
+        { ...attempt, ...failure },
+        message("second", "assistant", true),
+      ]), [group(true, "first", "attempt", "second")]);
+    }
     assert.deepEqual(threadGroups([
       message("first", "assistant", true),
-      { ...message("boundary", "assistant", true), ...failure },
+      { ...message("reply"), ...failure },
       message("second", "assistant", true),
-    ]), [group(true, "first"), group(false, "boundary"), group(true, "second")]);
+    ]), [group(true, "first"), group(false, "reply"), group(true, "second")], "independent reply text remains a boundary");
   }
 });
 
@@ -376,36 +433,37 @@ test("AgentViews: changing a regular call to delegate preserves the group index"
   assert.deepEqual(events, []);
 });
 
-test("AgentViews: assistant failures publish split groups and recovery restores grouping", (t) => {
+test("AgentViews: assistant tool failures and recovery retain the group and publish only message updates", (t) => {
   const first = message("first", "assistant", true);
   const middle = message("middle", "assistant", true);
   const last = message("last", "assistant", true);
   const { views, scope, events } = fixture(t, [first, middle, last]);
   for (const failure of failures) {
+    for (const updated of [{ ...middle, ...failure }, { ...middle, ...failure, text: "Updated failure details" }, middle]) {
+      events.length = 0;
+      views.messageChanged(scope, updated);
+      assert.deepEqual(events.slice(), []);
+      assert.deepEqual(views.thread(scope).groups, [group(true, "first", "middle", "last")]);
+      views.flush(scope);
+      assert.deepEqual(events.map(event => event.scope), [messageScope(scope, "middle")]);
+    }
+  }
+});
+
+test("AgentViews: error-only attempts join activity and independent body text restores a boundary", (t) => {
+  const first = message("first", "assistant", true);
+  const last: ChatMessage = { id: "last", role: "assistant", text: "" };
+  const { views, scope, events } = fixture(t, [first, last]);
+  for (const updated of [
+    { ...last, error: "请求失败", status: "failed" as const },
+    { ...last, text: "独立说明", error: "请求失败", status: "failed" as const },
+    { ...last, status: "cancelled" as const },
+    { ...last, compression: { number: 1, title: "压缩", before: 100, after: 50 } },
+  ]) {
     events.length = 0;
-    const failed = { ...middle, ...failure };
-    views.messageChanged(scope, failed);
-    assert.deepEqual(events.slice(), [{
-      scope: threadScope(scope),
-      data: {
-        ids: ["first", "middle", "last"],
-        groups: [group(true, "first"), group(false, "middle"), group(true, "last")],
-      },
-    }]);
-    views.flush(scope);
-    events.length = 0;
-    views.messageChanged(scope, { ...failed, text: "Updated failure details" });
-    assert.deepEqual(events.slice(), []);
-    views.flush(scope);
-    events.length = 0;
-    views.messageChanged(scope, middle);
-    assert.deepEqual(events.slice(), [{
-      scope: threadScope(scope),
-      data: {
-        ids: ["first", "middle", "last"],
-        groups: [group(true, "first", "middle", "last")],
-      },
-    }]);
+    views.messageChanged(scope, updated);
+    assert.equal(events.some(event => event.scope === threadScope(scope)), true);
+    assert.deepEqual(views.thread(scope).groups, threadGroups([first, updated]));
     views.flush(scope);
   }
 });
@@ -439,7 +497,7 @@ test("AgentViews: pure thinking classification changes publish layout, content d
     { ...thought("last"), status: "cancelled" as const },
     thought("last"),
   ];
-  const expected = [true, false, false, false, true, false, false, true];
+  const expected = [true, false, false, false, true, false, true, false];
   for (const [i, updated] of updates.entries()) {
     events.length = 0;
     views.messageChanged(scope, updated);

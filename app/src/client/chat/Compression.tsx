@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AppError,
   scopeKey,
@@ -26,6 +26,7 @@ import {
 } from "./CompressionDetail.js";
 
 export function Compression({ scope }: { scope?: Scope }) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const job = useScope<Job | null>(
     scope ? compressionScope(scope) : null,
     null,
@@ -129,14 +130,17 @@ export function Compression({ scope }: { scope?: Scope }) {
   return (
     <>
       <button
+        ref={trigger}
         type="button"
         className="compression-trigger"
         data-od-id="background-compression-trigger"
         data-state={state}
         aria-controls={id}
         aria-haspopup="dialog"
+        aria-expanded={open}
+        popoverTarget={id}
         aria-label={job ? `打开后台压缩 · ${compressionStatusLabel(job)}` : "打开后台压缩"}
-        title="打开压缩页面：选择模型、开始压缩或取消任务"
+        data-tooltip="打开压缩页面：选择模型、开始压缩或取消任务"
         style={{
           width: 44,
           minWidth: 44,
@@ -144,7 +148,7 @@ export function Compression({ scope }: { scope?: Scope }) {
           justifyContent: "center",
         }}
         disabled={!scope}
-        onClick={() => setOpen(true)}
+        onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}
       >
         <CompressionIcon state={state} />
         <span className="screen-reader" role="status" aria-live="polite">
@@ -169,6 +173,7 @@ export function Compression({ scope }: { scope?: Scope }) {
       {open && (
         <CompressionDetail
           id={id}
+          trigger={trigger.current!}
           job={job}
           title={session?.title ?? "当前会话"}
           selection={selection}

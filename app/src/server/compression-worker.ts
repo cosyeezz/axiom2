@@ -10,6 +10,8 @@ import { ModelService } from "./model-service.js";
 import { openTranscript } from "./transcript.js";
 import { compactionInstructions } from "./compaction-display.js";
 import { compressionError } from "./compression-error.js";
+import { sumCosts, type CostTotals } from "../shared/costs.js";
+import { usageCost } from "./usage-cost.js";
 
 export interface CompressionInput {
   root: string;
@@ -87,10 +89,22 @@ async function run(input: CompressionInput) {
     // This session only compacts snapshots: include the same requirement in every
     // native summary request, without another model call or persisted chat message.
     const stream = session.agent.streamFunction;
-    session.agent.streamFunction = (model, context, options) => stream(model, {
-      ...context,
-      messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }],
-    }, options);
+    const charges: CostTotals[] = [];
+    const publishBilling = () => send({ type: "billing", billing: sumCosts(charges) });
+    session.agent.streamFunction = async (model, context, options) => {
+      const index = charges.push(usageCost(null)) - 1;
+      publishBilling(); // Persist an unknown charge before a request can be interrupted.
+      const response = await stream(model, {
+        ...context,
+        messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }],
+      }, options);
+      // result() observes the same stream without consuming/replaying its events.
+      void response.result().then((message) => {
+        charges[index] = usageCost(message.usage);
+        publishBilling();
+      }).catch(() => { /* The unknown request remains accounted for. */ });
+      return response;
+    };
     const result = await session.compact(compactionInstructions);
     const entry = session.sessionManager.getLeafEntry();
     if (entry?.type !== "compaction") throw Error("pi 未生成有效的原生压缩记录，摘要未应用。");

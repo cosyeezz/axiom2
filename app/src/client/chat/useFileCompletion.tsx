@@ -73,7 +73,7 @@ export function useFileCompletion(scope: Scope, text: string, input: RefObject<H
       <div className="file-picker-heading"><strong>引用文件 · pi</strong><span>↑↓ 选择 · Enter / Tab 插入 · Esc 关闭</span></div>
       <div id={id} role="listbox" aria-label="pi 文件选择" aria-busy={loading}>
         {result?.items.map((item, i) => <button type="button" role="option" id={`${id}-${i}`} key={item.value}
-          aria-selected={i === index} title={item.value} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(item)}>
+          aria-selected={i === index} data-tooltip={item.value} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(item)}>
           <span>{item.label}</span>{item.description && <small>{item.description}</small>}
         </button>)}
       </div>

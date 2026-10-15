@@ -90,8 +90,18 @@ try {
   // A foreign active/unread main session is visible and searchable; child sessions stay excluded.
   app.store.db.prepare("UPDATE runs SET status='running' WHERE sessionId=?").run(child.id);
   app.store.db.prepare("UPDATE sessions SET unread=1 WHERE id=?").run(child.id);
+  app.store.db.prepare("UPDATE sessions SET autoPinUntil=0 WHERE id=?").run(remote.id);
   publish({ runStatus: "running" }, remote);
   await waitOrder([remote.title, pin.title, recent.title, old.title]);
+  assert.equal(app.store.session(foreign.id, remote.id).autoPinUntil, null, "background activity clears the old returned state");
+  app.store.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE id IN (?,?)").run(Date.now() - 1, remote.id, old.id);
+  const expiryDeadline = Date.now() + 5000;
+  while (app.store.session(workspace.id, old.id).autoPinUntil !== 0) {
+    if (Date.now() > expiryDeadline) throw Error("expiry sweep did not run");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(app.store.session(foreign.id, remote.id).autoPinUntil, null, "running sessions do not expire");
+  assert.equal(await pins.locator(`[data-session-id="${remote.id}"]`).count(), 1);
   const search = page.getByRole("searchbox", { name: "搜索置顶和当前空间的会话" });
   await search.fill("Remote");
   await waitOrder([remote.title]);

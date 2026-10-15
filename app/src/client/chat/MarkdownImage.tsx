@@ -54,7 +54,7 @@ export function MarkdownImage({ href, alt, owner }: {
       图片无法显示：{alt || "图片"} · {error}
       <button type="button" onClick={() => setAttempt((value) => value + 1)}>重试加载图片</button>
     </span> : image ? <button type="button" className="markdown-image-open" aria-label={`放大图片：${alt || image.name}`}
-      aria-haspopup="dialog" title="点击放大图片" onClick={() => setOpen(true)}>
+      aria-haspopup="dialog" data-tooltip="点击放大图片" onClick={() => setOpen(true)}>
       <img src={`data:${image.mimeType};base64,${image.data}`} alt={alt || image.name}
         onError={() => { setOpen(false); setError("文件可能已损坏或格式不受支持"); }} />
     </button> : <span className="markdown-image-loading" role="status">正在加载图片：{alt || "图片"}…</span>}

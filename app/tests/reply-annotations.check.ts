@@ -19,7 +19,7 @@ try {
   const s = app.store.execute({ op: "session.create", requestId: crypto.randomUUID(), workspaceId: w.id }) as Session;
   const other = app.store.execute({ op: "session.create", requestId: crypto.randomUUID(), workspaceId: w.id }) as Session;
   const scope = { workspaceId: w.id, sessionId: s.id }, views = (app.agents as unknown as { views: AgentViews }).views;
-  const source = "## 实施方案\n\n接口采用逐条提交，需要调整为批量。其他接口保持不变。\n\n超时设置为 30 秒，失败后直接重试。\n\n- 保留配置\n- 返回处理结果\n\n```ts\nconst timeout = 30;\nconst retry = true;\n```\n\n| 设置 | 值 |\n| --- | --- |\n| 重试 | 三次 |\n\n[查看文档](https://example.com)\n\n![批注图片](C:/annotation-fixture.png)";
+  const source = "## 实施方案\n\n接口采用逐条提交，需要调整为批量。其他接口保持不变。\n\n超时设置为 30 秒，失败后直接重试。\n\n- 保留配置\n- 返回处理结果\n\n```ts\nconst timeout = 30;\nconst retry = true;\n```\n\n| 设置 | 值 |\n| --- | --- |\n| 重试 | 三次 |\n\n[查看文档](https://example.com)\n\n![批注图片](C:/annotation-fixture.png)\n\n### 带上间距的标题\n\n这是一段用于检查自动换行的较长正文，包含 **加粗内容** 和末尾的 `行内代码`。";
   views.messageChanged(scope, { id: "answer", role: "assistant", text: source });
   views.messageChanged(scope, { id: "stream", role: "assistant", text: "正在输出的内容", streaming: true });
   views.flush(scope);
@@ -78,7 +78,7 @@ try {
   assert.equal(await toggle.getAttribute("aria-pressed"), "false");
   assert.equal(await page.locator(".annotation-tray,.annotation-block").count(), 0);
   const position = await page.locator(".usage-settings > button").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label")));
-  assert.deepEqual(position.slice(0, 2), ["开启批注", "子代理设置"]);
+  assert.deepEqual(position.slice(0, 3), ["开启批注", "原始会话", "子代理设置"]);
   await page.locator("#prompt").fill("保留输入框里的草稿");
   // Switching mode must preserve mounted image/code state, not refetch/recreate it.
   await reply.locator(".markdown-image").scrollIntoViewIfNeeded();
@@ -88,7 +88,7 @@ try {
   await toggle.click(); await toggle.click(); await toggle.click();
   assert.ok(await image.evaluate((el) => el === (window as any).annotationImageNode));
   assert.equal(imageRequests, 1, "mode toggling must not request the same image again");
-  assert.equal(await reply.getByRole("button", { name: "已复制", exact: true }).count(), 1);
+  assert.equal(await reply.locator('.code-head button[data-tooltip="已复制"]').count(), 1);
   await page.getByText("点击具体句子或选中几个字，添加批注", { exact: true }).waitFor();
   assert.equal(await page.getByRole("article", { name: "助手回复" }).last().locator(".annotation-block").count(), 0);
   // Unsupported cross-paragraph and cross-message selections must never become a different quote.
@@ -120,25 +120,44 @@ try {
     await page.getByRole("button", { name: "取消", exact: true }).click();
   }
   const first = reply.locator(".annotation-block").filter({ hasText: "接口采用逐条提交" });
-  // The add icon follows the final text glyph, including after responsive wrapping.
+  // Check the visible SVG, not the larger click target: top at text top, bottom at its midpoint.
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    for (const [selector, fragment] of [
+      ["p", "接口采用逐条提交"], ["h2", "实施方案"], ["h3", "带上间距的标题"],
+      ["li", "返回处理结果"], ["td", "三次"], ["pre code", "const retry"], ["p", "检查自动换行"],
+    ]) {
+      const target = reply.locator(`.annotation-source ${selector}`).filter({ hasText: fragment }).first();
+      await target.scrollIntoViewIfNeeded();
+      const point = await target.evaluate((el) => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let current: Node | null, node: Node = el;
+        while ((current = walker.nextNode())) if (current.textContent?.trim()) node = current;
+        const end = node.textContent!.trimEnd().length;
+        const range = document.createRange(); range.setStart(node, end - 1); range.setEnd(node, end);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      });
+      await page.mouse.move(point.x, point.y);
+      await page.waitForFunction((el) => {
+        const walker = document.createTreeWalker(el!, NodeFilter.SHOW_TEXT);
+        let current: Node | null, node: Node = el!;
+        while ((current = walker.nextNode())) if (current.textContent?.trim()) node = current;
+        const end = node.textContent!.trimEnd().length;
+        const range = document.createRange(); range.setStart(node, end - 1); range.setEnd(node, end);
+        const text = range.getBoundingClientRect(), button = el!.closest(".annotation-block")!.querySelector(".annotation-add")!;
+        const hit = button.getBoundingClientRect(), icon = button.querySelector("svg")!.getBoundingClientRect();
+        return Math.abs(icon.top - text.top) < 1 && Math.abs(icon.bottom - (text.top + text.height / 2)) < 1 &&
+          icon.left >= text.right && hit.width >= 24 && hit.height >= 24 && hit.right <= innerWidth;
+      }, await target.elementHandle());
+    }
     await first.scrollIntoViewIfNeeded();
     await first.locator("p").hover();
-    await page.waitForFunction(() => {
-      const block = [...document.querySelectorAll(".annotation-block")].find((el) => el.textContent?.includes("接口采用逐条提交"))!;
-      const paragraph = block.querySelector("p")!, walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
-      let current: Node | null, node: Node = paragraph;
-      while ((current = walker.nextNode())) if (current.textContent?.trim()) node = current;
-      const range = document.createRange(); range.setStart(node, node.textContent!.length - 1); range.setEnd(node, node.textContent!.length);
-      const text = range.getBoundingClientRect(), button = block.querySelector(".annotation-add")!.getBoundingClientRect();
-      return Math.abs(button.left - text.right - 4) < 1 && Math.abs((button.top + button.height / 2) - (text.top + text.height / 2)) < 1 && button.right <= innerWidth;
-    });
     const appearance = await first.locator(".annotation-add").evaluate((el) => ({
       border: getComputedStyle(el).borderWidth, background: getComputedStyle(el).backgroundColor,
       visiblePaths: [...el.querySelectorAll("path")].filter((path) => getComputedStyle(path).stroke !== "none").length,
     }));
-    assert.deepEqual(appearance, { border: "0px", background: "rgba(0, 0, 0, 0)", visiblePaths: 3 });
+    assert.deepEqual(appearance, { border: "0px", background: "rgba(0, 0, 0, 0)", visiblePaths: 2 });
     await first.screenshot({ path: join(artifacts, `inline-icon-${width}.png`) });
   }
   await clickText(first.locator(".annotation-source"), "接口采用逐条提交");

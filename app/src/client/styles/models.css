@@ -40,7 +40,7 @@ select.input{padding-right:24px;cursor:pointer;font-weight:510}
 select option{background:var(--surface);color:var(--fg);font-weight:400}
 @supports (appearance:base-select){
  select.input{appearance:base-select;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-inline:12px}
- select.input::picker(select){appearance:base-select;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);padding:4px;box-shadow:var(--elev-raised);min-width:anchor-size(width);max-width:calc(100vw - 24px);max-height:min(320px,50dvh);margin-block:6px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) var(--surface);font:13px/1.6 var(--font-body);font-feature-settings:"cv01","ss03"}
+ select.input::picker(select){appearance:base-select;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);padding:4px;box-shadow:var(--elev-raised);min-width:anchor-size(width);max-width:calc(100vw - 24px);max-height:min(320px,50dvh);margin-block:6px;overflow-y:auto;font:13px/1.6 var(--font-body);font-feature-settings:"cv01","ss03"}
  select.input::picker-icon{content:"";width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);flex-shrink:0;margin-inline:4px;color:var(--fg)}
  select.input:open{background:color-mix(in oklch,var(--fg) 4%,var(--bg));color:var(--fg);border-color:color-mix(in oklch,var(--fg) 28%,transparent)}
  select.input:open::picker-icon{transform:translateY(2px) rotate(225deg)}
@@ -85,7 +85,7 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 .supplier-toolbar h2{font-size:12px;color:var(--fg-2)}
 .add-supplier{width:32px;padding:0}
 .supplier-search{margin-bottom:8px}
-.supplier-list{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.supplier-list{display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow:auto}
 .supplier-option{width:100%;min-height:48px;flex-shrink:0;display:flex;align-items:center;text-align:left;border:1px solid transparent;border-radius:var(--radius-sm);padding:6px 8px}
 .supplier-option[aria-current=true]{background:color-mix(in oklch,var(--fg) 8%,transparent);border-color:var(--border)}
 .supplier-option:hover{background:color-mix(in oklch,var(--fg) 11%,transparent);color:var(--fg)}
@@ -97,7 +97,7 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 .supplier-option small{display:block;font-size:11px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .list-empty{padding:16px 8px;font-size:12px;color:var(--muted)}
 .supplier-detail{padding:0 16px;min-width:0;min-height:0;display:flex;flex-direction:column;container-type:inline-size}
-#suppliers-screen{flex:1;min-height:0;overflow:auto;padding-bottom:12px;scrollbar-gutter:stable}
+#suppliers-screen{flex:1;min-height:0;overflow:auto;padding-bottom:12px}
 #provider-form{width:100%;max-width:1040px}
 .supplier-detail>.config-tabs{padding:0}
 .supplier-detail>.detail-heading,.supplier-detail>.config-tabs{flex-shrink:0}
@@ -124,7 +124,7 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
 .empty-details{padding:48px 16px;text-align:center}
 .empty-details h2{font-size:20px;margin-bottom:8px}
 .empty-details p{font-size:13px;color:var(--muted)}
-.model-registry{padding:12px 0;flex:1;min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.model-registry{padding:12px 0;flex:1;min-width:0;min-height:0;overflow:auto}
 .model-heading{gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .model-heading>div:first-child{min-width:0}
 .model-heading h3{font-size:13px;line-height:1.5}
@@ -227,9 +227,9 @@ select option{background:var(--surface);color:var(--fg);font-weight:400}
  .configuration-layout{grid-template-columns:minmax(0,1fr)}
  .supplier-panel{border-right:0;border-bottom:1px solid var(--border);padding:8px 16px 12px}
  .supplier-toolbar{margin-bottom:4px;padding-left:0}
- .supplier-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:176px;flex:auto;scrollbar-gutter:auto}
+ .supplier-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:176px;flex:auto}
  .supplier-search{margin-bottom:8px}
- .supplier-detail,#suppliers-screen,.model-registry{overflow:visible;scrollbar-gutter:auto}
+ .supplier-detail,#suppliers-screen,.model-registry{overflow:visible}
  .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
  .model-tools{width:100%;flex-wrap:nowrap}
  .model-tools .input{flex:1;width:auto;min-width:0}

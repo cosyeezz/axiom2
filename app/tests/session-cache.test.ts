@@ -36,11 +36,11 @@ test("transcript uses native compacted entries, complete retained messages and n
   assert.ok(!rows.some((row) => row.text === "OLD_HIDDEN"));
   assert.equal(rows[1].text, "RECENT_VISIBLE");
   assert.equal(rows.at(-1)?.text, "new-124");
-  manager.appendCompaction("<axiom-summary>" + "很长的摘要".repeat(10) + "</axiom-summary>", null, 5000);
+  manager.appendCompaction("<axiom-summary>" + "很长的摘要".repeat(30) + "</axiom-summary>", null, 5000);
   const next = transcriptMessages(manager);
   assert.equal(next.length, 1);
   assert.equal(next[0].compression?.number, 2);
-  assert.equal(Array.from(next[0].compression!.title).length, 30);
+  assert.equal(Array.from(next[0].compression!.title).length, 100);
   assert.equal(manager.getBranch().filter((e) => e.type === "message").length, 127, "raw history is never deleted");
   assert.match(compactionInstructions, /不得.*替代完整摘要/);
 });

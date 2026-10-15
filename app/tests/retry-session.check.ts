@@ -72,6 +72,7 @@ try {
     await page.screenshot({ path: `../artifacts/retry-icon-${width}.png` });
   }
   assert.equal(app.store.session(workspace.id, viewed.sessionId).unread, true);
+  assert.equal(await page.locator(`[data-session-id="${viewed.sessionId}"] .session-state.unread`).count(), 0, "opened session hides blue indicator even before its read receipt");
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
   await until(() => !app.store.session(workspace.id, viewed.sessionId).unread, "visible committed context wasn't acknowledged");
   mode = "success"; count = 0;
@@ -109,12 +110,13 @@ try {
   assert.equal(await targetRow.locator('[aria-label="未读"]').count(), 0);
   assert.match(await targetRow.innerText(), /等待重试/);
   assert.equal(app.store.session(workspace.id, target.sessionId).unread, true);
-  assert.match(await targetRow.locator("svg.session-state title").textContent() ?? "", /未读结果/);
+  assert.match(await targetRow.locator("svg.session-state").getAttribute("data-tooltip") ?? "", /未读结果/);
   mkdirSync("../artifacts", { recursive: true });
   await page.screenshot({ path: "../artifacts/retry-session-running.png" });
   await until(() => !app.agents.active(target), "retry did not complete");
   await targetRow.locator('[aria-label="未读"]').waitFor();
   await targetRow.locator("button.history-item").click();
+  await targetRow.locator('.session-state.unread').waitFor({ state: 'detached' });
   await until(() => !app.store.session(workspace.id, target.sessionId).unread, "opened result wasn't read");
   // Remaining child work keeps the sidebar active without an execution footer.
   const child = create("子任务");

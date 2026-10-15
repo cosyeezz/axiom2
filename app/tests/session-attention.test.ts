@@ -71,38 +71,71 @@ test("viewing retains read/completed sessions; foreground reading never expires;
   } finally { f.close(); }
 });
 
-test("revisiting renews cooling, multiple viewers hold it, continued running does not move a returned session", (t) => {
+test("active sessions never start cooling; completion and reading start a full idle cooldown", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
   const f = fixture();
   try {
     const s = f.create(), first = {}, second = {};
     f.running(s);
     f.attention.view(first, f.scope(s), true);
-    f.attention.disconnect(first);
-    const initial = f.current(s).autoPinUntil!;
-    t.mock.timers.setTime(initial - 1);
-    f.attention.view(first, f.scope(s), true);
     f.attention.view(second, f.scope(s), true);
+    assert.equal(f.current(s).autoPinUntil, null);
     f.attention.disconnect(first);
-    f.attention.expire(initial + 10 * sessionPinCooldownMs);
-    assert.equal(isTopSession(f.current(s)), true);
     f.attention.disconnect(second);
-    const renewed = f.current(s).autoPinUntil!;
-    assert.ok(renewed > initial);
-    f.attention.expire(renewed);
-    assert.equal(isTopSession(f.current(s)), false);
-    assert.equal(f.current(s).runStatus, "running");
-    assert.equal(f.store.pinnedSessions().length, 0);
-    f.run("session.pin", s.workspaceId, s.id, { pinned: true });
-    assert.equal(isTopSession(f.current(s)), true, "manual pins survive cooling");
-    f.run("session.pin", s.workspaceId, s.id, { pinned: false });
-    f.unread(s);
-    f.attention.expire(renewed + sessionPinCooldownMs);
-    assert.equal(isTopSession(f.current(s)), true, "new unread output remains until viewed again");
+    assert.equal(f.current(s).autoPinUntil, null, "leaving a running session does not start a timer");
+    t.mock.timers.setTime(Date.now() + 10 * sessionPinCooldownMs);
+    f.attention.expire();
+    assert.equal(isTopSession(f.current(s)), true);
+    assert.equal(f.store.pinnedSessions().length, 1);
+
+    f.store.finishRun(s.id, "completed", null);
+    f.attention.observe(s.workspaceId);
+    f.attention.expire(Date.now() + 10 * sessionPinCooldownMs);
+    assert.equal(isTopSession(f.current(s)), true, "unread completion stays at the top");
     f.attention.view(second, f.scope(s), true);
     f.read(s);
-    assert.equal(f.current(s).unread, false);
-    assert.ok(f.current(s).autoPinUntil! > 0);
+    assert.equal(f.current(s).autoPinUntil, Date.now() + sessionPinCooldownMs);
+    t.mock.timers.setTime(Date.now() + 2 * sessionPinCooldownMs);
+    f.attention.expire();
+    assert.equal(isTopSession(f.current(s)), true, "foreground reading protects completed sessions");
+    f.attention.disconnect(second);
+    const deadline = Date.now() + sessionPinCooldownMs;
+    assert.equal(f.current(s).autoPinUntil, deadline);
+    f.attention.expire(deadline - 1);
+    assert.equal(isTopSession(f.current(s)), true);
+    f.attention.expire(deadline);
+    assert.equal(isTopSession(f.current(s)), false);
+    f.run("session.pin", s.workspaceId, s.id, { pinned: true });
+    assert.equal(isTopSession(f.current(s)), true, "manual pins survive cooling");
+  } finally { f.close(); }
+});
+
+test("all active states override legacy deadlines and child activity cancels an existing cooldown", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+  const f = fixture();
+  try {
+    for (const status of ["starting", "running", "stopping", "child"] as const) {
+      const s = f.create();
+      if (status === "child") {
+        const child = f.create();
+        f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,'a','d','','queued','{}',1)")
+          .run(s.id, s.workspaceId, s.id, child.id);
+      } else {
+        f.running(s);
+        f.store.db.prepare("UPDATE runs SET status=? WHERE id=?").run(status, s.id);
+      }
+      for (const deadline of [0, Date.now() - 1, Date.now() + sessionPinCooldownMs]) {
+        f.store.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE id=?").run(deadline, s.id);
+        assert.equal(isTopSession(f.current(s)), true, `${status} ignores legacy cooldown ${deadline}`);
+        assert.ok(f.store.pinnedSessions().some((row) => row.id === s.id), "global query includes active sessions");
+        f.attention.expire();
+        f.attention.observe(s.workspaceId);
+        assert.equal(f.current(s).autoPinUntil, null);
+        assert.equal(isTopSession(f.current(s)), true);
+      }
+      f.attention.view({}, f.scope(s), true);
+      assert.equal(f.current(s).autoPinUntil, null);
+    }
   } finally { f.close(); }
 });
 
@@ -113,7 +146,7 @@ test("new foreground activity needs a rendered version; wrong ownership and stal
     f.attention.view(owner, f.scope(a), true);
     f.running(a);
     f.attention.observe(a.workspaceId);
-    assert.ok(f.current(a).autoPinUntil! > 0);
+    assert.equal(f.current(a).autoPinUntil, null);
     f.unread(a);
     f.attention.observe(a.workspaceId);
     assert.equal(f.current(a).unread, true);
@@ -128,7 +161,7 @@ test("new foreground activity needs a rendered version; wrong ownership and stal
     assert.throws(() => f.attention.view(owner, { workspaceId: foreign.id, sessionId: b.id }, true), { code: "SCOPE_MISMATCH" });
     assert.throws(() => f.attention.view(owner, f.scope(b), "true"), { code: "INVALID_INPUT" });
     f.attention.expire(Date.now() + 10 * sessionPinCooldownMs);
-    assert.equal(isTopSession(f.current(a)), false);
+    assert.equal(isTopSession(f.current(a)), true, "running sessions remain pinned after leaving");
     assert.equal(isTopSession(f.current(b)), true);
     f.run("session.delete", b.workspaceId, b.id, { confirmed: true });
     assert.doesNotThrow(() => f.attention.disconnect(owner));

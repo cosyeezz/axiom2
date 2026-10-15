@@ -125,8 +125,19 @@ try {
   await reading.getByText("已读取", { exact: true }).waitFor();
   assert.equal(await reading.locator("pre, .markdown").count(), 0);
   await stop.getByRole("alert").waitFor();
+  // Advancing to a new process must not hide a genuinely running child in the old one.
+  put(output('file-a', 'completed'), output('file-b', 'completed'),
+    { id: 'next-user', role: 'user', text: '开始下一段' },
+    { id: 'next-process', role: 'assistant', text: '', calls: [call('next-read', 'read', { path: 'next.ts' })] },
+    output('next-read', 'running'));
+  await group.last().locator('.activity-current').filter({ hasText: 'next.ts' }).waitFor();
+  assert.equal(await group.first().getAttribute('data-status'), 'running', 'the old process retains an actual running child');
+  list.tasks[0].status = 'completed';
+  views.publish(tasksScope(scope), list);
+  await group.first().locator('.activity-status-completed').waitFor();
+  assert.equal(await group.last().getAttribute('data-status'), 'running', 'only the new process is running after the child finishes');
   assert.deepEqual(errors, []);
-  console.log(`PASS: task cards, delegation before task IDs, inline failures, all four tools, exact long delivery, lazy details, keyboard, mixed order, responsive layout and reload. Screenshots: ${artifacts}`);
+  console.log(`PASS: independent process and child statuses; task cards, delegation before task IDs, inline failures, all four tools, exact long delivery, lazy details, keyboard, mixed order, responsive layout and reload. Screenshots: ${artifacts}`);
 } finally {
   await browser.close();
   await app.close();

@@ -4,7 +4,7 @@ import { basename, isAbsolute, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { Run } from "../shared/agent.js";
 import { validSessionTitle } from "./session-title.js";
-import { isAutoTopSession, sessionPinCooldownMs } from "../shared/session-attention.js";
+import { isActiveSession, isAutoTopSession, sessionPinCooldownMs } from "../shared/session-attention.js";
 import { defaultAutoCompression, type CompressionPreferences } from "../shared/compression.js";
 import {
   AppError,
@@ -167,19 +167,19 @@ export class Store {
     return (
       this.db
         .prepare(
-          "SELECT sessions.*,r.id AS runId,r.status AS runStatus,r.phase,r.retry,r.reasonCode,(SELECT COUNT(*) FROM tasks WHERE parentSessionId=sessions.id AND status IN ('queued','starting','running','stopping')) AS activeTaskCount FROM sessions LEFT JOIN runs r ON r.id=(SELECT id FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) WHERE " + (workspaceId === undefined ? "(pinned=1 OR unread=1 OR autoPinUntil>0 OR (autoPinUntil IS NULL AND (r.status IN ('starting','running','stopping') OR activeTaskCount>0)))" : "workspaceId=?") + " AND EXISTS(SELECT 1 FROM workspaces w WHERE w.id=sessions.workspaceId AND w.archived=0) AND NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id) ORDER BY pinned DESC,updatedAt DESC,sessions.id",
+          "SELECT sessions.*,r.id AS runId,r.status AS runStatus,r.phase,r.retry,r.reasonCode,(SELECT COUNT(*) FROM tasks WHERE parentSessionId=sessions.id AND status IN ('queued','starting','running','stopping')) AS activeTaskCount FROM sessions LEFT JOIN runs r ON r.id=(SELECT id FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) WHERE " + (workspaceId === undefined ? "(pinned=1 OR unread=1 OR autoPinUntil>0 OR r.status IN ('starting','running','stopping') OR activeTaskCount>0)" : "workspaceId=?") + " AND EXISTS(SELECT 1 FROM workspaces w WHERE w.id=sessions.workspaceId AND w.archived=0) AND NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id) ORDER BY pinned DESC,updatedAt DESC,sessions.id",
         )
         .all(...(workspaceId === undefined ? [] : [workspaceId])) as unknown as Session[]
     ).map((s) => ({ ...s, pinned: !!s.pinned, unread: !!s.unread,
       activeTasks: !!s.activeTaskCount, retry: s.retry ? JSON.parse(String(s.retry)) : null }));
   }
-  /** Viewing starts/renews cooling only for an existing automatic pin, never for an idle history row. */
+  /** Active sessions have no deadline; viewing an idle automatic pin renews cooling. */
   viewSession(scope: Scope, now = Date.now()): boolean {
     this.session(scope.workspaceId, scope.sessionId);
     const summary = this.sessions(scope.workspaceId).find((s) => s.id === scope.sessionId);
     const automatic = summary && isAutoTopSession(summary);
     return !!this.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE id=? AND ?")
-      .run(now + sessionPinCooldownMs, scope.sessionId, Number(!!automatic)).changes;
+      .run(summary && isActiveSession(summary) ? null : now + sessionPinCooldownMs, scope.sessionId, Number(!!automatic)).changes;
   }
   /** Nested savepoints keep the result event and its reading watermark atomic. */
   recordResult(sessionId: string, sourceId: string, kind: "run" | "task") {
@@ -213,6 +213,10 @@ export class Store {
   }
   /** No ownership lookup here: a viewer may leave after its session was deleted/archived. */
   leaveSession(scope: Scope, now = Date.now()): boolean {
+    const summary = this.sessionSummaries(scope.workspaceId).find((s) => s.id === scope.sessionId);
+    if (summary && isActiveSession(summary))
+      return !!this.db.prepare("UPDATE sessions SET autoPinUntil=NULL WHERE id=? AND autoPinUntil IS NOT NULL")
+        .run(scope.sessionId).changes;
     return !!this.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE workspaceId=? AND id=? AND autoPinUntil>0")
       .run(now + sessionPinCooldownMs, scope.workspaceId, scope.sessionId).changes;
   }

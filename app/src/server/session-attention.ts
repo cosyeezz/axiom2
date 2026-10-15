@@ -1,5 +1,5 @@
 import { AppError, type Scope } from "../shared/protocol.js";
-import { isAutoTopSession } from "../shared/session-attention.js";
+import { isActiveSession, isAutoTopSession } from "../shared/session-attention.js";
 import type { Store } from "./storage.js";
 
 /** Foreground presence belongs to a connection; cooling belongs to the persisted session. */
@@ -40,11 +40,14 @@ export class SessionAttention {
 
   /** Foreground presence protects cooling only; rendering acknowledgement owns reading. */
   observe(workspaceId: string) {
-    if (this.closed || ![...this.viewers.values()].some((scope) => scope.workspaceId === workspaceId)) return;
+    if (this.closed) return;
     const visible = this.store.workspaces().some((w) => w.id === workspaceId);
     if (!visible) return;
     for (const session of this.store.sessions(workspaceId)) {
-      if (this.viewed(session.id) && session.autoPinUntil == null && isAutoTopSession(session))
+      if (isActiveSession(session)) {
+        if (session.autoPinUntil != null)
+          this.store.db.prepare("UPDATE sessions SET autoPinUntil=NULL WHERE id=?").run(session.id);
+      } else if (this.viewed(session.id) && session.autoPinUntil == null && isAutoTopSession(session))
         this.store.viewSession({ workspaceId, sessionId: session.id });
     }
   }
@@ -54,7 +57,13 @@ export class SessionAttention {
     if (this.closed) return;
     const workspaces = new Set<string>();
     const due = this.store.db.prepare("SELECT id,workspaceId FROM sessions WHERE autoPinUntil>0 AND autoPinUntil<=? AND unread=0").all(now);
+    const active = new Set(due.length ? this.store.pinnedSessions().filter(isActiveSession).map((s) => s.id) : []);
     for (const row of due) {
+      if (active.has(String(row.id))) {
+        this.store.db.prepare("UPDATE sessions SET autoPinUntil=NULL WHERE id=?").run(row.id);
+        workspaces.add(String(row.workspaceId));
+        continue;
+      }
       if (this.viewed(String(row.id))) continue;
       this.store.db.prepare("UPDATE sessions SET autoPinUntil=0 WHERE id=?").run(row.id);
       workspaces.add(String(row.workspaceId));

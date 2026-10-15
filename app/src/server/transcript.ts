@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { extname, resolve } from "node:path";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, buildSessionProjection } from "@earendil-works/pi-coding-agent";
 import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
 import { imageDisplayText, imagesInput } from "./images.js";
 import type { ChatMessage } from "../shared/agent.js";
@@ -88,6 +88,9 @@ export function chatMessage(
     (assistantDisplay.active || content.at(-1)?.type === "thinking");
   return {
     id,
+    ...(typeof message.axiomRunId === "string" ? { runId: message.axiomRunId } : {}),
+    ...(message.role === "assistant" && message.axiomSelectionChange
+      ? { selectionChange: message.axiomSelectionChange } : {}),
     // User-authored Steering/follow-up shares user presentation in live and history views.
     // Keep the native custom message unchanged; result notifications remain notices.
     role: isInput ? "user" : ["custom", "compactionSummary"].includes(message.role)
@@ -165,8 +168,14 @@ export function openTranscript(file: string, cwd: string): SessionManager {
   }
 }
 // One identity adapter for both metadata views and on-demand native image lookup.
-function transcriptEntries(manager: SessionManager): { message: any; id: string }[] {
-  return manager.buildSessionProjection().entries.flatMap(({ sourceEntry: entry, messages }) => {
+function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string }[] {
+  // Ignore compaction boundaries for reading, while retaining native retry/context edits.
+  // Only the active branch is eligible; abandoned branches and system records stay private.
+  const projection = original
+    ? buildSessionProjection(manager.getBranch().filter((entry) => entry.type !== "compaction")
+      .map((entry, index, entries) => ({ ...entry, parentId: entries[index - 1]?.id ?? null })))
+    : manager.buildSessionProjection();
+  return projection.entries.flatMap(({ sourceEntry: entry, messages }) => {
     if (!messages.length) return [];
     if (entry.type === "compaction") return [{ message: { role: "compactionSummary", summary: entry.summary,
       compression: compactionDisplay(entry, manager.getBranch()) }, id: entry.id }];
@@ -181,15 +190,15 @@ function transcriptEntries(manager: SessionManager): { message: any; id: string 
     return [{ message: m, id: m.axiomId ?? (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id) }];
   });
 }
-export function transcriptMessages(manager: SessionManager): ChatMessage[] {
-  return transcriptEntries(manager).flatMap(({ message, id }) => {
+export function transcriptMessages(manager: SessionManager, original = false): ChatMessage[] {
+  return transcriptEntries(manager, original).flatMap(({ message, id }) => {
     const converted = chatMessage(message, id);
     return converted ? [converted] : [];
   });
 }
 /** Read only a displayed native block from the bound current branch; never follow paths. */
-export function transcriptImage(manager: SessionManager, messageId: string, imageId: string): ImageAttachment {
-  const entry = transcriptEntries(manager).find(({ id }) => id === messageId);
+export function transcriptImage(manager: SessionManager, messageId: string, imageId: string, original = false): ImageAttachment {
+  const entry = transcriptEntries(manager, original).find(({ id }) => id === messageId);
   const view = entry && chatMessage(entry.message, entry.id);
   const images = view?.images?.filter((image) => !image.path) ?? [];
   const index = images.findIndex((image) => image.id === imageId);

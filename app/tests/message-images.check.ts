@@ -77,7 +77,7 @@ try {
   assert.equal(previews.length, 0, "no eager image reads");
   assert.ok(!(await page.locator("#messages").innerText()).includes("附件路径映射"));
   assert.equal(await page.locator(".user-text strong").last().textContent(), "普通消息");
-  assert.equal(await icons.nth(2).getAttribute("title"), `imag3 · ${many[1].name}`);
+  assert.equal(await icons.nth(2).getAttribute("data-tooltip"), `imag3 · ${many[1].name}`);
   assert.deepEqual(await icons.allTextContents(), ["imag1", "imag1", "imag3", "imag4", "imag8", "imag1", "imag1"]);
   assert.equal(await page.locator(".user-text").count(), 6, "ordinary and Steering messages share user bubbles");
   assert.equal(await page.locator(".user-text").filter({ hasText: "子任务完成通知" }).count(), 0);

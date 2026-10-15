@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   compressionLabels,
   type Compression,
 } from "../../shared/compression.js";
 import { Icon } from "../components.js";
+import { BubbleLoadingIcon } from "../StatusIcons.js";
 import type { Selection } from "../../shared/agent.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { CompressionSummary } from "./CompressionSummary.js";
 import { AutoCompressionSettings } from "./AutoCompressionSettings.js";
+import { useSettingsPopover } from "../useSettingsPopover.js";
 
 export function compressionStatusLabel(job: Compression) {
   if (job.state === "completed") return "已应用";
@@ -28,12 +30,11 @@ export function CompressionIcon({
   state: string;
   detail?: boolean;
 }) {
+  if (state === "running") return <BubbleLoadingIcon />;
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <g data-state={state}>
-        {state === "running" ? (
-          <path d="M21 12a9 9 0 1 1-9-9" />
-        ) : ["cancelled", "failed", "interrupted"].includes(state) ? (
+        {["cancelled", "failed", "interrupted"].includes(state) ? (
           <path d="m6 6 12 12m0-12L6 18" />
         ) : detail && state === "completed" ? (
           <path d="m5 12 4 4L19 6" />
@@ -53,6 +54,7 @@ export function CompressionIcon({
 }
 export function CompressionDetail({
   id,
+  trigger,
   job,
   title,
   busy,
@@ -70,6 +72,7 @@ export function CompressionDetail({
 }: {
   contextWindow?: number | null;
   id: string;
+  trigger: HTMLButtonElement;
   job: Compression | null;
   selection: Selection | null;
   inherited: boolean;
@@ -84,18 +87,10 @@ export function CompressionDetail({
   onStart: () => void;
   onCancel: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null),
-    close = useRef<HTMLButtonElement>(null);
-  const backdrop = useRef(false);
+  const { panel, close, host } = useSettingsPopover(trigger, onClose);
   const [now, setNow] = useState(Date.now());
   const active = job?.state === "running",
     done = job?.state === "completed";
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement;
-    ref.current!.showModal();
-    close.current!.focus();
-    return () => trigger?.focus({ preventScroll: true });
-  }, []);
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -114,32 +109,16 @@ export function CompressionDetail({
       "校验快照仍兼容后自动应用；原始历史与新增消息保留，冲突不应用",
     ],
   ];
-  const outside = (x: number, y: number) => {
-    const box = ref.current!.getBoundingClientRect();
-    return x < box.left || x > box.right || y < box.top || y > box.bottom;
-  };
-  // Outside usage/child layout: the sheet keeps the design's full-viewport geometry.
   return createPortal(
     <dialog
-      ref={ref}
+      ref={panel}
+      open
+      popover="auto"
       id={id}
       className="compression-page"
       data-od-id="background-compression-page"
       aria-labelledby={`${id}-heading`}
       aria-describedby={`${id}-note`}
-      onPointerDown={(e) => {
-        backdrop.current = e.target === e.currentTarget && outside(e.clientX, e.clientY);
-      }}
-      onPointerCancel={() => { backdrop.current = false; }}
-      onClick={(e) => {
-        if (backdrop.current && e.target === e.currentTarget && outside(e.clientX, e.clientY)) onClose();
-        backdrop.current = false;
-      }}
-      onCancel={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }}
       onKeyDown={(e) => {
         e.stopPropagation();
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")
@@ -155,7 +134,7 @@ export function CompressionDetail({
           ref={close}
           type="button"
           className="icon-btn"
-          title="返回会话（Esc）"
+          data-tooltip="返回会话（Esc）"
           aria-label="关闭压缩详情，返回会话"
           onClick={onClose}
         >
@@ -261,7 +240,7 @@ export function CompressionDetail({
               return (
                 <li key={heading} data-phase={phase} aria-current={phase === "current" ? "step" : undefined}>
                   <span className="compression-step-number" aria-hidden="true">
-                    {phase === "done" ? "✓" : phase === "failed" ? "!" : i + 1}
+                    {phase === "current" ? <BubbleLoadingIcon /> : phase === "done" ? "✓" : phase === "failed" ? "!" : i + 1}
                   </span>
                   <div>
                     <strong>{heading}<span className="screen-reader"> · {phaseLabel}</span></strong>
@@ -333,6 +312,6 @@ export function CompressionDetail({
         </div>
       </footer>
     </dialog>,
-    document.body,
+    host,
   );
 }

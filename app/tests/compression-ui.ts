@@ -165,11 +165,14 @@ export async function checkCompressionUI(
       const actual = await dialog.boundingBox(),
         expected = await design.locator(".compression-page").boundingBox();
       assert.ok(actual && expected);
-      for (const key of ["x", "y", "width", "height"] as const)
+      // Width, alignment and typography still follow the prototype; the toolbar must remain exposed.
+      for (const key of ["x", "y", "width"] as const)
         assert.ok(
           Math.abs(actual[key] - expected[key]) <= 1,
           `compression sheet geometry ${width} ${key}`,
         );
+      const launcher = (await trigger.boundingBox())!;
+      assert.ok(Math.abs(actual.y + actual.height + 8 - launcher.y) <= 1, `compression sheet clears its launcher at ${width}`);
       for (const selector of [
         ".compression-page > header",
         ".compression-page > footer",
@@ -201,20 +204,21 @@ export async function checkCompressionUI(
         path: join(artifacts, `design-compression-${width}.png`),
       });
     }
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    assert.equal(
-      await dialog
-        .locator(".compression-status svg")
-        .evaluate((el) => getComputedStyle(el).animationDuration),
-      "2.8s",
-    );
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    assert.equal(
-      await dialog
-        .locator(".compression-status svg")
-        .evaluate((el) => getComputedStyle(el).animationName),
-      "none",
-    );
+    for (const reducedMotion of ["no-preference", "reduce"] as const) {
+      await page.emulateMedia({ reducedMotion });
+      const frames = await dialog.locator(".compression-status .bubble-loading").evaluate(node => {
+        const svg = node as SVGSVGElement;
+        svg.pauseAnimations();
+        svg.setCurrentTime(0.2);
+        const first = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        svg.setCurrentTime(0.7);
+        const second = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        svg.unpauseAnimations();
+        return { first, second };
+      });
+      assert.equal(frames.first.length, 8);
+      assert.notDeepEqual(frames.first, frames.second, `compression bubbles animate in ${reducedMotion}`);
+    }
     await close();
     // Completing a model call must not disturb a selected draft or mount the detail sheet.
     await page.locator("#prompt").focus();

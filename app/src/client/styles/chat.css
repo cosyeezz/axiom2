@@ -1,5 +1,15 @@
+/* Output text stays readable against the dark conversation surface. */
+.tool-activity, .task-results, .message-body:not(.user-text) { --muted: #c7d2fe; }
+.log-row .message-body:not(.user-text) { color: #e2e8f0; }
 /* Reserve a steady right gutter during streaming and after completion. */
 .reply-body { position: relative; padding-inline-end: 52px; }
+/* Enlarge user-facing replies only, including while streaming. */
+.reply-body > .markdown { font-size: 15px; }
+.reply-body > .markdown :not(pre) > code,
+.reply-body > .markdown .code-card pre,
+.reply-body > .markdown .code-card code { font-size: 13px; }
+.reply-body > .markdown table { font-size: 14px; }
+.reply-body > .markdown :is(h4, h5, h6) { font-size: 15px; }
 .message-actions { position: absolute; top: -8px; right: 0; z-index: 1; line-height: 1; }
 .message-actions > button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--motion-fast), color var(--motion-fast), background var(--motion-fast); }
 .message-actions svg { width: 16px; height: 16px; }
@@ -75,8 +85,8 @@
 .tool-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 16px; width: 16px; height: 18px; color: var(--tool-color); }
 .tool-icon svg { width: 16px; height: 16px; }
 .tool-heading .tool-name, .activity-current .tool-name { color: var(--tool-color); }
-.execution-pulse { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--success); }
-.execution-pulse::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; background: color-mix(in oklch, var(--success) 30%, transparent); animation: execution-breathe 1.8s ease-in-out infinite; }
+.execution-pulse { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--accent-hover); }
+.execution-pulse::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; background: color-mix(in oklch, var(--accent-hover) 30%, transparent); animation: execution-breathe 1.8s ease-in-out infinite; }
 @keyframes execution-breathe { 0%, 100% { transform: scale(.65); opacity: .35; } 50% { transform: scale(1.1); opacity: 1; } }
 .composer:has(.retry-action) { grid-template-columns: 44px minmax(0, 1fr) auto auto; }
 .composer-actions { grid-column: 4; grid-row: 1; display: flex; align-items: center; gap: 4px; justify-self: end; }
@@ -100,10 +110,15 @@
 .tool-heading strong { flex-shrink: 0; font-size: 12px; font-weight: 510; }
 .tool-input-detail { color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tool-call small { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
-.tool-call[data-status="running"] small { color: var(--success); }
+.tool-call[data-status="running"] small { color: var(--accent-hover); }
+/* A failed execution colors its entire row, including explicitly styled children. */
+.tool-call[data-status="failed"] > .tool-header,
+.tool-call[data-status="failed"] > .tool-header *,
+.activity-current[data-status="failed"],
+.activity-current[data-status="failed"] * { color: #d99595; --tool-color: #d99595; }
 .tool-detail { padding-bottom: 8px; }
 .tool-detail-label { color: var(--muted); font-size: 11px; margin-top: 8px; }
-.tool-detail pre { max-height: 360px; overflow: auto; }
+.tool-detail pre { max-height: 360px; overflow: auto; color: #e2e8f0; }
 .tool-truncated { margin: 4px 0; font-size: 11px; color: var(--muted); }
 @media (max-width: 640px) {
   .tool-activity > summary { padding: 8px; }
@@ -268,6 +283,23 @@
 .attachment-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
 .attachment-chip .icon-btn { flex-shrink: 0; }
 .attachment-loading { color: var(--muted); }
+.attachment-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 280px; }
+.attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.attachment-symbol { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; color: var(--fg-2); vertical-align: middle; }
+.attachment-symbol svg { width: 17px; height: 17px; }
+.attachment-symbol small { font: 11px/1 var(--font-mono); color: var(--muted); }
+.attachment-symbol-image { color: #93c5fd; }
+.attachment-chip .image-label { padding: 8px 0; font-family: var(--font-body); text-align: left; }
+.composer textarea.has-attachment-overlay { color: transparent; caret-color: var(--fg); }
+.attachment-input-overlay { position: absolute; pointer-events: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; color: var(--fg); border: 0; }
+.attachment-input-overlay[hidden] { display: none; }
+.attachment-inline-reference { position: relative; }
+.attachment-reference-source { color: transparent; }
+.attachment-reference-icon { position: absolute; inset: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: color-mix(in oklch, var(--fg) 6%, transparent); }
+@media (forced-colors: active) {
+  .composer textarea.has-attachment-overlay { color: CanvasText; }
+  .attachment-input-overlay { display: none; }
+}
 .file-completion { left: 0; width: min(560px, 100%); padding: 6px; }
 .file-picker-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 6px 8px 10px; }
 .file-picker-heading strong { font-size: 12px; font-weight: 510; }

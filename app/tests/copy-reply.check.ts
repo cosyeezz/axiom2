@@ -97,7 +97,7 @@ try {
     await page.screenshot({ path: join(artifacts, `copy-${width}.png`) });
   }
   await page.reload(); await copy.waitFor({ state: "attached" });
-  assert.equal(await copy.getAttribute("title"), "复制回复");
+  assert.equal(await copy.getAttribute("data-tooltip"), "复制回复");
   const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   await touch.addInitScript((value) => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   const touchPage = await touch.newPage(); await touchPage.goto(app.origin);
