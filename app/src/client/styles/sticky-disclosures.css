@@ -22,13 +22,13 @@
   pointer-events: none;
 }
 .thread [data-sticky-disclosure]:hover, .task-results > details[open] > summary:hover {
-  background: color-mix(in oklch, var(--fg) 5%, var(--disclosure-surface, var(--bg)));
+  background: color-mix(in srgb, var(--fg) 5%, var(--disclosure-surface, var(--bg)));
 }
 .thread :is(.tool-activity, .thinking-block, .task-operation) {
-  --disclosure-surface: color-mix(in oklch, var(--fg) 2%, var(--bg));
+  --disclosure-surface: color-mix(in srgb, var(--fg) 2%, var(--bg));
 }
 .thread .compaction-card {
-  --disclosure-surface: color-mix(in oklch, var(--surface) 55%, var(--bg));
+  --disclosure-surface: color-mix(in srgb, var(--surface) 55%, var(--bg));
 }
 /* Clip rounded cards without introducing a scroll ancestor that traps sticky headers. */
 .thread .task-operation { overflow: clip; }

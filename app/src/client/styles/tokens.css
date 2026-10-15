@@ -16,10 +16,10 @@
 
   /* ─── Accent ───────────────────────────────────────────────────── */
   /* 用户配色：暖橙交互、金黄收藏、绿色完成，替代蓝紫色。 */
-  --accent:        oklch(0.76 0.13 55);
+  --accent:        #f0995b;
   --accent-on:     #08090a;
-  --accent-hover:  oklch(0.84 0.11 65);
-  --accent-active: oklch(0.88 0.09 65);
+  --accent-hover:  #fcbc7c;
+  --accent-active: #ffcc98;
 
   /* ─── Semantic ─────────────────────────────────────────────────── */
   --success: #27a644;                   /* Linear green */
@@ -86,7 +86,7 @@
   /* Multi-layer stack per DESIGN.md §6 + §7: accent ring makes the
      indicator visible on the near-black #08090a canvas. */
   --focus-ring:
-    0 0 0 2px color-mix(in oklab, var(--accent), transparent 30%),
+    0 0 0 2px color-mix(in srgb, var(--accent), transparent 30%),
     0 4px 12px rgba(0, 0, 0, 0.1);
 
   /* ─── Motion ───────────────────────────────────────────────────── */

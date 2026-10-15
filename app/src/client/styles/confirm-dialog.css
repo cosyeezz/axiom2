@@ -13,7 +13,7 @@
   box-shadow: var(--elev-raised);
   font: 15px/1.6 var(--font-body);
 }
-.confirm-dialog::backdrop { background: color-mix(in oklch, var(--bg) 80%, transparent); }
+.confirm-dialog::backdrop { background: color-mix(in srgb, var(--bg) 80%, transparent); }
 .confirm-dialog h2 { margin: 0; font-size: 20px; }
 .confirm-dialog .confirm-subject {
   margin: 16px 0 0;
@@ -28,10 +28,10 @@
   overflow: auto;
 }
 .confirm-dialog .confirm-description { margin: 12px 0 0; color: var(--muted); font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
-.confirm-dialog .confirm-error { margin: 12px 0 0; color: color-mix(in oklch, var(--danger) 55%, var(--fg)); font-size: 13px; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-error { margin: 12px 0 0; color: color-mix(in srgb, var(--danger) 55%, var(--fg)); font-size: 13px; overflow-wrap: anywhere; }
 .confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .confirm-actions .btn { min-height: 44px; min-width: 80px; }
 .confirm-actions .confirm-danger { background: var(--danger); border-color: transparent; color: var(--fg); }
-.confirm-actions .confirm-danger:hover { background: color-mix(in oklch, var(--danger) 85%, var(--fg)); }
+.confirm-actions .confirm-danger:hover { background: color-mix(in srgb, var(--danger) 85%, var(--fg)); }
 .confirm-actions .btn[aria-disabled=true] { opacity: .5; cursor: wait; }
 @media (max-width: 640px) { .confirm-dialog { padding: 20px; } }
