@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { TestContext } from "node:test";
@@ -9,7 +9,7 @@ import { SqliteIndexStore } from "../src/server/code-index/store/sqlite.js";
 import { CommitCoordinator } from "../src/server/code-index/application/commit.js";
 
 export async function indexFixture(t: TestContext, options: FilePolicyOptions = {}) {
-  const directory = await mkdtemp(path.join(tmpdir(), "axiom-index-store-")), root = path.join(directory, "workspace");
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "axiom-index-store-"))), root = path.join(directory, "workspace");
   await mkdir(root);
   const policy = await FilePolicy.create(root, options), filename = path.join(directory, "private", "index.sqlite");
   const store = new SqliteIndexStore(filename, "test-index"), sources = new SourceEvidence(store, policy, "workspace"), commits = new CommitCoordinator(store, sources);
