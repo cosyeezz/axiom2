@@ -201,8 +201,14 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
     assert.equal(service.store.db.prepare("SELECT COUNT(*) AS n FROM task_results WHERE taskId=?").get(taskId)!.n, 2);
     assert.equal(service.store.db.prepare("SELECT COUNT(*) AS n FROM task_inputs WHERE taskId=?").get(taskId)!.n, 0);
 
+    // Leave a wide cancellation window on loaded CI runners; the preceding
+    // retry cases intentionally use short delays, but this case must stop
+    // during backoff rather than race its expiry. Successful cancellation
+    // aborts the timer, so this does not add a 30-second test wait.
+    writeFileSync(join(root, "pi", "settings.json"), JSON.stringify({ retry: { enabled: true, maxRetries: 2, baseDelayMs: 30000, provider: { maxRetries: 0 } }, compaction: { enabled: false }, cacheWarming: "off" }));
     const stopped = await create(); await run(stopped, "stop");
     await until(() => info(stopped).run?.retry?.state === "waiting", "missing stop waiting state");
+    assert.equal(info(stopped).environment?.retry?.baseDelayMs, 30000);
     await call(stopped, "agent.stop", { runId: info(stopped).run!.id });
     assert.equal(info(stopped).run?.status, "cancelled");
     assert.equal(info(stopped).run?.retry?.state, "cancelled");
