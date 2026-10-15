@@ -85,11 +85,11 @@ test("only actually read evidence can commit; frozen acceptance and replay are s
   assert.equal(f.store.submission(ledger.requestId), null);
   const committed = await f.commits.commit(ledger.ledgerId, receipt.proposalDigest, async () => {});
   assert.equal(committed.freshness, "current");
-  const id = committed.submission.outcome.idMap["tmp:impl"], object = f.store.object(id)!;
+  const id = committed.idMap["tmp:impl"], object = f.store.object(id)!;
   assert.equal((object.body as NodeProposal).summary, "将输入乘以二。"); assert.equal(object.recordRev, 1);
   f.sources.revoke(ledger.ledgerId);
   const replay = await f.commits.replay(ledger.requestId, f.owner, receipt.proposalDigest);
-  assert.deepEqual(replay?.submission, committed.submission);
+  assert.deepEqual(replay, committed);
   await f.put("a.ts", "export const twice = (n:number) => n * 3;");
   assert.equal((await f.commits.replay(ledger.requestId, f.owner, receipt.proposalDigest))?.freshness, "stale");
   await assert.rejects(f.commits.replay(ledger.requestId, { ...f.owner, workspaceId: "other" }, receipt.proposalDigest), errorCode("ACCESS_DENIED"));
@@ -102,7 +102,7 @@ test("only actually read evidence can commit; frozen acceptance and replay are s
 test("final CAS and cancellation are rechecked after asynchronous commit admission", async t => {
   const f = await indexFixture(t); await f.put("a.ts", "export const a = 1;");
   const initial = await f.ledger("initial"), source = await f.read(initial), accept = f.commits.accept(initial.ledgerId, proposal(initial, [implementation("tmp:a", source.record.id)]));
-  const result = await f.commits.commit(initial.ledgerId, accept.proposalDigest, async () => {}), id = result.submission.outcome.idMap["tmp:a"];
+  const result = await f.commits.commit(initial.ledgerId, accept.proposalDigest, async () => {}), id = result.idMap["tmp:a"];
   const ledger = await f.ledger("update"), evidence = await f.read(ledger), old = f.store.object(id)!;
   await f.sources.withLedger(ledger.ledgerId, async live => f.sources.recordObject(live, old));
   const update = implementation(id, evidence.record.id); update.expectedContentRev = old.contentRev; update.expectedRecordRev = old.recordRev; update.summary = "updated";
@@ -130,7 +130,7 @@ test("policy restrictions hide mixed-source bodies and cyclic proof cannot self-
   const f = await indexFixture(t); await f.put("a.ts", "export const a = 1;"); await f.put("private.ts", "export const secret = 2;");
   const ledger = await f.ledger(), evidence = await f.read(ledger); await f.read(ledger, "private.ts");
   const receipt = f.commits.accept(ledger.ledgerId, proposal(ledger, [implementation("tmp:a", evidence.record.id)]));
-  const result = await f.commits.commit(ledger.ledgerId, receipt.proposalDigest, async () => {}), id = result.submission.outcome.idMap["tmp:a"];
+  const result = await f.commits.commit(ledger.ledgerId, receipt.proposalDigest, async () => {}), id = result.idMap["tmp:a"];
   const restricted = await FilePolicy.create(f.root, { excludes: ["private.ts"] }), other = new SourceEvidence(f.store, restricted, "workspace");
   try {
     const snapshot = await other.reconcile(), view = new AuthorizedReadView(f.store, restricted, snapshot, "workspace");

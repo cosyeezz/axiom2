@@ -13,7 +13,7 @@ test("final graph supports shared implementations and slots, and enforces flow r
   first.flows = [{ beforeEdgeId: "tmp:before", afterEdgeId: "tmp:after", condition: "通过检查", evidenceIds: [source.record.id] }];
   const input = proposal(initial, [first, second, implementation("tmp:impl", source.record.id)]);
   input.edges = [edge("tmp:before", first.id, "tmp:impl", source.record.id, "uses", "before"), edge("tmp:after", first.id, "tmp:impl", source.record.id, "uses", "after"), edge("tmp:shared", second.id, "tmp:impl", source.record.id)];
-  const receipt = f.commits.accept(initial.ledgerId, input), committed = await f.commits.commit(initial.ledgerId, receipt.proposalDigest, async () => {}), ids = committed.submission.outcome.idMap;
+  const receipt = f.commits.accept(initial.ledgerId, input), committed = await f.commits.commit(initial.ledgerId, receipt.proposalDigest, async () => {}), ids = committed.idMap;
   assert.equal(f.store.links().length, 3); assert.equal(committed.freshness, "current");
   const readObjects = async (ledger: RequestLedger, objectIds: string[]) => f.sources.withLedger(ledger.ledgerId, async live => { for (const id of objectIds) f.sources.recordObject(live, f.store.object(id)!); });
   const invalidLedger = await f.ledger("bad-retire"), invalidSource = await f.read(invalidLedger), oldEdge = f.store.object(ids["tmp:after"])!;
@@ -53,7 +53,7 @@ test("contains cycles and concurrent relation insertion are rejected by the fina
   await assert.rejects(f.commits.commit(ledger.ledgerId, receipt.proposalDigest, async () => {}), invalid);
   assert.equal(f.store.objects().filter(object => object.kind !== "symbol").length, 0);
   const initial = await f.ledger("nodes"), initialSource = await f.read(initial), nodes = proposal(initial, [feature("tmp:a", initialSource.record.id, "A"), feature("tmp:b", initialSource.record.id, "B")]);
-  const initialReceipt = f.commits.accept(initial.ledgerId, nodes), committed = await f.commits.commit(initial.ledgerId, initialReceipt.proposalDigest, async () => {}), ids = committed.submission.outcome.idMap;
+  const initialReceipt = f.commits.accept(initial.ledgerId, nodes), committed = await f.commits.commit(initial.ledgerId, initialReceipt.proposalDigest, async () => {}), ids = committed.idMap;
   const a = await f.ledger("a"), b = await f.ledger("b"); await f.read(a); await f.read(b);
   for (const item of [a, b]) await f.sources.withLedger(item.ledgerId, async live => { for (const id of Object.values(ids)) f.sources.recordObject(live, f.store.object(id)!); });
   const aa = proposal(a), bb = proposal(b);
