@@ -31,11 +31,14 @@ axiom2 start
 
 | Pake 客户端 | 下载与使用 |
 | --- | --- |
-| Windows x64 安装包 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/latest/download/Axiom2.msi)，安装后打开 Axiom2 |
-| Windows x64 便携版 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/latest/download/Axiom2.exe)，直接运行 |
-| SHA-256 校验 | [SHA256SUMS](https://github.com/cosyeezz/axiom2/releases/latest/download/SHA256SUMS) |
-| macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/latest/download/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
+| Windows x64 安装包 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.msi)，安装后打开 Axiom2 |
+| Windows x64 便携版 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.exe)，直接运行 |
+| 后台包 SHA-256 校验 | [SHA256SUMS](https://github.com/cosyeezz/axiom2/releases/latest/download/SHA256SUMS) |
+| 客户端 SHA-256 校验 | [SHA256SUMS（v0.4.0）](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/SHA256SUMS) |
+| macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
 | Linux | 当前使用浏览器；尚无发布并验收的原生客户端 |
+
+桌面客户端下载链接指向当前已发布的 `v0.4.0` 客户端。后台服务独立更新，不要求客户端与后台版本相同。
 
 **Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，后台停止或确认更新后返回控制页。关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 

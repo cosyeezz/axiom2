@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -16,7 +16,8 @@ import { AppError, type Workspace, type Session } from "../src/shared/protocol.j
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "axiom-task-reliability-")), store = new Store(root);
+  // Match Store's canonical workspace identity across macOS /var aliases and Windows short paths.
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "axiom-task-reliability-"))), store = new Store(root);
   const w = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: root, authorized: true } }) as Workspace;
   const s = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: w.id }) as Session;
   const scope = { workspaceId: w.id, sessionId: s.id }, records = new TaskRecords(store);
