@@ -18,12 +18,19 @@ export default function BuiltinTools() {
   const connectionText = useConnection();
   const [draft, setDraft] = useState<{ revision: string; settings: OpenCliSettings }>();
   const [sending, setSending] = useState(false);
-  const [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
+  const [feedback, setFeedback] = useState<{ text: string; error?: boolean; revision?: string }>();
   const settings = draft?.settings ?? state.settings;
   const busy = sending || !!state.job?.running || !connection.connected;
   const update = hasUpdate(state.latest, state.version);
+  const conflict = !!draft && draft.revision !== state.revision;
+  const installStatus = state.version ? `v${state.version}` : state.installationError ? "安装不完整" : state.ready ? "未安装" : state.job?.error ? "状态未知" : "等待检查";
+  const notice = feedback && (!feedback.revision || feedback.revision === state.revision) ? feedback : undefined;
+  useEffect(() => { setFeedback(undefined); }, [state.job?.id]);
   useEffect(() => {
-    if (connection.connected) void command("opencli.refresh").catch((error: Error) => setFeedback({ text: error.message, error: true }));
+    if (connection.connected) void command("opencli.get").then((value) => {
+      // Preserve failed/interrupted jobs when reconnecting; explicit checks can replace them.
+      if (!(value as OpenCliState).job?.error) return command("opencli.refresh");
+    }).catch((error: Error) => setFeedback({ text: error.message, error: true }));
   }, [connection.connected, connection.generation]);
   const change = (patch: Partial<OpenCliSettings>) => {
     setDraft({ revision: draft?.revision ?? state.revision, settings: { ...settings, ...patch } });
@@ -32,15 +39,15 @@ export default function BuiltinTools() {
   async function action(op: string, params: Record<string, unknown> = {}) {
     setSending(true); setFeedback(undefined);
     try {
-      await command(op, params);
+      const result = await command(op, params) as OpenCliState;
       if (op === "opencli.save") {
         setDraft(undefined);
-        setFeedback({ text: "接入设置已保存，将在下一次 Agent 执行时加载。" });
+        setFeedback({ text: "接入设置已保存，将在下一次 Agent 执行时加载。", revision: result.revision });
       }
     } catch (error) { setFeedback({ text: (error as Error).message, error: true }); }
     finally { setSending(false); }
   }
-  const error = feedback ? (feedback.error ? feedback.text : undefined) : state.error || state.job?.error || state.installationError;
+  const error = notice ? (notice.error ? notice.text : undefined) : state.error || state.job?.error || state.installationError;
   return (
     <div className="settings-app builtin-tools-app">
       <SettingsSidebar page="tools" />
@@ -54,21 +61,21 @@ export default function BuiltinTools() {
           <aside className="supplier-panel" aria-label="内置工具列表">
             <div className="supplier-toolbar"><h2>全部工具</h2></div>
             <nav className="supplier-list">
-              <a className="supplier-option" href="#opencli" aria-current="true"><span><strong>OpenCLI <span className="tag">浏览器</span></strong><small>{state.version ? `v${state.version}` : state.ready ? "未安装" : "等待检查"}</small></span></a>
+              <a className="supplier-option" href="#opencli" aria-current="true"><span><strong>OpenCLI <span className="tag">浏览器</span></strong><small>{installStatus}</small></span></a>
             </nav>
           </aside>
           <article className="supplier-detail tools-detail" id="opencli" aria-labelledby="opencli-heading">
             <div className="detail-heading row-between"><div><h2 id="opencli-heading">OpenCLI</h2><p className="meta">连接 Chrome，让 Agent 操作网页和已登录的网站。</p></div><span className="tag">{state.configured ? "已配置" : "待接入"}</span></div>
             <div className="tools-feedback" aria-live="polite">
-              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || (state.job?.running ? state.job.message : state.job?.message) || connectionText}</p>}
+              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{notice?.text || state.job?.message || connectionText}</p>}
               {!connection.connected && <p>{connectionText}；重连后读取当前操作进度。</p>}
             </div>
             <section className="section tools-section" aria-labelledby="install-heading">
               <div className="section-heading"><h3 id="install-heading">安装与更新</h3><p>官方 npm 包 · @jackwener/opencli</p></div>
               <dl className="tools-facts">
                 <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : " · npm 待检查"}</dd></div>
-                <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : state.ready ? "未安装" : "等待检查"}</dd></div>
-                <div><dt>最新版本</dt><dd>{state.latest ? <><code>v{state.latest}</code>{update && <span className="tag">有更新</span>}</> : "尚未检查"}</dd></div>
+                <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : installStatus}</dd></div>
+                <div><dt>最新版本</dt><dd>{state.latest ? <><code>v{state.latest}</code>{update && <span className="tag">有更新</span>}</> : state.job?.kind === "check" && state.job.error ? "检查失败" : "尚未检查"}</dd></div>
               </dl>
               <div className="tools-actions">
                 <button className="btn" disabled={busy} onClick={() => void action("opencli.refresh")}>检查环境</button>
@@ -87,8 +94,9 @@ export default function BuiltinTools() {
                   <div className="field"><label htmlFor="opencli-window">浏览器窗口</label><select className="input" id="opencli-window" value={settings.window} onChange={(e) => change({ window: e.target.value as OpenCliSettings["window"] })}><option value="foreground">前台显示</option><option value="background">后台运行</option></select><p className="field-help">后台模式仍需要 Chrome 和浏览器扩展保持运行。</p></div>
                 </div>
               </fieldset>
+              {conflict && <div className="tools-conflict" role="status"><p>配置已在其他窗口修改。可放弃修改并载入最新配置，或用当前输入覆盖最新设置。</p><button className="btn" disabled={busy || !state.version} onClick={() => void action("opencli.save", { ...settings, revision: state.revision })}>用当前输入保存</button></div>}
               <div className="tools-actions">
-                <button className="btn btn-primary" disabled={busy || !state.version || (!draft && state.configured)} onClick={() => void action("opencli.save", { ...settings, revision: draft?.revision ?? state.revision })}>保存接入设置</button>
+                <button className="btn btn-primary" disabled={busy || conflict || !state.version || (!draft && state.configured)} onClick={() => void action("opencli.save", { ...settings, revision: draft?.revision ?? state.revision })}>保存接入设置</button>
                 {draft && <button className="btn btn-ghost" disabled={busy} onClick={() => { setDraft(undefined); setFeedback(undefined); }}>放弃修改</button>}
                 <span className="meta">{draft ? "有未保存的修改" : state.configured ? "已保存 · 后续执行自动加载" : "已有安装可直接保存接入设置"}</span>
               </div>

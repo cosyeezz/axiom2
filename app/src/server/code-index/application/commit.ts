@@ -75,7 +75,7 @@ export class CommitCoordinator {
     if (proposal.result.status === "not_found") requireIndex(proposal.result.searchedScopeIds.length > 0 && !proposal.result.selection.objectIds.length && !proposal.result.selection.locations.length, "INVALID_PROPOSAL", "未找到必须绑定已完成搜索范围。");
     for (const location of proposal.result.selection.locations) requireIndex(refs.has(location.sourceRefId), "INVALID_PROPOSAL", "结果位置不是本次已读取的真实来源。");
   }
-  private build(input: IndexProposal, ledger: RequestLedger, snapshot: SourceSnapshot, allocated?: Record<string, string>): Changes {
+  private build(input: IndexProposal, ledger: RequestLedger, snapshot: SourceSnapshot, allocate = false): Changes {
     const objects = new Map(this.store.objects().map(object => [object.id, object]));
     const view = new AuthorizedReadView(this.store, this.sources.policy, snapshot, ledger.owner.workspaceId);
     const groups = [input.nodes, input.edges, input.reviews, input.retire, input.reactivate];
@@ -91,12 +91,12 @@ export class CommitCoordinator {
       const existing = objects.get(id);
       requireIndex(indices.length === 2 && indices.includes(4) && (indices.includes(0) || indices.includes(1)) && existing?.lifecycle === "retired", "INVALID_PROPOSAL", "对象操作冲突；仅允许退休对象正文更新与恢复组合。");
     }
-    const idMap: Record<string, string> = { ...allocated };
+    const idMap: Record<string, string> = {};
     for (const [groupIndex, group] of groups.entries()) for (const item of group) {
       const existing = objects.get(item.id), creation = item.expectedContentRev === null && item.expectedRecordRev === null;
       if (creation) {
         requireIndex(groupIndex < 2 && !existing && item.id.startsWith("tmp:"), "INVALID_PROPOSAL", "新建对象必须使用临时标识和空双版本。");
-        idMap[item.id] ??= `obj_${randomUUID()}`;
+        idMap[item.id] ??= allocate ? `obj_${randomUUID()}` : item.id;
       } else {
         requireIndex(existing && view.allowed(item.id) && ledger.readObjectIds.includes(item.id), "INVALID_PROPOSAL", "更新对象尚未在本次尝试中读取。");
         requireIndex(existing.contentRev === item.expectedContentRev && existing.recordRev === item.expectedRecordRev, "RECORD_CHANGED", "索引记录双版本冲突。");
@@ -142,7 +142,9 @@ export class CommitCoordinator {
     }
     for (const [group, lifecycle] of [[proposal.retire, "retired"], [proposal.reactivate, "active"]] as const) for (const item of group) {
       const old = objects.get(item.id)!;
-      objects.set(item.id, { ...old, lifecycle, review: { ...old.review, basis: ledger.basis.filter(basis => !(basis.kind === "object" && basis.key === item.id)), evidenceIds: [...new Set([...old.review.evidenceIds, ...item.evidenceIds])] } }); touched.add(item.id);
+      const basis = new Map(old.review.basis.map(basis => [`${basis.kind}:${basis.key}`, basis]));
+      for (const next of ledger.basis) if (!(next.kind === "object" && next.key === item.id)) basis.set(`${next.kind}:${next.key}`, next);
+      objects.set(item.id, { ...old, lifecycle, review: { ...old.review, basis: [...basis.values()], evidenceIds: [...new Set([...old.review.evidenceIds, ...item.evidenceIds])] } }); touched.add(item.id);
     }
     const changed: StoredObject[] = [];
     for (const id of touched) {
@@ -178,7 +180,13 @@ export class CommitCoordinator {
   }
   private submissionCurrent(submission: Submission, snapshot: SourceSnapshot) {
     const view = new AuthorizedReadView(this.store, this.sources.policy, snapshot, submission.owner.workspaceId);
-    return submission.outcome.objectRevisions.every(revision => {
+    const basisValid = submission.outcome.basis.every(basis => {
+      if (basis.kind === "context") return basis.version === (basis.key === "policy" ? snapshot.policyHash : snapshot.analysisContextHash);
+      if (basis.kind === "file") return view.pathAllowed(basis.key) && snapshot.files.get(basis.key)?.contentHash === basis.version;
+      if (basis.kind === "scope") return snapshot.scopes.find(scope => scope.id === basis.key)?.contentDigest === basis.version;
+      return String(view.get(basis.key)?.contentRev) === basis.version && view.freshness(basis.key) === "current";
+    });
+    return basisValid && submission.outcome.objectRevisions.every(revision => {
       const object = view.get(revision.id);
       return object?.contentRev === revision.contentRev && object.recordRev === revision.recordRev && view.freshness(object.id) === "current";
     }) && submission.outcome.result.selection.locations.every(location => {
@@ -192,7 +200,7 @@ export class CommitCoordinator {
     if (replay) return replay;
     const frozen = this.frozen(ledger, proposalDigest), snapshot = await this.sources.verify(ledger, signal);
     this.validateEvidence(frozen.proposal, ledger, snapshot);
-    const preview = this.build(frozen.proposal, ledger, snapshot);
+    this.build(frozen.proposal, ledger, snapshot);
     signal?.throwIfAborted();
     await admit();
     const submission = this.store.transaction(() => {
@@ -203,15 +211,23 @@ export class CommitCoordinator {
         requireIndex(prior.proposalDigest === proposalDigest && canonicalJson(prior.owner) === canonicalJson(ledger.owner), "ACCESS_DENIED", "提交标识冲突。");
         return prior;
       }
-      this.frozen(ledger, proposalDigest);
-      const final = this.build(frozen.proposal, ledger, snapshot, preview.idMap);
+      this.frozen(ledger, proposalDigest); this.sources.verifyStored(ledger);
+      const final = this.build(frozen.proposal, ledger, snapshot, true);
+      const lifecycleChanges = ([...final.proposal.retire.map(item => ({ ...item, action: "retire" as const })), ...final.proposal.reactivate.map(item => ({ ...item, action: "reactivate" as const }))]).map(item => ({ id: item.id, action: item.action, reason: item.reason, evidenceIds: item.evidenceIds, before: revision(this.store.object(item.id)!), after: revision(final.objects.get(item.id)!) }));
       for (const ref of ledger.sourceRefs) this.store.putSource(ref);
       for (const record of ledger.evidence) this.store.putEvidence(record, ledger.evidenceSources.find(item => item.evidenceId === record.id)?.paths ?? []);
       for (const object of final.changed) this.store.putObject(object);
       for (const object of final.changed) if (object.kind === "edge") { const edge = object.body as EdgeProposal; this.store.putLink({ id: object.id, fromId: edge.fromId, target: edge.target, relation: edge.relation, slot: edge.slot }); }
       for (const object of final.changed) this.store.putTerms(object.id, objectTerms(object));
       if (final.changed.length) this.store.advance("semantic");
-      const result: Submission = { requestId: ledger.requestId, proposalDigest, owner: ledger.owner, outcome: { result: final.proposal.result, objectRevisions: [...final.objects.values()].filter(object => final.changed.some(changed => changed.id === object.id) || final.proposal.result.selection.objectIds.includes(object.id)).map(revision), idMap: final.idMap }, committedAt: Date.now() };
+      const selection = final.proposal.result.selection;
+      const selected = new Set([...selection.objectIds, ...selection.knowledgeIds, ...selection.featurePaths.flat(), ...selection.locations.flatMap(location => location.symbolId ? [location.symbolId] : [])]);
+      for (const ids of selection.featurePaths) for (let i = 1; i < ids.length; i++) for (const object of final.objects.values()) {
+        const edge = object.body as EdgeProposal;
+        if (object.kind === "edge" && object.lifecycle === "active" && edge.relation === "contains" && edge.fromId === ids[i - 1] && "objectId" in edge.target && edge.target.objectId === ids[i]) selected.add(object.id);
+      }
+      const basis = ledger.basis.filter(item => item.kind !== "object" || !final.changed.some(object => object.id === item.key));
+      const result: Submission = { requestId: ledger.requestId, proposalDigest, owner: ledger.owner, outcome: { result: final.proposal.result, objectRevisions: [...final.objects.values()].filter(object => selected.has(object.id)).map(revision), idMap: final.idMap, basis, lifecycleChanges }, committedAt: Date.now() };
       this.store.putSubmission(result); return result;
     });
     this.accepted.delete(ledgerId);

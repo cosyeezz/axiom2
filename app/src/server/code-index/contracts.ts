@@ -102,7 +102,7 @@ export type EvidencePageState =
 export interface CodeEvidenceResult {
   readToken: ReadToken;
   operations: ({ operationIndex: number; evidence: { record: EvidenceRecord; source?: { ref: SourceRef; text: string } }[];
-    candidates: { symbolId?: Id; path: string; label: string }[] } & EvidencePageState)[];
+    candidates: { symbolId?: Id; sourceRefId?: Id; path: string; label: string }[] } & EvidencePageState)[];
 }
 export interface IndexQueryInput { query?: string; ids?: Id[]; scopeIds?: Id[]; direction?: "outgoing" | "incoming"; cursor?: string }
 export interface IndexQueryResult {
@@ -115,7 +115,10 @@ export interface IndexQueryResult {
 export interface SubmitReceipt { accepted: true; proposalDigest: string; committed: false }
 export interface Submission {
   requestId: Id; proposalDigest: string; owner: SubmissionOwner;
-  outcome: { result: IndexProposal["result"]; objectRevisions: ObjectRevision[]; idMap: Record<string, string> }; committedAt: number;
+  outcome: {
+    result: IndexProposal["result"]; objectRevisions: ObjectRevision[]; idMap: Record<string, string>; basis: BasisItem[];
+    lifecycleChanges: { id: Id; action: "retire" | "reactivate"; reason: string; evidenceIds: Id[]; before: ObjectRevision; after: ObjectRevision }[];
+  }; committedAt: number;
 }
 export interface MaintenanceJob {
   id: Id; groupId: Id | null; indexKey: Id; ownerWorkspaceId: Id | null; originRunIds: Id[];

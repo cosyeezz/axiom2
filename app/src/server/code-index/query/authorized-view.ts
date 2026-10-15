@@ -16,6 +16,13 @@ export class AuthorizedReadView {
     this.deleted = new Set(store.files().filter(file => file.status === "deleted").map(file => file.path));
   }
   pathAllowed(path: string) { return this.policy.allows(path) && (this.snapshot.files.has(path) || this.snapshot.complete && this.deleted.has(path)); }
+  scopeAllowed(id: string) {
+    const scope = this.store.scopes().find(scope => scope.id === id);
+    return !!scope && scope.members.every(member => this.pathAllowed(member.path)) && [...scope.definition.include, ...scope.definition.exclude].every(pattern => pattern === "**/*" || this.policy.allows(pattern.replace(/[?*]/g, "x")));
+  }
+  basisAllowed(basis: StoredObject["review"]["basis"]) {
+    return basis.every(item => item.kind === "file" ? this.pathAllowed(item.key) : item.kind === "object" ? this.allowed(item.key) : item.kind === "scope" ? this.scopeAllowed(item.key) : true);
+  }
   source(id: string): SourceRef | null {
     const ref = this.store.source(id, this.workspaceId);
     return ref && this.pathAllowed(ref.path) ? ref : null;
@@ -33,13 +40,14 @@ export class AuthorizedReadView {
       const paths = new Set(object.review.basis.filter(basis => basis.kind === "file").map(basis => basis.key));
       for (const evidenceId of new Set([...evidenceIds(object), ...object.review.evidenceIds])) {
         const evidence = this.store.evidence(evidenceId);
-        if (!evidence) { valid = false; break; }
+        if (!evidence || evidence.record.kind === "scope_observation" && !this.scopeAllowed(evidence.record.scopeId)) { valid = false; break; }
         for (const name of evidence.sourcePaths) paths.add(name);
         if (evidence.record.kind === "source_range" && !this.source(evidence.record.sourceRefId)) { valid = false; break; }
       }
       if (object.kind === "symbol") valid &&= "sourceRefId" in object.body && !!this.source(object.body.sourceRefId);
       if ("authoritySourceIds" in object.body) for (const sourceId of object.body.authoritySourceIds) valid &&= !!this.source(sourceId);
       valid &&= [...paths].every(name => this.pathAllowed(name));
+      valid &&= [...object.review.scopeIds, ...object.review.basis.filter(basis => basis.kind === "scope").map(basis => basis.key), ...("scopeIds" in object.body ? object.body.scopeIds : [])].every(scopeId => this.scopeAllowed(scopeId));
       for (const basis of object.review.basis) if (basis.kind === "object") pending.push(basis.key);
       if (object.kind === "edge") {
         const edge = object.body as EdgeProposal; pending.push(edge.fromId);

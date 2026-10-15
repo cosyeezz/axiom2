@@ -289,6 +289,8 @@ export async function startServer(
           throw new AppError("TOOL_INSTALLING", "OpenCLI 正在安装或更新，请完成后再开始执行。");
         if (c.op.startsWith("opencli.")) {
           if (c.op === "opencli.install") {
+            // Includes prompts admitted before their async model preparation registers a run.
+            if (workspaceOperations.size) throw new AppError("AGENT_BUSY", "工作空间仍有操作处理中，请完成后再安装或更新 OpenCLI。");
             for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions").all()) {
               if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
                 throw new AppError("AGENT_BUSY", "请等待本机 Agent 任务结束后再安装或更新 OpenCLI。");

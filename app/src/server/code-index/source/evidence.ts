@@ -87,7 +87,7 @@ export class SourceEvidence {
         this.store.putSource(symbol.sourceRef);
         this.store.putObject({ id: symbol.id, kind: "symbol", name: symbol.name, naturalKey: symbol.body.naturalKey, filePath: symbol.path, body: symbol.body, contentHash: hash, contentRev: (existing?.contentRev ?? 0) + Number(!same), recordRev: (existing?.recordRev ?? 0) + Number(!recordSame), review, lifecycle: "active" });
       }
-      for (const old of this.store.objects()) if (old.kind === "symbol" && old.lifecycle === "active" && !ids.has(old.id) && old.filePath && !parsed.parseErrors.has(old.filePath) && (manifest.files.has(old.filePath) || missingState(old.filePath) === "deleted")) this.store.putObject({ ...old, lifecycle: "retired", recordRev: old.recordRev + 1 });
+      for (const old of this.store.objects()) if (old.kind === "symbol" && old.lifecycle === "active" && !ids.has(old.id) && !old.review.unresolved) this.store.putObject({ ...old, review: { ...old.review, unresolved: true }, recordRev: old.recordRev + 1 });
       this.store.setMeta("analysis_context_hash", parsed.contextHash); this.store.setMeta("policy_hash", this.policy.hash); this.store.setMeta("reconciled", "true");
     });
     if (this.parsed !== parsed) this.parsed?.dispose();
@@ -97,6 +97,8 @@ export class SourceEvidence {
   }
   async createLedger(requestId: string, attemptId: string, owner: SubmissionOwner, expiresAt: number, signal?: AbortSignal): Promise<RequestLedger> {
     const snapshot = await this.reconcile(signal);
+    this.lifetime.signal.throwIfAborted(); signal?.throwIfAborted();
+    requireIndex(owner.indexKey === this.store.indexKey && expiresAt > Date.now(), "ACCESS_DENIED", "证据尝试归属或期限无效。");
     const ledger: RequestLedger = { ledgerId: randomUUID(), requestId, attemptId, owner, basis: [{ kind: "context", key: "analysis", version: snapshot.analysisContextHash }, { kind: "context", key: "policy", version: snapshot.policyHash }], evidence: [], sourceRefs: [], readObjectIds: [], evidenceSources: [], readRanges: [], expiresAt };
     this.store.createLedger(ledger); return ledger;
   }
@@ -205,7 +207,7 @@ export class SourceEvidence {
       const candidates: CodeEvidenceResult["operations"][number]["candidates"] = [];
       let count = offset;
       while (count < refs.length) {
-        const ref = refs[count], candidate = { path: ref.path, label: `${ref.path}:${ref.range.start.line + 1}`, symbolId: symbol.id };
+        const ref = refs[count], candidate = { path: ref.path, label: `${ref.path}:${ref.range.start.line + 1}`, symbolId: symbol.id, sourceRefId: ref.id };
         if (Buffer.byteLength(canonicalJson([...candidates, candidate])) > maxBytes - 1800) break;
         this.store.putSource(ref); candidates.push(candidate); count++;
       }
@@ -243,6 +245,16 @@ export class SourceEvidence {
     const record = this.observation(ledger, scope, operation.kind, operation.kind === "search" ? { text: operation.text, caseSensitive: operation.caseSensitive } : null, complete && exhaustive);
     if (complete && !exhaustive) return { operationIndex, evidence: [{ record }], candidates, truncated: true, error: { code: "BUDGET_EXCEEDED", message: "检索命中超过上限，请缩小范围；本次搜索不完整。" } };
     return complete ? { operationIndex, evidence: [{ record }], candidates, truncated: false } : { operationIndex, evidence: [{ record }], candidates, truncated: true, nextCursor: this.cursor(ledger, operation, snapshotHash, next) };
+  }
+  verifyStored(ledger: RequestLedger) {
+    requireIndex(this.store.meta("reconciled") === "true", "WORKSPACE_CHANGED", "新的变化尚未完成核对。");
+    const files = new Map(this.store.files().map(file => [file.path, file])), scopes = new Map(this.store.scopes().map(scope => [scope.id, scope]));
+    for (const basis of ledger.basis) {
+      if (basis.kind === "context") requireIndex(basis.version === this.store.meta(basis.key === "policy" ? "policy_hash" : "analysis_context_hash"), "WORKSPACE_CHANGED", "读取上下文已变化。");
+      if (basis.kind === "file") requireIndex(files.get(basis.key)?.contentHash === basis.version && files.get(basis.key)?.status !== "deleted" && files.get(basis.key)?.status !== "unresolved", "FILE_CHANGED", "源码依据已变化。");
+      if (basis.kind === "scope") requireIndex(scopes.get(basis.key)?.contentDigest === basis.version, "WORKSPACE_CHANGED", "检索范围已变化。");
+      if (basis.kind === "object") requireIndex(String(this.store.object(basis.key)?.contentRev) === basis.version, "RECORD_CHANGED", "读取的索引对象已变化。");
+    }
   }
   async verify(ledger: RequestLedger, signal?: AbortSignal) {
     requireIndex(ledger.expiresAt > Date.now(), "SNAPSHOT_EXPIRED", "读取尝试已到期。");

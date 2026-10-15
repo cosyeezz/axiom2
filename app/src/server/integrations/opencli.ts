@@ -122,9 +122,9 @@ export class OpenCliService {
     delete this.state.npmVersion; delete this.state.version; delete this.state.packageRoot; delete this.state.installationError;
     this.entry = undefined;
     this.npm = this.locateNpm();
-    const [npmVersion, modules, prefix] = await Promise.all([
-      this.run([this.npm, "--version"]), this.run([this.npm, "root", "--global"]), this.run([this.npm, "prefix", "--global"]),
-    ]);
+    const npmVersion = await this.run([this.npm, "--version"]);
+    const modules = await this.run([this.npm, "root", "--global"]);
+    const prefix = await this.run([this.npm, "prefix", "--global"]);
     if (!isAbsolute(modules) || !isAbsolute(prefix) || /[\r\n]/.test(modules + prefix)) throw Error("npm 返回了无效的全局安装目录。");
     this.state.npmVersion = npmVersion;
     const packageRoot = join(modules, "@jackwener", "opencli");
@@ -177,7 +177,14 @@ export class OpenCliService {
     const revision = this.state.revision;
     this.controller = new AbortController();
     this.state.job = { id: randomUUID(), kind, running: true, message: "正在检查本机环境…" };
-    this.notify();
+    if (kind === "doctor") delete this.state.diagnostic;
+    try { this.notify(); } catch {
+      this.state.job.running = false;
+      this.state.job.error = "无法保存操作记录，请检查数据目录权限与剩余空间；尚未开始操作。";
+      this.controller = undefined;
+      this.changed();
+      throw new AppError("STORAGE_ERROR", this.state.job.error);
+    }
     // A short receipt acknowledges the job; progress survives page navigation via its own scope.
     this.pending = Promise.resolve().then(async () => {
       try {

@@ -39,7 +39,7 @@ export function parseWorkspace(root: string, workspaceId: string, files: Map<str
     fileExists: name => !!fileAt(name), readFile: name => { const file = fileAt(name); if (file) configReads.set(file.path, file.contentHash); return file?.text; },
     readDirectory: (directory, extensions, excludes, includes, depth) => {
       const match = (pattern: string, candidate: string) => {
-        const expanded = pattern.endsWith("/**") ? `${pattern}/*` : !/[?*]/.test(pattern) && !/\.[^/]+$/.test(pattern) ? `${pattern}/**/*` : pattern;
+        const expanded = pattern.endsWith("/**") ? `${pattern}/*` : !/[?*.]/.test(slash(pattern).split("/").at(-1)!) ? `${pattern}/**/*` : pattern;
         const relativePattern = slash(path.relative(root, path.resolve(directory, expanded)));
         try { return glob(relativePattern).test(candidate); } catch { return false; }
       };
