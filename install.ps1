@@ -1,10 +1,10 @@
-# Requires Node.js 24+. Works in Windows PowerShell 5.1 and PowerShell 7.
+# Requires Node.js 22.19.0+. Works in Windows PowerShell 5.1 and PowerShell 7.
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    throw 'Install Node.js 24+ from https://nodejs.org/ and reopen PowerShell, then retry.'
+    throw 'Install Node.js 22.19.0+ from https://nodejs.org/ and reopen PowerShell, then retry.'
 }
 $axiomNodeVersion = & node --version
-if ($LASTEXITCODE -ne 0 -or [int]($axiomNodeVersion.TrimStart('v').Split('.')[0]) -lt 24) { throw 'Axiom2 requires Node.js 24+.' }
+if ($LASTEXITCODE -ne 0 -or [version]($axiomNodeVersion.Trim().TrimStart('v')) -lt [version]'22.19.0') { throw 'Axiom2 requires Node.js 22.19.0+.' }
 & npm.cmd install --global 'https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz'
 if ($LASTEXITCODE -ne 0) { throw 'Axiom2 installation failed. Service was not started.' }
 $axiomPrefix = (& npm.cmd prefix --global).Trim()

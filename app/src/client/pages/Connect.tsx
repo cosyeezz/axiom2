@@ -74,7 +74,7 @@ export default function Connect() {
       <DesktopUpdates service={service} serviceBusy={!!busy} onBusyChange={setUpdating} onServiceChange={() => void act("status")} />
       <details className="connect-install" open={missing || undefined}>
         <summary>首次安装 / 手动修复 <span>一行命令安装</span></summary>
-        <p>先安装 Node.js 24 或更新版本，再在终端运行以下命令。更新前先关闭服务；安装完成后点击“刷新状态”。</p>
+        <p>先安装 Node.js 22.19.0 或更新版本，再在终端运行以下命令。更新前先关闭服务；安装完成后点击“刷新状态”。</p>
         <div className="connect-command"><code>{command}</code><button onClick={() => { void navigator.clipboard.writeText(command).then(() => setCopied(true), () => setError("复制失败，请手动复制安装命令。")); }}>{copied ? "已复制" : "复制命令"}</button></div>
         {service?.log && <p className="connect-log">服务日志：<code>{service.log}</code></p>}
       </details>

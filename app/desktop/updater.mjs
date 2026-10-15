@@ -83,7 +83,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function installation() {
     const value = await json(registration);
-    if (!value || !isAbsolute(value.node || "") || !isAbsolute(value.cli || "") || !await exists(value.node)) throw Error("请先安装 Node.js 24+ 和后台服务，再检查更新。");
+    if (!value || !isAbsolute(value.node || "") || !isAbsolute(value.cli || "") || !await exists(value.node)) throw Error("请先安装 Node.js 22.19.0+ 和后台服务，再检查更新。");
     const packageRoot = dirname(dirname(value.cli));
     let managed = value.cli === join(packageRoot, "bin", "axiom2.mjs") && dirname(packageRoot).endsWith(`${process.platform === "win32" ? "\\" : "/"}@cosyeezz`) && dirname(dirname(packageRoot)).endsWith(`${process.platform === "win32" ? "\\" : "/"}node_modules`) && packageRoot.endsWith(`${process.platform === "win32" ? "\\" : "/"}axiom2`);
     if (await exists(packageRoot) && (await lstat(packageRoot)).isSymbolicLink()) managed = false;
@@ -157,7 +157,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       try { const target = await realpath(join(directory, "npm")); if (target.endsWith("npm-cli.js")) candidates.push(target); } catch {}
     }
     for (const candidate of candidates) if (await exists(candidate)) return resolve(candidate);
-    throw Error("找不到 npm，请修复 Node.js 24+ 安装后重试。");
+    throw Error("找不到 npm，请修复 Node.js 22.19.0+ 安装后重试。");
   }
   const control = async (installed, action) => {
     const result = JSON.parse(await command(installed.node, [installed.cli, action, "--json"], { env: environment, timeoutMs: 55_000 }));
@@ -352,7 +352,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
 }
 if (process.argv[1] && resolve(process.argv[1]) === script) {
   try {
-    if (Number(process.versions.node.split(".")[0]) < 24) throw Error("需要 Node.js 24+。");
+    const [major, minor] = process.versions.node.split(".").map(Number);
+    if (major < 22 || (major === 22 && minor < 19)) throw Error("需要 Node.js 22.19.0+。");
     const updater = createUpdater({ root: process.env.AXIOM_DATA_DIR });
     const [action, argument] = process.argv.slice(2);
     let value;
