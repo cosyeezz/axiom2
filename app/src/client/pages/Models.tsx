@@ -30,7 +30,7 @@ export default function Models() {
     showKey,
     setShowKey,
     feedback,
-    setFeedback,
+    feedbackError,
     copyFeedback,
     decision,
     setDecision,
@@ -47,8 +47,9 @@ export default function Models() {
     copyButton,
     rows,
   } = useConfiguration();
+  const hasError = feedback ? feedbackError : !!config.error;
   return (
-    <div className="settings-app">
+    <div className="settings-app" data-feedback-error={hasError}>
       <SettingsSidebar page="models" />
       <main className="settings-main" id="content">
         <header className="topnav">
@@ -113,7 +114,15 @@ export default function Models() {
             </button>
           </div>
         </header>
-        <p className="configuration-feedback" role="status" aria-live="polite" aria-atomic="true" data-saved={saved}>
+        <p
+          className="configuration-feedback"
+          role={hasError ? "alert" : "status"}
+          aria-live={hasError ? "assertive" : "polite"}
+          aria-atomic="true"
+          data-saved={saved}
+          data-error={hasError}
+        >
+          {hasError && <strong className="configuration-error-label">配置错误 · </strong>}
           {feedback || config.error || (connection !== "已连接本地服务" ? connection : "")}
         </p>
         <div className="container" inert={busy} aria-busy={busy}>

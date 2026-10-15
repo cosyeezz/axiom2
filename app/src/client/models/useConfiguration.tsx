@@ -38,8 +38,10 @@ export function useConfiguration() {
     [tab, setTab] = useState("suppliers");
   const [editor, setEditor] = useState<Model | null>(null),
     [showKey, setShowKey] = useState(false);
-  const [feedback, setFeedback] = useState(""),
-    [copyFeedback, setCopyFeedback] = useState("");
+  const [notice, setNotice] = useState({ message: "", error: false });
+  const feedback = notice.message, feedbackError = notice.error;
+  const setFeedback = (message: string, error = false) => setNotice({ message, error });
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [decision, setDecision] = useState<{
     title: string;
     text: string;
@@ -64,7 +66,10 @@ export function useConfiguration() {
     if (!editor || !p) return providers;
     const id = editor.id.trim();
     if (!id || p.models.some((m) => m.key !== editor.key && m.id === id)) {
-      setFeedback(id ? "模型 ID 不能重复" : "请输入模型 ID。");
+      setFeedback(
+        `供应商「${p.name || p.providerId}」（${p.providerId}）→ 模型「${editor.name || id || "新增模型"}」→ ${id ? `模型 ID「${id}」重复；请使用该供应商下唯一的模型 ID。` : "模型 ID 为空；请填写供应商提供的模型 ID。"}`,
+        true,
+      );
       setTab("models");
       return null;
     }
@@ -102,7 +107,7 @@ export function useConfiguration() {
       setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
       return true;
     } catch (error) {
-      setFeedback((error as Error).message);
+      setFeedback(`读取配置失败：${(error as Error).message}`, true);
       return false;
     } finally {
       setBusy(false);
@@ -143,7 +148,7 @@ export function useConfiguration() {
       }
     } catch (error) {
       const e = error as Error & { code?: string };
-      setFeedback(e.message);
+      setFeedback(`保存失败：${e.message}`, true);
       if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN"].includes(e.code ?? ""))
         setNeedsReconcile(true);
       if (
@@ -261,7 +266,7 @@ export function useConfiguration() {
           const e = error as Error & { code?: string };
           if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN"].includes(e.code ?? ""))
             setNeedsReconcile(true);
-          setFeedback(e.message);
+          setFeedback(`删除供应商失败：${e.message}`, true);
           if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
             setDecision({
               title: "停止受影响的执行？",
@@ -326,7 +331,7 @@ export function useConfiguration() {
     showKey,
     setShowKey,
     feedback,
-    setFeedback,
+    feedbackError,
     copyFeedback,
     decision,
     setDecision,

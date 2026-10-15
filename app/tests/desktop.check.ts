@@ -139,15 +139,62 @@ try {
   const denied = await workbench.evaluate(async () => {
     const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (name: string, args: object) => Promise<unknown> } }).__TAURI_INTERNALS__;
     if (!bridge) throw Error("IPC bridge unavailable: cannot exercise caller authorization");
-    const commands = [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}]] as const;
+    const commands = [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}], ["axiom_connection", {}]] as const;
     return Promise.all(commands.map(async ([name, args]) => {
       try { await bridge.invoke(name, args); return false; }
       catch (error) { return /内置页面|not allowed|not permitted|denied/i.test(String(error)); }
     }));
   });
-  assert.deepEqual(denied, [true, true, true], "Remote child must not inherit the parent window's management permissions");
+  assert.deepEqual(denied, [true, true, true, true], "Remote child must not inherit the parent window's management permissions");
   assert.equal((await control("status")).state, "running");
+  await workbench.addInitScript(() => {
+    const NativeSocket = window.WebSocket;
+    window.addEventListener("axiom-connection-request", (event) => {
+      const delayMs = (window as any).__connectionReportDelay as number | undefined;
+      if (!delayMs || (event as any).__delivered) return;
+      event.stopImmediatePropagation();
+      const probe = (event as CustomEvent).detail;
+      setTimeout(() => {
+        const replay = new CustomEvent("axiom-connection-request", { detail: probe });
+        (replay as any).__delivered = true;
+        window.dispatchEvent(replay);
+      }, delayMs);
+    }, true);
+    (window as any).__connectionSockets = [];
+    const failSubscription = localStorage.getItem("axiom-test-subscription-error") === "1";
+    localStorage.removeItem("axiom-test-subscription-error");
+    let failed = false;
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        (window as any).__connectionSockets.push(this);
+        this.addEventListener("message", (event) => { if ((window as any).__dropConnectionInput) event.stopImmediatePropagation(); });
+      }
+      send(data: string | BufferSource | Blob) {
+        if (typeof data === "string" && failSubscription && !failed) {
+          const value = JSON.parse(data);
+          if (value.op === "subscribe") { failed = true; data = JSON.stringify({ ...value, params: { scope: "invalid-connection-test" } }); }
+        }
+        super.send(data);
+      }
+    };
+  });
+  await workbench.evaluate(() => localStorage.setItem("axiom-test-subscription-error", "1"));
   await workbench.goto(`http://127.0.0.1:${port}/`);
+  await workbench.waitForFunction(() => document.querySelector('.connection-status')?.textContent?.includes("订阅读取失败"));
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
+  assert.equal(await page.locator('.desktop-workbench-status').innerText(), "后台服务已连接", "subscription errors must not turn the header red");
+  await workbench.reload();
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
+  await workbench.evaluate(() => { (window as any).__connectionReportDelay = 200; });
+  assert.deepEqual(await page.evaluate(() => Promise.all([
+    (window as any).__TAURI_INTERNALS__.invoke("axiom_connection"),
+    (window as any).__TAURI_INTERNALS__.invoke("axiom_connection"),
+  ])), ["connected", "connected"], "concurrent native observers cannot overwrite each other's requests");
+  await workbench.evaluate(() => { (window as any).__connectionReportDelay = 1000; });
+  assert.equal(await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("axiom_connection")), "checking", "expired report cannot restore green");
+  await workbench.evaluate(() => { (window as any).__connectionReportDelay = 0; });
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
   await workbench.getByRole("button", { name: /^切换保留会话/ }).click();
   const draft = workbench.getByRole("textbox", { name: "描述你的编码任务" });
   await draft.fill("切换视图后保留这份尚未发送的草稿。");
@@ -162,6 +209,46 @@ try {
   await workbench.locator("#thread").evaluate((thread) => { thread.scrollTop = 237; });
   const beforeSwitch = await workbench.evaluate(() => ({ sentinel: (window as any).__switchSentinel, scroll: document.getElementById("thread")!.scrollTop }));
   assert.ok(beforeSwitch.scroll > 0);
+  assert.equal(await workbench.locator('.title-heading svg').count(), 0, "workspace title has no connection icon");
+  const rejectedReport = await workbench.evaluate(async () => {
+    try { await (window as any).__TAURI_INTERNALS__.invoke("axiom_connection_report", { probe: 0, state: "connected" }); return false; }
+    catch { return true; }
+  });
+  assert.equal(rejectedReport, true, "unsolicited or expired reports are rejected");
+  assert.equal(await page.evaluate(async () => {
+    try { await (window as any).__TAURI_INTERNALS__.invoke("axiom_connection_report", { probe: 0, state: "connected" }); return false; }
+    catch { return true; }
+  }), true, "controller cannot impersonate workbench observations");
+  // Only the isolated installation record is changed. The real business socket keeps running.
+  const uncertainCli = join(root, "uncertain-control.mjs");
+  for (const state of ["stopping", "missing", "stopped"]) {
+    const observation = { state, active: [], message: `connection-test-${state}`, url: `http://127.0.0.1:${port}/` };
+    await writeFile(uncertainCli, `process.stdout.write(${JSON.stringify(JSON.stringify(observation))});`);
+    await writeFile(join(data, "installation.json"), JSON.stringify({ node: process.execPath, cli: uncertainCli }));
+    await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("axiom_service", { action: "status" }));
+    assert.ok(!workbench.isClosed(), `A ${state} control observation must not destroy a currently connected workbench`);
+    await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
+    assert.equal(await draft.inputValue(), "切换视图后保留这份尚未发送的草稿。");
+  }
+  await writeFile(join(data, "installation.json"), JSON.stringify({ node: process.execPath, cli }));
+  await workbench.evaluate(() => { (window as any).__dropConnectionInput = true; });
+  await page.locator('.desktop-workbench-status[data-state="checking"]').waitFor({ timeout: 22_000 });
+  assert.ok(!workbench.isClosed(), "stale evidence must not destroy the workbench");
+  await workbench.evaluate(() => { (window as any).__dropConnectionInput = false; });
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor({ timeout: 20_000 });
+  await workbench.route("**/api/status", (route) => route.abort());
+  await workbench.evaluate(() => (window as any).__connectionSockets.at(-1).close());
+  await page.locator('.desktop-workbench-status[data-state="disconnected"]').waitFor();
+  assert.equal(await page.locator('.desktop-workbench-status svg').evaluate((element) => getComputedStyle(element).color), "rgb(224, 138, 138)");
+  assert.equal(await page.locator('.desktop-workbench-status').evaluate((element) => getComputedStyle(element).color), "rgb(174, 182, 176)", "connection label keeps the same neutral color");
+  await page.screenshot({ path: "test-results/desktop-connection-disconnected.png" });
+  await workbench.unroute("**/api/status");
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
+  await workbench.evaluate(() => (window as any).__connectionSockets[0].onclose?.(new CloseEvent("close")));
+  await page.locator('.desktop-workbench-status[data-state="connected"]').waitFor();
+  assert.equal(await draft.inputValue(), "切换视图后保留这份尚未发送的草稿。");
+  await draft.evaluate((input: HTMLTextAreaElement) => { input.focus(); input.setSelectionRange(3, 8); });
+  await workbench.locator("#thread").evaluate((thread) => { thread.scrollTop = 237; });
   await page.getByRole("button", { name: "服务与更新" }).click();
   await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
   assert.ok(!workbench.isClosed(), "Returning to controls must keep the workbench instance");
@@ -180,11 +267,16 @@ try {
   } finally { if (second.exitCode === null && second.signalCode === null) second.kill(); }
   await workbench.waitForFunction(() => document.hasFocus() && document.activeElement?.tagName === "TEXTAREA");
   await inspectDesktopWindow(native.pid!);
-  for (const size of [{ width: 1100, height: 900 }, { width: 1440, height: 1000 }]) {
+  for (const size of [{ width: 430, height: 900 }, { width: 1100, height: 900 }, { width: 1440, height: 1000 }]) {
     const nativeBounds = await inspectDesktopWindow(native.pid!, size);
     await delay(200);
     const barBounds = await page.evaluate(() => ({ width: innerWidth * devicePixelRatio, height: innerHeight * devicePixelRatio, scale: devicePixelRatio }));
     const workbenchBounds = await workbench.evaluate(() => ({ width: innerWidth * devicePixelRatio, height: innerHeight * devicePixelRatio, scale: devicePixelRatio }));
+    assert.equal(await page.evaluate(() => {
+      const status = document.querySelector('.desktop-workbench-status')!.getBoundingClientRect();
+      const button = document.querySelector('.desktop-workbench-bar button')!.getBoundingClientRect();
+      return status.width > 0 && status.right + 5 <= button.left && button.right <= innerWidth;
+    }), true, "status stays visible without overlapping the service button");
     const nativeViews: { windows: string[]; views: { label: string; x: number; y: number; width: number; height: number }[] } = await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("axiom_test_probe", { action: "snapshot" }));
     const bar = nativeViews.views.find((view) => view.label === "pake");
     const content = nativeViews.views.find((view) => view.label === "axiom-workbench");

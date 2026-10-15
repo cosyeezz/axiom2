@@ -48,13 +48,26 @@ try {
   await page.locator("#provider-url").fill("invalid-url");
   await page.locator("#provider-key").fill("TEST-ONLY-UNSAVED");
   await page.locator("#save-provider").click();
-  await page.locator(".configuration-feedback").filter({ hasText: "接口地址无效" }).waitFor();
+  await page.locator(".configuration-feedback[data-error=true]").filter({ hasText: "接口地址无效" }).waitFor();
+  const failure = page.locator(".configuration-feedback");
+  assert.equal(await failure.getAttribute("role"), "alert");
+  assert.match(await failure.innerText(), /保留旧密钥.*save-feedback-test.*接口地址/);
+  assert.doesNotMatch(await failure.innerText(), /TEST-ONLY-UNSAVED|invalid-url/);
+  assert.equal(await failure.evaluate((el) => getComputedStyle(el).color), "rgb(252, 165, 165)");
+  assert.equal(await failure.evaluate((el) => getComputedStyle(el).fontWeight), "600");
   assert.equal(await page.locator("#provider-key").inputValue(), "TEST-ONLY-UNSAVED");
   assert.ok(keyOnDisk() === "TEST-ONLY-REPLACEMENT", "failed save must preserve disk credential");
   assert.equal(await page.locator(".configuration-feedback").getAttribute("data-saved"), "false");
 
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
+  const mobileBanner = await failure.boundingBox();
+  assert.ok(mobileBanner && mobileBanner.y >= 0 && mobileBanner.y + mobileBanner.height < 844);
+  await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
+  await page.locator("#save-provider").click();
+  await page.locator(".configuration-feedback[data-saved=true][data-error=false]").waitFor();
+  assert.equal(await failure.getAttribute("role"), "status");
+  assert.ok(keyOnDisk() === "TEST-ONLY-UNSAVED", "corrected draft must save successfully");
   assert.deepEqual(errors, []);
   console.log("Model save UI: disk persistence, replacement, reload, blank retention, visible feedback, failure preservation and mobile layout passed.");
 } finally {

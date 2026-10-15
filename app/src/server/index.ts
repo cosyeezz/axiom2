@@ -21,6 +21,7 @@ import { Agents } from "./agents.js";
 import { Costs } from "./costs.js";
 import { Tasks } from "./tasks.js";
 import { Preferences } from "./preferences.js";
+import { OpenCliService, type OpenCliExecute } from "./integrations/opencli.js";
 import { compressionPreferencesScope } from "../shared/compression.js";
 import { taskPreferencesScope } from "../shared/tasks.js";
 import {
@@ -48,7 +49,7 @@ export function dataRoot() {
 }
 
 export async function startServer(
-  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments } = {},
+  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string } } = {},
 ) {
   const store = new Store(options.root ?? dataRoot());
   const costs = new Costs(store);
@@ -91,6 +92,7 @@ export async function startServer(
     if (scope === "pinned-sessions") return store.pinnedSessions();
     if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
+    if (scope === "builtin-tools:opencli") return opencli.snapshot();
     if (scope === "authentication") return null;
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "sessions")
@@ -168,6 +170,7 @@ export async function startServer(
       for (const key of watching) publish(key, { revision: seq });
     }
   };
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm);
   const agents = new Agents(store, models, publish);
   const tasks = new Tasks(agents);
   attention = new SessionAttention(store, publish);
@@ -243,6 +246,11 @@ export async function startServer(
           c.workspaceId = text(value.workspaceId, "工作空间标识");
         if (value.sessionId !== undefined)
           c.sessionId = text(value.sessionId, "会话标识");
+        if (c.op === "ping") {
+          // A read-only round trip on this exact socket; no stored receipt or model work.
+          send(ws, { type: "receipt", requestId, ok: true, data: { streamId } });
+          return;
+        }
         if (c.op === "subscribe") {
           const scope = text(c.params!.scope, "订阅范围", 300),
             data = snapshots(scope);
@@ -277,7 +285,17 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
-        if (c.op === "costs.get") {
+        if (opencli.installing && ["prompt", "agent.resume", "task.append"].includes(c.op))
+          throw new AppError("TOOL_INSTALLING", "OpenCLI 正在安装或更新，请完成后再开始执行。");
+        if (c.op.startsWith("opencli.")) {
+          if (c.op === "opencli.install") {
+            for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions").all()) {
+              if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
+                throw new AppError("AGENT_BUSY", "请等待本机 Agent 任务结束后再安装或更新 OpenCLI。");
+            }
+          }
+          data = c.op === "opencli.get" ? await opencli.command(c) : await store.external(c, () => opencli.command(c));
+        } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
         } else if (c.op.startsWith("files.")) {
           data = await files.command(c);
@@ -626,6 +644,7 @@ export async function startServer(
     close: async () => {
       shuttingDown = true;
       attention.close();
+      await opencli.close();
       await Promise.all([openDialog.close(), fileManager.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);

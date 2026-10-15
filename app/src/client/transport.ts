@@ -46,6 +46,37 @@ const pending = new Map<
 let socket: WebSocket | undefined;
 let status = "正在连接本地服务…";
 let connection = { connected: false, generation: 0 };
+export type ConnectionHealth = "checking" | "connected" | "disconnected";
+let phase: ConnectionHealth = "checking";
+let lastResponse = 0;
+let connecting = false;
+let retry: ReturnType<typeof setTimeout> | undefined;
+let heartbeat: ReturnType<typeof setInterval> | undefined;
+let probing: WebSocket | undefined;
+/** A diagnostic error is not a disconnect. Only current-socket input renews this evidence. */
+export function connectionHealth(now = Date.now()): ConnectionHealth {
+  if (phase === "disconnected") return "disconnected";
+  return connection.connected && lastResponse > 0 && now >= lastResponse && now - lastResponse < 15_000
+    ? "connected" : "checking";
+}
+function probeConnection() {
+  const current = socket;
+  if (!current || current.readyState !== WebSocket.OPEN || probing === current) return;
+  probing = current;
+  void command("ping").catch(() => {}).finally(() => { if (probing === current) probing = undefined; });
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("axiom-connection-request", (event) => {
+    const probe: unknown = (event as CustomEvent).detail;
+    const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (name: string, args: object) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    if (!bridge || !Number.isSafeInteger(probe) || (probe as number) < 1) return;
+    void bridge.invoke("axiom_connection_report", { probe, state: connectionHealth() }).catch(() => {});
+  });
+  const resume = () => { if (document.visibilityState === "visible") probeConnection(); };
+  window.addEventListener("focus", resume);
+  window.addEventListener("pageshow", resume);
+  document.addEventListener("visibilitychange", resume);
+}
 const statusListeners = new Set<() => void>();
 function setStatus(value: string) {
   status = value;
@@ -167,8 +198,9 @@ export function subscribeScope(scope: string, fn: () => void) {
     listeners.set(scope, group);
     const wire = wireScope(scope), count = remote.get(wire) ?? 0;
     remote.set(wire, count + 1);
+    const current = socket;
     if (!count) void command("subscribe", { scope: wire }).catch((error) => {
-      if (remote.has(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
+      if (socket === current && current?.readyState === WebSocket.OPEN && remote.has(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
     });
   }
   group.add(fn);
@@ -208,52 +240,72 @@ export function useScope<T>(scope: string | null, fallback: T): T {
   );
 }
 export async function connect() {
+  // One fetch/socket/retry at a time; repeated callers cannot replace a healthy connection.
+  if (connecting || socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  connecting = true;
+  clearTimeout(retry);
+  const reconnect = () => { clearTimeout(retry); retry = setTimeout(() => void connect(), 1500); };
   try {
-    const response = await fetch("/api/status");
-    if (!response.ok) {
-      throw Error("本地服务尚未就绪");
-    }
+    const response = await fetch("/api/status", { signal: AbortSignal.timeout(10_000), cache: "no-store" });
+    if (!response.ok) throw Error("本地服务尚未就绪");
+    const current = new WebSocket(location.origin.replace(/^http/, "ws") + "/ws");
+    socket = current;
+    lastResponse = 0;
+    const owns = () => socket === current;
+    current.onopen = () => {
+      if (!owns()) return;
+      phase = "checking";
+      connection = { connected: true, generation: connection.generation + 1 };
+      setStatus("已连接本地服务");
+      // The server's hello (or a valid receipt) confirms actual response evidence.
+      for (const scope of remote.keys())
+        void command("subscribe", { scope }).catch((error) => {
+          if (owns() && current.readyState === WebSocket.OPEN && remote.has(scope)) setStatus(`订阅读取失败：${error.message}；请重新打开会话。`);
+        });
+      if (typeof window !== "undefined") {
+        clearInterval(heartbeat);
+        heartbeat = setInterval(() => {
+          if (owns() && Date.now() - lastResponse >= 5000) probeConnection();
+        }, 3000);
+      }
+    };
+    current.onmessage = (e) => {
+      if (!owns() || current.readyState !== WebSocket.OPEN) return;
+      let value: Snapshot | Reply | { type: "hello"; streamId: string };
+      try { value = JSON.parse(e.data); } catch { return; }
+      if (!value || typeof value !== "object") return;
+      if (value.type === "hello" && typeof value.streamId === "string" ||
+          value.type === "snapshot" && typeof value.scope === "string" && typeof value.streamId === "string" && Number.isFinite(value.seq) ||
+          value.type === "receipt" && typeof value.requestId === "string" && typeof value.ok === "boolean") {
+        lastResponse = Date.now(); phase = "connected";
+      } else return;
+      if (value.type === "snapshot") acceptSnapshot(value);
+      if (value.type === "receipt") {
+        const waiting = pending.get(value.requestId);
+        if (!waiting) return;
+        clearTimeout(waiting.timer);
+        pending.delete(value.requestId);
+        if (value.ok) waiting.resolve(value.data);
+        else waiting.reject(new AppError(value.error.code, value.error.message));
+      }
+    };
+    current.onclose = () => {
+      if (!owns()) return;
+      clearInterval(heartbeat);
+      probing = undefined;
+      lastResponse = 0; phase = "disconnected";
+      connection = { ...connection, connected: false };
+      setStatus("连接已断开，正在重连；不会自动重发操作。");
+      for (const waiting of pending.values()) {
+        clearTimeout(waiting.timer);
+        waiting.reject(new AppError("UNCERTAIN", "连接中断，未收到服务端响应；操作可能已执行，不会自动重发。"));
+      }
+      pending.clear();
+      reconnect();
+    };
   } catch {
+    phase = "disconnected";
     setStatus("无法连接本地服务，正在重试；不会自动重发操作。");
-    setTimeout(() => void connect(), 1500);
-    return;
-  }
-  socket = new WebSocket(location.origin.replace(/^http/, "ws") + "/ws");
-  socket.onopen = () => {
-    connection = { connected: true, generation: connection.generation + 1 };
-    setStatus("已连接本地服务");
-    // A deleted selection can briefly remain subscribed until its list snapshot arrives.
-    // A scope error must not overwrite the connection's actual state.
-    for (const scope of remote.keys())
-      void command("subscribe", { scope }).catch((error) => {
-        if (remote.has(scope)) setStatus(`订阅读取失败：${error.message}；请重新打开会话。`);
-      });
-  };
-  socket.onmessage = (e) => {
-    const value = JSON.parse(e.data) as Snapshot | Reply;
-    if (value.type === "snapshot") acceptSnapshot(value);
-    if (value.type === "receipt") {
-      const waiting = pending.get(value.requestId);
-      if (!waiting) return;
-      clearTimeout(waiting.timer);
-      pending.delete(value.requestId);
-      if (value.ok) waiting.resolve(value.data);
-      else waiting.reject(new AppError(value.error.code, value.error.message));
-    }
-  };
-  socket.onclose = () => {
-    connection = { ...connection, connected: false };
-    setStatus("连接已断开，正在重连；不会自动重发操作。");
-    for (const waiting of pending.values()) {
-      clearTimeout(waiting.timer);
-      waiting.reject(
-        new AppError(
-          "UNCERTAIN",
-          "连接中断，未收到服务端响应；操作可能已执行，不会自动重发。",
-        ),
-      );
-    }
-    pending.clear();
-    setTimeout(() => void connect(), 1500);
-  };
+    reconnect();
+  } finally { connecting = false; }
 }

@@ -18,9 +18,9 @@ function invoke(action: UpdateAction, version?: string): Promise<Update> {
   if (!bridge) return Promise.reject(Error("请在 Axiom2 桌面客户端内检查更新。"));
   return bridge.invoke("axiom_update", { action, version: version || null });
 }
-export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onServiceChange }: {
+export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onAvailableChange, onServiceChange }: {
   service: { state: string; active: string[] } | null; serviceBusy: boolean;
-  onBusyChange: (busy: boolean) => void; onServiceChange: () => void;
+  onBusyChange: (busy: boolean) => void; onAvailableChange: (available: boolean) => void; onServiceChange: () => void;
 }) {
   const [update, setUpdate] = useState<Update | null>(null);
   const [busy, setBusy] = useState<UpdateAction | null>(null);
@@ -60,6 +60,8 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onS
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => { onBusyChange(backendBusy); }, [backendBusy, onBusyChange]);
+  const available = newer(latest, update?.serviceVersion) || newer(latest, update?.clientVersion);
+  useEffect(() => { onAvailableChange(available); }, [available, onAvailableChange]);
   useEffect(() => {
     if (confirm) dialog.current?.showModal();
     else if (dialog.current?.open) { dialog.current.close(); trigger.current?.focus(); }

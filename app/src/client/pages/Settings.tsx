@@ -60,6 +60,14 @@ export default function Settings() {
                 <path d="m9 6 6 6-6 6" />
               </svg>
             </a>
+            <a className="log-row module-row" href="/tools.html">
+              <div>
+                <h3>内置工具</h3>
+                <p>安装、配置与更新 OpenCLI 等工具</p>
+              </div>
+              <span className="meta">浏览器与网站操作</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+            </a>
             <p className="overview-message" role="status">
               {config.error ||
                 `${connection}；${config.available.length} 个配置模型通过 pi 可用性检查。保存不代表远端连接验证成功。`}

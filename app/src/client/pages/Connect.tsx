@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DesktopUpdates from "./DesktopUpdates.js";
+import type { ConnectionHealth } from "../transport.js";
 import "../styles/connect.css";
 
 type View = "control" | "workbench";
@@ -16,6 +17,8 @@ export default function Connect() {
   const [service, setService] = useState<Service | null>(null);
   const [view, setView] = useState<View>("control");
   const [returning, setReturning] = useState(false);
+  const [connection, setConnection] = useState<ConnectionHealth>("checking");
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const revision = useRef(0);
   const openButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState<Action | null>(null);
@@ -66,6 +69,44 @@ export default function Connect() {
   }, []);
   useEffect(() => { if (view === "control") openButton.current?.focus(); }, [view]);
   useEffect(() => {
+    setConnection("checking");
+    if (view !== "workbench") return;
+    let cancelled = false, inFlight = false, acceptedAt = 0;
+    let timer: number | undefined;
+    const expiry = window.setInterval(() => {
+      const age = Date.now() - acceptedAt;
+      if (age < 0 || age >= 3000) setConnection("checking");
+    }, 500);
+    const poll = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      const requestedAt = Date.now();
+      let deadline: number | undefined;
+      try {
+        const bridge = (window as unknown as { __TAURI_INTERNALS__: { invoke: (name: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
+        const state = await Promise.race([
+          bridge.invoke("axiom_connection"),
+          new Promise<never>((_, reject) => { deadline = window.setTimeout(() => reject(Error("连接检测超时")), 2000); }),
+        ]);
+        if (!cancelled) {
+          const age = Date.now() - requestedAt;
+          acceptedAt = Date.now();
+          setConnection(age >= 0 && age < 2000 && (state === "connected" || state === "disconnected") ? state : "checking");
+        }
+      } catch { if (!cancelled) setConnection("checking"); }
+      finally {
+        window.clearTimeout(deadline);
+        inFlight = false;
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 1000);
+      }
+    };
+    const resume = () => { setConnection("checking"); window.clearTimeout(timer); void poll(); };
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", resume);
+    void poll();
+    return () => { cancelled = true; window.clearTimeout(timer); window.clearInterval(expiry); window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); };
+  }, [view]);
+  useEffect(() => {
     void act("status");
     const timer = window.setInterval(() => { void act("status", true); }, 3000);
     return () => window.clearInterval(timer);
@@ -78,13 +119,22 @@ export default function Connect() {
   const blocked = !!busy || updating;
   const starting = service?.state === "starting";
   const missing = service?.state === "missing";
+  const connectionLabel = connection === "connected" ? "后台服务已连接" : connection === "disconnected" ? "后台服务已断开" : "后台服务确认中";
   return (
     <>
     <nav className="desktop-workbench-bar" aria-label="桌面导航" hidden={view !== "workbench"}>
-      <span className="desktop-workbench-brand">AXIOM<span>2</span><i>/</i>工作台</span>
-      <span className="desktop-workbench-status"><span className="connect-dot is-running" />本机服务运行中</span>
-      {error && <span role="alert" className="desktop-workbench-error">{error}</span>}
-      <button onClick={() => void showControls()} disabled={!!busy || returning}><span aria-hidden="true">←</span> 服务与更新</button>
+      <div className="desktop-workbench-left">
+        <span className="desktop-workbench-brand">AXIOM<span>2</span></span>
+        <span className="desktop-workbench-status" data-state={connection} role="status" aria-live="polite" aria-label={connectionLabel}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.52" d="M1.88 12.21q2.32.02 4.62-.36q1.21-3.49 2.99-6.73q2.26 7.09 5.12 13.96q1.44-3.57 2.8-7.17q2.22.15 4.44.31" /></svg>
+          <span>{connectionLabel}</span>
+        </span>
+      </div>
+      {error && <span role="alert" className="desktop-workbench-error" title={error}>{error}</span>}
+      <button onClick={() => void showControls()} disabled={!!busy || returning} aria-label={updateAvailable ? "服务与更新，有可用更新" : "服务与更新"}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h8m4 0h4M4 17h3m4 0h9" /><circle cx="14" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></svg>
+        <span>服务与更新</span>{updateAvailable && <i className="desktop-update-dot" aria-hidden="true" />}
+      </button>
     </nav>
     <main className="connect-page" hidden={view === "workbench"}>
       <header className="connect-header"><a href="#" aria-label="Axiom2 首页" className="connect-brand">A<span>2</span></a><span>AXIOM2 <i>/</i> DESKTOP</span><span className="connect-local">本机 · 私有工作台</span></header>
@@ -98,7 +148,7 @@ export default function Connect() {
         <section className="connect-panel" aria-label="本地服务控制">
           <div className="connect-panel-top"><span>本地服务</span><button className="connect-refresh" onClick={() => void act("status")} disabled={!!busy}>刷新状态 <span aria-hidden="true">↻</span></button></div>
           <div className="connect-status" role="status" aria-live="polite"><span className={`connect-dot ${running ? "is-running" : ""}`} /><h2>{updating ? "正在更新服务…" : busy === "start" ? "正在启动服务…" : busy === "stop" ? "正在关闭服务…" : service ? labels[service.state] : "正在检查服务…"}</h2></div>
-          <p className="connect-status-detail">{updating ? "可在下方查看更新进度，完成后再打开工作台。" : busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : starting ? "正在准备后台服务，可以等待就绪或关闭服务。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
+          <p className="connect-status-detail">{updating ? "可在下方查看更新进度，完成后再打开工作台。" : busy === "start" ? "首次启动可能需要一些时间，请稍候。" : busy === "stop" ? "正在结束任务并保存状态，请稍候。" : starting ? "正在准备后台服务，可以等待就绪或关闭服务。" : running ? "连接已就绪，可以打开工作台。" : missing ? "安装一次，即可在客户端启动和关闭服务。" : service?.state === "stopping" ? service.message || "正在结束任务，请等待服务退出。" : service?.state === "unmanaged" ? "请处理端口占用后再启动。" : "服务尚未启动，点击下方按钮即可启动。"}</p>
           <dl className="connect-details"><div><dt>连接地址</dt><dd>{service?.url || "http://127.0.0.1:4317/"}</dd></div><div><dt>运行中的会话</dt><dd>{running ? `${service.active.length}${service.active.length >= 20 ? "+" : ""}` : "—"}</dd></div></dl>
           {service?.message && <p className="connect-message">{service.message}</p>}
           {error && <p className="connect-error" role="alert">{error}</p>}
@@ -109,7 +159,7 @@ export default function Connect() {
           <p className="connect-footnote">关闭服务会停止正在运行的任务。{running && service.background === false ? "当前服务由终端启动。" : "不会随系统登录自动启动。"}</p>
         </section>
       </div>
-      <DesktopUpdates service={service} serviceBusy={!!busy} onBusyChange={setUpdating} onServiceChange={() => void act("status")} />
+      <DesktopUpdates service={service} serviceBusy={!!busy} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} />
       <details className="connect-install" open={missing || undefined}>
         <summary>首次安装 / 手动修复 <span>一行命令安装</span></summary>
         <p>先安装 Node.js 22.19.0 或更新版本，再在终端运行以下命令。更新前先关闭服务；安装完成后点击“刷新状态”。</p>

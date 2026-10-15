@@ -548,6 +548,38 @@ export interface IndexBrowseNotice {
   sequence: number;
   reason: "changed" | "policy_changed" | "unavailable";
 }
+/** Immutable navigation hints for a user annotation, not an evidence ledger,
+ * capability, proposal or authority to edit code. The browser remains read-only.
+ * Minimal revisions avoid embedding complete object bodies in every annotation.
+ */
+export interface IndexAnnotationStep {
+  edge: ObjectRevision; // the selected uses occurrence, not merely its implementation
+  slot: string;
+  implementation: ObjectRevision;
+}
+export type IndexAnnotationContext =
+  | { kind: "feature"; feature: ObjectRevision }
+  | { kind: "step"; feature: ObjectRevision; step: IndexAnnotationStep }
+  | { kind: "flow"; feature: ObjectRevision; key: Id; flow: FlowAssertion;
+      before: IndexAnnotationStep; after: IndexAnnotationStep };
+export type IndexAnnotationTarget = IndexAnnotationContext | {
+  kind: "source";
+  context: IndexAnnotationContext;
+  requestedSourceRefId: Id;
+  pageSourceRef: SourceRef; // actual delivered page, not the whole original reference
+  selection: SourceRef["range"]; // contained in pageSourceRef.range; exact quote, no offset rebasing
+};
+export interface IndexAnnotationDraft {
+  id: Id;
+  owner: { workspaceId: Id; sessionId: Id | null }; // null supports workspace-only drafts/copy, not sending
+  snapshot: IndexBrowseSnapshot; // capture identity only; expired viewId is never a new authorization
+  target: IndexAnnotationTarget;
+  fragment: { key: Id; start: number; end: number }; // UTF-16 half-open offsets within one displayed fragment
+  quote: string; // immutable exact selection, <=6000 JS string units; source text is untrusted reference data
+  text: string; // user opinion, <=2000; serialized batch INCLUDING location metadata <=12000
+  intent: "change_code" | "correct_index" | "ask";
+  capturedFreshness: Freshness; // not a claim of current validity when subsequently sent
+}
 /** Local host port for the browser adapter, separate from IndexService/model
  * tools and IndexAdminService. All methods recheck current authorization.
  * Production IPC carries DTOs only; signal stays local to each adapter.

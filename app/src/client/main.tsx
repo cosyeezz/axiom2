@@ -11,6 +11,8 @@ const Page = (
     ? import("./pages/Connect.js")
     : location.pathname === "/settings.html"
     ? import("./pages/Settings.js")
+    : location.pathname === "/tools.html"
+      ? import("./pages/BuiltinTools.js")
     : location.pathname === "/costs.html"
       ? import("./pages/Costs.js")
     : location.pathname === "/model-config.html"

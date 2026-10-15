@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   createAgentSession,
   DefaultResourceLoader,
+  loadSkills,
   SettingsManager,
   resizeImage,
   type AgentSession,
@@ -19,6 +20,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { executionOutcome } from "./execution-outcome.js";
 import { isResumeControl, omitResumeControls, resumeSession } from "./resume-session.js";
 import { ModelService } from "./model-service.js";
+import { openCliEnvironment, openCliSkillNames, openCliSkillPaths, readOpenCliConfig } from "./integrations/opencli-runtime.js";
 import { contextUsage } from "./context-usage.js";
 import { compressionError } from "./compression-error.js";
 import { errorMessage } from "./error-message.js";
@@ -399,10 +401,23 @@ async function run(input: WorkerInput) {
       : projectSettings;
     // No speculative cache requests after a user stops or a worker finishes.
     settingsManager.applyOverrides({ cacheWarming: "off" });
+    const opencli = input.task ? undefined : readOpenCliConfig(input.root);
+    if (opencli) {
+      const env = openCliEnvironment(opencli);
+      for (const key of Object.keys(process.env)) if (key.toUpperCase() === "PATH" || key === "OPENCLI_PROFILE") delete process.env[key];
+      Object.assign(process.env, env);
+    }
+    const managedSkills = opencli ? loadSkills({ cwd: input.cwd, agentDir: join(input.root, "pi"), skillPaths: openCliSkillPaths(opencli), includeDefaults: false }) : undefined;
     const loader = new DefaultResourceLoader({
       cwd: input.cwd,
       agentDir: join(input.root, "pi"),
       settingsManager,
+      // Managed skills replace same-named legacy links without modifying user files.
+      // Children don't advertise capabilities that require shell/browser access.
+      skillsOverride: (base) => opencli || input.task ? {
+        skills: [...base.skills.filter((skill) => !openCliSkillNames.includes(skill.name)), ...(managedSkills?.skills ?? [])],
+        diagnostics: [...base.diagnostics, ...(managedSkills?.diagnostics ?? [])],
+      } : base,
       // Extensions execute arbitrary JS, may shadow read tools or add commands.
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),

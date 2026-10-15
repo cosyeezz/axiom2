@@ -137,6 +137,8 @@ pub async fn axiom_service(window: Webview, action: String) -> Result<Value, Str
     axiom_views::authorize(&window)?;
     if !["start", "stop", "status", "open"].contains(&action.as_str()) { return Err("不支持的服务操作".into()); }
     let open = action == "open";
+    let stopping = action == "stop";
+    let observed = axiom_views::revision();
     let mut result = tauri::async_runtime::spawn_blocking(move || {
         let _guard = CONTROL.lock().map_err(|_| "服务控制器不可用")?;
         if ["start", "stop"].contains(&action.as_str()) {
@@ -148,7 +150,14 @@ pub async fn axiom_service(window: Webview, action: String) -> Result<Value, Str
         run(if open { "status" } else { &action })
     }).await.map_err(|e| e.to_string())??;
     if result["state"] != "running" {
-        axiom_views::controls(window.app_handle(), true)?;
+        // A lost control channel is reported as stopping; it cannot prove the
+        // business connection closed. Preserve drafts until stopping is confirmed.
+        if result["state"] == "stopped" && observed == axiom_views::revision() {
+            let app = window.app_handle();
+            let closed = stopping || app.get_webview("axiom-workbench").is_none() ||
+                crate::axiom_connection::observe(app).await.as_deref() == Ok("disconnected");
+            if closed && observed == axiom_views::revision() { axiom_views::controls(app, true)?; }
+        }
         if open { return Err("服务尚未就绪，请先启动后台服务。".into()); }
     } else if open {
         let target = tauri::Url::parse(result["url"].as_str().ok_or("缺少工作台地址")?).map_err(|e| e.to_string())?;

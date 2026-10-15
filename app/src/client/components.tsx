@@ -62,7 +62,7 @@ export function Dialog({
     </dialog>
   );
 }
-export function SettingsSidebar({ page }: { page: "overview" | "models" }) {
+export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools" }) {
   return (
     <aside className="settings-sidebar" aria-label="配置导航">
       <a className="btn btn-ghost back-link" href="/">
@@ -88,6 +88,13 @@ export function SettingsSidebar({ page }: { page: "overview" | "models" }) {
           aria-current={page === "models" ? "page" : undefined}
         >
           模型服务
+        </a>
+        <a
+          href="/tools.html"
+          className="settings-nav"
+          aria-current={page === "tools" ? "page" : undefined}
+        >
+          内置工具
         </a>
       </nav>
       <p className="sidebar-note">

@@ -298,6 +298,12 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       };
     }
     const first = await connect();
+    const probeId = randomUUID();
+    const probe = await first.call({ op: "ping", requestId: probeId });
+    assert.equal(probe.ok, true);
+    assert.equal(probe.data.streamId, first.messages.find((message) => message.type === "hello")?.streamId);
+    assert.equal(first.messages.filter((message) => message.type === "snapshot").length, 0, "liveness probes do not subscribe or publish");
+    assert.equal(app.store.db.prepare("SELECT id FROM requests WHERE id=?").get(probeId), undefined, "liveness probes do not persist receipts");
     await first.call({ op: "subscribe", params: { scope: "workspaces" } });
     const opened = await first.call({
       op: "workspace.open",

@@ -4,10 +4,24 @@
   "description": "Local multi-workspace coding agent workbench powered by pi",
   "type": "module",
   "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/cosyeezz/axiom2.git" },
-  "engines": { "node": ">=22.19.0" },
-  "bin": { "axiom2": "bin/axiom2.mjs" },
-  "files": ["npm-shrinkwrap.json", "bin/","app/dist/client/", "app/dist/server/", "app/dist/shared/", "app/package.json"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cosyeezz/axiom2.git"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "axiom2": "bin/axiom2.mjs"
+  },
+  "files": [
+    "npm-shrinkwrap.json",
+    "bin/",
+    "app/dist/client/",
+    "app/dist/server/",
+    "app/dist/shared/",
+    "app/package.json"
+  ],
   "scripts": {
     "build": "npm --prefix app run build",
     "prepare": "npm run build",
@@ -17,16 +31,18 @@
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
     "@earendil-works/pi-agent-core": "1.1.0",
-    "@earendil-works/pi-codemode": "1.1.0",
-    "@earendil-works/pi-mcp": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-codemode": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
     "@earendil-works/pi-tui": "1.1.0",
     "highlight.js": "10.7.3",
+    "koffi": "3.3.3",
     "marked": "18.0.11",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typebox": "1.1.38",
+    "typescript": "6.0.2",
     "ws": "8.22.0"
   },
   "devDependencies": {
@@ -36,7 +52,6 @@
     "@types/ws": "8.18.1",
     "playwright": "1.64.0",
     "tsx": "4.23.15",
-    "typescript": "6.0.2",
     "vite": "8.3.4"
   }
 }

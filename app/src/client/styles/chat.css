@@ -26,18 +26,6 @@
   align-items: center;
   gap: 8px;
 }
-.connection-status {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--warn);
-}
-.connection-status svg {
-  stroke: none;
-  transform: rotate(45deg);
-}
-.connection-status[data-connected="true"] {
-  color: var(--success);
-}
 .compression-feedback {
   flex-basis: 100%;
   white-space: normal;

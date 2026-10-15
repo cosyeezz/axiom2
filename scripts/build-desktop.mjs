@@ -44,6 +44,7 @@ if (testInstance) {
 }
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
+await cp(join(repo, "app/desktop/axiom_connection.rs"), join(template, "src-tauri/src/axiom_connection.rs"));
 for (const [input, output] of [["test-probe.rs", "axiom_probe.rs"], ["test-controller-probe.js", "axiom_controller_probe.js"], ["test-workbench-probe.js", "axiom_workbench_probe.js"]]) {
   const destination = join(template, "src-tauri/src", output);
   if (testInstance) await cp(join(repo, "app/desktop", input), destination);
@@ -59,13 +60,16 @@ const libPath = join(template, "src-tauri/src/lib.rs");
 let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
-lib = "mod axiom_service;\nmod axiom_views;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls,");
+lib = "mod axiom_service;\nmod axiom_views;\nmod axiom_connection;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls, axiom_connection::axiom_connection, axiom_connection::axiom_connection_report,");
 if (testInstance) {
   const loadedMarker = "let label = webview.label();";
   if (!lib.includes(loadedMarker)) throw Error("Pake template changed: page-load hook not found");
   lib = "mod axiom_probe;\n" + lib.replace(marker, marker + "\n            axiom_probe::axiom_test_probe,")
     .replace(loadedMarker, "axiom_probe::loaded(webview);\n            " + loadedMarker);
 }
+const pageLoadMarker = '.on_page_load(move |webview, payload| {';
+if (!lib.includes(pageLoadMarker)) throw Error("Pake template changed: page load callback not found");
+lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); }');
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
 lib = lib.replace(closeMarker, closeMarker + `

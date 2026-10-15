@@ -1,9 +1,11 @@
 // One native window. Only the local controller may manage the service or switch views.
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, Rect, Webview, WebviewBuilder, WebviewUrl};
 use tauri_plugin_opener::OpenerExt;
 
 static WORKBENCH: AtomicBool = AtomicBool::new(false);
+static REVISION: AtomicU64 = AtomicU64::new(0);
+pub fn revision() -> u64 { REVISION.load(Ordering::Acquire) }
 const BAR_HEIGHT: f64 = 48.0;
 
 pub fn authorize(view: &Webview) -> Result<(), String> {
@@ -52,6 +54,7 @@ fn notify(app: &AppHandle) -> Result<(), String> {
 }
 
 pub fn controls(app: &AppHandle, discard: bool) -> Result<(), String> {
+    if discard { REVISION.fetch_add(1, Ordering::AcqRel); crate::axiom_connection::invalidate(); }
     let was_active = WORKBENCH.swap(false, Ordering::AcqRel);
     if let Some(workbench) = app.get_webview("axiom-workbench") {
         workbench.hide().map_err(|e| e.to_string())?;
@@ -66,6 +69,7 @@ pub fn controls(app: &AppHandle, discard: bool) -> Result<(), String> {
 }
 
 pub async fn open(app: &AppHandle, target: tauri::Url) -> Result<(), String> {
+    REVISION.fetch_add(1, Ordering::AcqRel);
     if target.scheme() != "http" || target.host_str() != Some("127.0.0.1") || !target.username().is_empty() || target.password().is_some() {
         return Err("工作台地址不合法".into());
     }

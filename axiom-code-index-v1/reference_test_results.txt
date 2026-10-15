@@ -89,6 +89,11 @@ revocation and production wire schemas still require implementation and acceptan
 
 Browser-prototype check: PASS
 Artifact: artifacts/prototypes/index-browser/index.html (offline synthetic data).
+Preview: node artifacts/prototypes/index-browser/preview.cjs; http://127.0.0.1:4177/.
+Both direct-file and HTTP entry show sample data immediately. Text launch and the
+labeled Index button reopen the panel; branch/source controls work over HTTP.
+The local preview serves only whitelisted files: GET/HEAD 200, POST 405, unknown
+paths 404. It binds to 127.0.0.1 and does not expose product/model APIs.
 Runtime: Chrome 155.0.8059.40, Playwright 1.64.0; reduced-motion preference.
 Checked keyboard open/close and focus restoration; keyboard feature selection;
 branch/source/shared-step details; graph/list toggle; search/no-match, collapse
@@ -96,13 +101,41 @@ state through filtering and no-flow feature; ready/stale/loading/empty/error
 examples and retry; outside dismissal and drag-out selection; draft preservation.
 Viewport widths: 360, 390, 430, 600, 820, 1024, 1366, 1440, 1920 pixels.
 Checked panel/page bounds, 44px Index target, and narrow-screen tree/flow/detail
-and source navigation. No page errors or HTTP requests during these interactions.
+and source navigation. No page errors or external requests; HTTP-preview traffic
+is limited to the local preview service.
 Saved desktop and mobile screenshots beside the HTML; manually inspected them.
 Generated the interaction diagram with Pillow at 1920x1230, and inspected both the
 original and 460px preview. These are example interaction/layout checks, not
-UI01-UI08 production acceptance, real-index rendering, performance or cross-browser
+UI01-UI14 production acceptance, real-index rendering, performance or cross-browser
 compatibility. The prototype does not implement other entity categories, live
 subscriptions, authorization, large-graph layout, pagination or source validation.
+
+Browser-annotation check: PASS
+Command: node artifacts/prototypes/index-browser/annotations.check.cjs
+Requires the local preview above and the installed Playwright/Chrome.
+Checked feature, step, conditional-flow and source targets; shared implementation
+with distinct uses occurrences/slots; exact source quote and zero-based half-open
+UTF-16 selection; preserved original-reference identity and captured file hash;
+immutable location while editing opinions; numbering, list/edit/delete/
+locate; unfinished editor protection; mode/panel close and ordinary draft retention.
+A deferred digest check blocks competing editors, retains the original target after
+navigation, and cannot reopen a closed panel. A rejected digest keeps prior notes
+and displays an error. Cross-fragment selection and split surrogate boundaries are
+rejected; complete supplementary characters are preserved. Quote/opinion/batch
+limits retain text and block oversize actions. Clipboard success/failure use stubs
+and do not write the system clipboard; failure selects the complete request.
+Stale is a synthetic UI state, not real source-hash or revocation validation.
+Nine widths (360/390/430/600/820/1024/1366/1440/1920), keyboard, local HTTP and direct
+file loading pass in Chrome 155.0.8059.40; no page errors or external/model requests.
+Desktop/mobile annotation screenshots were generated and manually inspected.
+The prototype does not send messages or modify code. Production scope isolation,
+policy/revision checks, source-closure validation, real prompt/Steering receipts,
+unknown/rejected/recall recovery and source-listener lifecycle remain UI09-UI14 work.
+Strict target-contract compilation and in-memory annotation fixtures: PASS.
+Four target kinds and workspace-only drafts are accepted; eight expected negative
+cases reject fake message targets, absent uses/flow endpoints, recursive source
+contexts, UTF-8 ranges, missing workspace, direct commit intent and browser sending.
+Type checking does not establish runtime authorization or coordinate validity.
 
 SDK projection behavior check: PASS
 Runtime: Node, locked pi 1.1.0 SessionManager.inMemory; 5 synthetic cases.
@@ -131,8 +164,8 @@ replay filtering, graph semantics, concurrency, host integration, migration or m
 correctness.
 
 Document checks: PASS
-104 unique acceptance IDs (F12/S12/C12/W10/P10/Q8/K32/UI8); ordered stages 0-8;
+110 unique acceptance IDs (F12/S12/C12/W10/P10/Q8/K32/UI14); ordered stages 0-8;
 package Markdown links resolve. Component responsibilities, state ownership, narrow
 ports and extension rules are in the single implementation plan; the overview PNG
 is illustrative, not a running product. Production architecture checks remain planned.
-These are planned acceptance IDs, not 104 implemented or passing production tests.
+These are planned acceptance IDs, not 110 implemented or passing production tests.
