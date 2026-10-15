@@ -1,13 +1,27 @@
 {
   "name": "@cosyeezz/axiom2",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Local multi-workspace coding agent workbench powered by pi",
   "type": "module",
   "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/cosyeezz/axiom2.git" },
-  "engines": { "node": ">=22.19.0" },
-  "bin": { "axiom2": "bin/axiom2.mjs" },
-  "files": ["npm-shrinkwrap.json", "bin/","app/dist/client/", "app/dist/server/", "app/dist/shared/", "app/package.json"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cosyeezz/axiom2.git"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "axiom2": "bin/axiom2.mjs"
+  },
+  "files": [
+    "npm-shrinkwrap.json",
+    "bin/",
+    "app/dist/client/",
+    "app/dist/server/",
+    "app/dist/shared/",
+    "app/package.json"
+  ],
   "scripts": {
     "build": "npm --prefix app run build",
     "prepare": "npm run build",
