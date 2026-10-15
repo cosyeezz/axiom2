@@ -21,13 +21,14 @@
     const thread = document.getElementById("thread"); thread.scrollTop = 237;
     const token = crypto.randomUUID(); let sample = 0;
     const denied = [];
-    for (const [name, args] of [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}]]) {
+    for (const [name, args] of [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}], ["axiom_connection", {}]]) {
       try { await window.__TAURI_INTERNALS__.invoke(name, args); denied.push(false); }
       catch (error) { denied.push(/内置页面|not allowed|not permitted|denied/i.test(String(error))); }
     }
     window.__axiomProbeSample = () => invoke("record", { token, sample: ++sample, draft: input.value,
       selection: [input.selectionStart, input.selectionEnd], scroll: thread.scrollTop,
       focused: document.hasFocus() && document.activeElement === input, denied,
+      titleIconCount: document.querySelectorAll('.title-heading svg').length,
       viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } });
     await window.__axiomProbeSample();
   })().catch((error) => { console.error(error); void invoke("record", { error: String(error) }); });

@@ -40,7 +40,23 @@
     await heading("服务运行中");
     (await button("打开工作台")).click();
     const before = await observation((value) => value.sample === 1);
-    check(before.denied.length === 3 && before.denied.every(Boolean), "Remote management command was not rejected");
+    check(before.denied.length === 4 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
+    check(before.titleIconCount === 0, "The old title connection icon must be removed");
+    const headerStatus = await wait(() => document.querySelector('.desktop-workbench-status[data-state="connected"]'));
+    check(headerStatus.textContent.trim() === "后台服务已连接", "Connected header label missing");
+    const bridgeStates = await Promise.all([1, 2].map(() => window.__TAURI_INTERNALS__.invoke("axiom_connection")));
+    check(bridgeStates.every((state) => state === "connected"), "Native connection observations must return the real connected state");
+    const colors = {};
+    for (const [state, expected] of Object.entries({ connected: "rgb(104, 191, 124)", disconnected: "rgb(224, 138, 138)", checking: "rgb(152, 159, 169)" })) {
+      // Check packaged CSS in WKWebView; live connected state is checked above.
+      headerStatus.dataset.state = state;
+      const text = getComputedStyle(headerStatus).color;
+      const icon = getComputedStyle(headerStatus.querySelector("svg")).color;
+      check(text === "rgb(174, 182, 176)" && icon === expected, `Unexpected ${state} header colors: ${text} / ${icon}`);
+      colors[state] = { text, icon };
+    }
+    headerStatus.dataset.state = "connected";
+    const header = { bridgeStates, colors, titleIconCount: before.titleIconCount };
     check(before.scroll > 0 && before.draft === "Mac 单窗口切换保留草稿", "Real composer/scroll fixture missing");
     bounds(await invoke("snapshot"));
     await invoke("checkpoint");
@@ -89,7 +105,7 @@
     (await button("打开工作台")).click();
     await observation((value) => value.token !== before.token);
     bounds(await invoke("snapshot"));
-    await invoke("finished", { checks: ["offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "native-resize", "native-close-with-running-service"] });
+    await invoke("finished", { header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "native-resize", "native-close-with-running-service"] });
     void invoke("close");
   })().catch((error) => { console.error(error); void invoke("failed", { error: String(error), stack: error.stack }); });
 })();

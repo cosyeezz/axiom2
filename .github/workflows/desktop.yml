@@ -98,6 +98,20 @@ jobs:
           exit(1)
           SWIFT
           kill -0 "$pid"
+      - name: Load native regression probes from workflow revision
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          AXIOM_REGRESSION_REF: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # The distributed DMG is already built and verified from source_ref.
+          # Only the isolated test application's JS probes use the workflow revision.
+          git fetch --no-tags --depth=1 origin "$AXIOM_REGRESSION_REF"
+          for name in test-controller-probe.js test-workbench-probe.js; do
+            git show "$AXIOM_REGRESSION_REF:app/desktop/$name" > "app/desktop/$name"
+          done
+          echo "Native regression probe revision: $AXIOM_REGRESSION_REF"
       - name: Build isolated macOS native probe
         if: runner.os == 'macOS'
         shell: bash
