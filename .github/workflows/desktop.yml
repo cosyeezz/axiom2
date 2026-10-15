@@ -1,6 +1,16 @@
 name: Build Axiom2 Desktop
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Desktop platform
+        type: choice
+        options: [all, macos, windows]
+        default: all
+      source_ref:
+        description: Source tag or commit (empty uses the workflow ref)
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -8,21 +18,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            target: x64
-            artifact: Axiom2-Windows-x64
-            output: |
-              app/Axiom2.msi
-              app/Axiom2.exe
-          - os: macos-latest
-            target: universal
-            artifact: Axiom2-macOS-universal
-            output: app/Axiom2.dmg
+        os: ${{ inputs.platform == 'macos' && fromJSON('["macos-latest"]') || inputs.platform == 'windows' && fromJSON('["windows-latest"]') || fromJSON('["windows-latest","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+      - name: Record source revision
+        run: git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -32,10 +36,73 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: npm ci
       - run: npm --prefix app run build:desktop
-      - run: node scripts/build-desktop.mjs --targets ${{ matrix.target }}
+      - run: node scripts/build-desktop.mjs --targets ${{ runner.os == 'macOS' && 'universal' || 'x64' }}
+      - name: Verify macOS disk image and universal application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          hdiutil verify app/Axiom2.dmg
+          mount="$(mktemp -d "$RUNNER_TEMP/axiom-dmg.XXXXXX")"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" app/Axiom2.dmg
+          trap 'hdiutil detach "$mount"' EXIT
+          bundle="$mount/Axiom2.app"
+          plist="$bundle/Contents/Info.plist"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          test "$version" = "$(node -p 'require("./package.json").version')"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = local.axiom2.desktop
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")
+          binary="$bundle/Contents/MacOS/$executable"
+          lipo -verify_arch arm64 x86_64 "$binary"
+          file "$binary"
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          codesign --display --verbose=2 "$bundle"
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist"
+          if grep -aEq 'AXIOM_UPDATE_TEST_ORIGIN|AXIOM_DESKTOP_DEBUG_PORT|axiom-test-installer-launches.jsonl|local.axiom2.desktop.test' "$binary"; then
+            echo 'Test hooks found in production binary' >&2
+            exit 1
+          fi
+          ditto "$bundle" "$RUNNER_TEMP/axiom-macos-smoke/Axiom2.app"
+          (cd app && shasum -a 256 Axiom2.dmg > SHA256SUMS-macos)
+      - name: Smoke test macOS controller window
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke="$RUNNER_TEMP/axiom-macos-smoke"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$smoke/Axiom2.app/Contents/Info.plist")
+          mkdir "$smoke/data"
+          AXIOM_DATA_DIR="$smoke/data" "$smoke/Axiom2.app/Contents/MacOS/$executable" > "$smoke/startup.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; cat "$smoke/startup.log"' EXIT
+          AXIOM_SMOKE_PID="$pid" /usr/bin/swift - <<'SWIFT'
+          import Foundation
+          import CoreGraphics
+          let pid = Int(ProcessInfo.processInfo.environment["AXIOM_SMOKE_PID"]!)!
+          for _ in 0..<30 {
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+              if windows.contains(where: { window in
+                  guard window[kCGWindowOwnerPID as String] as? Int == pid,
+                        window[kCGWindowLayer as String] as? Int == 0,
+                        let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                        let width = bounds["Width"] as? Double,
+                        let height = bounds["Height"] as? Double else { return false }
+                  return width >= 360 && height >= 600
+              }) {
+                  print("PASS: native controller process owns a visible application window")
+                  exit(0)
+              }
+              Thread.sleep(forTimeInterval: 1)
+          }
+          fputs("No visible controller window within 30 seconds\n", stderr)
+          exit(1)
+          SWIFT
+          kill -0 "$pid"
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.output }}
+          name: ${{ runner.os == 'macOS' && 'Axiom2-macOS-universal' || 'Axiom2-Windows-x64' }}
+          path: |
+            ${{ runner.os == 'macOS' && 'app/Axiom2.dmg' || 'app/Axiom2.*' }}
+            ${{ runner.os == 'macOS' && 'app/SHA256SUMS-macos' || '' }}
           if-no-files-found: error
           retention-days: 30
