@@ -3,7 +3,7 @@
   "name": "Axiom2",
   "identifier": "local.axiom2.desktop",
   "title": "Axiom2",
-  "appVersion": "0.4.1",
+  "appVersion": "0.4.5",
   "icon": "./desktop/icon.png",
   "width": 1440,
   "height": 900,
