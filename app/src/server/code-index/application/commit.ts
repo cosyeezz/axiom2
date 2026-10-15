@@ -10,6 +10,11 @@ import { category } from "../source/policy.js";
 import { SourceEvidence } from "../source/evidence.js";
 import { SqliteIndexStore } from "../store/sqlite.js";
 
+export interface CommitResult {
+  receipt: { requestId: string; proposalDigest: string; committedAt: number };
+  result: IndexProposal["result"]; idMap: Record<string, string>; objectRevisions: ObjectRevision[];
+  freshness: "current" | "stale"; disclosure: "complete" | "restricted";
+}
 interface Frozen { digest: string; proposal: IndexProposal; attemptId: string; expiresAt: number }
 interface Changes { objects: Map<string, StoredObject>; changed: StoredObject[]; idMap: Record<string, string>; proposal: IndexProposal }
 const revision = (object: StoredObject): ObjectRevision => ({ id: object.id, contentRev: object.contentRev, recordRev: object.recordRev });
@@ -172,11 +177,25 @@ export class CommitCoordinator {
     }
     return { objects, changed, idMap, proposal };
   }
-  async replay(requestId: string, owner: SubmissionOwner, proposalDigest: string, signal?: AbortSignal): Promise<{ submission: Submission; freshness: "current" | "stale" } | null> {
+  async replay(requestId: string, owner: SubmissionOwner, proposalDigest: string, signal?: AbortSignal): Promise<CommitResult | null> {
     const submission = this.store.submission(requestId); if (!submission) return null;
     requireIndex(submission.proposalDigest === proposalDigest && canonicalJson(submission.owner) === canonicalJson(owner), "ACCESS_DENIED", "提交标识不属于当前请求或提案。");
     const snapshot = await this.sources.reconcile(signal);
-    return { submission, freshness: this.submissionCurrent(submission, snapshot) ? "current" : "stale" };
+    return this.disclose(submission, snapshot);
+  }
+  private disclose(submission: Submission, snapshot: SourceSnapshot | null): CommitResult {
+    const view = snapshot && new AuthorizedReadView(this.store, this.sources.policy, snapshot, submission.owner.workspaceId);
+    const selection = submission.outcome.result.selection;
+    const visible = view && view.basisAllowed(submission.outcome.basis)
+      && [...selection.objectIds, ...selection.knowledgeIds, ...selection.featurePaths.flat(), ...selection.locations.flatMap(location => location.symbolId ? [location.symbolId] : [])].every(id => !!view.get(id))
+      && Object.values(submission.outcome.idMap).every(id => view.allowed(id))
+      && selection.locations.every(location => !!view.source(location.sourceRefId))
+      && [...submission.outcome.result.coverage.scopeIds, ...submission.outcome.result.searchedScopeIds].every(id => view.scopeAllowed(id));
+    const receipt = { requestId: submission.requestId, proposalDigest: submission.proposalDigest, committedAt: submission.committedAt };
+    if (!visible) return { receipt, idMap: {}, objectRevisions: [], freshness: "stale", disclosure: "restricted", result: { status: "partial", selection: { objectIds: [], knowledgeIds: [], featurePaths: [], locations: [] }, searchedScopeIds: [], coverage: { mode: "partial", scopeIds: [], gaps: [{ code: "access_unavailable", description: "当前来源或授权不足，部分历史结果无法重新披露。" }] } } };
+    const current = this.submissionCurrent(submission, snapshot!), result = structuredClone(submission.outcome.result);
+    if (!current) { result.status = "partial"; result.coverage.mode = "partial"; result.coverage.gaps.push({ code: "basis_changed", description: "提交依据已经变化，结果需要重新核验。" }); }
+    return { receipt, result, idMap: { ...submission.outcome.idMap }, objectRevisions: structuredClone(submission.outcome.objectRevisions), freshness: current ? "current" : "stale", disclosure: "complete" };
   }
   private submissionCurrent(submission: Submission, snapshot: SourceSnapshot) {
     const view = new AuthorizedReadView(this.store, this.sources.policy, snapshot, submission.owner.workspaceId);
@@ -194,7 +213,7 @@ export class CommitCoordinator {
       return ref && snapshot.files.get(ref.path)?.contentHash === ref.contentHash;
     });
   }
-  async commit(ledgerId: string, proposalDigest: string, admit: () => Promise<void>, signal?: AbortSignal): Promise<{ submission: Submission; freshness: "current" | "stale" }> {
+  async commit(ledgerId: string, proposalDigest: string, admit: () => Promise<void>, signal?: AbortSignal): Promise<CommitResult> {
     const ledger = this.sources.ledger(ledgerId);
     const replay = await this.replay(ledger.requestId, ledger.owner, proposalDigest, signal);
     if (replay) return replay;
@@ -234,8 +253,8 @@ export class CommitCoordinator {
     // The durable commit remains valid even if later external edits invalidate the answer.
     try {
       const current = await this.sources.verify({ ...ledger, basis: ledger.basis.filter(basis => basis.kind !== "object") }, signal);
-      return { submission, freshness: this.submissionCurrent(submission, current) ? "current" : "stale" };
+      return this.disclose(submission, current);
     }
-    catch { return { submission, freshness: "stale" }; }
+    catch { return this.disclose(submission, null); }
   }
 }

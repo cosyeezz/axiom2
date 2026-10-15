@@ -6,7 +6,7 @@ import { Compression } from "./Compression.js";
 import { TaskSettings } from "../tasks/TaskSettings.js";
 import { AnnotationToggle } from "./ReplyAnnotations.js";
 import { OriginalConversationToggle } from "./OriginalConversation.js";
-import { formatDuration } from "./duration.js";
+import { formatDuration, sessionDuration } from "./duration.js";
 import { CostsPopover } from "../pages/Costs.js";
 export function Usage({ scope }: { scope?: Scope }) {
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
@@ -17,12 +17,11 @@ export function Usage({ scope }: { scope?: Scope }) {
   useEffect(() => { setCostWindow(null); }, [scope?.workspaceId, scope?.sessionId]);
   useEffect(() => {
     if (!running(info.run)) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [info.run?.id, info.run?.status]);
-  const elapsed = info.run
-    ? ((info.run.endedAt ?? now) - info.run.startedAt) / 1000
-    : null;
+  const elapsed = sessionDuration(info, now);
   const cacheTotal = usage
     ? usage.input + usage.cacheRead + usage.cacheWrite
     : 0;
@@ -116,7 +115,7 @@ export function Usage({ scope }: { scope?: Scope }) {
         <span
           className="usage-metric"
           data-od-id="run-duration"
-          data-tooltip="当前执行耗时（服务端起止时间）"
+          data-tooltip={`${label}累计运行时间（不含停止后的空闲时间）`}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />

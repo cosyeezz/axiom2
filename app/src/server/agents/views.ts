@@ -66,6 +66,9 @@ export class AgentViews {
         ? JSON.parse(String(row.environment))
         : null,
       usage,
+      completedRunDurationMs: Number(this.store.db.prepare(
+        "SELECT COALESCE(SUM(MAX(0,endedAt-startedAt)),0) AS ms FROM runs WHERE sessionId=? AND endedAt IS NOT NULL",
+      ).get(scope.sessionId)!.ms),
       run: run
         ? ({
             ...run,

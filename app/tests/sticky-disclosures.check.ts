@@ -128,8 +128,9 @@ try {
     const groupHeader = group.locator(":scope > summary");
     await groupHeader.click();
     const inner = group.locator(".thinking-block");
+    assert.equal(await inner.locator(".thinking-body").count(), 0);
+    await inner.locator(":scope > summary").click();
     assert.ok(await inner.locator(".thinking-body").isVisible());
-    assert.equal(await inner.locator(":scope > summary").count(), 0);
     await settled(page);
     await scrollInside(inner, 350);
     await settled(page);
@@ -161,7 +162,7 @@ try {
     await tool.locator(":scope > summary").click();
     await settled(page);
     await startsAtBeginning(tool);
-    // Closing the process releases thinking content; reopening displays it directly.
+    // Closing the process releases thinking content and resets nested expansion.
     await groupHeader.click();
     assert.equal(await group.locator(".thinking-body").count(), 0);
     assert.equal(await group.getAttribute("open"), null);
@@ -169,7 +170,7 @@ try {
     await settled(page);
     await startsAtBeginning(group);
     assert.equal(await group.locator(".tool-call[open], .tool-detail").count(), 0, "tool details remain collapsed on reopening");
-    assert.ok(await inner.locator(".thinking-body").isVisible(), "thinking is directly visible on reopening");
+    assert.equal(await inner.locator(".thinking-body").count(), 0, "thinking remains collapsed on reopening");
     await groupHeader.click();
     await page.setViewportSize({ width, height: 900 });
     const delegation = page.locator(".delegation-card");
@@ -184,6 +185,7 @@ try {
   const childBlock = dialog.locator(".thinking-block");
   const childGroup = dialog.locator(".tool-activity");
   await childGroup.locator(":scope > summary").click();
+  await childBlock.locator(":scope > summary").click();
   assert.ok(await childBlock.locator(".thinking-body").isVisible());
   await settled(page);
   const mainScroll = await page.locator("#thread").evaluate(node => node.scrollTop);
@@ -213,6 +215,52 @@ try {
   await settled(page);
   await startsAtBeginning(tailGroup.locator(".tool-call"));
   await page.screenshot({ path: join(artifacts, "reopen-from-start.png") });
+  // Running inner details still open at the beginning, including scrollable output.
+  const runningMessage: ChatMessage = { id: "tail-tools", role: "assistant", text: "", thinking: longText,
+    thinkingActive: true, streaming: true, calls: [call("tail-read", "read", { path: "tail.ts", context: longText })] };
+  views.messageChanged(scope, runningMessage);
+  views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "running" });
+  views.flush(scope);
+  await page.waitForFunction(() => [...document.querySelectorAll('.tool-activity')].at(-1)?.getAttribute('data-status') === 'running');
+  const endsAtBottom = async (block: Locator) => {
+    await settled(page);
+    const gap = await block.evaluate(node => {
+      const thread = node.closest<HTMLElement>(".thread")!;
+      return node.getBoundingClientRect().bottom - thread.getBoundingClientRect().top - thread.clientHeight;
+    });
+    assert.ok(Math.abs(gap) < 2, `running card ends at viewport bottom, gap ${gap}`);
+  };
+  const tailTool = tailGroup.locator(".tool-call");
+  await tailTool.locator(":scope > summary").click();
+  await tailTool.locator(":scope > summary").click();
+  await settled(page);
+  await startsAtBeginning(tailTool);
+  assert.equal(await tailTool.locator("pre").last().evaluate(node => node.scrollTop), 0);
+  const tailThinking = tailGroup.locator(".thinking-block");
+  await tailThinking.locator(":scope > summary").click();
+  await settled(page);
+  await startsAtBeginning(tailThinking);
+  await pinned(tailThinking.locator(":scope > summary"), await pinned(tailGroup.locator(":scope > summary")));
+  // Updating an already open running thought preserves a user's earlier reading position.
+  await scrollInside(tailThinking, 250); await settled(page);
+  const beforeIncrement = await page.locator("#thread").evaluate(node => node.scrollTop);
+  views.messageChanged(scope, { ...runningMessage, thinking: longText + "\n\n新增思考" }); views.flush(scope);
+  await tailThinking.getByText("新增思考", { exact: true }).waitFor(); await settled(page);
+  assert.equal(await page.locator("#thread").evaluate(node => node.scrollTop), beforeIncrement);
+  // Only the outer running process opens at its end.
+  views.messageChanged(scope, { ...runningMessage, calls: [...runningMessage.calls!, ...Array.from({ length: 30 }, (_, i) => call(`pending-${i}`, "read", { path: `file-${i}.ts` }))] });
+  views.flush(scope);
+  await tailGroup.locator('.tool-call').nth(30).waitFor({ state: "attached" });
+  await tailGroup.locator(":scope > summary").click();
+  await tailGroup.locator(":scope > summary").click();
+  await endsAtBottom(tailGroup);
+  // A completed nested call starts at the top even while its parent is running.
+  views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "completed" });
+  views.messageChanged(scope, { ...runningMessage, thinkingActive: false }); views.flush(scope);
+  await page.waitForFunction(() => [...document.querySelectorAll('.tool-call')].find(node => node.textContent?.includes('tail.ts'))?.getAttribute('data-status') === 'completed');
+  await tailTool.locator(":scope > summary").click(); await settled(page); await startsAtBeginning(tailTool);
+  await tailThinking.locator(":scope > summary").click(); await settled(page); await startsAtBeginning(tailThinking);
+  await page.screenshot({ path: join(artifacts, "status-aware-expansion.png") });
   assert.deepEqual(errors, []);
   console.log(`PASS: sticky environment/thinking/tools/compression/task, nested offsets, resize, streaming, inner scrolling, block boundaries, collapse, draft preservation, independent child window, desktop/mobile. Screenshots: ${artifacts}`);
 } finally {

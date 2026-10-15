@@ -1,3 +1,14 @@
+import { running, type AgentInfo } from "../../shared/agent.js";
+
+/** Completed executions plus only the active execution, never the idle gaps. */
+export function sessionDuration(info: AgentInfo, now: number): number | null {
+  if (!info.run || info.completedRunDurationMs == null) return null;
+  const activeMs = running(info.run) && info.run.endedAt == null
+    ? Math.max(0, now - info.run.startedAt)
+    : 0;
+  return (info.completedRunDurationMs + activeMs) / 1000;
+}
+
 /** Format elapsed time from the largest reached unit down to seconds, capped at days. */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds)) return "—";

@@ -127,10 +127,13 @@ try {
   assert.equal(await group.locator(".activity-ticker").count(), 0);
   assert.equal(await head.locator(".tool-icon").count(), 0, "thinking summary has no icon");
   const thinking = group.locator(".thinking-block");
-  assert.ok(await thinking.getByText("检查当前实现", { exact: true }).isVisible());
-  assert.equal(await thinking.locator("summary, .thinking-glyph, .thinking-label").count(), 0);
+  assert.equal(await thinking.getAttribute("open"), null);
+  assert.equal(await thinking.locator(".thinking-body").count(), 0);
+  assert.equal(await thinking.locator(":scope > summary .thinking-glyph path").count(), 7);
   assert.equal(await thinking.locator(".thinking-dots span").count(), 3);
-  assert.match(await thinking.innerText(), /thinking\s*\.\s*\.\s*\./);
+  assert.match(await thinking.innerText(), /思考\s*\.\s*\.\s*\./);
+  await thinking.locator(":scope > summary").focus(); await page.keyboard.press("Enter");
+  assert.ok(await thinking.getByText("检查当前实现", { exact: true }).isVisible());
   const groupNode = await group.elementHandle(), thinkingNode = await thinking.elementHandle();
   publish({ ...thought, thinking: "持续更新思考内容" });
   await thinking.getByText("持续更新思考内容").waitFor();
@@ -139,7 +142,8 @@ try {
   await group.locator(".delegation-card").waitFor();
   assert.ok(await groupNode!.evaluate(node => node.isConnected && node.hasAttribute("open")));
   assert.ok(await thinkingNode!.evaluate(node => node.isConnected));
-  assert.equal(await group.locator(".thinking-label").count(), 0);
+  assert.equal(await group.locator(".thinking-label").innerText(), "思考");
+  assert.equal(await thinking.getAttribute("open"), "", "streaming completion preserves manual expansion");
   assert.equal(await group.locator(".thinking-dots").count(), 0);
   assert.equal(await page.locator(".delegation-card").count(), 1);
   publish({ id: "tool-delegate", role: "toolResult", text: "{}", status: "completed" });
@@ -173,7 +177,10 @@ try {
   assert.equal(await group.locator(".delegation-card").isVisible(), false);
   await head.click();
   assert.equal(await group.locator(".task-operation details[open]").count(), 0);
-  assert.ok(await thinking.locator(".thinking-body").isVisible(), "reopening shows thinking directly");
+  assert.equal(await thinking.locator(".thinking-body").count(), 0, "reopening leaves thinking collapsed");
+  assert.equal(await thinking.getAttribute("open"), null);
+  await thinking.locator(":scope > summary").click();
+  assert.ok(await thinking.locator(".thinking-body").isVisible());
   assert.equal(await group.locator(".activity-ticker").count(), 0);
   await group.screenshot({ path: join(artifacts, "process-expanded-1440.png") });
   await head.click();
@@ -223,7 +230,11 @@ try {
     await group.screenshot({ path: join(artifacts, `thinking-markdown-${width}.png`) });
   }
   await head.click();
-  assert.deepEqual(await thinking.locator(".thinking-body strong").evaluate(node => { const style = getComputedStyle(node); return [style.color, style.fontStyle, style.fontWeight]; }), ["rgb(156, 163, 175)", "italic", "400"]);
+  const markdownThinking = group.locator(".thinking-block").last();
+  assert.equal(await markdownThinking.getAttribute("open"), null);
+  assert.equal(await markdownThinking.locator("summary a, summary button").count(), 0);
+  await markdownThinking.locator(":scope > summary").click();
+  assert.deepEqual(await markdownThinking.locator(".thinking-body strong").evaluate(node => { const style = getComputedStyle(node); return [style.color, style.fontStyle, style.fontWeight]; }), ["rgb(156, 163, 175)", "italic", "400"]);
   await head.click();
   const streamingReply: ChatMessage = { id: "answer", role: "assistant", text: "最终回复保持独立可见", thinking: markdownThought, streaming: true };
   publish(streamingReply);
@@ -233,7 +244,8 @@ try {
   await head.click();
   assert.ok(await groupNode!.evaluate(node => node.isConnected && node.hasAttribute("open")), "the original process stays mounted");
   const replyThinking = group.locator(".thinking-block").last();
-  await replyThinking.locator("strong").waitFor();
+  await replyThinking.locator(":scope > summary").click();
+  await replyThinking.locator(".thinking-body strong").waitFor();
   const replyThinkingNode = await replyThinking.elementHandle();
   publish({ ...streamingReply, text: "最终回复保持独立可见，正文继续输出", status: "completed", streaming: false });
   await page.getByText("最终回复保持独立可见，正文继续输出", { exact: true }).waitFor();

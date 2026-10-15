@@ -66,6 +66,8 @@ export interface AgentInfo {
   };
   selection: Selection | null;
   run: Run | null;
+  /** Sum of this session's persisted runs with an end time; excludes the active run. */
+  completedRunDurationMs?: number;
   environment: {
     cwd: string;
     /** Absent only in environment snapshots saved before prompt inspection. */

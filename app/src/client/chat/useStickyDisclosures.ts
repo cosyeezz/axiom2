@@ -3,7 +3,7 @@ import "../styles/sticky-disclosures.css";
 
 const disclosureSelector = "details[open]";
 
-/** CSS handles scrolling; opening a disclosure starts a fresh read at its beginning. */
+/** CSS handles sticky headings; only running process groups open at their end. */
 export function useStickyDisclosures(container: RefObject<HTMLElement | null>, followBottom: RefObject<boolean>) {
   useLayoutEffect(() => {
     const root = container.current;
@@ -21,7 +21,8 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
         const heading = block.querySelector<HTMLElement>(":scope > summary");
         const thread = root.closest<HTMLElement>(".thread");
         if (!heading || !thread || block.parentElement?.closest("details:not([open])")) return;
-        // Native details can keep mounted descendants and their scroll offsets.
+        const running = block.matches('.tool-activity[data-status="running"]');
+        // Inner details always start at the beginning, regardless of execution state.
         for (const node of [block, ...block.querySelectorAll<HTMLElement>("*")]) {
           if (node.scrollTop) node.scrollTop = 0;
           if (node.scrollLeft) node.scrollLeft = 0;
@@ -29,8 +30,11 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
         followBottom.current = false;
         const inset = parseFloat(getComputedStyle(heading).top) || 0;
         const border = parseFloat(getComputedStyle(block).borderTopWidth) || 0;
-        thread.scrollTo({ top: thread.scrollTop + block.getBoundingClientRect().top
-          - thread.getBoundingClientRect().top + border - inset, behavior: "instant" });
+        const rect = block.getBoundingClientRect();
+        const threadRect = thread.getBoundingClientRect();
+        const start = thread.scrollTop + rect.top - threadRect.top + border - inset;
+        const end = thread.scrollTop + rect.bottom - threadRect.top - thread.clientHeight;
+        thread.scrollTo({ top: running ? Math.max(start, end) : start, behavior: "instant" });
       });
     };
     const resize = new ResizeObserver(schedule);
