@@ -14,8 +14,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 48 }, deviceScaleFactor: 2 });
   const errors: string[] = [];
   page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
-  await page.addInitScript("window.__name = (value) => value");
-  await page.addInitScript(() => {
+  await page.addInitScript({ content: "window.__name = (value) => value; (" + (() => {
     const state = { health: "connected", update: false, held: [] as ((value: string) => void)[] };
     (window as any).__headerFixture = state;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string) => {
@@ -25,7 +24,7 @@ try {
       if (name === "axiom_controls") { window.dispatchEvent(new CustomEvent("axiom-desktop-view", { detail: "control" })); return; }
       throw Error("Unexpected IPC: " + name);
     } };
-  });
+  }).toString() + ")()" });
   await page.clock.install();
   await page.goto(server.resolvedUrls!.local[0]);
   await page.waitForTimeout(300);
