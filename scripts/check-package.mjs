@@ -166,6 +166,18 @@ try {
   assert.equal((await request(control("status").url)).status, 200);
   assert.equal(control("stop").state, "stopped");
   console.log("PASS: real backup control restores a candidate with broken service imports and restarts the expected backend");
+  if (process.env.AXIOM_VERIFIED_PACKAGE_DIR) {
+    const destination = resolve(process.env.AXIOM_VERIFIED_PACKAGE_DIR);
+    const archive = await readFile(join(temporary, packed.filename));
+    await mkdir(destination, { recursive: true });
+    await writeFile(join(destination, "axiom2.tgz"), archive);
+    await writeFile(join(destination, "package-validation.json"), JSON.stringify({
+      version: pkg.version,
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+      sha256: createHash("sha256").update(archive).digest("hex"),
+      size: archive.length,
+    }, null, 2) + "\n");
+  }
   console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
 } finally {
   if (cli && serviceEnv) { try { control("stop"); } catch {} }

@@ -16,6 +16,9 @@ jobs:
   publish:
     runs-on: macos-latest
     timeout-minutes: 10
+    concurrency:
+      group: axiom-macos-publication
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: write
