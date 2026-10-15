@@ -31,7 +31,7 @@ const control = (action) => JSON.parse(execFileSync(process.execPath, [cli, acti
 }));
 const request = (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.timeout(3000) });
 try {
-  const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--json", "--pack-destination", temporary]));
+  const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--foreground-scripts=false", "--json", "--pack-destination", temporary]));
   const paths = packed.files.map((file) => file.path);
   for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/client/index.html"])
     assert.ok(paths.includes(file), `Missing runtime file: ${file}`);
