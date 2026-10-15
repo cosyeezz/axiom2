@@ -133,6 +133,21 @@ test('published-release retries repeat public verification and accept added desk
   await assert.rejects(verifyPublicRelease(release, async () => new Response('corrupted')), /download exceeds|strictly equal/);
 });
 
+test('draft temporary GitHub URLs are accepted only before publication and remain repository-bound', async () => {
+  const bytes = Buffer.from('tarball');
+  const files = { 'axiom2.tgz': bytes };
+  const temporary = 'https://github.com/cosyeezz/axiom2/releases/download/untagged-87c963e0ae172f1789a1/axiom2.tgz';
+  const release = { tag_name: 'v0.4.3', draft: true, prerelease: false, assets: [{ name: 'axiom2.tgz', state: 'uploaded', size: bytes.length, digest: `sha256:${digest(bytes)}`, browser_download_url: temporary }] };
+  assertReleaseAssets(release, '0.4.3', files);
+  assert.throws(() => assertReleaseAssets({ ...release, draft: false }, '0.4.3', files));
+  await assert.rejects(verifyPublicRelease({ ...release, draft: false }, async () => { throw Error('must not fetch temporary URL'); }), /strictly equal/);
+  for (const url of [temporary.replace('cosyeezz', 'other'), temporary.replace('github.com', 'example.com'), temporary.replace('untagged-', 'v'), temporary + '?download=1', temporary + '/extra', temporary.replace('/axiom2.tgz', '/wrong.tgz'), temporary.replace('https://', 'https://user@')]) {
+    const broken = structuredClone(release);
+    broken.assets[0].browser_download_url = url;
+    assert.throws(() => assertReleaseAssets(broken, '0.4.3', files));
+  }
+});
+
 test('draft cannot publish with partial, duplicate, incorrectly addressed or corrupted assets', () => {
   const files = { 'axiom2.tgz': Buffer.from('tarball'), SHA256SUMS: Buffer.from('checksum') };
   const release = { tag_name: 'v0.4.2', prerelease: false, assets: Object.entries(files).map(([name, bytes]) => ({ name, state: 'uploaded', size: bytes.length, digest: `sha256:${digest(bytes)}`, browser_download_url: `https://github.com/cosyeezz/axiom2/releases/download/v0.4.2/${name}` })) };

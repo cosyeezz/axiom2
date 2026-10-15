@@ -78,7 +78,19 @@ export function assertReleaseAssets(release, version, files) {
     assert.equal(asset.state, 'uploaded');
     assert.equal(asset.size, bytes.length, `${name}: size mismatch`);
     assert.equal(asset.digest, `sha256:${sha256(bytes)}`, `${name}: digest mismatch`);
-    assert.equal(asset.browser_download_url, `https://github.com/${repository}/releases/download/v${version}/${name}`);
+    const expected = `https://github.com/${repository}/releases/download/v${version}/${name}`;
+    if (release.draft === true && asset.browser_download_url !== expected) {
+      // GitHub assigns temporary untagged URLs until a draft becomes public.
+      const url = new URL(asset.browser_download_url);
+      assert.equal(url.origin, 'https://github.com');
+      assert.equal(url.username + url.password + url.search + url.hash, '');
+      const prefix = `/${repository}/releases/download/`;
+      assert.ok(url.pathname.startsWith(prefix));
+      const parts = url.pathname.slice(prefix.length).split('/');
+      assert.equal(parts.length, 2);
+      assert.match(parts[0], /^untagged-[a-f0-9]+$/);
+      assert.equal(parts[1], name);
+    } else assert.equal(asset.browser_download_url, expected);
   }
 }
 
