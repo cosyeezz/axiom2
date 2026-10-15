@@ -1,0 +1,38 @@
+name: Publish Axiom2 macOS Desktop
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Build Axiom2 Desktop run ID
+        type: string
+        required: true
+      release_tag:
+        description: Existing public release tag matching the build source
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify and publish existing macOS build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AXIOM_BUILD_RUN: ${{ inputs.build_run }}
+          AXIOM_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node scripts/publish-macos.mjs --publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-macOS-publish-evidence
+          path: macos-publish.json
+          if-no-files-found: error
+          retention-days: 30
