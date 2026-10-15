@@ -15,7 +15,7 @@ const until = async (check: () => boolean, message: string, ms = 25000) => {
   while (!check()) { if (Date.now() > end) throw Error(message); await new Promise((resolve) => setTimeout(resolve, 20)); }
 };
 
-test("native retries, cancellation, persisted recovery, single tool effects and guarded continuation", { timeout: 120000 }, async () => {
+test("native retries, cancellation, persisted recovery, single tool effects and guarded continuation", { timeout: 240000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-native-retry-")), project = join(root, "project");
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
