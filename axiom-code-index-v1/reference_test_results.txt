@@ -1,0 +1,138 @@
+Reference-material validation only; not production acceptance or model-quality evidence.
+Command: python -B -m unittest discover -s axiom-code-index-v1 -p test_reference.py -v
+
+
+test_cache_accounting_rejected (test_reference.EvaluationTests.test_cache_accounting_rejected) ... ok
+test_duplicate_rejected (test_reference.EvaluationTests.test_duplicate_rejected) ... ok
+test_failure_gets_budget_penalty (test_reference.EvaluationTests.test_failure_gets_budget_penalty) ... ok
+test_missing_arm_rejected (test_reference.EvaluationTests.test_missing_arm_rejected) ... ok
+test_paired_synthetic_ratio (test_reference.EvaluationTests.test_paired_synthetic_ratio) ... ok
+test_absolute_path (test_reference.ReferenceTests.test_absolute_path) ... ok
+test_changed_basis_rolls_back (test_reference.ReferenceTests.test_changed_basis_rolls_back) ... ok
+test_compare_and_swap_rejects_stale_writer (test_reference.ReferenceTests.test_compare_and_swap_rejects_stale_writer) ... ok
+test_create (test_reference.ReferenceTests.test_create) ... ok
+test_foreign_key_rejects_orphan_dependency (test_reference.ReferenceTests.test_foreign_key_rejects_orphan_dependency) ... ok
+test_invalid_basis_prevents_write (test_reference.ReferenceTests.test_invalid_basis_prevents_write) ... ok
+test_invalid_kind_rolls_back (test_reference.ReferenceTests.test_invalid_kind_rolls_back) ... ok
+test_json_array_order_preserved (test_reference.ReferenceTests.test_json_array_order_preserved) ... ok
+test_json_key_order_stable (test_reference.ReferenceTests.test_json_key_order_stable) ... ok
+test_json_nan_rejected (test_reference.ReferenceTests.test_json_nan_rejected) ... ok
+test_metadata_only_change_keeps_hash (test_reference.ReferenceTests.test_metadata_only_change_keeps_hash) ... ok
+test_parent_traversal (test_reference.ReferenceTests.test_parent_traversal) ... ok
+test_ref_range_bounds (test_reference.ReferenceTests.test_ref_range_bounds) ... ok
+test_ref_rejects_changed_file (test_reference.ReferenceTests.test_ref_rejects_changed_file) ... ok
+test_ref_rejects_other_workspace (test_reference.ReferenceTests.test_ref_rejects_other_workspace) ... ok
+test_ref_returns_exact_version (test_reference.ReferenceTests.test_ref_returns_exact_version) ... ok
+test_review_only_does_not_increment_content_revision (test_reference.ReferenceTests.test_review_only_does_not_increment_content_revision) ... ok
+test_same_size_same_mtime_change_detected (test_reference.ReferenceTests.test_same_size_same_mtime_change_detected) ... ok
+test_schema_integrity (test_reference.ReferenceTests.test_schema_integrity) ... ok
+test_scope_detects_addition (test_reference.ReferenceTests.test_scope_detects_addition) ... ok
+test_scope_detects_deletion (test_reference.ReferenceTests.test_scope_detects_deletion) ... ok
+test_scope_detects_existing_file_content (test_reference.ReferenceTests.test_scope_detects_existing_file_content) ... ok
+test_scope_ignores_creation_order (test_reference.ReferenceTests.test_scope_ignores_creation_order) ... ok
+test_semantic_change_increments_revision (test_reference.ReferenceTests.test_semantic_change_increments_revision) ... ok
+test_symlink_rejected (test_reference.ReferenceTests.test_symlink_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 2.185s
+
+OK
+
+Target-contract check: PASS
+Command: node app/node_modules/typescript/bin/tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext axiom-code-index-v1/contracts.ts
+Checked with in-memory TypeScript fixtures: kind/body discrimination for exported
+objects; proposal CAS fields and duplicate edge endpoints excluded from export bodies;
+omission metadata excludes hidden IDs; foreground/background submission ownership
+cannot be mixed. read/fetch_ref support cursors; complete, continuable and error page
+states reject contradictory completeness, cursor and error fields. Focus/progress
+fixtures accept paired native-entry stamps and async observers. They require
+separate source/projected hashes for the user anchor and each call/result, the latest
+consumed-input boundary, delivery policy identity and raw tool-call IDs; result-only
+stamps and legacy undifferentiated hashes are rejected. Invalid fixtures also cover
+raw history in focus metadata, unknown progress phases and a locator-runner claim of
+DB commit. Strict compilation covers the optional tool IPC/ChatMessage progress
+fields. Runtime forwarding, summary ordering and final-result replacement still
+require SDK/UI verification. These are compile-time checks, not runtime disclosure,
+pagination, relevance selection or live progress validation.
+
+Component-contract check: PASS
+Strict compilation plus in-memory TypeScript fixtures accept separate tool, change,
+admin and resource-owner capabilities; foreground/background execution owners;
+local runner signals and async observers; identity-bound tool/cancel payloads; and
+explicit unknown status/diagnostic facts. All 21 expected negative cases reject
+capability leakage, missing/mixed ownership, missing worker incarnations, a signal
+in a wire payload, owner overrides, a fourth tool, incomplete change/settlement
+provenance or invalid status/diagnostic states. No fixture files were created.
+This checks target types only. Complete production IPC schemas, runtime capability
+isolation, import boundaries, shutdown ordering and live authorization are pending.
+
+Accepted-draft contract check: PASS
+Strict compilation plus an in-memory TypeScript fixture accepts a receipt-derived
+acceptedProposalDigest or explicit null in runner results. All 8 expected negative
+cases reject a legacy/replacement proposal body, missing or incorrectly typed
+digest, a runner commit state, an unbound/committed receipt, and the old runner
+return signature. No fixture file was created. This checks target result shapes,
+not runtime digest syntax, copy/freeze behavior, receipt provenance, same-attempt
+idempotency, crash recovery, submission replay or commit concurrency. Those remain
+production acceptance work under P04 and the related evidence/ownership checks.
+
+Browser-contract check: PASS
+Strict compilation and in-memory fixtures accept the separate read-only browser
+port, bound snapshots, complete/continuable list and source pages, typed flow
+endpoints, symbol locations and evidence mapping. All 17 expected negative cases
+reject model/admin/change/shutdown capabilities, caller workspace overrides,
+arbitrary paths, missing source snapshot/original-reference identity, invalid
+root kinds/page state, hidden identifiers in notices, missing detail keys/source
+mapping and non-uses/non-implementation flow endpoints. No fixture files were
+created. Runtime authentication, source hashes, graph closure, stable paging,
+revocation and production wire schemas still require implementation and acceptance.
+
+Browser-prototype check: PASS
+Artifact: artifacts/prototypes/index-browser/index.html (offline synthetic data).
+Runtime: Chrome 155.0.8059.40, Playwright 1.64.0; reduced-motion preference.
+Checked keyboard open/close and focus restoration; keyboard feature selection;
+branch/source/shared-step details; graph/list toggle; search/no-match, collapse
+state through filtering and no-flow feature; ready/stale/loading/empty/error
+examples and retry; outside dismissal and drag-out selection; draft preservation.
+Viewport widths: 360, 390, 430, 600, 820, 1024, 1366, 1440, 1920 pixels.
+Checked panel/page bounds, 44px Index target, and narrow-screen tree/flow/detail
+and source navigation. No page errors or HTTP requests during these interactions.
+Saved desktop and mobile screenshots beside the HTML; manually inspected them.
+Generated the interaction diagram with Pillow at 1920x1230, and inspected both the
+original and 460px preview. These are example interaction/layout checks, not
+UI01-UI08 production acceptance, real-index rendering, performance or cross-browser
+compatibility. The prototype does not implement other entity categories, live
+subscriptions, authorization, large-graph layout, pagination or source validation.
+
+SDK projection behavior check: PASS
+Runtime: Node, locked pi 1.1.0 SessionManager.inMemory; 5 synthetic cases.
+Confirmed: editing an anchor leaves its raw entry unchanged but changes projected
+content; compaction can remove a signal and its edit from projection while both
+remain on the current branch; omitting newer input exposes an older visible input
+without removing the newer raw input; editing tool content can retain old details;
+ordinary appends/context edits advance the leaf while branch navigation can exclude
+previous descendants. No model requests or session-file writes. These validate SDK
+behavior only, not the planned focus selector, canonical hash protocol, recovery
+policy, final request delivery or end-to-end integration.
+
+Target-DDL smoke check: PASS
+Runtime: Node v24.19.0, node:sqlite, disposable database.
+Checked: 18 expected tables, WAL, FULL, foreign keys, integrity, record_rev column,
+module/knowledge kinds, rejected UTF-8 SourceRef encoding, orphan evidence, and
+included delivery without a model request identity. Confirmed distinct retry
+attempt ledgers and rejection of a duplicate request/attempt pair. Also checked
+shared job coalesce-key uniqueness, a required owner for running jobs, durable
+workspace ownership of usage events, unique physical model request IDs across
+aliases, positive measurement revisions, and consistent
+pending/reported/unknown measurement payloads and reasons. Submission ownership is
+required valid JSON, remains after request-ledger deletion, and the logical request
+still admits only one commit row. These checks do not verify current-authorization
+replay filtering, graph semantics, concurrency, host integration, migration or model
+correctness.
+
+Document checks: PASS
+104 unique acceptance IDs (F12/S12/C12/W10/P10/Q8/K32/UI8); ordered stages 0-8;
+package Markdown links resolve. Component responsibilities, state ownership, narrow
+ports and extension rules are in the single implementation plan; the overview PNG
+is illustrative, not a running product. Production architecture checks remain planned.
+These are planned acceptance IDs, not 104 implemented or passing production tests.
