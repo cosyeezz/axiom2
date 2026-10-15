@@ -53,7 +53,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = local.axiom2.desktop
           executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")
           binary="$bundle/Contents/MacOS/$executable"
-          lipo -verify_arch arm64 x86_64 "$binary"
+          lipo "$binary" -verify_arch arm64 x86_64
           file "$binary"
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign --display --verbose=2 "$bundle"
@@ -106,3 +106,13 @@ jobs:
             ${{ runner.os == 'macOS' && 'app/SHA256SUMS-macos' || '' }}
           if-no-files-found: error
           retention-days: 30
+      - name: Preserve macOS diagnostics on failure
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-macOS-diagnostics
+          path: |
+            app/Axiom2.dmg
+            ${{ runner.temp }}/axiom-macos-smoke/startup.log
+          if-no-files-found: warn
+          retention-days: 7
