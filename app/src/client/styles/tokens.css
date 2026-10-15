@@ -27,8 +27,8 @@
   --danger:  #dc2626;
 
   /* ─── Typography ───────────────────────────────────────────────── */
-  --font-display: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-body:    "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Inter Variable", "Inter", "SF Pro Display", "PingFang SC", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "SF Pro Display", "PingFang SC", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono:    "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
 
   /* Type scale — DESIGN.md §Typography Hierarchy.

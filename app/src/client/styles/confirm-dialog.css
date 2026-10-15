@@ -11,7 +11,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--elev-raised);
-  font: 14px/1.6 var(--font-body);
+  font: 15px/1.6 var(--font-body);
 }
 .confirm-dialog::backdrop { background: color-mix(in oklch, var(--bg) 80%, transparent); }
 .confirm-dialog h2 { margin: 0; font-size: 20px; }
