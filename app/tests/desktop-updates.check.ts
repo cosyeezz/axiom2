@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, type Browser } from "playwright";
+import { inspectDesktopWindow } from "./desktop-window.js";
 import { waitForUpdateExit, type UpdateCleanupJob } from "./desktop-update-cleanup.js";
 const { installerRecordName } = await import(new URL("../../scripts/desktop-test-bridge.mjs", import.meta.url).href);
 if (process.platform !== "win32") throw Error("Requires Windows WebView2.");
@@ -78,7 +79,14 @@ const launch = async () => {
   throw Error("Controller missing");
 };
 const killDesktop = async () => {
-  if (native && native.exitCode === null) { const exited = new Promise<void>((done) => native!.once("exit", () => done())); native.kill(); await exited; }
+  if (native && native.exitCode === null && native.signalCode === null) {
+    native.kill();
+    const deadline = Date.now() + 10000;
+    while (native.exitCode === null && native.signalCode === null) {
+      if (Date.now() >= deadline) throw Error("Desktop cleanup exit is unconfirmed");
+      await delay(50);
+    }
+  }
   await browser?.close().catch(() => {}); browser = undefined;
 };
 try {
@@ -95,9 +103,17 @@ try {
   } finally { db.close(); }
   let page = await launch();
   await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
+  await page.getByRole("button", { name: "打开工作台" }).click();
+  for (let i = 0; i < 50 && browser!.contexts()[0].pages().length < 2; i++) await delay(100);
+  const oldWorkbench = browser!.contexts()[0].pages().find((candidate) => candidate.url().startsWith(`http://127.0.0.1:${port}`));
+  assert.ok(oldWorkbench);
+  await inspectDesktopWindow(native!.pid!);
+  await page.getByRole("button", { name: "服务与更新" }).click();
+  assert.ok(!oldWorkbench.isClosed(), "Returning to updates must retain the workbench until update confirmation");
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).waitFor();
-  await page.setViewportSize({ width: 390, height: 844 });
+  await inspectDesktopWindow(native!.pid!, { width: 430, height: 900 });
+  await page.waitForFunction(() => innerWidth < 500);
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).click();
   await page.getByText("应用内更新与恢复要求此安装仅用于当前数据目录。", { exact: false }).waitFor();
   assert.equal(await page.getByRole("button", { name: "确认更新服务", exact: true }).evaluate((button) => {
@@ -107,13 +123,16 @@ try {
   await mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/desktop-update-confirm-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "暂不更新", exact: true }).click();
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await inspectDesktopWindow(native!.pid!, { width: 1456, height: 1039 });
+  await page.waitForFunction(() => innerWidth > 1000);
   assert.equal((await control("status")).state, "running", "Cancelling update confirmation must leave the service running");
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).click();
   await requestingUpdate();
   await page.getByRole("button", { name: "确认更新服务", exact: true }).click();
   await Promise.race([downloadStarted, delay(20000).then(() => { throw Error("Updater never started download"); })]);
   await page.getByText("正在下载 axiom2.tgz…", { exact: true }).waitFor();
+  for (let i = 0; i < 50 && !oldWorkbench.isClosed(); i++) await delay(100);
+  assert.ok(oldWorkbench.isClosed(), "Confirmed backend update must discard the workbench while preserving the control page");
   await killDesktop();
   assert.equal((await control("status")).state, "running", "Preparing an update must not stop the old backend");
   page = await launch();
@@ -135,6 +154,8 @@ try {
     if (!bridge) return true;
     try { await bridge.invoke("axiom_update", { action: "service", version: "999.0.0" }); return false; } catch { return true; }
   }), true, "Remote workbench must not invoke updater");
+  await inspectDesktopWindow(native!.pid!);
+  await page.getByRole("button", { name: "服务与更新" }).click();
   const parts = version.split(".").map(Number); parts[2]++;
   releaseVersion = parts.join(".");
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
@@ -150,10 +171,12 @@ try {
   assert.equal(native!.exitCode, null, "Rejected installer must leave the desktop running");
   await assert.rejects(access(installerRecord), { code: "ENOENT" }, "Tampered MSI must never reach the native installer launch");
   await page.getByRole("button", { name: "运行安装器", exact: true }).waitFor({ state: "hidden" });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await inspectDesktopWindow(native!.pid!, { width: 430, height: 900 });
+  await page.waitForFunction(() => innerWidth < 500);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   await page.screenshot({ path: "test-results/desktop-update-mobile.png", fullPage: true });
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await inspectDesktopWindow(native!.pid!, { width: 1456, height: 1039 });
+  await page.waitForFunction(() => innerWidth > 1000);
   await page.screenshot({ path: "test-results/desktop-update.png", fullPage: true });
   // A valid fixture reaches the same native command construction, but the test
   // binary records it instead of starting Windows Installer.

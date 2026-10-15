@@ -30,6 +30,7 @@ await cp(join(source, "dist", "cli.js"), join(template, "dist", "cli.js"));
 await rm(join(template, "node_modules"), { recursive: true, force: true });
 await symlink(join(toolchain, "node_modules"), join(template, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 let bridge = await readFile(join(repo, "app/desktop/axiom_service.rs"), "utf8");
+let views = await readFile(join(repo, "app/desktop/axiom_views.rs"), "utf8");
 if (testInstance) {
   // Only the separate test application exposes CDP. Shipped builds contain no debugging hook.
   const windowPath = join(template, "src-tauri/src/app/window.rs");
@@ -38,10 +39,16 @@ if (testInstance) {
   if (!windowSource.includes(needle)) throw Error("Pake window builder changed");
   const args = 'format!("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled --remote-debugging-port={}", std::env::var("AXIOM_DESKTOP_DEBUG_PORT").unwrap().parse::<u16>().unwrap())';
   await writeFile(windowPath, windowSource.replace(needle, `window_builder = window_builder.additional_browser_args(&${args});`));
-  bridge = bridge.replace('additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled")', `additional_browser_args(&${args})`);
+  views = views.replace('additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled")', `additional_browser_args(&${args})`);
   bridge = instrumentInstaller(bridge);
 }
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
+await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
+for (const [input, output] of [["test-probe.rs", "axiom_probe.rs"], ["test-controller-probe.js", "axiom_controller_probe.js"], ["test-workbench-probe.js", "axiom_workbench_probe.js"]]) {
+  const destination = join(template, "src-tauri/src", output);
+  if (testInstance) await cp(join(repo, "app/desktop", input), destination);
+  else await rm(destination, { force: true });
+}
 let updater = await readFile(join(repo, "app/desktop/updater.mjs"), "utf8");
 if (testInstance) {
   updater = updater.replace('"https://api.github.com/repos/cosyeezz/axiom2/releases/latest"', '(process.env.AXIOM_UPDATE_TEST_ORIGIN ? process.env.AXIOM_UPDATE_TEST_ORIGIN + "/latest" : "https://api.github.com/repos/cosyeezz/axiom2/releases/latest")')
@@ -52,7 +59,13 @@ const libPath = join(template, "src-tauri/src/lib.rs");
 let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
-lib = "mod axiom_service;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update,");
+lib = "mod axiom_service;\nmod axiom_views;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls,");
+if (testInstance) {
+  const loadedMarker = "let label = webview.label();";
+  if (!lib.includes(loadedMarker)) throw Error("Pake template changed: page-load hook not found");
+  lib = "mod axiom_probe;\n" + lib.replace(marker, marker + "\n            axiom_probe::axiom_test_probe,")
+    .replace(loadedMarker, "axiom_probe::loaded(webview);\n            " + loadedMarker);
+}
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
 lib = lib.replace(closeMarker, closeMarker + `
@@ -61,8 +74,34 @@ lib = lib.replace(closeMarker, closeMarker + `
                 _window.app_handle().exit(0);
                 return;
             }
+            if _window.label() == "pake" && matches!(_event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+                let _ = axiom_views::layout(_window.app_handle());
+            }
 `);
+// Adding a child makes get_webview_window return None. Native lifetime handlers
+// must address the parent Window directly on both platforms.
+for (const handle of ["app", "_app"]) {
+  const needle = `if let Some(window) = ${handle}.get_webview_window("pake") {`;
+  const start = lib.indexOf(needle);
+  if (start < 0) throw Error(`Pake template changed: ${handle} reveal handler not found`);
+  const end = lib.indexOf("let _ = window.set_focus();", start);
+  if (end < 0) throw Error("Pake template changed: reveal focus not found");
+  const original = lib.slice(start, end).replace('get_webview_window("pake")', 'get_window("pake")').replace("reapply_window_icon(&window);", "");
+  const reveal = handle === "_app" ? original.replace("let _ = window.show();", "let _ = window.unminimize();\n                        let _ = window.show();") : original;
+  lib = lib.slice(0, start) + reveal
+    + `let _ = window.set_focus();\n                    let _ = axiom_views::focus(${handle});` + lib.slice(end + "let _ = window.set_focus();".length);
+}
 await writeFile(libPath, lib);
+const menuPath = join(template, "src-tauri/src/app/menu.rs");
+const menu = await readFile(menuPath, "utf8");
+const menuMarker = "pub fn handle_menu_click(app_handle: &AppHandle, id: &str) {";
+if (!menu.includes(menuMarker)) throw Error("Pake template changed: macOS menu handler not found");
+await writeFile(menuPath, menu.replace(menuMarker, menuMarker + "\n    if crate::axiom_views::menu_action(app_handle, id) { return; }"));
+const invokePath = join(template, "src-tauri/src/app/invoke.rs");
+const invokeSource = await readFile(invokePath, "utf8");
+const zoomMarker = "pub fn set_zoom(window: WebviewWindow, percent: f64)";
+if (!invokeSource.includes(zoomMarker)) throw Error("Pake template changed: zoom command not found");
+await writeFile(invokePath, invokeSource.replace(zoomMarker, "pub fn set_zoom(window: tauri::Webview, percent: f64)"));
 const configPath = join(template, "src-tauri/tauri.conf.json");
 const config = JSON.parse(await readFile(configPath, "utf8"));
 const version = JSON.parse(await readFile(join(repo, "package.json"), "utf8")).version;
@@ -71,7 +110,10 @@ config.app.security.csp = "default-src 'self'; script-src 'self'; style-src 'sel
 await writeFile(configPath, JSON.stringify(config, null, 2));
 // Pake's Rust package version is also used by Windows executable metadata.
 const cargoPath = join(template, "src-tauri/Cargo.toml");
-const cargo = await readFile(cargoPath, "utf8");
+let cargo = await readFile(cargoPath, "utf8");
+const featureMarker = 'tauri = { version = "2.10.2", features = [';
+if (!cargo.includes(featureMarker)) throw Error("Pake template changed: Tauri features not found");
+cargo = cargo.replace(featureMarker, featureMarker + '\n  "unstable",');
 await writeFile(cargoPath, cargo.replace(/^version = "[^"]+"/m, `version = "${version}"`));
 const extra = process.argv.slice(2).filter((arg) => arg !== "--test-instance");
 if (testInstance) extra.push("--identifier", "local.axiom2.desktop.test", "--name", "Axiom2-ServiceTest");

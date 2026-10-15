@@ -37,7 +37,7 @@ axiom2 start
 | macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/latest/download/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
 | Linux | 当前使用浏览器；尚无发布并验收的原生客户端 |
 
-**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。工作台在独立窗口打开；服务地址变化时，重新打开会替换旧地址窗口。后台停止后工作台窗口关闭，可在控制页重新启动。单独关闭工作台会保留控制页；关闭控制页会退出整个桌面客户端，再次启动时恢复控制入口。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
+**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，后台停止或确认更新后返回控制页。关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
 **应用内更新：** 在 Pake 控制页的“版本与更新”点击“检查更新”，分别查看客户端、后台服务与最新版本。点击“更新后台服务”并确认后关闭工作台，先下载、校验和准备新版，再停止旧服务、切换程序并验证启动；项目与会话数据保留，正在执行的任务会结束。更新由独立任务执行，关闭、重开客户端仍可查看进度。程序切换或启动失败会尝试恢复旧程序，更新进程异常退出且留下恢复记录时可点击“恢复旧版本”；恢复会核对旧程序版本，备份缺失且安装目录仍是其他版本时保留恢复记录并报错。后台必须安装在标准 npm 包目录且目录可写（一行安装命令符合此方式），源码目录请使用原方式更新。**应用内更新与恢复仅支持一个数据目录独占一个服务安装。多个数据目录共用全局安装不受支持；请为各数据目录使用独立安装目录，或停止所有相关服务后手动更新。** 当前任务锁和服务探测均按数据目录工作，不能检查其他数据目录是否仍在使用同一程序。
 
@@ -147,7 +147,7 @@ Windows x64 与 macOS 通用版产物通过 [GitHub Releases](https://github.com
 - `app/Axiom2.exe`：Windows 独立可执行文件。
 - `app/Axiom2.dmg`：macOS 通用安装镜像，包含 arm64 与 x86_64。
 
-桌面壳包含本地服务控制页及原生启动／停止桥接，不包含 Node.js、pi 或后端。控制页随客户端打包，从本地加载，不会在服务未启动时跳转到连接错误页。工作台在服务就绪后单独打开，沿用原有 Web 产品及 Host／Origin／禁止 iframe 的安全限制；远程工作台不能调用原生服务控制命令。OAuth 提供可复制的授权链接，由系统浏览器完成 pi 授权。Windows 需要 WebView2 Runtime，Windows 客户端未经代码签名；macOS 客户端使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公证。
+桌面壳包含本地服务控制页及原生启动／停止桥接，不包含 Node.js、pi 或后端。控制页随客户端打包，从本地加载，不会在服务未启动时跳转到连接错误页。控制页与工作台是同一个原生窗口中的两个独立 WebView；工作台就绪后切换显示，上方保留本地“服务与更新”导航，普通切换不重新加载工作台。沿用原有 Web 产品及 Host／Origin／禁止 iframe 的安全限制；管理桥接校验实际调用 WebView 的标签与内置来源，远程工作台不能因共用父窗口而取得原生服务或更新权限。OAuth 提供可复制的授权链接，由系统浏览器完成 pi 授权。Windows 需要 WebView2 Runtime，Windows 客户端未经代码签名；macOS 客户端使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公证。
 
 重新构建需要 Node.js、Rust/Cargo 与目标平台原生构建工具（Windows MSVC、WebView2；macOS Xcode；Linux WebKitGTK 等）；脚本自动在隔离目录安装固定版本 Pake **3.16.2**：
 
@@ -163,9 +163,9 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 npm --prefix app run package:desktop -- --targets universal
 ```
 
-也可在 GitHub Actions 的 `Build Axiom2 Desktop` 中选择 `platform=macos`；`source_ref` 可填写发布 tag 或 commit，为空时使用工作流所在版本。macOS 流程校验 DMG、双架构、版本与应用标识、签名完整性及无测试入口，再从镜像复制应用到临时目录，用隔离数据目录启动并检查该进程拥有可见窗口。只有检查通过才生成交付 artifact；失败时保留的诊断 artifact 不作为发布包。`Publish Axiom2 macOS Desktop` 可将成功构建的 artifact 直接发布到已有 Release：需填写构建 run ID 与对应 tag，发布前复核源码、原生检查和附件摘要，保留其他产物并补全校验文件。
+也可在 GitHub Actions 的 `Build Axiom2 Desktop` 中选择 `platform=macos`；`source_ref` 可填写发布 tag 或 commit，为空时使用工作流所在版本。macOS 流程校验 DMG、双架构、版本与应用标识、签名完整性及无测试入口，再从镜像复制应用到临时目录，用隔离数据目录启动并检查该进程拥有可见窗口。流程另构建独立标识的测试应用，由 `scripts/check-desktop-macos.mjs` 在真实 WKWebView 中操作打包控制页，检查单窗口切换、原生命令拒绝、草稿／选区／滚动／焦点、原生缩放、服务启停、窗口关闭及重开后复用后台；CoreGraphics 独立确认工作台显示时只有一个可见应用窗口。只有检查通过才生成交付 artifact；失败时保留的诊断 artifact 不作为发布包。`Publish Axiom2 macOS Desktop` 可将成功构建的 artifact 直接发布到已有 Release：需填写构建 run ID 与对应 tag，发布前复核源码、原生检查和附件摘要，保留其他产物并补全校验文件。
 
-配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs` 后构建，桌面版本统一从根 `package.json` 传入，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP 与原生窗口关闭请求检查离线控制页、启动／状态／工作台、停止确认与取消、重启、两个窗口的关闭顺序、客户端重新打开、服务换端口后的工作台重建及正常／强制退出客户端后服务存活。先在仓库根目录运行 `npm --prefix app run package:desktop -- --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 接入，正式产物不带调试入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
+配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs` 与 `axiom_views.rs` 后构建，桌面版本统一从根 `package.json` 传入，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP、Win32 窗口枚举／缩放与原生关闭请求检查离线控制页、单原生窗口双 WebView、切换后的草稿／选区／滚动／焦点保留、远程管理调用拒绝、启动／停止确认与取消、重启、第二次启动聚焦已有窗口、退出后重新打开、服务换端口后的工作台重建及正常／强制退出客户端后服务存活。先在仓库根目录运行 `npm --prefix app run package:desktop -- --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 和原生自检入口，正式产物不带调试或自检入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
 
 `npm run check:desktop-update`（在 `app/` 执行）使用当前构建脚本生成的测试 EXE 验证应用内更新；设置 `AXIOM_UPDATE_OLD_TARBALL` 指向已发布 v0.2.3 包、`AXIOM_UPDATE_TARBALL` 指向本次构建包。测试隔离安装目录、数据、pi 配置、npm 缓存及端口，仅测试构建允许本地发布源，并将原生安装器启动替换为程序路径与参数记录；假 MSI 用于验证篡改后零次启动、有效文件仅传入固定系统 `msiexec.exe` 及 `/i`、已校验路径，不执行真实安装。清理需确认最近请求的更新任务已终止、所属 worker 和后台进程已退出；读取失败、状态未知、旧任务记录或超时均保留目录并报告，不与更新并发删除夹具。生产客户端的更新来源固定为本仓库 GitHub Release，附件按发布 API 的 SHA-256 和大小校验。更新日志与恢复记录位于数据目录的 `updates/`；旧程序备份和准备目录保留在原包旁。恢复保证限于更新进程异常退出，不保证系统崩溃或掉电后的自动恢复；程序恢复不回滚会话数据或数据库迁移。恢复时使用已验证旧备份中的控制代码确认服务退出，再移动目录；即使候选程序能显示版本却无法加载控制模块，也不依赖候选程序执行恢复控制。恢复时核对旧程序及服务报告的运行版本；旧后台协议不报告版本时，只确认旧程序和服务运行状态。
 
@@ -209,8 +209,8 @@ npm audit --omit=dev
 | 工作空间管理与恢复专项 | `tests/workspaces.test.ts`、`tests/folder-response.test.ts` 通过：旧库迁移、改名／置顶／移出再恢复、活动操作阻断、最近空间跨服务重启及 WS 更新；`tests/workspace-management.check.ts` 通过：行内改名／IME、悬停按钮、删除确认／最后空间空态、全新浏览器存储恢复、多窗口互不切换、旧服务空 404 提示及移动端布局。Pake 原生关闭／重开仍待实机验收 |
 | 工作空间目录选择专项 | `tests/folder-picker.test.ts` 的 9 项后端检查及 `tests/workspace-picker.check.ts` 通过：平台命令、中文路径、取消／超时／进程清理、来源校验、并发拒绝；浏览器直接请求选择器、取消不创建、选择后默认授权并创建会话、打开失败与错误重试及 390/1440 宽度无溢出。测试模拟原生选择器响应，使用真实服务创建工作空间／会话；Windows 原生目录选择另由统一打开组件实机检查覆盖。 |
 | 应用内更新 | `tests/desktop-updater.test.ts` 覆盖校验失败不停止服务、依赖准备失败、正常切换、启动失败回滚、控制模块损坏时的自动／显式恢复及停服确认、缺失 CLI 时恢复、备份缺失／版本不符时保留恢复记录、旧后台协议恢复、并发任务与服务启动保护、源码安装拒绝及 MSI 重新校验；`tests/desktop-update-harness.test.ts` 覆盖清理时的未知／旧记录、终态进程退出确认，以及仅测试构建使用的安装器命令记录；Windows 真实 Pake 从已发布 v0.2.3 后端升级，退出／重开后继续更新，会话与命令路径保留，远程工作台无更新权限，篡改 MSI 的安装器调用记录为零，有效 MSI 仅记录固定系统程序与 `/i`、已校验路径，随后客户端退出而后台继续。测试隔离 npm 缓存，确认任务终态及 worker／后台退出后再删除夹具。未执行真实 MSI 升级安装 |
-| Windows 桌面 | MSI／EXE 构建成功；独立标识的真实 Pake／WebView2 测试通过：离线控制页、原生启动／状态／打开工作台、取消／确认停止、重启、系统窗口关闭请求、控制页关闭后重新启动、服务换端口后的工作台重建、正常／强制退出客户端后服务存活、远程页面不能控制服务及窄窗口布局。MSI 安装交互仍未验收 |
-| macOS 桌面 | v0.3.3 tag 的通用 DMG 构建、镜像完整性、arm64/x86_64、版本／应用标识、ad-hoc 签名完整性与无测试入口检查通过；在 macOS CI 中实际启动并确认本进程拥有可见窗口。未覆盖完整服务控制、文件选择、模型交互或 Gatekeeper 首次安装 |
+| Windows 桌面 | MSI／EXE 构建成功；独立标识的真实 Pake／WebView2 检查覆盖单原生窗口、双 WebView 权限隔离、草稿／选区／滚动／焦点保留、真实窗口缩放、第二次启动聚焦已有窗口、离线控制与服务启停、退出重开、服务换端口、正常／强制退出客户端后服务存活及窄窗口布局。MSI 安装交互仍未验收 |
+| macOS 桌面 | 通用 DMG 构建流程校验镜像、arm64/x86_64、版本／应用标识、ad-hoc 签名完整性与无测试入口；实际启动正式应用，并使用独立测试应用检查真实 WKWebView 的单窗口切换、权限拒绝、草稿／选区／滚动／焦点、原生缩放、服务启停、关闭和重开复用后台。完整业务、文件选择、模型交互及 Gatekeeper 首次安装仍需单独验收 |
 | 尚未通过的发布门槛 | 完整 UI-01 逐状态视觉对照、真实远端供应商／OAuth、MSI 安装与完整桌面业务端到端、macOS/Linux 完整业务端到端、广泛性能与异常进程组合测试 |
 
 所有自动模型请求使用**隔离回环协议夹具**，但调用产品里的真实 pi 会话／工作进程／工具；不是产品假回复，也不代表远端供应商验收。OAuth 测试验证桥接归属、提示和取消，不访问真实授权服务。测试通过不宣称任意项目命令的后代都能终止或外部副作用已经回滚。Agent 停止没有人工清理确认流程。

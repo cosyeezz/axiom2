@@ -58,7 +58,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign --display --verbose=2 "$bundle"
           /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist"
-          if grep -aEq 'AXIOM_UPDATE_TEST_ORIGIN|AXIOM_DESKTOP_DEBUG_PORT|axiom-test-installer-launches.jsonl|local.axiom2.desktop.test' "$binary"; then
+          if grep -aEq 'AXIOM_UPDATE_TEST_ORIGIN|AXIOM_DESKTOP_DEBUG_PORT|AXIOM_DESKTOP_PROBE_REPORT|axiom_test_probe|axiom-test-installer-launches.jsonl|local.axiom2.desktop.test' "$binary"; then
             echo 'Test hooks found in production binary' >&2
             exit 1
           fi
@@ -98,6 +98,34 @@ jobs:
           exit(1)
           SWIFT
           kill -0 "$pid"
+      - name: Build isolated macOS native probe
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(node -p 'process.arch === "arm64" ? "arm64" : "x64"')"
+          node scripts/build-desktop.mjs --targets "$target" --test-instance
+      - name: Check macOS single-window WebViews and service lifecycle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mount="$(mktemp -d "$RUNNER_TEMP/axiom-probe-dmg.XXXXXX")"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" app/Axiom2-ServiceTest.dmg
+          trap 'hdiutil detach "$mount"' EXIT
+          bundle="$mount/Axiom2-ServiceTest.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist")" = local.axiom2.desktop.test
+          ditto "$bundle" "$RUNNER_TEMP/axiom-native-probe/Axiom2-ServiceTest.app"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$bundle/Contents/Info.plist")
+          AXIOM_DESKTOP_BINARY="$RUNNER_TEMP/axiom-native-probe/Axiom2-ServiceTest.app/Contents/MacOS/$executable" node scripts/check-desktop-macos.mjs
+      - name: Preserve macOS native check evidence
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-macOS-native-check
+          path: app/test-results/desktop-macos.json
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os == 'macOS' && 'Axiom2-macOS-universal' || 'Axiom2-Windows-x64' }}
@@ -114,5 +142,6 @@ jobs:
           path: |
             app/Axiom2.dmg
             ${{ runner.temp }}/axiom-macos-smoke/startup.log
+            app/test-results/
           if-no-files-found: warn
           retention-days: 7

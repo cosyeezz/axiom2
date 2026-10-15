@@ -2,7 +2,8 @@
 // No arbitrary executable, command, URL, PID or shell input crosses the webview boundary.
 use serde_json::{json, Value};
 use std::{env, fs, io::Read, path::PathBuf, process::{Command, Stdio}, sync::Mutex, time::{Duration, Instant}};
-use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Manager, Webview};
+use crate::axiom_views;
 
 static CONTROL: Mutex<()> = Mutex::new(());
 static UPDATES: Mutex<()> = Mutex::new(());
@@ -108,11 +109,8 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn axiom_update(window: WebviewWindow, action: String, version: Option<String>) -> Result<Value, String> {
-    let url = window.url().map_err(|e| e.to_string())?;
-    let local = (url.scheme() == "tauri" && url.host_str() == Some("localhost")) ||
-        (["http", "https"].contains(&url.scheme()) && url.host_str() == Some("tauri.localhost") && url.port().is_none());
-    if window.label() != "pake" || !local { return Err("更新仅可从客户端内置页面调用。".into()); }
+pub async fn axiom_update(window: Webview, action: String, version: Option<String>) -> Result<Value, String> {
+    axiom_views::authorize(&window)?;
     if !["status", "check", "service", "client", "recover", "installer"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
     if ["client", "installer"].contains(&action.as_str()) && !cfg!(windows) { return Err("本机平台尚未提供客户端安装包，请从发布页下载。".into()); }
     let install = action == "installer";
@@ -121,9 +119,7 @@ pub async fn axiom_update(window: WebviewWindow, action: String, version: Option
         let _control = if backend { Some(CONTROL.lock().map_err(|_| "服务控制器不可用")?) } else { None };
         run_updater(&action, version.as_deref())
     }).await.map_err(|e| e.to_string())??;
-    if backend {
-        if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") { let _ = workbench.close(); }
-    }
+    if backend { axiom_views::controls(window.app_handle(), true)?; }
     if install {
         #[cfg(windows)] {
             let installer = result["installer"].as_str().ok_or("缺少已校验的安装包")?;
@@ -137,14 +133,11 @@ pub async fn axiom_update(window: WebviewWindow, action: String, version: Option
 }
 
 #[tauri::command]
-pub async fn axiom_service(window: WebviewWindow, action: String) -> Result<Value, String> {
-    let url = window.url().map_err(|e| e.to_string())?;
-    let local = (url.scheme() == "tauri" && url.host_str() == Some("localhost")) ||
-        (["http", "https"].contains(&url.scheme()) && url.host_str() == Some("tauri.localhost") && url.port().is_none());
-    if window.label() != "pake" || !local { return Err("服务控制仅可从客户端内置页面调用。".into()); }
+pub async fn axiom_service(window: Webview, action: String) -> Result<Value, String> {
+    axiom_views::authorize(&window)?;
     if !["start", "stop", "status", "open"].contains(&action.as_str()) { return Err("不支持的服务操作".into()); }
     let open = action == "open";
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    let mut result = tauri::async_runtime::spawn_blocking(move || {
         let _guard = CONTROL.lock().map_err(|_| "服务控制器不可用")?;
         if ["start", "stop"].contains(&action.as_str()) {
             let update = run_updater("busy", None)?;
@@ -155,35 +148,12 @@ pub async fn axiom_service(window: WebviewWindow, action: String) -> Result<Valu
         run(if open { "status" } else { &action })
     }).await.map_err(|e| e.to_string())??;
     if result["state"] != "running" {
-        if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") { let _ = workbench.close(); }
+        axiom_views::controls(window.app_handle(), true)?;
         if open { return Err("服务尚未就绪，请先启动后台服务。".into()); }
     } else if open {
         let target = tauri::Url::parse(result["url"].as_str().ok_or("缺少工作台地址")?).map_err(|e| e.to_string())?;
-        if target.scheme() != "http" || target.host_str() != Some("127.0.0.1") || !target.username().is_empty() || target.password().is_some() { return Err("工作台地址不合法".into()); }
-        if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") {
-            if workbench.url().map_err(|e| e.to_string())?.origin() != target.origin() {
-                // Navigation is pinned to the origin at creation. Rebuild when the
-                // service moves, and wait until Tauri releases the old window label.
-                workbench.destroy().map_err(|e| e.to_string())?;
-                let deadline = Instant::now() + Duration::from_secs(5);
-                while window.app_handle().get_webview_window("axiom-workbench").is_some() {
-                    if Instant::now() >= deadline { return Err("旧工作台尚未关闭，请稍后重试。".into()); }
-                    tokio::time::sleep(Duration::from_millis(25)).await;
-                }
-            }
-        }
-        if let Some(workbench) = window.app_handle().get_webview_window("axiom-workbench") {
-            workbench.show().map_err(|e| e.to_string())?;
-            workbench.set_focus().map_err(|e| e.to_string())?;
-        } else {
-            let origin = target.origin();
-            let builder = WebviewWindowBuilder::new(window.app_handle(), "axiom-workbench", WebviewUrl::External(target))
-                .title("Axiom2 · 工作台").inner_size(1440.0, 900.0).min_inner_size(360.0, 600.0)
-                .on_navigation(move |url| url.origin() == origin);
-            #[cfg(windows)]
-            let builder = builder.additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled");
-            builder.build().map_err(|e| e.to_string())?;
-        }
+        axiom_views::open(window.app_handle(), target).await?;
     }
+    result["desktopView"] = Value::from(axiom_views::current());
     Ok(result)
 }

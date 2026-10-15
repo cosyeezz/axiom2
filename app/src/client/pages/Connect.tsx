@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import DesktopUpdates from "./DesktopUpdates.js";
 import "../styles/connect.css";
 
-type Service = { state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
+type View = "control" | "workbench";
+type Service = { desktopView?: View; state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
 type Action = "status" | "start" | "stop" | "open";
 const labels = { starting: "服务正在启动", running: "服务运行中", stopped: "服务已停止", stopping: "服务正在退出", missing: "需要安装服务", unmanaged: "端口已被占用" };
 function invoke(action: Action): Promise<Service> {
@@ -13,6 +14,10 @@ function invoke(action: Action): Promise<Service> {
 
 export default function Connect() {
   const [service, setService] = useState<Service | null>(null);
+  const [view, setView] = useState<View>("control");
+  const [returning, setReturning] = useState(false);
+  const revision = useRef(0);
+  const openButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState<Action | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
@@ -30,10 +35,36 @@ export default function Connect() {
     if (!quiet) { setBusy(action); setError(""); }
     while (pending.current) await new Promise((resolve) => window.setTimeout(resolve, 80));
     pending.current = true;
-    try { setService(await invoke(action)); if (!quiet) setError(""); }
+    const observed = revision.current;
+    try {
+      const result = await invoke(action);
+      setService(result);
+      if (observed === revision.current && result.desktopView) setView(result.desktopView);
+      if (!quiet) setError("");
+    }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { pending.current = false; if (!quiet) setBusy(null); }
   }
+  async function showControls() {
+    if (returning) return;
+    setReturning(true);
+    try {
+      const bridge = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string) => Promise<void> } }).__TAURI_INTERNALS__;
+      await bridge.invoke("axiom_controls");
+      revision.current++;
+      setView("control");
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setReturning(false); }
+  }
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const next: unknown = (event as CustomEvent).detail;
+      if (next === "control" || next === "workbench") { revision.current++; setView(next); }
+    };
+    window.addEventListener("axiom-desktop-view", changed);
+    return () => window.removeEventListener("axiom-desktop-view", changed);
+  }, []);
+  useEffect(() => { if (view === "control") openButton.current?.focus(); }, [view]);
   useEffect(() => {
     void act("status");
     const timer = window.setInterval(() => { void act("status", true); }, 3000);
@@ -48,7 +79,14 @@ export default function Connect() {
   const starting = service?.state === "starting";
   const missing = service?.state === "missing";
   return (
-    <main className="connect-page">
+    <>
+    <nav className="desktop-workbench-bar" aria-label="桌面导航" hidden={view !== "workbench"}>
+      <span className="desktop-workbench-brand">AXIOM<span>2</span><i>/</i>工作台</span>
+      <span className="desktop-workbench-status"><span className="connect-dot is-running" />本机服务运行中</span>
+      {error && <span role="alert" className="desktop-workbench-error">{error}</span>}
+      <button onClick={() => void showControls()} disabled={!!busy || returning}><span aria-hidden="true">←</span> 服务与更新</button>
+    </nav>
+    <main className="connect-page" hidden={view === "workbench"}>
       <header className="connect-header"><a href="#" aria-label="Axiom2 首页" className="connect-brand">A<span>2</span></a><span>AXIOM2 <i>/</i> DESKTOP</span><span className="connect-local">本机 · 私有工作台</span></header>
       <div className="connect-layout">
         <section className="connect-intro">
@@ -65,7 +103,7 @@ export default function Connect() {
           {service?.message && <p className="connect-message">{service.message}</p>}
           {error && <p className="connect-error" role="alert">{error}</p>}
           <div className="connect-actions">
-            {starting ? <button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button> : running ? <><button className="connect-primary" disabled={blocked} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button></>
+            {starting ? <button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button> : running ? <><button ref={openButton} className="connect-primary" disabled={blocked} onClick={() => void act("open")}>打开工作台 <span aria-hidden="true">↗</span></button><button ref={stopButton} className="connect-secondary" disabled={blocked} onClick={() => setConfirm(true)}>关闭后台服务</button></>
               : <button className="connect-primary" disabled={blocked || !service || service.state !== "stopped"} onClick={() => void act("start")}>{busy === "start" ? "正在启动…" : "启动后台服务"}<span aria-hidden="true">→</span></button>}
           </div>
           <p className="connect-footnote">关闭服务会停止正在运行的任务。{running && service.background === false ? "当前服务由终端启动。" : "不会随系统登录自动启动。"}</p>
@@ -81,10 +119,11 @@ export default function Connect() {
       <footer className="connect-footer"><span>文件和任务留在你的电脑上</span><span>Axiom2 / 本地服务控制</span></footer>
       <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(false)} onClose={() => setConfirm(false)} aria-labelledby="stop-title">
         <h2 id="stop-title">关闭后台服务？</h2>
-        <p>{service?.active.length ? `当前有 ${service.active.length}${service.active.length >= 20 ? "+" : ""} 个会话正在执行任务，关闭服务会中断这些任务。` : "关闭后工作台窗口会关闭，尚未结束的任务将被停止。"}项目和会话记录会保留。</p>
+        <p>{service?.active.length ? `当前有 ${service.active.length}${service.active.length >= 20 ? "+" : ""} 个会话正在执行任务，关闭服务会中断这些任务。` : "关闭后将返回服务控制页，尚未结束的任务将被停止。"}项目和会话记录会保留。</p>
         {!!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
         <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(false)}>继续运行</button><button className="connect-danger" onClick={() => { setConfirm(false); void act("stop"); }}>确认关闭服务</button></div>
       </dialog>
     </main>
+    </>
   );
 }

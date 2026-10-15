@@ -83,7 +83,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onS
       {update?.log && <p className="connect-log">更新日志：<code>{update.log}</code></p>}
       <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(null)} onClose={() => setConfirm(null)} aria-labelledby="update-title">
         <h2 id="update-title">{confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : `更新后台至 ${latest}？`}</h2>
-        <p>{confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "工作台窗口会关闭，正在运行的任务将结束。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
+        <p>{confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "工作台视图会关闭，正在运行的任务将结束。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
         {confirm !== "installer" && <p>应用内更新与恢复要求此安装仅用于当前数据目录。多个数据目录共用安装时，请停止所有相关服务并使用原安装方式更新；各数据目录使用独立安装目录后才能使用此功能。</p>}
         {confirm !== "installer" && !!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
         <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(null)}>暂不更新</button><button className="connect-primary" onClick={() => { const action = confirm; setConfirm(null); if (action) void act(action); }}>{confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : "确认更新服务"}</button></div>
