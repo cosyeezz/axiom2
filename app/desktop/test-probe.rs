@@ -31,15 +31,25 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
     match action.as_str() {
         "snapshot" => {},
         "sample" => { app.get_webview("axiom-workbench").ok_or("Workbench missing")?.eval("window.__axiomProbeSample()").map_err(|e| e.to_string())?; },
-        "resize" => { window.set_size(tauri::LogicalSize::new(1100.0, 800.0)).map_err(|e| e.to_string())?; },
+        "resize" => { window.set_size(tauri::LogicalSize::new(900.0, 650.0)).map_err(|e| e.to_string())?; },
         "checkpoint" | "dock-hidden" | "finished" | "failed" => {},
         "hide" => { window.hide().map_err(|e| e.to_string())?; },
         #[cfg(target_os = "macos")]
         "menu-home" => {
             let top = window.is_always_on_top().map_err(|e| e.to_string())?;
             crate::app::menu::handle_menu_click(app, "always_on_top");
-            if window.is_always_on_top().map_err(|e| e.to_string())? == top { return Err("Native topmost menu did not target the parent window".into()); }
+            // AppKit applies window levels asynchronously even after Tauri dispatches them.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while window.is_always_on_top().map_err(|e| e.to_string())? == top {
+                if std::time::Instant::now() >= deadline { return Err("Native topmost menu did not target the parent window".into()); }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
             crate::app::menu::handle_menu_click(app, "always_on_top");
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while window.is_always_on_top().map_err(|e| e.to_string())? != top {
+                if std::time::Instant::now() >= deadline { return Err("Native topmost menu did not restore the window level".into()); }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
             crate::app::menu::handle_menu_click(app, "go_home");
         },
         "close" => { window.close().map_err(|e| e.to_string())?; return Ok(Value::Null); },

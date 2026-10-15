@@ -71,7 +71,12 @@
       check(dock.token === before.token && dock.draft === before.draft && dock.scroll === before.scroll && dock.focused, "Native menu or Dock reopen lost the working view");
     }
     await invoke("resize");
-    await wait(async () => { const state = await invoke("snapshot"); return Math.abs(state.width / state.scale - 1100) < 2; });
+    await wait(async () => {
+      const state = await invoke("snapshot");
+      return Math.abs(state.width / state.scale - 900) < 2
+        && state.views.every((view) => Math.abs(view.width - state.width) <= 2)
+        && Math.abs(state.views.reduce((height, view) => height + view.height, 0) - state.height) <= 2;
+    });
     bounds(await invoke("snapshot"));
     (await button("服务与更新")).click();
     (await button("关闭后台服务")).click();
