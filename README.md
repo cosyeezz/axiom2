@@ -68,11 +68,21 @@ npm start
 5. 主 Agent 可委派子任务；点击任务卡片查看独立子会话、追问、停止、历史结果。关闭弹窗不停止任务。
 6. 输入框下方与子代理设置成组的压缩图标用于展开／收起压缩页面，在页内选择模型、开始／再次压缩或取消任务；两个设置面板的底部均避开工具栏图标，点击另一个图标可直接切换。打开页面本身不会发起模型请求。任务先等待安全点保存快照，使用所选模型在后台生成 **pi 原生摘要**，再等待新的安全点校验并自动应用；原始历史与快照后的新增消息保留，失败或冲突时不应用。
 
-开发模式：`npm run dev`。环境变量 `AXIOM_PORT` 默认固定 4317（桌面入口使用此端口，不支持 0）；`AXIOM_DATA_DIR` 指定数据根目录，`AXIOM_PI_DIR` 可指定共享模型／认证目录，默认使用 pi 的 `getAgentDir()`（通常为 `~/.pi/agent`，遵循 `PI_CODING_AGENT_DIR`）。页面入口：`/`、`/settings.html`、`/model-config.html`、`/connect.html`。
+开发模式：`npm run dev`。环境变量 `AXIOM_PORT` 默认固定 4317（桌面入口使用此端口，不支持 0）；`AXIOM_DATA_DIR` 指定数据根目录，`AXIOM_PI_DIR` 可指定共享模型／认证目录，默认使用 pi 的 `getAgentDir()`（通常为 `~/.pi/agent`，遵循 `PI_CODING_AGENT_DIR`）。页面入口：`/`、`/settings.html`、`/model-config.html`、`/tools.html`、`/connect.html`。
 
 默认数据目录：Windows `%APPDATA%/Axiom2`；macOS `~/Library/Application Support/Axiom2`；Linux `$XDG_DATA_HOME/Axiom2` 或 `~/.local/share/Axiom2`。`axiom.sqlite` 保存管理数据，`pi/` 保存应用资源／设置，模型配置与认证使用共享 pi 目录，`sessions/` 保存 pi JSONL，`run-models/` 保存主／子执行的临时模型配置快照，`compression-snapshots/` 保存运行中的临时压缩快照及固定配置；模型保存、登录与退出登录会影响终端 pi 的同一配置，请留意供应商级退出提示；旧版应用的 `pi/models.json` 与 `pi/auth.json` 不自动覆盖或合并到共享目录，可通过 `AXIOM_PI_DIR` 显式继续使用。同一数据目录只允许一个服务管理器。执行快照按数据目录隔离，启动时只清理本数据目录的残留，不扫描或清理共享 pi 目录中的运行文件。
 
 退出服务：在客户端点击“关闭后台服务”并确认，或运行 `axiom2 stop`；前台模式也可按 Ctrl+C。退出会结束拥有的执行并保存状态；控制通道暂时失联且记录的进程仍存活时，不确认“已停止”，需等待后续状态或退出超时。PID 仅用于存活探测，不用于强杀；若旧 PID 被复用，确认停止可能延迟或超时。关闭浏览器或桌面窗口仅关闭客户端。数据目录中的 `service.log` 保存后台启动与运行日志，`installation.json` 记录本机 Node.js／CLI 路径，`service-startup.sqlite` 保存启动实例登记以协调并发启停，`service-control.json` 保存本次运行的本机控制通道凭据；启动登记和控制凭据均不要分享。配置目录不承诺磁盘加密或系统密钥库；需要备份时先停止服务，再复制整个数据目录。
+
+## 内置工具与 OpenCLI
+
+打开「配置 → 内置工具」，在 OpenCLI 条目中检查环境和更新。新电脑点击「检查更新」→「安装 OpenCLI」，安装成功后会默认接入官方 `opencli-usage`、`opencli-browser` 两个技能；本机已有 npm 全局安装时，可检查环境后直接「保存接入设置」。页面也支持更新和重新安装。需要本机 npm 可用、官方 npm 仓库可访问且全局安装目录可写；权限不足时使用用户级 Node.js 安装或 npm prefix，再重启后台服务。
+
+按页面指引从 OpenCLI 官方发布页下载 Browser Bridge 扩展，在外部 Chrome 的 `chrome://extensions` 中手动加载。保持 Chrome 打开，点击「检测连接」查看官方 `doctor` 报告；诊断命令执行完成不等于浏览器连接成功。可以设置 Chrome Profile ID／别名和前台／后台窗口模式，空 Profile 遵循 OpenCLI 默认选择。Pake WebView 不替代 Chrome 扩展。
+
+Agent 通过现有 shell 工具运行 OpenCLI，不新增命令映射或原生 OpenCLI 工具。常用技能只注入名称、简介与路径，完整指南按需读取；程序和技能来自同一已安装 npm 包。配置可关闭这两个默认技能，不删除用户已有技能目录；子 Agent 仍限只读工具，不加载这两项技能。设置保存在数据目录的 `integrations/opencli.json`，在后续执行加载，不修改终端 pi 设置。
+
+安装／更新使用官方全局 npm 包，并跳过生命周期脚本；会影响本机其他使用同一 OpenCLI 的程序。Axiom 有活动任务或启动准备时拒绝安装，安装期间不接受新的 Agent 执行。页面关闭不取消后台操作；重连可查看结果。关闭后台服务会中止自有安装进程，重启显示中断，不自动重做；npm 全局安装失败不承诺回滚，可重新检查实际安装后重试。Chrome 扩展需独立手动更新。`integrations/opencli-job.json` 保存最近操作状态，配置损坏或技能缺失会报告警告并跳过本轮 OpenCLI 接入，不阻断基础 Agent。
 
 ## 已实现能力与边界
 

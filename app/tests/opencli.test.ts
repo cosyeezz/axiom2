@@ -9,6 +9,10 @@ import { OpenCliService, executeOpenCli, type OpenCliExecute } from "../src/serv
 import { openCliConfigPath, openCliEnvironment, openCliSkillNames, openCliSkillPaths, readOpenCliConfig } from "../src/server/integrations/opencli-runtime.js";
 import { resourceIdentity } from "../src/server/agents/resource-identity.js";
 import { Store } from "../src/server/storage.js";
+import { openCliResources } from "../src/server/integrations/opencli-resources.js";
+import { startServer } from "../src/server/index.js";
+import { WebSocket } from "ws";
+import { once } from "node:events";
 
 export function openCliFixture() {
   const root = mkdtempSync(join(tmpdir(), "axiom-opencli-"));
@@ -147,4 +151,64 @@ test("OpenCLI process runner separates stdout from npm warnings and terminates t
     assert.equal(await executeOpenCli(["-e", 'console.error("warning"); console.log("1.8.8")'], options), "1.8.8");
     await assert.rejects(executeOpenCli(["-e", "setInterval(()=>{}, 1000)"], { ...options, timeout: 100 }), /超时/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("OpenCLI: optional resource failures stay local; failed initial journal write never leaves a phantom job", async () => {
+  const f = openCliFixture(); f.install("1.8.8");
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  try {
+    await call(service, "opencli.refresh"); await settle(service);
+    await call(service, "opencli.save", { ...service.snapshot().settings, revision: "" });
+    assert.equal(openCliResources(f.root, f.root).skills.length, 2);
+    rmSync(join(f.packageRoot, "skills", "opencli-browser"), { recursive: true });
+    assert.ok(openCliResources(f.root, f.root).warning);
+    assert.deepEqual(openCliResources(f.root, f.root).skills, []);
+    writeFileSync(openCliConfigPath(f.root), "broken");
+    assert.ok(openCliResources(f.root, f.root).warning, "corrupt optional config must not throw into main agent startup");
+    rmSync(join(f.root, "integrations", "opencli-job.json"));
+    mkdirSync(join(f.root, "integrations", "opencli-job.json"));
+    const count = f.calls.length;
+    await assert.rejects(call(service, "opencli.refresh"), { code: "STORAGE_ERROR" });
+    assert.equal(service.snapshot().job?.running, false);
+    assert.equal(service.installing, false);
+    assert.equal(f.calls.length, count);
+  } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("OpenCLI: failed environment checks settle their child before releasing job admission", async () => {
+  const f = openCliFixture();
+  const calls: string[][] = [];
+  const service = new OpenCliService(f.root, () => {}, async (args) => { calls.push(args); throw Error("npm unavailable"); }, f.locateNpm);
+  try {
+    await call(service, "opencli.refresh"); await settle(service);
+    assert.equal(calls.length, 1, "sequential probing must not leave root/prefix children behind on first failure");
+    assert.equal(service.snapshot().job?.running, false);
+  } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("OpenCLI: install rejects a prompt already admitted but still preparing its model", async () => {
+  const f = openCliFixture();
+  const app = await startServer({ root: join(f.root, "data"), port: 0, openCli: { execute: f.execute, locateNpm: f.locateNpm } });
+  const ws = new WebSocket(app.origin.replace("http:", "ws:") + "/ws", { headers: { Origin: app.origin } });
+  await once(ws, "open");
+  const waiting = new Map<string, (value: any) => void>();
+  ws.on("message", (raw) => { const value = JSON.parse(raw.toString()); if (value.type === "receipt") waiting.get(value.requestId)?.(value); });
+  const send = (op: string, extra = {}) => new Promise<any>((resolve) => { const requestId = randomUUID(); waiting.set(requestId, resolve); ws.send(JSON.stringify({ requestId, op, ...extra })); });
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  const admitted = new Promise<void>((r) => { entered = r; });
+  const original = app.tasks.command.bind(app.tasks);
+  app.tasks.command = async (c) => { if (c.op === "prompt") { entered(); await gate; return {}; } return original(c); };
+  try {
+    const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: f.root, authorized: true } }) as { id: string };
+    const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as { id: string };
+    const scope = { workspaceId: workspace.id, sessionId: session.id };
+    const prompt = send("prompt", { ...scope, params: { text: "fixture" } });
+    await admitted;
+    assert.equal(app.agents.active(scope), false, "the async pre-launch window has no active run yet");
+    const rejected = await send("opencli.install", { params: { version: "1.8.8" } });
+    assert.equal(rejected.error.code, "AGENT_BUSY");
+    release(); await prompt;
+    assert.equal(f.calls.length, 0);
+  } finally { release(); ws.terminate(); await app.close(); rmSync(f.root, { recursive: true, force: true }); }
 });

@@ -137,18 +137,23 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
       if (view?.images?.length) assert.ok(!view.text.includes("图片附件映射"));
     }
     await choose("text");
-    await assert.rejects(call("prompt", { text: "history contains images" }), { code: "MODEL_IMAGE_UNSUPPORTED" });
+    await call("prompt", { text: "history contains images" });
+    await wait(() => !running(app.agents.info(scope).run), "text-only continuation with image history unfinished");
+    assert.equal(app.agents.info(scope).run!.status, "completed");
+    assert.equal(requests.at(-1).model, "text");
+    assert.ok(!JSON.stringify(requests.at(-1).messages).includes("image_url"), "pi omits historical image payloads for text-only models");
+    const beforeRestart = requests.length;
     await choose("vision");
     await app.close(); ws = undefined;
     app = await startServer({ root, port: 0 });
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, beforeRestart);
     for (const id of app.agents.thread(scope).ids) {
       const view = app.agents.message(scope, id, true);
       if (view?.images?.length) assert.ok(!view.text.includes("图片附件映射"));
     }
     assert.equal(app.store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='drafts'").get(), undefined);
     await call("prompt", params, scope, requestId);
-    assert.equal(requests.length, 1, "receipt cannot replay images");
+    assert.equal(requests.length, beforeRestart, "receipt cannot replay images");
     await call("prompt", { text: "refer to previous images" });
     await wait(() => !running(app.agents.info(scope).run), "history restore unfinished");
     assert.ok(JSON.stringify(requests.at(-1).messages).includes("image_url"));

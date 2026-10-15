@@ -9,14 +9,17 @@ import type { OpenCliExecute } from "../src/server/integrations/opencli.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-tools-ui-"));
 const prefix = join(root, "global"), modules = join(prefix, "node_modules"), packageRoot = join(modules, "@jackwener", "opencli");
-let release!: () => void, installs = 0;
+let release!: () => void, installs = 0, doctorFails = false;
 const gate = new Promise<void>((r) => { release = r; });
 const execute: OpenCliExecute = async (args) => {
   if (args[1] === "--version") return "11.0.0";
   if (args[1] === "root") return modules;
   if (args[1] === "prefix") return prefix;
   if (args[1] === "view") return '"1.8.8"';
-  if (args[1] === "doctor") return "[OK] Daemon: running\n[MISSING] Extension: not connected\nBrowser connectivity test failed";
+  if (args[1] === "doctor") {
+    if (doctorFails) throw Error("fixture browser diagnostic timeout");
+    return "[OK] Daemon: running\n[MISSING] Extension: not connected\nBrowser connectivity test failed";
+  }
   if (args[1] === "install") {
     installs++; await gate;
     mkdirSync(packageRoot, { recursive: true });
@@ -65,13 +68,35 @@ try {
   await page.getByText("[OK] Daemon: running", { exact: false }).waitFor();
   assert.ok((await page.locator(".tools-diagnostic").innerText()).includes("[MISSING]"));
   assert.ok(!(await page.locator(".tools-feedback").innerText()).includes("连接成功"));
+  const other = await browser.newPage();
+  await other.goto(app.origin + "/tools.html");
+  await other.waitForFunction(() => !(document.getElementById("opencli-profile") as HTMLInputElement)?.disabled && document.body.innerText.includes("检查已完成"));
+  await page.getByLabel("Chrome 配置档案", { exact: true }).fill("my-draft");
+  await other.getByLabel("Chrome 配置档案", { exact: true }).fill("other-window");
+  await other.getByRole("button", { name: "保存接入设置", exact: true }).click();
+  await page.getByRole("button", { name: "用当前输入保存", exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Chrome 配置档案", { exact: true }).inputValue(), "my-draft");
+  await page.getByRole("button", { name: "用当前输入保存", exact: true }).click();
+  await page.getByText("接入设置已保存，将在下一次 Agent 执行时加载。", { exact: true }).waitFor();
+  assert.equal(JSON.parse(readFileSync(openCliConfigPath(root), "utf8")).profile, "my-draft");
+  doctorFails = true;
+  await other.getByRole("button", { name: "检测连接", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "fixture browser diagnostic timeout" }).waitFor();
+  assert.equal(await page.locator(".tools-diagnostic").count(), 0, "failed retry must not show an old report");
+  await page.reload();
+  await page.getByRole("alert").filter({ hasText: "fixture browser diagnostic timeout" }).waitFor();
+  await other.close();
+  doctorFails = false;
+  await page.getByRole("button", { name: "检测连接", exact: true }).click();
+  await page.locator(".tools-diagnostic").waitFor();
   mkdirSync(resolve("test-results"), { recursive: true });
   for (const [width, height] of [[360, 800], [390, 844], [430, 932], [600, 960], [820, 1180], [1024, 768], [1366, 768], [1440, 900], [1920, 1080]]) {
     await page.setViewportSize({ width, height });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     assert.equal(overflow, false, `horizontal overflow at ${width}`);
+    await page.evaluate(() => { document.querySelector(".tools-detail")?.scrollTo(0, 0); window.scrollTo(0, 0); });
     if ([360, 1440].includes(width)) await page.screenshot({ path: resolve(`test-results/builtin-tools-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
-  console.log("Built-in tools UI passed: install/reload, persisted settings, draft preservation, diagnostics, nine responsive widths.");
+  console.log("Built-in tools UI passed: install/reload, persisted settings, drafts/conflicts, remote errors, failed diagnostic recovery, nine responsive widths.");
 } finally { release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }
