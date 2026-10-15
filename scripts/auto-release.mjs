@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export const versionFiles = ['package.json', 'npm-shrinkwrap.json', 'app/package.json', 'app/package-lock.json', 'app/desktop/pake.json'];
 const repository = 'cosyeezz/axiom2';
@@ -148,6 +149,24 @@ export async function verifyPublicRelease(release, fetcher = fetch, expectedPack
   assert.deepEqual(entries, [`${hash}  axiom2.tgz`]);
 }
 
+export async function verifyWithRetry(readRelease, verify, pause = () => delay(2000)) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const release = await readRelease();
+      await verify(release);
+      return release;
+    } catch (error) {
+      if (attempt === 5) throw error;
+      await pause();
+    }
+  }
+}
+
+const verifyPublished = (release, expectedHash) => verifyWithRetry(
+  () => api(`releases/${release.id}`),
+  (fresh) => verifyPublicRelease(fresh, fetch, expectedHash),
+);
+
 export function existingReleaseStatus(release, source, commit) {
   if (!release) return 'missing';
   assert.ok(hasSource(release.body, source), 'Existing release has different provenance');
@@ -173,7 +192,7 @@ export async function prepare(stateFile) {
     verifyTag(tag, source);
     const existing = published.find((release) => release.tag_name === tag);
     if (existingReleaseStatus(existing, source, git('rev-parse', `${tag}^{commit}`)) === 'published') {
-      await verifyPublicRelease(existing);
+      await verifyPublished(existing);
       return output({ skip: true, reason: 'already published and verified', source, tag }, stateFile);
     }
     git('checkout', '--detach', tag);
@@ -214,7 +233,7 @@ export async function publish(stateFile, directory) {
   let release = releases().find((item) => item.tag_name === tag);
   if (release) {
     if (existingReleaseStatus(release, source, commit) === 'published') {
-      await verifyPublicRelease(release);
+      await verifyPublished(release);
       console.log(`Already published and verified: ${release.html_url}`);
       return;
     }
@@ -222,21 +241,24 @@ export async function publish(stateFile, directory) {
   } else {
     const notes = join(directory, 'release-notes.md');
     writeFileSync(notes, `后台自动更新包，来自 master 提交 [${source.slice(0, 7)}](https://github.com/${repository}/commit/${source})。\n\n三平台、两组 Node.js 版本的 CI 已通过；发布版本另外通过安装、升级与失败恢复检查。\n\n在桌面服务控制页点击「检查更新」，再选择「更新后台服务」。本次不包含桌面客户端安装包，已有客户端可继续使用。新设备的桌面客户端下载见 [README](https://github.com/${repository}/blob/master/README.md#一行安装与客户端下载)。\n\n${sourceLine(source)}\n`);
-    gh('release', 'create', tag, '--repo', repository, '--verify-tag', '--target', commit, '--draft', '--title', `Axiom2 ${tag}`, '--notes-file', notes);
-    release = releases().find((item) => item.tag_name === tag);
+    // Use the creation response: release-list reads can briefly omit a newly created draft.
+    const request = join(directory, 'release-request.json');
+    writeJson(request, { tag_name: tag, target_commitish: commit, name: `Axiom2 ${tag}`, body: readFileSync(notes, 'utf8'), draft: true, prerelease: false });
+    release = JSON.parse(gh('api', '--method', 'POST', `repos/${repository}/releases`, '--input', request));
   }
-  assert.ok(release?.draft);
+  assert.equal(existingReleaseStatus(release, source, commit), 'draft');
+  assert.equal(release.tag_name, tag);
   gh('release', 'upload', tag, archive, sums, '--clobber', '--repo', repository);
-  release = api(`releases/${release.id}`);
-  assertReleaseAssets(release, version, files);
+  release = await verifyWithRetry(() => api(`releases/${release.id}`), (fresh) => assertReleaseAssets(fresh, version, files));
   // Do not let an older run make itself Latest after a newer push or manual release.
   if (!sourceIsCurrent(source)) { console.log(`Keep ${tag} as draft: master has advanced.`); return; }
   const newerRelease = releases().find((item) => !item.draft && !item.prerelease && /^v/.test(item.tag_name) && pattern.test(item.tag_name.slice(1)) && compareVersions(item.tag_name.slice(1), version) > 0);
   assert.ok(!newerRelease, 'A newer release is already published; refusing to move Latest backwards');
   gh('release', 'edit', tag, '--repo', repository, '--draft=false', '--latest');
-  const latest = api('releases/latest');
-  assert.equal(latest.tag_name, tag);
-  await verifyPublicRelease(latest, fetch, sha256(bytes));
+  const latest = await verifyWithRetry(() => api('releases/latest'), async (fresh) => {
+    assert.equal(fresh.tag_name, tag);
+    await verifyPublicRelease(fresh, fetch, sha256(bytes));
+  });
   console.log(`Published and verified: ${latest.html_url}`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Published [${tag}](${latest.html_url}) from \`${source}\`. Package and checksum downloads verified.\n`);
 }

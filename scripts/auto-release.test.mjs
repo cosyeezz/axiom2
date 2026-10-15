@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { assertPackageReceipt, assertReleaseAssets, assertVersions, compareVersions, existingReleaseStatus, nextVersion, syncVersions, verifyPublicRelease, verifyTag, versionFiles } from './auto-release.mjs';
+import { assertPackageReceipt, assertReleaseAssets, assertVersions, compareVersions, existingReleaseStatus, nextVersion, syncVersions, verifyPublicRelease, verifyTag, verifyWithRetry, versionFiles } from './auto-release.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const source = 'a'.repeat(40), commit = 'b'.repeat(40);
@@ -93,6 +93,28 @@ test('upload requires the exact tarball and commit exercised by package validati
   assert.throws(() => assertPackageReceipt({ ...receipt, commit: source }, state, bytes));
   assert.throws(() => assertPackageReceipt({ ...receipt, version: '0.4.1' }, state, bytes));
   assert.throws(() => assertPackageReceipt({ ...receipt, size: 0, sha256: digest(Buffer.alloc(0)) }, state, Buffer.alloc(0)));
+});
+
+test('release propagation retries reread metadata, preserve the creation identity and stop on persistent failure', async () => {
+  const created = { id: 42 };
+  let reads = 0, pauses = 0;
+  const seen = [];
+  const final = await verifyWithRetry(async () => {
+    reads++;
+    if (reads === 1) throw Error('API propagation');
+    return { ...created, digest: reads === 2 ? 'old' : 'current' };
+  }, (release) => {
+    seen.push(release);
+    assert.equal(release.id, created.id);
+    assert.equal(release.digest, 'current');
+  }, async () => { pauses++; });
+  assert.equal(reads, 3);
+  assert.equal(pauses, 2);
+  assert.equal(final.id, 42);
+  assert.deepEqual(seen.map((release) => release.digest), ['old', 'current']);
+  let failedReads = 0;
+  await assert.rejects(verifyWithRetry(() => { failedReads++; return {}; }, () => { throw Error('still invalid'); }, async () => {}), /still invalid/);
+  assert.equal(failedReads, 6);
 });
 
 test('published-release retries repeat public verification and accept added desktop checksum entries', async () => {
