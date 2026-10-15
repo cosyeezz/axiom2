@@ -27,7 +27,7 @@ import type { WorkerInput } from "./agent-worker.js";
 import { AgentViews } from "./agents/views.js";
 import { AgentRuns } from "./agents/runs.js";
 import { Compressions } from "./compressions.js";
-import { imagesInput, imagePrompt, requireImageModel, contextImages } from "./images.js";
+import { imagesInput, imagePrompt, requireImageModel } from "./images.js";
 import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
 export class Agents {
@@ -311,7 +311,6 @@ export class Agents {
               .run(scope.sessionId, file);
           }
           const manager = openTranscript(file, cwd);
-          requireImageModel(model, contextImages(manager.buildSessionContext().messages));
           const raw = await this.models.raw();
           if (createHash("sha256").update(raw).digest("hex") !== config.revision)
             throw new AppError(

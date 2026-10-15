@@ -34,7 +34,7 @@ import {
 } from "./compression-context.js";
 import { taskToolNames, type TaskTool } from "../shared/tasks.js";
 import { AppError, type ImageAttachment } from "../shared/protocol.js";
-import { imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel, contextImages } from "./images.js";
+import { imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel } from "./images.js";
 
 // Literal SDK tool names form an allowlist, not modifiers of project defaults.
 const researchTools = ["read", "grep", "find", "ls"];
@@ -491,7 +491,6 @@ async function run(input: WorkerInput) {
         ...new Set([...session.getActiveToolNames(), ...taskToolNames]),
       ]);
     await session.setModel(model);
-    requireImageModel(model, contextImages(session.messages));
     session.setThinkingLevel(input.selection.thinking);
     if (session.thinkingLevel !== input.selection.thinking) throw Error();
     environment = {
