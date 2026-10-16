@@ -55,6 +55,7 @@ export function entries(provider: Json): Map<string, Json> {
             ...m,
             name: override.name ?? m.name,
             reasoning: override.reasoning ?? m.reasoning,
+            input: override.input ?? m.input,
             thinkingLevelMap: {
               ...m.thinkingLevelMap,
               ...override.thinkingLevelMap,
@@ -278,6 +279,17 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
           )
             invalid("至少选择一个有效思考等级");
           const existing = runtime.getModel(providerId, oldId ?? modelId);
+          if (m.input !== undefined) {
+            if (!Array.isArray(m.input) || !m.input.includes("text") ||
+                m.input.length > 2 || new Set(m.input).size !== m.input.length ||
+                m.input.some((value: unknown) => value !== "text" && value !== "image"))
+              invalid("输入能力：必须包含文本，可选图片；不支持其他输入类型或重复项");
+            const input = ["text", ...((m.input as string[]).includes("image") ? ["image"] : [])];
+            // Do not freeze native catalog metadata when the capability was not edited.
+            const beforeInput = existing?.input ?? old.input ?? ["text"];
+            if (input.length !== beforeInput.length || input.some((value) => !beforeInput.includes(value)) ||
+                (!oldId && !existing) || (oldId && oldId !== modelId)) model.input = input;
+          }
           if (
             existing?.reasoning &&
             !getSupportedThinkingLevels(existing).includes("off") &&
@@ -319,6 +331,9 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             next.modelOverrides[modelId] = model;
           } else {
             model.id = modelId;
+            // A renamed native override becomes a custom definition, whose default is text-only.
+            if (oldId && oldId !== modelId && model.input === undefined)
+              model.input = [...(existing?.input ?? ["text"])];
             next.models.push(model);
             if (oldId && Object.hasOwn(original.modelOverrides ?? {}, oldId)) {
               const remaining = structuredClone(original.modelOverrides[oldId]);
@@ -326,6 +341,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
               for (const key of [
                 "name",
                 "reasoning",
+                "input",
                 "thinkingLevelMap",
                 "samplingParams",
                 "headers",
@@ -427,9 +443,14 @@ export function validateDraft(
           const inputProvider = (draft.providers as Json[]).find(
             (v) => v.providerId.trim() === providerId,
           )!;
-          const expected = inputProvider.models.find(
+          const inputModel = inputProvider.models.find(
             (m: Json) => m.id.trim() === modelId,
-          ).levels;
+          );
+          if (inputModel.input !== undefined &&
+              (actual.input.length !== inputModel.input.length ||
+               actual.input.some((value) => !inputModel.input.includes(value))))
+            invalid("输入能力：所选能力与模型加载后的能力不一致，请重新读取并调整模型配置");
+          const expected = inputModel.levels;
           if (
             levelsOf(actual).join() !==
             reasoningLevels.filter((l) => expected.includes(l)).join()

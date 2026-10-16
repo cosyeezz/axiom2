@@ -78,7 +78,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
               const checked = e.target.checked;
               setSelected((old) => { const next = new Set(old); checked ? next.add(model.id) : next.delete(model.id); return next; });
             }} />
-            <span className="model-catalog-name"><strong>{model.name}</strong><code>{model.id}</code><span className="meta">{model.api} · 上下文 {model.contextWindow.toLocaleString()} · {model.levels.join(" / ")}</span></span>
+            <span className="model-catalog-name"><strong>{model.name}</strong><code>{model.id}</code><span className="meta">{model.api} · 上下文 {model.contextWindow.toLocaleString()} · {model.input?.includes("image") ? "文本 + 图片" : "仅文本"}</span><span className="meta">思考：{model.levels.join(", ")}</span></span>
             {existing.has(model.id) ? <span className="tag">已添加</span> : provider.connectionType !== "oauth" && model.api !== provider.api ? <span className="meta">需使用 {model.api} 协议</span> : null}
           </label>
         ))}
@@ -88,7 +88,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
       <div className="model-catalog-actions">
         <span className="meta">已选 {picked.length} 个 · 加入后保存</span>
         <button type="button" className="btn btn-primary" disabled={busy || blocked || !!error || !picked.length || overflow} onClick={() => {
-          add(picked.map((model) => ({ key: crypto.randomUUID(), id: model.id, name: model.name, levels: [...model.levels], headers: [], body: [] })));
+          add(picked.map((model) => ({ key: crypto.randomUUID(), id: model.id, name: model.name, levels: [...model.levels], input: model.input ? [...model.input] : undefined, headers: [], body: [] })));
           close();
         }}>加入配置{picked.length ? `（${picked.length}）` : ""}</button>
       </div>

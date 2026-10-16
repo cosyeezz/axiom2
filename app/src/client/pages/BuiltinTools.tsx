@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SettingsSidebar } from "../components.js";
+import { SettingsHeader } from "../settings/SettingsHeader.js";
 import { BrowserWindowSelect } from "./BrowserWindowSelect.js";
 import { command, useConnection, useConnectionState, useScope } from "../transport.js";
 import { defaultOpenCliSettings, type OpenCliSettings, type OpenCliState } from "../../shared/builtin-tools.js";
@@ -54,23 +55,20 @@ export default function BuiltinTools() {
     <div className="settings-app builtin-tools-app">
       <SettingsSidebar page="tools" />
       <main className="settings-main" id="content">
-        <header className="topnav">
-          <div className="row"><a className="mobile-config-link" href="/settings.html">配置</a><span className="tools-desktop-label">配置</span><span aria-hidden="true">/</span><strong>内置工具</strong></div>
-          <span className="tag">本机应用</span>
-        </header>
-        <div className="page-heading"><div><h1>内置工具</h1><p>为 Agent 接入常用工具，在这里完成安装、配置与更新。</p></div><span className="tag">1 项工具</span></div>
+        <SettingsHeader page="tools" />
         <div className="configuration-layout">
           <aside className="supplier-panel" aria-label="内置工具列表">
-            <div className="supplier-toolbar"><h2>全部工具</h2></div>
+            <div className="supplier-toolbar"><h2>全部工具 <span className="meta num">1</span></h2></div>
             <nav className="supplier-list">
               <a className="supplier-option" href="#opencli" aria-current="true"><span><strong>OpenCLI <span className="tag">浏览器</span></strong><small>{installStatus}</small></span></a>
             </nav>
           </aside>
           <article className="supplier-detail tools-detail" id="opencli" aria-labelledby="opencli-heading">
             <div className="detail-heading row-between"><div><h2 id="opencli-heading">OpenCLI</h2><p className="meta">连接 Chrome，让 Agent 操作网页和已登录的网站。</p></div><span className="tag">{state.configured ? "已配置" : "待接入"}</span></div>
+            <div className="tools-content">
             <div className="tools-feedback" aria-live="polite">
-              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{notice?.text || state.job?.message || connectionText}</p>}
-              {!connection.connected && <p>{connectionText}；重连后读取当前操作进度。</p>}
+              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{notice?.text || state.job?.message || (connection.connected ? connectionText : `${connectionText}；重连后读取当前操作进度。`)}</p>}
+              {!connection.connected && (error || notice?.text || state.job?.message) && <p>{connectionText}；重连后读取当前操作进度。</p>}
             </div>
             <section className="section tools-section" aria-labelledby="install-heading">
               <div className="section-heading"><h3 id="install-heading">安装与更新</h3><p>官方 npm 包 · @jackwener/opencli</p></div>
@@ -97,11 +95,6 @@ export default function BuiltinTools() {
                 </div>
               </fieldset>
               {conflict && <div className="tools-conflict" role="status"><p>配置已在其他窗口修改。可放弃修改并载入最新配置，或用当前输入覆盖最新设置。</p><button className="btn" disabled={busy || !state.version} onClick={() => void action("opencli.save", { ...settings, revision: state.revision })}>用当前输入保存</button></div>}
-              <div className="tools-actions">
-                <button className="btn btn-primary" disabled={busy || conflict || !state.version || (!draft && state.configured)} onClick={() => void action("opencli.save", { ...settings, revision: draft?.revision ?? state.revision })}>保存接入设置</button>
-                {draft && <button className="btn btn-ghost" disabled={busy} onClick={() => { setDraft(undefined); setFeedback(undefined); }}>放弃修改</button>}
-                <span className="meta">{draft ? "有未保存的修改" : state.configured ? "已保存 · 后续执行自动加载" : "已有安装可直接保存接入设置"}</span>
-              </div>
             </section>
             <section className="section tools-section" aria-labelledby="browser-heading">
               <div className="section-heading"><h3 id="browser-heading">浏览器扩展与连接</h3></div>
@@ -110,6 +103,12 @@ export default function BuiltinTools() {
               <p className="field-help tools-help">任选一种方式安装扩展，然后保持 Chrome 和扩展启用，点击「检测连接」查看诊断结果。</p>
               {state.diagnostic && <details className="tools-diagnostic" open><summary>官方诊断报告 · {new Date(state.diagnostic.checkedAt).toLocaleTimeString()}</summary><pre>{state.diagnostic.text}</pre></details>}
             </section>
+            </div>
+            <footer className="configuration-actions" aria-label="接入设置操作">
+              <button className="btn btn-primary" disabled={busy || conflict || !state.version || (!draft && state.configured)} onClick={() => void action("opencli.save", { ...settings, revision: draft?.revision ?? state.revision })}>保存接入设置</button>
+              <button className="btn btn-ghost" disabled={busy || !draft} onClick={() => { setDraft(undefined); setFeedback(undefined); }}>放弃修改</button>
+              <span className="save-state" data-dirty={!!draft}>{draft ? "有未保存的修改" : state.configured ? "已保存 · 后续执行自动加载" : "已有安装可直接保存接入设置"}</span>
+            </footer>
           </article>
         </div>
       </main>

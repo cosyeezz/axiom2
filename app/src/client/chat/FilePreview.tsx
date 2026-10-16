@@ -1,0 +1,138 @@
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { command } from "../transport.js";
+import type { FilePreview } from "../../shared/file-preview.js";
+import type { OpenFileReference } from "./FileLink.js";
+import { FileIcon, type FileIconName } from "./FileIcon.js";
+import { Markdown } from "./Markdown.js";
+import { CodeBlock } from "./CodeBlock.js";
+import "../styles/file-preview.css";
+type Mode = "source" | "split" | "reading";
+const modes: [Mode, string][] = [["source", "Markdown 源码"], ["split", "源码与预览对比"], ["reading", "Markdown 阅读"]];
+function Action({ icon, label, onClick, disabled, pressed }: { icon: FileIconName; label: string; onClick: () => void; disabled?: boolean; pressed?: boolean }) {
+  return <button type="button" className="file-action" aria-label={label} data-tooltip={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}><FileIcon name={icon} /></button>;
+}
+function Source({ file, wrap }: { file: FilePreview; wrap: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lines = (file.text ?? "").split("\n").length;
+  useEffect(() => {
+    if (file.line && ref.current) ref.current.scrollTop = (Math.min(file.line, lines) - 1) * 24;
+  }, [file, lines]);
+  return <div className={`file-source-scroll${wrap ? " is-wrapped" : ""}`} ref={ref} tabIndex={0} aria-label="文件源码">
+    <div className="file-source-lines" aria-hidden="true">{Array.from({ length: Math.min(lines, 30000) }, (_, i) => i + 1).join("\n")}</div>
+    <div className="file-source-code"><CodeBlock text={file.text ?? ""} language={file.language ?? (file.kind === "markdown" ? "markdown" : "text")} /></div>
+  </div>;
+}
+function useMedia(file: FilePreview | null) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!file?.data || !file.mimeType) { setUrl(""); return; }
+    const bytes = Uint8Array.from(atob(file.data), char => char.charCodeAt(0));
+    const next = URL.createObjectURL(new Blob([bytes], { type: file.mimeType }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return url;
+}
+function ImageFile({ url, name, zoom }: { url: string; name: string; zoom: number | null }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [natural, setNatural] = useState({ width: 0, height: 0 });
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const node = scroller.current!;
+    const measure = () => setViewport({ width: node.clientWidth, height: node.clientHeight });
+    const observer = new ResizeObserver(measure); observer.observe(node); measure();
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => { setError(false); }, [url]);
+  useEffect(() => { if (zoom === null) scroller.current?.scrollTo(0, 0); }, [zoom]);
+  const scale = zoom === null ? Math.min(1, Math.max(1, viewport.width - 48) / (natural.width || 1), Math.max(1, viewport.height - 48) / (natural.height || 1)) : zoom / 100;
+  const width = natural.width * scale, height = natural.height * scale;
+  return <div className="file-image-scroll" ref={scroller} tabIndex={0} aria-label="图片预览内容">
+    {error ? <div className="file-empty" role="alert"><strong>图片无法解码</strong><p>请重新加载，或打开本地位置查看原文件。</p></div> : <div className="file-image-stage" style={{ width: width + 48, height: height + 48 }}>
+      {url && <img src={url} alt={name} style={{ width, height }} onLoad={event => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setError(true)} />}
+    </div>}
+  </div>;
+}
+const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileReference; onClose: () => void }) {
+  const [file, setFile] = useState<FilePreview | null>(null), [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0), [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<Mode>("reading"), [ratio, setRatio] = useState(50), [wrap, setWrap] = useState(false);
+  const [revealing, setRevealing] = useState(false), [notice, setNotice] = useState("");
+  const [zoom, setZoom] = useState<number | null>(null);
+  const panel = useRef<HTMLElement>(null), panes = useRef<HTMLDivElement>(null), alive = useRef(true);
+  const url = useMedia(file);
+  useEffect(() => { alive.current = true; panel.current?.focus(); return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    let current = true;
+    setLoading(true); setError(""); setNotice("");
+    void command<FilePreview>("files.document", { messageId: reference.messageId, href: reference.href }, reference.owner.scope)
+      .then(result => { if (current) { setFile(result); if (result.line) setMode("source"); } })
+      .catch(e => { if (current) setError(e.message); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [reference, attempt]);
+  const reveal = async () => {
+    setRevealing(true); setNotice("");
+    try {
+      await command("files.reveal", { messageId: reference.messageId, href: reference.href }, reference.owner.scope);
+      if (alive.current) setNotice("已打开所在文件夹");
+    } catch (e) { if (alive.current) setNotice((e as Error).message); }
+    finally { if (alive.current) setRevealing(false); }
+  };
+  const clamp = (value: number) => Math.max(20, Math.min(80, value));
+  const move = (clientX: number) => { const box = panes.current?.getBoundingClientRect(); if (box?.width) setRatio(clamp((clientX - box.left) / box.width * 100)); };
+  const title = file?.name ?? reference.href.replace(/\\/g, "/").split("/").at(-1) ?? "文件预览";
+  const isText = file && ["markdown", "code", "text"].includes(file.kind);
+  const showSource = file?.kind !== "markdown" || mode !== "reading";
+  const readable = (file?.text?.length ?? 0) <= 200000;
+  let body: ReactNode;
+  if (loading) body = <div className="file-empty" role="status"><span className="file-loading" /><strong>正在读取文件</strong><p>内容将在这里展开</p></div>;
+  else if (error) body = <div className="file-empty" role="alert"><FileIcon name="file" /><strong>暂时无法预览</strong><p>{error}</p><button type="button" className="btn" onClick={() => setAttempt(n => n + 1)}>重新加载</button></div>;
+  else if (!file) body = null;
+  else if (isText) body = <div ref={panes} className={`file-panes mode-${file.kind === "markdown" ? mode : "source"}`} style={{ "--file-split": `${ratio}%` } as CSSProperties}>
+    <section className="file-source-pane" hidden={!showSource} aria-label="源码视图">
+      <div className="file-pane-label"><span>源码</span><span>{file.encoding}</span></div><Source file={file} wrap={wrap} />
+    </section>
+    {file.kind === "markdown" && <>
+      <div className="file-divider" hidden={mode !== "split"} role="separator" aria-label="调整源码与预览宽度" aria-orientation="vertical" aria-valuemin={20} aria-valuemax={80} aria-valuenow={Math.round(ratio)} tabIndex={0}
+        onDoubleClick={() => setRatio(50)}
+        onKeyDown={event => {
+          if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); setRatio(v => event.key === "Home" ? 20 : event.key === "End" ? 80 : clamp(v + (event.key === "ArrowLeft" ? -5 : 5))); }
+        }}
+        onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); move(event.clientX); }}
+        onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) move(event.clientX); }}
+        onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}><span /></div>
+      <section className="file-reading-pane" hidden={mode === "source"} aria-label="渲染预览">
+        <div className="file-pane-label"><span>预览</span><span>MARKDOWN</span></div>
+        <div className="file-reading-scroll" tabIndex={0}>
+          {readable ? <div className="markdown file-reading"><Markdown text={file.text ?? ""} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>}
+        </div>
+      </section>
+    </>}
+  </div>;
+  else if (file.kind === "image") body = <ImageFile url={url} name={file.name} zoom={zoom} />;
+  else if (file.kind === "pdf") body = <div className="file-pdf"><p>PDF 阅读器不可用时，可通过右上角打开所在文件夹。</p>{url && <object data={url} type="application/pdf" aria-label={`PDF 预览：${file.name}`}><div className="file-empty"><strong>此环境无法内嵌显示 PDF</strong><p>请打开所在文件夹，使用本地 PDF 阅读器查看。</p></div></object>}</div>;
+  else body = <div className="file-empty"><FileIcon name="file" /><strong>{file.name}</strong><p>{file.reason}</p><button type="button" className="btn" disabled={revealing} onClick={() => void reveal()}><FileIcon name="folder" />打开所在文件夹</button></div>;
+  return <aside className="file-preview-panel" ref={panel} role="dialog" aria-modal="false" aria-label={`文件预览：${title}`} tabIndex={-1}
+    onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
+    <header className="file-preview-header">
+      <div className="file-title"><span className="file-type-icon"><FileIcon name={file?.kind === "image" ? "image" : file?.kind === "markdown" ? "reading" : file?.kind === "code" ? "source" : "text"} /></span><div><strong title={title}>{title}</strong><span title={file?.path ?? reference.href}>{file?.path ?? reference.href}</span></div></div>
+      <div className="file-header-actions"><Action icon="folder" label={revealing ? "正在打开所在文件夹" : "打开所在文件夹"} onClick={() => void reveal()} disabled={revealing || loading || !!error} /><Action icon="close" label="关闭文件预览" onClick={onClose} /></div>
+    </header>
+    <div className="file-preview-toolbar">
+      <div className="file-mode-group" role="group" aria-label="预览模式">
+        {file?.kind === "markdown" ? modes.map(([value, label]) => <Action key={value} icon={value} label={label} pressed={mode === value} onClick={() => setMode(value)} disabled={loading} />) : <span className="file-format-label">{file ? ({ code: "代码", text: "纯文本", image: "图片", pdf: "PDF 文档", unsupported: "文件信息", markdown: "Markdown" })[file.kind] : "文件预览"}</span>}
+      </div>
+      <span className="file-mode-caption">{file?.kind === "markdown" ? mode === "split" ? "源码 · 预览" : mode === "source" ? "源码" : "阅读" : "只读"}</span>
+      <div className="file-view-actions">
+        {isText && showSource && <Action icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(v => !v)} />}
+        {file?.kind === "image" && <><Action icon="minus" label="缩小图片" onClick={() => setZoom(v => Math.max(25, (v ?? 100) - 25))} disabled={zoom === 25} /><span className="file-zoom">{zoom === null ? "适应" : `${zoom}%`}</span><Action icon="plus" label="放大图片" onClick={() => setZoom(v => Math.min(300, (v ?? 100) + 25))} disabled={zoom === 300} /><Action icon="fit" label="图片适应窗口" onClick={() => setZoom(null)} /></>}
+        <Action icon="reload" label="重新加载文件" disabled={loading} onClick={() => setAttempt(n => n + 1)} />
+      </div>
+    </div>
+    <div className="file-preview-body" aria-busy={loading}>{body}</div>
+    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" title={notice}>{notice || (file?.encoding ?? "只读预览")}</span></footer>
+  </aside>;
+}

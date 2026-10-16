@@ -12,7 +12,7 @@ export function TaskSettings() {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   return <>
-    <button ref={trigger} type="button" className="compression-trigger subagent-trigger"
+    <button ref={trigger} type="button" className="compression-trigger subagent-trigger action-icon"
       data-od-id="subagent-settings-trigger" aria-label="子代理设置" data-tooltip="子代理设置"
       aria-haspopup="dialog" aria-expanded={open} aria-controls={id} popoverTarget={id}
       onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>

@@ -132,7 +132,7 @@ export function Compression({ scope }: { scope?: Scope }) {
       <button
         ref={trigger}
         type="button"
-        className="compression-trigger"
+        className="compression-trigger action-icon"
         data-od-id="background-compression-trigger"
         data-state={state}
         aria-controls={id}

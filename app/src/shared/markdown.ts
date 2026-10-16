@@ -1,7 +1,18 @@
-import { Marked } from "marked";
+import { Marked, Tokenizer } from "marked";
 
 /** Shared parser keeps displayed image references and server authorization identical. */
 export const markdown = new Marked({
+  tokenizer: {
+    emStrong(source, maskedSource) {
+      // Marked checks the opening delimiter against the original source, not
+      // the mask. Allow Chinese opening punctuation after adjacent prose while
+      // letting its tokenizer preserve nesting, escapes and original token text.
+      if (/^\*{2}[“‘（【《「『〔〈〖〘〚]/.test(source)) {
+        return Tokenizer.prototype.emStrong.call(this, source, maskedSource, "") ?? false;
+      }
+      return false;
+    },
+  },
   hooks: {
     emStrongMask(source) {
       // Relax CJK closing punctuation only in the delimiter-analysis mask.

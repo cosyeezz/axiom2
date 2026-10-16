@@ -34,12 +34,15 @@ export interface OverrideRow {
   source?: string;
   keep?: boolean;
 }
+export type ModelInput = "text" | "image";
 export interface ModelDraft {
   key: string;
   originalId?: string;
   id: string;
   name: string;
   levels: ReasoningLevel[];
+  // Omitted by older clients: preserve the model's native input capabilities.
+  input?: ModelInput[];
   headers: OverrideRow[];
   body: OverrideRow[];
 }
@@ -76,7 +79,7 @@ export interface ModelCatalog {
   revision: string;
   source: "refreshed" | "local";
   message: string;
-  models: { id: string; name: string; api: string; levels: ReasoningLevel[]; contextWindow: number }[];
+  models: { id: string; name: string; api: string; levels: ReasoningLevel[]; input: ModelInput[]; contextWindow: number }[];
 }
 export interface AuthState {
   id: string;

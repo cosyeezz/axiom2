@@ -20,15 +20,14 @@ function savedView(): WorkspaceView {
 /** Sidebar workspace and viewed session are independent; server preferences never navigate an open viewer. */
 export function useWorkspaceView(onError: (message: string) => void) {
   const workspaces = useScope<Workspace[] | null>("workspaces", null);
-  const preferences = useScope<{ lastWorkspaceId: string | null } | null>("workspace-preferences", null);
+  const preferences = useScope<{ lastWorkspaceId: string | null; view?: Scope | null } | null>("workspace-preferences", null);
   const [state, setState] = useState<WorkspaceView>(savedView);
   const current = useRef(state);
   const [ready, setReady] = useState(false);
   const initialized = useRef(false);
   const navigation = useRef(0);
-  const select = (next: Scope | null, changeWorkspace = true) => {
-    const workspaceId = changeWorkspace ? next?.workspaceId ?? null : current.current.workspaceId;
-    const changedWorkspace = current.current.workspaceId !== workspaceId;
+  const select = (next: Scope | null, changeWorkspace = true, restoredWorkspace?: string) => {
+    const workspaceId = restoredWorkspace ?? (changeWorkspace ? next?.workspaceId ?? null : current.current.workspaceId);
     navigation.current++;
     current.current = { workspaceId, view: next };
     setState(current.current);
@@ -40,8 +39,8 @@ export function useWorkspaceView(onError: (message: string) => void) {
     } catch {
       onError("此窗口的查看位置无法保存；下次仍可恢复服务端记住的工作空间。");
     }
-    if (workspaceId && changedWorkspace)
-      void command("workspace.select", {}, { workspaceId })
+    if (workspaceId)
+      void command("workspace.select", { view: next?.sessionId ? next : null }, { workspaceId })
         .catch((e: Error) => onError(`上次工作空间未保存：${e.message}`));
   };
   useEffect(() => {
@@ -52,8 +51,12 @@ export function useWorkspaceView(onError: (message: string) => void) {
     if (!initialized.current) {
       initialized.current = true;
       setReady(true);
-      // Restore both selections in this window, while only the sidebar workspace
-      // becomes the preference for new browser/Pake windows.
+      // Per-window selection wins; a fresh window restores the durable main session.
+      // Older services omit view; optional session recovery must never block navigation.
+      if (!existing.view && preferences.view && workspaces.some(w => w.id === preferences.view!.workspaceId)) {
+        select(preferences.view, true, workspaces.find(w => w.id === preferences.lastWorkspaceId)?.id);
+        return;
+      }
       if (sidebarExists && viewExists) {
         void command("workspace.select", {}, { workspaceId: existing.workspaceId! })
           .catch((e: Error) => onError(`上次工作空间未保存：${e.message}`));

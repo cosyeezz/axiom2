@@ -155,7 +155,7 @@ test("HTTP/WS workspace broadcasts, view-only preference, removed preview comman
     await a.call(command("workspace.select", w.id));
     // A same-socket round trip is an observation barrier for prior broadcasts.
     await b.call({ op: "subscribe", params: { scope: "workspace-preferences" } });
-    assert.deepEqual(b.latest("workspace-preferences"), { lastWorkspaceId: w.id });
+    assert.deepEqual(b.latest("workspace-preferences"), { lastWorkspaceId: w.id, view: null });
     assert.equal(b.latest("workspaces")[0].name, "广播名称");
     assert.equal(b.latest("workspaces")[0].pinned, true);
     assert.ok(b.messages.slice(before).filter((m) => m.type === "snapshot").every((m) => m.scope === "workspace-preferences"));
@@ -183,7 +183,7 @@ test("HTTP/WS workspace broadcasts, view-only preference, removed preview comman
     await b.call({ op: "subscribe", params: { scope: "workspaces" } });
     assert.deepEqual(b.latest("workspaces"), []);
     assert.deepEqual(b.latest("pinned-sessions"), []);
-    assert.deepEqual(b.latest("workspace-preferences"), { lastWorkspaceId: null });
+    assert.deepEqual(b.latest("workspace-preferences"), { lastWorkspaceId: null, view: null });
     assert.deepEqual(b.latest(`sessions:${w.id}`), []);
     for (const prefix of ["session", "agent", "thread", "tasks", "compression"])
       assert.equal(b.latest(`${prefix}:${w.id}:${s.id}`), null);
@@ -199,7 +199,7 @@ test("HTTP/WS workspace broadcasts, view-only preference, removed preview comman
     await app.close(); app = await startServer({ root, port: 0 });
     const restored = await connect();
     await restored.call({ op: "subscribe", params: { scope: "workspace-preferences" } });
-    assert.deepEqual(restored.latest("workspace-preferences"), { lastWorkspaceId: w.id });
+    assert.deepEqual(restored.latest("workspace-preferences"), { lastWorkspaceId: w.id, view: null });
     // Archived child history remains on disk but must be excluded from lifecycle scans.
     const child = app.store.execute(command("session.create", w.id)) as Session;
     app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES('archived-run',?,'completed','{}',1,2)").run(child.id);

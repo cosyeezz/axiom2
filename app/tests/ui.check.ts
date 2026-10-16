@@ -371,6 +371,7 @@ try {
   await page.getByRole("checkbox", { name: "max", exact: true }).check();
   await page.getByRole("button", { name: "完成编辑", exact: true }).click();
   assert.equal(await page.locator("#save-provider").isDisabled(), false);
+  await page.locator("#configured-model-table tbody tr").first().hover();
   await page
     .getByRole("button", { name: "复制模型名称：验收模型名称", exact: true })
     .click();
@@ -479,6 +480,7 @@ try {
     .filter({ hasText: "界面验收供应商" })
     .click();
   await page.getByRole("tab", { name: /模型配置/ }).click();
+  await page.locator("#configured-model-table tbody tr").first().hover();
   await page
     .getByRole("button", { name: "编辑模型：尚未完成的编辑", exact: true })
     .click();
@@ -492,6 +494,7 @@ try {
     .locator(".supplier-option")
     .filter({ hasText: "界面验收供应商" })
     .click();
+  await page.locator("#configured-model-table tbody tr").first().hover();
   await page
     .getByRole("button", { name: "编辑模型：验收模型名称", exact: true })
     .click();
@@ -654,6 +657,7 @@ try {
       "其他页面修改",
   );
   await page.getByRole("tab", { name: /模型配置/ }).click();
+  await page.getByRole("button", { name: "删除模型：ui-model", exact: true }).locator("xpath=ancestor::tr").hover();
   await page
     .getByRole("button", { name: "删除模型：ui-model", exact: true })
     .click();

@@ -19,6 +19,8 @@ const Page = (
       ? import("./pages/Models.js")
       : import("./pages/Workbench.js"))
 ).default;
+// Apply shared control states after the selected page's styles.
+await import("./styles/action-icons.css");
 createRoot(document.getElementById("root")!).render(
   <>
     <Icons />

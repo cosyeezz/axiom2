@@ -5,7 +5,14 @@ import {
   type Scope,
 } from "../shared/protocol.js";
 
-// Drafts live only in this page, keyed by workspace/session. Reloading discards them.
+// Synchronous page cache; the persistence adapter saves changes without blocking input.
+let persist: ((scope: Scope, draft: Draft) => void) | undefined;
+export function onDraftChange(callback: typeof persist) { persist = callback; }
+export function restoreDraft(scope: Scope, draft: Draft) {
+  const key = scopeKey(scope);
+  drafts.set(key, draftContent(draft));
+  listeners.get(key)?.forEach((fn) => fn());
+}
 export type DraftContent = Draft;
 const drafts = new Map<string, Draft>();
 const listeners = new Map<string, Set<() => void>>();
@@ -18,10 +25,12 @@ export function getDraft(scope: Scope) {
 export function updateDraft(
   scope: Scope,
   patch: Partial<DraftContent>,
+  save = true,
 ) {
   const key = scopeKey(scope);
   drafts.set(key, { ...getDraft(scope), ...patch });
   listeners.get(key)?.forEach((fn) => fn());
+  if (save) persist?.(scope, getDraft(scope));
 }
 export function draftContent(draft: DraftContent): DraftContent {
   return {
@@ -31,10 +40,10 @@ export function draftContent(draft: DraftContent): DraftContent {
     images: (draft.images ?? []).map((image) => ({ ...image })),
   };
 }
-export function clearSubmittedDraft(scope: Scope, submitted: DraftContent) {
+export function clearSubmittedDraft(scope: Scope, submitted: DraftContent, save = true) {
   const current = getDraft(scope);
   if (JSON.stringify(draftContent(current)) === JSON.stringify(draftContent(submitted)))
-    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [] });
+    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [] }, save);
 }
 export function useDraft(scope: Scope) {
   const key = scopeKey(scope);

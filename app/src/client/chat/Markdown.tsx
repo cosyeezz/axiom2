@@ -1,5 +1,7 @@
 import { memo, type ReactNode } from "react";
 import type { Token } from "marked";
+import { FileLink } from "./FileLink.js";
+import { localFileLink } from "../../shared/file-preview.js";
 import { CodeBlock } from "./CodeBlock.js";
 import { markdown, markdownImagePath } from "../../shared/markdown.js";
 import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
@@ -67,10 +69,11 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
           if (token.type === "image") linkedImage = true;
         });
         if (linkedImage) return <span key={i}>{inner()}</span>;
+        if (localFileLink(t.href)) return images ? <FileLink key={i} href={t.href} owner={images}>{inner()}</FileLink> : <span key={i}>{inner()}</span>;
         let safe = false;
         try {
-          safe = ["http:", "https:", "mailto:"].includes(
-            new URL(t.href, location.href).protocol,
+          safe = /^(?:https?:\/\/|mailto:)/i.test(t.href) && ["http:", "https:", "mailto:"].includes(
+            new URL(t.href).protocol,
           );
         } catch {}
         return safe ? (

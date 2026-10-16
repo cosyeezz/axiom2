@@ -212,10 +212,12 @@ try {
     await page.getByRole("button", { name: "完成编辑", exact: true }).click();
   }
   const firstModel = page.getByRole("button", { name: "删除模型：gesture-one", exact: true });
+  await firstModel.locator("xpath=ancestor::tr").hover();
   await firstModel.click();
   const modelDialog = page.getByRole("dialog", { name: "删除模型草稿？", exact: true });
   await modelDialog.waitFor();
   await modelDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await firstModel.locator("xpath=ancestor::tr").hover();
   await page.getByRole("button", { name: "编辑模型：gesture-one", exact: true }).click();
   await page.locator("#model-editor").waitFor();
   await firstModel.dblclick();

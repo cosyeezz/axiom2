@@ -7,6 +7,8 @@ import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Store } from "./storage.js";
+import { SessionDrafts } from "./session-drafts.js";
+import type { DraftStamp } from "../shared/drafts.js";
 import { SessionAttention } from "./session-attention.js";
 import { Files } from "./files.js";
 import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
@@ -53,7 +55,9 @@ export async function startServer(
 ) {
   const store = new Store(options.root ?? dataRoot());
   const costs = new Costs(store);
-  const files = new Files(store, (scope, id) => agents.message(scope, id, true));
+  const drafts = new SessionDrafts(store);
+  const files = new Files(store, (scope, id) => agents.message(scope, id, true),
+    (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal));
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
@@ -86,7 +90,8 @@ export async function startServer(
   const subscriptions = new Map<WebSocket, Set<string>>();
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
-    if (scope === "workspace-preferences") return store.workspacePreferences();
+    if (scope === "workspace-preferences") return { ...store.workspacePreferences(), view: store.lastSession() };
+    if (scope === "session-preferences") return { view: store.lastSession() };
     if (scope === compressionPreferencesScope) return store.compressionPreferences();
     if (scope === taskPreferencesScope) return tasks.settings();
     if (scope === "pinned-sessions") return store.pinnedSessions();
@@ -300,7 +305,11 @@ export async function startServer(
         } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
         } else if (c.op.startsWith("files.")) {
-          data = await files.command(c);
+          const controller = new AbortController();
+          const abort = () => controller.abort();
+          ws.once("close", abort);
+          try { data = await files.command(c, controller.signal); }
+          finally { ws.off("close", abort); }
         } else if (c.op === "configuration.get") {
           await refreshConfiguration();
           data = await models.read();
@@ -343,13 +352,26 @@ export async function startServer(
           c.op.startsWith("task.") ||
           c.op === "message.get" ||
           c.op === "message.image"
-        )
+        ) {
+          if (c.op === "prompt" && c.params?.draftStamp !== undefined) {
+            const stamp = object(c.params.draftStamp);
+            if (typeof stamp.writer !== "string" || !Number.isSafeInteger(stamp.sequence) || Number(stamp.sequence) < 1)
+              throw new AppError("INVALID_INPUT", "草稿发送标识无效");
+          }
           data = await tasks.command(c);
-        else if (c.op === "session.delete")
+        } else if (c.op === "session.delete")
           data = await models.serial(() => tasks.remove(c));
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId, c);
         else data = store.execute(c);
+        if (c.op === "prompt" && c.params?.draftStamp) {
+          const stamp = object(c.params.draftStamp);
+          if (typeof stamp.writer === "string" && Number.isSafeInteger(stamp.sequence)) {
+            // Prompt admission is already committed; optional draft cleanup cannot reject it.
+            try { drafts.consume({ workspaceId: c.workspaceId!, sessionId: c.sessionId! }, stamp as unknown as DraftStamp, c.requestId); }
+            catch { /* A later draft read reconciles the committed request receipt. */ }
+          }
+        }
         if (c.op.startsWith("workspace.")) publishWorkspace(c, data);
         if (c.op.startsWith("session.")) {
           if (c.op === "session.read")
@@ -365,7 +387,7 @@ export async function startServer(
           else if (c.op !== "session.create")
             publish(`session:${c.workspaceId}:${c.sessionId}`);
         }
-        send(ws, { type: "receipt", requestId, ok: true, data }, c.op === "agent.original");
+        send(ws, { type: "receipt", requestId, ok: true, data }, c.op === "agent.original" || c.op === "files.document");
       } catch (error) {
         send(ws, {
           type: "receipt",
@@ -423,6 +445,34 @@ export async function startServer(
         } else {
           res.writeHead(403);
           res.end("来源校验失败");
+        }
+        return;
+      }
+      if (url.pathname === "/api/draft") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (req.method !== "GET" && req.method !== "POST") {
+          res.writeHead(405, { Allow: "GET, POST" }); res.end(JSON.stringify({ error: "请使用 GET 或 POST" })); return;
+        }
+        if (req.method === "POST" && req.headers.origin !== origin) {
+          res.writeHead(403); res.end(JSON.stringify({ error: "来源校验失败" })); return;
+        }
+        try {
+          const scope = { workspaceId: text(url.searchParams.get("workspaceId"), "工作空间标识"), sessionId: text(url.searchParams.get("sessionId"), "会话标识") };
+          store.session(scope.workspaceId, scope.sessionId);
+          if (req.method === "GET") res.end(JSON.stringify(drafts.read(scope)));
+          else {
+            const chunks: Buffer[] = [];
+            let bytes = 0;
+            for await (const chunk of req) {
+              bytes += chunk.length;
+              if (bytes > imagePayloadLimit) throw new AppError("PAYLOAD_TOO_LARGE", "草稿内容超过大小限制");
+              chunks.push(Buffer.from(chunk));
+            }
+            res.end(JSON.stringify(drafts.save(scope, JSON.parse(Buffer.concat(chunks).toString("utf8")))));
+          }
+        } catch (error) {
+          res.writeHead(error instanceof AppError && error.code === "DRAFT_CONFLICT" ? 409 : 400);
+          res.end(JSON.stringify({ code: error instanceof AppError ? error.code : "DRAFT_SAVE_FAILED", error: error instanceof AppError ? error.message : "草稿未确认保存，请重试。" }));
         }
         return;
       }

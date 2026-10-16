@@ -9,8 +9,8 @@
 .desktop-workbench-status[data-state="disconnected"] svg { color: #e08a8a; }
 .desktop-workbench-bar button { display: inline-flex; align-items: center; gap: 8px; height: 32px; box-sizing: border-box; margin-left: auto; flex-shrink: 0; border: 1px solid #ffffff12; border-radius: 8px; padding: 0 11px; background: #ffffff04; color: #b9bdc5; font: inherit; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
 .desktop-workbench-bar button svg { width: 15px; height: 15px; flex-shrink: 0; color: #9299a3; }
-.desktop-workbench-bar button:hover:not(:disabled) { background: #252321; border-color: #70553f; color: #f0c7a1; }
-.desktop-workbench-bar button:hover:not(:disabled) svg { color: #e1b38c; }
+.desktop-workbench-bar button:is(:hover, :focus-visible):not(:disabled) { background: #252321; border-color: #70553f; color: #f0c7a1; }
+.desktop-workbench-bar button:is(:hover, :focus-visible):not(:disabled) svg { color: #e1b38c; }
 .desktop-workbench-bar button:focus-visible { outline: 2px solid #e9ac76; outline-offset: 3px; }
 .desktop-workbench-bar button:disabled { opacity: .5; cursor: wait; }
 .desktop-update-dot { width: 5px; height: 5px; margin-left: 2px; border-radius: 50%; background: #edb27e; }

@@ -183,6 +183,7 @@ export class ModelService {
           name:
             m.name ?? runtime.getModel(providerId, modelId)?.name ?? modelId,
           levels: levelsOf(runtime.getModel(providerId, modelId)),
+          input: [...(runtime.getModel(providerId, modelId)?.input ?? m.input ?? ["text"])],
           headers: headersView(m.headers),
           body: bodyView(m.samplingParams),
         })),
@@ -244,7 +245,7 @@ export class ModelService {
         providerId, revision, source, message,
         models: runtime.getModels(providerId).map((model) => ({
           id: model.id, name: model.name, api: model.api,
-          levels: levelsOf(model), contextWindow: model.contextWindow,
+          levels: levelsOf(model), input: [...model.input], contextWindow: model.contextWindow,
         })).sort((a, b) => a.name.localeCompare(b.name)),
       };
     });

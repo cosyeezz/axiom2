@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnection, useConnectionState, useScope } from "../transport.js";
 import { useDraft, updateDraft } from "../drafts.js";
+import { usePersistentDraft, resolveDraftConflict } from "../draft-persistence.js";
 import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running, type Selection } from "../../shared/agent.js";
@@ -17,6 +18,7 @@ import { AnnotationTray } from "./ReplyAnnotations.js";
 import { clearSentAnnotations } from "./reply-annotations.js";
 import { messageLengthError, messageTextLimit } from "./message-limit.js";
 import { SteeringQueue } from "./SteeringQueue.js";
+import "../styles/draft-status.css";
 const noConfig: Configuration = {
   revision: "",
   providerCount: 0,
@@ -47,6 +49,7 @@ export function Composer({
       (m) =>
         m.provider === info.selection?.provider && m.id === info.selection.id,
     );
+  const persistence = usePersistentDraft(scope);
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null);
   const [reading, setReading] = useState(false);
@@ -188,8 +191,7 @@ export function Composer({
                 busy ||
                 connection !== "已连接本地服务" ||
                 (!active &&
-                  (!selected ||
-                    reading || imageUnsupported || !!lengthError || !hasContent))
+                  (!selected || reading || imageUnsupported || !!lengthError || !hasContent))
               }
             >
               {active ? (
@@ -204,6 +206,11 @@ export function Composer({
           </div>
         </form>
         <Usage scope={scope} />
+        {persistence.conflict && <div className="draft-status" role="status" aria-live="polite">
+          <span>另一个窗口有不同的草稿，当前输入已保留。</span>
+          <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, true)}>保存当前输入</button>
+          <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, false)}>载入已保存草稿</button>
+        </div>}
         <Connection active={active} extra={lengthError || error || (imageUnsupported ? "当前模型不支持图片，请选择支持图片的模型或移除图片。" : "")} />
       </div>
     </section>

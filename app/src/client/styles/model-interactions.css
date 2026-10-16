@@ -46,10 +46,13 @@
 .model-catalog-item>.meta{max-width:30%;overflow-wrap:anywhere}
 .model-catalog-panel .row-between{flex-wrap:wrap;gap:8px}
 
-.configuration-feedback{flex-shrink:0;margin:0;padding:7px 16px;border-bottom:1px solid var(--border-soft);background:color-mix(in srgb,var(--fg) 1.5%,var(--bg));color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+/* Remain in the accessibility tree while the editable workspace is inert. */
+.configuration-progress{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.configuration-feedback{flex-shrink:0;width:100%;max-width:920px;margin:0;padding:8px 0;border-top:1px solid var(--border-soft);color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .configuration-feedback:empty{display:none}
-.configuration-feedback[data-saved=true]{color:var(--fg);border-left:3px solid var(--success)}
-.configuration-feedback[data-error=true]{color:#fca5a5;background:color-mix(in srgb,var(--danger) 10%,var(--surface));border-left:3px solid #f87171;font-size:14px;font-weight:600;line-height:1.7}
+.configuration-feedback[data-saved=true]{color:var(--fg);border-left:3px solid var(--success);padding-left:10px}
+.configuration-feedback[data-error=true]{color:#fca5a5;background:color-mix(in srgb,var(--danger) 10%,var(--surface));border-left:3px solid #f87171;padding:8px 10px;font-size:14px;font-weight:600;line-height:1.7}
+.configuration-feedback.configuration-global-error{max-width:none;padding:8px 16px;border-top:0;border-bottom:1px solid var(--border-soft)}
 .configuration-error-label{font-weight:700}
 .settings-app[data-feedback-error=true] .feedback,.settings-app .feedback[role=alert]{color:#fca5a5;font-weight:600}
 .credential-path{overflow-wrap:anywhere;min-width:0}
@@ -57,9 +60,14 @@
 /* Only the annotated model table: compact, independent copy actions. */
 #configured-model-table .copyable-value{display:flex;align-items:center;gap:4px;min-width:0}
 #configured-model-table .copyable-value>span,#configured-model-table .copyable-value>code{min-width:0;overflow-wrap:anywhere}
-#configured-model-table .copy-model-value{color:var(--fg-2);margin-left:auto}
-#configured-model-table .copy-model-value:hover{background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--fg)}
-#configured-model-table .copy-model-value:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
+#configured-model-table .copy-model-value{margin-left:auto}
+#configured-model-table tbody .icon-btn{opacity:0;pointer-events:none}
+#configured-model-table tbody tr:is(:hover,:focus-within,[data-editing=true]) .icon-btn{opacity:1;pointer-events:auto}
+#configured-model-table tbody tr:is(:focus-within,[data-editing=true]){background:color-mix(in srgb,var(--fg) 3%,transparent)}
+@media(hover:none),(pointer:coarse){
+ #configured-model-table tbody .icon-btn{opacity:1;pointer-events:auto;min-width:44px;min-height:44px}
+ #configured-model-table th.actions-col{width:112px}
+}
 #configured-model-table .mobile-model-id .copy-model-value{display:none}
 #model-copy-feedback{caption-side:bottom;text-align:left;color:var(--fg-2);font-size:12px;overflow-wrap:anywhere}
 #model-copy-feedback:not(:empty){padding:6px 12px;border-top:1px solid var(--border-soft)}

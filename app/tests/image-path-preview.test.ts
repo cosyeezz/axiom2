@@ -86,7 +86,7 @@ test("path preview: upload provenance survives restart; arbitrary paths/files in
       await assert.rejects(restarted.command(command(f.scope, "files.preview", { path: a.path, id })), { code: "INVALID_INPUT" });
     f.files.registerPicked(f.scope, [{ path: outside, name: "unselected.png", kind: "image" }]);
     assert.ok(await f.files.command(command(f.scope, "files.preview", { path: outside })));
-    await assert.rejects(restarted.command(command(f.scope, "files.preview", { path: outside })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
+    assert.ok(await restarted.command(command(f.scope, "files.preview", { path: outside })));
     const other = createScope(f.store, join(f.root, "other-project"));
     await assert.rejects(restarted.command(command(other, "files.preview", { path: a.path })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
     await assert.rejects(restarted.command(command({ ...f.scope, sessionId: other.sessionId }, "files.preview", { path: a.path })), { code: "SCOPE_MISMATCH" });
@@ -98,7 +98,7 @@ test("path preview: upload provenance survives restart; arbitrary paths/files in
   } finally { f.close(); }
 });
 
-test("path preview: committed uploads remain authorized after Store reopen, picked grants expire", async () => {
+test("path preview: committed uploads and native picker grants survive Store reopen", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-preview-restart-"));
   let store = new Store(root);
   try {
@@ -109,7 +109,7 @@ test("path preview: committed uploads remain authorized after Store reopen, pick
     store.close(); store = new Store(root);
     const restarted = new Files(store);
     assert.equal((await restarted.command(command(scope, "files.preview", { path: a.path })) as ImageAttachment).data, png.toString("base64"));
-    await assert.rejects(restarted.command(command(scope, "files.preview", { path: picked })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
+    assert.equal((await restarted.command(command(scope, "files.preview", { path: picked })) as ImageAttachment).data, png.toString("base64"));
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

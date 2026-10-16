@@ -26,7 +26,7 @@ function AnnotationIcon({ inlineHeight }: { inlineHeight?: number }) {
 export function AnnotationToggle({ scope }: { scope?: Scope }) {
   const state = useAnnotations(scope, true);
   const label = state.enabled ? "关闭批注" : "开启批注";
-  return <button type="button" className="compression-trigger annotation-toggle" aria-label={label}
+  return <button type="button" className="compression-trigger annotation-toggle action-icon" aria-label={label}
     data-tooltip={`${label}${state.items.length ? ` · ${state.items.length} 条待发送` : ""}`} aria-pressed={state.enabled}
     disabled={!scope?.sessionId} onClick={() => scope && updateAnnotations(scope, { enabled: !state.enabled })}>
     <AnnotationIcon />
@@ -226,7 +226,7 @@ function AnnotationBlock({ scope, messageId, block, source, children, eligible }
       {notes.filter((item, i) => !notes.slice(0, i).some((previous) => Math.abs((positions[previous.id] ?? 0) - (positions[item.id] ?? 0)) < 28)).map((item) => <button key={item.id} type="button" className="annotation-marker" style={{ top: positions[item.id] ?? 0 }}
         aria-label={`编辑批注 ${state.items.indexOf(item) + 1}`} data-tooltip={item.text} data-annotation-id={item.id}
         onClick={() => edit(scope, item)}>{state.items.indexOf(item) + 1}</button>)}
-      <button ref={trigger} type="button" className="annotation-add" style={marker ? { top: marker.top, left: marker.left } : { display: "none" }} aria-label="批注选中文字或这一句"
+      <button ref={trigger} type="button" className="annotation-add action-icon" style={marker ? { top: marker.top, left: marker.left } : { display: "none" }} aria-label="批注选中文字或这一句"
         data-tooltip="选中文字可精确批注；直接点击正文批注当前句、列表项或代码行"
         onMouseDown={(e) => e.preventDefault()} onClick={() => open(candidate.current ?? detail(body.current!))}>
         <AnnotationIcon inlineHeight={marker?.iconHeight} />

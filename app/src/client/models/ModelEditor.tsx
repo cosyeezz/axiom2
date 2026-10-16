@@ -31,9 +31,12 @@ export function ModelEditor({
           stageEditor();
         }}
       >
-        <h2 id="model-editor-heading">
-          {p.models.some((m) => m.key === editor.key) ? "编辑模型" : "添加模型"}
-        </h2>
+        <div className="model-editor-heading">
+          <h2 id="model-editor-heading">
+            {p.models.some((m) => m.key === editor.key) ? "编辑模型" : "添加模型"}
+          </h2>
+          <span className="meta">完成编辑后，统一保存生效</span>
+        </div>
         <div className="inline-model-fields">
           <div className="field">
             <label htmlFor="new-model-id">模型 ID</label>
@@ -58,6 +61,24 @@ export function ModelEditor({
               value={editor.name}
               onChange={(e) => setEditor({ ...editor, name: e.target.value })}
             />
+          </div>
+          <div className="field model-input-field">
+            <label id="model-input-label">输入能力 <span className="meta">（多模态）</span></label>
+            <div className="model-input-options" role="group" aria-labelledby="model-input-label" aria-describedby="model-input-help">
+              <div className="model-input-option model-input-required">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M12 5v14M8 19h8" /></svg>
+                <span className="model-input-copy"><strong>文本</strong><small>对话与代码</small></span>
+                <span className="model-input-state">默认支持</span>
+              </div>
+              <label className="model-input-option" data-selected={editor.input?.includes("image") ?? false}>
+                <input type="checkbox" name="model-input-image" checked={editor.input?.includes("image") ?? false}
+                  onChange={(e) => setEditor({ ...editor, input: e.target.checked ? ["text", "image"] : ["text"] })} />
+                <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8" cy="8" r="1" /><path d="m21 15-5-5L5 21" /></svg>
+                <span className="model-input-copy"><strong>图片</strong><small>理解图片内容</small></span>
+                <span className="model-input-toggle" aria-hidden="true" />
+              </label>
+            </div>
+            <span className="field-help" id="model-input-help">仅在模型支持图片理解时开启；当前支持文本与图片输入。</span>
           </div>
           <div className="field" id="model-reasoning-field">
             <label id="model-reasoning-label">
@@ -92,8 +113,7 @@ export function ModelEditor({
               ))}
             </div>
             <span className="field-help" id="reasoning-help">
-              选择模型支持的等级；再次点击可取消，未选时不配置思考等级。统一点击下方「保存」后生效。none
-              对应 pi 的 off；保存时校验实际模型能力。
+              选择模型支持的等级；再次点击可取消。至少保留一项，不使用思考时选择 none。
             </span>
           </div>
         </div>

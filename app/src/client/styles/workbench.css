@@ -37,12 +37,12 @@
 .session-actions .icon-btn:hover,.session-actions .icon-btn:focus-visible{color:var(--fg);background:color-mix(in srgb,var(--fg) 8%,transparent)}
 .session-actions svg{width:16px;height:16px;stroke-width:1.7}
 .history-row:is(:hover,:has(:focus-visible)):not([data-editing=true]) .session-actions{opacity:1;pointer-events:auto}
-.history-row:is(:hover,:has(:focus-visible)):not([data-editing=true]) :is(.session-title-line,.history-item small){margin-right:60px}
+.history-row:is(:hover,:has(:focus-visible)):not([data-editing=true]) :is(.session-title-line,.history-item small){margin-right:var(--row-action-clearance,60px)}
 .history-row[data-editing=true] .session-actions{display:none}
 .history-row .session-title-input{flex:1;min-width:0;width:100%;height:20px;min-height:0;padding:0;border:0;border-radius:2px;background:transparent;color:var(--fg);font:inherit;font-size:13px;line-height:20px;outline:1px solid var(--accent);outline-offset:1px}
 .history-row:has([aria-current=true]) .session-title-input{font-weight:510}
 .history-group+.history-group{margin-top:20px}
-@media(hover:none){.history-row:focus-within:not([data-editing=true]) .session-actions{opacity:1;pointer-events:auto}.history-row:focus-within:not([data-editing=true]) :is(.session-title-line,.history-item small){margin-right:60px}}
+@media(hover:none),(pointer:coarse){.history-row{--row-action-clearance:92px}.history-row:not([data-editing=true]) .session-actions{opacity:1;pointer-events:auto}.session-actions .icon-btn{width:44px;min-width:44px;height:44px}.history-row:not([data-editing=true]) :is(.session-title-line,.history-item small){margin-right:92px}}
 /* Always dock the composer below the independently scrolling thread.
    Keep it in flow so it never covers the last message. */
 .composer-area{flex-shrink:0;padding:8px 0 env(safe-area-inset-bottom,0px)}
@@ -64,7 +64,15 @@
  .workspace:has(.empty-state) .empty-state{padding-top:28px}
  .workspace:has(.empty-state) .empty-state h2{font-size:23px}
 }
-.send.is-running{background:var(--fg-2);color:var(--bg)}.send.is-running:hover{background:var(--fg);color:var(--bg)}.send.is-running svg{width:20px;height:20px;fill:#991b1b;stroke:none}
+.send.is-running{position:relative;background:var(--fg-2);color:var(--bg);animation:send-breathe 2.8s ease-in-out infinite;transform-origin:center}
+.send.is-running::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle closest-side,rgb(220 38 38 / 28%) 0%,rgb(220 38 38 / 14%) 45%,rgb(220 38 38 / 0%) 100%);box-shadow:0 0 6px 2px color-mix(in srgb,var(--fg-2) 22%,transparent);opacity:0;pointer-events:none;animation:send-breathe-glow 2.8s ease-in-out infinite}
+.send.is-running:hover{background:var(--fg);color:var(--bg)}
+.send.is-running svg{position:relative;z-index:1;width:20px;height:20px;fill:#991b1b;stroke:none}
+.send.is-running:is(:hover,:focus-visible,:active,:disabled),.send.is-running:is(:hover,:focus-visible,:active,:disabled)::after{animation:none}
+@keyframes send-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes send-breathe-glow{0%,100%{opacity:0}50%{opacity:1}}
+/* Keep execution feedback visible even when system motion is reduced, like the other status icons. */
+@media(prefers-reduced-motion:reduce){.send.is-running,.send.is-running::after{transition:none}}
 /* Compact composer: one row at rest, expands naturally for longer drafts. */
 .composer{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:end;gap:8px;padding:4px 10px;border-radius:32px;background:var(--surface)}
 .composer:focus-within{border-color:color-mix(in srgb,var(--fg) 35%,transparent)}
@@ -191,9 +199,7 @@ svg{stroke-width:1.8}
 .model-footer .model-actions .icon-btn{width:30px;min-width:30px;height:32px}
 .model-footer .icon-btn svg{width:15px;height:15px;stroke-width:2;transition:transform var(--motion-fast)}
 @media(pointer:coarse){.model-footer .effort-options button{min-width:44px;min-height:44px}.model-footer .model-actions .icon-btn{width:44px;min-width:44px;height:44px}.model-footer{flex-wrap:wrap}}
-.model-footer #confirm-model{color:color-mix(in srgb,var(--success) 65%,var(--fg))}
 .model-footer .icon-btn:hover{color:var(--fg);background:color-mix(in srgb,var(--fg) 10%,transparent)}
-.model-footer #confirm-model:hover{color:color-mix(in srgb,var(--success) 45%,var(--fg));background:color-mix(in srgb,var(--fg) 10%,transparent)}
 .model-footer .icon-btn:active svg{transform:scale(.88)}
 @media(prefers-reduced-motion:reduce){.model-footer .icon-btn svg{transition:none}}
 .model-row{display:flex;align-items:center;border-radius:var(--radius-sm)}
@@ -206,7 +212,7 @@ svg{stroke-width:1.8}
 .model-row .model-favorite:hover{color:var(--fg)}
 .model-row .model-favorite[aria-pressed=true]{color:var(--warn)}
 .model-favorite[aria-pressed=true] svg{fill:currentColor}
-@media(hover:none){.model-row .model-favorite{opacity:1;pointer-events:auto}}
+@media(hover:none),(pointer:coarse){.model-row .model-favorite{opacity:1;pointer-events:auto}}
 @media(prefers-reduced-motion:reduce){.model-row .model-favorite{transition:none}}
 @media(max-width:380px){.model-footer .effort-heading{display:none}.model-footer{gap:2px;padding-inline:4px}}
 @media(max-width:760px){.composer{column-gap:4px}.composer textarea{grid-column:2/-1}.model-picker{grid-column:2/4;grid-row:2;justify-self:start;margin:0}.send{grid-column:4;grid-row:2}.attachment:not(:empty){grid-row:3}.model-popover{left:-44px;right:auto}.model-picker>summary span{max-width:140px}.model-picker>summary .effort-label{display:inline}}
@@ -265,10 +271,10 @@ svg{stroke-width:1.8}
 .workspace-actions .icon-btn:hover,.workspace-actions .icon-btn:focus-visible{color:var(--fg);background:color-mix(in srgb,var(--fg) 8%,transparent)}
 .workspace-actions svg{width:16px;height:16px;stroke-width:1.7}
 .workspace-row:is(:hover,:focus-within):not([data-editing=true]) .workspace-actions{opacity:1;pointer-events:auto}
-.workspace-row:is(:hover,:focus-within):not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:58px}
+.workspace-row:is(:hover,:focus-within):not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:var(--row-action-clearance,58px)}
 .workspace-row[data-editing=true] .workspace-actions{display:none}
 .workspace-row .workspace-name-input{min-width:0;width:100%;height:20px;min-height:0;padding:0;border:0;border-radius:2px;background:transparent;color:var(--fg);font:inherit;font-size:13px;line-height:20px;outline:1px solid var(--accent);outline-offset:1px}
-@media(hover:none){.workspace-row:not([data-editing=true]) .workspace-actions{opacity:1;pointer-events:auto}.workspace-actions .icon-btn{height:32px}.workspace-row:not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:58px}}
+@media(hover:none),(pointer:coarse){.workspace-row{--row-action-clearance:92px}.workspace-row:not([data-editing=true]) .workspace-actions{opacity:1;pointer-events:auto}.workspace-actions .icon-btn{width:44px;min-width:44px;height:44px}.workspace-row:not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:92px}}
 @media(max-width:640px){.topnav h1{font-size:14px}.topnav{min-height:56px}.workspace-list{max-height:35dvh}}
 @media(hover:none),(pointer:coarse){.title-meta{height:44px}.topnav{height:auto;min-height:80px}}
 /* Subagent launchers are summaries only. The dialog hosts the SAME live

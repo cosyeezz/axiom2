@@ -5,7 +5,8 @@ import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
 import { ModelRegistry } from "../models/ModelRegistry.js";
 import { useConfiguration } from "../models/useConfiguration.js";
-import "../styles/models.css";
+import { SettingsHeader } from "../settings/SettingsHeader.js";
+import "../styles/settings.css";
 import "../styles/model-interactions.css";
 export default function Models() {
   const [adding, setAdding] = useState(false);
@@ -61,35 +62,21 @@ export default function Models() {
     <div className="settings-app models-workspace" data-feedback-error={hasError}>
       <SettingsSidebar page="models" />
       <main className="settings-main" id="content">
-        <header className="topnav">
-          <div className="row">
-            <a
-              className="icon-btn mobile-back"
-              href="/settings.html"
-              aria-label="返回配置概览"
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m15 5-7 7 7 7" />
-              </svg>
-            </a>
-            <a className="mobile-config-link" href="/settings.html">
-              配置
-            </a>
-            <span aria-hidden="true">/</span>
-            <strong>模型服务</strong>
-          </div>
-        </header>
-        <p
-          className="configuration-feedback"
-          role={hasError ? "alert" : "status"}
-          aria-live={hasError ? "assertive" : "polite"}
+        <SettingsHeader page="models" />
+        <span className="configuration-progress" role="status" aria-live="polite" aria-atomic="true">
+          {busy && !hasError ? feedback : ""}
+        </span>
+        {hasError && <p
+          className="configuration-feedback configuration-global-error"
+          role="alert"
+          aria-live="assertive"
           aria-atomic="true"
-          data-saved={saved}
-          data-error={hasError}
+          data-saved={false}
+          data-error={true}
         >
-          {hasError && <strong className="configuration-error-label">配置错误 · </strong>}
-          {feedback || config.error || (connection !== "已连接本地服务" ? connection : "")}
-        </p>
+          <strong className="configuration-error-label">配置错误 · </strong>
+          {feedback || config.error}
+        </p>}
         <div className="container" inert={busy} aria-busy={busy}>
           <div className="configuration-layout">
             <section
@@ -266,6 +253,16 @@ export default function Models() {
                   />
                 </>
               )}
+              {!hasError && <p
+                className="configuration-feedback"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                data-saved={saved}
+                data-error={false}
+              >
+                {feedback || (connection !== "已连接本地服务" ? connection : "")}
+              </p>}
               <footer className="configuration-actions" aria-label="配置操作">
                 <button
                   className="btn btn-primary"

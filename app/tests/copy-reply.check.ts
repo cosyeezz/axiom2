@@ -88,6 +88,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.message-actions')?.getAttribute('data-feedback') === 'copied');
   assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n"), long);
   publish(source, false, "检查复制按钮是否避开思考块。");
+  await reply.locator(".tool-activity > summary").click();
   await reply.locator(".thinking-block").waitFor();
   assert.ok((await copy.boundingBox())!.y > (await reply.locator(".thinking-block").boundingBox())!.y);
   publish();

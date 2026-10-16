@@ -98,6 +98,8 @@ export class Store {
     this.db.exec(`CREATE TABLE IF NOT EXISTS workspace_preferences(id INTEGER PRIMARY KEY CHECK(id=1),lastWorkspaceId TEXT REFERENCES workspaces(id));
       INSERT OR IGNORE INTO workspace_preferences(id,lastWorkspaceId)
       VALUES(1,(SELECT id FROM workspaces WHERE archived=0 ORDER BY pinned DESC,rowid LIMIT 1));`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS session_preferences(id INTEGER PRIMARY KEY CHECK(id=1),workspaceId TEXT NOT NULL,sessionId TEXT NOT NULL,
+      FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE)`);
     // Retire the old cleanup gate without touching conversation files or execution history.
     if (this.db.prepare("PRAGMA table_info(runs)").all().some((column) => column.name === "cleanup"))
       this.db.exec("ALTER TABLE runs DROP COLUMN cleanup");
@@ -141,6 +143,10 @@ export class Store {
   workspacePreferences(): WorkspacePreferences {
     const row = this.db.prepare("SELECT w.id FROM workspace_preferences p JOIN workspaces w ON w.id=p.lastWorkspaceId WHERE p.id=1 AND w.archived=0").get();
     return { lastWorkspaceId: row ? String(row.id) : null };
+  }
+  lastSession(): Scope | null {
+    const row = this.db.prepare("SELECT p.workspaceId,p.sessionId FROM session_preferences p JOIN workspaces w ON w.id=p.workspaceId WHERE p.id=1 AND w.archived=0").get();
+    return row ? { workspaceId: String(row.workspaceId), sessionId: String(row.sessionId) } : null;
   }
   compressionPreferences(): CompressionPreferences {
     const row = this.db.prepare("SELECT selection,auto FROM compression_preferences WHERE id=1").get();
@@ -404,6 +410,15 @@ export class Store {
         if (typeof p.pinned !== "boolean") throw new AppError("INVALID_INPUT", "置顶状态必须为布尔值");
         this.db.prepare("UPDATE workspaces SET pinned=? WHERE id=?").run(Number(p.pinned), w.id);
       } else if (c.op === "workspace.select") {
+        if (p.view !== undefined) {
+          if (p.view === null) this.db.prepare("DELETE FROM session_preferences WHERE id=1").run();
+          else {
+            const view = object(p.view), session = this.session(view.workspaceId, view.sessionId);
+            if (this.db.prepare("SELECT 1 FROM tasks WHERE sessionId=?").get(session.id))
+              throw new AppError("INVALID_INPUT", "默认查看位置只能是主会话");
+            this.db.prepare("INSERT INTO session_preferences(id,workspaceId,sessionId) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET workspaceId=excluded.workspaceId,sessionId=excluded.sessionId").run(session.workspaceId, session.id);
+          }
+        }
         this.db.prepare("INSERT INTO workspace_preferences(id,lastWorkspaceId) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET lastWorkspaceId=excluded.lastWorkspaceId").run(w.id);
         return this.workspacePreferences();
       } else {

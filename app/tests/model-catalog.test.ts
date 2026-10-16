@@ -54,7 +54,8 @@ test("pi fetches a catalog over HTTP and preserves newly discovered metadata acr
     assert.equal(requests, 1);
     const chosen = catalog.models.find((model) => model.id === discovered.id)!;
     assert.ok(chosen);
-    draft.providers[0].models.push({ key: chosen.id, id: chosen.id, name: chosen.name, levels: chosen.levels, headers: [], body: [] });
+    assert.deepEqual(chosen.input, discovered.input);
+    draft.providers[0].models.push({ key: chosen.id, id: chosen.id, name: chosen.name, levels: chosen.levels, input: [...chosen.input], headers: [], body: [] });
     await service.save(draft);
     const saved = JSON.parse(readFileSync(join(piDir, "models.json"), "utf8"));
     assert.ok(saved.providers.openai.modelOverrides[chosen.id]);

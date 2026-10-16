@@ -180,6 +180,9 @@ try {
   assert.ok(await dialog.locator(".model-catalog-item").filter({ has: page.getByText(selectedId, { exact: true }) }).getByRole("checkbox").isDisabled());
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
+  // Closing restores focus in requestAnimationFrame, after the panel unmounts.
+  await page.waitForFunction(button => button === document.activeElement,
+    await page.getByRole("button", { name: "拉取模型列表", exact: true }).elementHandle());
   assert.ok(await page.getByRole("button", { name: "拉取模型列表", exact: true }).evaluate((el) => el === document.activeElement));
 
   await capture("models");
@@ -191,6 +194,7 @@ try {
   await page.getByRole("searchbox", { name: "搜索供应商", exact: true }).fill("no-matching-fixture");
   await page.locator(".list-empty").getByRole("button", { name: "清除搜索" }).click();
   assert.ok(await page.getByRole("searchbox", { name: "搜索供应商", exact: true }).evaluate((el) => el === document.activeElement));
+  await page.locator("#configured-model-table tbody tr").first().hover();
   await page.locator("#configured-model-table button[aria-label^='编辑模型']").first().click();
   await capture("editor");
   await page.locator("#model-editor").getByRole("button", { name: "取消", exact: true }).click();

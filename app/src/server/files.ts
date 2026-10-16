@@ -1,3 +1,5 @@
+import { DocumentFiles } from "./document-files.js";
+import type { FilePreview } from "../shared/file-preview.js";
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
@@ -28,22 +30,27 @@ export async function findFd(): Promise<string> {
 
 const pathKey = (path: string) => process.platform === "win32" ? path.toLowerCase() : path;
 const scopeKey = (scope: Scope) => JSON.stringify([scope.workspaceId, scope.sessionId]);
-const denied = () => new AppError("IMAGE_PREVIEW_FORBIDDEN", "只能预览本会话上传或本次服务运行中明确选择的图片，不能读取其他路径或符号链接");
+const denied = () => new AppError("IMAGE_PREVIEW_FORBIDDEN", "只能预览本会话上传或明确选择的图片，不能读取其他路径或符号链接");
 
 export class Files {
+  private documents: DocumentFiles;
   private fd?: Promise<string>;
   private searching = 0;
   private previewing = 0;
-  private readonly picked = new Map<string, Map<string, string>>();
   constructor(private readonly store: Store,
-    private readonly message?: (scope: Scope, id: string) => ChatMessage | null) {}
+    private readonly message?: (scope: Scope, id: string) => ChatMessage | null,
+    reveal?: (path: string, directory: boolean, signal: AbortSignal) => Promise<void>) {
+    this.documents = new DocumentFiles(store, message, reveal);
+    store.db.exec(`CREATE TABLE IF NOT EXISTS picked_images(
+      sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      path TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(sessionId,path))`);
+  }
 
   /** Trusted native picker only: never expose registration as a client command. */
   registerPicked(scope: Scope, items: readonly PickedAttachment[]) {
     this.authorize(scope);
-    const key = scopeKey(scope), paths = this.picked.get(key) ?? new Map<string, string>();
-    for (const item of items) if (item.kind === "image") paths.set(pathKey(resolve(item.path)), item.name);
-    if (paths.size) this.picked.set(key, paths);
+    const save = this.store.db.prepare("INSERT INTO picked_images(sessionId,path,name) VALUES(?,?,?) ON CONFLICT(sessionId,path) DO UPDATE SET name=excluded.name");
+    for (const item of items) if (item.kind === "image") save.run(scope.sessionId, pathKey(resolve(item.path)), item.name);
   }
 
   private authorize(scope: Scope) {
@@ -60,7 +67,7 @@ export class Files {
       throw new AppError("INVALID_INPUT", "图片预览需要有效绝对路径与 imag1 等图片编号");
     const path = resolve(p.path), key = pathKey(path);
     const dir = resolve(this.store.root, "attachments", scope.workspaceId, scope.sessionId);
-    let name = reference ? reference() : this.picked.get(scopeKey(scope))?.get(key);
+    let name = reference ? reference() : this.store.db.prepare("SELECT name FROM picked_images WHERE sessionId=? AND path=?").get(scope.sessionId, key)?.name;
     let uploaded = false;
     if (pathKey(dirname(path)) === pathKey(dir)) {
       // A directory prefix alone is not provenance: require an actual committed upload.
@@ -120,7 +127,7 @@ export class Files {
         if (!mimeType) throw new AppError("INVALID_IMAGE", "文件不是支持的图片：仅可预览 PNG/JPEG/GIF/WebP");
         this.authorize(scope); // Session deletion/authorization changes may overtake filesystem reads.
         reference?.(); // The bound assistant image must still exist after the asynchronous read.
-        return { id, name, mimeType, data: bytes.toString("base64") };
+        return { id, name: String(name), mimeType, data: bytes.toString("base64") };
       } finally { await handle.close(); }
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -131,7 +138,8 @@ export class Files {
     } finally { this.previewing--; }
   }
 
-  async command(c: Command): Promise<FileCompletion | Attachment | ImageAttachment | null> {
+  async command(c: Command, signal?: AbortSignal): Promise<FileCompletion | Attachment | ImageAttachment | FilePreview | null> {
+    if (c.op === "files.document" || c.op === "files.reveal") return this.documents.command(c, signal);
     const session = this.store.session(c.workspaceId, c.sessionId);
     const workspace = this.store.workspace(session.workspaceId);
     if (!workspace.authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");

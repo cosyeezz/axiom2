@@ -33,7 +33,7 @@ export function Headers({
             <input
               className="input"
               aria-label={`第 ${i + 1} 项 key`}
-              placeholder="key"
+              placeholder="请求头名称"
               maxLength={160}
               autoComplete="off"
               value={row.key}
@@ -50,7 +50,7 @@ export function Headers({
             <input
               className="input override-value"
               aria-label={`第 ${i + 1} 项 value`}
-              placeholder={row.keep ? "已保存；留空保留，输入替换" : "value"}
+              placeholder={row.keep ? "已保存" : "请求头值"}
               maxLength={8192}
               autoComplete="off"
               value={row.value}
@@ -76,7 +76,7 @@ export function Headers({
         ))}
         {!rows.length && <p className="override-empty">未设置覆盖项</p>}
       </div>
-      <p className="field-help">模型优先；草稿和敏感值不写入浏览器存储。</p>
+      <p className="field-help">模型设置优先。已保存的值留空保留，输入新值替换；草稿不写入浏览器存储。</p>
     </section>
   );
 }
@@ -159,8 +159,8 @@ export function BodyOverrides({
       {!rows.length && <p className="override-empty">未设置覆盖项</p>}
       <p className="field-help">
         {supported
-          ? "映射 pi samplingParams；供应商项保存时落实到各模型，模型项优先。其他已有字段保留在服务端。"
-          : "当前协议不支持采样请求体覆盖；不可保存后静默忽略。"}
+          ? "模型设置优先于供应商设置，仅应用到当前配置的模型；其他已有字段保持不变。"
+          : "当前协议不支持这些请求体参数，请移除覆盖项或切换协议后保存。"}
       </p>
     </section>
   );

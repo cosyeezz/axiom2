@@ -102,6 +102,7 @@ export function ModelRegistry({
                   id: "",
                   name: "",
                   levels: ["none"],
+                  input: ["text"],
                   headers: [],
                   body: [],
                 }),
@@ -143,13 +144,13 @@ export function ModelRegistry({
             <tr>
               <th className="name-col">显示名称</th>
               <th className="id-col">模型 ID</th>
-              <th className="reasoning-col">思考设置</th>
+              <th className="reasoning-col">思考等级</th>
               <th className="actions-col">操作</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((m) => (
-              <tr key={m.key}>
+              <tr key={m.key} data-editing={editor?.key === m.key}>
                 <td>
                   <div className="copyable-value">
                     <span className="model-name">{m.name}</span>
@@ -159,8 +160,11 @@ export function ModelRegistry({
                     <code>{m.id}</code>
                     {copyButton(m.id, "模型 ID")}
                   </div>
+                  <span className="model-input-summary" aria-label="输入能力">
+                    {m.input?.includes("image") ? "文本 + 图片" : "仅文本"}
+                  </span>
                   <span className="mobile-model-reasoning">
-                    {m.levels.join(" / ") || "不设置"}
+                    思考：{m.levels.join(", ") || "不设置"}
                   </span>
                 </td>
                 <td className="id-col">
@@ -170,7 +174,7 @@ export function ModelRegistry({
                   </div>
                 </td>
                 <td className="reasoning-col">
-                  {m.levels.join(" / ") || "不设置"}
+                  {m.levels.join(", ") || "不设置"}
                 </td>
                 <td>
                   <div className="model-actions">

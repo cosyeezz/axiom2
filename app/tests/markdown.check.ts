@@ -35,13 +35,18 @@ try {
   const message = page.locator('[aria-label="助手回复"] .markdown');
   await message.waitFor();
   assert.equal(await message.locator("strong").count(), 0);
-  const source = "- 保留撤回、失败恢复和迟到回执去重。\n\n**验证：**43 项相关测试、25 项 Steering 浏览器检查通过。\n\n`**验证：**43`\n\n```text\n**验证：**43\n```";
+  const quote = "“整理索引时检查冲突，核实后修正或删除；用户明确否定的内容直接删除”";
+  const quotedSource = `可以，简化为**${quote}**就够了。`;
+  publish(`可以，简化为**${quote.slice(0, -1)}`, true);
+  await page.waitForFunction(() => document.querySelector('[aria-label="助手回复"] .markdown')?.textContent?.startsWith("可以，简化为**“整理"));
+  assert.equal(await message.locator("strong").count(), 0);
+  const source = `- 保留撤回、失败恢复和迟到回执去重。\n\n**验证：**43 项相关测试、25 项 Steering 浏览器检查通过。\n\n${quotedSource}\n\n\`**验证：**43\`\n\n\`\`\`text\n${quotedSource}\n\`\`\``;
   publish(source, false);
-  await message.locator("strong").waitFor();
-  assert.equal(await message.locator("strong").innerText(), "验证：");
+  await message.locator("strong").nth(1).waitFor();
+  assert.deepEqual(await message.locator("strong").allTextContents(), ["验证：", quote]);
   assert.ok((await message.locator("p").first().innerText()).startsWith("验证：43"));
   assert.equal(await message.locator("code").first().innerText(), "**验证：**43");
-  assert.equal(await message.locator("pre code").innerText(), "**验证：**43");
+  assert.equal(await message.locator("pre code").innerText(), quotedSource);
   await page.getByRole("button", { name: "复制回复的 Markdown 原文" }).focus();
   await page.getByRole("button", { name: "复制回复的 Markdown 原文" }).click();
   // Windows clipboard normalizes line endings to CRLF.
@@ -52,8 +57,8 @@ try {
     await page.screenshot({ path: join(artifacts, `markdown-${width}.png`) });
   }
   await page.reload();
-  await message.locator("strong").waitFor();
-  assert.equal(await message.locator("strong").innerText(), "验证：");
+  await message.locator("strong").nth(1).waitFor();
+  assert.deepEqual(await message.locator("strong").allTextContents(), ["验证：", quote]);
   assert.deepEqual(errors, []);
   console.log("PASS: Chinese bold, streaming completion, literal code, unchanged clipboard, reload and 3 widths");
 } finally {

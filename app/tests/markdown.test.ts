@@ -26,11 +26,32 @@ test("Chinese bold works inside lists, quotes, tables, links and nested emphasis
   assert.match(html, /<strong>.*<em>.*嵌套.*<\/em>.*<code>code<\/code>.*：.*<\/strong>/);
 });
 
+test("Chinese quoted bold renders next to prose on both sides", () => {
+  const quote = "“整理索引时检查冲突，核实后修正或删除；用户明确否定的内容直接删除”";
+  assert.equal(render(`可以，简化为**${quote}**就够了。`),
+    `<p><span>可以，简化为</span>${strong(quote)}<span>就够了。</span></p>`);
+  for (const label of ["“完成”", "‘完成’", "（完成）", "【完成】", "《完成》", "「完成」", "『完成』", "〔完成〕", "〈完成〉", "〖完成〗", "〘完成〙", "〚完成〛"]) {
+    for (const prefix of ["中文", "text", "", "🙂"]) {
+      assert.ok(render(`${prefix}**${label}**继续`).includes(strong(label)), `${prefix}${label}`);
+    }
+  }
+  assert.equal(render("先**“检查”**再**“删除”**完成"),
+    `<p><span>先</span>${strong("“检查”")}<span>再</span>${strong("“删除”")}<span>完成</span></p>`);
+  assert.match(render("改为**“检查 *嵌套* 和 `code`”**继续"),
+    /<strong>.*“检查.*<em>.*嵌套.*<\/em>.*<code>code<\/code>.*”.*<\/strong>/);
+  for (const text of ["- 改为**“完成”**继续", "> 改为**“完成”**继续", "| 结果 |\n| --- |\n| 改为**“完成”**继续 |", "[改为**“完成”**继续](https://example.com)"]) {
+    assert.ok(render(text).includes(strong("“完成”")), text);
+  }
+});
+
 test("normal Markdown emphasis and ASCII punctuation retain their rules", () => {
   assert.ok(render("**验证**：43 项").includes(strong("验证")));
   assert.ok(render("**验证：** 43 项").includes(strong("验证：")));
   assert.ok(render("**bold** and __bold__").includes(strong("bold")));
   assert.ok(!render("**label:**43").includes("<strong>"));
+  assert.ok(!render('text**"quoted"**more').includes("<strong>"));
+  assert.ok(!render("改为*“斜体”*继续").includes("<em>"));
+  assert.ok(!render("改为__“加粗”__继续").includes("<strong>"));
   assert.match(render("*斜体* ~~删除~~"), /<em>.*斜体.*<\/em>.*<del>.*删除.*<\/del>/);
 });
 
@@ -44,6 +65,16 @@ test("code, escaped delimiters and unmatched streaming prefixes stay literal", (
     assert.ok(!render(text).includes("<strong>"), text);
   }
   assert.ok(render(source).includes(strong("验证：")), "completed streaming text is reparsed");
+});
+
+test("quoted bold keeps code, escaped delimiters and streaming prefixes literal", () => {
+  const source = "改为**“完成”**继续";
+  assert.equal(render(`\`${source}\``), `<p><code>${source}</code></p>`);
+  assert.ok(render(`\`\`\`text\n${source}\n\`\`\``).includes(`<pre><code>${source}</code></pre>`));
+  for (const text of ["改为\\*\\*“完成”\\*\\*继续", "改为**“完成", "改为**“完成”*", "改为**“完成”\\**继续"]) {
+    assert.ok(!render(text).includes("<strong>"), text);
+  }
+  assert.ok(render(source).includes(strong("“完成”")));
 });
 
 test("mask preserves punctuation, whitespace, escapes and adjacent bold spans", () => {

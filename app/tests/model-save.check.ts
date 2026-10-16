@@ -15,11 +15,19 @@ try {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let logoutRequests = 0;
+  let firstSave = true, releaseFirstSave!: () => void, receiveFirstSave!: () => void;
+  const firstSaveReceived = new Promise<void>(resolve => { receiveFirstSave = resolve; });
   let logoutFailure: "active" | "uncertain" | null = null;
   await page.routeWebSocket("**/ws", (route) => {
     const server = route.connectToServer();
     route.onMessage((message) => {
       const c = JSON.parse(message.toString());
+      if (c.op === "configuration.save" && firstSave) {
+        firstSave = false;
+        releaseFirstSave = () => server.send(message);
+        receiveFirstSave();
+        return;
+      }
       if (c.op === "configuration.save" && c.params.providers.some((provider: { clearKey?: boolean }) => provider.clearKey)) {
         logoutRequests++;
         if (logoutFailure) {
@@ -42,6 +50,13 @@ try {
   await page.locator("#provider-key").fill("TEST-ONLY-FIRST-KEY");
   assert.match(await page.locator("#provider-key-status").innerText(), /尚未保存/);
   await page.locator("#save-provider").click();
+  await firstSaveReceived;
+  try {
+    const progress = page.getByRole("status").and(page.locator(".configuration-progress"));
+    await progress.filter({ hasText: "正在保存配置和密钥…" }).waitFor();
+    assert.equal(await progress.evaluate(node => node.closest("[inert]") === null), true, "progress stays outside the inert subtree");
+    assert.equal(await page.locator(".container").evaluate(node => node instanceof HTMLElement && node.inert), true, "saving still blocks editing");
+  } finally { releaseFirstSave(); }
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();
   assert.match(await page.locator(".configuration-feedback").innerText(), /API 密钥已写入本地文件/);
   assert.equal(await page.locator("#save-provider").innerText(), "保存");

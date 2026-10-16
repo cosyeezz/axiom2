@@ -19,7 +19,7 @@ function useOriginalMode(scope: Scope | null | undefined) {
 }
 export function OriginalConversationToggle({ scope }: { scope?: Scope }) {
   const mode = useOriginalMode(scope);
-  return <button type="button" className="compression-trigger original-conversation-toggle"
+  return <button type="button" className="compression-trigger original-conversation-toggle action-icon"
     aria-label="原始会话" aria-pressed={mode?.enabled ?? false}
     data-tooltip={mode?.enabled ? "关闭原始会话" : "查看原始会话"}
     disabled={!scope?.sessionId || !mode} onClick={() => mode?.setEnabled((enabled) => !enabled)}>

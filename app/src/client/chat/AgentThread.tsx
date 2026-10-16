@@ -1,4 +1,6 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { FilePreviewContext, type OpenFileReference } from "./FileLink.js";
+import { FilePreviewPanel } from "./FilePreview.js";
 import { useScope } from "../transport.js";
 import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
@@ -32,6 +34,8 @@ function ThreadActivityGroup({ scope, group, tail, tailReply, index }: {
 }
 
 function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: boolean }) {
+  const [preview, setPreview] = useState<OpenFileReference | null>(null);
+  const closePreview = () => { setPreview(null); if (preview?.trigger.isConnected) preview.trigger.focus({ preventScroll: true }); };
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   useScope(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null, null);
@@ -88,7 +92,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
       : el.scrollTop + (direction === "up" ? -1 : 1) * el.clientHeight * 0.85;
     el.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   };
-  return <div className="thread-shell">
+  return <FilePreviewContext.Provider value={setPreview}><div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
       onScroll={(e) => { const n = e.currentTarget; bottom.current = n.scrollHeight - n.scrollTop - n.clientHeight < 60; measure(); }}>
       <div ref={content} className="container thread-content"><div id={nested ? undefined : "messages"}>
@@ -126,11 +130,12 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
     <nav className="thread-navigation" aria-label="会话滚动">
       {([ ["top", "回到最上", "M7 5h10M7 14l5-5 5 5M12 9v11"], ["up", "向上滚动一屏", "m6 15 6-6 6 6"],
         ["down", "向下滚动一屏", "m6 9 6 6 6-6"], ["bottom", "回到最下", "M7 19h10M7 10l5 5 5-5M12 4v11"] ] as const).map(([direction, label, path]) =>
-        <button type="button" key={direction} data-tooltip={label} aria-label={label} disabled={direction === "top" || direction === "up" ? edges.top : edges.bottom} onClick={() => scroll(direction)}>
+        <button type="button" className="action-icon" key={direction} data-tooltip={label} aria-label={label} disabled={direction === "top" || direction === "up" ? edges.top : edges.bottom} onClick={() => scroll(direction)}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
         </button>)}
     </nav>
-  </div>;
+    {preview && <FilePreviewPanel key={`${preview.messageId}:${preview.href}`} reference={preview} onClose={closePreview} />}
+  </div></FilePreviewContext.Provider>;
 }
 
 // Remount local viewing state on every workspace/session change, including child views.

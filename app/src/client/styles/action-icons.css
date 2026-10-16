@@ -1,0 +1,35 @@
+/* Shared interaction for icon-only actions; page styles own geometry.
+   Explicit control specificity keeps legacy page rules from changing this contract. */
+:root { --action-icon-fg: #8a8f98; }
+:root :is(button, a)[class]:is(.icon-btn, .action-icon) {
+  color: var(--action-rest, var(--action-icon-fg));
+  background: transparent;
+  transition: color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast);
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+  color: var(--action-highlight, var(--fg));
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: -2px;
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):is(:disabled, [aria-disabled="true"]) {
+  color: var(--action-icon-fg);
+  background: transparent;
+  cursor: not-allowed;
+}
+/* Persistent state and operation feedback remain distinguishable. */
+.model-favorite[aria-pressed="true"] { --action-rest: var(--warn); --action-highlight: var(--warn); }
+.compression-trigger:is([aria-expanded="true"], [data-state="running"]),
+.annotation-toggle[aria-pressed="true"],
+.original-conversation-toggle[aria-pressed="true"] { --action-rest: var(--accent-hover); --action-highlight: var(--accent-hover); }
+:root .compression-trigger.action-icon:is([aria-expanded="true"], [aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.execution-alert .icon-btn > svg { color: inherit; }
+.message-actions[data-feedback="copied"] { --action-rest: var(--success); --action-highlight: var(--success); }
+.message-actions[data-feedback="failed"] { --action-rest: var(--danger); --action-highlight: var(--danger); }
+@media (prefers-reduced-motion: reduce) {
+  :root :is(button, a)[class]:is(.icon-btn, .action-icon) { transition: none; }
+}

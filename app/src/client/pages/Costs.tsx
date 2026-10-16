@@ -133,7 +133,7 @@ export function CostsPopover({ scope, trigger, onClose }: { scope: Scope; trigge
     event.stopPropagation();
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") event.preventDefault();
   }}>
-    <CostPage scope={scope} closeControl={<button ref={close} type="button" className="cost-close" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
+    <CostPage scope={scope} closeControl={<button ref={close} type="button" className="cost-close action-icon" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
     </button>} />
   </dialog>, host);

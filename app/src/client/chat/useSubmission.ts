@@ -7,6 +7,8 @@ import {
   getDraft,
 } from "../drafts.js";
 import { AppError, type Draft, type Scope } from "../../shared/protocol.js";
+import { prepareDraftSubmission, completeDraftSubmission } from "../draft-persistence.js";
+import type { DraftStamp } from "../../shared/drafts.js";
 import { optimisticStart, optimisticState } from "./optimistic.js";
 import { beginRecall, finishRecall, pendingRecall, reconcileInputs, beginResume, finishResume, pendingResume } from "./reconcile-inputs.js";
 import { messageLengthError } from "./message-limit.js";
@@ -53,21 +55,28 @@ export function useSubmission(
     const captured = draftContent(current);
     const requestId = crypto.randomUUID();
     if (continuing) beginResume(scope, requestId);
-    if (!stopping && !continuing) flushSync(() => {
-      optimisticStart(scope, requestId, captured, state.active);
-      if (provided) provided.onStart();
-      else clearSubmittedDraft(scope, captured);
-    });
+    let stamp: DraftStamp | undefined;
+    let started = false;
     try {
+      if (!stopping && !continuing) {
+        if (!provided) stamp = prepareDraftSubmission(scope, captured, requestId);
+        flushSync(() => {
+          optimisticStart(scope, requestId, captured, state.active);
+          started = true;
+          if (provided) provided.onStart();
+          else clearSubmittedDraft(scope, captured, false);
+        });
+      }
       const task = stopping && state.nested ? state.task : undefined;
       const receipt = await command<{ runId?: string; inputId?: string }>(
         continuing ? "agent.resume" : stopping ? (task ? "task.cancel" : "agent.stop") : "prompt",
         continuing ? { expectedRunId: state.runId } : stopping
           ? (task ? { taskId: task.id } : { runId: state.runId })
-          : { ...captured, ...(state.nested || state.active ? { mode: "steer" } : {}) },
+          : { ...captured, ...(stamp ? { draftStamp: stamp } : {}), ...(state.nested || state.active ? { mode: "steer" } : {}) },
         task ? { ...scope, sessionId: task.parentSessionId } : scope,
         requestId,
       );
+      if (stamp) completeDraftSubmission(scope, stamp);
       if (continuing) finishResume(scope, requestId);
       else if (!stopping) optimisticState(scope, requestId, "accepted", receipt.inputId ?? receipt.runId, receipt.inputId ? true : receipt.runId ? false : undefined);
     } catch (e) {
@@ -79,7 +88,7 @@ export function useSubmission(
           finishResume(scope, requestId);
           setError((e as Error).message);
         }
-      } else if (stopping) setError((e as Error).message);
+      } else if (stopping || !started) setError((e as Error).message);
       else if ((e as AppError).code === "UNCERTAIN") {
         optimisticState(scope, requestId, "uncertain");
         void reconcileInputs(scope).catch(() => {});

@@ -18,6 +18,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+File preview toolbar: Lucide file-code, columns-2, book-open, folder-open, file-text, image, file, rotate-ccw, text-wrap, minus, plus, maximize and x; official SVG paths in chat/FileIcon.tsx.
+Sources: https://lucide.dev/icons/columns-2 https://lucide.dev/icons/book-open https://lucide.dev/icons/folder-open
 SVG source: https://github.com/lucide-icons/lucide/tree/main/icons
 Running process status: eos-icons:three-dots-loading (SUSE UX/UI team, MIT), inline in chat/ToolActivity.tsx.
 EOS source: https://icon-sets.iconify.design/eos-icons/three-dots-loading/

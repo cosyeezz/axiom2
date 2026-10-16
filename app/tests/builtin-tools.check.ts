@@ -34,7 +34,9 @@ const execute: OpenCliExecute = async (args) => {
   }
   throw Error("Unexpected fixture command");
 };
-const app = await startServer({ root, port: 0, openCli: { execute, locateNpm: () => "npm-cli.js", openExtension: async () => {
+const browserTargets: string[] = [];
+const app = await startServer({ root, port: 0, openCli: { execute, locateNpm: () => "npm-cli.js", openExtension: async (target) => {
+  browserTargets.push(target);
   browserOpens++;
   if (browserFails) throw new AppError("BROWSER_OPEN_FAILED", "fixture default browser unavailable");
 } } });
@@ -49,16 +51,17 @@ try {
   await page.waitForFunction(() => !(document.querySelectorAll(".tools-actions button")[0] as HTMLButtonElement).disabled);
   assert.equal(await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole("combobox", { name: "浏览器窗口" }).isDisabled(), true);
-  await page.getByRole("button", { name: "打开扩展下载页" }).click();
-  await page.getByText("已请求系统浏览器打开扩展下载页。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Chrome 应用商店安装" }).click();
+  await page.getByText("已请求系统浏览器打开 Chrome 应用商店。", { exact: true }).waitFor();
   assert.equal(browserOpens, 1, "opening the extension page works before installation");
   browserFails = true;
-  await page.getByRole("button", { name: "打开扩展下载页" }).click();
+  await page.getByRole("button", { name: "手动下载压缩包" }).click();
   await page.getByRole("alert").filter({ hasText: "fixture default browser unavailable" }).waitFor();
   browserFails = false;
-  await page.getByRole("button", { name: "打开扩展下载页" }).click();
-  await page.getByText("已请求系统浏览器打开扩展下载页。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "手动下载压缩包" }).click();
+  await page.getByText("已请求系统浏览器打开官方压缩包下载页。", { exact: true }).waitFor();
   assert.equal(browserOpens, 3);
+  assert.deepEqual(browserTargets, ["store", "download", "download"]);
   assert.ok(page.url().endsWith("/tools.html"));
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "安装 OpenCLI" && !b.disabled));

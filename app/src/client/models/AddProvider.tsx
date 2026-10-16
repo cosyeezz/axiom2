@@ -31,7 +31,7 @@ export function ProviderAddMenu({ disabled, oauth, custom }: {
     }} onKeyDown={(event) => {
       if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); }
     }}>
-      <button ref={trigger} className="btn btn-ghost add-supplier" id="add-supplier" type="button"
+      <button ref={trigger} className="btn btn-ghost add-supplier action-icon" id="add-supplier" type="button"
         aria-label="添加供应商" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? "provider-add-menu" : undefined}
         disabled={disabled} onClick={() => setOpen(!open)} onKeyDown={(event) => {
           if (["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); setOpen(true); }

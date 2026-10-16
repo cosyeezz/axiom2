@@ -4,7 +4,7 @@ import { clearSubmittedDraft, draftContent, getDraft, updateDraft } from "../src
 
 const scope = () => ({ workspaceId: crypto.randomUUID(), sessionId: crypto.randomUUID() });
 
-test("drafts retain text, attachments and large images only in page memory, scoped to workspace/session", () => {
+test("draft cache retains scoped text, attachments and images without browser storage", () => {
   const owner = scope(), other = { ...owner, workspaceId: crypto.randomUUID() };
   const storage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
   Object.defineProperty(globalThis, "sessionStorage", {

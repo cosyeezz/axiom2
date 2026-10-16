@@ -86,6 +86,10 @@ const subscribeConnection = (fn: () => void) => {
   statusListeners.add(fn);
   return () => { statusListeners.delete(fn); };
 };
+/** Observe lifecycle without tying durable background saves to a mounted composer. */
+export function observeConnection(fn: (state: Readonly<typeof connection>) => void) {
+  return subscribeConnection(() => fn(connection));
+}
 /** Socket lifecycle is independent of diagnostic text such as subscription errors. */
 export function useConnectionState() {
   return useSyncExternalStore(subscribeConnection, () => connection);

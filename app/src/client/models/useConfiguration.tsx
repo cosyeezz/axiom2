@@ -58,6 +58,7 @@ export function useConfiguration() {
           id: "",
           name: "",
           levels: ["none"],
+          input: ["text"],
           headers: [],
           body: [],
         },
