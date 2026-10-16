@@ -357,6 +357,7 @@ try {
   assert.equal(await concurrencyInput.inputValue(), "3");
   await page.goto(app.origin + "/model-config.html");
   await page.locator("#add-supplier").click();
+  await page.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   await page.locator("#provider-name").fill("界面验收供应商");
   await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
   await page.locator("#provider-key").fill("UI-TEST-ONLY-SECRET");
@@ -433,7 +434,8 @@ try {
   await page.locator("#new-model-name").fill("尚未完成的编辑");
   for (const trigger of ["#add-model", "#add-supplier"]) {
     await page.locator(trigger).click();
-    await page
+    if (trigger === "#add-supplier") await page.keyboard.press("Escape");
+    else await page
       .getByRole("dialog")
       .getByRole("button", { name: "取消", exact: true })
       .click();
@@ -470,6 +472,7 @@ try {
   );
   await page.getByRole("button", { name: "完成编辑", exact: true }).click();
   await page.locator("#add-supplier").click();
+  await page.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   await page.locator("#provider-name").fill("切换验证供应商");
   await page
     .locator(".supplier-option")
@@ -529,6 +532,7 @@ try {
   assert.equal(await page.locator("#reset-provider").isDisabled(), true);
   // Publish through the real service; a test key checks local persistence, not remote authentication.
   await page.locator("#add-supplier").click();
+  await page.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   await page.locator("#provider-id").fill("axiom-ui-check");
   await page.locator("#provider-name").fill("可发布供应商");
   await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
@@ -548,13 +552,11 @@ try {
   await page.locator("#add-model").click();
   await page.locator("#new-model-id").fill("ui-model");
   await page.getByRole("checkbox", { name: "high", exact: true }).check();
-  // Top Save also includes the unfinished model form hidden behind the connection tab.
+  // Unified Save also includes the unfinished model form hidden behind the connection tab.
   await page.getByRole("tab", { name: /连接配置/ }).click();
   assert.equal(await page.locator("#save-provider").isDisabled(), false);
   await page.locator("#save-provider").click();
-  await page.waitForFunction(() =>
-    document.body.innerText.includes("已发布配置"),
-  );
+  await page.locator(".configuration-feedback[data-saved=true]").waitFor();
   await page.getByRole("tab", { name: /连接配置/ }).click();
   assert.equal(await page.locator("#provider-key").inputValue(), "");
   assert.equal(
@@ -581,38 +583,31 @@ try {
       .innerText()
       .then((t) => t.includes("UI-PUBLISH-TEST-KEY"))),
   );
-  await page.getByRole("button", { name: "API Key 登录", exact: true }).click();
-  await page.waitForSelector("#auth-answer");
+  assert.equal(await page.getByRole("button", { name: "API Key 登录", exact: true }).count(), 0);
+  await page.locator("#provider-key").fill("UI-LOGIN-TEST-KEY");
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
-    await overflow(page, `model login ${width}`);
+    await overflow(page, `model key ${width}`);
     await page.screenshot({
-      path: join(artifacts, `models-login-${width}.png`),
+      path: join(artifacts, `models-key-${width}.png`),
       fullPage: true,
     });
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator("#auth-answer").fill("UI-LOGIN-TEST-KEY");
-  await page.getByRole("button", { name: "提交认证输入", exact: true }).click();
-  await page
-    .getByRole("button", { name: "关闭并刷新状态", exact: true })
-    .click();
-  await page.waitForFunction(
-    () => !document.querySelector(".container[inert]"),
-  );
+  await page.locator("#save-provider").click();
+  await page.locator(".configuration-feedback[data-saved=true]").waitFor();
+  assert.equal(JSON.parse(readFileSync(join(root, "data/pi/auth.json"), "utf8"))["axiom-ui-check"].key, "UI-LOGIN-TEST-KEY");
   await page.reload();
   await page.waitForFunction(
     () =>
       (document.querySelector("#provider-name") as HTMLInputElement)?.value ===
       "可发布供应商",
   );
-  await page.getByRole("button", { name: "API Key 登录", exact: true }).click();
-  await page.waitForSelector("#auth-answer");
-  await page.getByRole("button", { name: "取消登录", exact: true }).click();
-  await page.getByRole("dialog").waitFor({ state: "detached" });
-  await page.waitForFunction(
-    () => !document.querySelector(".container[inert]"),
-  );
+  await page.locator("#provider-key").fill("UI-CANCELLED-KEY");
+  await page.locator("#reset-provider").click();
+  await page.getByRole("dialog", { name: "放弃修改？" }).getByRole("button", { name: "确认", exact: true }).click();
+  await page.waitForFunction(() => (document.querySelector("#provider-key") as HTMLInputElement)?.value === "");
+  assert.equal(JSON.parse(readFileSync(join(root, "data/pi/auth.json"), "utf8"))["axiom-ui-check"].key, "UI-LOGIN-TEST-KEY");
   // External updates leave the local draft/focus intact; stale publication cannot overwrite them.
   await page.locator("#provider-name").fill("保留本页草稿");
   const configPath = join(root, "data/pi/models.json"),
@@ -718,7 +713,7 @@ try {
     JSON.stringify(report, null, 2),
   );
   console.log(
-    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key login/cancel, model/provider deletion, multi-select and copy, hidden inline-editor top Save, two-column reasoning styles; context ring boundaries/unknown ARIA, real background snapshot compression, cancel/retry/no-replay/focus, nine-viewport compression sheet vs design and reduced motion; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, memory-only drafts, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; IME/focus/menu preservation, stop/fresh prompt and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
+    "PASS: 9 viewports × 3 pages, no horizontal overflow; workbench/settings shell geometry vs read-only designs; workspace/session/draft isolation, refresh, IME, independent picker update, model publication, redaction, revision conflict with preserved draft/focus, API-key save/cancel, model/provider deletion, multi-select and copy, hidden inline-editor unified Save, two-column reasoning styles; context ring boundaries/unknown ARIA, real background snapshot compression, cancel/retry/no-replay/focus, nine-viewport compression sheet vs design and reduced motion; product Agent worker/tool streaming, safe Markdown/code highlighting/copy, favorites, memory-only drafts, session management, task settings and Connect validation; independent child dialogs/stop/results/freeze; IME/focus/menu preservation, stop/fresh prompt and reload without replay (loopback). Screenshots: app/test-results/. Full product visual acceptance remains pending.",
   );
 } catch (error) {
   await page.screenshot({

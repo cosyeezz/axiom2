@@ -55,7 +55,7 @@ function fixture() {
   return { store, scope, records, taskId, row, scheduler, delivery, stops, signals, activate, agents,
     setRun: (value: Run | null) => { run = value; },
     release: () => releaseStop(),
-    dispose: async () => { scheduler.closing = true; releaseStop(); await tick(); await tick(); store.close(); rmSync(root, { recursive: true, force: true }); },
+    dispose: async () => { scheduler.closing = true; for (const timer of (scheduler as any).timers.values()) clearTimeout(timer); releaseStop(); await tick(); await tick(); store.close(); rmSync(root, { recursive: true, force: true }); },
   };
 }
 
@@ -84,6 +84,20 @@ test("queued cancellation creates one result without a worker or cleanup state",
   } finally { await f.dispose(); }
 });
 
+test("a cancelled new queue cannot inherit its previous run's summary phase", async () => {
+  const f = fixture();
+  try {
+    f.store.db.prepare("UPDATE tasks SET status='completed',workStartedAt=1,workDeadlineAt=1001,summaryDeadlineAt=181001,budgetRevision=2 WHERE id=?").run(f.taskId);
+    f.records.enqueue(f.row());
+    assert.equal(f.row().workStartedAt, null);
+    assert.equal(f.row().workDeadlineAt, null);
+    assert.equal(f.row().summaryDeadlineAt, null);
+    f.scheduler.cancel(f.row(), { reason: "cancel new queue before startup" });
+    const result = f.records.list(f.scope).tasks[0].results[0];
+    assert.equal(f.delivery.result(f.scope, f.taskId, result.id).budgetSummary, undefined);
+  } finally { await f.dispose(); }
+});
+
 test("running cancellation stops once and repeated stop withdraws stopping-time input", async () => {
   const f = fixture();
   try {
@@ -106,17 +120,73 @@ test("running cancellation stops once and repeated stop withdraws stopping-time 
   } finally { await f.dispose(); }
 });
 
-test("work deadline directly stops without wrapping or a second model request", async () => {
+test("work deadline starts summary and only its three-minute deadline force-stops", async (t) => {
   const f = fixture();
   try {
     const run = f.activate();
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: run.startedAt });
     f.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(JSON.stringify({ concurrency: 1, workMs: 5 }), f.taskId);
     (f.scheduler as any).arm(f.row(), run);
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    t.mock.timers.tick(5);
+    assert.equal(f.stops.length, 0);
+    assert.equal(f.row().status, "running");
+    assert.equal(f.row().summaryDeadlineAt, run.startedAt + 5 + 180_000);
+    assert.equal(f.signals[0].type, "summarize");
+    t.mock.timers.tick(179_999);
+    assert.equal(f.stops.length, 0);
+    t.mock.timers.tick(1);
     assert.deepEqual(f.stops, [[target(f.row()), "budget"]]);
-    assert.equal(f.signals.length, 0);
     assert.equal(f.row().status, "stopping");
-    assert.match(f.row().error!, /工作预算/);
+    assert.match(f.row().error!, /3 分钟/);
+  } finally { await f.dispose(); }
+});
+
+test("accepted append refreshes the same run; invalid append and old work timers cannot change it", async (t) => {
+  const f = fixture();
+  try {
+    const run = f.activate();
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: run.startedAt });
+    f.store.db.prepare("INSERT INTO task_settings VALUES(1,?)").run(JSON.stringify({ concurrency: 1, workMs: 1000 }));
+    f.scheduler.preferencesChanged();
+    t.mock.timers.tick(500);
+    await f.scheduler.append(f.row(), { text: "more evidence" });
+    const refreshed = f.row();
+    assert.equal(refreshed.runId, run.id);
+    assert.equal(refreshed.workStartedAt, run.startedAt + 500);
+    assert.equal(refreshed.workDeadlineAt, run.startedAt + 1500);
+    assert.equal(f.signals.at(-1).budget.deadlineAt, refreshed.workDeadlineAt);
+    await assert.rejects(f.scheduler.append(f.row(), { text: "invalid", mode: "followUp" }));
+    assert.equal(f.row().budgetRevision, refreshed.budgetRevision);
+    t.mock.timers.tick(500);
+    assert.equal(f.row().summaryDeadlineAt, null);
+    t.mock.timers.tick(500);
+    assert.equal(f.signals.at(-1).type, "summarize");
+    assert.equal(f.stops.length, 0);
+  } finally { await f.dispose(); }
+});
+
+test("summary retains its hard deadline across preferences; append cancels that deadline and restores work", async (t) => {
+  const f = fixture();
+  try {
+    const run = f.activate();
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: run.startedAt });
+    f.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(JSON.stringify({ concurrency: 1, workMs: 5 }), f.taskId);
+    (f.scheduler as any).arm(f.row(), run);
+    t.mock.timers.tick(5);
+    const summary = f.row();
+    f.store.db.prepare("INSERT INTO task_settings VALUES(1,?)").run(JSON.stringify({ concurrency: 1, workMs: 600000 }));
+    f.scheduler.preferencesChanged();
+    assert.equal(f.row().summaryDeadlineAt, summary.summaryDeadlineAt);
+    f.scheduler.event(f.row(), run, { type: "ready" });
+    assert.equal(f.signals.at(-1).type, "summarize", "initialization cannot lose the transition");
+    await f.scheduler.append(f.row(), { text: "continue with new evidence" });
+    assert.equal(f.row().summaryDeadlineAt, null);
+    assert.ok(f.row().budgetRevision! > summary.budgetRevision!);
+    assert.equal(f.signals.at(-1).type, "input");
+    assert.equal(f.signals.at(-1).budget.summaryDeadlineAt, null);
+    t.mock.timers.tick(180000);
+    assert.equal(f.stops.length, 0);
+    assert.equal(f.row().summaryDeadlineAt, null);
   } finally { await f.dispose(); }
 });
 
@@ -155,8 +225,9 @@ test("live budget updates keep the original start and expire overdue running tas
     f.scheduler.preferencesChanged();
     assert.deepEqual(f.records.list(f.scope).tasks[0].budgets, { concurrency: 2, workMs: 1000 });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.equal(f.stops.length, 1, "does not restart the deadline from preference save time");
-    assert.equal(f.row().status, "stopping");
+    assert.equal(f.stops.length, 0);
+    assert.ok(f.row().summaryDeadlineAt, "does not restart the work deadline from preference save time");
+    assert.equal(f.row().status, "running");
     assert.equal(f.signals.filter((event) => event.type === "input").length, 0);
   } finally { await f.dispose(); }
 });

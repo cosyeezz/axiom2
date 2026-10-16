@@ -61,6 +61,56 @@ function fixture(t: TestContext, messages: ChatMessage[] = []) {
   return { views, scope, events };
 }
 
+test("AgentViews: cache reload must compare the previous stream before applying new calls", (t) => {
+  const { views, scope, events } = fixture(t);
+  const first = { ...message("first", "assistant", true), streaming: true };
+  const reply = { ...thought("reply"), text: "继续检查" };
+  views.messageChanged(scope, first);
+  views.messageChanged(scope, reply);
+  views.flush(scope);
+  views.messages.delete(scope.sessionId);
+  events.length = 0;
+  const withCalls = { ...reply, calls: message("reply", "assistant", true).calls };
+  views.messageChanged(scope, withCalls);
+  assert.deepEqual(events.filter(e => e.scope === threadScope(scope)).map(e => e.data), [
+    { ids: ["first", "reply"], groups: [group(true, "first", "reply")] },
+  ], "the first call still publishes the merged group after cache eviction");
+  views.flush(scope);
+
+  views.messages.delete(scope.sessionId);
+  events.length = 0;
+  views.messageChanged(scope, { ...thought("new"), thinking: undefined, thinkingActive: false });
+  assert.equal(events.filter(e => e.scope === threadScope(scope)).length, 1, "a new streaming message publishes its ID after cache eviction");
+});
+
+test("threadGroups: invisible assistant placeholders do not split a process", () => {
+  for (const text of ["", " ", "\n\t"]) {
+    const empty: ChatMessage = { id: "empty", role: "assistant", text, streaming: true };
+    assert.deepEqual(threadGroups([message("first", "assistant", true), empty, message("next", "assistant", true)]),
+      [group(true, "first", "next")]);
+    assert.deepEqual(threadGroups([empty]), []);
+    for (const visible of [
+      { images: [{ id: "image", name: "image", mimeType: "image/png" }] },
+      { compression: { number: 1, title: "压缩", before: 100, after: 50 } },
+      { text: "实际正文" },
+    ]) assert.deepEqual(threadGroups([message("first", "assistant", true), { ...empty, ...visible }, message("next", "assistant", true)]),
+      [group(true, "first"), group(false, "empty"), group(true, "next")]);
+  }
+});
+
+test("AgentViews: placeholder visibility republishes layout, subsequent text deltas do not", (t) => {
+  const first = message("first", "assistant", true), next = message("next", "assistant", true);
+  const empty: ChatMessage = { id: "empty", role: "assistant", text: "", streaming: true };
+  const { views, scope, events } = fixture(t, [first, empty, next]);
+  for (const [text, changed] of [["正文", true], ["正文增量", false], [" \n", true]] as const) {
+    events.length = 0;
+    views.messageChanged(scope, { ...empty, text });
+    assert.equal(events.some(e => e.scope === threadScope(scope)), changed);
+    assert.deepEqual(views.thread(scope).groups, threadGroups([first, { ...empty, text }, next]));
+    views.flush(scope);
+  }
+});
+
 test("threadGroups: empty and tool-only transcripts have no visible groups", () => {
   assert.deepEqual(threadGroups([]), []);
   assert.deepEqual(threadGroups([message("tool", "toolResult")]), []);

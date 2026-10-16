@@ -4,12 +4,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { AppError } from "../src/shared/protocol.js";
 import { openCliSkillNames, openCliConfigPath } from "../src/server/integrations/opencli-runtime.js";
 import type { OpenCliExecute } from "../src/server/integrations/opencli.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-tools-ui-"));
 const prefix = join(root, "global"), modules = join(prefix, "node_modules"), packageRoot = join(modules, "@jackwener", "opencli");
-let release!: () => void, installs = 0, doctorFails = false;
+let release!: () => void, installs = 0, doctorFails = false, browserFails = false, browserOpens = 0;
 const gate = new Promise<void>((r) => { release = r; });
 const execute: OpenCliExecute = async (args) => {
   if (args[1] === "--version") return "11.0.0";
@@ -33,7 +34,10 @@ const execute: OpenCliExecute = async (args) => {
   }
   throw Error("Unexpected fixture command");
 };
-const app = await startServer({ root, port: 0, openCli: { execute, locateNpm: () => "npm-cli.js" } });
+const app = await startServer({ root, port: 0, openCli: { execute, locateNpm: () => "npm-cli.js", openExtension: async () => {
+  browserOpens++;
+  if (browserFails) throw new AppError("BROWSER_OPEN_FAILED", "fixture default browser unavailable");
+} } });
 const browser = await chromium.launch({ headless: true, executablePath: process.env.AXIOM_TEST_BROWSER });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
 const errors: string[] = [];
@@ -44,6 +48,18 @@ try {
   await page.getByRole("button", { name: "检查更新", exact: true }).waitFor();
   await page.waitForFunction(() => !(document.querySelectorAll(".tools-actions button")[0] as HTMLButtonElement).disabled);
   assert.equal(await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole("combobox", { name: "浏览器窗口" }).isDisabled(), true);
+  await page.getByRole("button", { name: "打开扩展下载页" }).click();
+  await page.getByText("已请求系统浏览器打开扩展下载页。", { exact: true }).waitFor();
+  assert.equal(browserOpens, 1, "opening the extension page works before installation");
+  browserFails = true;
+  await page.getByRole("button", { name: "打开扩展下载页" }).click();
+  await page.getByRole("alert").filter({ hasText: "fixture default browser unavailable" }).waitFor();
+  browserFails = false;
+  await page.getByRole("button", { name: "打开扩展下载页" }).click();
+  await page.getByText("已请求系统浏览器打开扩展下载页。", { exact: true }).waitFor();
+  assert.equal(browserOpens, 3);
+  assert.ok(page.url().endsWith("/tools.html"));
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "安装 OpenCLI" && !b.disabled));
   await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).click();
@@ -54,7 +70,29 @@ try {
   release();
   await page.waitForFunction(() => document.body.innerText.includes("安装与技能接入已完成"));
   await page.getByLabel("Chrome 配置档案", { exact: true }).fill("work-profile");
-  await page.getByLabel("浏览器窗口", { exact: true }).selectOption("background");
+  const windowSelect = page.getByRole("combobox", { name: "浏览器窗口", exact: true });
+  await windowSelect.click();
+  await page.getByRole("option", { name: "后台运行" }).click();
+  assert.equal(await windowSelect.innerText(), "后台运行");
+  await windowSelect.press("Enter");
+  await windowSelect.press("ArrowUp");
+  await windowSelect.press("Escape");
+  assert.equal(await windowSelect.innerText(), "后台运行", "Escape cancels keyboard navigation");
+  assert.equal(await windowSelect.evaluate((element) => element === document.activeElement), true);
+  await windowSelect.press("Space");
+  await windowSelect.press("Home");
+  await windowSelect.press("Enter");
+  assert.equal(await windowSelect.innerText(), "前台显示");
+  await windowSelect.press("Enter");
+  await windowSelect.press("End");
+  await windowSelect.press("Enter");
+  assert.equal(await windowSelect.innerText(), "后台运行");
+  await windowSelect.click();
+  await page.getByLabel("Chrome 配置档案", { exact: true }).click();
+  assert.equal(await page.getByRole("listbox").count(), 0, "outside click dismisses options");
+  await windowSelect.click();
+  await windowSelect.press("Tab");
+  assert.equal(await page.getByRole("listbox").count(), 0, "Tab dismisses without trapping focus");
   await page.getByRole("button", { name: "检查环境", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "保存接入设置" && !b.disabled));
   assert.equal(await page.getByLabel("Chrome 配置档案", { exact: true }).inputValue(), "work-profile", "status updates preserve input");
@@ -63,7 +101,7 @@ try {
   assert.equal(JSON.parse(readFileSync(openCliConfigPath(root), "utf8")).profile, "work-profile");
   await page.reload();
   await page.waitForFunction(() => (document.getElementById("opencli-profile") as HTMLInputElement)?.value === "work-profile");
-  assert.equal(await page.getByLabel("浏览器窗口", { exact: true }).inputValue(), "background");
+  assert.equal(await windowSelect.innerText(), "后台运行");
   await page.getByRole("button", { name: "检测连接", exact: true }).click();
   await page.getByText("[OK] Daemon: running", { exact: false }).waitFor();
   assert.ok((await page.locator(".tools-diagnostic").innerText()).includes("[MISSING]"));
@@ -94,6 +132,17 @@ try {
     await page.setViewportSize({ width, height });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     assert.equal(overflow, false, `horizontal overflow at ${width}`);
+    await windowSelect.click();
+    const popup = page.getByRole("listbox", { name: "浏览器窗口" });
+    const bounds = await popup.boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= height, `popup in viewport at ${width}`);
+    assert.equal(await popup.evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(25, 26, 27)", "opaque theme surface");
+    assert.equal(await popup.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    }), true, "menu is above page content");
+    if ([360, 1440].includes(width)) await page.screenshot({ path: resolve(`test-results/builtin-tools-dropdown-${width}.png`) });
+    await windowSelect.press("Escape");
     await page.evaluate(() => { document.querySelector(".tools-detail")?.scrollTo(0, 0); window.scrollTo(0, 0); });
     if ([360, 1440].includes(width)) await page.screenshot({ path: resolve(`test-results/builtin-tools-${width}.png`), fullPage: true });
   }

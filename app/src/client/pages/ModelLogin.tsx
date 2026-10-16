@@ -7,19 +7,31 @@ export function ModelLogin({
   providerId,
   type,
   revision,
+  inline = false,
+  onComplete,
   close,
 }: {
   providerId: string;
   type: "api_key" | "oauth";
   revision: string;
+  inline?: boolean;
+  onComplete: () => void;
   close: () => void;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (inline) heading.current?.focus(); }, [inline]);
   const event = useScope<AuthState | null>("authentication", null),
     connection = useConnection();
   const [id, setId] = useState(""),
     [answer, setAnswer] = useState(""),
     [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [browserMessage, setBrowserMessage] = useState("");
+  const opened = useRef(new Set<string>());
+  const completed = useRef(false);
+  const completion = useRef(onComplete);
+  completion.current = onComplete;
   const [lostConnection, setLostConnection] = useState(false);
   useEffect(() => {
     if (connection !== "已连接本地服务") setLostConnection(true);
@@ -57,6 +69,31 @@ export function ModelLogin({
     setBusy(false);
   }, [state?.prompt?.id]);
   const disconnected = lostConnection || connection !== "已连接本地服务";
+  const openBrowser = async () => {
+    setOpening(true);
+    setError("");
+    try {
+      await command("auth.open", { id });
+      if (active.current && !completed.current) setBrowserMessage("已请求系统浏览器打开登录页；完成授权后返回此处。");
+    } catch (e) {
+      if (active.current && !completed.current) setError((e as Error).message);
+    } finally {
+      if (active.current) setOpening(false);
+    }
+  };
+  useEffect(() => {
+    if (type !== "oauth" || !state?.url || state.status !== "running" || disconnected || closing) return;
+    if (opened.current.has(state.url)) return;
+    opened.current.add(state.url);
+    void openBrowser();
+  }, [state?.url, state?.status, disconnected, closing, id, type]);
+  useEffect(() => {
+    if (state?.status !== "completed" || completed.current) return;
+    completed.current = true;
+    setAnswer("");
+    setError("");
+    completion.current();
+  }, [state?.status]);
   const dismiss = async () => {
     if (closing) return;
     setClosing(true);
@@ -83,36 +120,43 @@ export function ModelLogin({
       setClosing(false);
     }
   };
-  return (
-    <Dialog
-      title={`${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerId}`}
-      onClose={() => void dismiss()}
-      className="settings-dialog"
-    >
-      <p role="status">
+  const authFailed = !!error || disconnected || state?.status === "failed";
+  const canInteract = state?.status === "running" && !disconnected && !closing;
+  const title = `${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerId}`;
+  const content = (
+    <>
+      <p role={authFailed ? "alert" : "status"} className={`auth-status${authFailed ? " auth-error" : ""}`} data-state={authFailed ? "failed" : state?.status || "starting"}>
         {error ||
           (disconnected
             ? "连接已断开；此登录流程不会自动重做，请关闭并重新读取认证状态。"
             : state?.message || "正在启动认证…")}
       </p>
-      {state?.url && !disconnected && !closing && (
-        <div>
-          <label htmlFor="oauth-url">在系统浏览器打开以下授权链接（不要在桌面窗口内打开）</label>
+      {state?.url && canInteract && (
+        <div className="auth-browser-step">
+          <label htmlFor="oauth-url">在系统浏览器完成授权</label>
           <input id="oauth-url" className="input" readOnly value={state.url}
             onFocus={(e) => e.currentTarget.select()} />
-          <button className="btn" type="button" onClick={() => {
-            void navigator.clipboard.writeText(state.url!).catch(() =>
-              setError("复制失败，请选中上方链接手动复制到浏览器。"));
-          }}>复制授权链接</button>
+          <div className="dialog-actions">
+            <button className="btn" type="button" disabled={opening} onClick={() => void openBrowser()}>
+              {opening ? "正在打开浏览器…" : "打开浏览器登录"}
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => {
+              void navigator.clipboard.writeText(state.url!).catch(() =>
+                setError("复制失败，请选中上方链接手动复制到浏览器。"));
+            }}>复制授权链接</button>
+          </div>
+          <p className="field-help" role="status">{browserMessage || "正在准备浏览器登录…"}</p>
+          <p className="field-help">完成浏览器授权后将自动回填；未完成时按下方提示手动提交。</p>
         </div>
       )}
-      {state?.userCode && !disconnected && !closing && (
+      {state?.userCode && canInteract && (
         <p>
           设备验证码：<code>{state.userCode}</code>
         </p>
       )}
-      {state?.prompt && !disconnected && !closing && (
+      {state?.prompt && canInteract && (
         <form
+          className="auth-input-step"
           key={state.prompt.id}
           onSubmit={async (e) => {
             e.preventDefault();
@@ -154,15 +198,17 @@ export function ModelLogin({
               className="input"
               id="auth-answer"
               autoComplete="off"
+              spellCheck={false}
+              placeholder={state.prompt.placeholder || (state.prompt.type === "manual_code" ? "按提示粘贴授权码或完整回调地址" : undefined)}
               type={state.prompt.type === "secret" ? "password" : "text"}
               value={answer}
               maxLength={8192}
-              required
+              required={state.prompt.type !== "text"}
               onChange={(e) => setAnswer(e.target.value)}
             />
           )}
-          <button className="btn" disabled={busy || !answer}>
-            提交认证输入
+          <button className="btn" disabled={busy || (state.prompt.type !== "text" && !answer)}>
+            {state.prompt.type === "manual_code" ? "提交回填" : "提交认证输入"}
           </button>
         </form>
       )}
@@ -180,9 +226,16 @@ export function ModelLogin({
         </button>
       </div>
       <p className="field-help">
-        认证输入仅发给本地 pi，不写入浏览器存储；OAuth 交换和令牌保存由 pi
-        负责。
+        认证信息仅提交至本地服务，由 pi 保存；浏览器不存储凭据。
       </p>
-    </Dialog>
+    </>
+  );
+  return inline ? (
+    <section className="oauth-login-panel" aria-labelledby="oauth-login-title">
+      <div className="detail-heading"><h2 ref={heading} tabIndex={-1} id="oauth-login-title">{title}</h2></div>
+      <div className="oauth-login-content">{content}</div>
+    </section>
+  ) : (
+    <Dialog title={title} onClose={() => void dismiss()} className="settings-dialog">{content}</Dialog>
   );
 }

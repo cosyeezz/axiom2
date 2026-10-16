@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, 
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultOpenCliSettings, type OpenCliJob, type OpenCliState } from "../../shared/builtin-tools.js";
+import { openExtensionPage } from "./opencli-browser.js";
 import { errorMessage } from "../error-message.js";
 import { openCliConfigPath, openCliEnvironment, openCliSkillPaths, readOpenCliConfig, type OpenCliConfig } from "./opencli-runtime.js";
 
@@ -83,7 +84,7 @@ export class OpenCliService {
   private controller?: AbortController;
   private closed = false;
   private readonly jobFile: string;
-  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli) {
+  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension = openExtensionPage) {
     this.jobFile = join(root, "integrations", "opencli-job.json");
     this.loadConfig();
     try {
@@ -158,6 +159,13 @@ export class OpenCliService {
     if (c.workspaceId || c.sessionId) throw new AppError("INVALID_SCOPE", "内置工具属于本机应用配置。");
     if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
     if (c.op === "opencli.get") return this.snapshot();
+    if (c.op === "opencli.openExtension") {
+      const params = c.params ?? {};
+      const target = params.target ?? "store";
+      if (Object.keys(params).some((key) => key !== "target") || (target !== "store" && target !== "download")) throw new AppError("INVALID_PARAMS", "请选择 Chrome 应用商店或官方压缩包下载页，不接受自定义地址。");
+      await this.openExtension(target);
+      return this.snapshot();
+    }
     if (c.op === "opencli.save") {
       if (this.pending) throw new AppError("BUSY", "请等待当前 OpenCLI 操作完成。");
       const p = c.params ?? {};

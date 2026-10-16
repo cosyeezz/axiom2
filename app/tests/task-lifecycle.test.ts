@@ -22,7 +22,7 @@ const wait = async (check: () => boolean, label: string, ms = 25000) => {
   }
 };
 test(
-  "Task lifecycle: append/cancel tools, queue cancellation, live handoff, work deadline without summary, restart uncertainty",
+  "Task lifecycle: append/cancel tools, queue cancellation, live handoff, tool-free deadline summary, restart uncertainty",
   { timeout: 120000 },
   async (t) => {
     const root = mkdtempSync(join(tmpdir(), "axiom-lifecycle-")),
@@ -108,9 +108,10 @@ test(
             reason: "Cancel queued child",
           });
         else answer("Parent done; notices are not polled.");
-      } else if (last.includes("工作已停止：")) {
+      } else if (last.includes("工作预算已到。")) {
         observed.add("summary");
-        answer("Unexpected stop-summary request");
+        assert.deepEqual(body.tools ?? [], [], "summary has no declared tools");
+        answer("Budget summary: prior requests interrupted; remaining work unverified.");
       } else if (all.includes("SECOND-BUDGET")) {
         return;
       } else if (all.includes("LIVE-STEER")) answer("Live steer processed.");
@@ -229,7 +230,7 @@ test(
       assert.equal(
         app.tasks.list(scope).tasks[0].runId,
         runId,
-        "live append must not replace run budget",
+        "live append must preserve the business run",
       );
       await wait(() => !running(app.agents.info(scope).run), "parent idle");
       await call("agent.stop", { runId: app.agents.info(scope).run!.id });
@@ -239,16 +240,18 @@ test(
       await call("task.append", { taskId: live.id, text: "SECOND-BUDGET" });
       await wait(
         () => app.tasks.list(scope).tasks[0].results.length === 2,
-        "hard deadline did not stop",
+        "deadline summary did not finish",
       );
-      assert.ok(!observed.has("summary"), "work deadline must not request a summary");
-      assert.equal(app.tasks.list(scope).tasks[0].status, "cancelled");
+      assert.ok(observed.has("summary"), "work deadline requests a tool-free summary");
+      assert.equal(app.tasks.list(scope).tasks[0].status, "completed");
       const result = app.tasks.result(
         scope,
         live.id,
         app.tasks.list(scope).tasks[0].results[1].id,
       );
-      assert.match(result.reason ?? "", /预算|时限|截止/);
+      assert.equal(result.budgetSummary, true);
+      assert.match(result.report, /Budget summary/);
+      assert.match(result.unfinished.join(""), /工作预算/);
       assert.ok(!("cleanup" in result));
       // Retrying cancellation does not produce another result; stale input is discarded on restart.
       await call("task.cancel", { taskId: live.id });
@@ -281,9 +284,9 @@ test(
         "fresh work budget did not settle",
         25000,
       );
-      assert.equal(app.tasks.list(scope).tasks[0].status, "cancelled");
+      assert.equal(app.tasks.list(scope).tasks[0].status, "completed");
       assert.deepEqual(app.tasks.result(scope, live.id, result.id), result);
-      assert.ok(!observed.has("summary"), "neither deadline may start summary work");
+      assert.ok(observed.has("summary"));
       assert.equal(app.tasks.list(scope).tasks[1].id, queued.id);
       // Stop wins over a prompt waiting for the config writer; a late acknowledgement must not unfreeze it.
       let release!: () => void;

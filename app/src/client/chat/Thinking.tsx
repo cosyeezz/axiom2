@@ -19,7 +19,7 @@ export function Thinking({ text, active }: { text: string; active: boolean }) {
         <path d="M6.5 16a3.5 3.5 0 0 1 0 -7h.5" />
         <path d="M5 9.3v-2.8a3.5 3.5 0 0 1 7 0v10" />
       </svg>
-      {active ? <ThinkingDots label="思考" /> : <span className="thinking-label">思考</span>}
+      {active ? <ThinkingDots /> : <span className="thinking-label">thinking</span>}
       {!open && !active && text && <span className="thinking-preview"><Markdown text={text} compact /></span>}
     </summary>
     {open && text && <div className="thinking-body markdown"><Markdown text={text} /></div>}

@@ -92,7 +92,7 @@ export function ModelEditor({
               ))}
             </div>
             <span className="field-help" id="reasoning-help">
-              选择模型支持的等级；再次点击可取消，未选时不配置思考等级。统一点击顶部「保存」后生效。none
+              选择模型支持的等级；再次点击可取消，未选时不配置思考等级。统一点击下方「保存」后生效。none
               对应 pi 的 off；保存时校验实际模型能力。
             </span>
           </div>

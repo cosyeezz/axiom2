@@ -387,8 +387,11 @@ svg{stroke-width:1.8}
 .auto-compression-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:16px 0}.auto-compression-field{min-width:0}.auto-compression-field label{display:block;font-size:13px;margin-bottom:8px}.auto-compression-field input{width:100%;min-width:0;min-height:44px}.auto-compression-settings p:empty{display:none}.compression-body p.auto-compression-effective{color:var(--fg);margin-bottom:8px}
 .compression-page>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px max(16px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0}.compression-page footer small{font-size:12px;color:var(--muted)}.compression-page footer button{font-size:13px;flex-shrink:0}
 @media(max-width:640px){.context-controls{gap:4px}.compression-page{border:0}.compression-body{padding:20px}.compression-page>header,.compression-page>footer{padding-inline:20px}}
-/* Keep usage glyphs aligned and equally sized in every compression state. */
+/* Tight viewBoxes include strokes; fit each glyph proportionally into an 18px box.
+   Limit this rule to toolbar icons so portalled panels keep their own sizing. */
 [data-od-id="token-usage"] .usage-metric{min-height:44px;gap:8px}
-[data-od-id="token-usage"] svg{display:block;width:18px;height:18px;flex:0 0 18px;align-self:center;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[data-od-id="token-usage"] :is(.usage-metric,.usage-settings>.compression-trigger)>svg{display:block;width:18px;height:18px;flex:0 0 18px;align-self:center;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[data-od-id="token-usage"] .usage-settings>.compression-trigger{min-width:44px;justify-content:center}
+[data-od-id="token-usage"] .usage-settings>.original-conversation-toggle>svg{fill:currentColor;stroke:none}
 /* Refined prompt hint, scoped to the marked input only. */
 [data-od-id="message-input"]::placeholder{font-size:16px;font-weight:510;letter-spacing:-0.01em;color:var(--muted);opacity:1}

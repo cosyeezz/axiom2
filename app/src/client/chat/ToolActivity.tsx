@@ -5,6 +5,7 @@ import { Icon } from "../components.js";
 import { type ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ThinkingDots } from "./ThinkingDots.js";
+import { RunningDots } from "./RunningDots.js";
 import { Markdown } from "./Markdown.js";
 import "../styles/activity-status.css";
 import { toolPreview, toolStatusLabels, toolSummary, type ToolCall, type ToolStatus } from "./tool-summary.js";
@@ -13,21 +14,6 @@ export type ActivityFact = { name: string; icon: string; target: string; status:
 type Reporter = (id: string, fact: ActivityFact | null) => void;
 export const ActivityContext = createContext<Reporter>(() => {});
 export const ActivityExpanded = createContext(true);
-
-function RunningStatusIcon() {
-  return <svg className="activity-status-dots" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M0 0h24v24H0z" fill="none" />
-    <circle cx="18" cy="12" r="0" fill="currentColor">
-      <animate attributeName="r" begin=".67" calcMode="spline" dur="1.5s" keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite" values="0;2;0;0" />
-    </circle>
-    <circle cx="12" cy="12" r="0" fill="currentColor">
-      <animate attributeName="r" begin=".33" calcMode="spline" dur="1.5s" keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite" values="0;2;0;0" />
-    </circle>
-    <circle cx="6" cy="12" r="0" fill="currentColor">
-      <animate attributeName="r" begin="0" calcMode="spline" dur="1.5s" keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite" values="0;2;0;0" />
-    </circle>
-  </svg>;
-}
 
 function CompletedStatusIcon({ animate }: { animate: boolean }) {
   const strokes = [
@@ -117,7 +103,7 @@ export function ActivityGroup({ children, awaitingMore = false, activeRunId, mes
     <details className="activity tool-activity" open={open} data-status={status}>
       <summary onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
         <span className="activity-status" data-state={status} role="img" aria-label={toolStatusLabels[status]} data-tooltip={toolStatusLabels[status]}>
-          {status === "running" ? <RunningStatusIcon /> : status === "completed" ? <CompletedStatusIcon animate={statusChange.animateCompletion} /> :
+          {status === "running" ? <RunningDots className="activity-status-dots" /> : status === "completed" ? <CompletedStatusIcon animate={statusChange.animateCompletion} /> :
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" />{status === "failed" ? <path d="m9 9 6 6m0-6-6 6" /> : status === "cancelled" ? <path d="M9 8v8m6-8v8" /> : <path d="M12 7v6m0 4h.01" />}</svg>}
         </span>
         <span className="activity-overview">

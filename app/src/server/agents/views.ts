@@ -8,7 +8,7 @@ import {
   type Run,
   type ThreadIndex,
 } from "../../shared/agent.js";
-import { threadActivity, threadGroups, threadReplyThinking, threadThinking } from "../../shared/thread-layout.js";
+import { threadActivity, threadEmpty, threadGroups, threadReplyThinking, threadThinking } from "../../shared/thread-layout.js";
 import type { Store } from "../storage.js";
 import { contextUsage } from "../context-usage.js";
 import { Lru } from "../../shared/lru.js";
@@ -85,14 +85,26 @@ export class AgentViews {
       const row = this.store.db
         .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
         .get(scope.sessionId);
-      const list = row?.file
-        ? transcriptMessages(
-            openTranscript(
-              String(row.file),
-              this.store.workspace(scope.workspaceId).path,
-            ),
-          )
-        : [];
+      const manager = row?.file
+        ? openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path)
+        : null;
+      const list = manager ? transcriptMessages(manager) : [];
+      // Compaction can remove both a task's card and its result notice. Keep the
+      // actual unread notices in the display projection so the client can render
+      // and acknowledge them; a summary alone is not proof of reading a result.
+      // Only recover notices from this session's current branch, never agent input.
+      if (manager && list.some((message) => message.compression)) {
+        const missing = new Set(this.store.db.prepare(
+          "SELECT sourceId FROM session_results WHERE sessionId=? AND kind='task' AND version>(SELECT readVersion FROM sessions WHERE id=?)",
+        ).all(scope.sessionId, scope.sessionId).map((row) => String(row.sourceId)));
+        for (const message of [...list, ...(this.transient.get(scope.sessionId)?.values() ?? [])])
+          if (message.taskNotice && message.resultId) missing.delete(message.resultId);
+        if (missing.size) {
+          const notices = transcriptMessages(manager, true).filter((message) =>
+            message.taskNotice && message.resultId && missing.delete(message.resultId));
+          list.unshift(...notices);
+        }
+      }
       messages = new Map(list.map((m) => [m.id, m]));
       for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
       this.messages.set(scope.sessionId, messages);
@@ -152,6 +164,9 @@ export class AgentViews {
     this.publish(scopeKey(scope));
   }
   messageChanged(scope: Scope, message: ChatMessage) {
+    // Hydrate against the old transient state. Writing the incoming delta first
+    // makes a cache miss compare the new message with itself and lose its layout update.
+    const messages = this.transcript(scope), previous = messages.get(message.id);
     if (message.streaming || message.status === "running") {
       const active = this.transient.get(scope.sessionId) ?? new Map<string, ChatMessage>();
       active.set(message.id, message); this.transient.set(scope.sessionId, active);
@@ -159,15 +174,14 @@ export class AgentViews {
       const active = this.transient.get(scope.sessionId); active?.delete(message.id);
       if (!active?.size) this.transient.delete(scope.sessionId);
     }
-    const messages = this.transcript(scope),
-      previous = messages.get(message.id),
-      fresh = !messages.has(message.id),
+    const fresh = !messages.has(message.id),
       layoutChanged =
         previous?.role !== message.role ||
         JSON.stringify(previous?.selectionChange) !== JSON.stringify(message.selectionChange) ||
         (message.role === "assistant" &&
           !!previous?.calls?.length !== !!message.calls?.length) ||
-        (!!previous && (threadActivity(previous) !== threadActivity(message) ||
+        (!!previous && (threadEmpty(previous) !== threadEmpty(message) ||
+          threadActivity(previous) !== threadActivity(message) ||
           threadThinking(previous) !== threadThinking(message) ||
           threadReplyThinking(previous) !== threadReplyThinking(message)));
     messages.set(message.id, message);

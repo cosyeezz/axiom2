@@ -50,8 +50,8 @@ test("session time accumulates across stops and sends, excludes idle gaps and su
     store = new Store(root);
     views = new AgentViews(store, () => {});
     assert.equal(duration(2_000_000), 21.25, "reopening persisted history preserves the total");
-    assert.equal(sessionDuration({ ...views.info(scope), completedRunDurationMs: undefined }, 2_000_000), null,
-      "missing cumulative data must not be labelled as the session total");
+    assert.equal(sessionDuration({ ...views.info(scope), completedRunDurationMs: undefined }, 2_000_000), 3,
+      "older servers retain the latest recorded execution time");
   } finally {
     store.close();
     rmSync(root, { recursive: true, force: true });

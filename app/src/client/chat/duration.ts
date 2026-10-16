@@ -1,12 +1,23 @@
 import { running, type AgentInfo } from "../../shared/agent.js";
 
-/** Completed executions plus only the active execution, never the idle gaps. */
+/** Completed executions plus the active execution; older servers expose only the latest run. */
 export function sessionDuration(info: AgentInfo, now: number): number | null {
-  if (!info.run || info.completedRunDurationMs == null) return null;
+  if (!info.run) return null;
+  if (info.completedRunDurationMs == null) {
+    const end = info.run.endedAt ?? (running(info.run) ? now : null);
+    return end == null ? null : Math.max(0, end - info.run.startedAt) / 1000;
+  }
   const activeMs = running(info.run) && info.run.endedAt == null
     ? Math.max(0, now - info.run.startedAt)
     : 0;
   return (info.completedRunDurationMs + activeMs) / 1000;
+}
+
+/** Keep the displayed metric's scope explicit during a frontend/backend upgrade. */
+export function durationTooltip(info: AgentInfo): string {
+  if (info.run && info.completedRunDurationMs == null)
+    return "最近一次运行时间；累计计时需在任务结束后重启后台服务";
+  return `${info.task ? "子会话" : "主会话"}累计运行时间（不含停止后的空闲时间）`;
 }
 
 /** Format elapsed time from the largest reached unit down to seconds, capped at days. */

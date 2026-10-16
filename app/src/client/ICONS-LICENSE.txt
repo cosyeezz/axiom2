@@ -30,6 +30,9 @@ Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold
 Completed process status: user-provided Tabler progress-check SVG, inline in chat/ToolActivity.tsx; original paths preserved with one-shot left-dash reveal, right-arc drawing and check drawing.
 Tabler icon: https://tabler.io/icons/icon/progress-check
 Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
+Model configuration reload: Tabler refresh, inline in pages/Models.tsx.
+Refresh source: https://icon-sets.iconify.design/tabler/refresh/
+Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh.svg
 Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
 Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
 Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths)

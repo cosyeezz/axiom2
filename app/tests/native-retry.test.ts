@@ -179,7 +179,7 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
     const unknownResult = entries(interrupted).find((e) => e.type === "message" && e.message.role === "toolResult" && e.message.toolCallId === "unknown-write");
     assert.ok(unknownResult?.type === "message" && unknownResult.message.role === "toolResult" && unknownResult.message.isError);
 
-    // A child retry must keep task scheduling, immutable reports and read-only tools.
+    // A child retry must keep task scheduling, immutable reports and research/test tools.
     const parent = await create(), child = await create(), taskId = randomUUID();
     service.store.db.prepare("INSERT INTO task_parents(sessionId,frozen) VALUES(?,1)").run(parent.sessionId);
     service.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,'fixture','retry child','','interrupted','{}',?)")
@@ -195,7 +195,7 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
     await until(() => service.tasks.child(child)?.status === "completed", "child retry did not complete");
     assert.equal(info(child).run?.resumedFromRunId, childRun);
     assert.equal(count, 1);
-    assert.deepEqual(requests[0].tools.map((tool: any) => tool.function.name).sort(), ["find", "grep", "ls", "read"]);
+    assert.deepEqual(requests[0].tools.map((tool: any) => tool.function.name).sort(), ["find", "grep", "ls", "read", process.platform === "win32" ? "powershell" : "bash"].sort());
     assert.equal(entries(child).filter((e) => e.type === "message" && e.message.role === "user").length, 1);
     assert.equal(service.store.db.prepare("SELECT body FROM task_results WHERE runId=?").get(childRun)!.body, previousResult);
     assert.equal(service.store.db.prepare("SELECT COUNT(*) AS n FROM task_results WHERE taskId=?").get(taskId)!.n, 2);

@@ -210,8 +210,10 @@
 .model-picker .model-level { position: relative; min-width: 0; cursor: pointer; }
 .model-picker .model-level input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; font: 11px/1.5 var(--font-mono); color: var(--fg-2); pointer-events: none; }
-.model-picker .model-level input:hover + span { background: color-mix(in srgb, var(--fg) 8%, transparent); }
-.model-picker .model-level input:checked + span { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent-hover); box-shadow: inset 0 -2px 0 var(--accent); }
+.model-picker .model-level input:enabled:hover + span { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.model-picker .model-level input:checked + span { border-color: var(--accent); background: var(--accent); color: var(--accent-on); }
+.model-picker .model-level input:enabled:checked:hover + span { border-color: var(--accent-hover); background: var(--accent-hover); }
+.model-picker .model-level input:enabled:checked:active + span { border-color: var(--accent-active); background: var(--accent-active); }
 .model-picker .model-level input:focus-visible + span { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
 .model-picker .model-level input:disabled { cursor: not-allowed; }
 .model-picker .model-level input:disabled + span { opacity: .5; }

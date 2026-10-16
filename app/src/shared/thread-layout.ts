@@ -1,5 +1,12 @@
 import type { ChatMessage, ThreadIndex } from "./agent.js";
 
+export function threadEmpty(message: ChatMessage): boolean {
+  return message.role === "assistant" && !message.text.trim() && !message.images?.length &&
+    !message.thinking && !message.thinkingActive && !message.calls?.length &&
+    !message.compression && !message.taskNotice && !message.error && !message.truncated &&
+    message.status !== "failed" && message.status !== "cancelled";
+}
+
 export function threadActivity(message: ChatMessage): boolean {
   if (message.taskNotice) return true;
   return message.role === "assistant" && !message.compression && (
@@ -42,9 +49,12 @@ export function threadGroups(messages: ChatMessage[]): NonNullable<ThreadIndex["
   for (const message of messages) {
     // Results stay with their calls, including asynchronous subagent operations.
     if (message.role === "toolResult") continue;
+    const selectionChange = changes.get(message.id);
+    // Invisible stream placeholders must not separate adjacent process cards.
+    // Keep explicit selection notices even before their response has content.
+    if (threadEmpty(message) && !selectionChange) continue;
     const activity = threadActivity(message) || threadThinking(message);
     const previous = groups.at(-1);
-    const selectionChange = changes.get(message.id);
     if (previous?.activity && !selectionChange && threadReplyThinking(message)) {
       // Keep the reply's thinking in the preceding process when body text arrives.
       previous.ids.push(message.id);

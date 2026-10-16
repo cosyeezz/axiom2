@@ -17,6 +17,7 @@ import {
 import { TaskDelivery } from "./delivery.js";
 import { configuration } from "../models.js";
 import { imagesInput, requireImageModel } from "../images.js";
+import { taskSummaryMs, type TaskBudget } from "../task-budget.js";
 // Owns launch capacity, live input handoff, budgets and cancellation.
 export class TaskScheduler {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -69,6 +70,7 @@ export class TaskScheduler {
   event(row: Row, run: Run, event: any) {
     row = this.records.rows("WHERE id=?", row.id)[0];
     if (!row || row.runId !== run.id || !["starting", "running"].includes(row.status)) return;
+    if (event.type === "ready") this.syncBudget(row);
     if (event.type === "running") {
       this.store.db
         .prepare(
@@ -186,9 +188,17 @@ export class TaskScheduler {
       if (!taskActive(row.status)) this.records.enqueue(row);
       id = this.records.queue(row.id, body, mode, images, requestId);
       if (row.status === "stopping") this.store.db.prepare("UPDATE task_inputs SET state='waiting',runId=? WHERE id=?").run(row.runId, id);
+      if (["starting", "running"].includes(row.status)) {
+        const now = Date.now(), budgets = this.records.preferences();
+        this.store.db.prepare("UPDATE tasks SET workStartedAt=?,workDeadlineAt=?,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1,budgets=? WHERE id=?")
+          .run(now, now + budgets.workMs, JSON.stringify(budgets), row.id);
+      }
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
     if (editable) this.records.drafts.set(id, { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images });
+    row = this.records.rows("WHERE id=?", row.id)[0];
+    const activeRun = this.agents.info(target(row)).run;
+    if (activeRun?.id === row.runId && ["starting", "running"].includes(row.status)) this.arm(row, activeRun);
     if (row.status === "running") this.sendInputs(row);
     this.changed(row);
     this.kick();
@@ -254,6 +264,7 @@ export class TaskScheduler {
           text: input.body,
           images: this.records.images(input.id),
           mode: input.mode,
+          budget: this.budget(row),
         })
       ) {
         this.handed.delete(input.id);
@@ -328,7 +339,7 @@ export class TaskScheduler {
       return;
     }
     try {
-      const budgetContext = { workMs: this.records.preferences().workMs, elapsedMs: this.records.elapsed(row.id) };
+      const budgetContext: TaskBudget = { workMs: this.records.preferences().workMs, elapsedMs: this.records.elapsed(row.id) };
       await this.agents.command(
         {
           requestId: randomUUID(),
@@ -358,9 +369,9 @@ export class TaskScheduler {
           onStart: (run) => {
             this.store.db
               .prepare(
-                "UPDATE tasks SET status='starting',runId=?,error=NULL WHERE id=?",
+                "UPDATE tasks SET status='starting',runId=?,error=NULL,workStartedAt=?,workDeadlineAt=?,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1 WHERE id=?",
               )
-              .run(run.id, row.id);
+              .run(run.id, run.startedAt, run.startedAt + this.records.preferences().workMs, row.id);
             this.store.db.prepare("DELETE FROM task_stops WHERE taskId=?").run(row.id);
             for (const input of inputs) {
               this.records.receipt(input.id, "queued", null, run.id);
@@ -374,7 +385,8 @@ export class TaskScheduler {
             budgetContext.workMs = this.records.preferences().workMs;
             const budgets = JSON.stringify(this.records.preferences());
             this.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(budgets, row.id);
-            this.arm({ ...row, budgets }, run);
+            Object.assign(budgetContext, this.budget(this.records.rows("WHERE id=?", row.id)[0]));
+            this.arm(this.records.rows("WHERE id=?", row.id)[0], run);
             this.changed(row);
           },
         },
@@ -398,30 +410,57 @@ export class TaskScheduler {
     const budgets = JSON.stringify(this.records.preferences());
     for (const row of this.records.rows("WHERE status IN ('queued','starting','running')")) {
       this.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(budgets, row.id);
-      const current = { ...row, budgets };
       const run = this.agents.info(target(row)).run;
       if (run && run.id === row.runId && ["starting", "running"].includes(row.status)) {
+        if (!row.summaryDeadlineAt) this.store.db.prepare("UPDATE tasks SET workStartedAt=?,workDeadlineAt=?,budgetRevision=budgetRevision+1 WHERE id=?")
+          .run(row.workStartedAt ?? run.startedAt, (row.workStartedAt ?? run.startedAt) + this.records.preferences().workMs, row.id);
+        const current = this.records.rows("WHERE id=?", row.id)[0];
         this.arm(current, run);
-        this.agents.signal(target(row), run.id, { type: "budget", workMs: this.records.preferences().workMs,
-          deadlineAt: run.startedAt + this.records.preferences().workMs });
+        this.syncBudget(current);
       }
-      this.changed(current);
+      this.changed(row);
     }
     this.kick();
   }
+  private budget(row: Row): TaskBudget {
+    return { workMs: this.records.budgets(row.budgets).workMs, elapsedMs: this.records.elapsed(row.id),
+      workStartedAt: row.workStartedAt ?? undefined, deadlineAt: row.workDeadlineAt ?? undefined,
+      revision: row.budgetRevision ?? 0, summaryDeadlineAt: row.summaryDeadlineAt };
+  }
+  private syncBudget(row: Row) {
+    if (row.runId) this.agents.signal(target(row), row.runId, {
+      type: row.summaryDeadlineAt ? "summarize" : "budget", ...this.budget(row),
+    });
+  }
   private arm(row: Row, run: Run) {
     clearTimeout(this.timers.get(run.id));
-    const budgets = this.records.budgets(row.budgets);
+    // Older saved tasks and test fixtures may not yet have a work clock.
+    if (!row.workDeadlineAt) {
+      this.store.db.prepare("UPDATE tasks SET workStartedAt=?,workDeadlineAt=? WHERE id=? AND runId=?")
+        .run(run.startedAt, run.startedAt + this.records.budgets(row.budgets).workMs, row.id, run.id);
+      row = this.records.rows("WHERE id=?", row.id)[0];
+    }
+    const deadlineAt = row.summaryDeadlineAt ?? row.workDeadlineAt!;
+    const revision = row.budgetRevision;
+    const summary = Boolean(row.summaryDeadlineAt);
     const timer = setTimeout(() => {
       const current = this.records.rows("WHERE id=?", row.id)[0];
-      if (
-        !current ||
-        current.runId !== run.id ||
-        !["starting", "running"].includes(current.status)
-      )
+      if (!current || current.runId !== run.id || current.budgetRevision !== revision ||
+          (current.summaryDeadlineAt ?? current.workDeadlineAt) !== deadlineAt ||
+          !["starting", "running"].includes(current.status)) return;
+      if (summary) {
+        this.cancel(current, { reason: "子任务无工具总结已达到 3 分钟上限" }, "budget");
         return;
-      this.cancel(current, { reason: "子任务工作预算已到" }, "budget");
-    }, Math.max(0, budgets.workMs - (Date.now() - run.startedAt)));
+      }
+      this.store.db.prepare("UPDATE tasks SET summaryDeadlineAt=?,budgetRevision=budgetRevision+1 WHERE id=? AND runId=?")
+        .run(Date.now() + taskSummaryMs, row.id, run.id);
+      const next = this.records.rows("WHERE id=?", row.id)[0];
+      // Arm the hard limit before asking the worker to abort its current operation.
+      this.arm(next, run);
+      this.syncBudget(next);
+      this.changed(next);
+    }, Math.max(0, deadlineAt - Date.now()));
+    timer.unref?.();
     this.timers.set(run.id, timer);
   }
   cancel(row: Row, p: Record<string, unknown>, source: StopSource = "user") {

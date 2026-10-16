@@ -139,6 +139,7 @@ export class TaskDelivery {
         status,
         report,
         reportKind,
+        ...(row.summaryDeadlineAt ? { budgetSummary: true } : {}),
         elapsedMs: Math.max(0, (run.endedAt ?? Date.now()) - run.startedAt),
         ...(stop ? { stop: JSON.parse(String(stop.body)) } : {}),
         reason: row.error || run.error,
@@ -146,7 +147,7 @@ export class TaskDelivery {
         endedAt: run.endedAt ?? Date.now(),
         unfinished:
           status === "completed"
-            ? ["模型报告不等于全部验收通过；请核对交付中的未验证项。"]
+            ? [row.summaryDeadlineAt ? "工作预算已到，本次交付为无工具总结；请核对实际完成情况和未验证项。" : "模型报告不等于全部验收通过；请核对交付中的未验证项。"]
             : ["任务未正常完成；只保留已记录产出，未自动重做。"],
         sideEffects: `${known.length ? known.slice(-30).join("；") : "未记录工具返回"}。文件及外部副作用未回滚。`,
       };

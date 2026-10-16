@@ -79,7 +79,7 @@
 ```text
 主 Agent
   ├─ locate_code / repo_overview
-  └─ 请求级认知正文（宿主提供；只读子Agent可接收任务范围资料）
+  └─ 请求级认知正文（宿主提供；调研与测试子 Agent 可接收任务范围资料）
                  │ index-call / reply / cancel
 Axiom宿主组装入口
   ├─ IndexManager（indexKey资源池、授权入口、准入与撤销排序）
@@ -88,7 +88,7 @@ Axiom宿主组装入口
   └─ LocatorScheduler → LocatorRunner → 专用 pi worker（三个内部工具）
 ```
 
-首版两个新工具只注册到主 Agent。只读调研子 Agent 保留现有 read/grep/find/ls 白名单，宿主可以为它交付已授权任务范围的参考正文，但不允许它创建 locator 或调用索引写入路径。
+首版两个新工具只注册到主 Agent。调研与测试子 Agent 使用 `docs/design.md` 第 7 节规定的 read/grep/find/ls 及平台命令工具白名单，宿主可以为它交付已授权任务范围的参考正文，但不允许它创建 locator 或调用索引写入路径。
 
 ### 2.1 工作区身份
 
@@ -114,7 +114,7 @@ IndexManager 按 indexKey 惰性打开唯一索引 worker，空闲释放解析�
 
 每项资源只有一个关闭责任者。现有 `Tasks.close → TaskScheduler.close → Agents.close` 须在阶段0纳入上述顺序；若将Agents关闭移交组装入口，必须同时移除Tasks中的对应调用，不能保留两条并行关闭链。现状尚无覆盖新索引服务的统一关闭屏障，所需拆分在实施时完成。崩溃后过期lease变为interrupted，不自动重放旧模型请求或旧提案；前台查询重新发起，后台任务仅在预算及自动维护开关允许时重排。
 
-索引 worker 退出时，主聊天仍可工作；主 Agent 收到明确诊断，可使用现有 read/平台搜索能力，或委派四工具只读调研继续。IndexManager 不把失败的索引答案伪装成成功。
+索引 worker 退出时，主聊天仍可工作；主 Agent 收到明确诊断，可使用现有 read/平台搜索能力，或委派子代理只读调研继续。IndexManager 不把失败的索引答案伪装成成功。
 
 ### 2.3 内部 pi 的启动边界
 

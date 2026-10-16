@@ -1,4 +1,6 @@
-import { Dialog, Icon, SettingsSidebar } from "../components.js";
+import { useRef, useState } from "react";
+import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
+import { Dialog, SettingsSidebar } from "../components.js";
 import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
 import { ModelRegistry } from "../models/ModelRegistry.js";
@@ -6,6 +8,8 @@ import { useConfiguration } from "../models/useConfiguration.js";
 import "../styles/models.css";
 import "../styles/model-interactions.css";
 export default function Models() {
+  const [adding, setAdding] = useState(false);
+  const supplierSearch = useRef<HTMLInputElement>(null);
   const {
     config,
     connection,
@@ -36,20 +40,25 @@ export default function Models() {
     setDecision,
     p,
     load,
+    refreshAuthentication,
     save,
     patch,
     discardEditor,
     stageEditor,
     add,
     select,
+    logoutProvider,
     removeProvider,
     changeTab,
     copyButton,
     rows,
   } = useConfiguration();
   const hasError = feedback ? feedbackError : !!config.error;
+  const filteredProviders = providers.filter((provider) =>
+    `${provider.name} ${provider.providerId}`.toLowerCase().includes(query.toLowerCase()),
+  );
   return (
-    <div className="settings-app" data-feedback-error={hasError}>
+    <div className="settings-app models-workspace" data-feedback-error={hasError}>
       <SettingsSidebar page="models" />
       <main className="settings-main" id="content">
         <header className="topnav">
@@ -68,50 +77,6 @@ export default function Models() {
             </a>
             <span aria-hidden="true">/</span>
             <strong>模型服务</strong>
-          </div>
-          <div className="row toolbar-actions">
-            <span className="save-state" data-dirty={dirty} role="status">
-              {dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}
-            </span>
-            <button
-              className="btn btn-ghost"
-              id="reset-provider"
-              disabled={busy || (!dirty && !editor)}
-              onClick={() =>
-                setDecision({
-                  title: "放弃修改？",
-                  text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
-                  proceed: () => void load(),
-                })
-              }
-            >
-              放弃修改
-            </button>
-            <button
-              className="btn btn-primary"
-              id="save-provider"
-              disabled={busy || needsReconcile || !dirty || !revision}
-              data-tooltip={"包含当前行内编辑，统一发布到共享 pi 配置"}
-              onClick={() => void save()}
-            >
-              {busy ? "处理中…" : needsReconcile ? "请先重新读取" : saved ? "已保存" : "保存"}
-            </button>
-            <button
-              className="btn btn-ghost"
-              aria-label="重新读取配置"
-              disabled={busy}
-              onClick={() => {
-                if (dirty || editor)
-                  setDecision({
-                    title: "重新读取配置？",
-                    text: "这会丢弃当前未保存修改和临时密钥。取消可继续编辑。",
-                    proceed: () => void load(),
-                  });
-                else void load();
-              }}
-            >
-              重新读取
-            </button>
           </div>
         </header>
         <p
@@ -135,78 +100,87 @@ export default function Models() {
                 <h2 id="supplier-heading">
                   供应商 <span className="meta num">{providers.length}</span>
                 </h2>
-                <button
-                  className="btn btn-ghost add-supplier"
-                  id="add-supplier"
-                  type="button"
-                  aria-label="添加供应商"
-                  onClick={add}
-                  disabled={!revision}
-                >
-                  <Icon name="plus" />
-                </button>
+                <ProviderAddMenu
+                  disabled={!revision || needsReconcile || busy || !!login}
+                  oauth={() => setAdding(true)}
+                  custom={() => { setAdding(false); add(); }}
+                />
               </div>
               <input
                 type="search"
                 className="input supplier-search"
+                ref={supplierSearch}
                 placeholder="搜索供应商"
                 aria-label="搜索供应商"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
               <div className="supplier-list">
-                {providers
-                  .filter((p) =>
-                    p.name.toLowerCase().includes(query.toLowerCase()),
-                  )
-                  .map((p) => (
+                {filteredProviders.map((p) => (
                     <button
                       key={p.id}
                       className="supplier-option"
-                      aria-current={selected === p.id}
-                      onClick={() => select(p.id)}
+                      data-configured={p.auth?.configured || false}
+                      aria-current={!adding && selected === p.id}
+                      disabled={!!login}
+                      onClick={() => { setAdding(false); select(p.id); }}
                     >
                       <span>
                         <strong>
-                          <span className="supplier-name">
+                          <span className="supplier-name" title={p.name || "新供应商"}>
                             {p.name || "新供应商"}
                           </span>
                           <span className="tag">{p.models.length}</span>
                         </strong>
                         <small>
-                          {p.originalId
-                            ? p.auth?.configured
-                              ? "已配置认证 · 未验证调用"
-                              : "尚未配置认证"
-                            : "未保存 · 本页草稿"}
+                          <span className="supplier-status-dot" aria-hidden="true" />
+                          {p.connectionType === "oauth" ? "OAuth" : "自定义接口"}
+                          <span aria-hidden="true">·</span>
+                          {p.originalId ? p.auth?.configured ? "已配置" : "未认证" : "未保存"}
                         </small>
                       </span>
                     </button>
                   ))}
-                {!providers.length && <p className="list-empty">暂无供应商</p>}
+                {!providers.length ? <p className="list-empty">暂无供应商</p> : !filteredProviders.length && <div className="list-empty">未找到供应商<button type="button" className="btn btn-ghost" onClick={() => { setQuery(""); supplierSearch.current?.focus(); }}>清除搜索</button></div>}
               </div>
             </section>
             <div className="supplier-detail">
-              {!p ? (
+              {login?.type === "oauth" ? (
+                <ModelLogin
+                  {...login}
+                  inline
+                  revision={revision}
+                  onComplete={() => { void refreshAuthentication(login.providerId); }}
+                  close={() => {
+                    setLogin(null);
+                    void refreshAuthentication(login.providerId).then(() => document.getElementById("add-supplier")?.focus());
+                  }}
+                />
+              ) : adding ? (
+                <AddProvider
+                  templates={templates}
+                  blocked={dirty || !!editor || busy || needsReconcile}
+                  login={(providerId) => { setAdding(false); setLogin({ providerId, type: "oauth" }); }}
+                  close={() => { setAdding(false); document.getElementById("add-supplier")?.focus(); }}
+                />
+              ) : !p ? (
                 <div className="empty-details">
-                  <h2>添加供应商</h2>
-                  <p>使用供应商列表旁的「添加供应商」按钮，填写连接信息。</p>
-                  <p className="feedback" role="status">
-                    {feedback || config.error || connection}
-                  </p>
+                  <h2>连接你的模型</h2>
+                  <p>点击供应商旁的「+」，选择账号授权或自定义接口。</p>
+                  <div className="empty-connection-types"><span>OAuth 账号登录</span><span>API Key / 本地接口</span></div>
                 </div>
               ) : (
                 <>
                   <div className="row-between detail-heading">
                     <div className="provider-heading-copy">
                       <h2>{p.name || "新供应商"}</h2>
-                      <p className="meta">
-                        {p.models.length} 个模型 ·{" "}
-                        {dirty ? "有未保存修改" : "已发布配置"}
+                      <p className="meta provider-identity">
+                        <code>{p.providerId}</code><span aria-hidden="true">·</span>
+                        {p.models.length} 个模型
                       </p>
                     </div>
-                    <span className="tag">
-                      {p.auth?.configured ? "已配置认证" : "未认证"}
+                    <span className="connection-badge" data-configured={p.auth?.configured || false}>
+                      <span aria-hidden="true" />{p.auth?.configured ? "已配置认证" : "未认证"}
                     </span>
                   </div>
                   <nav
@@ -244,9 +218,7 @@ export default function Models() {
                         onClick={() => changeTab(id)}
                       >
                         {id === "suppliers" ? "连接配置" : "模型配置"}
-                        {dirty && (
-                          <span className="draft-indicator">未保存</span>
-                        )}
+                        {dirty && <span className="draft-indicator" aria-label="未保存" />}
                       </button>
                     ))}
                   </nav>
@@ -264,13 +236,19 @@ export default function Models() {
                       busy,
                       needsReconcile,
                       setLogin,
-                      feedback,
+                      feedback: feedbackError ? feedback : "",
+                      logoutProvider,
                       removeProvider,
                     }}
                   />
                   <ModelRegistry
+                    key={p.id}
                     {...{
                       p,
+                      revision,
+                      dirty,
+                      busy,
+                      needsReconcile,
                       tab,
                       filter,
                       setFilter,
@@ -279,7 +257,7 @@ export default function Models() {
                       discardEditor,
                       stageEditor,
                       patch,
-                      feedback,
+                      feedback: feedbackError ? feedback : "",
                       copyFeedback,
                       copyButton,
                       rows,
@@ -288,19 +266,53 @@ export default function Models() {
                   />
                 </>
               )}
+              <footer className="configuration-actions" aria-label="配置操作">
+                <button
+                  className="btn btn-primary"
+                  id="save-provider"
+                  disabled={busy || !!login || needsReconcile || !dirty || !revision}
+                  title={needsReconcile ? "请先重新读取配置" : "统一保存所有供应商和模型的修改"}
+                  onClick={() => void save()}
+                >
+                  保存
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  id="reset-provider"
+                  disabled={busy || !!login || (!dirty && !editor)}
+                  onClick={() => setDecision({
+                    title: "放弃修改？",
+                    text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
+                    proceed: () => void load(),
+                  })}
+                >
+                  取消
+                </button>
+                <button
+                  className="icon-btn config-reload"
+                  type="button"
+                  aria-label="重新读取配置"
+                  title="重新读取配置"
+                  disabled={busy || !!login}
+                  onClick={() => {
+                    if (dirty || editor) setDecision({
+                      title: "重新读取配置？",
+                      text: "这会丢弃当前未保存修改和临时密钥。取消可继续编辑。",
+                      proceed: () => void load(),
+                    });
+                    else void load();
+                  }}
+                >
+                  {/* Tabler Icons · refresh · MIT; see ICONS-LICENSE.txt. */}
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4m-4 4a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                </button>
+                <span className="save-state" data-dirty={dirty} role="status">
+                  {busy ? "处理中…" : dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}
+                </span>
+              </footer>
             </div>
           </div>
         </div>
-        {login && (
-          <ModelLogin
-            {...login}
-            revision={revision}
-            close={() => {
-              setLogin(null);
-              void load();
-            }}
-          />
-        )}
         {revision && config.revision && revision !== config.revision && (
           <p className="feedback" role="alert">
             服务端配置已更新；当前草稿未被覆盖。请重新读取后合并，过期保存会被拒绝。

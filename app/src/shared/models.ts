@@ -46,6 +46,8 @@ export interface ModelDraft {
 export interface ProviderDraft {
   id: string;
   originalId?: string;
+  connectionType?: "custom" | "oauth";
+  hasConnectionOverrides?: boolean;
   providerId: string;
   name: string;
   api: string;
@@ -67,7 +69,14 @@ export interface ModelConfiguration {
   revision: string;
   providers: ProviderDraft[];
   storage?: { modelsPath: string; authPath: string };
-  templates: { id: string; name: string; api: string; url: string }[];
+  templates: { id: string; name: string; api: string; url: string; methods?: ("api_key" | "oauth")[] }[];
+}
+export interface ModelCatalog {
+  providerId: string;
+  revision: string;
+  source: "refreshed" | "local";
+  message: string;
+  models: { id: string; name: string; api: string; levels: ReasoningLevel[]; contextWindow: number }[];
 }
 export interface AuthState {
   id: string;
@@ -80,6 +89,7 @@ export interface AuthState {
     id: string;
     type: "secret" | "text" | "manual_code" | "select";
     message: string;
+    placeholder?: string;
     options?: { id: string; label: string }[];
   };
 }

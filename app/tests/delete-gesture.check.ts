@@ -204,6 +204,7 @@ try {
   // The same gesture removes only the targeted model draft, without publishing.
   await page.goto(app.origin + "/model-config.html");
   await page.locator("#add-supplier").click();
+  await page.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   await page.locator("#models-tab").click();
   for (const id of ["gesture-one", "gesture-two"]) {
     await page.locator("#add-model").click();

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Locator } from "playwright";
 import { startServer } from "../src/server/index.js";
 import type { AgentViews } from "../src/server/agents/views.js";
 import type { ChatMessage } from "../src/shared/agent.js";
@@ -17,7 +17,7 @@ const previous = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
 let app: Awaited<ReturnType<typeof startServer>> | undefined, browser: Browser | undefined;
 try {
-  app = await startServer({ root: join(root, "data"), port: 0, dev: true });
+  app = await startServer({ root: join(root, "data"), port: 0, dev: process.env.AXIOM_TEST_PRODUCTION !== "1" });
   const w = app.store.execute({ op: "workspace.open", requestId: crypto.randomUUID(), params: { path: root, authorized: true } }) as Workspace;
   const s = app.store.execute({ op: "session.create", requestId: crypto.randomUUID(), workspaceId: w.id }) as Session;
   const scope = { workspaceId: w.id, sessionId: s.id };
@@ -37,9 +37,16 @@ try {
   await page.waitForFunction(() => document.querySelector(".activity-status")?.getAttribute("data-state") === "running");
   assert.equal(await group.count(), 1);
   assert.equal(await group.getAttribute("open"), null);
-  assert.equal(await head.locator(".thinking-dots span").count(), 3);
-  assert.match(await head.innerText(), /thinking\s*\.\s*\.\s*\./);
-  assert.equal(await head.locator(".thinking-dots span").first().evaluate(node => getComputedStyle(node).animationName), "thinking-dot");
+  const assertThinkingAnimates = async (container: Locator) => {
+    const dots = container.locator(".thinking-dots");
+    assert.equal(await dots.locator("circle").count(), 3);
+    assert.match(await container.innerText(), /thinking/);
+    const radii = await dots.locator("circle").evaluateAll(nodes => nodes.map(node => (node as SVGCircleElement).r.animVal.value));
+    await page.waitForFunction(({ svg, radii }) => [...svg!.querySelectorAll<SVGCircleElement>("circle")]
+      .some((circle, i) => Math.abs(circle.r.animVal.value - radii[i]) > 0.2), { svg: await dots.elementHandle(), radii });
+    assert.deepEqual(await dots.evaluate(node => { const style = getComputedStyle(node); return [style.width, style.height, style.stroke]; }), ["18px", "18px", "none"]);
+  };
+  await assertThinkingAnimates(head);
   const runningIcon = group.locator('.activity-status-dots');
   const radii = await runningIcon.evaluate(node => {
     const svg = node as SVGSVGElement;
@@ -130,9 +137,11 @@ try {
   assert.equal(await thinking.getAttribute("open"), null);
   assert.equal(await thinking.locator(".thinking-body").count(), 0);
   assert.equal(await thinking.locator(":scope > summary .thinking-glyph path").count(), 7);
-  assert.equal(await thinking.locator(".thinking-dots span").count(), 3);
-  assert.match(await thinking.innerText(), /思考\s*\.\s*\.\s*\./);
+  await assertThinkingAnimates(thinking);
   await thinking.locator(":scope > summary").focus(); await page.keyboard.press("Enter");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await assertThinkingAnimates(thinking);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   assert.ok(await thinking.getByText("检查当前实现", { exact: true }).isVisible());
   const groupNode = await group.elementHandle(), thinkingNode = await thinking.elementHandle();
   publish({ ...thought, thinking: "持续更新思考内容" });
@@ -142,7 +151,7 @@ try {
   await group.locator(".delegation-card").waitFor();
   assert.ok(await groupNode!.evaluate(node => node.isConnected && node.hasAttribute("open")));
   assert.ok(await thinkingNode!.evaluate(node => node.isConnected));
-  assert.equal(await group.locator(".thinking-label").innerText(), "思考");
+  assert.equal(await group.locator(".thinking-label").innerText(), "thinking");
   assert.equal(await thinking.getAttribute("open"), "", "streaming completion preserves manual expansion");
   assert.equal(await group.locator(".thinking-dots").count(), 0);
   assert.equal(await page.locator(".delegation-card").count(), 1);
@@ -200,14 +209,14 @@ try {
   // Thinking added after tools takes over the second line without opening the group.
   publish({ id: "answer", role: "assistant", text: "", thinking: "汇总结果", thinkingActive: true, streaming: true });
   await page.waitForFunction(() => document.querySelector(".activity-current:not(.activity-current-out) .thinking-dots") !== null);
-  assert.match(await head.innerText(), /thinking\s*\.\s*\.\s*\./);
+  await assertThinkingAnimates(head);
   assert.equal(await group.getAttribute("open"), null);
   assert.equal(await group.getAttribute('data-status'), 'running', 'merged running thinking keeps the outer process active');
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(await runningIcon.count(), 1);
   assert.equal(await completedIcon.count(), 0, 'thinking cannot coexist with a completed status icon');
   await group.screenshot({ path: join(artifacts, "process-running-merged-1440.png") });
-  assert.equal(await head.locator(".thinking-dots span").first().evaluate(node => getComputedStyle(node).animationName), "none");
+  await assertThinkingAnimates(head);
   const markdownThought = "**正在复核关键落实**，检查 `src/main.ts` 与 [说明](https://example.com)\n\n- 核对列表\n\n```ts\nconst ready = true;\n```";
   publish({ id: "answer", role: "assistant", text: "", thinking: markdownThought, status: "completed" });
   await completedIcon.waitFor();

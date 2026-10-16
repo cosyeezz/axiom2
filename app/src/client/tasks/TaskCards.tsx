@@ -30,7 +30,7 @@ export function TaskState({ task }: { task: Task }) {
       {state === "running" ? <BubbleLoadingIcon /> : <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d={state === "completed" ? "m5 12 4 4L19 6" : "M12 5v9m0 4v1"} />
       </svg>}
-      <span className="agent-state-label">{taskLabels[task.status]}</span>
+      <span className="agent-state-label">{task.summaryDeadlineAt && ["starting", "running"].includes(task.status) ? "正在总结" : taskLabels[task.status]}</span>
     </span>
   );
 }

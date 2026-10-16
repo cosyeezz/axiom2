@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SettingsSidebar } from "../components.js";
+import { BrowserWindowSelect } from "./BrowserWindowSelect.js";
 import { command, useConnection, useConnectionState, useScope } from "../transport.js";
 import { defaultOpenCliSettings, type OpenCliSettings, type OpenCliState } from "../../shared/builtin-tools.js";
 import "../styles/settings.css";
@@ -40,6 +41,7 @@ export default function BuiltinTools() {
     setSending(true); setFeedback(undefined);
     try {
       const result = await command(op, params) as OpenCliState;
+      if (op === "opencli.openExtension") setFeedback({ text: params.target === "download" ? "已请求系统浏览器打开官方压缩包下载页。" : "已请求系统浏览器打开 Chrome 应用商店。" });
       if (op === "opencli.save") {
         setDraft(undefined);
         setFeedback({ text: "接入设置已保存，将在下一次 Agent 执行时加载。", revision: result.revision });
@@ -91,7 +93,7 @@ export default function BuiltinTools() {
                 <label className="tools-toggle"><input type="checkbox" checked={settings.enabled} onChange={(e) => change({ enabled: e.target.checked })} /><span><strong>默认加载常用技能</strong><small><code>opencli-usage</code> 与 <code>opencli-browser</code>；简介常驻，完整指南按需读取。</small></span></label>
                 <div className="grid-2">
                   <div className="field"><label htmlFor="opencli-profile">Chrome 配置档案</label><input className="input" id="opencli-profile" value={settings.profile} maxLength={128} placeholder="留空使用 OpenCLI 默认选择" onChange={(e) => change({ profile: e.target.value })} /><p className="field-help">多个 Chrome 账号同时连接时，填写诊断报告中的 Profile ID 或已设置的别名。</p></div>
-                  <div className="field"><label htmlFor="opencli-window">浏览器窗口</label><select className="input" id="opencli-window" value={settings.window} onChange={(e) => change({ window: e.target.value as OpenCliSettings["window"] })}><option value="foreground">前台显示</option><option value="background">后台运行</option></select><p className="field-help">后台模式仍需要 Chrome 和浏览器扩展保持运行。</p></div>
+                  <div className="field"><label htmlFor="opencli-window">浏览器窗口</label><BrowserWindowSelect value={settings.window} disabled={busy || !state.version} onChange={(window) => change({ window })} /><p className="field-help" id="opencli-window-help">后台模式仍需要 Chrome 和浏览器扩展保持运行。</p></div>
                 </div>
               </fieldset>
               {conflict && <div className="tools-conflict" role="status"><p>配置已在其他窗口修改。可放弃修改并载入最新配置，或用当前输入覆盖最新设置。</p><button className="btn" disabled={busy || !state.version} onClick={() => void action("opencli.save", { ...settings, revision: state.revision })}>用当前输入保存</button></div>}
@@ -103,9 +105,9 @@ export default function BuiltinTools() {
             </section>
             <section className="section tools-section" aria-labelledby="browser-heading">
               <div className="section-heading"><h3 id="browser-heading">浏览器扩展与连接</h3></div>
-              <ol className="tools-steps"><li>从官方发布页下载 Browser Bridge 扩展并解压。</li><li>在 Chrome 打开 <code>chrome://extensions</code>，启用开发者模式，点击「加载已解压的扩展程序」，选择扩展目录。</li><li>保持 Chrome 打开，点击「检测连接」查看官方诊断结果。</li></ol>
-              <div className="tools-actions"><a className="btn" href="https://github.com/jackwener/opencli/releases" target="_blank" rel="noreferrer">打开扩展下载页 <span aria-hidden="true">↗</span></a><button className="btn" disabled={busy || !state.version || !!draft} onClick={() => void action("opencli.doctor")}>检测连接</button></div>
-              <p className="field-help tools-help">扩展需要在 Chrome 中手动安装。检测会运行 OpenCLI doctor，并按需启动浏览器桥接服务。</p>
+              <ol className="tools-steps"><li><strong>Chrome 应用商店安装（推荐）</strong>：打开商店页面，在 Chrome 中点击「添加至 Chrome」。</li><li><strong>手动下载压缩包</strong>：从官方发布页下载 <code>opencli-extension-v&#123;version&#125;.zip</code> 并解压。在 <code>chrome://extensions</code> 中启用开发者模式，点击「加载已解压的扩展程序」，选择解压后的扩展目录。</li></ol>
+              <div className="tools-actions"><button className="btn btn-primary" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "store" })}>Chrome 应用商店安装 <span aria-hidden="true">↗</span></button><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "download" })}>手动下载压缩包 <span aria-hidden="true">↗</span></button><button className="btn" disabled={busy || !state.version || !!draft} onClick={() => void action("opencli.doctor")}>检测连接</button></div>
+              <p className="field-help tools-help">任选一种方式安装扩展，然后保持 Chrome 和扩展启用，点击「检测连接」查看诊断结果。</p>
               {state.diagnostic && <details className="tools-diagnostic" open><summary>官方诊断报告 · {new Date(state.diagnostic.checkedAt).toLocaleTimeString()}</summary><pre>{state.diagnostic.text}</pre></details>}
             </section>
           </article>

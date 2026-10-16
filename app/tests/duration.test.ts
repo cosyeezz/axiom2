@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDuration } from "../src/client/chat/duration.js";
+import { durationTooltip, formatDuration, sessionDuration } from "../src/client/chat/duration.js";
+import { emptyAgent, type AgentInfo, type Run } from "../src/shared/agent.js";
+
+test("older backend snapshots keep the timer visible and label its limited scope", () => {
+  const info: AgentInfo = { ...emptyAgent, run: {
+    id: "run", sessionId: "session", status: "running",
+    selection: { provider: "fixture", id: "fixture", thinking: "off" },
+    startedAt: 1_000, endedAt: null, error: null,
+  } };
+  for (const status of ["starting", "running", "stopping"] as Run["status"][]) {
+    info.run!.status = status;
+    assert.equal(sessionDuration(info, 12_000), 11);
+    assert.equal(sessionDuration(info, 13_000), 12);
+  }
+  assert.match(durationTooltip(info), /最近一次运行时间.*重启后台/);
+  for (const status of ["completed", "cancelled", "failed", "interrupted"] as Run["status"][]) {
+    info.run = { ...info.run!, status, endedAt: 11_000 };
+    assert.equal(sessionDuration(info, 100_000), 10, "idle time is excluded");
+    info.run.endedAt = null;
+    assert.equal(sessionDuration(info, 100_000), null, "unknown terminal time cannot keep ticking");
+  }
+  info.run = { ...info.run!, status: "running", startedAt: 100_000 };
+  info.completedRunDurationMs = 15_000;
+  assert.equal(sessionDuration(info, 103_000), 18, "new backend immediately restores the full total");
+  assert.match(durationTooltip(info), /主会话累计运行时间/);
+  assert.equal(sessionDuration(emptyAgent, 103_000), null);
+});
 
 test("duration uses seconds until a full minute is reached", () => {
   for (const [seconds, expected] of [

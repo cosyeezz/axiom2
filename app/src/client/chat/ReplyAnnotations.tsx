@@ -13,11 +13,10 @@ import "../styles/annotations.css";
 
 // User-provided comment bubble, shared by the toolbar and inline annotation action.
 function AnnotationIcon({ inlineHeight }: { inlineHeight?: number }) {
-  // Trim the inline SVG's transparent margins so its visible outline aligns with the text.
+  // Include the visible stroke, but no transparent canvas padding.
   return <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em"
-    viewBox={inlineHeight === undefined ? "0 0 24 24" : "2 3 20 18.6"}
+    viewBox={inlineHeight === undefined ? "2 3 20 18.8" : "2 3 20 18.6"}
     style={inlineHeight === undefined ? undefined : { height: inlineHeight, width: inlineHeight * 20 / 18.6 }} aria-hidden="true">
-    <path d="M0 0h24v24H0z" fill="none" stroke="none" />
     <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
       <path strokeWidth="1.5" d="M2.75 6.25a2.5 2.5 0 0 1 2.5-2.5h13.5a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1-2.5 2.5H12.5L8 20.85a.77.77 0 0 1-1.25-.6v-2.5h-1.5a2.5 2.5 0 0 1-2.5-2.5Z" />
       <path strokeWidth="2" d="M8 10.75h.01m3.99 0h.01m3.99 0h.01" />

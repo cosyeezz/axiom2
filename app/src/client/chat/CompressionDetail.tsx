@@ -32,7 +32,7 @@ export function CompressionIcon({
 }) {
   if (state === "running") return <BubbleLoadingIcon />;
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
+    <svg aria-hidden="true" viewBox={detail ? "0 0 24 24" : ["cancelled", "failed", "interrupted"].includes(state) ? "5 5 14 14" : "2 2 20 20"}>
       <g data-state={state}>
         {["cancelled", "failed", "interrupted"].includes(state) ? (
           <path d="m6 6 12 12m0-12L6 18" />

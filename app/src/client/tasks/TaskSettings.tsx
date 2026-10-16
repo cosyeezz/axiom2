@@ -16,7 +16,7 @@ export function TaskSettings() {
       data-od-id="subagent-settings-trigger" aria-label="子代理设置" data-tooltip="子代理设置"
       aria-haspopup="dialog" aria-expanded={open} aria-controls={id} popoverTarget={id}
       onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg viewBox="1 1 22 22" aria-hidden="true">
         <rect x="9" y="2" width="6" height="6" rx="1" />
         <path d="M12 8v4M5 16v-4h14v4" />
         <rect x="2" y="16" width="6" height="6" rx="1" />
@@ -58,9 +58,9 @@ function SettingsDialog({ id, trigger, onClose }: { id: string; trigger: HTMLBut
           <BudgetField label="同时运行的子任务" name="concurrency" value={preferences?.budgets.concurrency} min={1} max={16} disabled={!connected}
             hint="立即调整现有队列；降低上限不会强停正在运行的任务。" />
           <BudgetField label="工作时限（秒）" name="workMs" value={preferences ? preferences.budgets.workMs / 1000 : undefined} min={1} max={86400} scale={1000} disabled={!connected}
-            hint="立即更新排队及运行中任务，从原启动时间计时；若已超时则停止。追加消息不重置计时。" />
+            hint="立即更新工作时限；有效追加重新计时。到期进入无工具总结，最多 3 分钟后强停；修改设置不延长已开始的总结。" />
         </div>
-        <p>子代理始终仅限只读调研。</p>
+        <p>子代理可并行调研与执行测试，代码修改由主代理完成。</p>
       </section>
       <p role="status" className="meta">{!connected ? "连接断开，暂时无法保存设置。" : !preferences ? "正在读取全局设置…" : message}</p>
     </div>

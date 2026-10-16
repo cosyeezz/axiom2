@@ -9,10 +9,5 @@
 .thinking-body > :last-child { margin-bottom: 0; }
 .thinking-preview, .thinking-preview *, .thinking-indicator { color: #9ca3af; font-style: italic; font-weight: 400; }
 .thinking-preview { min-width: 0; white-space: nowrap; }
-.thinking-indicator { display: inline-flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
-.thinking-dots { display: inline-flex; width: 18px; flex-shrink: 0; overflow: visible; color: inherit; }
-.thinking-dots span { width: 5px; animation: thinking-dot 1.2s ease-in-out infinite; }
-.thinking-dots span:nth-child(2) { animation-delay: 150ms; }
-.thinking-dots span:nth-child(3) { animation-delay: 300ms; }
-@keyframes thinking-dot { 0%, 70%, 100% { opacity: .3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
-@media (prefers-reduced-motion: reduce) { .thinking-dots span { animation: none; } }
+.thinking-indicator { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.thinking-indicator .thinking-dots { width: 18px; height: 18px; flex-shrink: 0; overflow: visible; color: inherit; stroke: none; }

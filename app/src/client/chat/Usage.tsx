@@ -6,7 +6,7 @@ import { Compression } from "./Compression.js";
 import { TaskSettings } from "../tasks/TaskSettings.js";
 import { AnnotationToggle } from "./ReplyAnnotations.js";
 import { OriginalConversationToggle } from "./OriginalConversation.js";
-import { formatDuration, sessionDuration } from "./duration.js";
+import { durationTooltip, formatDuration, sessionDuration } from "./duration.js";
 import { CostsPopover } from "../pages/Costs.js";
 export function Usage({ scope }: { scope?: Scope }) {
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
@@ -54,7 +54,7 @@ export function Usage({ scope }: { scope?: Scope }) {
           >
             <svg
               className="usage-icon"
-              viewBox="0 0 24 24"
+              viewBox="2 2 20 20"
               role="progressbar"
               aria-label={contextLabel}
               aria-valuemin={0}
@@ -95,7 +95,7 @@ export function Usage({ scope }: { scope?: Scope }) {
               : "缓存命中率：未知"
           }
         >
-          <svg className="usage-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg className="usage-icon" viewBox="2 1 20 22" aria-hidden="true">
             <g>
               <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
               <path d="M4 13h4" />
@@ -115,9 +115,9 @@ export function Usage({ scope }: { scope?: Scope }) {
         <span
           className="usage-metric"
           data-od-id="run-duration"
-          data-tooltip={`${label}累计运行时间（不含停止后的空闲时间）`}
+          data-tooltip={durationTooltip(info)}
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
+          <svg viewBox="2 2 20 20" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
           </svg>
@@ -134,7 +134,7 @@ export function Usage({ scope }: { scope?: Scope }) {
           data-od-id="estimated-cost"
           data-tooltip={`${label}累计预计费用（pi 定价）；点击查看主 Agent、各子 Agent、压缩与工具费用明细`}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="182 182 660 660" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="354.9 255 313.8 514" aria-hidden="true">
             <path fill="currentColor" d="M559.7 488.8l-25.4-5.9V348.6c38 5.2 61.5 29 65.5 58.2c.5 4 3.9 6.9 7.9 6.9h44.9c4.7 0 8.4-4.1 8-8.8c-6.1-62.3-57.4-102.3-125.9-109.2V263c0-4.4-3.6-8-8-8h-28.1c-4.4 0-8 3.6-8 8v33c-70.8 6.9-126.2 46-126.2 119c0 67.6 49.8 100.2 102.1 112.7l24.7 6.3v142.7c-44.2-5.9-69-29.5-74.1-61.3c-.6-3.8-4-6.6-7.9-6.6H363c-4.7 0-8.4 4-8 8.7c4.5 55 46.2 105.6 135.2 112.1V761c0 4.4 3.6 8 8 8h28.4c4.4 0 8-3.6 8-8.1l-.2-31.7c78.3-6.9 134.3-48.8 134.3-124c-.1-69.4-44.2-100.4-109-116.4m-68.6-16.2c-5.6-1.6-10.3-3.1-15-5c-33.8-12.2-49.5-31.9-49.5-57.3c0-36.3 27.5-57 64.5-61.7zM534.3 677V543.3c3.1.9 5.9 1.6 8.8 2.2c47.3 14.4 63.2 34.4 63.2 65.1c0 39.1-29.4 62.6-72 66.4" />
           </svg>
           <strong>

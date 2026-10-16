@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
-test("subagents enforce read-only tools across resume, settings and executable extensions; main retains writes", { timeout: 90000 }, async (t) => {
+test("subagents run tests across resume while restricting edits and extensions; main retains writes", { timeout: 90000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "axiom-research-")), cwd = join(root, "project"), pi = join(root, "pi");
   const requests: any[] = [];
   let calls: { name: string; args: unknown }[] = [], step = 0;
@@ -42,6 +42,15 @@ test("subagents enforce read-only tools across resume, settings and executable e
   mkdirSync(join(cwd, ".pi", "extensions"), { recursive: true });
   mkdirSync(join(pi, "extensions"), { recursive: true });
   writeFileSync(join(cwd, "evidence.txt"), "ORIGINAL evidence");
+  writeFileSync(join(cwd, "verify.cjs"), `const assert = require('node:assert/strict');
+const fs = require('node:fs');
+assert.equal(fs.readFileSync('evidence.txt', 'utf8'), 'ORIGINAL evidence');
+fs.mkdirSync('test-output', { recursive: true });
+fs.writeFileSync('test-output/result.txt', 'verified');
+console.log('TEST_PASSED');`);
+  writeFileSync(join(cwd, "fail.cjs"), "console.error('TEST_FAILED'); process.exit(7);");
+  const shell = process.platform === "win32" ? "powershell" : "bash";
+  const expectedTools = ["find", "grep", "ls", "read", shell].sort();
   // Even a tool named read is unsafe when supplied by an executable extension.
   const extension = `import { writeFileSync } from 'node:fs';
 export default function(pi) {
@@ -83,7 +92,10 @@ export default function(pi) {
     const childProcess = fork(worker, [], { cwd, env: { ...process.env, AXIOM_PI_DIR: pi }, execArgv: worker.pathname.endsWith(".ts") ? ["--import", import.meta.resolve("tsx")] : [], stdio: ["ignore", "ignore", "pipe", "ipc"] });
     let stderr = "";
     childProcess.stderr?.on("data", (data) => { stderr += data; });
-    childProcess.on("message", (event) => events.push(event));
+    childProcess.on("message", (event: any) => {
+      events.push(event);
+      if (event.type === "done") childProcess.send({ type: "shutdown" });
+    });
     const exit = once(childProcess, "exit");
     const timer = setTimeout(() => childProcess.kill(), 25000);
     try {
@@ -101,23 +113,27 @@ export default function(pi) {
   const forbidden = [
     { name: "write", args: { path: "forbidden.txt", content: "bad" } },
     { name: "edit", args: { path: "evidence.txt", oldText: "ORIGINAL", newText: "CHANGED" } },
-    { name: "bash", args: { command: "echo bad > shell-write" } },
-    { name: "powershell", args: { command: "Set-Content shell-write bad" } },
+    { name: process.platform === "win32" ? "bash" : "powershell", args: { command: "echo bad > shell-write" } },
     { name: "delegate", args: { context: "recursive", tasks: [{ task: "write" }] } },
   ];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await run(true, [...forbidden, { name: "read", args: { path: "evidence.txt" } }, { name: "ls", args: { path: "." } }]);
+    const result = await run(true, [...forbidden, { name: "read", args: { path: "evidence.txt" } }, { name: "ls", args: { path: "." } },
+      { name: shell, args: { command: "node verify.cjs", timeout: 10 } },
+      { name: shell, args: { command: process.platform === "win32" ? "node fail.cjs; exit $LASTEXITCODE" : "node fail.cjs", timeout: 10 } }]);
     for (const body of result.bodies)
-      assert.deepEqual(body.tools.map((tool: any) => tool.function.name).sort(), ["find", "grep", "ls", "read"], "allowlist on initial and resumed requests");
+      assert.deepEqual(body.tools.map((tool: any) => tool.function.name).sort(), expectedTools, "allowlist on initial and resumed requests");
     const outcomes = result.events.filter((event) => event.type === "tool" && event.status !== "running");
     for (const call of forbidden)
       assert.ok(outcomes.some((event) => event.name === call.name && event.status === "failed"), `${call.name} must fail, not merely be hidden`);
     assert.ok(outcomes.some((event) => event.name === "read" && event.status === "completed" && JSON.stringify(event.output).includes("ORIGINAL evidence")));
     assert.ok(outcomes.some((event) => event.name === "ls" && event.status === "completed"));
+    assert.ok(outcomes.some((event) => event.name === shell && event.status === "completed" && JSON.stringify(event.output).includes("TEST_PASSED")));
+    assert.ok(outcomes.some((event) => event.name === shell && event.status === "failed" && /TEST_FAILED/.test(JSON.stringify(event.output)) && /code 7/.test(JSON.stringify(event.output))), "failed test preserves its non-zero exit code: " + JSON.stringify(outcomes.filter((event) => event.name === shell)));
+    assert.equal(readFileSync(join(cwd, "test-output/result.txt"), "utf8"), "verified");
     assert.equal(readFileSync(join(cwd, "evidence.txt"), "utf8"), "ORIGINAL evidence");
     for (const path of ["forbidden.txt", "shell-write", "extension-loaded", "global-loaded", "package-loaded", "shadow-write"])
       assert.equal(existsSync(join(cwd, path)), false, `${path} must not be created by child`);
-    assert.ok(result.events.find((event) => event.type === "ready").environment.systemPrompt.includes("只读调研"));
+    assert.ok(result.events.find((event) => event.type === "ready").environment.systemPrompt.includes("调研与测试子代理"));
   }
   const main = await run(false, [{ name: "write", args: { path: "main.txt", content: "main implementation" } }]);
   assert.equal(readFileSync(join(cwd, "main.txt"), "utf8"), "main implementation");

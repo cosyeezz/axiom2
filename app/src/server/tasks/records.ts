@@ -43,6 +43,9 @@ export class TaskRecords {
     return this.stopEpochs.get(scope.sessionId) ?? 0;
   }
   constructor(readonly store: Store) {
+    const columns = new Set((store.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map((column) => column.name));
+    for (const [name, declaration] of Object.entries({ workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
+      if (!columns.has(name)) store.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS task_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL)",
     );
@@ -196,7 +199,7 @@ export class TaskRecords {
     this.store.db.prepare("DELETE FROM task_stops WHERE taskId=?").run(row.id);
     this.store.db.prepare("DELETE FROM task_queue_order WHERE taskId=?").run(row.id);
     this.store.db.prepare("INSERT INTO task_queue_order(taskId) VALUES(?)").run(row.id);
-    this.store.db.prepare("UPDATE tasks SET status='queued',error=NULL WHERE id=?").run(row.id);
+    this.store.db.prepare("UPDATE tasks SET status='queued',error=NULL,workStartedAt=NULL,workDeadlineAt=NULL,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1 WHERE id=?").run(row.id);
   }
   deliver(row: TaskRow, ids: string[], state: TaskInputState = "delivered", runId?: string) {
     for (const id of ids) {

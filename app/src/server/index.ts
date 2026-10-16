@@ -49,7 +49,7 @@ export function dataRoot() {
 }
 
 export async function startServer(
-  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string } } = {},
+  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
 ) {
   const store = new Store(options.root ?? dataRoot());
   const costs = new Costs(store);
@@ -170,7 +170,7 @@ export async function startServer(
       for (const key of watching) publish(key, { revision: seq });
     }
   };
-  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm);
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension);
   const agents = new Agents(store, models, publish);
   const tasks = new Tasks(agents);
   attention = new SessionAttention(store, publish);
@@ -304,6 +304,8 @@ export async function startServer(
         } else if (c.op === "configuration.get") {
           await refreshConfiguration();
           data = await models.read();
+        } else if (c.op === "configuration.catalog") {
+          data = await models.catalog(c.params!.providerId, c.params!.revision);
         } else if (c.op === "auth.start")
           data = await store.external(c, () =>
             logins.start(
@@ -313,6 +315,8 @@ export async function startServer(
               c.params!.revision,
             ),
           );
+        else if (c.op === "auth.open")
+          data = await logins.open(ws, text(c.params!.id, "认证流程"));
         else if (c.op === "auth.answer")
           data = logins.answer(
             ws,

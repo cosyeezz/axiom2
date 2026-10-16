@@ -6,12 +6,14 @@ import { CredentialSynchronizationError } from "@earendil-works/pi-coding-agent"
 import { ModelService } from "./model-service.js";
 import { AppError, text } from "../shared/protocol.js";
 import type { AuthState } from "../shared/models.js";
+import { openAuthBrowser } from "./auth-browser.js";
 
 type Flow = {
   owner: object;
   controller: AbortController;
   state: AuthState;
   operation?: Promise<void>;
+  opening?: Promise<{ opened: true }>;
   pending?: {
     id: string;
     resolve: (answer: string) => void;
@@ -38,6 +40,7 @@ export class Logins {
     private models: ModelService,
     private publish: (owner: object, state: AuthState) => void,
     private changed: () => Promise<void>,
+    private openBrowser = openAuthBrowser,
   ) {}
   get(owner: object, id: string) {
     const flow = this.flows.get(id);
@@ -71,8 +74,8 @@ export class Logins {
         throw new AppError("AUTH_CANCELLED", "连接已关闭，未启动认证");
       if (revision !== current)
         throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后认证");
-      if (!Object.hasOwn(config.providers, providerId))
-        throw new AppError("NOT_FOUND", "请先发布供应商配置");
+      if (!Object.hasOwn(config.providers, providerId) && type !== "oauth")
+        throw new AppError("NOT_FOUND", "请先发布自定义供应商配置");
       const method =
         type === "oauth"
           ? runtime.getProvider(providerId)?.auth.oauth
@@ -133,6 +136,7 @@ export class Logins {
             id: promptId,
             type: p.type,
             message: p.message.slice(0, 1000),
+            ...(p.type !== "select" && p.placeholder ? { placeholder: p.placeholder.slice(0, 1000) } : {}),
             ...(p.type === "select"
               ? {
                   options: p.options.map((o) => ({ id: o.id, label: o.label })),
@@ -174,21 +178,22 @@ export class Logins {
             },
           },
         )
-        .then(
-          () => {
-            flow.state.status = "completed";
-            flow.state.message = "pi 已保存认证；这不代表模型调用已验证。";
-          },
-          (error) => {
-            flow.state.status = "failed";
-            flow.state.message =
-              error instanceof CredentialSynchronizationError
-                ? "认证已改变，但目录同步失败；请重新读取，勿重复登录。"
-                : controller.signal.aborted
-                  ? "认证已取消或超时；若供应商刚完成回调，请重新读取确认认证状态。"
-                  : "pi 认证未完成；请检查供应商配置后重试。";
-          },
-        )
+        .then(async () => {
+          const persisted = await this.models.runtime();
+          if (!(await persisted.listCredentials()).some((c) => c.providerId === providerId && c.type === type))
+            throw new CredentialSynchronizationError(providerId, "login", undefined, { cause: Error("Credential not persisted") });
+          flow.state.status = "completed";
+          flow.state.message = "pi 已保存认证；这不代表模型调用已验证。";
+        })
+        .catch((error) => {
+          flow.state.status = "failed";
+          flow.state.message =
+            error instanceof CredentialSynchronizationError
+              ? "认证已改变，但目录同步失败；请重新读取，勿重复登录。"
+              : controller.signal.aborted
+                ? "认证已取消或超时；若供应商刚完成回调，请重新读取确认认证状态。"
+                : "pi 认证未完成；请检查供应商配置后重试。";
+        })
         .finally(async () => {
           clearTimeout(timeout);
           flow.pending = undefined;
@@ -210,6 +215,17 @@ export class Logins {
       throw error;
     }
   }
+  open(owner: object, id: string) {
+    const flow = this.get(owner, id);
+    if (flow.state.status !== "running" || flow.controller.signal.aborted || !flow.state.url)
+      throw new AppError("AUTH_EXPIRED", "授权链接已失效，请重新登录。");
+    if (flow.opening) return flow.opening;
+    flow.opening = this.openBrowser(safeUrl(flow.state.url), flow.controller.signal)
+      .then(() => ({ opened: true as const }))
+      .catch(() => { throw new AppError("BROWSER_OPEN_FAILED", "无法打开系统浏览器，请复制授权链接手动打开。"); })
+      .finally(() => { flow.opening = undefined; });
+    return flow.opening;
+  }
   answer(owner: object, id: string, promptId: unknown, answer: unknown) {
     const flow = this.get(owner, id);
     if (
@@ -218,7 +234,10 @@ export class Logins {
       flow.state.status !== "running"
     )
       throw new AppError("AUTH_STALE_PROMPT", "认证问题已完成或失效");
-    const value = text(answer, "认证输入", 8192);
+    if (typeof answer !== "string" || answer.length > 8192 || answer.includes("\0"))
+      throw new AppError("INVALID_INPUT", "认证输入无效（最多 8192 字符）");
+    // Text prompts may deliberately accept blank (e.g. Copilot's default github.com domain).
+    const value = flow.pending.type === "text" ? answer.trim() : text(answer, "认证输入", 8192);
     if (
       flow.pending.type === "secret" &&
       (value.startsWith("!") || /^[*•●]+$/.test(value) || /[\r\n]/.test(value))

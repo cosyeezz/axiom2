@@ -183,35 +183,42 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
       if (originalId) originals.add(originalId);
       const original: Json = originalId ? config.providers[originalId] : {};
       const next = structuredClone(original);
+      const oauth = p.connectionType === "oauth";
+      if (oauth && !runtime.getProvider(providerId)?.auth.oauth?.login)
+        invalid("该供应商不支持 OAuth 登录，请使用自定义接口");
+      if (oauth && (p.key || p.clearKey))
+        invalid("OAuth 连接不接受 API 密钥；退出登录请删除该供应商");
       next.name = text(p.name, "供应商名称", 80);
-      next.api = text(p.api, "接口协议", 100);
-      if (
-        !modelApis.includes(next.api) &&
-        next.api !== original.api &&
-        next.api !== runtime.getModels(providerId)[0]?.api
-      )
-        invalid("当前接口协议不支持编辑");
-      if (p.keepUrl === true) {
-        if (!original.baseUrl) invalid("已保存地址引用失效");
-      } else {
-        const endpoint = text(p.url, "接口地址", 2048);
-        let url: URL;
-        try {
-          url = new URL(endpoint);
-        } catch {
-          return invalid(
-            "接口地址无效；请填写完整的 HTTP/HTTPS 地址，例如 https://api.example.com/v1",
-          );
-        }
+      if (!oauth) {
+        next.api = text(p.api, "接口协议", 100);
         if (
-          !["http:", "https:"].includes(url.protocol) ||
-          url.username ||
-          url.password ||
-          url.search ||
-          url.hash
+          !modelApis.includes(next.api) &&
+          next.api !== original.api &&
+          next.api !== runtime.getModels(providerId)[0]?.api
         )
-          invalid("接口地址仅允许 HTTP/HTTPS，不允许凭据、查询参数或片段");
-        next.baseUrl = endpoint;
+          invalid("当前接口协议不支持编辑");
+        if (p.keepUrl === true) {
+          if (!original.baseUrl) invalid("已保存地址引用失效");
+        } else {
+          const endpoint = text(p.url, "接口地址", 2048);
+          let url: URL;
+          try {
+            url = new URL(endpoint);
+          } catch {
+            return invalid(
+              "接口地址无效；请填写完整的 HTTP/HTTPS 地址，例如 https://api.example.com/v1",
+            );
+          }
+          if (
+            !["http:", "https:"].includes(url.protocol) ||
+            url.username ||
+            url.password ||
+            url.search ||
+            url.hash
+          )
+            invalid("接口地址仅允许 HTTP/HTTPS，不允许凭据、查询参数或片段");
+          next.baseUrl = endpoint;
+        }
       }
       next.headers = headersInput(
         p.headers,
@@ -251,7 +258,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
               ),
             );
           model.samplingParams = { ...sampling, ...common, ...body };
-          const api = model.api ?? next.api;
+          const api = model.api ?? (oauth ? runtime.getModel(providerId, oldId ?? modelId)?.api : next.api);
           if (
             Object.keys(model.samplingParams).length &&
             ![
@@ -301,7 +308,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             : !!existing;
           if (wasOverride && (!oldId || oldId === modelId)) {
             if (
-              existing?.api !== next.api &&
+              !oauth && existing?.api !== next.api &&
               (!oldId ||
                 next.api !==
                   (original.api ?? runtime.getModels(providerId)[0]?.api))

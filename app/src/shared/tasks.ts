@@ -58,6 +58,10 @@ export interface Task {
   results: { id: string; runId: string; status: TaskStatus }[];
   inputs?: TaskInputReceipt[];
   elapsedMs?: number;
+  workStartedAt?: number | null;
+  workDeadlineAt?: number | null;
+  summaryDeadlineAt?: number | null;
+  budgetRevision?: number;
   error: string | null;
 }
 export interface TaskResult {
@@ -72,6 +76,7 @@ export interface TaskResult {
   unfinished: string[];
   sideEffects: string;
   reportKind?: "final" | "partial" | "system";
+  budgetSummary?: boolean;
   stop?: TaskStop;
   elapsedMs?: number;
   totalLength?: number;

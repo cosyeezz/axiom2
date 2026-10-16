@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type {
   ProviderDraft as Provider,
   ModelConfiguration,
@@ -17,6 +18,7 @@ export function ProviderConnection({
   needsReconcile,
   setLogin,
   feedback,
+  logoutProvider,
   removeProvider,
 }: {
   p: Provider;
@@ -32,8 +34,33 @@ export function ProviderConnection({
   needsReconcile: boolean;
   setLogin: (v: { providerId: string; type: "api_key" | "oauth" }) => void;
   feedback: string;
+  logoutProvider: (p: Provider) => void;
   removeProvider: (p: Provider) => void;
 }) {
+  const providerIdInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!p.originalId) providerIdInput.current?.focus();
+  }, [p.id, p.originalId]);
+  if (p.connectionType === "oauth") return (
+    <div id="suppliers-screen" role="tabpanel" aria-labelledby="suppliers-tab" hidden={tab !== "suppliers"}>
+      <section className="section">
+        <div className="section-heading"><h3>OAuth 连接</h3><p>使用供应商账号授权，无需填写 API 密钥、接口地址或协议。</p></div>
+        <div className="connection-fields oauth-account-fields">
+          <div className="field"><label htmlFor="provider-name">供应商名称</label><input className="input" id="provider-name" maxLength={80} value={p.name} onChange={(e) => patch({ name: e.target.value })} /></div>
+          <p className="meta">供应商：{p.providerId}</p>
+          <p id="provider-auth-status" className="connection-status" data-configured={p.auth?.configured || false} role="status">{p.auth?.configured ? "已通过 OAuth 登录" : "尚未登录，请完成账号授权。"}</p>
+          {p.hasConnectionOverrides && <p className="field-help">此连接保留已有自定义接口覆盖，登录不会修改原配置。协议：{p.api}；地址：{p.keepUrl ? "已保存敏感地址" : p.url}</p>}
+          <div className="row">
+            <button type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>OAuth 登录</button>
+            <button type="button" className="btn btn-ghost" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => removeProvider(p)}>退出登录并移除</button>
+          </div>
+          {dirty && <p className="field-help">请先保存或放弃当前草稿，再重新登录或移除账号。</p>}
+          {storage && <p className="meta credential-path">凭据保存位置：<code>{storage.authPath}</code></p>}
+        </div>
+      </section>
+      <p className="prototype-note">账号凭据仅保存在服务端。登录成功后可到「模型配置」拉取和选择模型，调用权限以供应商账号为准。</p>
+    </div>
+  );
   return (
     <div
       id="suppliers-screen"
@@ -44,15 +71,17 @@ export function ProviderConnection({
       <form id="provider-form" onSubmit={(e) => e.preventDefault()}>
         <section className="section">
           <div className="section-heading">
-            <h3>连接信息</h3>
-            <p>顶部保存统一发布；密钥通过 pi 原生认证接口管理。</p>
+            <h3>自定义接口</h3>
+            <p>填写连接信息，完成后在下方统一保存。</p>
           </div>
           <div className="connection-fields">
+            <div className="grid-2">
             <div className="field">
               <label htmlFor="provider-id">供应商 ID</label>
               <input
                 className="input num"
                 id="provider-id"
+                ref={providerIdInput}
                 list="provider-templates"
                 value={p.providerId}
                 readOnly={!!p.originalId}
@@ -81,11 +110,9 @@ export function ProviderConnection({
                 ))}
               </datalist>
               <span className="field-help">
-                稳定的 pi 供应商标识；使用内置供应商认证时选择对应
-                ID，保存后不可修改。
+                选择内置 ID 或自定义；保存后不可修改。
               </span>
             </div>
-            <div className="grid-2">
               <div className="field">
                 <label htmlFor="provider-name">供应商名称</label>
                 <input
@@ -97,6 +124,8 @@ export function ProviderConnection({
                   onChange={(e) => patch({ name: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="grid-2 connection-endpoint">
               <div className="field">
                 <label htmlFor="provider-protocol">接口协议</label>
                 <select
@@ -117,8 +146,6 @@ export function ProviderConnection({
                   <option value="google-generative-ai">Google Gemini</option>
                 </select>
               </div>
-            </div>
-            <div className="grid-2">
               <div className="field">
                 <label htmlFor="provider-url">接口地址</label>
                 <input
@@ -142,10 +169,22 @@ export function ProviderConnection({
                   填写基础地址，支持 HTTP / HTTPS。
                 </span>
               </div>
+            </div>
+            <div className="connection-credentials">
               <div className="field">
-                <label htmlFor="provider-key">
-                  API 密钥 <span className="meta">（可选）</span>
-                </label>
+                <div className="row-between credential-heading">
+                  <label htmlFor="provider-key">
+                    API 密钥 <span className="meta">（可选）</span>
+                  </label>
+                  <button
+                    id="logout-provider"
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={!p.originalId || !p.auth?.configured || dirty || !!editor || busy || needsReconcile}
+                    onClick={() => logoutProvider(p)}
+                    data-tooltip={dirty || editor ? "请先保存或放弃修改，再退出认证" : "立即退出认证，保留供应商和模型"}
+                  >退出认证</button>
+                </div>
                 <div className="key-field">
                   <input
                     className="input num"
@@ -155,9 +194,7 @@ export function ProviderConnection({
                     maxLength={4096}
                     spellCheck={false}
                     placeholder={
-                      p.clearKey
-                        ? "保存后清除认证"
-                        : p.auth?.source === "stored" && p.auth.type === "api_key"
+                      p.auth?.source === "stored" && p.auth.type === "api_key"
                           ? "••••••••（已保存，输入可替换）"
                           : p.auth?.configured
                             ? "已配置认证；留空保持不变"
@@ -186,60 +223,29 @@ export function ProviderConnection({
                   </button>
                 </div>
                 <span className="field-help" id="provider-key-status" role="status">
-                  {p.clearKey
-                    ? "待清除认证，保存后生效。"
-                    : p.key
-                      ? "新密钥尚未保存，请点击顶部「保存」。"
+                  {p.key
+                      ? "新密钥尚未保存，请点击下方「保存」。"
                       : p.auth?.source === "stored" && p.auth.type === "api_key"
                         ? "API 密钥已保存到本地。为保护密钥不显示原文，留空保持不变。"
                         : p.auth?.source === "stored" && p.auth.type === "oauth"
                           ? "已保存 OAuth 登录凭据；留空保持当前认证。"
-                          : "输入密钥后点击顶部「保存」；留空保持原认证。"}
+                          : "输入密钥后点击下方「保存」；留空保持原认证。"}
                 </span>
+                {p.auth?.configured && <p className="field-help">退出立即生效，并清除该供应商及模型的请求头覆盖、地址参数和内嵌凭据。</p>}
+                {(dirty || !!editor) && p.auth?.configured && <p className="field-help">退出前请先保存或放弃当前修改。</p>}
+                <details className="credential-details">
+                  <summary>凭据存储位置</summary>
+                  <div className="credential-details-content">
                 {storage && (
                   <span className="field-help credential-path">
                     密钥保存位置：<code>{storage.authPath}</code>
                   </span>
                 )}
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={p.clearKey === true}
-                    onChange={(e) =>
-                      patch({
-                        clearKey: e.target.checked,
-                        key: "",
-                      })
-                    }
-                  />{" "}
-                  保存时退出此供应商并清除受管理认证
-                </label>
                 <span className="field-help">
-                  认证来源：{p.auth?.source || "无"} {p.auth?.type || ""}
+                  认证来源：{p.auth?.source === "stored" ? "本地保存" : p.auth?.source === "environment" ? "环境变量" : p.auth?.configured ? "配置或运行环境" : "未配置"}
                 </span>
-                <div className="row">
-                  {p.auth?.methods.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      className="btn btn-ghost"
-                      disabled={dirty || !!editor || busy || needsReconcile}
-                      onClick={() =>
-                        setLogin({
-                          providerId: p.providerId,
-                          type,
-                        })
-                      }
-                    >
-                      {type === "oauth" ? "OAuth 登录" : "API Key 登录"}
-                    </button>
-                  ))}
-                </div>
-                {dirty && (
-                  <span className="field-help">
-                    单独登录前请先保存或放弃配置修改。
-                  </span>
-                )}
+                  </div>
+                </details>
               </div>
             </div>
           </div>
@@ -258,9 +264,6 @@ export function ProviderConnection({
         </div>
         <div className="save-bar">
           <div>
-            <p className="meta">
-              统一点击顶部「保存」后发布。草稿仅保留在本页内存。
-            </p>
             {storage && (
               <p className="meta credential-path">
                 模型配置位置：<code>{storage.modelsPath}</code>

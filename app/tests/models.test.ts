@@ -385,10 +385,12 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
   const states: { owner: object; state: AuthState }[] = [],
     owner = {},
     foreign = {};
+  const opened: string[] = [];
   const logins = new Logins(
     service,
     (owner, state) => states.push({ owner, state }),
     async () => {},
+    async (url, signal) => { signal.throwIfAborted(); opened.push(url); },
   );
   const until = async (predicate: () => boolean) => {
     for (let n = 0; n < 100 && !predicate(); n++) await delay(10);
@@ -414,6 +416,8 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
               type: "progress",
               message: "must-not-forward-private-progress",
             });
+            const domain = await interaction.prompt({ type: "text", message: "Domain (blank for default)", placeholder: "company.example" });
+            assert.equal(domain, "");
             await interaction.prompt({
               type: "select",
               message: "method",
@@ -450,6 +454,9 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
       revision,
     );
     await until(() => !!logins.get(owner, id).state.prompt);
+    assert.throws(() => logins.open(foreign, id), { code: "AUTH_SCOPE_MISMATCH" });
+    assert.deepEqual(await logins.open(owner, id), { opened: true });
+    assert.deepEqual(opened, ["https://example.invalid/authorize?state=fixture"]);
     await assert.rejects(service.save({ revision, providers: [] }), {
       code: "AUTH_BUSY",
     });
@@ -463,6 +470,10 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
         ),
       { code: "AUTH_SCOPE_MISMATCH" },
     );
+    assert.throws(() => logins.answer(owner, id, logins.get(owner, id).state.prompt!.id, "bad\0input"), { code: "INVALID_INPUT" });
+    assert.equal(logins.get(owner, id).state.prompt!.placeholder, "company.example");
+    logins.answer(owner, id, logins.get(owner, id).state.prompt!.id, "");
+    await until(() => logins.get(owner, id).state.prompt?.type === "select");
     const first = logins.get(owner, id).state.prompt!.id;
     assert.throws(() => logins.answer(owner, id, first, "invalid"), {
       code: "INVALID_INPUT",
@@ -485,6 +496,7 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
         logins.get(owner, id).state.status === "completed" &&
         !service.authActive,
     );
+    assert.throws(() => logins.open(owner, id), { code: "AUTH_EXPIRED" });
     assert.deepEqual(await runtime.listCredentials(), [
       { providerId: "axiom-config-test", type: "oauth" },
     ]);

@@ -26,6 +26,7 @@ export function useConfiguration() {
   const [dirty, setDirty] = useState(false),
     [busy, setBusy] = useState(false);
   const initialized = useRef(false);
+  const logoutInFlight = useRef(false);
   const [needsReconcile, setNeedsReconcile] = useState(false);
   const [login, setLogin] = useState<{
     providerId: string;
@@ -61,7 +62,7 @@ export function useConfiguration() {
           body: [],
         },
       );
-  // One staging path for Finish, top Save (including a hidden editor), and supplier switches.
+  // One staging path for Finish, unified Save (including a hidden editor), and supplier switches.
   const stageEditor = (): Provider[] | null => {
     if (!editor || !p) return providers;
     const id = editor.id.trim();
@@ -86,7 +87,7 @@ export function useConfiguration() {
     setFeedback("已结束行内编辑；仍是未保存草稿。");
     return next;
   };
-  const load = async () => {
+  const load = async (preferredProvider?: string) => {
     setBusy(true);
     try {
       const data = await command<ModelConfiguration>("configuration.get");
@@ -96,22 +97,28 @@ export function useConfiguration() {
       setStorage(data.storage);
       setSaved(false);
       setSelected((old) =>
-        data.providers.some((p) => p.id === old)
-          ? old
-          : (data.providers[0]?.id ?? ""),
+        preferredProvider && data.providers.some((p) => p.id === preferredProvider)
+          ? preferredProvider
+          : data.providers.some((p) => p.id === old)
+            ? old
+            : (data.providers[0]?.id ?? ""),
       );
       setEditor(null);
       setDirty(false);
       setNeedsReconcile(false);
       setShowKey(false);
       setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
-      return true;
+      return data;
     } catch (error) {
       setFeedback(`读取配置失败：${(error as Error).message}`, true);
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
+  };
+  const refreshAuthentication = async (providerId?: string) => {
+    setNeedsReconcile(true);
+    return load(providerId);
   };
   useEffect(() => {
     if (connection === "已连接本地服务" && !initialized.current) {
@@ -207,6 +214,7 @@ export function useConfiguration() {
         ...all,
         {
           id,
+          connectionType: "custom",
           providerId: "custom-" + id.slice(0, 8),
           name: "新供应商",
           api: "openai-completions",
@@ -229,7 +237,50 @@ export function useConfiguration() {
     if (!stageEditor()) return;
     setSelected(id);
     setShowKey(false);
-    setFeedback("已保留其他供应商的草稿；顶部保存才会发布配置。");
+    setFeedback("已保留其他供应商的草稿；下方保存才会发布配置。");
+  };
+  const logoutProvider = async (provider: Provider, confirmStop = false) => {
+    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId || provider.connectionType === "oauth") return;
+    logoutInFlight.current = true;
+    setBusy(true);
+    setSaved(false);
+    setFeedback("正在退出认证…");
+    try {
+      const current = await command<ModelConfiguration>("configuration.get");
+      if (!current.providers.some((item) => item.providerId === provider.providerId))
+        throw Error("供应商配置已变化，请重新读取后重试。");
+      await command("configuration.save", {
+        revision,
+        providers: current.providers.map((item) => item.providerId === provider.providerId
+          ? { ...item, key: "", clearKey: true }
+          : item),
+        confirmLogout: true,
+        confirmStop,
+      });
+      setNeedsReconcile(true);
+      const refreshed = await load(provider.providerId);
+      if (refreshed) {
+        const remaining = refreshed.providers.find((item) => item.providerId === provider.providerId);
+        setFeedback(remaining?.auth?.configured
+          ? "已清除受管理认证；供应商和模型已保留。当前仍有环境变量等其他来源提供认证。"
+          : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
+        requestAnimationFrame(() => document.getElementById("provider-key")?.focus());
+      }
+    } catch (error) {
+      const e = error as Error & { code?: string };
+      setFeedback(`退出认证失败：${e.message}`, true);
+      if (["PARTIAL_CONFIG_FAILURE", "UNCERTAIN", "REVISION_CONFLICT"].includes(e.code ?? ""))
+        setNeedsReconcile(true);
+      if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
+        setDecision({
+          title: "停止受影响的执行并退出认证？",
+          text: e.message + "停止不回滚项目文件；供应商和模型配置保留。",
+          proceed: () => void logoutProvider(provider, true),
+        });
+    } finally {
+      logoutInFlight.current = false;
+      setBusy(false);
+    }
   };
   const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
@@ -337,11 +388,13 @@ export function useConfiguration() {
     setDecision,
     p,
     load,
+    refreshAuthentication,
     save,
     patch,
     discardEditor,
     add,
     select,
+    logoutProvider,
     removeProvider,
     changeTab,
     copyButton,

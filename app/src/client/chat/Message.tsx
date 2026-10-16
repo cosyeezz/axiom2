@@ -103,11 +103,13 @@ export const Message = memo(function Message({
   if (!m || m.role === "toolResult") return null;
   if (!thinkingOnly && m.compression) return <CompactionCard m={m} scope={scope} id={id} />;
   if (!thinkingOnly && m.taskNotice) return <><ActivityMessageFact message={m} order={activityOrder} /><TaskNotice message={m} /></>;
-  const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive) || !thinkingOnly && m.calls?.length);
+  // Split replies have one process owner. Live calls may arrive while an older
+  // layout still separates thinking from the body (notably in original view).
+  const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive || m.calls?.length));
   const process = <>
     <ActivityMessageFact message={m} order={activityOrder} />
     {!hideThinking && (m.thinking || m.thinkingActive) && <Thinking text={m.thinking ?? ""} active={!!m.thinkingActive && !!m.streaming} />}
-    {!thinkingOnly && m.calls?.map((call, callOrder) => {
+    {!hideThinking && m.calls?.map((call, callOrder) => {
       const name = taskToolName(call.name);
       const key = `${scope.workspaceId}:${scope.sessionId}:${call.id}`;
       if (name) return <div key={key}>

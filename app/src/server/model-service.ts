@@ -18,6 +18,7 @@ import { AppError, object, text } from "../shared/protocol.js";
 import {
   samplingKeys,
   type ModelConfiguration,
+  type ModelCatalog,
   type ProviderDraft,
   type OverrideRow,
 } from "../shared/models.js";
@@ -117,14 +118,17 @@ export class ModelService {
         "CONFIG_READ_FAILED",
         "pi 配置校验失败；原文件未覆盖。",
       );
+    // Credentials are also a native provider registration: OAuth need not create a custom endpoint first.
+    for (const credential of await runtime.listCredentials())
+      config.providers[credential.providerId] ??= {};
+    // Restore pi's cached metadata after validating the file. Auth failures remain
+    // separate from configuration validity and are reported by auth/save operations.
+    await runtime.refresh({ providers: Object.keys(config.providers), allowNetwork: false, signal: AbortSignal.timeout(5000) });
     if (digest(await this.raw()) !== digest(raw))
       throw new AppError(
         "REVISION_CONFLICT",
         "读取期间配置已改变；请重新读取。",
       );
-    if (process.env.AXIOM_PI_DIR)
-      for (const credential of await runtime.listCredentials())
-        config.providers[credential.providerId] ??= {};
     return { raw, config, runtime, revision: digest(raw) };
   }
   async read(): Promise<ModelConfiguration> {
@@ -143,6 +147,10 @@ export class ModelService {
         id: providerId,
         originalId: providerId,
         providerId,
+        connectionType: credentials.find((c) => c.providerId === providerId)?.type === "oauth" ||
+          (!credentials.some((c) => c.providerId === providerId) && provider?.auth.oauth && !p.baseUrl && !p.api && !p.apiKey)
+          ? "oauth" : "custom",
+        hasConnectionOverrides: !!(p.baseUrl || p.api || p.apiKey),
         name: p.name ?? provider?.name ?? providerId,
         api: p.api ?? provider?.getModels()[0]?.api ?? "openai-completions",
         ...urlView(
@@ -192,8 +200,54 @@ export class ModelService {
         name: p.name,
         api: p.getModels()[0]?.api ?? "openai-completions",
         url: urlView(p.baseUrl ?? p.getModels()[0]?.baseUrl ?? "").url,
+        methods: [
+          ...(p.auth.apiKey?.login ? ["api_key" as const] : []),
+          ...(p.auth.oauth?.login ? ["oauth" as const] : []),
+        ],
       })),
     };
+  }
+  catalog(provider: unknown, expectedRevision: unknown): Promise<ModelCatalog> {
+    return this.serial(async () => {
+      if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
+      const providerId = id(provider, "供应商 ID");
+      const { config, runtime, revision } = await this.load();
+      if (expectedRevision !== revision)
+        throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后拉取模型列表。");
+      if (!Object.hasOwn(config.providers, providerId))
+        throw new AppError("NOT_FOUND", "请先保存供应商连接配置，再拉取模型列表。");
+      const native = runtime.getProvider(providerId);
+      if (!native) throw new AppError("NOT_FOUND", "pi 未识别该供应商，请检查连接配置。");
+      let source: ModelCatalog["source"] = "local";
+      let message = "此供应商不支持自动发现模型，显示本地已知目录；可手动添加模型。";
+      if (native.refreshModels) {
+        const signal = AbortSignal.timeout(8000);
+        if (!await runtime.checkAuth(providerId, { signal })) {
+          message = "请先保存 API 密钥或完成 OAuth 登录；当前显示 pi 本地目录。";
+        } else {
+          try {
+            const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
+            if (result.aborted || result.errors.size)
+              message = "在线目录刷新未完成，显示 pi 本地目录；请检查网络和认证后重试。";
+            else {
+              source = "refreshed";
+              message = "已通过 pi 刷新模型目录；目录不代表账号一定有调用权限。";
+            }
+          } catch {
+            message = "在线目录刷新失败，显示 pi 本地目录；请检查网络和认证后重试。";
+          }
+        }
+      }
+      if (digest(await this.raw()) !== revision)
+        throw new AppError("REVISION_CONFLICT", "拉取期间配置已改变，请重新读取后重试。");
+      return {
+        providerId, revision, source, message,
+        models: runtime.getModels(providerId).map((model) => ({
+          id: model.id, name: model.name, api: model.api,
+          levels: levelsOf(model), contextWindow: model.contextWindow,
+        })).sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    });
   }
   save(input: unknown): Promise<{ revision: string; loggedOut: string[] }> {
     return this.serial(async () => {
@@ -229,6 +283,7 @@ export class ModelService {
           invalid(
             "pi 拒绝此配置；请检查协议、模型能力与覆盖项。原文件未覆盖。",
           );
+        await checked.refresh({ providers: Object.keys(providers), allowNetwork: false, signal: AbortSignal.timeout(5000) });
         validateDraft(draft, providers, keys, checked);
         if (digest(await this.raw()) !== revision)
           throw new AppError(

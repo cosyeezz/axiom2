@@ -54,19 +54,17 @@ export async function configuration(root: string): Promise<Configuration> {
       allowModelNetwork: false,
     });
     if (runtime.getError()) throw Error();
-    if (process.env.AXIOM_PI_DIR) {
-      for (const credential of await runtime.listCredentials()) {
-        if (Object.hasOwn(config.providers, credential.providerId)) continue;
-        result.providerCount++;
-        for (const model of runtime.getModels(credential.providerId))
-          allowed.add(`${model.provider}/${model.id}`);
-      }
-      // A provider-only configuration uses pi's native catalog.
-      for (const [provider, definition] of Object.entries(config.providers) as [string, any][])
-        if (!(definition.models?.length || Object.keys(definition.modelOverrides ?? {}).length))
-          for (const model of runtime.getModels(provider)) allowed.add(`${provider}/${model.id}`);
-      result.modelCount = allowed.size;
+    for (const credential of await runtime.listCredentials()) {
+      if (Object.hasOwn(config.providers, credential.providerId)) continue;
+      result.providerCount++;
+      for (const model of runtime.getModels(credential.providerId))
+        allowed.add(`${model.provider}/${model.id}`);
     }
+    // A provider-only configuration uses pi's native catalog in either storage location.
+    for (const [provider, definition] of Object.entries(config.providers) as [string, any][])
+      if (!(definition.models?.length || Object.keys(definition.modelOverrides ?? {}).length))
+        for (const model of runtime.getModels(provider)) allowed.add(`${provider}/${model.id}`);
+    result.modelCount = allowed.size;
     result.available = (
       await runtime.getAvailable(undefined, {
         signal: AbortSignal.timeout(5000),
