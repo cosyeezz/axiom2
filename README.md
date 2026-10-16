@@ -34,13 +34,14 @@ axiom2 start
 | Windows x64 安装包 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.msi)，安装后打开 Axiom2 |
 | Windows x64 便携版 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.exe)，直接运行 |
 | 后台包 SHA-256 校验 | [SHA256SUMS](https://github.com/cosyeezz/axiom2/releases/latest/download/SHA256SUMS) |
-| 客户端 SHA-256 校验 | [SHA256SUMS（v0.4.0）](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/SHA256SUMS) |
-| macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
+| Windows 客户端 SHA-256 校验 | [SHA256SUMS（v0.4.0）](https://github.com/cosyeezz/axiom2/releases/download/v0.4.0/SHA256SUMS) |
+| macOS 客户端 SHA-256 校验 | [SHA256SUMS（v0.4.4）](https://github.com/cosyeezz/axiom2/releases/download/v0.4.4/SHA256SUMS) |
+| macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.4/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
 | Linux | 当前使用浏览器；尚无发布并验收的原生客户端 |
 
-桌面客户端下载链接指向当前已发布的 `v0.4.0` 客户端。后台服务独立更新，不要求客户端与后台版本相同。
+当前 Windows 下载链接指向 `v0.4.0`，macOS 通用版指向 `v0.4.4`。后台服务独立更新，不要求客户端与后台版本始终相同；新版 Mac 顶栏的连接状态上报需要后台 `v0.4.4` 或更新版本。
 
-**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，确认后台停止或确认更新后返回控制页。当前源码构建的客户端使用波形图标表示连接：绿为已连接，红为已断开，灰为确认中，文字颜色固定。业务订阅报错或服务管理通道暂不可用时，保留当前工作台；连接信息过期时显示确认中。旧后台不支持连接上报时需更新后台才能显示准确状态。关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
+**Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后点击“打开工作台”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，确认后台停止或确认更新后返回控制页。macOS v0.4.4 与当前源码构建的客户端使用波形图标表示连接：绿为已连接，红为已断开，灰为确认中，文字颜色固定。业务订阅报错或服务管理通道暂不可用时，保留当前工作台；连接信息过期时显示确认中。旧后台不支持连接上报时需更新后台才能显示准确状态。关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，首次使用仍需安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
 **应用内更新：** 在 Pake 控制页的“版本与更新”点击“检查更新”，分别查看客户端、后台服务与最新版本。点击“更新后台服务”并确认后关闭工作台，先下载、校验和准备新版，再停止旧服务、切换程序并验证启动；项目与会话数据保留，正在执行的任务会结束。更新由独立任务执行，关闭、重开客户端仍可查看进度。程序切换或启动失败会尝试恢复旧程序，更新进程异常退出且留下恢复记录时可点击“恢复旧版本”；恢复会核对旧程序版本，备份缺失且安装目录仍是其他版本时保留恢复记录并报错。后台必须安装在标准 npm 包目录且目录可写（一行安装命令符合此方式），源码目录请使用原方式更新。**应用内更新与恢复仅支持一个数据目录独占一个服务安装。多个数据目录共用全局安装不受支持；请为各数据目录使用独立安装目录，或停止所有相关服务后手动更新。** 当前任务锁和服务探测均按数据目录工作，不能检查其他数据目录是否仍在使用同一程序。
 
@@ -185,7 +186,7 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 npm --prefix app run package:desktop -- --targets universal
 ```
 
-也可在 GitHub Actions 的 `Build Axiom2 Desktop` 中选择 `platform=macos`；`source_ref` 可填写发布 tag 或 commit，为空时使用工作流所在版本。macOS 流程校验 DMG、双架构、版本与应用标识、签名完整性及无测试入口，再从镜像复制应用到临时目录，用隔离数据目录启动并检查该进程拥有可见窗口。流程另构建独立标识的测试应用，由 `scripts/check-desktop-macos.mjs` 在真实 WKWebView 中操作打包控制页，检查单窗口切换、原生命令拒绝、草稿／选区／滚动／焦点、原生缩放、服务启停、窗口关闭及重开后复用后台；CoreGraphics 独立确认工作台显示时只有一个可见应用窗口。只有检查通过才生成交付 artifact；失败时保留的诊断 artifact 不作为发布包。`Publish Axiom2 macOS Desktop` 可将成功构建的 artifact 直接发布到已有 Release：需填写构建 run ID 与对应 tag，发布前复核源码、原生检查和附件摘要，保留其他产物并补全校验文件。
+也可在 GitHub Actions 的 `Build Axiom2 Desktop` 中选择 `platform=macos`；`source_ref` 可填写发布 tag 或 commit，为空时使用工作流所在版本。macOS 流程校验 DMG、双架构、版本与应用标识、签名完整性及无测试入口，再从镜像复制应用到临时目录，用隔离数据目录启动并检查该进程拥有可见窗口。正式包始终从 `source_ref` 构建；正式包校验完成后，独立测试应用的两份 JavaScript 探针取自工作流修订，日志记录该修订，不改写正式 DMG。流程另构建独立标识的测试应用，由 `scripts/check-desktop-macos.mjs` 在真实 WKWebView 中操作打包控制页，检查单窗口切换、原生命令拒绝、草稿／选区／滚动／焦点、原生缩放、服务启停、窗口关闭及重开后复用后台；CoreGraphics 独立确认工作台显示时只有一个可见应用窗口。只有检查通过才生成交付 artifact；失败时保留的诊断 artifact 不作为发布包。`Publish Axiom2 macOS Desktop` 可将成功构建的 artifact 直接发布到已有 Release：需填写构建 run ID 与对应 tag，发布前复核源码、原生检查和附件摘要，并校验原生证据中的连接桥接、固定状态文字色和波形三状态样式，保留其他产物并补全校验文件。
 
 配置在 `app/desktop/pake.json`。`package:desktop` 使用 `scripts/build-desktop.mjs` 将固定版本的 Pake 模板复制到隔离目录，注入 `app/desktop/axiom_service.rs`、`axiom_views.rs` 与只读连接观测 `axiom_connection.rs` 后构建，桌面版本统一从根 `package.json` 传入，不修改全局 Pake 源文件；直接运行原版 `pake --config` 不包含服务控制桥接。产物／日志不提交 Git。`npm run check:desktop` 使用 Windows EXE、WebView2 和隔离数据目录，通过本机 CDP、Win32 窗口枚举／缩放与原生关闭请求检查离线控制页、单原生窗口双 WebView、切换后的草稿／选区／滚动／焦点保留、远程管理调用拒绝、启动／停止确认与取消、重启、第二次启动聚焦已有窗口、退出后重新打开、服务换端口后的工作台重建及正常／强制退出客户端后服务存活。先在仓库根目录运行 `npm --prefix app run package:desktop -- --targets x64 --test-instance` 构建独立标识的 `Axiom2-ServiceTest.exe`；仅此测试构建带 CDP 和原生自检入口，正式产物不带调试或自检入口，测试不会接管已运行的正式客户端。可用 `AXIOM_DESKTOP_BINARY` 指定测试 EXE。该检查不覆盖 MSI 安装交互、真实 OAuth 或 macOS/Linux 原生运行。
 
