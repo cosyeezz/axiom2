@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, 
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultOpenCliSettings, type OpenCliJob, type OpenCliState } from "../../shared/builtin-tools.js";
-import { openExtensionPage } from "./opencli-browser.js";
+import { openExtensionPage, type OpenCliExtensionTarget } from "./opencli-browser.js";
 import { errorMessage } from "../error-message.js";
 import { openCliConfigPath, openCliEnvironment, openCliSkillPaths, readOpenCliConfig, type OpenCliConfig } from "./opencli-runtime.js";
 
@@ -84,7 +84,7 @@ export class OpenCliService {
   private controller?: AbortController;
   private closed = false;
   private readonly jobFile: string;
-  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension = openExtensionPage) {
+  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage) {
     this.jobFile = join(root, "integrations", "opencli-job.json");
     this.loadConfig();
     try {
