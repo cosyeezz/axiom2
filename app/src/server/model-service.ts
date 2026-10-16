@@ -3,6 +3,7 @@ import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ModelRuntime,
+  ModelRegistry,
   CredentialSynchronizationError,
 } from "@earendil-works/pi-coding-agent";
 import {
@@ -14,6 +15,7 @@ import {
   validateDraft,
   invalid,
 } from "./models/draft.js";
+import { discoverModels } from "./model-discovery.js";
 import { AppError, object, text } from "../shared/protocol.js";
 import {
   samplingKeys,
@@ -208,46 +210,95 @@ export class ModelService {
       })),
     };
   }
+  // Discovery uses connection settings only. models.json is the import target;
+  // its models and modelOverrides must never become catalog entries or metadata.
+  private async withCatalogRuntime<T>(providerId: string, connection: Json, run: (runtime: ModelRuntime) => Promise<T>): Promise<T> {
+    const { models: _models, modelOverrides: _overrides, authHeader: _authHeader, ...settings } = connection;
+    const path = join(this.dir, `models-catalog-${randomUUID()}.tmp`);
+    try {
+      const file = await open(path, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify({ providers: { [providerId]: { ...settings, headers: settings.headers ?? {} } } }));
+      } finally {
+        await file.close();
+      }
+      const runtime = await this.runtime(path);
+      if (runtime.getError()) throw new AppError("CONFIG_READ_FAILED", "供应商连接配置无法用于读取模型目录。");
+      await runtime.refresh({ providers: [providerId], allowNetwork: false, signal: AbortSignal.timeout(5000) });
+      return await run(runtime);
+    } finally {
+      await rm(path, { force: true });
+    }
+  }
   catalog(provider: unknown, expectedRevision: unknown): Promise<ModelCatalog> {
     return this.serial(async () => {
       if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
       const providerId = id(provider, "供应商 ID");
-      const { config, runtime, revision } = await this.load();
+      const { config, revision } = await this.load();
       if (expectedRevision !== revision)
         throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后拉取模型列表。");
       if (!Object.hasOwn(config.providers, providerId))
         throw new AppError("NOT_FOUND", "请先保存供应商连接配置，再拉取模型列表。");
-      const native = runtime.getProvider(providerId);
-      if (!native) throw new AppError("NOT_FOUND", "pi 未识别该供应商，请检查连接配置。");
-      let source: ModelCatalog["source"] = "local";
-      let message = "此供应商不支持自动发现模型，显示本地已知目录；可手动添加模型。";
-      if (native.refreshModels) {
-        const signal = AbortSignal.timeout(8000);
-        if (!await runtime.checkAuth(providerId, { signal })) {
-          message = "请先保存 API 密钥或完成 OAuth 登录；当前显示 pi 本地目录。";
-        } else {
-          try {
+      return this.withCatalogRuntime(providerId, config.providers[providerId], async (runtime) => {
+        const native = runtime.getProvider(providerId);
+        if (!native) throw new AppError("NOT_FOUND", "pi 未识别该供应商，请检查连接配置。");
+        const connection = config.providers[providerId];
+        const credential = (await runtime.listCredentials()).find((item) => item.providerId === providerId);
+        const oauth = connection.oauth === "radius" || (!connection.baseUrl &&
+          (credential?.type === "oauth" || (!credential && native.auth.oauth && !connection.api && !connection.apiKey)));
+        const signal = AbortSignal.timeout(15000);
+        let models: ModelCatalog["models"];
+        let source: ModelCatalog["source"];
+        let message: string;
+        try {
+          if (!oauth) {
+            const baseUrl = connection.baseUrl ?? native.baseUrl ?? runtime.getModels(providerId)[0]?.baseUrl;
+            if (!baseUrl) throw new AppError("MODEL_DISCOVERY_FAILED", "请先配置 Base URL，再拉取模型列表。");
+            const api = connection.api ?? runtime.getModels(providerId)[0]?.api;
+            // A request descriptor lets pi resolve provider headers even without an API key.
+            // It is never registered, persisted, or returned as a discovered model.
+            const auth = await new ModelRegistry(runtime).getApiKeyAndHeaders({
+              id: "axiom-model-discovery", name: "Model discovery", provider: providerId, api, baseUrl,
+              input: ["text"], reasoning: false, contextWindow: 0, maxTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            });
+            if (!auth.ok) throw new AppError("MODEL_DISCOVERY_FAILED", "无法解析接口认证或请求头，请检查连接配置后重试。");
+            const discovered = await discoverModels({ baseUrl, api, auth, signal });
+            models = discovered.map((model) => {
+              // Native metadata can describe a returned ID, but cannot add identities to the response.
+              // This runtime excludes all models and overrides in the target configuration.
+              const candidate = runtime.getModel(providerId, model.id);
+              const known = candidate?.api === api ? candidate : undefined;
+              return { ...model, api,
+                levels: known ? levelsOf(known) : undefined,
+                input: known ? [...known.input] : undefined, contextWindow: known?.contextWindow };
+            });
+            source = "endpoint";
+            message = "已从当前 Base URL 拉取模型列表。接口未提供的能力参考 pi 原生目录；未知能力请在添加后确认。";
+          } else {
+            if (!native.refreshModels) throw new AppError("MODEL_DISCOVERY_FAILED", "该 OAuth 供应商不支持模型目录刷新，请手动添加模型。");
+            if (!await runtime.checkAuth(providerId, { signal }))
+              throw new AppError("MODEL_DISCOVERY_FAILED", "请先完成 OAuth 登录，再拉取模型列表。");
             const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
             if (result.aborted || result.errors.size)
-              message = "在线目录刷新未完成，显示 pi 本地目录；请检查网络和认证后重试。";
-            else {
-              source = "refreshed";
-              message = "已通过 pi 刷新模型目录；目录不代表账号一定有调用权限。";
-            }
-          } catch {
-            message = "在线目录刷新失败，显示 pi 本地目录；请检查网络和认证后重试。";
+              throw new AppError("MODEL_DISCOVERY_FAILED", "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
+            source = "native";
+            message = "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。";
+            models = runtime.getModels(providerId).map((model) => ({
+              id: model.id, name: model.name, api: model.api,
+              levels: levelsOf(model), input: [...model.input], contextWindow: model.contextWindow,
+            })).sort((a, b) => a.name.localeCompare(b.name));
           }
+        } catch (error) {
+          if (error instanceof AppError) throw error;
+          throw new AppError("MODEL_DISCOVERY_FAILED", signal.aborted
+            ? "模型列表请求超时，请稍后重试。"
+            : "模型列表请求失败，请检查接口地址、网络、认证和请求头后重试。");
         }
-      }
-      if (digest(await this.raw()) !== revision)
-        throw new AppError("REVISION_CONFLICT", "拉取期间配置已改变，请重新读取后重试。");
-      return {
-        providerId, revision, source, message,
-        models: runtime.getModels(providerId).map((model) => ({
-          id: model.id, name: model.name, api: model.api,
-          levels: levelsOf(model), input: [...model.input], contextWindow: model.contextWindow,
-        })).sort((a, b) => a.name.localeCompare(b.name)),
-      };
+        if (digest(await this.raw()) !== revision)
+          throw new AppError("REVISION_CONFLICT", "拉取期间配置已改变，请重新读取后重试。");
+        return { providerId, revision, source, message, models };
+      });
     });
   }
   save(input: unknown): Promise<{ revision: string; loggedOut: string[] }> {

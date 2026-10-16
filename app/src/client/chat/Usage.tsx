@@ -80,7 +80,7 @@ export function Usage({ scope }: { scope?: Scope }) {
               />
             </svg>
             <span className="screen-reader">上下文占用：</span>
-            <strong>{context?.estimated && context.tokens != null ? "≈" : ""}{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
+            <strong>{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
             <strong aria-label={contextLabel}>
               · {percent == null ? "—" : Math.round(percent)}%
             </strong>

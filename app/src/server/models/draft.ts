@@ -278,7 +278,10 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             levels.some((l) => !reasoningLevels.includes(l))
           )
             invalid("至少选择一个有效思考等级");
-          const existing = runtime.getModel(providerId, oldId ?? modelId);
+          const native = runtime.getModel(providerId, oldId ?? modelId);
+          // A newly imported endpoint model can share an ID with a native model
+          // while using a different protocol. Save its own definition and capabilities.
+          const existing = !oldId && !oauth && native?.api !== next.api ? undefined : native;
           if (m.input !== undefined) {
             if (!Array.isArray(m.input) || !m.input.includes("text") ||
                 m.input.length > 2 || new Set(m.input).size !== m.input.length ||

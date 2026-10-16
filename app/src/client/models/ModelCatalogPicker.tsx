@@ -20,6 +20,8 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
   const load = async () => {
     setBusy(true);
     setError("");
+    setCatalog(null);
+    setSelected(new Set());
     try {
       const result = await command<ModelCatalog>("configuration.catalog", { providerId: provider.providerId, revision });
       if (!active.current) return;
@@ -51,7 +53,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
         <h3 id="model-catalog-title">选择模型 · {provider.name}</h3>
         <button type="button" className="btn btn-ghost" onClick={close}>收起列表</button>
       </div>
-      <p className="field-help">选择模型加入当前供应商草稿，下方「保存」后生效。模型能力沿用原生目录。</p>
+      <p className="field-help">选择模型加入当前供应商草稿，下方「保存」后生效。未知能力先按仅文本、不启用思考加入，请按模型实际能力编辑。</p>
       <div className="model-catalog-tools">
         <input ref={search} className="input" type="search" aria-label="搜索可添加模型" placeholder="搜索模型名称或 ID" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button type="button" className="btn btn-ghost" disabled={busy || blocked} onClick={() => void load()}>{busy ? "正在拉取…" : "重新拉取"}</button>
@@ -78,7 +80,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
               const checked = e.target.checked;
               setSelected((old) => { const next = new Set(old); checked ? next.add(model.id) : next.delete(model.id); return next; });
             }} />
-            <span className="model-catalog-name"><strong>{model.name}</strong><code>{model.id}</code><span className="meta">{model.api} · 上下文 {model.contextWindow.toLocaleString()} · {model.input?.includes("image") ? "文本 + 图片" : "仅文本"}</span><span className="meta">思考：{model.levels.join(", ")}</span></span>
+            <span className="model-catalog-name"><strong>{model.name}</strong><code>{model.id}</code><span className="meta">{model.api} · 上下文 {model.contextWindow?.toLocaleString() ?? "待确认"} · {model.input ? (model.input.includes("image") ? "文本 + 图片" : "仅文本") : "输入能力待确认"}</span><span className="meta">思考：{model.levels?.join(", ") ?? "待确认"}</span></span>
             {existing.has(model.id) ? <span className="tag">已添加</span> : provider.connectionType !== "oauth" && model.api !== provider.api ? <span className="meta">需使用 {model.api} 协议</span> : null}
           </label>
         ))}
@@ -88,7 +90,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
       <div className="model-catalog-actions">
         <span className="meta">已选 {picked.length} 个 · 加入后保存</span>
         <button type="button" className="btn btn-primary" disabled={busy || blocked || !!error || !picked.length || overflow} onClick={() => {
-          add(picked.map((model) => ({ key: crypto.randomUUID(), id: model.id, name: model.name, levels: [...model.levels], input: model.input ? [...model.input] : undefined, headers: [], body: [] })));
+          add(picked.map((model) => ({ key: crypto.randomUUID(), id: model.id, name: model.name, levels: [...(model.levels ?? ["none"])], input: [...(model.input ?? ["text"])], headers: [], body: [] })));
           close();
         }}>加入配置{picked.length ? `（${picked.length}）` : ""}</button>
       </div>

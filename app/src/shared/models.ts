@@ -77,9 +77,9 @@ export interface ModelConfiguration {
 export interface ModelCatalog {
   providerId: string;
   revision: string;
-  source: "refreshed" | "local";
+  source: "endpoint" | "native" | "refreshed" | "local";
   message: string;
-  models: { id: string; name: string; api: string; levels: ReasoningLevel[]; input: ModelInput[]; contextWindow: number }[];
+  models: { id: string; name: string; api: string; levels?: ReasoningLevel[]; input?: ModelInput[]; contextWindow?: number }[];
 }
 export interface AuthState {
   id: string;

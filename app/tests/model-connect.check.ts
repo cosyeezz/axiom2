@@ -3,13 +3,25 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { startServer } from "../src/server/index.js";
+import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import type { Command } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-model-connect-"));
 const previous = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
 const app = await startServer({ root: join(root, "data"), port: 0 });
+let catalogStatus = 200;
+const catalogModel = builtinProviders().find((provider) => provider.id === "openai")!.getModels()[0];
+const endpoint = createServer((req, res) => {
+  assert.equal(req.url, "/proxy/v1/models");
+  res.writeHead(catalogStatus, { "content-type": "application/json" });
+  res.end(JSON.stringify({ data: [{ id: catalogModel.id, name: "A known model" }, { id: "remote-fixture-model", name: "Unknown model" }] }));
+});
+await new Promise<void>((resolve) => endpoint.listen(0, "127.0.0.1", resolve));
+const endpointUrl = `http://127.0.0.1:${(endpoint.address() as AddressInfo).port}/proxy/v1`;
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -137,6 +149,8 @@ try {
   await menu.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   assert.ok(await page.locator("#provider-id").evaluate((el) => el === document.activeElement));
   await page.locator("#provider-id").fill("openai");
+  await page.locator("#provider-url").fill(endpointUrl);
+  await page.locator("#provider-protocol").selectOption(catalogModel.api);
   await capture("custom");
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
@@ -150,7 +164,8 @@ try {
   const dialog = page.locator("#model-catalog-panel");
   assert.equal(await page.getByRole("dialog").count(), 0, 'catalog expands in the page');
   assert.equal(await page.getByRole('button', { name: '拉取模型列表', exact: true }).getAttribute('aria-expanded'), 'true');
-  await dialog.getByText(/请先保存 API 密钥/).waitFor();
+  await dialog.getByText(/已从当前 Base URL 拉取模型列表/).waitFor();
+  await dialog.getByText("输入能力待确认", { exact: false }).waitFor();
   const first = dialog.locator(".model-catalog-item").filter({ has: page.locator('input:not([disabled])') }).first();
   const selectedId = await first.locator("code").innerText();
   await first.getByRole("checkbox").check();
@@ -175,7 +190,14 @@ try {
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();
   assert.ok(JSON.parse(readFileSync(join(root, "pi", "models.json"), "utf8")).providers.openai.modelOverrides[selectedId]);
   await page.getByRole("button", { name: "拉取模型列表", exact: true }).click();
-  await dialog.getByText(/请先保存 API 密钥/).waitFor();
+  await dialog.getByText(/已从当前 Base URL 拉取模型列表/).waitFor();
+  catalogStatus = 401;
+  await dialog.getByRole("button", { name: "重新拉取", exact: true }).click();
+  await dialog.getByRole("alert").filter({ hasText: "HTTP 401" }).waitFor();
+  assert.equal(await dialog.locator(".model-catalog-item").count(), 0, "failed refresh must clear previous results");
+  catalogStatus = 200;
+  await dialog.getByRole("button", { name: "重新拉取", exact: true }).click();
+  await dialog.getByText(/已从当前 Base URL 拉取模型列表/).waitFor();
   await dialog.getByRole("searchbox").fill(selectedId);
   assert.ok(await dialog.locator(".model-catalog-item").filter({ has: page.getByText(selectedId, { exact: true }) }).getByRole("checkbox").isDisabled());
   await page.keyboard.press("Escape");
@@ -296,6 +318,8 @@ try {
 } finally {
   await browser.close();
   await app.close();
+  endpoint.closeAllConnections();
+  await new Promise<void>((resolve) => endpoint.close(() => resolve()));
   if (previous === undefined) delete process.env.AXIOM_PI_DIR;
   else process.env.AXIOM_PI_DIR = previous;
   rmSync(root, { recursive: true, force: true });
