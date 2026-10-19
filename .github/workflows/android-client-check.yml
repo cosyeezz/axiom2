@@ -16,15 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      AXIOM_RELEASE_TEST_ROOT: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}
-      AXIOM_DATA_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/data
-      AXIOM_PI_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/pi
-      PI_CODING_AGENT_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/pi
-      npm_config_cache: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/npm-cache
       AXIOM_PORT: '4319'
       NODE_PATH: ''
       NO_PROXY: 127.0.0.1,localhost
     steps:
+      - name: Initialize isolated runtime paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_root="${RUNNER_TEMP}/axiom-android-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            printf 'AXIOM_RELEASE_TEST_ROOT=%s\n' "$release_root"
+            printf 'AXIOM_DATA_DIR=%s/data\n' "$release_root"
+            printf 'AXIOM_PI_DIR=%s/pi\n' "$release_root"
+            printf 'PI_CODING_AGENT_DIR=%s/pi\n' "$release_root"
+            printf 'npm_config_cache=%s/npm-cache\n' "$release_root"
+          } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
