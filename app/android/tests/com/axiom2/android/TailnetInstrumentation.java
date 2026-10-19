@@ -228,7 +228,31 @@ public final class TailnetInstrumentation extends Instrumentation {
             runOnMainSync(() -> panel.setAvailable(false)); check(panel.getVisibility() == View.GONE, "Discovery still visible while connecting");
             runOnMainSync(() -> panel.setAvailable(true)); waitFor(() -> contains(panel, "New computer"));
             runOnMainSync(() -> activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)); Thread.sleep(600);
+            StringBuilder inventory = new StringBuilder("{\"devices\":[");
+            for (int i = 1; i <= 12; i++) { if (i > 1) inventory.append(','); inventory.append(String.format(Locale.ROOT, "{\"id\":\"%d\",\"hostname\":\"Node %02d\",\"addresses\":[\"100.64.0.%d\"]}", i, i, i)); }
+            response.set(inventory.append("]}").toString()); click(panel, "刷新设备"); waitFor(() -> contains(panel, "第 1 / 2 页"));
+            check(!contains(panel, "Node 11"), "First page exceeded ten devices"); click(panel, "下一页"); check(contains(panel, "Node 11"), "Second page missing");
+            runOnMainSync(() -> { try { ((EditText) member(panel, "search")).setText("Node 01"); } catch (Exception e) { throw new AssertionError(e); } });
+            waitFor(() -> contains(panel, "第 1 / 1 页") && contains(panel, "Node 01")); check(!contains(panel, "Node 11"), "Search retained old page"); screenshot("03-search-results");
+            orderedRemoval(activity);
         } finally { runOnMainSync(activity::finish); waitForIdleSync(); }
+    }
+    private void orderedRemoval(Activity activity) throws Exception {
+        CountDownLatch release = new CountDownLatch(1); AtomicReference<TailnetPanel> replacement = new AtomicReference<>();
+        TailnetCredentialStore.SERIAL.submit(() -> { try { release.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } });
+        try {
+            runOnMainSync(() -> {
+                try {
+                    Method persist = TailnetPanel.class.getDeclaredMethod("persist", TailnetApi.Credentials.class); persist.setAccessible(true);
+                    TailnetPanel old = new TailnetPanel(activity, value -> { });
+                    persist.invoke(old, credentials()); old.close();
+                    TailnetPanel fresh = new TailnetPanel(activity, value -> { }); replacement.set(fresh); persist.invoke(fresh, new Object[]{null});
+                } catch (Exception e) { throw new AssertionError(e); }
+            });
+        } finally { release.countDown(); }
+        TailnetCredentialStore.SERIAL.submit(() -> { }).get(5, TimeUnit.SECONDS);
+        check(new TailnetCredentialStore(getTargetContext()).load() == null, "An old panel save restored removed credentials");
+        runOnMainSync(() -> replacement.get().close());
     }
     private static void findPassword(View view, AtomicReference<EditText> result) {
         if (view instanceof EditText && ((((EditText) view).getInputType() & 0xfff) == 0x81)) result.set((EditText) view);
