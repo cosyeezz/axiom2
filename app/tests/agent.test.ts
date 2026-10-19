@@ -106,7 +106,7 @@ test(
             },
             { index: 1, id: "start-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
               { oldText: "## 目标与范围\n尚未记录", newText: "## 目标与范围\n验证真实文件工具与进度更新" },
-              { oldText: "整体状态：尚未记录\n整体进度：待评估\n当前进展：尚未记录", newText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑" },
+              { oldText: "整体状态：尚未记录\n整体进度：待评估\n当前进展：尚未记录", newText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑\n- [进行中] 验证真实文件工具与进度更新" },
             ] }) } },
           ],
         });
@@ -141,7 +141,7 @@ test(
               },
             },
             { index: 2, id: "complete-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
-              { oldText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑", newText: "整体状态：已完成\n整体进度：100%\n当前进展：真实工具回环已完成" },
+              { oldText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑\n- [进行中] 验证真实文件工具与进度更新", newText: "整体状态：已完成\n整体进度：100%\n当前进展：真实工具回环已完成\n- [已完成] 验证真实文件工具与进度更新" },
             ] }) } },
           ],
         });
