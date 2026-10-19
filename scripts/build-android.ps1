@@ -2,12 +2,13 @@ param(
   [string]$JavaHome = 'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.1\jbr',
   [string]$AndroidPlatform = 'F:\Tools\Android\platforms\android-35',
   [string]$BuildTools = 'F:\Tools\Android\build-tools\android-15',
-  [string]$OutputDirectory = ''
+  [string]$OutputDirectory = '',
+  [string]$ClientVersion = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $android = Join-Path $repo 'app\android'
-$version = (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
+$version = if ($ClientVersion) { $ClientVersion } else { (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version }
 if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw "Invalid release version: $version" }
 $major = [long]$Matches[1]; $minor = [long]$Matches[2]; $patch = [long]$Matches[3]
 $versionCode = $major * 1000000 + $minor * 1000 + $patch

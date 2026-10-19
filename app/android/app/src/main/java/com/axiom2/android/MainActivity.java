@@ -18,6 +18,7 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private ScrollView status;
     private AxiomWebView web;
+    private TailnetPanel tailnet;
     private TextView feedback, retry, vpn, cancel;
     private AutoCompleteTextView address;
     private String connectingAddress = "";
@@ -63,6 +64,7 @@ public class MainActivity extends Activity {
         TextView brand = text("AXIOM  /  MOBILE", 12, accent); brand.setLetterSpacing(.18f); LinearLayout.LayoutParams brandLabel = new LinearLayout.LayoutParams(-2, -2); brandLabel.leftMargin = dp(12); brandRow.addView(brand, brandLabel); add(page, brandRow, 0);
         TextView title = text("接续你的工作。", 30, fg); title.setTypeface(null, Typeface.BOLD); add(page, title, 24);
         feedback = text("输入电脑的 Tailscale 地址，默认端口 4317。", 15, muted); feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); add(page, feedback, 16);
+        tailnet = new TailnetPanel(this, endpoint -> { address.setText(endpoint); address.dismissDropDown(); feedback.setTextColor(muted); feedback.setText("已选择设备，点击连接工作台。"); retry.requestFocus(); }); add(page, tailnet, 20);
         TextView addressLabel = text("连接地址", 12, muted); add(page, addressLabel, 24);
         address = new AutoCompleteTextView(this); address.setId(View.generateViewId()); addressLabel.setLabelFor(address.getId()); address.setTextColor(fg); address.setHintTextColor(muted); address.setTextSize(16); address.setSingleLine(true); address.setMinHeight(dp(52)); address.setHint("100.x.x.x:4317"); address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); address.setThreshold(0);
         address.setText(getSharedPreferences("connection", MODE_PRIVATE).getString("last", "")); updateHistory(); address.setOnFocusChangeListener((v, focused) -> { if (focused) address.showDropDown(); }); address.setOnClickListener(v -> address.showDropDown()); add(page, address, 8);
@@ -74,7 +76,7 @@ public class MainActivity extends Activity {
             Intent intent = getPackageManager().getLaunchIntentForPackage("com.tailscale.ipn");
             try { startActivity(intent != null ? intent : new Intent(Intent.ACTION_VIEW, Uri.parse("https://tailscale.com/download/android"))); } catch (Exception e) { feedback.setText("请连接手机上的 Tailscale。"); }
         }); add(page, vpn, 12);
-        add(page, text("手机与电脑需在同一 Tailscale 网络。下拉列表保存最近成功连接；在线设备列表请在桌面客户端查看。", 12, muted), 20);
+        add(page, text("手机与电脑需在同一 Tailscale 网络。可选择设备或手动输入地址；地址下拉保留最近成功连接。", 12, muted), 20);
     }
     private void enterFullscreen() {
         if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -91,13 +93,13 @@ public class MainActivity extends Activity {
     private void begin() {
         if (connecting) return;
         try { connectingAddress = AxiomWebView.normalizeAddress(address.getText().toString()); } catch (Exception e) { showError(e.getMessage()); return; }
-        connecting = true; loaded = false; address.setEnabled(false); web.setVisibility(View.GONE); status.setVisibility(View.VISIBLE);
+        connecting = true; loaded = false; address.setEnabled(false); tailnet.setAvailable(false); web.setVisibility(View.GONE); status.setVisibility(View.VISIBLE);
         progress.setVisibility(View.VISIBLE); retry.setVisibility(View.GONE); vpn.setVisibility(View.GONE); cancel.setVisibility(View.VISIBLE); feedback.setTextColor(muted); feedback.setText("正在连接 " + connectingAddress + "…");
         web.connect(connectingAddress);
     }
     private void showError(String message) {
         connecting = false; if (status == null) return;
-        status.setVisibility(View.VISIBLE); web.setVisibility(View.GONE); address.setEnabled(true); progress.setVisibility(View.GONE); retry.setVisibility(View.VISIBLE); vpn.setVisibility(View.VISIBLE); cancel.setVisibility(View.GONE); feedback.setTextColor(0xffe6ac94); feedback.setText(message);
+        status.setVisibility(View.VISIBLE); web.setVisibility(View.GONE); address.setEnabled(true); tailnet.setAvailable(true); progress.setVisibility(View.GONE); retry.setVisibility(View.VISIBLE); vpn.setVisibility(View.VISIBLE); cancel.setVisibility(View.GONE); feedback.setTextColor(0xffe6ac94); feedback.setText(message);
     }
     private void updateHistory() {
         String saved = getSharedPreferences("connection", MODE_PRIVATE).getString("history", "");
@@ -111,14 +113,14 @@ public class MainActivity extends Activity {
         updateHistory();
     }
     @Override public void onBackPressed() {
-        if (status.getVisibility() == View.VISIBLE) { web.cancelConnect(); connecting = false; super.onBackPressed(); return; }
+        if (status.getVisibility() == View.VISIBLE) { if (tailnet.back()) return; web.cancelConnect(); connecting = false; super.onBackPressed(); return; }
         web.evaluateJavascript("(()=>{try{const p=document.querySelector('[popover]:popover-open');if(p){p.hidePopover();return true}}catch(e){}const ds=document.querySelectorAll('dialog[open]:not([popover])');const d=ds[ds.length-1];if(d){const event=new Event('cancel',{cancelable:true});if(d.dispatchEvent(event)&&d.open)d.close();return true}const h=document.querySelector('.history-open #collapse-history');if(h){h.click();return true}return false})()", result -> {
             if ("true".equals(result)) return;
             if (web.canGoBack()) web.goBack(); else new android.app.AlertDialog.Builder(this).setTitle("工作台连接").setMessage("切换电脑会离开当前工作台，后台任务继续运行。").setPositiveButton("切换连接", (d, which) -> { web.cancelConnect(); loaded = false; showError("选择或输入连接地址。"); }).setNegativeButton("留在工作台", null).setNeutralButton("返回后台", (d, which) -> moveTaskToBack(true)).show();
         });
     }
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) { super.onActivityResult(requestCode, resultCode, data); if (requestCode == 41 && upload != null) { upload.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data)); upload = null; } }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
-    @Override protected void onPause() { if (web != null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); if (tailnet != null) tailnet.resume(); }
+    @Override protected void onPause() { if (tailnet != null) tailnet.pause(); if (web != null) web.onPause(); super.onPause(); }
+    @Override protected void onDestroy() { if (tailnet != null) tailnet.close(); if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
 }
