@@ -19,10 +19,21 @@ def adb(*args, binary=False):
     return result.stdout if binary else result.stdout.decode('utf-8', errors='replace')
 
 def tree():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/axiom-window.xml')
-    value = adb('shell', 'cat', '/sdcard/axiom-window.xml')
-    (out / 'latest-window.xml').write_text(value, encoding='utf-8')
-    return ET.fromstring(value)
+    last_error = None
+    for _ in range(3):
+        try:
+            # UIAutomator may report no idle root during the first system overlay.
+            # Remove the prior dump so a failed sample can never reuse stale UI.
+            adb('shell', 'rm', '-f', '/sdcard/axiom-window.xml')
+            adb('shell', 'uiautomator', 'dump', '/sdcard/axiom-window.xml')
+            value = adb('shell', 'cat', '/sdcard/axiom-window.xml')
+            root = ET.fromstring(value)
+            (out / 'latest-window.xml').write_text(value, encoding='utf-8')
+            return root
+        except (subprocess.CalledProcessError, ET.ParseError) as error:
+            last_error = error
+            time.sleep(.5)
+    raise last_error
 
 def wait(predicate, label, seconds=55):
     deadline = time.monotonic() + seconds
