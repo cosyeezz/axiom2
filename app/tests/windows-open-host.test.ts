@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { once } from "node:events";
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WindowsOpenHost } from "../src/server/windows-open-host.js";
 import { nativeOpenDialog, OpenDialog, OpenDialogError, type PickPaths } from "../src/server/open-dialog.js";
 
@@ -10,6 +13,84 @@ const windows = { skip: process.platform !== "win32", timeout: 15_000 };
 function closed(child: ChildProcess) {
   return new Promise<number | null>((resolve) => child.once("close", resolve));
 }
+
+for (const stop of ["shutdown", "cancel", "already-exited"] as const) {
+  test(`native ${stop} releases retained output pipes only after the owned process exits`, windows, async () => {
+    let holderPid: number | undefined;
+    let holderReady!: () => void;
+    const holderStarted = new Promise<void>(resolve => { holderReady = resolve; });
+    const host = new WindowsOpenHost("dialog", () => {
+      const child = spawn(process.execPath, ["-e", String.raw`
+        const { spawn } = require('node:child_process');
+        const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'],
+          { stdio: ['ignore', 1, 2], windowsHide: true, detached: true });
+        holder.once('spawn', () => { process.send({ holder: holder.pid }); process.stdout.write('ready\n'); });
+        process.stdin.resume(); process.stdin.once('end', () => process.exit(0));
+      `], { stdio: ["pipe", "pipe", "pipe", "ipc"], windowsHide: true }) as ChildProcessWithoutNullStreams;
+      child.on("message", message => { holderPid = (message as { holder: number }).holder; holderReady(); });
+      return child;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const child = await host.take(false);
+      await holderStarted;
+      const exited = once(child, "exit"), done = closed(child);
+      if (stop === "already-exited") { child.stdin!.end(); await exited; }
+      const stopping = stop === "cancel" ? (child.kill("SIGKILL"), done) : host.close();
+      await exited;
+      assert.ok(child.exitCode !== null || child.signalCode !== null);
+      await Promise.race([stopping, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(Error("exited native host is waiting for inherited output pipes")), 5000);
+      })]);
+      process.kill(holderPid!, 0); // The pipe holder is still alive: it did not release EOF for us.
+      assert.equal(child.stdout!.destroyed, true);
+      assert.equal(child.stderr!.destroyed, true);
+    } finally {
+      clearTimeout(timer);
+      if (holderPid) { try { process.kill(holderPid, "SIGKILL"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; } }
+      await host.close();
+    }
+  });
+}
+
+test("normal native completion preserves output arriving after process exit", windows, async () => {
+  const directory = mkdtempSync(join(tmpdir(), "axiom-native-tail-")), release = join(directory, "release");
+  let writerPid: number | undefined, writerFinished = false;
+  let writerReady!: () => void;
+  const writerStarted = new Promise<void>(resolve => { writerReady = resolve; });
+  const host = new WindowsOpenHost("dialog", () => {
+    const child = spawn(process.execPath, ["-e", String.raw`
+    const { spawn } = require('node:child_process');
+    process.stdout.write('ready\n'); process.stdin.resume();
+    process.stdin.once('end', () => {
+      const writer = spawn(process.execPath, ['-e',
+        'const fs = require("node:fs"); const timer = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(timer); process.stdout.write(JSON.stringify(["complete"]) + "\\n"); } }, 10); setTimeout(() => process.exit(2), 5000).unref();', process.argv[1]],
+        { stdio: ['ignore', 1, 2], windowsHide: true, detached: true });
+      writer.once('spawn', () => process.send({ writer: writer.pid }, () => process.exit(0)));
+    });
+  `, release], { stdio: ["pipe", "pipe", "pipe", "ipc"], windowsHide: true }) as ChildProcessWithoutNullStreams;
+    child.on("message", message => { writerPid = (message as { writer: number }).writer; writerReady(); });
+    return child;
+  });
+  try {
+    const child = await host.take(false), output: Buffer[] = [];
+    child.stdout!.on("data", (chunk: Buffer) => output.push(chunk));
+    const exited = once(child, "exit"), done = closed(child);
+    child.stdin!.end();
+    await exited;
+    await writerStarted;
+    assert.equal(child.stdout!.destroyed, false, "normal output remains readable after exit");
+    writeFileSync(release, "ready"); // The writer cannot produce the result before the real exit.
+    const code = await done;
+    writerFinished = true;
+    assert.equal(code, 0);
+    assert.equal(Buffer.concat(output).toString(), '["complete"]\n');
+  } finally {
+    await host.close();
+    if (writerPid && !writerFinished) { try { process.kill(writerPid, "SIGKILL"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; } }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 for (const mode of ["dialog", "explorer"] as const) {
 test(`a prewarmed ${mode} host waits without a request, replaces a failed owner, and cleans active/idle children`, windows, async () => {
