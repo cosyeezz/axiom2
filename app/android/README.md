@@ -149,12 +149,12 @@ python scripts/check-android-tailnet.py --build-only
 python scripts/check-android-tailnet.py --serial emulator-5554
 ```
 
-可用 `--sdk`、`--java-home`、`--build-tools` 和 `--output` 指定工具及独立产物目录。GitHub workflow `Android Tailnet checks` 在 API 35 模拟器执行，保存逐项结果和原生页面截图。覆盖地址与解析边界、OAuth scope／编码／错误脱敏、IPv6回退、实际HTTP重定向拒绝／限流／取消、Keystore加密／损坏／移除、原生配置与旧请求隔离、前后台恢复及跨进程读取。构建成功与模拟器运行通过分别记录，不能替代真实 OAuth client、实体手机及跨设备 Tailnet 验收。
+可用 `--sdk`、`--java-home`、`--build-tools` 和 `--output` 指定工具及独立产物目录。运行前会在所选隔离模拟器标记系统全屏提示已确认，避免遮挡测试截图。GitHub workflow `Android Tailnet checks` 在 API 35 模拟器执行，保存逐项结果和原生页面截图。覆盖地址与解析边界、OAuth scope／编码／错误脱敏、IPv6回退、实际HTTP重定向拒绝／限流／取消、Keystore加密／损坏／移除、原生配置与旧请求隔离、实际触摸选择、搜索分页、前后台恢复及跨进程读取。构建成功与模拟器运行通过分别记录，不能替代真实 OAuth client、实体手机及跨设备 Tailnet 验收。
 
 ## 验证范围
 
 网关专项覆盖无凭据 HTTP／WS、Host／Origin 拒绝、路径规范化、接口恢复及旧配置迁移；浏览器专项访问本机实际 Tailscale 地址，检查 7 个手机视口和桌面、免登录进入、阅读模式、草稿、文件选择、断网恢复。APK 已经 Java 编译、D8 转换、资源打包、对齐及 v2／v3 签名验证。
 
-当前设备发现实现已在 API 35 隔离模拟器通过全部7组主进程专项及1组进程重启检查，包含真实 Android Keystore 和原生 UI；[CI 运行及证据](https://github.com/cosyeezz/axiom2/actions/runs/39254926725) 对应源码提交 `43add59`。0.4.9／4009 候选 APK 的对齐、非调试配置、既有证书及 v2／v3 签名已核对，未公开发布。
+当前设备发现实现已在 API 35 隔离模拟器通过全部7组主进程专项及1组进程重启检查，包含真实 Android Keystore、原生 UI 和实际触摸选择；竖屏、横屏及搜索截图已检查。[CI 运行及证据](https://github.com/cosyeezz/axiom2/actions/runs/39255660593) 对应源码提交 `8d79afe`。0.4.9／4009 候选 APK 的对齐、非调试配置、既有证书及 v2／v3 签名已核对，未公开发布。
 
 当前没有连接实体安卓设备，尚未验证真机安装升级、真实 OAuth 凭据、跨设备 Tailnet、真实软键盘及系统文件选择器。浏览器自动化中的模型为测试夹具，不代表真实供应商调用验收。
