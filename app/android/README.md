@@ -6,7 +6,7 @@
 
 要求 Android 8.0（API 26）或更新版本、更新的 Android System WebView，以及官方 [Tailscale Android](https://tailscale.com/download/android)。电脑也需安装并登录 Tailscale，手机与电脑处于同一 tailnet，ACL 允许手机访问电脑的 TCP 4317。
 
-将构建产物 `Axiom2-Android.apk` 传到手机并安装。启动后输入电脑的 Tailscale 地址，例如 `100.106.9.14`，省略端口时使用 `4317`；也可输入完整 `http://IP:端口`。下拉保留最多8条最近成功连接记录，选择后连接，无访问密钥或登录步骤。版本为 `0.4.1-connect`（404），可覆盖此前同签名版本。工作台根页面按返回键可选择“切换连接”；连接中可取消。Android 不读取其他应用的私有数据，当前不提供 Tailscale 在线设备发现。
+将构建产物 `Axiom2-Android.apk` 传到手机并安装。启动后输入电脑的 Tailscale 地址，例如 `100.106.9.14`，省略端口时使用 `4317`；也可输入完整 `http://IP:端口`。下拉保留最多8条最近成功连接记录，选择后连接，无访问密钥或登录步骤。版本来自发布 tag 中根 `package.json`，与同一 Release 的后台和桌面端一致；保留原签名，可覆盖安装此前同签名版本。工作台根页面按返回键可选择“切换连接”；连接中可取消。Android 不读取其他应用的私有数据，当前不提供 Tailscale 在线设备发现。
 
 电脑当前已有服务通过 `scripts/dev-tailnet.mjs` 接入，保持原服务和任务运行；新版后台默认开启 Tailnet 监听。若电脑重启后继续使用旧开发进程，可在仓库根目录运行 `node scripts/dev-tailnet.mjs`；其目标默认是 `http://127.0.0.1:4317`，检测到新版后台后自动交回监听。
 
@@ -33,11 +33,12 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-android.ps1 `
   -JavaHome 'C:\path\to\jdk' `
   -AndroidPlatform 'C:\Android\Sdk\platforms\android-35' `
-  -BuildTools 'C:\Android\Sdk\build-tools\35.0.0' `
-  -DevServerUrl 'http://100.106.9.14:4317'
+  -BuildTools 'C:\Android\Sdk\build-tools\35.0.0'
 ```
 
 脚本使用现有 JDK、Android SDK 35 的 `aapt2`、D8、zipalign、apksigner，不下载或安装依赖。APK 不再内置开发服务地址，首次使用由用户输入，只有连接成功才保存历史。`-OutputDirectory` 可指定独立输出目录，默认是仓库 `artifacts/android`。Java 支持 `--release 8`，本机验证环境为 JetBrains JBR 25；Android 编译／目标 API 为 35，最低 API 为 26。
+
+输出前从根 `package.json` 读取正式三段版本；PowerShell 与 Gradle 均按 `major × 1,000,000 + minor × 1,000 + patch` 生成 versionCode，minor／patch不超过999，且编码必须大于旧版404、不超过Android上限。正式交付从对应发布tag构建，不按开发分支的旧版本制作发布包。
 
 输出：
 
@@ -51,14 +52,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-android.ps1 `
 
 该目录也提供 Gradle 工程，可在 Android Studio 中打开 `app/android`，或使用现有 Gradle 执行 `:app:assembleDebug`／`:sdk:assembleRelease`。没有内置 Gradle wrapper；Gradle 方式需要能获取工程声明的 Android Gradle Plugin。正式 APK 的固定签名由上述 PowerShell 脚本负责。
 
-电脑 Web／服务端须另外构建并重启，安卓 APK 不包含它们。本次配套后台包为仓库 `artifacts/cosyeezz-axiom2-0.4.1.tgz`；已有 npm 方式安装的电脑可先通过原服务管理入口停止后台，再在仓库根目录执行：
+电脑 Web／服务端须另外更新，安卓 APK 不包含它们。同一版本的后台包与客户端在 [GitHub Releases](https://github.com/cosyeezz/axiom2/releases) 下载。已有 npm 方式安装的电脑可先通过原服务管理入口停止后台，再安装对应 Release 的 `axiom2.tgz`：
 
 ```powershell
-npm install -g .\artifacts\cosyeezz-axiom2-0.4.1.tgz
+npm install -g .\axiom2.tgz
 axiom2 start
 ```
 
-此包是当前工作区的本地构建，安装依赖仍需能访问 npm 仓库。源码方式运行则使用：
+安装依赖仍需能访问 npm 仓库。源码方式运行则使用：
 
 ```powershell
 cd app

@@ -7,6 +7,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $android = Join-Path $repo 'app\android'
+$version = (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
+if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw "Invalid release version: $version" }
+$major = [long]$Matches[1]; $minor = [long]$Matches[2]; $patch = [long]$Matches[3]
+$versionCode = $major * 1000000 + $minor * 1000 + $patch
+if ($minor -gt 999 -or $patch -gt 999 -or $versionCode -le 404 -or $versionCode -gt 2100000000) { throw "Release version cannot be encoded as an upgradeable Android versionCode: $version" }
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts\android' }
 $build = Join-Path $OutputDirectory 'build'
 $java = Join-Path $JavaHome 'bin\java.exe'
@@ -33,7 +38,7 @@ ZipDirectory $aar (Join-Path $OutputDirectory 'axiom2-android-sdk.aar')
 $aapt = Join-Path $BuildTools 'aapt2.exe'; $resources = Join-Path $build 'resources.zip'
 Run $aapt @('compile','--dir',(Join-Path $android 'app\src\main\res'),'-o',$resources)
 $unsigned = Join-Path $build 'unsigned.apk'
-Run $aapt @('link','-o',$unsigned,'-I',$platformJar,'--manifest',(Join-Path $android 'app\src\main\AndroidManifest.xml'),'--java',$generated,$resources)
+Run $aapt @('link','-o',$unsigned,'-I',$platformJar,'--manifest',(Join-Path $android 'app\src\main\AndroidManifest.xml'),'--version-name',$version,'--version-code',[string]$versionCode,'--java',$generated,$resources)
 $buildConfig = Join-Path $generated 'com\axiom2\android\BuildConfig.java'
 [System.IO.File]::WriteAllText($buildConfig,'package com.axiom2.android; public final class BuildConfig { public static final boolean DEBUG = false; }')
 $appSources = @(Get-ChildItem (Join-Path $android 'app\src\main\java'),$generated -Recurse -Filter '*.java' | ForEach-Object FullName)

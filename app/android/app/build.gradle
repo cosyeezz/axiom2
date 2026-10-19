@@ -1,8 +1,13 @@
 plugins { id 'com.android.application' }
+def releaseVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../../package.json')).version
+if (!(releaseVersion ==~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/)) throw new GradleException('Invalid release version')
+def parts = releaseVersion.tokenize('.').collect { it.toLong() }
+def releaseCode = parts[0] * 1000000L + parts[1] * 1000L + parts[2]
+if (parts[1] > 999 || parts[2] > 999 || releaseCode <= 404 || releaseCode > 2100000000L) throw new GradleException('Release version cannot be encoded as an upgradeable Android versionCode')
 android {
     namespace 'com.axiom2.android'
     compileSdk 35
-    defaultConfig { applicationId 'com.axiom2.android'; minSdk 26; targetSdk 35; versionCode 404; versionName '0.4.1-connect' }
+    defaultConfig { applicationId 'com.axiom2.android'; minSdk 26; targetSdk 35; versionCode releaseCode.toInteger(); versionName releaseVersion }
     buildFeatures { buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
 }
