@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../Icon.js";
+import { ConnectionAddressSelect } from "./ConnectionAddressSelect.js";
 import { connectionAddress, connectionQr } from "./connection-qr.js";
 import "../styles/phone-connect.css";
 
@@ -62,26 +64,30 @@ export function PhoneConnect() {
   }
   return <section className="overview-section phone-connect-section" aria-labelledby="phone-connect-heading">
     <h2 id="phone-connect-heading">手机连接</h2>
-    <div className="phone-connect-content">
-    <div className="phone-connect-description">
-    <h3>扫码连接这台电脑</h3>
-    <p>连接地址自动获取，无需输入。在安卓 Axiom 点击「扫码连接」，扫描二维码。</p>
-    <p className="phone-connect-note">手机与电脑都需连接 Tailscale，并允许相互访问。连接成功后，手机会记住这台电脑。</p>
-    <button className="btn btn-ghost" onClick={() => setRevision(value => value + 1)}>刷新地址</button>
+    <div className="phone-connect-content phone-connect-code">
+      <div className="phone-connect-visual">
+        {qr ? <svg role="img" aria-label="连接二维码" viewBox={`0 0 ${qr.size} ${qr.size}`} shapeRendering="crispEdges"><rect width={qr.size} height={qr.size} fill="#fff" /><path d={qr.path} fill="#000" /></svg>
+          : <span className="phone-connect-placeholder">{failure || status ? "暂无二维码" : "正在生成…"}</span>}
+      </div>
+      <div className="phone-connect-details">
+        <h3>扫码连接这台电脑</h3>
+        <p>打开安卓 Axiom，点击「扫码连接」。成功后自动记住，下次直接连接。</p>
+        <p className="phone-connect-note">手机与电脑需通过 Tailscale 互通。</p>
+        {failure && <p role="alert" className="phone-connect-error">{failure}</p>}
+        {!failure && !status && <p role="status">正在读取电脑连接地址…</p>}
+        {status && !status.urls.length && <p role="status">{status.error || status.message || "等待 Tailscale 网络，请在电脑上打开并连接 Tailscale。"}</p>}
+        {qr && <div className="phone-connect-address">
+          <div className="phone-connect-address-heading"><span>本机连接地址</span>
+            {status && status.urls.length > 1 && <ConnectionAddressSelect value={address} options={status.urls} onChange={setSelected} />}
+          </div>
+          <div className="phone-connect-address-row"><code>{address}</code><button className="icon-btn" aria-label="复制地址" title="复制地址" onClick={() => void copy()}><Icon name="copy" /></button></div>
+        </div>}
+        <div className="phone-connect-actions">
+          <button className="btn btn-ghost" onClick={() => setRevision(value => value + 1)}><Icon name="refresh-cw" />刷新地址</button>
+          <span role="status">{copied}</span>
+        </div>
+        {!!status?.urls.length && status.error && <p className="phone-connect-error" role="status">部分地址暂不可用：{status.error}</p>}
+      </div>
     </div>
-    <div className="phone-connect-details">
-    {failure && <p role="alert" className="phone-connect-error">{failure}</p>}
-    {!failure && !status && <p role="status">正在读取电脑连接地址…</p>}
-    {status && !status.urls.length && <p role="status">{status.error || status.message || "等待 Tailscale 网络，请在电脑上打开并连接 Tailscale。"}</p>}
-    {status && status.urls.length > 1 && <label className="phone-connect-select">连接地址<select className="input" aria-label="选择连接地址" value={address} onChange={event => setSelected(event.target.value)}>{status.urls.map(url => <option key={url} value={url}>{url}</option>)}</select></label>}
-    {qr && <div className="phone-connect-code">
-      <svg role="img" aria-label="连接二维码" viewBox={`0 0 ${qr.size} ${qr.size}`} shapeRendering="crispEdges"><rect width={qr.size} height={qr.size} fill="#fff" /><path d={qr.path} fill="#000" /></svg>
-      <code>{address}</code>
-      <button className="btn btn-ghost" onClick={() => void copy()}>复制地址</button>
-      <span role="status">{copied}</span>
-      <p className="phone-connect-note">二维码只包含连接地址，不包含账户或密钥。</p>
-    </div>}
-    {!!status?.urls.length && status.error && <p className="phone-connect-error" role="status">部分地址暂不可用：{status.error}</p>}
-    </div></div>
   </section>;
 }

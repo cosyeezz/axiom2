@@ -1,16 +1,35 @@
-.phone-connect-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:32px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:16px 12px}
+.phone-connect-content{display:grid;grid-template-columns:184px minmax(0,440px);align-items:center;gap:24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:20px 12px}
 .phone-connect-content>div{min-width:0}
-.phone-connect-section h3{font-size:15px;margin:0 0 4px}
-.phone-connect-section p{font-size:12px;line-height:1.7;margin:8px 0;overflow-wrap:anywhere;color:var(--fg-2)}
+.phone-connect-section h3{font-size:15px;margin:0 0 6px}
+.phone-connect-section p{font-size:12px;line-height:1.7;margin:4px 0;overflow-wrap:anywhere;color:var(--fg-2)}
 .phone-connect-section .phone-connect-note{color:var(--muted)}
-.phone-connect-description .btn{margin-top:12px}
-.phone-connect-select{display:grid;gap:8px;font-size:12px;color:var(--muted)}
-.phone-connect-select select{width:100%;min-width:0}
-.phone-connect-code{display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0 0}
-.phone-connect-code svg{display:block;stroke:none;stroke-width:0;flex:none;width:min(240px,100%);height:auto;aspect-ratio:1;background:#fff;border-radius:4px}
-.phone-connect-code code{font-size:13px;text-align:center;overflow-wrap:anywhere;user-select:all;max-width:100%}
-.phone-connect-code [role=status]{font-size:12px;color:var(--muted)}
-.phone-connect-code [role=status]:empty{display:none}
-.phone-connect-code p{text-align:center;margin:0}
+.phone-connect-visual{width:184px;max-width:100%;aspect-ratio:1;display:grid;place-items:center}
+.phone-connect-visual svg{display:block;stroke:none;stroke-width:0;flex:none;width:100%;height:auto;aspect-ratio:1;background:#fff;border-radius:var(--radius-sm)}
+.phone-connect-placeholder{display:grid;place-items:center;width:100%;height:100%;border:1px dashed var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--muted)}
+.phone-connect-address{margin-top:14px}
+.phone-connect-address-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px;margin-bottom:4px;font-size:11px;color:var(--muted)}
+.phone-connect-address-row{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 10px;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-sm);background:color-mix(in srgb,var(--fg) 2%,transparent)}
+.phone-connect-address-row code{flex:1;min-width:0;font-size:12px;line-height:1.6;overflow-wrap:anywhere;user-select:all;color:var(--fg-2)}
+.phone-connect-address-row .icon-btn{width:28px;height:28px;color:var(--muted)}
+.phone-connect-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+.phone-connect-actions .btn{font-size:12px;margin-left:-8px;padding-inline:8px;color:var(--muted)}
+.phone-connect-actions .btn svg{width:14px;height:14px}
+.phone-connect-actions [role=status]{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.phone-connect-actions [role=status]:empty{display:none}
 .phone-connect-section .phone-connect-error{color:#fca5a5}
-@media(max-width:600px){.phone-connect-content{grid-template-columns:minmax(0,1fr);gap:16px;padding-inline:8px}}
+.phone-address-trigger{display:inline-flex;align-items:center;gap:6px;padding:3px 7px;min-height:28px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--fg-2);font-size:11px;line-height:1.4;background:color-mix(in srgb,var(--fg) 2%,transparent)}
+.phone-address-trigger[aria-expanded=true]{border-color:var(--accent);background:var(--surface)}
+.phone-address-trigger svg{width:12px;height:12px;color:var(--muted);transition:transform var(--motion-fast)}
+.phone-address-trigger[aria-expanded=true] svg{transform:rotate(180deg)}
+.phone-address-menu{position:fixed;inset:auto;margin:0;padding:4px;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 8px 28px #0006}
+.phone-address-option{display:flex;align-items:center;gap:12px;padding:10px;min-height:64px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid transparent}
+.phone-address-option>div{flex:1;min-width:0}
+.phone-address-option[data-active=true]{background:color-mix(in srgb,var(--fg) 7%,transparent);border-color:var(--border)}
+.phone-address-option[aria-selected=true]{color:var(--accent)}
+.phone-address-family{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:510}
+.phone-address-family small{font-size:10px;color:var(--muted);font-weight:400}
+.phone-address-option code{display:block;margin-top:4px;font-size:11px;line-height:1.5;overflow-wrap:anywhere;color:var(--muted)}
+.phone-address-option svg{width:14px;height:14px;flex:none}
+@media(max-width:600px){.phone-connect-content{grid-template-columns:minmax(0,1fr);gap:16px;padding:16px 8px}.phone-connect-visual{justify-self:center}.phone-connect-details{width:100%}}
+@media(pointer:coarse){.phone-address-trigger{min-height:44px;min-width:72px;justify-content:center}.phone-connect-address-row .icon-btn{width:44px;height:44px}}
+@media(prefers-reduced-motion:reduce){.phone-address-trigger svg{transition:none}}

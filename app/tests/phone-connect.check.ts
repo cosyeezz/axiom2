@@ -36,9 +36,32 @@ try {
   assert.equal(await page.locator(".phone-connect-code code").textContent(),v4,"IPv4 is preferred");
   assert.equal(await qr.evaluate(node => getComputedStyle(node).stroke),"none","Global icon stroke must not contaminate QR");
   await image("qr-ipv4.png",v4); await page.screenshot({path:join(output,"desktop.png")});
+  const addressPicker = page.getByRole("combobox", {name:"选择连接地址"});
+  await addressPicker.click();
+  const menu = page.getByRole("listbox", {name:"连接地址"});
+  await menu.waitFor();
+  assert.equal(await section.locator("select").count(),0,"Address menu uses the application UI");
+  assert.equal(await menu.getByRole("option",{selected:true}).count(),1);
+  await page.screenshot({path:join(output,"desktop-menu.png")});
+  await addressPicker.press("Escape");assert.equal(await menu.count(),0);
+  assert.ok(await addressPicker.evaluate(node=>node===document.activeElement));
+  await addressPicker.press("ArrowDown");await addressPicker.press("End");await addressPicker.press("Enter");
+  assert.equal(await page.locator(".phone-connect-code code").textContent(),v6);
+  await addressPicker.press("Home");await addressPicker.press("Enter");
+  assert.equal(await page.locator(".phone-connect-code code").textContent(),v4);
+  await addressPicker.click();await page.getByRole("heading",{name:"扫码连接这台电脑"}).click();assert.equal(await menu.count(),0);
+  await addressPicker.click();await addressPicker.press("Tab");assert.equal(await menu.count(),0);
+  await addressPicker.click();await addressPicker.press("End");
+  urls=[v6,v4,"http://100.64.0.3:4317/"];
+  await page.waitForFunction(() => document.querySelectorAll('.phone-address-option').length===3);
+  assert.ok(await addressPicker.evaluate(node=>node===document.activeElement),"Polling keeps trigger focus");
+  assert.ok(await addressPicker.evaluate(node=>document.getElementById(node.getAttribute('aria-activedescendant')!)?.textContent?.includes('IPv6')),"Polling preserves active address identity");
+  urls=[v4];await addressPicker.waitFor({state:"detached"});
+  assert.ok(await page.getByRole("button",{name:"刷新地址",exact:true}).evaluate(node=>node===document.activeElement),"Removed picker restores focus to refresh");
+  urls=[v6,v4];await refresh();await addressPicker.waitFor();
   await page.evaluate('Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:() => new Promise(resolve => { window.finishCopy = resolve; })}})');
   await page.getByRole("button",{name:"复制地址",exact:true}).click();
-  await page.getByLabel("选择连接地址").selectOption(v6);
+  await addressPicker.click();await menu.getByRole("option").filter({hasText:"IPv6"}).click();
   await page.evaluate(() => (window as any).finishCopy());
   assert.equal(await page.locator(".phone-connect-code [role=status]").textContent(),"","Late copy cannot label a different address copied");
   await image("qr-ipv6.png",v6);
@@ -46,6 +69,11 @@ try {
     await page.setViewportSize({width,height});
     assert.ok(await section.evaluate(node => node.scrollWidth <= node.clientWidth + 1),"Section horizontal overflow");
     await page.screenshot({path:join(output,`${width}x${height}.png`)});
+    await addressPicker.click();await menu.waitFor();
+    const bounds=await menu.boundingBox();assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x+bounds.width <= width+1 && bounds.y+bounds.height <= height+1,"Menu stays in viewport");
+    assert.ok(await menu.evaluate(node=>node.scrollWidth<=node.clientWidth+1),"Menu content does not overflow");
+    await page.screenshot({path:join(output,`${width}x${height}-menu.png`)});
+    await addressPicker.press("Escape");
   }
   urls=[]; message="等待 Tailscale 网络，连接后会自动就绪。"; await refresh(); await page.getByText(message,{exact:true}).waitFor(); assert.equal(await qr.count(),0);
   code=403;await refresh();await page.getByRole("alert").filter({hasText:"请在电脑本机"}).waitFor();assert.equal(await qr.count(),0);
@@ -70,6 +98,6 @@ try {
   assert.equal(await qr.count(),0,"Leaving settings removes the QR");
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   writeFileSync(join(output,"qr-images.json"),JSON.stringify(fixtures,null,2));
-  writeFileSync(join(output,"result.json"),JSON.stringify({passed:true,requests,fixtures,checks:["strict addresses","IPv4 preference","IPv6 only","rendered QR without global stroke","copy race","3 responsive sizes","empty Tailnet","403","503","unsafe URL","bounded response","long message wrapping","inline auto generation without input or dialog","late response after refresh","timeout recovery","Escape retains inline content","leave settings cleanup","no external requests"]},null,2));
+  writeFileSync(join(output,"result.json"),JSON.stringify({passed:true,requests,fixtures,checks:["strict addresses","IPv4 preference","IPv6 only","rendered QR without global stroke","copy race","3 responsive sizes","empty Tailnet","403","503","unsafe URL","bounded response","long message wrapping","inline auto generation without input or dialog","custom menu styling","menu keyboard and dismissal","menu viewport bounds","polling preserves menu focus and active address","removed picker restores focus","late response after refresh","timeout recovery","Escape retains inline content","leave settings cleanup","no external requests"]},null,2));
   console.log(JSON.stringify({passed:true,output,requests}));
 } finally { releases.splice(0).forEach(release=>release());await browser.close();await server.close(); }
