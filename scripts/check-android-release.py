@@ -29,6 +29,12 @@ def wait(predicate, label, seconds=55):
     last = None
     while time.monotonic() < deadline:
         last = tree()
+        # Android's first immersive launch shows a system tutorial above the app.
+        if node(last, text='Viewing full screen') is not None:
+            acknowledgement = node(last, text='Got it')
+            if acknowledgement is not None:
+                tap(acknowledgement)
+                continue
         result = predicate(last)
         if result is not None and result is not False:
             return result
@@ -127,6 +133,11 @@ try:
     success = True
 finally:
     try:
+        if not success:
+            try:
+                screenshot('failure')
+            except Exception as error:
+                print('Failure screenshot unavailable:', error)
         (out / 'logcat.txt').write_text(adb('logcat', '-d', '-v', 'threadtime'), encoding='utf-8')
         adb('shell', 'am', 'force-stop', package)
     finally:
