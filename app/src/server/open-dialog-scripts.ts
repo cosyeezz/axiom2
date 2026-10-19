@@ -6,6 +6,9 @@ function run() {
   const options = JSON.parse(ObjC.unwrap($.NSProcessInfo.processInfo.environment.objectForKey('AXIOM_OPEN_OPTIONS')));
   const app = $.NSApplication.sharedApplication;
   app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+  // osascript has no normal AppKit application startup. Finish it before
+  // presenting a key window, so activation targets a window ready for input.
+  app.finishLaunching;
   const panel = $.NSOpenPanel.openPanel;
   panel.title = options.title;
   panel.prompt = '打开';
@@ -16,6 +19,7 @@ function run() {
   panel.resolvesAliases = true;
   if (options.initialDirectory) panel.directoryURL = $.NSURL.fileURLWithPath(options.initialDirectory);
   panel.center;
+  panel.makeKeyAndOrderFront(null);
   app.activateIgnoringOtherApps(true);
   if (panel.runModal !== $.NSModalResponseOK) return '[]';
   const urls = panel.URLs;

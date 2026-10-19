@@ -1,6 +1,6 @@
 import { useCallback, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { command, useConnection, useScope } from "../transport.js";
+import { command, useConnectionState, useScope } from "../transport.js";
 import { taskPreferencesScope, type TaskPreferences } from "../../shared/tasks.js";
 import type { Selection } from "../../shared/agent.js";
 import { Icon } from "../components.js";
@@ -23,7 +23,7 @@ export function TaskSettings() {
 }
 function SettingsDialog({ id, trigger, onClose }: { id: string; trigger: HTMLButtonElement; onClose: () => void }) {
   const preferences = useScope<TaskPreferences | null>(taskPreferencesScope, null);
-  const connected = useConnection() === "已连接本地服务";
+  const { connected } = useConnectionState();
   const { panel, close, host } = useSettingsPopover(trigger, onClose);
   const [message, setMessage] = useState("");
   const saveModel = useCallback(async (selection: Selection | null) => {
