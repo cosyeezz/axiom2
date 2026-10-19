@@ -166,6 +166,19 @@ public final class TailnetInstrumentation extends Instrumentation {
         return null;
     }
     private void click(View root, String text) { runOnMainSync(() -> { View view = find(root, text); check(view != null && view.isEnabled(), "Missing enabled control: " + text); view.performClick(); }); }
+    private void reveal(View root, String text) {
+        runOnMainSync(() -> { View view = find(root, text); check(view != null, "Missing view: " + text); view.requestRectangleOnScreen(new android.graphics.Rect(0, 0, view.getWidth(), view.getHeight()), true); });
+        waitForIdleSync();
+    }
+    private void tap(View root, String text) {
+        reveal(root, text); android.graphics.Rect bounds = new android.graphics.Rect();
+        runOnMainSync(() -> { View view = find(root, text); check(view.isEnabled() && view.getGlobalVisibleRect(bounds), "Touch target not visible"); });
+        long time = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(time, time, android.view.MotionEvent.ACTION_DOWN, bounds.centerX(), bounds.centerY(), 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(time, time + 40, android.view.MotionEvent.ACTION_UP, bounds.centerX(), bounds.centerY(), 0);
+        try { sendPointerSync(down); sendPointerSync(up); } finally { down.recycle(); up.recycle(); }
+        waitForIdleSync();
+    }
     private void waitFor(Condition condition) throws Exception { long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(8); while (!condition.get()) { if (System.nanoTime() > until) throw new AssertionError("UI wait timed out"); Thread.sleep(40); } }
     private boolean contains(View root, String text) { AtomicBoolean value = new AtomicBoolean(); runOnMainSync(() -> value.set(find(root, text) != null)); return value.get(); }
     private void screenshot(String name) throws Exception {
@@ -198,7 +211,7 @@ public final class TailnetInstrumentation extends Instrumentation {
         try {
             click(panel, "选择 Tailscale 设备"); waitFor(() -> contains(panel, "My computer") && !((Boolean) member(panel, "busy")));
             waitFor(() -> { AtomicBoolean done = new AtomicBoolean(); runOnMainSync(() -> { TextView row = (TextView) find(panel, "My computer"); done.set(row != null && row.getText().toString().contains("服务可达")); }); return done.get(); });
-            screenshot("01-device-list-portrait"); click(panel, "My computer"); check("http://100.64.0.2:4317".equals(selected.get()), "Selection did not return endpoint");
+            screenshot("01-device-list-portrait"); tap(panel, "My computer"); check("http://100.64.0.2:4317".equals(selected.get()), "Selection did not return endpoint");
             click(panel, "选择 Tailscale 设备"); waitFor(() -> contains(panel, "My computer") && !((Boolean) member(panel, "busy")));
             CountDownLatch release = new CountDownLatch(1); blocked.set(release); click(panel, "刷新设备"); check(entered.await(3, TimeUnit.SECONDS), "Delayed request not reached");
             click(panel, "取消加载"); response.set(DEVICE.replace("My computer", "New computer")); click(panel, "刷新设备");
@@ -223,7 +236,7 @@ public final class TailnetInstrumentation extends Instrumentation {
             runOnMainSync(() -> { try { ((AlertDialog) member(panel, "dialog")).getButton(AlertDialog.BUTTON_POSITIVE).performClick(); } catch (Exception e) { throw new AssertionError(e); } });
             waitFor(() -> contains(panel, "New computer") && !((Boolean) member(panel, "busy")));
             check(store.load().secret.equals(SECRET), "Blank secret did not preserve saved configuration");
-            runOnMainSync(() -> activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)); Thread.sleep(600); screenshot("02-device-list-landscape");
+            runOnMainSync(() -> activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)); Thread.sleep(600); reveal(panel, "New computer"); screenshot("02-device-list-landscape");
             runOnMainSync(panel::pause); check(!contains(panel, "New computer"), "Background retained stale inventory");
             runOnMainSync(panel::resume); waitFor(() -> contains(panel, "New computer"));
             runOnMainSync(() -> panel.setAvailable(false)); check(panel.getVisibility() == View.GONE, "Discovery still visible while connecting");

@@ -87,6 +87,8 @@ def main():
     if not adb.exists():
         adb = sdk / 'platform-tools-package/platform-tools' / ('adb' + suffix)
     run([adb, '-s', args.serial, 'install', '-r', apk], timeout=60)
+    # Only the explicitly selected test emulator: dismiss the OS first-use overlay before UI evidence.
+    run([adb, '-s', args.serial, 'shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed'], timeout=20)
     for phase in ['full', 'restart']:
         result = run([adb, '-s', args.serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'phase', phase, f'{PACKAGE}/com.axiom2.android.TailnetInstrumentation'], capture_output=True, timeout=180)
         (out / f'{phase}.log').write_text(result, encoding='utf-8')
