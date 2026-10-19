@@ -138,8 +138,8 @@ try {
   for (const width of [1440, 820, 430, 390, 360]) {
     await page.setViewportSize({ width, height: 48 });
     const layout = await page.evaluate(() => {
-      const nodes = ['.desktop-workbench-brand', '.desktop-workbench-status', '.desktop-workbench-bar button'].map(selector => document.querySelector(selector)!.getBoundingClientRect());
-      return { centers: nodes.map(box => box.y + box.height / 2), right: nodes[2].right, leftEnd: nodes[1].right, buttonStart: nodes[2].left, width: innerWidth };
+      const nodes = ['.desktop-workbench-status', '.desktop-workbench-bar button'].map(selector => document.querySelector(selector)!.getBoundingClientRect());
+      return { centers: nodes.map(box => box.y + box.height / 2), right: nodes[1].right, leftEnd: nodes[0].right, buttonStart: nodes[1].left, width: innerWidth };
     });
     assert.ok(Math.max(...layout.centers) - Math.min(...layout.centers) < 1, `center alignment ${width}`);
     assert.ok(layout.right <= layout.width && layout.leftEnd <= layout.buttonStart, `header fits ${width}`);
@@ -172,10 +172,23 @@ try {
   const recover = page.getByRole('button', { name: '确认安装器退出后解除占用' });
   await recover.waitFor();
   assert.ok(await page.getByRole('button', { name: '安装 Node.js', exact: true }).isDisabled());
-  page.once('dialog', dialog => void dialog.dismiss()); await recover.click();
+  await recover.click();
+  const recoveryDialog = page.getByRole('dialog', { name: '确认安装器已退出？' });
+  await recoveryDialog.waitFor();
+  assert.equal(await recoveryDialog.getByRole('button', { name: '取消', exact: true }).evaluate(node => document.activeElement === node), true);
+  await recoveryDialog.getByRole('button', { name: '取消', exact: true }).click();
+  await recoveryDialog.waitFor({ state: 'hidden' });
+  assert.equal(await recover.evaluate(node => document.activeElement === node), true);
+  await recover.click();
+  await page.keyboard.press('Escape');
+  await recoveryDialog.waitFor({ state: 'hidden' });
+  assert.equal(await recover.evaluate(node => document.activeElement === node), true);
   assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'acknowledge-interruption').length), 0);
-  page.once('dialog', dialog => void dialog.accept()); await recover.click();
+  await recover.click();
+  await page.screenshot({ path: resolve(output, 'interrupted-install-confirmation.png'), fullPage: true });
+  await recoveryDialog.getByRole('button', { name: '我已确认安装器全部退出', exact: true }).click();
   await recover.waitFor({ state: 'hidden' });
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'acknowledge-interruption').length), 1);
   assert.deepEqual(errors, []);
   // A partial installation record must not unmount the page when no log exists.
   await page.evaluate(() => { (window as any).fixture.job = { running: false, phase: 'error', message: '异常记录测试' }; });

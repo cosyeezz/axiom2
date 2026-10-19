@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { test } from "node:test";
 import { Store } from "../src/server/storage.js";
 import { Memories, type MemoryExecution, type MemoryRunner } from "../src/server/memories.js";

@@ -18,6 +18,8 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const [uncertain, setUncertain] = useState(false);
   const [error, setError] = useState("");
   const [chosen, setChosen] = useState<string | null>(null);
+  const [confirmRecovery, setConfirmRecovery] = useState(false);
+  const recoveryDialog = useRef<HTMLDialogElement>(null), recoveryButton = useRef<HTMLButtonElement>(null);
   const windows = /Win/i.test(navigator.platform);
   const pending = useRef(false), alive = useRef(true), jobEpoch = useRef(0), checkEpoch = useRef(0);
   const wasRunning = useRef(false);
@@ -53,7 +55,6 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   useEffect(() => { callbacks.current.onBusy(running || submitting || uncertain); }, [running, submitting, uncertain]);
   async function action(name: string) {
     if (pending.current) return;
-    if (name === "acknowledge-interruption" && !window.confirm("请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。\n\n我已确认安装器全部退出。")) return;
     pending.current = true; ++jobEpoch.current; setSubmitting(true); setError("");
     try {
       const result = await desktopInvoke<{ job?: unknown }>("axiom_setup", { action: name, confirmed: name === "acknowledge-interruption" });
@@ -63,6 +64,11 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     } finally { ++jobEpoch.current; pending.current = false; if (alive.current) setSubmitting(false); }
   }
   const interrupted = job?.phase === "interrupted";
+  useEffect(() => {
+    if (confirmRecovery && interrupted) recoveryDialog.current?.showModal();
+    else if (recoveryDialog.current?.open) { recoveryDialog.current.close(); recoveryButton.current?.focus(); }
+    if (!interrupted) setConfirmRecovery(false);
+  }, [confirmRecovery, interrupted]);
   const disabled = running || interrupted || uncertain || submitting || blocked;
   const installed = !!service && ["running", "stopped", "starting", "stopping"].includes(service.state);
   const steps = remote ? [{ id: "network", title: "连接环境", detail: "Tailscale", done: !!environment?.tailscale }, { id: "connect", title: "连接工作台", detail: "验证目标服务", done: false }] : [{ id: "runtime", title: "运行环境", detail: "Node.js · npm", done: !!environment?.nodeReady && !!environment.writable }, { id: "service", title: "后台服务", detail: "安装与校验", done: installed }, { id: "connect", title: "连接工作台", detail: "启动与验证", done: service?.state === "running" }];
@@ -84,9 +90,14 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
         <details className="startup-manual"><summary>手动安装与开发运行<Icon name="chevron-down" /></summary><p>已有服务请先关闭；手动安装同样使用正式 Release 包。完成后在上方点击连接。</p><CommandLine label="手动安装命令" command="npm install --global https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz" /><CommandLine label="启动服务命令" command="axiom2 start" /><p>已有源码和开发依赖：在仓库 app 目录运行以下命令，并连接开发服务使用的端口。</p><CommandLine label="开发运行命令" command="npm run dev" /></details>
       </> : children}
       {(running || job?.phase === "error" || interrupted || uncertain) && <div className={`setup-job ${job?.phase === "error" || interrupted ? "has-error" : ""}`} role="status"><div>{running && <Icon name="loader-circle" className="startup-spin" />}<span>{uncertain ? "操作结果尚未确认，请先重新读取进度，避免重复安装。" : job?.message}</span><IconButton label="重新读取安装进度" icon="refresh-cw" onClick={() => void status().catch(cause => setError(String(cause)))} /></div>{!!job?.lines.length && <details><summary>执行详情</summary><pre>{job.lines.join("\n").replaceAll("@@phase:", "")}</pre></details>}</div>}
-      {interrupted && <button className="connect-secondary" disabled={submitting || blocked} onClick={() => void action("acknowledge-interruption")}>确认安装器退出后解除占用</button>}
+      {interrupted && <button ref={recoveryButton} className="connect-secondary" disabled={submitting || blocked} onClick={() => setConfirmRecovery(true)}>确认安装器退出后解除占用</button>}
       {error && <p className="connect-error" role="alert">{error}</p>}
       {running && <p className="connect-footnote">请保持客户端打开，并完成系统请求的安装授权。</p>}
     </div>
+    <dialog ref={recoveryDialog} className="connect-dialog" onCancel={() => setConfirmRecovery(false)} onClose={() => setConfirmRecovery(false)} aria-labelledby="recovery-title" aria-describedby="recovery-description">
+      <h2 id="recovery-title">确认安装器已退出？</h2>
+      <p id="recovery-description">请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。</p>
+      <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirmRecovery(false)}>取消</button><button className="connect-danger" disabled={submitting || blocked || !interrupted} onClick={() => { setConfirmRecovery(false); void action("acknowledge-interruption"); }}>我已确认安装器全部退出</button></div>
+    </dialog>
   </section>;
 }

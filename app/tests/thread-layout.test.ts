@@ -405,7 +405,9 @@ test("AgentViews: first calls on an existing last message publish a new group in
   }]);
   views.flush(scope);
   assert.equal(events[1].scope, messageScope(scope, "last"));
-  assert.deepEqual((events[1].data as ChatMessage).calls, updated.calls);
+  // The wire projection also carries input revisions and summaries; this layout
+  // regression checks that the original calls reach the newly grouped message.
+  assert.deepEqual((events[1].data as ChatMessage).calls?.map(({ id, name, input }) => ({ id, name, input })), updated.calls);
 });
 
 test("AgentViews: text, thinking, call input/count and tool progress do not republish layout", (t) => {

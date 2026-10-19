@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, ftruncateSync, closeSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, ftruncateSync, closeSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -36,6 +36,19 @@ test("header reads stay bounded for 10/50/200 MiB bodies and reject malformed ow
     writeFileSync(file, "x".repeat(65536)); assert.throws(() => transcriptHeader(file), /64 KiB/);
     writeFileSync(file, JSON.stringify({ type: "session", cwd: join(root, "other") }) + "\n");
     assert.throws(() => openTranscript(file, root), { code: "SESSION_FILE_ERROR" });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("transcript ownership accepts a workspace alias but rejects a different directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-transcript-alias-"));
+  const cwd = join(root, "project"), alias = join(root, "alias"), other = join(root, "other");
+  mkdirSync(cwd); mkdirSync(other);
+  symlinkSync(cwd, alias, process.platform === "win32" ? "junction" : "dir");
+  try {
+    const manager = SessionManager.create(alias, join(root, "sessions"));
+    manager.appendMessage({ role: "user", content: "saved through alias", timestamp: 1 });
+    const file = manager.getSessionFile()!;
+    assert.equal(openTranscript(file, cwd).getSessionId(), manager.getSessionId());
+    assert.throws(() => openTranscript(file, other), { code: "SESSION_FILE_ERROR" });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("six background sessions never cold-read display history and retain terminal deltas until persistence", (t) => {

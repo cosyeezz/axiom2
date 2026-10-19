@@ -945,6 +945,9 @@ async function run(input: WorkerInput) {
     send({ type: "done", ...outcome,
       ...(input.task && taskPhase.stage === "summary" && outcome.status === "completed" ? { reasonCode: "BUDGET_SUMMARY" } : {}), usage: usage() });
   } catch (error) {
+    // Retirement can send shutdown while asynchronous cleanup is pending.
+    // Preserve the outcome at failure time instead of relabeling it as a user stop.
+    const wasCancelled = cancelled;
     accepting = false;
     inputClosed = true;
     await session?.abort();
@@ -952,8 +955,8 @@ async function run(input: WorkerInput) {
     closeCompressionRequests();
     send({
       type: "done",
-      status: cancelled ? "cancelled" : "failed",
-      reasonCode: cancelled ? "USER_STOPPED" : error instanceof AppError ? error.code : "EXECUTION_ERROR",
+      status: wasCancelled ? "cancelled" : "failed",
+      reasonCode: wasCancelled ? "USER_STOPPED" : error instanceof AppError ? error.code : "EXECUTION_ERROR",
       error: errorMessage(error, "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {

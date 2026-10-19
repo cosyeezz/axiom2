@@ -35,6 +35,9 @@ export class Store {
   beforeArchiveWorkspace?: (workspaceId: string) => void;
   constructor(readonly root: string) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
+    // Trust the configured root once; all managed descendants use its real path.
+    // macOS /var aliases and Windows short TEMP paths must share one identity.
+    root = this.root = realpathSync(root);
     // A separate SQLite exclusive lock is released by the OS on a crash; no stale PID guessing.
     this.lease = new DatabaseSync(join(root, "service-lock.sqlite"));
     try {

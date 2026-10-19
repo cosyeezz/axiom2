@@ -103,14 +103,19 @@ export class Memories {
     if (this.closed || this.scanner) return;
     try {
       // tsx 开发模式需要 .ts 入口，发布产物则由 tsc 输出同名 .js 文件。
-      const workerFile = import.meta.url.endsWith(".ts") ? "./memory-scan-worker.ts" : "./memory-scan-worker.js";
-      // --input-type 只适用于 node -e/STDIN，继承给文件型 worker 会直接退出；
-      // 其余 tsx loader 参数保留，以便开发模式继续加载 .ts 入口。
+      const source = import.meta.url.endsWith(".ts");
+      const workerUrl = new URL(source ? "./memory-scan-worker.ts" : "./memory-scan-worker.js", import.meta.url);
+      // Older supported Node versions do not register inherited tsx hooks in
+      // worker threads. Bootstrap the hook inside this worker before importing.
+      const entry = source ? new URL(`data:text/javascript,${encodeURIComponent(
+        `import { register } from ${JSON.stringify(import.meta.resolve("tsx/esm/api"))}; register(); await import(${JSON.stringify(workerUrl.href)});`,
+      )}`) : workerUrl;
+      // --input-type only applies to node -e/STDIN, not file workers.
       const inherited = process.execArgv;
       const execArgv = inherited.some((value) => value.startsWith("--input-type"))
         ? inherited.filter((value) => !value.startsWith("--input-type"))
         : undefined;
-      const worker = new Worker(new URL(workerFile, import.meta.url), execArgv ? { execArgv } : undefined);
+      const worker = new Worker(entry, execArgv ? { execArgv } : undefined);
       worker.on("message", (value: { id: number; ok: boolean; files?: MemoryView["files"]; entry?: string; error?: string }) => {
         const request = this.scanRequests.get(value.id);
         if (!request) return;

@@ -13,9 +13,14 @@ test("tailnet opens HTTP and websocket directly, rejects foreign origins and aut
   const port = (upstream.address() as any).port;
   const target = `http://127.0.0.1:${port}`;
   const websocket = new WebSocketServer({ server: upstream }); websocket.on("connection", (ws) => ws.on("message", (message) => ws.send(message)));
-  let addresses = ["127.0.0.2"];
-  const gateway = new RemoteAccess(target, () => addresses); await gateway.initialize();
-  const origin = `http://127.0.0.2:${port}`;
+  // macOS only guarantees 127.0.0.1; use a separate port, not a loopback alias.
+  const reservation = createServer();
+  reservation.listen(0, "127.0.0.1"); await once(reservation, "listening");
+  const gatewayPort = (reservation.address() as any).port;
+  await new Promise<void>((resolve, reject) => reservation.close(error => error ? reject(error) : resolve()));
+  let addresses = ["127.0.0.1"];
+  const gateway = new RemoteAccess(target, () => addresses, gatewayPort); await gateway.initialize();
+  const origin = `http://127.0.0.1:${gatewayPort}`;
   try {
     assert.deepEqual(gateway.status().urls, [origin + "/"]);
     assert.equal("token" in gateway.status(), false);
@@ -39,7 +44,7 @@ test("tailnet opens HTTP and websocket directly, rejects foreign origins and aut
     ws.send("direct-roundtrip"); const [echo] = await once(ws, "message"); assert.equal(String(echo), "direct-roundtrip");
     const interfaceClosed = once(ws, "close"); addresses = []; t.mock.timers.tick(5000); await interfaceClosed;
     assert.deepEqual(gateway.status().urls, []);
-    addresses = ["127.0.0.2"]; t.mock.timers.tick(5000);
+    addresses = ["127.0.0.1"]; t.mock.timers.tick(5000);
     for (let attempt = 0; attempt < 100 && !gateway.status().urls.length; attempt++) await delay(10);
     assert.deepEqual(gateway.status().urls, [origin + "/"], "restored interfaces reconnect without an enable action");
     const restored = new WebSocket(origin.replace("http", "ws") + "/ws", { origin }); await once(restored, "open");

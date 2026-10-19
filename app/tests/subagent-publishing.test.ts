@@ -88,6 +88,9 @@ test("production subscriptions keep sixteen background streams lazy while pins/c
     });
     for (const scope of [`thread:${w.id}:${sessions[0].sessionId}`, `messages:${w.id}:${sessions[0].sessionId}`, "pinned-sessions", `costs:${w.id}:${sessions[0].sessionId}`])
       assert.equal((await request("subscribe", { scope })).ok, true);
+    // Establish the accounting source baseline before counting history reads.
+    assert.equal((await request("costs.get")).ok, true);
+    const costScope = `costs:${w.id}:${sessions[0].sessionId}`;
     const open = t.mock.method(SessionManager, "open");
     const views = (app.agents as any).views;
     for (let round = 0; round < 6; round++) for (const scope of sessions.slice(1)) {
@@ -98,7 +101,22 @@ test("production subscriptions keep sixteen background streams lazy while pins/c
     await request("ping");
     assert.equal(open.mock.callCount(), 0, "production observed wiring must suppress background history reads");
     assert.ok(events.some(e => e.scope === "pinned-sessions"));
-    assert.ok(events.filter(e => e.scope === `costs:${w.id}:${sessions[0].sessionId}`).length > 1);
+    assert.equal(events.filter(e => e.scope === costScope).length, 1, "unrelated background streams do not invalidate current costs");
+    // A title is part of the authoritative cost report. Wait for its actual
+    // invalidation event; a ping receipt does not drain the 100ms batch timer.
+    const costChanged = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.off("message", received); reject(Error("cost invalidation did not arrive")); }, 5000);
+      const received = (raw: WebSocket.RawData) => {
+        const event = JSON.parse(raw.toString());
+        if (event.scope !== costScope || !(event.data?.revision > 0)) return;
+        clearTimeout(timer); ws.off("message", received); resolve();
+      };
+      ws.on("message", received);
+    });
+    app.store.db.prepare("UPDATE sessions SET title=? WHERE id=?").run("Renamed accounting source", sessions[0].sessionId);
+    app.agents.publish(`sessions:${w.id}`);
+    await costChanged;
+    assert.equal(open.mock.callCount(), 0, "cost invalidation checks source identity without parsing history");
     assert.ok(views.messages.has(sessions[0].sessionId), "background output must not evict front history");
     const scope = sessions[1], collection = `messages:${w.id}:${scope.sessionId}`;
     assert.equal((await request("subscribe", { scope: collection })).ok, true);

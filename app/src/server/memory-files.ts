@@ -130,12 +130,21 @@ export function memoryDirectory(root: string, sessionId: string) {
   return join(root, "memory", "sessions", sessionId);
 }
 export function initializeMemory(root: string, sessionId: string) {
-  const directory = memoryDirectory(root, sessionId);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  // The application root is trusted; descendants are not. Resolve only this
+  // boundary, then validate each level before creating the next one.
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  const actualRoot = realpathSync(root);
+  const directory = memoryDirectory(actualRoot, sessionId);
+  let current = actualRoot;
+  for (const segment of relative(actualRoot, directory).split(sep)) {
+    current = join(current, segment);
+    try { mkdirSync(current, { mode: 0o700 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    const stat = lstatSync(current);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(current) !== current)
+      throw new AppError("MEMORY_PATH", "记忆目录不能使用符号链接");
+  }
   const path = join(directory, "MEMORY.md");
-  // Never follow a link into another session or outside application storage.
-  if (!within(realpathSync(root), realpathSync(directory)) || realpathSync(directory) !== resolve(directory))
-    throw new AppError("MEMORY_PATH", "记忆目录不能使用符号链接");
   try { writeFileSync(path, memoryTemplate, { flag: "wx", mode: 0o600 }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
   if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink() || lstatSync(path).nlink !== 1) throw new AppError("MEMORY_PATH", "记忆入口不是普通文件");

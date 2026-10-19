@@ -101,7 +101,7 @@ test("selected Skill and native MCP reach the real worker; unselected resources 
     await assert.rejects(app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "no model" } }), { code: "MODEL_UNAVAILABLE" });
     assert.equal(app.agents.capabilities.state(scope).locked, false);
     const catalog = await app.agents.capabilities.get(scope);
-    assert.deepEqual(catalog.mcpPaths, [join(modelDir, "mcp.json"), join(cwd, ".pi", "mcp.json")]);
+    assert.deepEqual(catalog.mcpPaths, [join(modelDir, "mcp.json"), join(w.path, ".pi", "mcp.json")]);
     assert.ok(catalog.mcp.some(item => item.id === "chosen"));
     assert.ok(!catalog.mcp.some(item => item.id === "app-only"), "uses the configured shared Pi directory, not the application resource directory");
     assert.equal(connections, 0, "catalog does not connect MCP");

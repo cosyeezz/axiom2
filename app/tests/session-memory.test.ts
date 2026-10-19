@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, linkSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -641,14 +641,13 @@ test("a targeted scan settles when another source requeues, without waiting for 
     };
     const first = f.memories.scanAsync(f.scope);
     await enteredFirst;
-    const targetedOther = f.memories.scanAsync(other);
+    // This deadline only guards against a stuck queue; worker startup latency
+    // is not part of the assertion. A's retry stays gated until B completes.
+    const targetedOther = f.memories.scanAsync(other, AbortSignal.timeout(10_000));
     f.memories.refresh(f.scope); // 使 A 的在途读取过期并在 B 后重排。
     releaseFirst();
-    const settled = await Promise.race([
-      targetedOther.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-    ]);
-    assert.equal(settled, true, "B 的调用只等待 B 的目标代次，不能被 A 的重试阻塞");
+    await targetedOther;
+    assert.equal(f.memories.snapshot(other)?.entry, "来源 B", "B 的调用只等待 B 的目标代次，不能被 A 的重试阻塞");
     releaseRetry();
     await Promise.all([first, targetedOther]);
   } finally {

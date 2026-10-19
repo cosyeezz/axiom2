@@ -51,27 +51,32 @@ async function fixture(inject = false, partial = false) {
   const budget = (revision: number) => ({ workMs: 600000, deadlineAt: Date.now() + 600000, elapsedMs: 0, summaryDeadlineAt: null, revision });
   const send = (value: object) => child.send({ runId, ...value, lease });
   const start = async () => {
+    // The injected fixture listens to IPC before importing the production
+    // worker. Do not let it consume start before that worker is ready.
+    await wait(() => events.some(e => e.type === "process_ready" &&
+      e.instance?.instanceId === lease.instanceId && e.instance?.generation === lease.generation),
+    () => stderr || "worker process_ready");
     runId = randomUUID();
     send({ type: "start", input: { root, cwd, modelsFile, file: manager.getSessionFile(), runId,
       selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: "Inspect evidence.",
       task: { id: "isolated", role: "", inputIds: [], budget: budget(0) } } });
-    await wait(() => bodies.length > 0, stderr);
+    await wait(() => bodies.length > 0, () => stderr);
   };
   const summarize = async (revision = 1) => {
     const count = bodies.length;
     send({ type: "summarize", ...budget(revision), deadlineAt: Date.now(), summaryDeadlineAt: Date.now() + 180000 });
-    await wait(() => bodies.length > count, stderr); assert.deepEqual(bodies.at(-1).tools ?? [], []);
+    await wait(() => bodies.length > count, () => stderr); assert.deepEqual(bodies.at(-1).tools ?? [], []);
   };
   const append = (text: string, images: any[] = [], revision = 2) => {
     const id = randomUUID(); send({ type: "input", id, text, images, mode: "steer", budget: budget(revision) }); return id;
   };
   const barrier = async () => {
     const key = randomUUID(); send({ type: "recall", key, ids: [] });
-    await wait(() => events.some(e => e.type === "recalled" && e.key === key), stderr);
+    await wait(() => events.some(e => e.type === "recalled" && e.key === key), () => stderr);
   };
   return { root, cwd, get runId() { return runId; }, file: manager.getSessionFile()!, bodies, events, releases, send, start, summarize, append, barrier,
     done: () => events.filter(e => e.type === "done" && e.runId === runId),
-    idle: () => wait(() => events.some(e => e.type === "idle" && e.runId === runId), stderr),
+    idle: () => wait(() => events.some(e => e.type === "idle" && e.runId === runId), () => stderr),
     close: async () => {
       clearTimeout(watchdog); if (child.exitCode === null) child.kill(); await exit;
       provider.closeAllConnections(); await new Promise<void>(resolve => provider.close(() => resolve()));
