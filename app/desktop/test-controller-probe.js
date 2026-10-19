@@ -9,7 +9,14 @@
     while (Date.now() < until) { const value = await condition(); if (value) return value; await new Promise((done) => setTimeout(done, 50)); }
     throw Error("Controller probe condition timed out");
   };
-  const button = async (text) => wait(() => [...document.querySelectorAll("button")].find((item) => item.textContent.includes(text) && !item.disabled && item.getClientRects().length));
+  const button = async (text) => wait(() => [...document.querySelectorAll("button")].find((item) => (item.getAttribute("aria-label") || item.textContent).includes(text) && !item.disabled && item.getClientRects().length));
+  const preparation = async () => {
+    const details = await wait(() => document.querySelector(".startup-preparation"));
+    if (!details.open) details.querySelector("summary").click();
+    await wait(() => details.open);
+    const connect = await wait(() => [...details.querySelectorAll(".startup-steps button")].find((item) => item.textContent.includes("连接工作台") && !item.disabled));
+    connect.click();
+  };
   const heading = async (text) => wait(() => [...document.querySelectorAll("h2")].some((item) => item.textContent === text && item.getClientRects().length));
   const observation = async (condition) => wait(async () => {
     const value = (await invoke("snapshot")).observation;
@@ -28,6 +35,7 @@
     check(Math.abs(control.height + workbench.height - state.height) <= 2, "Views must cover native height");
   };
   void (async () => {
+    await preparation();
     if (window.__axiomProbeMode === "reopen") {
       await heading("服务运行中");
       const state = await invoke("snapshot");
