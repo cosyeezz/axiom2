@@ -326,7 +326,7 @@ test(
       const cachedWorker = () => [...(app.agents.pool as any).instances.values()].find((instance: any) => instance.binding?.sessionId === b.sessionId) as any;
       const cached = cachedWorker();
       assert.ok(cached, "completed child has a reusable worker");
-      assert.equal(dirname(cached.environment.modelsFile), join(root, "execution-models"));
+      assert.equal(dirname(cached.environment.modelsFile), join(app.store.root, "execution-models"));
       const previousPid = cached.child.pid;
       rmSync(cached.environment.modelsFile);
       await call("task.append", { taskId: b.id, text: "explicit-followup after missing snapshot" });

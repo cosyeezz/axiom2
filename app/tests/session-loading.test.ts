@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, ftruncateSync, closeSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, openSync, ftruncateSync, closeSync, symlinkSync, realpathSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -49,6 +49,25 @@ test("transcript ownership accepts a workspace alias but rejects a different dir
     const file = manager.getSessionFile()!;
     assert.equal(openTranscript(file, cwd).getSessionId(), manager.getSessionId());
     assert.throws(() => openTranscript(file, other), { code: "SESSION_FILE_ERROR" });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("transcript ownership accepts Windows short names in either cwd position without rewriting history", { skip: process.platform !== "win32" }, (t) => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-transcript-short-"));
+  try {
+    const native = realpathSync.native(root);
+    if (realpathSync(root) === native) {
+      t.skip("TEMP has no Windows short-name alias; this case requires an 8.3 TEMP directory");
+      return;
+    }
+    const other = join(native, "other"); mkdirSync(other);
+    for (const [saved, requested] of [[root, native], [native, root]]) {
+      const manager = SessionManager.create(saved, join(root, "sessions"));
+      manager.appendMessage({ role: "user", content: "saved through a Windows alias", timestamp: 1 });
+      const file = manager.getSessionFile()!, before = readFileSync(file);
+      assert.equal(openTranscript(file, requested).getSessionId(), manager.getSessionId());
+      assert.deepEqual(readFileSync(file), before, "opening an alias must not rewrite the saved JSONL");
+      assert.throws(() => openTranscript(file, other), { code: "SESSION_FILE_ERROR" });
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("six background sessions never cold-read display history and retain terminal deltas until persistence", (t) => {

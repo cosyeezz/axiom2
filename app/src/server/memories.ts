@@ -162,7 +162,8 @@ export class Memories {
 
   private watchSources(root: string) {
     try {
-      this.watcher = watch(root, { recursive: true, persistent: false }, (_event, name) => {
+      // libuv on Windows requires the native long spelling for watcher paths.
+      this.watcher = watch(realpathSync.native(root), { recursive: true, persistent: false }, (_event, name) => {
         this.handleWatchEvent(root, name);
       });
       this.watcher.on("error", () => {

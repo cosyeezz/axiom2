@@ -12,6 +12,42 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { AuthState } from "../src/shared/models.js";
 import type { ProviderDraft, ModelDraft } from "../src/shared/models.js";
 
+test("configuration watchers preserve invalidation when TEMP uses a filesystem alias", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-config-watch-"));
+  const previous = process.env.AXIOM_PI_DIR;
+  process.env.AXIOM_PI_DIR = join(root, "pi");
+  let close = () => {};
+  try {
+    const service = new ModelService(root);
+    let changes = 0;
+    close = service.watchConfiguration(() => { changes++; });
+    const changed = async (expected: number) => {
+      const deadline = Date.now() + 5000;
+      while (changes < expected) {
+        assert.ok(Date.now() < deadline, "configuration watcher must deliver the file change");
+        await delay(10);
+      }
+    };
+    const models = join(service.dir, "models.json");
+    writeFileSync(models, '{"providers":{}}');
+    await changed(1);
+    const beforeEdit = changes;
+    writeFileSync(models, '{ "providers": {} }');
+    await changed(beforeEdit + 1);
+    const beforeAuth = changes;
+    writeFileSync(join(service.dir, "auth.json"), '{}');
+    await changed(beforeAuth + 1);
+    const beforeDelete = changes;
+    rmSync(models);
+    await changed(beforeDelete + 1);
+  } finally {
+    close();
+    if (previous === undefined) delete process.env.AXIOM_PI_DIR;
+    else process.env.AXIOM_PI_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("external receipts: pending recovery never repeats side effects after restart", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-receipts-"));
   let store = new Store(root);

@@ -208,7 +208,7 @@ test(
         workspaceId: w.id,
       }) as Session;
       const scope: Scope = { workspaceId: w.id, sessionId: s.id };
-      memoryPath = join(root, "memory", "sessions", s.id, "MEMORY.md");
+      memoryPath = join(app.store.root, "memory", "sessions", s.id, "MEMORY.md");
       // Legacy explicit denials no longer gate this product's default authorization.
       app.store.db.exec("CREATE TABLE IF NOT EXISTS project_trust(workspaceId TEXT PRIMARY KEY, trusted INTEGER NOT NULL)");
       app.store.db.prepare("INSERT INTO project_trust VALUES(?,0)").run(w.id);
@@ -358,7 +358,7 @@ test(
       );
       await call("prompt", { text: "independent session" }, otherScope);
       await wait(() => count === 6, "second worker did not start");
-      assertMemoryPrompt(requests[5], join(root, "memory", "sessions", other.id, "MEMORY.md"));
+      assertMemoryPrompt(requests[5], join(app.store.root, "memory", "sessions", other.id, "MEMORY.md"));
       await assert.rejects(call("agent.stop", { runId: randomUUID() }), {
         code: "RUN_MISMATCH",
       });

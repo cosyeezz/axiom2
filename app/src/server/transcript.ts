@@ -187,9 +187,9 @@ export function openTranscript(file: string, cwd: string): SessionManager {
     // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
     const { header, identity } = transcriptHeader(file);
     if (header?.type !== "session" || typeof header.cwd !== "string") throw Error();
-    // System aliases such as macOS /var and /private/var can name the same
-    // workspace. Distinct spellings must resolve to the same real directory.
-    if (resolve(header.cwd) !== resolve(cwd) && realpathSync(header.cwd) !== realpathSync(cwd)) throw Error();
+    // Resolve OS aliases natively: Windows short names and macOS /var aliases
+    // must identify the same real workspace, without case-folding path strings.
+    if (resolve(header.cwd) !== resolve(cwd) && realpathSync.native(header.cwd) !== realpathSync.native(cwd)) throw Error();
     const manager = SessionManager.open(file);
     const current = statSync(file);
     if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");

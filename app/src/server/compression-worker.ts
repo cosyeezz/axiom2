@@ -1,4 +1,4 @@
-import { acceptsLease, awaitExecutionPermit, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
+import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { join } from "node:path";
 import {
   createAgentSession,
@@ -134,7 +134,7 @@ async function run(input: CompressionInput) {
           : null,
     });
   } catch (error) {
-    send(cancelled ? { type: "cancelled" } : { type: "failed", error: compressionError(error) });
+    send(cancelled && !(error instanceof ExecutionPermitDeniedError) ? { type: "cancelled" } : { type: "failed", error: compressionError(error) });
   } finally {
     await Promise.allSettled(accounting);
     await session?.waitForIdle();

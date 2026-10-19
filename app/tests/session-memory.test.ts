@@ -627,10 +627,15 @@ test("a targeted scan settles when another source requeues, without waiting for 
   const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
   const retryGate = new Promise<void>((resolve) => { releaseRetry = resolve; });
   try {
+    // This case controls generation invalidation explicitly. OS watcher events
+    // must not invalidate B again behind A's deliberately blocked retry.
+    (f.memories as any).watcher?.close();
+    (f.memories as any).watcher = undefined;
     const other = f.create();
     writeFileSync(join(f.directory, "MEMORY.md"), "来源 A");
     writeFileSync(join(memoryDirectory(f.root, other.sessionId), "MEMORY.md"), "来源 B");
     f.memories.scan();
+    await f.memories.scanAsync(); // Drain initialization and warm the real scanner before gating A.
     const original = (f.memories as any).scanDirectory.bind(f.memories);
     let calls = 0, entered!: () => void;
     const enteredFirst = new Promise<void>((resolve) => { entered = resolve; });
@@ -664,9 +669,15 @@ test("a restarted service queries its cached source while reporting catalog sour
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     const restarted = new Memories(f.store, () => {});
     try {
+      // Keep B intentionally unloaded; filesystem notifications are covered by
+      // separate watcher cases and would invalidate this query's premise.
+      (restarted as any).watcher?.close();
+      (restarted as any).watcher = undefined;
       if ((restarted as any).scanDelay) clearTimeout((restarted as any).scanDelay);
       (restarted as any).scanDelay = undefined; (restarted as any).queueAll = false;
+      (restarted as any).queuedScopes.clear();
       await restarted.scanAsync(f.scope);
+      assert.equal((restarted as any).cachedViews.has(other.sessionId), false, "B must be unloaded before the query");
       let reads = 0;
       restarted.runner = { close: async () => {}, execute: async (input) => {
         reads++; return { answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false };

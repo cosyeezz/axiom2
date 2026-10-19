@@ -17,6 +17,12 @@ export function leaseSender(ref?: LeaseRef, runId?: string) {
 export function sameInstance(ref: InstanceRef | undefined) {
   return Boolean(workerInstance && ref && ref.instanceId === workerInstance.instanceId && ref.generation === workerInstance.generation && ref.profileHash === workerInstance.profileHash);
 }
+export class ExecutionPermitDeniedError extends Error {
+  constructor() {
+    super('绑定期间配置或资源已变化，未发起模型请求');
+    this.name = 'ExecutionPermitDeniedError';
+  }
+}
 /** The coordinator rechecks configuration after asynchronous binding, before inference. */
 export async function awaitExecutionPermit(ref: LeaseRef | undefined, required?: boolean) {
   if (!required) return;
@@ -27,7 +33,7 @@ export async function awaitExecutionPermit(ref: LeaseRef | undefined, required?:
     const message = (event: any) => {
       if (event.type === 'shutdown' && sameInstance(event.instance)) return finish(Error('执行已取消'));
       if (!sameLease(event.lease, ref)) return;
-      if (event.type === 'execution_permit') finish(event.allowed === true ? undefined : Error('绑定期间配置或资源已变化，未发起模型请求'));
+      if (event.type === 'execution_permit') finish(event.allowed === true ? undefined : new ExecutionPermitDeniedError());
       if (event.type === 'stop' || event.type === 'shutdown') finish(Error('执行已取消'));
     };
     const timer = setTimeout(() => finish(Error('执行确认超时')), 30000);

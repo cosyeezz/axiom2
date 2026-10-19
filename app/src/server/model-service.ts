@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, watch } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -77,7 +77,8 @@ export class ModelService {
     }).join(":");
     let previous = revision();
     try {
-      const watcher = watch(this.dir, { persistent: false }, (_event, name) => {
+      // Short Windows aliases can abort libuv before a JS error is emitted.
+      const watcher = watch(realpathSync.native(this.dir), { persistent: false }, (_event, name) => {
         if (name && !["models.json", "auth.json", "models-store.json"].includes(String(name))) return;
         const next = revision();
         if (next !== previous) { previous = next; changed(); }

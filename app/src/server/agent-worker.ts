@@ -1,6 +1,6 @@
 import { capabilityExtensions, type CapabilityRuntime } from "./capability-resources.js";
 import { performance } from "node:perf_hooks";
-import { acceptsLease, awaitExecutionPermit, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
+import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
 import { memoryQueryTool } from "./memory-tool.js";
 import { memoryInstruction } from "../shared/memory.js";
@@ -945,9 +945,9 @@ async function run(input: WorkerInput) {
     send({ type: "done", ...outcome,
       ...(input.task && taskPhase.stage === "summary" && outcome.status === "completed" ? { reasonCode: "BUDGET_SUMMARY" } : {}), usage: usage() });
   } catch (error) {
-    // Retirement can send shutdown while asynchronous cleanup is pending.
-    // Preserve the outcome at failure time instead of relabeling it as a user stop.
-    const wasCancelled = cancelled;
+    // A denied permit can be followed by retirement in the same IPC turn,
+    // before this catch runs. Keep that failure distinct from a user stop.
+    const wasCancelled = cancelled && !(error instanceof ExecutionPermitDeniedError);
     accepting = false;
     inputClosed = true;
     await session?.abort();
