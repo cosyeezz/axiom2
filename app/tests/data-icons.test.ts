@@ -29,12 +29,23 @@ test("context capacity and task thirds remain independent; only 100% lights all 
     const svg = renderToStaticMarkup(createElement(ContextMemoryIcon, { percent: 50, taskPercent }));
     assert.equal((svg.match(/class="memory-progress-lit"/g) ?? []).length, bars, String(taskPercent));
     assert.equal((svg.match(/class="data-filled context-ring"/g) ?? []).length, 1);
-    assert.match(svg, /stroke-dasharray="50 100"/);
+    assert.match(svg, /d="M10 1\.5A8\.5 8\.5 0 0 1 10[^ ]* 18\.5"/);
+    assert.doesNotMatch(svg, /stroke-dasharray|<svg[^>]*memory-progress-bars/);
     assert.doesNotMatch(svg, /<animate|#i-check/);
   }
   for (const percent of [0, 49.99, 50, 100, null, NaN, -1]) {
     const svg = renderToStaticMarkup(createElement(CacheDataIcon, { percent, active: false }));
     assert.equal(svg.includes('data-icon-cache-low'), percent != null && Number.isFinite(percent) && percent >= 0 && percent < 50, String(percent));
+  }
+});
+
+test("cache color thresholds govern breathing only during active work", () => {
+  for (const [percent, tone] of [[0, "danger"], [70, "danger"], [70.01, "warning"], [90, "warning"], [90.01, "success"], [100, "success"], [null, "unknown"], [NaN, "unknown"]] as const) {
+    for (const active of [false, true]) {
+      const svg = renderToStaticMarkup(createElement(CacheDataIcon, { percent, active }));
+      assert.ok(svg.includes(`data-tone="${tone}"`), String(percent));
+      assert.equal(svg.includes("<animate"), active && tone !== "success", `${percent}: active=${active}`);
+    }
   }
 });
 

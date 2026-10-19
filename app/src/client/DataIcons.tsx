@@ -22,27 +22,35 @@ export function TaskProgressIcon({ percent, active, error, label }: { percent: n
     <Core name={error ? "triangle-alert" : percent === 100 ? "check" : "list-checks"} />{!valid && !error && <Unknown />}<Activity active={active} />
   </Frame>;
 }
+// Draw the measured angle directly: pathLength dashes plus non-scaling strokes
+// can render a different fraction when the SVG viewBox is scaled.
+function contextArc(percent: number) {
+  if (percent >= 100) return "M10 1.5a8.5 8.5 0 1 1 0 17a8.5 8.5 0 1 1 0-17";
+  const angle = percent / 100 * Math.PI * 2;
+  return `M10 1.5A8.5 8.5 0 ${percent > 50 ? 1 : 0} 1 ${10 + 8.5 * Math.sin(angle)} ${10 - 8.5 * Math.cos(angle)}`;
+}
 export function ContextMemoryIcon({ percent, taskPercent = null, label }: { percent: number | null; taskPercent?: number | null; label?: string }) {
   const valid = percent != null && Number.isFinite(percent) && percent >= 0;
   const fill = valid ? Math.min(100, percent) : 0;
   const validTask = taskPercent != null && Number.isFinite(taskPercent) && taskPercent >= 0 && taskPercent <= 100;
-  return <Frame kind={valid && percent >= 90 ? "capacity-warning" : "context-memory"} label={label} value={valid ? percent : null}>
-    <circle className="data-track context-ring" cx="16" cy="16" r="13" />
-    {valid && fill > 0 && <circle className="data-filled context-ring" cx="16" cy="16" r="13" pathLength="100" strokeDasharray={`${fill} 100`} transform="rotate(-90 16 16)" />}
-    <svg className="memory-progress-bars ui-glyph" x="11" y="10" width="10" height="12" viewBox="0 0 10 12" data-progress={validTask ? taskPercent : "unknown"}>
-      {[0, 1, 2].map(i => <path key={i} d={`M1 ${2 + i * 4}h8`} className={validTask && taskPercent >= (i + 1) * 100 / 3 ? "memory-progress-lit" : "memory-progress-pending"} />)}
-    </svg>
+  return <Frame kind={valid && percent >= 90 ? "capacity-warning" : "context-memory"} label={label} value={valid ? percent : null} viewBox="0 0 20 20">
+    <path className="data-track context-ring" d={contextArc(100)} />
+    {valid && fill > 0 && <path className="data-filled context-ring" d={contextArc(fill)} strokeLinecap="butt" />}
+    <g className="memory-progress-bars" data-progress={validTask ? taskPercent : "unknown"}>
+      {[0, 1, 2].map(i => <path key={i} d={`M5.5 ${5.5 + i * 4}l1 1 1.5-2M9 ${5.5 + i * 4}h5`} className={validTask && taskPercent >= (i + 1) * 100 / 3 ? "memory-progress-lit" : "memory-progress-pending"} />)}
+    </g>
   </Frame>;
 }
 export function CacheDataIcon({ percent, active }: { percent: number | null; active: boolean }) {
   const clipId = useId();
   const valid = percent != null && Number.isFinite(percent) && percent >= 0;
   const fill = valid ? Math.min(100, percent) : 0;
+  const tone = !valid ? "unknown" : percent > 90 ? "success" : percent > 70 ? "warning" : "danger";
   return <Frame kind={valid && percent < 50 ? "cache-low" : "cache"} value={valid ? percent : null} viewBox="0.5 0 24 24">
     <defs><clipPath id={clipId}><path d="M3 5a9 3 0 0 0 18 0v3h-6v13.84A9 3 0 0 1 3 19Z" /></clipPath></defs>
     <rect className="data-level" x="3" y={22 - 15 * fill / 100} width="18" height={15 * fill / 100} clipPath={`url(#${clipId})`} fill="currentColor" stroke="none" opacity=".18" />
     {/* C001: Lucide database-zap, original outline paths (ISC). */}
-    <g className="cache-outline"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 12 2.84M21 5v3" /><path className="cache-lightning" data-tone={!valid ? "unknown" : percent > 90 ? "success" : percent > 70 ? "warning" : "danger"} d="m21 12-3 5h4l-3 5" /><path d="M3 12a9 3 0 0 0 11.59 2.87" />{active && <animate attributeName="opacity" values="1;.45;1" dur="1.8s" repeatCount="indefinite" />}</g>
+    <g className="cache-outline"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 12 2.84M21 5v3" /><path className="cache-lightning" data-tone={tone} d="m21 12-3 5h4l-3 5" /><path d="M3 12a9 3 0 0 0 11.59 2.87" />{active && tone !== "success" && <animate attributeName="opacity" values="1;.45;1" dur="1.8s" repeatCount="indefinite" />}</g>
     {!valid && <Unknown dx={-16} dy={-7} />}
   </Frame>;
 }

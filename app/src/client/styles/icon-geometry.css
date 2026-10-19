@@ -22,7 +22,6 @@ svg.ui-glyph { display: block; flex-shrink: 0; overflow: visible; }
 .memory-todo-toggle { padding-inline: 8px; gap: 8px; }
 .usage .cost-trigger { min-width: 44px; }
 .usage .memory-progress-bars { --icon-stroke: 1px; }
-.usage .context-ring.data-track { opacity: .4; }
 /* Keep curves antialiased and line weight independent of the SVG canvas. */
 .usage .action-icon > svg { shape-rendering: geometricPrecision; overflow: visible; }
 .usage .action-icon > svg.data-icon :is(path, circle, ellipse, rect, line, polyline) { vector-effect: non-scaling-stroke; stroke-width: var(--icon-stroke); }
