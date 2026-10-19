@@ -1,0 +1,44 @@
+/* Shared typography; right-hand tools keep their edge drawers. */
+dialog.toolbar-detail-panel{position:fixed;inset:auto auto min(var(--settings-bottom,64px),calc(100dvh - 80px)) clamp(12px,var(--toolbar-panel-left,12px),calc(100vw - min(var(--toolbar-panel-width,520px),100vw - 24px) - 12px));box-sizing:border-box;margin:0;padding:0;width:var(--toolbar-panel-width,min(520px,calc(100vw - 24px)));height:auto;max-width:calc(100vw - 24px);max-height:min(680px,var(--toolbar-panel-height,calc(100dvh - 88px)),calc(100dvh - min(var(--settings-bottom,64px),100dvh - 80px) - 12px));border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);color:var(--fg-2);box-shadow:0 12px 40px #0007;font:13px/1.65 var(--font-body);}
+dialog.toolbar-detail-panel:popover-open{display:flex;flex-direction:column}
+dialog.toolbar-detail-panel::backdrop{background:transparent;pointer-events:none}
+dialog.toolbar-detail-panel.toolbar-detail-drawer{inset:0 0 var(--settings-bottom,64px) auto;width:min(520px,100vw);max-width:100vw;max-height:none;height:auto;border:0;border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0;background:var(--bg);box-shadow:-12px 0 36px #0004}
+dialog.toolbar-detail-drawer:popover-open{animation:toolbar-drawer-enter .18s ease-out}
+@keyframes toolbar-drawer-enter{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){dialog.toolbar-detail-drawer:popover-open{animation:none}}
+dialog.toolbar-detail-panel>header,dialog.toolbar-detail-panel .cost-topbar{display:flex;flex-shrink:0;align-items:center;justify-content:space-between;gap:12px;min-height:64px;margin:0;padding:10px 12px 10px 20px;border-bottom:1px solid var(--border);background:var(--surface);color:var(--fg)}
+dialog.toolbar-detail-panel header h2,dialog.toolbar-detail-panel .cost-heading>strong{margin:0;font-size:15px;line-height:1.5;font-weight:550}
+dialog.toolbar-detail-panel header p,dialog.toolbar-detail-panel .cost-heading>span{margin:3px 0 0;font-size:12px;line-height:1.5;letter-spacing:0;color:var(--muted)}
+dialog.toolbar-detail-panel header>.icon-btn,dialog.toolbar-detail-panel .cost-close{display:grid;place-items:center;flex:0 0 44px;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--action-icon-fg,#b8bec8)}
+dialog.toolbar-detail-panel header>.icon-btn:hover,dialog.toolbar-detail-panel .cost-close:hover{color:var(--fg);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+dialog.toolbar-detail-panel header>.icon-btn svg{width:16px;height:16px}
+dialog.toolbar-detail-panel>.toolbar-detail-body,dialog.toolbar-detail-panel>.compression-body,dialog.toolbar-detail-panel .cost-content{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px 20px 20px;scroll-behavior:auto}
+dialog.toolbar-detail-panel>footer{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:10px 20px;border-top:1px solid var(--border);background:var(--surface);font-size:12px}
+dialog.toolbar-detail-panel>footer button{min-height:44px}
+.toolbar-detail-body>p:first-child{margin-top:0}.toolbar-detail-body>p:last-child{margin-bottom:0}
+.metric-summary{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:4px 0 16px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.metric-summary>span{font-size:12px;color:var(--muted)}.metric-summary>strong{font:500 28px/1.3 var(--font-mono);color:var(--accent-hover)}
+.metric-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;margin:16px 0;font-size:13px}.metric-facts dt{color:var(--muted)}.metric-facts dd{margin:0;font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right}
+.metric-note{margin:12px 0 0;color:var(--muted);font-size:12px;line-height:1.7}.metric-section-title{font-size:13px;font-weight:550;margin:20px 0 8px}
+.toolbar-detail-panel .memory-context-detail{padding:0 0 16px;margin-bottom:16px}
+.toolbar-detail-panel .memory-todo-empty{padding:20px 0}.toolbar-detail-panel .memory-progress-summary{padding:8px 0}.toolbar-detail-panel .memory-task-count{padding:0}.toolbar-detail-panel .memory-next{margin:16px 0 0}.toolbar-detail-panel .toolbar-detail-body>h3{padding:0;margin:16px 0 8px}.toolbar-detail-panel .toolbar-detail-body>ul{padding:0;margin:12px 0}.toolbar-detail-panel .toolbar-detail-body>progress{width:100%;margin:8px 0}.toolbar-detail-panel .toolbar-detail-body>.meta{font-size:12px;color:var(--muted)}
+dialog.toolbar-detail-panel.cost-popover .cost-page{background:var(--surface);font-size:13px}
+dialog.toolbar-detail-panel.cost-popover .cost-status{min-height:18px;margin:0 0 14px;font-size:11px;color:var(--muted)}
+dialog.toolbar-detail-panel.cost-popover .cost-total{padding:14px 16px}
+dialog.toolbar-detail-panel.cost-popover .cost-total>.cost-number{font-size:18px;line-height:1.5;margin:6px 0;color:var(--accent-hover);font-weight:500}
+dialog.toolbar-detail-panel.cost-popover .cost-equation>a{flex-basis:45%;padding:10px 16px;gap:3px;font-size:13px}
+.toolbar-detail-panel .cost-section{padding-top:24px}.toolbar-detail-panel .cost-section h2,.toolbar-detail-panel .cost-method h2{font-size:14px}.toolbar-detail-panel .cost-section>header{gap:12px;margin-bottom:10px}.toolbar-detail-panel .cost-method{margin-top:24px;padding-top:16px}
+.toolbar-detail-panel .cost-breakdown{padding:8px 0 16px}.toolbar-detail-panel .cost-line>summary{padding:12px 0;gap:8px}.toolbar-detail-panel .cost-line>summary>.cost-number{max-width:45%;white-space:normal;overflow-wrap:anywhere;text-align:right}
+dialog.toolbar-detail-panel.cost-popover .cost-session-duration{padding:0 0 14px;margin:0 0 16px;border-bottom:1px solid var(--border)}
+.cost-session-facts{margin:0;display:grid;gap:8px}.cost-session-facts>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px}.cost-session-facts dt{font-size:12px;color:var(--muted)}.cost-session-facts dd{margin:0;font:500 14px/1.6 var(--font-mono);color:var(--fg-2)}
+dialog.toolbar-detail-panel.cost-popover .cost-session-duration>p{font-size:11px;line-height:1.6;margin:10px 0 0;color:var(--muted)}
+dialog.toolbar-detail-panel.cost-popover .cost-refresh{width:44px;min-width:44px;height:44px;padding:0;border:0;background:transparent}.toolbar-detail-panel .cost-actions{gap:0}
+.cache-detail .cache-summary{display:flex;align-items:baseline;justify-content:space-between;gap:16px;font-size:12px;color:var(--muted)}
+.cache-detail .cache-summary strong{font:500 20px/1.5 var(--font-mono);color:var(--accent-hover)}
+.cache-composition{display:flex;gap:2px;height:4px;margin:12px 0 20px;overflow:hidden;border-radius:3px;background:var(--border)}.cache-composition>span{min-width:0;border-radius:1px}.cache-read{background:var(--accent-hover)}.cache-input{background:#87919d}.cache-write{background:#555f6c}
+.cache-ledger-heading{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.metric-detail .cache-ledger{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;margin:14px 0;font-size:12px}.cache-ledger dt{display:flex;align-items:center;gap:8px;color:var(--fg-2)}.cache-ledger dt i{width:5px;height:5px;border-radius:50%;flex-shrink:0}.cache-ledger dd{margin:0;text-align:right;font:12px/1.6 var(--font-mono);color:var(--fg-2)}
+.cache-detail .metric-note{font-size:11px;line-height:1.65;margin-top:14px}
+.metric-method{margin-top:16px;border-top:1px solid var(--border)}.metric-method>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;list-style:none;cursor:pointer;font-size:12px;color:var(--muted)}.metric-method>summary::-webkit-details-marker{display:none}.metric-method>summary>svg{width:12px;height:12px;transition:transform .15s}.metric-method[open]>summary>svg{transform:rotate(180deg)}.metric-method>summary:hover{color:var(--fg-2)}.metric-method>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.cache-detail .metric-method .metric-note{margin:0 0 8px}
+.toolbar-detail-panel .cost-source{content-visibility:auto;contain-intrinsic-size:auto 120px}
+@media(max-height:420px){dialog.toolbar-detail-panel>header,dialog.toolbar-detail-panel .cost-topbar{min-height:48px;padding-block:2px}dialog.toolbar-detail-panel>footer{padding-block:4px}}

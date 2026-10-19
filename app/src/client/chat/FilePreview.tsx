@@ -59,6 +59,10 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   const [file, setFile] = useState<FilePreview | null>(null), [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0), [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>("reading"), [ratio, setRatio] = useState(50), [wrap, setWrap] = useState(false);
+  const [visited, setVisited] = useState({ source: false, reading: false });
+  useEffect(() => {
+    if (file) setVisited((old) => ({ source: old.source || file.kind !== "markdown" || mode !== "reading", reading: old.reading || mode !== "source" }));
+  }, [file, mode]);
   const [revealing, setRevealing] = useState(false), [notice, setNotice] = useState("");
   const [zoom, setZoom] = useState<number | null>(null);
   const panel = useRef<HTMLElement>(null), panes = useRef<HTMLDivElement>(null), alive = useRef(true);
@@ -66,12 +70,13 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   useEffect(() => { alive.current = true; panel.current?.focus(); return () => { alive.current = false; }; }, []);
   useEffect(() => {
     let current = true;
+    const controller = new AbortController();
     setLoading(true); setError(""); setNotice("");
-    void command<FilePreview>("files.document", { messageId: reference.messageId, href: reference.href }, reference.owner.scope)
+    void command<FilePreview>("files.document", { messageId: reference.messageId, href: reference.href }, reference.owner.scope, crypto.randomUUID(), controller.signal)
       .then(result => { if (current) { setFile(result); if (result.line) setMode("source"); } })
       .catch(e => { if (current) setError(e.message); })
       .finally(() => { if (current) setLoading(false); });
-    return () => { current = false; };
+    return () => { current = false; controller.abort(); };
   }, [reference, attempt]);
   const reveal = async () => {
     setRevealing(true); setNotice("");
@@ -93,7 +98,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   else if (!file) body = null;
   else if (isText) body = <div ref={panes} className={`file-panes mode-${file.kind === "markdown" ? mode : "source"}`} style={{ "--file-split": `${ratio}%` } as CSSProperties}>
     <section className="file-source-pane" hidden={!showSource} aria-label="源码视图">
-      <div className="file-pane-label"><span>源码</span><span>{file.encoding}</span></div><Source file={file} wrap={wrap} />
+      <div className="file-pane-label"><span>源码</span><span>{file.encoding}</span></div>{(showSource || visited.source) && <Source file={file} wrap={wrap} />}
     </section>
     {file.kind === "markdown" && <>
       <div className="file-divider" hidden={mode !== "split"} role="separator" aria-label="调整源码与预览宽度" aria-orientation="vertical" aria-valuemin={20} aria-valuemax={80} aria-valuenow={Math.round(ratio)} tabIndex={0}
@@ -107,7 +112,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
       <section className="file-reading-pane" hidden={mode === "source"} aria-label="渲染预览">
         <div className="file-pane-label"><span>预览</span><span>MARKDOWN</span></div>
         <div className="file-reading-scroll" tabIndex={0}>
-          {readable ? <div className="markdown file-reading"><Markdown text={file.text ?? ""} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>}
+          {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={file.text ?? ""} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
         </div>
       </section>
     </>}
@@ -118,7 +123,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   return <aside className="file-preview-panel" ref={panel} role="dialog" aria-modal="false" aria-label={`文件预览：${title}`} tabIndex={-1}
     onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
     <header className="file-preview-header">
-      <div className="file-title"><span className="file-type-icon"><FileIcon name={file?.kind === "image" ? "image" : file?.kind === "markdown" ? "reading" : file?.kind === "code" ? "source" : "text"} /></span><div><strong title={title}>{title}</strong><span title={file?.path ?? reference.href}>{file?.path ?? reference.href}</span></div></div>
+      <div className="file-title"><span className="file-type-icon"><FileIcon name={file?.kind === "image" ? "image" : "text"} /></span><div><strong data-tooltip={title}>{title}</strong><span tabIndex={0} data-tooltip={file?.path ?? reference.href}>{file?.path ?? reference.href}</span></div></div>
       <div className="file-header-actions"><Action icon="folder" label={revealing ? "正在打开所在文件夹" : "打开所在文件夹"} onClick={() => void reveal()} disabled={revealing || loading || !!error} /><Action icon="close" label="关闭文件预览" onClick={onClose} /></div>
     </header>
     <div className="file-preview-toolbar">
@@ -133,6 +138,6 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
       </div>
     </div>
     <div className="file-preview-body" aria-busy={loading}>{body}</div>
-    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" title={notice}>{notice || (file?.encoding ?? "只读预览")}</span></footer>
+    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice}>{notice || (file?.encoding ?? "只读预览")}</span></footer>
   </aside>;
 }

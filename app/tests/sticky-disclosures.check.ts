@@ -124,7 +124,7 @@ try {
       await header.click();
       if (await parent.count()) await parent.locator(":scope > summary").click();
     }
-    const group = page.locator("#messages > .tool-activity").filter({ has: page.locator('.tool-call[aria-label="read"]') });
+    const group = page.locator("#messages > .tool-activity").filter({ hasText: "long-file.ts" });
     const groupHeader = group.locator(":scope > summary");
     await groupHeader.click();
     const inner = group.locator(".thinking-block");
@@ -179,7 +179,7 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator("#messages > .tool-activity").filter({ has: page.locator(".delegation-card") }).locator(":scope > summary").click();
+  await page.locator("#messages > .tool-activity").last().locator(":scope > summary").click();
   await page.getByRole("button", { name: "打开子会话：检查长内容" }).click();
   const dialog = page.getByRole("dialog", { name: "子代理会话", exact: true });
   const childBlock = dialog.locator(".thinking-block");
@@ -204,8 +204,8 @@ try {
   views.messageChanged(scope, { id: "tail-tools", role: "assistant", text: "", calls: [call("tail-read", "read", { path: "tail.ts", context: longText })] });
   views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "completed" });
   views.flush(scope);
-  const tailGroup = page.locator(".tool-activity").last();
-  await tailGroup.getByText("tail.ts", { exact: true }).waitFor({ state: "attached" });
+  const tailGroup = page.locator("#messages > .tool-activity").last();
+  await tailGroup.locator(":scope > summary").filter({ hasText: "tail.ts" }).waitFor();
   await page.locator("#thread").evaluate(node => { node.scrollTop = node.scrollHeight; });
   await settled(page);
   await tailGroup.locator(":scope > summary").click();

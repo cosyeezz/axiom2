@@ -1,4 +1,4 @@
-Original conversation toolbar: Bootstrap Icons bi:filetype-raw, inline in chat/OriginalConversation.tsx.
+Third-party icon notices retained with the distribution. Bootstrap Icons (MIT).
 Source: https://icon-sets.iconify.design/bi/filetype-raw/
 The MIT License (MIT)
 Copyright (c) 2019-2024 The Bootstrap Authors
@@ -18,11 +18,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-File preview toolbar: Lucide file-code, columns-2, book-open, folder-open, file-text, image, file, rotate-ccw, text-wrap, minus, plus, maximize and x; official SVG paths in chat/FileIcon.tsx.
+Shared non-brand glyphs: Lucide (ISC), static paths in icons.svg; Icon.tsx is the shared renderer. File preview, model configuration, memory, original conversation and notifications reuse these symbols. The original pin arrows and user-provided annotation bubble remain inline. The shared usage entry uses Lucide chart-column-increasing (https://lucide.dev/icons/chart-column-increasing). DataIcons.tsx combines custom measured geometry with Lucide glyphs; mobile upload uses a custom confirmed-file meter. See icons.svg for the complete adopted symbol list.
 Sources: https://lucide.dev/icons/columns-2 https://lucide.dev/icons/book-open https://lucide.dev/icons/folder-open
 SVG source: https://github.com/lucide-icons/lucide/tree/main/icons
 Running process status: eos-icons:three-dots-loading (SUSE UX/UI team, MIT), inline in chat/ToolActivity.tsx.
 EOS source: https://icon-sets.iconify.design/eos-icons/three-dots-loading/
+Compression steps: Lucide copy, file-text, list-checks, check, triangle-alert and square; official paths in chat/CompressionDetail.tsx, displayed without background badges or circular borders.
+Sources: https://lucide.dev/icons/copy https://lucide.dev/icons/file-text https://lucide.dev/icons/list-checks https://lucide.dev/icons/check https://lucide.dev/icons/triangle-alert https://lucide.dev/icons/square
+SVG source: https://github.com/lucide-icons/lucide/tree/main/icons (ISC license below).
 Shared loading status: eos-icons:bubble-loading, official SVG animation in StatusIcons.tsx.
 EOS loading source: https://icon-sets.iconify.design/eos-icons/bubble-loading/
 Session title status: svg-spinners:pulse-rings-multiple (Utkarsh Verma, MIT), in StatusIcons.tsx. Running and unread indicators share the original ring paths, distinguished by color, with a custom 2-second transition to a solid dot, 2-second hold and 2-second reverse transition, repeating seamlessly every 6 seconds.
@@ -32,17 +35,17 @@ Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold
 Completed process status: user-provided Tabler progress-check SVG, inline in chat/ToolActivity.tsx; original paths preserved with one-shot left-dash reveal, right-arc drawing and check drawing.
 Tabler icon: https://tabler.io/icons/icon/progress-check
 Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
-Model configuration reload: Tabler refresh, inline in pages/Models.tsx.
-Refresh source: https://icon-sets.iconify.design/tabler/refresh/
-Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh.svg
+Model configuration reload: shared Lucide rotate-cw (ISC).
+Tabler fold is also used as the shared static compression symbol in icons.svg.
 Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
 Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
 Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths)
 MIT License: Copyright (c) 2023 Phosphor Icons. Full text: assets/PHOSPHOR-LICENSE.txt
-Lucide: square-pen, folder-plus, gauge, database-zap, copy, x, chevron-down,
-network, inbox, message-square-plus, circle-stop, brain.
-Reply annotation toolbar and inline action: user-provided three-dot comment bubble SVG.
-Task card SVGs use the official paths with a 1.75px stroke at an 18px display size.
+Lucide symbols use 1.5px non-scaling rounded strokes; ordinary desktop glyphs
+are 18px, while measured data glyphs are 24px. The composer toolbar uses 16px
+ordinary glyphs with 1px non-scaling strokes and 20px measured data glyphs with
+1.3-unit strokes; its neutral icon color is #b8bec8. Existing status animations remain
+instance-local SVG timelines and are not disabled by reduced-motion preferences.
 ISC License
 Copyright (c) 2026 Lucide Icons and Contributors
 Permission to use, copy, modify, and/or distribute this software for any

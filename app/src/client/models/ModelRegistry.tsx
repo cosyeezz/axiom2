@@ -185,9 +185,7 @@ export function ModelRegistry({
                         discardEditor(() => setEditor(structuredClone(m)))
                       }
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m16 3 5 5-12 12H4v-5Z" />
-                      </svg>
+                      <Icon name="square-pen" />
                     </button>
                     <DeleteButton
                       label={`删除模型：${m.name}`}

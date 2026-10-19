@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { Icon } from "./Icon.js";
 import sprite from "./icons.svg?raw";
 
 export function Icons() {
@@ -6,16 +7,10 @@ export function Icons() {
     <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: sprite }} />
   );
 }
-export function Icon({ name }: { name: string }) {
-  return (
-    <svg aria-hidden="true">
-      <use href={`#i-${name}`} />
-    </svg>
-  );
-}
+export { Icon } from "./Icon.js";
 export function PanelIcon() {
   return (
-    <svg className="sidebar-motion" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className="sidebar-motion ui-glyph" viewBox="2 3 20 18" aria-hidden="true">
       <rect className="panel-fill" x="4" y="5" width="5" height="14" rx="1" />
       <rect x="3" y="4" width="18" height="16" rx="3" />
       <path className="panel-divider" d="M9 5v14" />
@@ -66,9 +61,7 @@ export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools
   return (
     <aside className="settings-sidebar" aria-label="配置导航">
       <a className="btn btn-ghost back-link" href="/">
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="m12 5-7 7 7 7M5 12h15" />
-        </svg>
+        <Icon name="arrow-left" />
         返回工作台
       </a>
       <nav aria-label="配置模块">

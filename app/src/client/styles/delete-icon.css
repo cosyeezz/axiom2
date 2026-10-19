@@ -1,2 +1,2 @@
-svg.delete-icon { display: block; stroke: none; }
-button:enabled:is(:hover, :focus-visible) > .delete-icon { color: #991b1b; }
+svg.delete-icon { display: block; stroke: currentColor; fill: none; }
+button:enabled:not([aria-disabled="true"]):is(:hover, :focus-visible) > .delete-icon { color: var(--danger-icon); }

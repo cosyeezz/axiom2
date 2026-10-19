@@ -73,7 +73,7 @@ try {
   } }));
   writeFileSync(join(root, "pi/auth.json"), JSON.stringify({ "compression-page-fixture": { type: "api_key", key: "loopback-only" } }));
   writeFileSync(join(root, "pi/settings.json"), JSON.stringify({ compaction: { enabled: false }, retry: { enabled: false } }));
-  app = await startServer({ root, port: 0 });
+  app = await startServer({ root, port: 0, dev: true });
   const server = app;
   const workspace = server.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const chat: Selection = { provider: "compression-page-fixture", id: "chat-model", thinking: "off" };
@@ -127,6 +127,21 @@ try {
   await page.goto(server.origin);
   const trigger = page.locator('[data-od-id="background-compression-trigger"]');
   const dialog = page.getByRole("dialog", { name: "后台压缩", exact: true });
+  const expectTriggerColor = async (variable: string) => {
+    // Sample the settled color: normal-motion controls transition from running to idle.
+    await page.waitForFunction((token) => {
+      const button = document.querySelector('[data-od-id="background-compression-trigger"]')!;
+      const probe = document.createElement("span"); probe.style.color = `var(${token})`; button.append(probe);
+      const expected = getComputedStyle(probe).color; probe.remove();
+      return getComputedStyle(button.querySelector("svg")!).color === expected;
+    }, variable);
+    const colors = await trigger.evaluate((button, token) => {
+      const probe = document.createElement("span"); probe.style.color = `var(${token})`; button.append(probe);
+      const expected = getComputedStyle(probe).color; probe.remove();
+      return { actual: getComputedStyle(button.querySelector("svg")!).color, expected };
+    }, variable);
+    assert.equal(colors.actual, colors.expected, `compression icon uses ${variable}`);
+  };
   const picker = dialog.locator("details.model-picker");
   const pickerTrigger = picker.locator("summary");
   const state = (value: string) => dialog.locator(`.compression-status[data-state="${value}"]`).waitFor();
@@ -152,9 +167,12 @@ try {
     await page.mouse.move(x, y);
     await page.mouse.up();
     assert.equal(await dialog.isVisible(), true, "dragging from inside to outside does not dismiss the sheet");
+    const outsideTarget = await page.evaluateHandle(({ x, y }) => document.elementFromPoint(x, y)?.closest('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') ?? null, { x, y });
     await page.mouse.click(x, y);
     await dialog.waitFor({ state: "detached" });
-    assert.ok(await trigger.evaluate((el) => document.activeElement === el), "outside click restores trigger focus");
+    if (outsideTarget.asElement()) assert.ok(await outsideTarget.evaluate((el) => document.activeElement === el), "outside click preserves the clicked control's focus");
+    else assert.ok(await trigger.evaluate((el) => document.activeElement === el), "outside blank click restores trigger focus");
+    await outsideTarget.dispose();
   };
   const select = async (target: typeof a) => {
     await page.locator(".history-row").filter({ has: page.getByRole("button", { name: `删除会话：${target.title}`, exact: true }) }).locator("button.history-item").click();
@@ -287,7 +305,7 @@ try {
     assert.equal(requests.length, count, "one provider request per explicit start");
     assert.equal(requests[count - 1].model, summary.id);
     assert.ok(!requests[count - 1].tools?.length, "compression exposes no coding tools");
-    assert.match(JSON.stringify(requests[count - 1].messages.at(-1)?.content), /<axiom-summary>.*30.*<\/axiom-summary>/, "the actual provider request must include short-summary instructions, including split turns");
+    assert.match(JSON.stringify(requests[count - 1].messages.at(-1)?.content), /<axiom-summary>.*100.*<\/axiom-summary>/, "the actual provider request must include short-summary instructions, including split turns");
     assert.deepEqual(server.agents.compressions.info(a)!.selection, summary);
     assert.deepEqual(server.agents.info(a).selection, chat);
     return server.agents.compressions.info(a)!.id;
@@ -300,20 +318,20 @@ try {
   assert.equal(await currentStep.getAttribute("aria-current"), "step");
   for (const reducedMotion of ["reduce", "no-preference"] as const) {
     await page.emulateMedia({ reducedMotion });
-    for (const icon of [currentStep.locator(".bubble-loading"), dialog.locator(".compression-status .bubble-loading"), trigger.locator(".bubble-loading")]) {
+    for (const icon of [currentStep.locator(".bubble-loading"), dialog.locator(".compression-status .data-icon"), trigger.locator(".data-icon")]) {
       const frames = await icon.evaluate(node => {
         const svg = node as SVGSVGElement;
         svg.pauseAnimations();
         svg.setCurrentTime(0.2);
-        const first = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        const first = [...svg.querySelectorAll("circle")].map(circle => [circle.r.animVal.value, getComputedStyle(circle).opacity]);
         svg.setCurrentTime(0.7);
-        const second = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        const second = [...svg.querySelectorAll("circle")].map(circle => [circle.r.animVal.value, getComputedStyle(circle).opacity]);
         svg.unpauseAnimations();
         return { first, second, stroke: getComputedStyle(svg).stroke };
       });
-      assert.equal(frames.first.length, 8);
-      assert.notDeepEqual(frames.first, frames.second, `compression bubbles animate in ${reducedMotion}`);
-      assert.equal(frames.stroke, "none");
+      assert.ok([3, 8].includes(frames.first.length));
+      assert.notDeepEqual(frames.first, frames.second, `compression activity animates in ${reducedMotion}`);
+      if (frames.first.length === 8) assert.equal(frames.stroke, "none");
     }
   }
   await page.screenshot({ path: "test-results/compression-page-running.png" });
@@ -332,11 +350,17 @@ try {
   assert.equal(await page.locator(".compaction-title").innerText(), "浏览器压缩验证", "split-turn topic reaches the collapsed card");
   assert.equal(await page.locator(".compaction-icon .fold-icon path").count(), 6);
   assert.equal(await trigger.locator("animate").count(), 0, "compression completion removes loading bubbles");
+  assert.equal(await trigger.locator('use[href="#i-fold"]').count(), 1, "completion restores the idle fold glyph");
+  await page.mouse.move(0, 0);
+  await expectTriggerColor("--action-icon-fg");
   assert.equal(await dialog.count(), 0, "completion does not reopen dialog");
   assert.deepEqual(await page.locator("#prompt").evaluate((el: HTMLTextAreaElement) => [el.value, el === document.activeElement, el.selectionStart, el.selectionEnd]), ["压缩不打扰聊天草稿", true, 2, 5]);
   assert.ok(readFileSync(a.file!, "utf8").startsWith(original), "compression preserves original JSONL history");
   await open();
   await state("completed");
+  await page.mouse.move(0, 0);
+  await dialog.getByRole("heading", { name: "后台压缩", exact: true }).click();
+  await expectTriggerColor("--action-icon-fg");
   assert.equal(await currentStep.count(), 0, "terminal stages stop animation");
   assert.equal(await dialog.locator('.compression-steps li[data-phase="done"]').count(), 3);
   await dialog.getByText(/浏览器真实压缩摘要/).waitFor();
@@ -396,6 +420,7 @@ try {
   await dialog.getByRole("button", { name: "开始压缩", exact: true }).click();
   await state("failed");
   await dialog.getByRole("alert").getByText(/quota_exhausted/).waitFor();
+  await expectTriggerColor("--danger");
   assert.match(await dialog.getByRole("alert").innerText(), /失败原因/);
   assert.doesNotMatch(await dialog.innerText(), /sk-fixture-secret/);
   await page.screenshot({ path: "test-results/compression-page-failed.png" });

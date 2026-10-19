@@ -53,6 +53,9 @@ function TaskWindow({
     ref = useRef<HTMLDialogElement>(null);
   const [report, setReport] = useState<TaskResult | null>(null),
     [error, setError] = useState("");
+  const [detailsVisited, setDetailsVisited] = useState(false), [loadingReport, setLoadingReport] = useState(false);
+  const reportRequest = useRef(0);
+  useEffect(() => () => { reportRequest.current++; }, []);
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement;
     ref.current!.showModal();
@@ -89,8 +92,7 @@ function TaskWindow({
     >
       <header className="subagent-dialog-head">
         <div className="subagent-dialog-heading">
-          <span>子代理会话 · 独立上下文</span>
-          <strong>{task?.description}</strong>
+          <strong>子代理会话</strong>
         </div>
         {task && <TaskState task={task} />}
         <button
@@ -105,19 +107,12 @@ function TaskWindow({
       </header>
       {task && child && (
         <section className="workspace">
-          <header className="topnav">
-            <div className="title-block">
-              <h1>{task.description}</h1>
-              <div className="title-meta">
-                工作预算 {task.budgets.workMs / 1000}s · 累计执行 {Math.round((task.elapsedMs ?? 0) / 1000)}s
-              </div>
-            </div>
-          </header>
           <div className="container task-results">
-            <details>
+            <details onToggle={(event) => { if (event.target === event.currentTarget && event.currentTarget.open) setDetailsVisited(true); }}>
               <summary>
                 执行与交付 · {task.results.length} 次
               </summary>
+              {detailsVisited && <><p className="task-description">{task.description}</p>
               {task.error && <p className="execution-alert">{task.error}</p>}
               {task.results.map((r, i) => (
                 <button
@@ -125,22 +120,22 @@ function TaskWindow({
                   className="btn"
                   key={r.id}
                   onClick={async () => {
+                    const request = ++reportRequest.current;
+                    setLoadingReport(true); setError(""); setReport(null);
                     try {
-                      setReport(
-                        await command<TaskResult>(
-                          "task.result",
-                          { taskId: task.id, resultId: r.id },
-                          scope,
-                        ),
-                      );
+                      const value = await command<TaskResult>("task.result", { taskId: task.id, resultId: r.id }, scope);
+                      if (request === reportRequest.current) setReport(value);
                     } catch (e) {
-                      setError((e as Error).message);
+                      if (request === reportRequest.current) setError((e as Error).message);
+                    } finally {
+                      if (request === reportRequest.current) setLoadingReport(false);
                     }
                   }}
                 >
                   第 {i + 1} 次 · {taskLabels[r.status]}
                 </button>
               ))}
+              {loadingReport && <p role="status">正在读取交付…</p>}
               {report && (
                 <div>
                   <p>{report.sideEffects}</p>
@@ -148,7 +143,7 @@ function TaskWindow({
                   <p>{report.unfinished.join("；")}</p>
                 </div>
               )}
-              {error && <p role="alert">{error}</p>}
+              {error && <p role="alert">{error}</p>}</>}
             </details>
           </div>
           <OriginalConversationProvider key={`${child.workspaceId}:${child.sessionId}`} scope={child}>

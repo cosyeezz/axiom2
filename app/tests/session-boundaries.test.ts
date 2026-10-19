@@ -30,12 +30,13 @@ test("pending launch is active; stop invalidates it and waits, with exactly one 
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const saved: unknown[][] = [], settled: Run[] = [];
-  const runs = new AgentRuns({ session() {}, finishRun: (...args: unknown[]) => saved.push(args) } as any, { changed() {} } as any, () => {});
+  const pool = { retire: () => gate, releaseAffinity: async () => {} } as any;
+  const runs = new AgentRuns({ session() {}, finishRun: (...args: unknown[]) => saved.push(args) } as any, { changed() {} } as any, () => {}, pool);
   const scope = { workspaceId: "workspace", sessionId: "session" };
-  (runs as any).retiringSessions.set(scope.sessionId, gate);
+  const lease = { ref: { instanceId: "instance", generation: 1, leaseId: "lease" }, ensureReady: async () => { await gate; throw Object.assign(Error("stopped"), { code: "AGENT_STOPPED" }); } } as any;
   runs.onSettled = (_scope, run) => settled.push(run);
   const run = { id: "run", status: "starting" } as Run;
-  const launch = runs.launch(scope, run, {} as any);
+  const launch = runs.launch(scope, run, {} as any, lease);
   assert.equal(runs.active(scope), true);
   let stopped = false;
   const stop = runs.stop(scope).then(() => { stopped = true; });
@@ -80,7 +81,7 @@ test("startup exceptions retain bounded redacted causes in the run and settlemen
   (runs as any).launchWorker = async () => { throw cause; };
   runs.onSettled = (_scope, run) => settled.push(run);
   const scope = { workspaceId: "workspace", sessionId: "session" }, run = { id: "run", status: "starting" } as Run;
-  await assert.rejects(runs.launch(scope, run, {} as any), cause);
+  await assert.rejects(runs.launch(scope, run, {} as any, { ref: { instanceId: "unstarted", generation: 1, leaseId: "lease" } } as any), cause);
   assert.equal(runs.active(scope), false);
   assert.equal(run.status, "failed");
   assert.match(run.error!, /ENOENT: missing frozen model snapshot/);

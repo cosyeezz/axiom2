@@ -1,8 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { scopeKey, type Scope } from "../../shared/protocol.js";
-import { getDraft, updateDraft } from "../drafts.js";
-import { optimisticRemove, pendingMessages } from "./optimistic.js";
-import { mergeRecalledDrafts } from "./recall-drafts.js";
+import { optimisticConfirmation, optimisticState, pendingMessages } from "./optimistic.js";
 
 // Submission feedback belongs to the originating session, including late receipts.
 const errors = new Map<string, string>();
@@ -21,11 +19,11 @@ export function useSubmissionError(scope: Scope) {
   }, [key]), () => errors.get(key) ?? "");
 }
 
-// Only a confirmed rejection reaches here. Consumed/removed inputs cannot be restored twice.
+// A rejection remains attached to the submitted message, never to the next draft.
+// Consumed/removed inputs and duplicate failure receipts cannot recreate a submission.
 export function rejectSubmission(scope: Scope, id: string, reason?: string) {
   const pending = pendingMessages(scope).find((item) => item.id === id);
-  if (!pending) return;
-  optimisticRemove(scope, id);
-  updateDraft(scope, mergeRecalledDrafts(getDraft(scope), [pending.draft]));
-  setSubmissionError(scope, `${reason || "消息未能发送。"} 内容已保留在输入框。`);
+  if (!pending || (pending.state === "failed" && pending.confirmation)) return;
+  optimisticState(scope, id, "failed");
+  optimisticConfirmation(scope, id, `发送未完成：${reason || "消息未能发送。"} 原消息已保留。`);
 }

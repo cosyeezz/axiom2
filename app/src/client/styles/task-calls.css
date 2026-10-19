@@ -48,7 +48,7 @@
 .delegation-card[data-status="failed"] > .subagents-head,
 .delegation-card[data-status="failed"] > .subagents-head *,
 .subagent-card > .subagent[data-status="failed"],
-.subagent-card > .subagent[data-status="failed"] * { color: #d99595; --tool-color: #d99595; }
+.subagent-card > .subagent[data-status="failed"] * { color: var(--danger-text); --tool-color: var(--danger-icon); }
 @media (max-width: 640px) {
   .task-operation > details > summary { gap: 8px; padding-inline: 10px; }
   .task-operation-heading { display: grid; gap: 0; }

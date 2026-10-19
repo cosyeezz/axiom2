@@ -1,3 +1,4 @@
+import { mkdirSync, readFileSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -64,11 +65,44 @@ export class ModelService {
   constructor(readonly root: string) {
     this.dir = process.env.AXIOM_PI_DIR || join(root, "pi");
   }
+  // Watchers only invalidate; admission still verifies content, including missed events and partial saves.
+  watchConfiguration(changed: () => void): () => void {
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    const revision = () => ["models.json", "auth.json", "models-store.json"].map(name => {
+      try { return digest(readFileSync(join(this.dir, name), "utf8")); } catch { return "unreadable"; }
+    }).join(":");
+    let previous = revision();
+    try {
+      const watcher = watch(this.dir, { persistent: false }, (_event, name) => {
+        if (name && !["models.json", "auth.json", "models-store.json"].includes(String(name))) return;
+        const next = revision();
+        if (next !== previous) { previous = next; changed(); }
+      });
+      watcher.on("error", () => { changed(); watcher.close(); });
+      return () => watcher.close();
+    } catch { return () => {}; }
+  }
   // ponytail: one application config writer; split locks only if independent config domains become necessary.
-  serial<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.tail.then(run);
+  serial<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const cancelled = () => new AppError("AGENT_STOPPED", "配置准备等待期间已停止；未发送请求。");
+    if (signal?.aborted) return Promise.reject(cancelled());
+    let entered = false;
+    const result = this.tail.then(() => {
+      if (signal?.aborted) throw cancelled();
+      entered = true;
+      return run();
+    });
     this.tail = result.catch(() => {});
-    return result;
+    if (!signal) return result;
+    // A logout writer may be waiting for this startup to stop. Cancel queued
+    // work without waiting for that writer; work already entered must finish.
+    return new Promise<T>((resolve, reject) => {
+      const abort = () => { if (!entered) reject(cancelled()); };
+      signal.addEventListener("abort", abort, { once: true });
+      result.then(value => { signal.removeEventListener("abort", abort); resolve(value); },
+        error => { signal.removeEventListener("abort", abort); reject(error); });
+      if (signal.aborted) abort();
+    });
   }
   async raw() {
     await mkdir(this.dir, { recursive: true, mode: 0o700 });

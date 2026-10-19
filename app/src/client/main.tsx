@@ -1,3 +1,4 @@
+import "./platform.js";
 import { createRoot } from "react-dom/client";
 import { Icons } from "./components.js";
 import { connect } from "./transport.js";
@@ -21,6 +22,8 @@ const Page = (
 ).default;
 // Apply shared control states after the selected page's styles.
 await import("./styles/action-icons.css");
+await import("./styles/icon-geometry.css");
+await import("./styles/mobile.css");
 createRoot(document.getElementById("root")!).render(
   <>
     <Icons />

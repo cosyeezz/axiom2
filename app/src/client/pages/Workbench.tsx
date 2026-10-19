@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { command } from "../transport.js";
+import { MemoryToolbar } from "../memory/MemoryToolbar.js";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { command, useConnectionState } from "../transport.js";
 import { Icon, PanelIcon } from "../components.js";
+import { BrandMark } from "../BrandMark.js";
 import {
   scopeKey,
   type Scope,
@@ -17,8 +19,23 @@ import { useWorkspaceView } from "../workspaces/useWorkspaceView.js";
 import { pickWorkspaceFolder, Title } from "../workspaces/WorkspaceControls.js";
 import "../styles/workbench.css";
 import "../styles/chat.css";
+const androidClient = /^#axiom-native=\d+$/.test(location.hash);
 export default function Workbench() {
   const [error, setError] = useState("");
+  const connection = useConnectionState();
+  const [reading, setReading] = useState(() => androidClient || localStorage.getItem("axiom.mobile.reading") === "true");
+  const restoreReadingFocus = useRef(false);
+  const navigationGuard = useRef<(action: () => void) => void>((action) => action());
+  const toggleReading = () => {
+    restoreReadingFocus.current = true;
+    setReading((current) => { localStorage.setItem("axiom.mobile.reading", String(!current)); return !current; });
+  };
+  useLayoutEffect(() => {
+    if (restoreReadingFocus.current) {
+      restoreReadingFocus.current = false;
+      document.querySelector<HTMLButtonElement>(reading ? ".mobile-expand" : ".mobile-reading-toggle")?.focus({ preventScroll: true });
+    }
+  }, [reading]);
   const { workspaces, workspaceId, view, select: selectView, selectSession, navigation } = useWorkspaceView(setError);
   const [collapsed, setCollapsed] = useState(false),
     [mobileOpen, setMobileOpen] = useState(false);
@@ -47,7 +64,7 @@ export default function Workbench() {
       }
     }
   };
-  const mobile = useRef(matchMedia("(max-width:640px)"));
+  const mobile = useRef(matchMedia("(max-width:640px), (pointer:coarse) and (max-height:500px)"));
   const [isMobile, setIsMobile] = useState(mobile.current.matches);
   useEffect(() => {
     const change = () => {
@@ -57,28 +74,45 @@ export default function Workbench() {
     mobile.current.addEventListener("change", change);
     return () => mobile.current.removeEventListener("change", change);
   }, []);
+  const restoreHistoryFocus = useRef(false);
+  const closeMobileHistory = () => {
+    if (!isMobile || !mobileOpen) return;
+    restoreHistoryFocus.current = true;
+    setMobileOpen(false);
+  };
+  useLayoutEffect(() => {
+    if (isMobile && mobileOpen) document.getElementById("collapse-history")?.focus();
+    else if (restoreHistoryFocus.current) {
+      restoreHistoryFocus.current = false;
+      document.getElementById("toggle-history")?.focus({ preventScroll: true });
+    }
+  }, [isMobile, mobileOpen]);
   const workspace = workspaces.find((w) => w.id === workspaceId);
   const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
   const select = (next: Scope) => {
-    selectView(next);
-    setMobileOpen(false);
+    navigationGuard.current(() => { selectView(next); closeMobileHistory(); });
   };
+  const creatingSessions = useRef(new Set<string>());
   const create = async (id = workspace?.id) => {
     if (!id) {
       void chooseFolder();
       return;
     }
+    if (creatingSessions.current.has(id)) return;
+    creatingSessions.current.add(id);
     const startedAt = navigation.current;
     try {
       const session = await command<Session>(
         "session.create",
-        {},
+        { reuseEmpty: true },
         { workspaceId: id },
       );
       if (navigation.current === startedAt)
         select({ workspaceId: id, sessionId: session.id });
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      creatingSessions.current.delete(id);
     }
   };
   useEffect(() => {
@@ -89,7 +123,7 @@ export default function Workbench() {
         !document.querySelector("dialog[open]")
       ) {
         e.preventDefault();
-        void create();
+        navigationGuard.current(() => { void create(); });
       }
     };
     document.addEventListener("keydown", handler);
@@ -98,32 +132,34 @@ export default function Workbench() {
   const expanded = isMobile ? mobileOpen : !collapsed;
   return (
     <div
-      className={`app${collapsed ? " sidebar-collapsed" : ""}${mobileOpen ? " history-open" : ""}`}
+      className={`app${isMobile ? " mobile-workbench" : ""}${androidClient ? " android-workbench" : ""}${collapsed ? " sidebar-collapsed" : ""}${mobileOpen ? " history-open" : ""}${(isMobile || androidClient) && reading ? " reading-mode" : ""}`}
       id="app"
     >
       <button
         className="backdrop"
         aria-label="关闭历史对话"
-        onClick={() => setMobileOpen(false)}
+        onClick={closeMobileHistory}
       />
-      <aside className="sidebar" id="history-sidebar" aria-label="对话历史">
+      <aside className="sidebar" id="history-sidebar" aria-label="对话历史" inert={isMobile && !mobileOpen} role={isMobile && mobileOpen ? "dialog" : undefined} aria-modal={isMobile && mobileOpen ? true : undefined} onKeyDown={(event) => {
+        if (!isMobile || !mobileOpen || event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeMobileHistory(); }
+        if (event.key !== "Tab") return;
+        const elements = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),summary')].filter((el) => el.getClientRects().length);
+        const first = elements[0], last = elements.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
         <div className="row brand">
-          <span className="axiom-wordmark" role="img" aria-label="AXIOM">
-            <span className="brand-mark axiom-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 2 22 8 12 14 2 8Z" />
-                <path className="facet" d="m2 10 9 5.4V22l-9-5.4Z" />
-                <path d="m13 15.4 9-5.4v6.6L13 22Z" />
-              </svg>
-            </span>
-            <strong aria-hidden="true">XIOM</strong>
+          <span className="axiom-wordmark" role="img" aria-label="AXIOM 2 · 工作台">
+            <BrandMark size={38} className="brand-mark axiom-mark" />
+            <span className="axiom-brand-type" aria-hidden="true"><strong>AXIOM<span className="axiom-edition">2</span></strong><span className="axiom-brand-caption">工作台 <i /> WORKSPACE</span></span>
           </span>
           <button
             className="icon-btn"
             id="collapse-history"
             aria-label="收起侧栏"
             onClick={() => {
-              isMobile ? setMobileOpen(false) : setCollapsed(true);
+              isMobile ? closeMobileHistory() : setCollapsed(true);
               requestAnimationFrame(() =>
                 document.getElementById("toggle-history")?.focus(),
               );
@@ -143,7 +179,8 @@ export default function Workbench() {
         <button
           className="btn new-chat"
           id="new-chat"
-          onClick={() => void create()}
+          data-view-navigation
+          onClick={() => navigationGuard.current(() => { void create(); })}
         >
           <Icon name="new-chat" />
           <span>新建会话</span>
@@ -153,7 +190,7 @@ export default function Workbench() {
           workspace={workspace}
           workspaces={workspaces}
           selected={view}
-          select={(next) => { selectSession(next); setMobileOpen(false); }}
+          select={(next) => navigationGuard.current(() => { selectSession(next); closeMobileHistory(); })}
           onError={setError}
         />
         <a
@@ -173,13 +210,7 @@ export default function Workbench() {
               应用配置
             </span>
           </span>
-          <svg
-            className="config-chevron"
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-          >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
+          <Icon className="config-chevron" name="chevron-right" />
         </a>
       </aside>
       <TaskViews
@@ -189,7 +220,8 @@ export default function Workbench() {
           <Composer key={scopeKey(scope)} scope={scope} nested />
         )}
       >
-        <main className="workspace" id="content">
+        <main className="workspace" id="content" inert={isMobile && mobileOpen}>
+          <button className="mobile-expand" aria-label="展开工作台" onClick={toggleReading}><PanelIcon /><span>展开</span></button>
           <header className="topnav">
             <div className="row">
               <button
@@ -206,21 +238,24 @@ export default function Workbench() {
               </button>
               <Title workspace={viewedWorkspace} scope={view} onError={setError} />
             </div>
+            <button className="mobile-reading-toggle icon-btn" aria-label="收起工作台，只看对话" onClick={toggleReading}><Icon name="scan" /></button>
           </header>
+          {isMobile && !connection.connected && <div className="mobile-connection" role="status">正在恢复连接，已有对话和草稿已保留<a href="/">重新连接</a></div>}
           <OriginalConversationProvider key={view ? scopeKey(view) : "empty"} scope={view}>
           <Thread
-            key={view ? "thread:" + scopeKey(view) : "empty"}
+            key={view ? "thread:" + scopeKey(view) : "thread:empty"}
             scope={view}
           />
-          {view?.sessionId && viewedWorkspace ? (
-            <Composer key={scopeKey(view)} scope={view} />
+          <MemoryToolbar key={view ? scopeKey(view) : "empty"} scope={view ?? null} workspaces={workspaces} navigationGuard={navigationGuard}>{(tools) => view?.sessionId && viewedWorkspace ? (
+            <Composer key={scopeKey(view)} scope={view} tools={tools} />
           ) : (
             <EmptyComposer
+              tools={tools}
               openWorkspace={() => void chooseFolder()}
               onSelect={workspace ? async (selection) => {
                 const startedAt = navigation.current;
                 const session = await command<Session>(
-                  "session.create", {}, { workspaceId: workspace.id },
+                  "session.create", { reuseEmpty: true }, { workspaceId: workspace.id },
                 );
                 const scope = { workspaceId: workspace.id, sessionId: session.id };
                 try {
@@ -233,7 +268,7 @@ export default function Workbench() {
                 }
               } : undefined}
             />
-          )}
+          )}</MemoryToolbar>
           </OriginalConversationProvider>
           {error && (
             <p className="execution-alert" role="alert">

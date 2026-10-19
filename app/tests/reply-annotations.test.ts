@@ -6,12 +6,14 @@ const note = (text = "改用批量提交"): ReplyAnnotation => ({ id: crypto.ran
 test("annotation drafts and editor survive closing mode without leaking across workspaces or sessions", () => {
   const owner = scope(), child = { ...owner, sessionId: crypto.randomUUID() }, other = { ...owner, workspaceId: crypto.randomUUID() };
   updateAnnotations(owner, { enabled: true, editor: note() }); saveAnnotation(owner);
-  updateAnnotations(owner, { editor: note("仍在输入"), enabled: false });
+  updateAnnotations(owner, { editor: note("仍在输入"), enabled: false, supplement: "整体保持简洁" });
   assert.equal(getAnnotations(owner).items.length, 1);
   assert.equal(getAnnotations(owner).editor?.text, "仍在输入");
   assert.equal(getAnnotations(child).items.length, 0); assert.equal(getAnnotations(other).editor, null);
   updateAnnotations(owner, { enabled: true });
   assert.equal(getAnnotations(owner).editor?.text, "仍在输入");
+  assert.equal(getAnnotations(owner).supplement, "整体保持简洁");
+  assert.equal(getAnnotations(child).supplement, ""); assert.equal(getAnnotations(other).supplement, "");
 });
 test("clearing a captured annotation batch preserves later additions and edited comments", () => {
   const owner = scope(), sent = [note()];
@@ -34,6 +36,17 @@ test("typing updates the editor without changing the snapshot observed by source
   assert.notEqual(annotationPresentation(owner), before);
   assert.equal(annotationPresentation(owner).items[0].text, "abc");
 });
+test("supplement typing keeps source snapshots stable and clearing only removes the submitted text", () => {
+  const owner = scope(), items = [note()];
+  updateAnnotations(owner, { enabled: true, items, supplement: "初稿" });
+  const before = annotationPresentation(owner);
+  updateAnnotations(owner, { supplement: "新的补充说明" });
+  assert.equal(annotationPresentation(owner), before);
+  clearSentAnnotations(owner, items, "初稿");
+  assert.equal(getAnnotations(owner).supplement, "新的补充说明");
+  clearSentAnnotations(owner, [], "新的补充说明");
+  assert.equal(getAnnotations(owner).supplement, "");
+});
 test("batch submission carries immutable original quotes, reply identity and each comment without the whole source", () => {
   const item = { ...note(), quote: "需要修改的部分\n第二行", source: "整段包括其他内容", text: "缩短超时并解释原因" };
   const prompt = annotationPrompt([item, note("第二条意见")]);
@@ -42,4 +55,7 @@ test("batch submission carries immutable original quotes, reply identity and eac
   assert.ok(prompt.includes(item.text)); assert.ok(prompt.includes("第二条意见"));
   assert.ok(!prompt.includes("整段包括其他内容"));
   assert.equal(annotationPrompt([]), "");
+  assert.equal(annotationPrompt([], "没有批注时不单独发送"), "");
+  assert.equal(annotationPrompt([item], "  \n "), annotationPrompt([item]));
+  assert.ok(annotationPrompt([item], "  请先解释取舍\n然后修改  ").endsWith("补充说明：\n请先解释取舍\n然后修改"));
 });

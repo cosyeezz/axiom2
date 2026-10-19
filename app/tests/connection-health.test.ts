@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { command, connect, connectionHealth, scopeSnapshot } from "../src/client/transport.js";
+import { command, connect, connectionHealth, renderedContextReady, scopeOrder, scopeSnapshot, subscribeScope } from "../src/client/transport.js";
 
 test("connection evidence expires independently of errors and rejects obsolete socket events", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1000 });
@@ -37,6 +37,25 @@ test("connection evidence expires independently of errors and rejects obsolete s
   assert.equal(connectionHealth(), "checking", "OPEN without a server response is not green");
   first.receive({ type: "hello", streamId: "first-server" });
   assert.equal(connectionHealth(), "connected");
+  const scope = { workspaceId: "reconnect", sessionId: "same" };
+  const names = ["messages:reconnect:same", "thread:reconnect:same", "agent:reconnect:same"];
+  const unsubscribe = names.map((name) => subscribeScope(name, () => {}));
+  const snapshots = [[], { ids: [] }, { run: null }].map((data, i) => ({ type: "snapshot", scope: names[i], streamId: "first-server", seq: 7, data }));
+  snapshots.forEach((snapshot) => first.receive(snapshot));
+  assert.equal(renderedContextReady(scope, [], false), true);
+  const optionalScopes = ["memory:reconnect:same", "memory-catalog:reconnect"];
+  const optionalOff = optionalScopes.map((name) => subscribeScope(name, () => {}));
+  for (const name of optionalScopes) {
+    const request = first.sent.findLast((item) => item.op === "subscribe" && item.params.scope === name)!;
+    first.receive({ type: "receipt", requestId: request.requestId, ok: false, error: { code: "SCOPE_MISMATCH", message: "optional memory missing" } });
+  }
+  await Promise.resolve();
+  assert.equal(scopeSnapshot<any>(optionalScopes[0])?.entry, "");
+  assert.deepEqual(scopeSnapshot(optionalScopes[1]), []);
+  assert.equal(connectionHealth(), "connected");
+  const memorySnapshots = [{ entry: "available" }, [{ id: "available" }]].map((data, i) => ({ type: "snapshot", scope: optionalScopes[i], streamId: "first-server", seq: 7, data }));
+  memorySnapshots.forEach((snapshot) => first.receive(snapshot));
+  const originalThread = scopeSnapshot(names[1]);
   const failed = command("subscribe", { scope: "invalid" }, {}, "subscription");
   first.receive({ type: "receipt", requestId: "subscription", ok: false, error: { code: "INVALID_SCOPE", message: "bad scope" } });
   await assert.rejects(failed, /bad scope/);
@@ -51,7 +70,27 @@ test("connection evidence expires independently of errors and rejects obsolete s
   first.close(); await rejected;
   assert.equal(connectionHealth(), "disconnected");
   const reopening = connect(); release({ ok: true } as Response); await reopening;
-  const second = sockets[1]; second.open(); second.receive({ type: "hello", streamId: "second-server" });
+  const second = sockets[1]; second.open(); second.receive({ type: "hello", streamId: "first-server" });
+  for (const name of optionalScopes) {
+    const request = second.sent.findLast((item) => item.op === "subscribe" && item.params.scope === name)!;
+    second.receive({ type: "receipt", requestId: request.requestId, ok: false, error: { code: "SCOPE_MISMATCH", message: "optional memory missing" } });
+  }
+  await Promise.resolve();
+  assert.equal(scopeSnapshot<any>(optionalScopes[0])?.entry, "");
+  assert.deepEqual(scopeSnapshot(optionalScopes[1]), []);
+  memorySnapshots.forEach((snapshot) => second.receive(snapshot));
+  assert.equal(scopeSnapshot<any>(optionalScopes[0])?.entry, "available", "a real snapshot with the same cursor replaces a synthetic empty view");
+  assert.deepEqual(scopeSnapshot(optionalScopes[1]), [{ id: "available" }]);
+  assert.equal(renderedContextReady(scope, [], false), false);
+  second.receive(snapshots[0]); second.receive(snapshots[1]);
+  assert.equal(renderedContextReady(scope, [], false), false, "all three new-generation snapshots are required");
+  second.receive({ ...snapshots[2], seq: 6 });
+  assert.equal(renderedContextReady(scope, [], false), false, "lower sequence cannot confirm freshness");
+  second.receive(snapshots[2]);
+  assert.equal(renderedContextReady(scope, [], false), true, "same stream/sequence confirms new connection");
+  assert.equal(scopeSnapshot(names[1]), originalThread, "duplicate data reuses identity");
+  const order = scopeOrder(names[1]); second.receive(snapshots[1]);
+  assert.equal(scopeOrder(names[1]), order, "same-generation duplicate does not publish");
   const pending = command<string>("ping", {}, {}, "current-request");
   let settled = false; void pending.then(() => { settled = true; });
   first.onopen?.(); first.onclose?.();
@@ -66,4 +105,11 @@ test("connection evidence expires independently of errors and rejects obsolete s
   await connect();
   assert.equal(sockets.length, 2);
   assert.ok(!second.sent.some((request) => request.op === "prompt"), "reconnect never resends an operation");
+  const expiredRead = command("agent.original", {}, scope, "expired-read");
+  const readFailure = assert.rejects(expiredRead, /请求超时/);
+  t.mock.timers.tick(15_001); await readFailure;
+  assert.equal(second.sent.filter((request) => request.op === "read.cancel" && request.params.requestId === "expired-read").length, 1);
+  assert.equal(first.sent.filter((request) => request.op === "read.cancel").length, 0);
+  optionalOff.forEach((off) => off());
+  unsubscribe.forEach((off) => off());
 });

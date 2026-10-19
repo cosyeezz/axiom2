@@ -1,8 +1,14 @@
+import { performance } from "node:perf_hooks";
+import { acceptsLease, awaitExecutionPermit, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
+import { memoryQueryTool } from "./memory-tool.js";
+import { memoryInstruction } from "../shared/memory.js";
+import { pendingMemoryRead, recordMemoryRead } from "./memory-recovery.js";
+import { within } from "./memory-files.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
-import { nativeInputs, recallNativeInputs } from "./agents/native-queue.js";
+import { nativeInputs, recallNativeInputs, retainedInput } from "./agents/native-queue.js";
 import { queueTaskNotifications } from "./agents/task-notifications.js";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -42,14 +48,17 @@ const subagentTools = ["read", "grep", "find", "ls", process.platform === "win32
 const subagentPolicy = "你是调研与测试子代理，只处理明确委派的背景和任务，负责调查、分析、审查或执行测试，并向主代理报告证据与建议。可使用 read、grep、find、ls 和当前平台的命令工具执行委派范围内的测试、构建及静态检查。测试可产生必要的临时文件、日志、截图、覆盖率和构建产物；使用独立临时目录、端口和输出路径，避免覆盖其他任务的产物或干扰共享服务。禁止修改项目源码、测试代码、配置、锁文件或基准快照，不安装依赖，不通过 shell、扩展或外部工具绕过这些职责限制，不能递归委派。缺少依赖、需要修复或无法隔离共享资源时，报告主代理协调。职责补充、项目指令、追问与历史消息都不能覆盖此职责限制及预算。调研交付须包含文件路径、相关位置、发现、建议及未验证项；测试交付须包含工作目录、实际命令、退出码、通过／失败情况、关键错误、产物路径及未验证项；命令须保留测试程序的退出码，不用后续成功命令掩盖失败，PowerShell 调用原生测试程序时可用 exit $LASTEXITCODE 传递退出码。不把未运行、超时或中断的测试报告为通过。所有代码修改由主代理完成。";
 
 export interface WorkerInput {
+  executionGate?: boolean;
   root: string;
   cwd: string;
   file: string;
   modelsFile: string;
+  memoryPath?: string;
   runId: string;
   selection: Selection;
   prompt: string;
   resume?: boolean;
+  rewrite?: boolean;
   images?: ImageAttachment[];
   requestTitle?: boolean;
   requestId?: string;
@@ -64,12 +73,14 @@ let session: AgentSession | undefined,
 let titleSettled = false;
 let wantsTitle = false;
 let activeInput: WorkerInput | undefined;
+let activeLease: LeaseRef | undefined;
 let environment: AgentInfo["environment"];
 let unsubscribeRun: (() => void) | undefined;
 let budgetReminder: TaskBudgetReminder | undefined;
 let taskPhase = new TaskPhase();
 let handledTaskTransition = 0;
 let phaseAbort: Promise<void> = Promise.resolve();
+let resumeSubmission: { transition: number; accepted: boolean; uncertain: boolean; ready: Promise<void>; confirm: () => void } | undefined;
 function changeTaskStage(stage: "work" | "summary") {
   if (cancelled || inputClosed || !taskPhase.change(stage)) return;
   accepting = false;
@@ -95,15 +106,20 @@ async function shutdown() {
   await session?.abort();
   await session?.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
   session?.dispose();
-  if (process.connected) process.send?.({ type: "closed", runId: activeInput?.runId }, () => process.exit(0));
+  if (process.connected) process.send?.({ type: "closed", runId: activeInput?.runId, lease: activeLease }, () => process.exit(0));
   else process.exit(0);
 }
 // Decode and enqueue in IPC arrival order; text must not overtake an earlier image.
 let inputQueue: Promise<void> = Promise.resolve();
 const pendingInputs = new Map<string, { mode: "steer" | "followUp" }>();
+let lastQueue = "";
 function publishQueue() {
-  send({ type: "queue", queue: [...pendingInputs].map(([id, value]) => ({ id, ...value })),
-    native: session ? nativeInputs(session) : [] });
+  const value = { type: "queue", queue: [...pendingInputs].map(([id, value]) => ({ id, ...value })),
+    native: session ? nativeInputs(session) : [] };
+  const key = JSON.stringify(value);
+  if (key === lastQueue) return;
+  lastQueue = key;
+  send(value);
 }
 type CompressionApply = { snapshot: CompressionSnapshot; entry: CompactionEntry };
 const compressionSnapshots = new Set<string>();
@@ -201,15 +217,17 @@ const pendingCalls = new Map<
   { resolve: (data: unknown) => void; reject: (error: Error) => void }
 >();
 function callTask(
-  name: TaskTool,
+  name: TaskTool | "memory_query",
   id: string,
   params: unknown,
   signal?: AbortSignal,
 ) {
   return new Promise<unknown>((resolve, reject) => {
+    const send = leaseSender(activeLease, activeInput?.runId);
     const key = randomUUID();
     const abort = () => {
       pendingCalls.delete(key);
+      if (name === "memory_query") send({ type: "memory-cancel", key });
       reject(Error("工具调用已中断，不会自动重新委派。"));
     };
     signal?.addEventListener("abort", abort, { once: true });
@@ -224,7 +242,7 @@ function callTask(
       },
     });
     if (signal?.aborted) abort();
-    else send({ type: "task-call", key, name, callId: id, params });
+    else send({ type: name === "memory_query" ? "memory-call" : "task-call", key, name, callId: id, params });
   });
 }
 let deliveryCursor = new PersistedInputCursor();
@@ -233,7 +251,9 @@ const persistedNotifications = new Set<string>();
 function delivered() {
   if (!activeInput) return;
   try {
-    const { ids, notifications } = deliveryCursor.read(activeInput.file);
+    const { ids, notifications } = deliveryCursor.read(activeInput.file, (messageIds) => {
+      if (messageIds.length) send({ type: "messages-persisted", ids: messageIds });
+    });
     for (const id of notifications) persistedNotifications.add(id);
     if (ids.length) send({ type: "delivered", ids });
   } catch {
@@ -241,9 +261,7 @@ function delivered() {
     // Settlement reconciles from disk; the cursor does not advance on failure.
   }
 }
-const send = (value: unknown) => {
-  if (process.connected) process.send?.({ ...(value as object), runId: activeInput?.runId });
-};
+const send = (value: unknown) => leaseSender(activeLease, activeInput?.runId)(value);
 process.on("disconnect", () => {
   cancelled = true;
   budgetReminder?.dispose();
@@ -251,8 +269,12 @@ process.on("disconnect", () => {
   setTimeout(() => process.exit(1), 9000).unref();
 });
 process.on("message", (value: any) => {
-  if (value.type === "shutdown") { void shutdown(); return; }
-  if (value.type !== "start" && value.runId !== activeInput?.runId) return;
+  if (value.type === "shutdown") {
+    if (sameInstance(value.instance) || !value.lease || !activeLease || sameLease(value.lease, activeLease)) void shutdown();
+    return;
+  }
+  if (value.type === "start" && !acceptsLease(value.lease)) return;
+  if (value.type !== "start" && (value.runId !== activeInput?.runId || workerInstance && !sameLease(value.lease, activeLease))) return;
   if ((value.type === "budget" || value.type === "summarize") && activeInput?.task?.budget) {
     const budget: TaskBudget = { ...activeInput.task.budget, workMs: value.workMs,
       deadlineAt: value.deadlineAt, revision: value.revision ?? 0,
@@ -320,10 +342,24 @@ process.on("message", (value: any) => {
     }
     if (!value.notification) {
       pendingInputs.set(value.id, { mode: value.mode === "followUp" ? "followUp" : "steer" });
-      if (value.budget && applyTaskBudget(value.budget) && !value.budget.summaryDeadlineAt) changeTaskStage("work");
+      if (value.budget) applyTaskBudget(value.budget);
     }
     publishQueue();
     inputQueue = inputQueue.then(async () => {
+      // Preparation must finish before aborting a summary or exposing work tools.
+      const images = value.notification ? [] : imagesInput(value.images);
+      const prepared = value.notification ? [] : await prepareImages(images);
+      if (!value.notification && !pendingInputs.has(value.id)) return;
+      if (!value.notification && session) requireImageModel(session.model, images);
+      if (!value.notification && activeInput?.task && taskPhase.stage === "summary" &&
+          !cancelled && !inputClosed) {
+        if (activeInput.task.budget?.summaryDeadlineAt)
+          throw new AppError("INPUT_EXPIRED", "追加输入准备期间工作时限已到；未恢复工作。");
+        changeTaskStage("work");
+        let confirm!: () => void;
+        const ready = new Promise<void>(resolve => { confirm = resolve; });
+        resumeSubmission = { transition: taskPhase.revision, accepted: false, uncertain: false, ready, confirm };
+      }
       while (!accepting && !inputClosed && !cancelled)
         await new Promise((resolve) => setTimeout(resolve, 10));
       if (!value.notification && !pendingInputs.has(value.id)) return;
@@ -335,15 +371,18 @@ process.on("message", (value: any) => {
         delivered();
         return;
       }
-      const images = imagesInput(value.images);
       requireImageModel(session.model, images);
-      const prepared = await prepareImages(images);
       // Recall can run during image decoding. Its tombstone wins before enqueue.
       if (!value.notification && !pendingInputs.has(value.id)) return;
       // Never append an unconsumed custom message after prompt() settles or stop.
       if (!canAcceptInput())
         throw Error("输入未进入安全交付边界");
-      await session.sendCustomMessage(
+      // Claim before SDK submission: after this point a local pending entry is
+      // no longer evidence that the input can safely be returned as a draft.
+      pendingInputs.delete(value.id);
+      const submissionTransition = taskPhase.revision;
+      try {
+        await session.sendCustomMessage(
         {
           customType: value.notification ? "axiom-result" : "axiom-append",
           content: prepared.length ? imageContent(value.text, prepared) : value.text,
@@ -353,8 +392,24 @@ process.on("message", (value: any) => {
         },
         { deliverAs: value.mode === "followUp" ? "followUp" : "steer",
           ...(session.isStreaming ? {} : { triggerTurn: false }) },
-      );
-      pendingInputs.delete(value.id);
+        );
+      } catch (error) {
+        let retained: boolean | undefined;
+        try { retained = retainedInput(session, value.id); } catch { /* Unknown is never replayed or treated as safely rejected. */ }
+        if (retained !== true) {
+          if (retained === undefined) {
+            if (resumeSubmission?.transition === submissionTransition) resumeSubmission.uncertain = true;
+            send({ type: "input-error", id: value.id, uncertain: true, error: "追加输入送达未确认；未自动重发。" });
+            publishQueue();
+            return;
+          }
+          throw error;
+        }
+      }
+      if (resumeSubmission?.transition === submissionTransition) {
+        resumeSubmission.accepted = true;
+        resumeSubmission.confirm();
+      }
       send({ type: "input-accepted", id: value.id });
       publishQueue();
       delivered();
@@ -368,13 +423,17 @@ process.on("message", (value: any) => {
   if (value.type === "start" && !started) {
     started = true;
     activeInput = value.input;
+    activeLease = value.lease ? Object.freeze({ ...value.lease }) : undefined;
     cancelled = false;
     accepting = false;
     inputClosed = false;
     compressionClosed = false;
     taskPhase = new TaskPhase();
+    if (activeInput?.task?.budget?.summaryDeadlineAt) taskPhase.change("summary");
     handledTaskTransition = 0;
     phaseAbort = Promise.resolve();
+    resumeSubmission = undefined;
+    lastQueue = "";
     titleSettled = false;
     inputQueue = Promise.resolve();
     pendingInputs.clear();
@@ -422,6 +481,8 @@ async function prepareImages(images: ImageAttachment[]) {
   return prepared;
 }
 async function run(input: WorkerInput) {
+  const bindStarted = performance.now();
+  const runSend = leaseSender(activeLease, input.runId);
   wantsTitle = Boolean(input.requestTitle) && !input.task;
   let reusable = false;
   try {
@@ -470,8 +531,20 @@ async function run(input: WorkerInput) {
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),
       extensionFactories: [(pi) => {
+        pi.on("before_provider_request", () => { send({ type: "provider_request" }); });
+        pi.on("tool_call", (event) => {
+          const inputPath = (event.input as Record<string, unknown>).path;
+          if (!["edit", "write"].includes(event.toolName) || typeof inputPath !== "string") return;
+          const path = resolve(input.cwd, inputPath);
+          if (within(join(input.root, "memory"), path) && (!input.memoryPath || !within(dirname(input.memoryPath), path)))
+            return { block: true, reason: "只能维护所属主会话的记忆；其他来源记忆只读。" };
+        });
+        if (input.memoryPath) pi.on("tool_result", (event) => {
+          try { if (session) recordMemoryRead(session.sessionManager, input.memoryPath!, input.cwd, event); }
+          catch { /* Optional recovery bookkeeping must not interrupt tool execution. */ }
+        });
         if (input.task) pi.on("tool_call", (event) => {
-          if (taskPhase.stage !== "work") return { block: true, reason: "工作预算已到；总结阶段禁止调用任何工具。" };
+          if (taskPhase.stage !== "work" || taskPhase.revision !== handledTaskTransition) return { block: true, reason: "总结或恢复准备阶段禁止调用任何工具。" };
           if (!subagentTools.includes(event.toolName))
             return { block: true, reason: "子代理仅限调研与测试工具；代码修改须交给主代理，不能递归委派或加载外部工具。" };
         });
@@ -484,6 +557,12 @@ async function run(input: WorkerInput) {
           }
           messages = messages.filter((message) => !isResumeControl(message)).flatMap((message) => {
             if (message.role === "custom" && message.customType === "axiom-task-summary") return [];
+            if (message.role === "custom" && message.customType === "axiom-budget") {
+              const owner = (message.details as { runId?: string } | undefined)?.runId;
+              const budget = activeInput?.task?.budget;
+              return owner === activeInput?.runId && budget && taskPhase.stage === "work"
+                ? [{ ...message, content: taskBudgetIntro(budget) }] : [];
+            }
             if (message.role === "custom" && message.customType === "axiom-append" && taskPhase.stage === "work") {
               const received = (message.details as { axiomBudget?: { runId: string; revision: number } } | undefined)?.axiomBudget;
               const budget = activeInput?.task?.budget;
@@ -502,6 +581,9 @@ async function run(input: WorkerInput) {
           });
           if (input.task && taskPhase.stage === "summary") messages.push({ role: "custom", customType: "axiom-task-summary",
             content: taskSummaryInstruction, display: false, timestamp: Date.now() });
+          if (input.memoryPath && session && pendingMemoryRead(session.sessionManager)) messages.push({
+            role: "custom", customType: "axiom-memory-restore", content: `上下文压缩已实际应用。尝试用 read 重新读取 ${input.memoryPath}；记忆是可选资料，读不到就按空记忆继续工作，不报错或等待修复。提示送达不代表已读取，也不要声称已恢复未读到的背景。`, display: false, timestamp: Date.now(),
+          });
           if (!wantsTitle || titleSettled) return { messages };
           // Request-local copy: neither original input, system prompt nor JSONL
           // gains an instruction entry. Repeated tool turns keep requesting it.
@@ -518,12 +600,13 @@ async function run(input: WorkerInput) {
         pi.on("turn_end", (event) => compressionBoundary(event));
         pi.on("agent_before_settle", (event) => compressionBoundary(event));
       }],
-      appendSystemPromptOverride: (base) => [...base, ...(input.task
+      appendSystemPromptOverride: (base) => [...base, "引用本地文件时，使用 Markdown 链接 [文件名](路径)", ...(input.task
         ? [
             input.task.role,
             subagentPolicy,
           ]
         : [
+            ...(input.memoryPath ? [memoryInstruction(input.memoryPath)] : []),
             "delegate、append、cancel_task、read_result 是独立的子任务工具。子代理可用于调研、分析、审查以及执行测试、构建和静态检查；彼此独立的测试应优先拆分委派并行执行，不必由主代理串行运行。委派测试时给出工作目录、命令或测试范围、必要前置条件与交付要求，协调独立端口、临时目录和输出路径；有依赖或争用共享资源的检查须等待前置完成或串行执行。测试期间不要修改其覆盖的文件；收到结果后若相关文件变化，重跑受影响的检查。子代理可生成必要测试产物，但不得修改源码、测试代码、配置、锁文件或基准快照，不得安装依赖；所有代码修改由你（主代理）完成。委派后继续独立工作，不轮询；完成通知到达后读取指定结果，核对实际命令、退出码、关键输出及未验证项。已验证且相关文件未变的检查无需由主代理重复执行。应用调研建议前重新核对当前文件。",
           ])],
     });
@@ -538,7 +621,7 @@ async function run(input: WorkerInput) {
       settingsManager,
       resourceLoader: loader,
       sessionManager: openTranscript(input.file, input.cwd),
-      customTools: input.task ? [] : taskTools(callTask),
+      customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal))],
       ...(input.task
         ? { tools: subagentTools, excludeTools: [...taskToolNames] }
         // Main agents keep authorized extension tools and the platform shell.
@@ -557,7 +640,7 @@ async function run(input: WorkerInput) {
     });
     if (!input.task)
       session.setActiveToolsByName([
-        ...new Set([...session.getActiveToolNames(), ...taskToolNames]),
+        ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"]),
       ]);
     await session.setModel(model);
     session.setThinkingLevel(input.selection.thinking);
@@ -585,6 +668,10 @@ async function run(input: WorkerInput) {
       environment = environment ? { ...environment, systemPrompt: session.systemPrompt } : environment;
       requireImageModel(session.model, originalImages);
     }
+    await awaitExecutionPermit(activeLease, input.executionGate);
+    if (cancelled) throw Error('执行已取消');
+    send({ type: "execution_phase", stage: "bind", durationMs: performance.now() - bindStarted });
+    const historyStarted = performance.now();
     deliveryCursor = new PersistedInputCursor();
     notificationIds.clear();
     persistedNotifications.clear();
@@ -592,6 +679,7 @@ async function run(input: WorkerInput) {
       notificationIds.add(id);
       persistedNotifications.add(id);
     }
+    send({ type: "execution_phase", stage: "history", durationMs: performance.now() - historyStarted });
     let previousSelection = lastRequestSelection(session.sessionManager.getBranch());
     send({ type: "ready", environment });
     let currentId = "",
@@ -616,6 +704,7 @@ async function run(input: WorkerInput) {
       send({ type: "system-prompt", systemPrompt });
     };
     unsubscribeRun = session.subscribe((event) => {
+      const send = runSend;
       // Includes before_agent_start overrides and subsequent tool-loadout changes.
       // Publish only changed snapshots, never once per streamed token.
       if (["agent_start", "turn_start", "message_start", "turn_end"].includes(event.type))
@@ -768,7 +857,7 @@ async function run(input: WorkerInput) {
       send({ type: "usage", usage: usage(), autoCheck: true });
       if (input.resume) {
         if (input.task?.budget) await session.sendCustomMessage({ customType: "axiom-budget", display: false,
-          content: taskBudgetIntro(input.task.budget) }, { triggerTurn: false });
+          content: taskBudgetIntro(input.task.budget), details: { runId: input.runId } }, { triggerTurn: false });
         await resumeSession(session, input.task?.inputIds[0] ?? input.requestId);
         send({ type: "context-rebuilt" });
       } else if (input.notification) {
@@ -789,9 +878,10 @@ async function run(input: WorkerInput) {
         }
         publishQueue();
         const budget = input.task?.budget;
-        const prompt = budget ? `${taskBudgetIntro(budget)}\n\n${input.prompt}` : input.prompt;
-        await session.prompt(prompt, {
-          expandPromptTemplates: !input.task && !images.length,
+        if (budget) await session.sendCustomMessage({ customType: "axiom-budget", display: false,
+          content: taskBudgetIntro(budget), details: { runId: input.runId } }, { triggerTurn: false });
+        await session.prompt(input.prompt, {
+          expandPromptTemplates: !input.rewrite && !input.task && !images.length,
           images: nativeImages(images),
         });
       }
@@ -806,7 +896,18 @@ async function run(input: WorkerInput) {
       if (stage === "work") {
         accepting = true;
         // A newer deadline must be able to interrupt a blocked image/input drain.
-        await taskPhase.drain(inputQueue, transition);
+        while (!cancelled && transition === taskPhase.revision) {
+          const tail = inputQueue;
+          await taskPhase.drain(tail, transition);
+          if (cancelled || transition !== taskPhase.revision) break;
+          if (tail !== inputQueue) continue;
+          if (resumeSubmission?.accepted) break;
+          if (!resumeSubmission?.uncertain)
+            throw new AppError("TASK_RESUME_FAILED", "追加输入未成功进入上下文；未恢复工作。");
+          // A later successful append wakes this gate without requiring another
+          // phase change. Deadlines still interrupt the wait independently.
+          await taskPhase.drain(resumeSubmission.ready, transition);
+        }
       }
       if (cancelled) break;
       if (transition !== taskPhase.revision) continue;
@@ -832,8 +933,9 @@ async function run(input: WorkerInput) {
     compressionBoundary();
     closeCompressionRequests();
     delivered();
-    reusable = outcome.status === "completed" && session.isIdle;
-    send({ type: "done", ...outcome, usage: usage() });
+    reusable = outcome.status === "completed" && session.isIdle && pendingCalls.size === 0;
+    send({ type: "done", ...outcome,
+      ...(input.task && taskPhase.stage === "summary" && outcome.status === "completed" ? { reasonCode: "BUDGET_SUMMARY" } : {}), usage: usage() });
   } catch (error) {
     accepting = false;
     inputClosed = true;
@@ -843,7 +945,7 @@ async function run(input: WorkerInput) {
     send({
       type: "done",
       status: cancelled ? "cancelled" : "failed",
-      reasonCode: cancelled ? "USER_STOPPED" : "EXECUTION_ERROR",
+      reasonCode: cancelled ? "USER_STOPPED" : error instanceof AppError ? error.code : "EXECUTION_ERROR",
       error: errorMessage(error, "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {

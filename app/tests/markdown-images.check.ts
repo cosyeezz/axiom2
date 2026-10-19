@@ -53,6 +53,21 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await page.screenshot({ path: join(artifacts, `inline-${width}.png`) });
   }
+  const svgPath = join(root, "vector.svg"), svgHref = svgPath.replace(/\\/g, "/");
+  writeFileSync(svgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="120" viewBox="0 0 480 120"><rect width="480" height="120" fill="#183044"/><circle cx="60" cy="60" r="30" fill="none" stroke="#7dd3fc" stroke-width="4"/><text x="120" y="70" fill="white" font-size="28">SVG 图标候选</text></svg>');
+  publish(`![矢量候选](<${svgHref}>)`);
+  await image.waitFor(); await image.evaluate((node: HTMLImageElement) => node.decode());
+  assert.equal(await image.evaluate((node: HTMLImageElement) => node.naturalWidth), 480);
+  await page.getByRole("button", { name: "放大图片：矢量候选" }).click();
+  const vectorPreview = page.locator(".image-preview-body img");
+  await vectorPreview.waitFor(); await vectorPreview.evaluate((node: HTMLImageElement) => node.decode());
+  assert.equal(await vectorPreview.evaluate((node: HTMLImageElement) => node.naturalWidth), 480);
+  await page.screenshot({ path: join(artifacts, "svg-preview.png") });
+  await page.keyboard.press("Escape");
+  assert.ok(await page.getByRole("button", { name: "放大图片：矢量候选" }).evaluate((node) => node === document.activeElement));
+  await page.reload(); await image.waitFor(); await image.evaluate((node: HTMLImageElement) => node.decode());
+  assert.equal(await image.evaluate((node: HTMLImageElement) => node.naturalWidth), 480);
+  publish(source);
   await page.reload(); await image.waitFor(); await image.evaluate((node: HTMLImageElement) => node.decode());
   const missing = href + ".missing";
   publish(`![缺失图片](<${missing}>)`);
@@ -71,7 +86,7 @@ try {
   assert.equal(await page.locator("a .markdown-image-open").count(), 0);
   assert.equal(await page.locator(".markdown-image-error").count(), 0);
   assert.deepEqual(remoteRequests, []); assert.deepEqual(errors, []);
-  console.log("PASS: inline local image, streaming, preview/keyboard/focus, unchanged copy, reload, missing/retry, changed source, no remote requests, 6 linked images and 3 widths");
+  console.log("PASS: inline local PNG and SVG, SVG enlarged preview/reload, streaming, preview/keyboard/focus, unchanged copy, reload, missing/retry, changed source, no remote requests, 6 linked images and 3 widths");
 } finally {
   await browser?.close(); await app?.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

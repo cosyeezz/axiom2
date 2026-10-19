@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { scopeKey, type Scope, type Draft } from "../../shared/protocol.js";
 import type { ChatMessage } from "../../shared/agent.js";
-export type PendingMessage = { id: string; draft: Draft; message: ChatMessage; inputId?: string; queued?: boolean; state: "sending" | "accepted" | "uncertain" };
+export type PendingMessage = { id: string; draft: Draft; message: ChatMessage; inputId?: string; queued?: boolean; state: "sending" | "accepted" | "uncertain" | "failed"; confirmation?: string };
 const entries = new Map<string, PendingMessage[]>();
 const listeners = new Map<string, Set<() => void>>();
 const empty: PendingMessage[] = [];
@@ -21,6 +21,13 @@ export function optimisticState(scope: Scope, id: string, state: PendingMessage[
   const seen = observed.get(scopeKey(scope));
   update(scope, (list) => list.flatMap((item) => item.id !== id ? [item]
     : seen?.has(id) || (inputId && seen?.has(inputId)) ? [] : [{ ...item, state, inputId: inputId ?? item.inputId, queued: queued ?? item.queued }]));
+}
+export function optimisticConfirmation(scope: Scope, id: string, confirmation: string) {
+  update(scope, (list) => list.map((item) => item.id === id ? { ...item, confirmation } : item));
+}
+export function pendingMessageStatus(item: PendingMessage, queued = false) {
+  if (item.confirmation) return item.confirmation;
+  return { sending: queued ? "正在排队…" : "正在发送…", accepted: queued ? "等待接收" : "已受理，等待进入会话", uncertain: "正在确认发送结果…", failed: "发送未完成，原消息已保留" }[item.state];
 }
 export function optimisticRemove(scope: Scope, id: string) { update(scope, (list) => list.filter((item) => item.id !== id)); }
 export function reconcileOptimistic(scope: Scope, messages: ChatMessage[]) {

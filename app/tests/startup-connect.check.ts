@@ -1,0 +1,196 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+const output = resolve('../artifacts/startup-polish/browser'); await mkdir(output, { recursive: true });
+const server = await createServer({ configFile: resolve('desktop/vite.config.ts'), server: { host: '127.0.0.1', port: 0 } }); await server.listen();
+const origin = server.resolvedUrls!.local[0];
+const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors: string[] = []; page.on('pageerror', error => { errors.push(error.message); console.error('pageerror:', error.message); });
+  // tsx preserves names of nested fixture callbacks using this emitted helper.
+  await page.addInitScript({ content: 'window.__name = value => value;' });
+  await page.addInitScript(() => {
+    function assertFixture(confirmed: boolean) { if (!confirmed) throw Error('缺少解除确认'); }
+    const state = { node: false, installed: false, view: 'control', connection: 'connected', job: null as any, calls: [] as any[], remoteFail: false, remoteDelay: false, stopped: false };
+    (window as any).fixture = state;
+    (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
+      state.calls.push({ name, args });
+      if (name === 'axiom_setup') {
+        if (args.action === 'check') return { nodeReady: state.node, nodeVersion: state.node ? 'v24.13.0' : '', writable: true, tailscale: true, platform: 'windows' };
+        if (args.action === 'status') return { job: state.job };
+        if (args.action === 'acknowledge-interruption') { assertFixture(args.confirmed); state.job = { ...state.job, running: false, phase: 'error', message: '已解除占用' }; return { job: state.job }; }
+        if (['node','service'].includes(args.action)) {
+          state.job = { action: args.action, running: true, phase: 'running', message: '正在执行测试安装步骤…', lines: ['开始处理'] };
+          setTimeout(() => { state.node = true; if (args.action === 'service') state.installed = true; state.job = { ...state.job, running: false, phase: 'done', message: '步骤完成' }; }, 600);
+          return { job: state.job };
+        }
+        return {};
+      }
+      if (name === 'axiom_service') {
+        if (args.action === 'open') state.view = 'workbench';
+        if (args.action === 'stop') { state.stopped = true; state.view = 'control'; }
+        if (args.action === 'start') state.stopped = false;
+        return { desktopView: state.view, state: state.installed ? state.stopped ? 'stopped' : 'running' : 'missing', active: [], url: 'http://127.0.0.1:4317/' };
+      }
+      if (name === 'axiom_peers') return { peers: [{ name: 'Studio', ip: '100.64.0.8' }, { name: 'Laptop', ip: '100.70.1.2' }] };
+      if (name === 'axiom_remote' || name === 'axiom_local') { if (name === 'axiom_local') args = { ...args, address: '127.0.0.1' }; if (state.remoteDelay) await new Promise(resolve => setTimeout(resolve, 600)); if (state.remoteFail) throw Error('目标服务尚未启动'); state.view = 'workbench'; return { url: (() => { const url = new URL(args.address.includes('://') ? args.address : `http://${args.address}`); url.port = String(args.port); return url.href; })() }; }
+      if (name === 'axiom_connection') return state.connection;
+      if (name === 'axiom_controls') { state.view = 'control'; return; }
+      if (name === 'axiom_update') return { clientVersion: '0.4.1', serviceVersion: '0.4.1', managed: true, clientSupported: true, release: null, job: null };
+      throw Error(`Unexpected ${name}`);
+    } };
+  });
+  await page.goto(origin);
+  await page.getByRole('button', { name: '连接工作台', exact: true }).waitFor();
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => ['axiom_local', 'axiom_remote'].includes(call.name) || call.args.action === 'open').length), 0, 'never auto-connect');
+  for (const [width, height] of [[1440, 1000], [1100, 768], [820, 650], [390, 844], [360, 640]]) {
+    await page.setViewportSize({ width, height });
+    const geometry = await page.evaluate(() => { const first = document.querySelector('.connect-header')!.getBoundingClientRect(), last = document.querySelector('.connect-footer')!.getBoundingClientRect(); return { height: document.documentElement.scrollHeight, width: document.documentElement.scrollWidth, center: (first.top + last.bottom) / 2 }; });
+    assert.ok(geometry.height <= height + 1 && geometry.width <= width + 1, `no unnecessary scrolling ${width}x${height}`);
+    assert.ok(Math.abs(geometry.center - height / 2) <= 4, `content centered ${width}x${height}`);
+    await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+    await page.getByRole('button', { name: '刷新设备', exact: true }).focus();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `menu stays inside viewport ${width}x${height}`);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).evaluate(node => document.activeElement === node), true);
+  }
+  await page.setViewportSize({ width: 1100, height: 768 });
+  await page.screenshot({ path: resolve(output, 'direct-connect.png'), fullPage: true });
+  await page.getByLabel('本地端口').fill('8123');
+  await page.getByRole('button', { name: '连接工作台', exact: true }).click();
+  await page.locator('.desktop-workbench-status[data-state=connected]').waitFor();
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => call.name === 'axiom_local').at(-1).args.port), 8123);
+  assert.equal(await page.evaluate(() => (window as any).fixture.installed), false, 'local development service needs no installation');
+  await page.getByRole('button', { name: '服务与更新', exact: false }).click();
+  await page.locator('.startup-preparation > summary').click();
+  await page.getByRole('button', { name: '安装 Node.js', exact: true }).waitFor();
+  await page.getByRole('button', { name: '后台服务 安装与校验' }).click();
+  assert.ok(await page.getByRole('button', { name: '安装并启动服务', exact: true }).isDisabled());
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: '复制一行安装命令', exact: true }).click();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /install\.ps1 \| iex/);
+  await page.locator('.startup-manual > summary').click();
+  await page.getByRole('button', { name: '复制手动安装命令', exact: true }).click();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /npm install --global https:\/\/github.com\/cosyeezz\/axiom2\/releases\/latest\/download\/axiom2.tgz/);
+  await page.screenshot({ path: resolve(output, 'install-methods.png'), fullPage: true });
+  await page.getByRole('button', { name: '运行环境 Node.js · npm' }).click();
+  await page.getByRole('button', { name: '打开Node.js 下载地址', exact: true }).click();
+  await page.waitForFunction(() => !(document.querySelector('[role=combobox]') as HTMLButtonElement)?.disabled, undefined, { timeout: 2000 });
+  assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).isEnabled(), true, 'instant link actions must release busy state');
+  await page.screenshot({ path: resolve(output, 'local-first-install.png'), fullPage: true });
+  await page.getByRole('button', { name: '安装 Node.js', exact: true }).click();
+  await page.locator('.setup-job .startup-spin').waitFor();
+  assert.ok(await page.getByRole('combobox', { name: '连接设备', exact: true }).isDisabled());
+  await page.getByRole('button', { name: '安装并启动服务', exact: true }).waitFor();
+  await page.getByRole('button', { name: '安装并启动服务', exact: true }).click();
+  await page.getByRole('button', { name: '打开工作台', exact: false }).waitFor();
+  await page.waitForFunction(() => !(document.querySelector('.setup-job .startup-spin')));
+  for (const width of [1440, 820, 390, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `local fits ${width}`);
+    await page.screenshot({ path: resolve(output, `local-${width}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 1100, height: 850 });
+  // A confirmed stop must wait for an overlapping quiet status read, not vanish.
+  await page.evaluate(() => {
+    const fixture = (window as any).fixture, bridge = (window as any).__TAURI_INTERNALS__, original = bridge.invoke;
+    bridge.invoke = async (name: string, args: any) => {
+      if (name === 'axiom_service' && args.action === 'status') {
+        bridge.invoke = original;
+        await new Promise<void>(resolve => { fixture.releaseStatus = resolve; });
+      }
+      return original(name, args);
+    };
+  });
+  await page.waitForFunction(() => typeof (window as any).fixture.releaseStatus === 'function');
+  await page.getByRole('button', { name: '关闭后台服务', exact: true }).click();
+  await page.getByRole('button', { name: '确认关闭服务', exact: true }).click();
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => call.name === 'axiom_service' && call.args.action === 'stop').length), 0);
+  await page.evaluate(() => (window as any).fixture.releaseStatus());
+  await page.getByRole('heading', { name: '服务已停止', exact: true }).waitFor();
+  await page.getByRole('button', { name: '启动后台服务', exact: true }).click();
+  await page.getByRole('heading', { name: '服务运行中', exact: true }).waitFor();
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+  await page.screenshot({ path: resolve(output, 'device-menu.png'), fullPage: true });
+  assert.equal(await page.getByRole('option').count(), 4);
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).press('Escape');
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).press('Enter');
+  await page.getByLabel('远程连接地址', { exact: true }).waitFor();
+  await page.evaluate(() => { (window as any).fixture.remoteFail = true; (window as any).fixture.remoteDelay = true; });
+  await page.getByRole('button', { name: '连接工作台', exact: true }).click();
+  assert.ok(await page.getByRole('combobox', { name: '连接设备', exact: true }).isDisabled());
+  assert.ok(await page.getByRole('button', { name: '连接环境 Tailscale' }).isDisabled());
+  await page.getByRole('alert').filter({ hasText: '目标服务尚未启动' }).waitFor();
+  assert.equal(await page.getByLabel('远程连接地址', { exact: true }).inputValue(), '100.64.0.8');
+  await page.screenshot({ path: resolve(output, 'remote-failure.png'), fullPage: true });
+  await page.evaluate(() => { (window as any).fixture.remoteFail = false; });
+  await page.getByRole('button', { name: '连接工作台', exact: true }).click();
+  await page.locator('.desktop-workbench-status[data-state=connected]').waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('axiom.remote.address')), 'http://100.64.0.8:4317/');
+  assert.equal(await page.locator('.desktop-update-dot').count(), 0);
+  for (const width of [1440, 820, 430, 390, 360]) {
+    await page.setViewportSize({ width, height: 48 });
+    const layout = await page.evaluate(() => {
+      const nodes = ['.desktop-workbench-brand', '.desktop-workbench-status', '.desktop-workbench-bar button'].map(selector => document.querySelector(selector)!.getBoundingClientRect());
+      return { centers: nodes.map(box => box.y + box.height / 2), right: nodes[2].right, leftEnd: nodes[1].right, buttonStart: nodes[2].left, width: innerWidth };
+    });
+    assert.ok(Math.max(...layout.centers) - Math.min(...layout.centers) < 1, `center alignment ${width}`);
+    assert.ok(layout.right <= layout.width && layout.leftEnd <= layout.buttonStart, `header fits ${width}`);
+    await page.locator('.desktop-workbench-bar button').hover();
+    assert.equal(await page.locator('.desktop-workbench-bar button').evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: resolve(output, `header-${width}.png`) });
+  }
+  await page.evaluate(() => { (window as any).fixture.connection = 'disconnected'; });
+  await page.locator('.desktop-update-dot').waitFor();
+  await page.getByRole('button', { name: '服务与更新', exact: false }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  assert.equal(await page.locator('.desktop-update-dot').count(), 0);
+  await page.screenshot({ path: resolve(output, 'remote-ready.png'), fullPage: true });
+  // A saved protocol-default port is omitted by URL serialization, but must survive a reload.
+  for (const [url, port] of [['http://100.64.0.8/', '80'], ['https://100.64.0.8/', '443'], ['http://100.64.0.8:9000/', '9000']]) {
+    await page.evaluate(value => localStorage.setItem('axiom.remote.address', value), url);
+    await page.reload();
+    await page.getByLabel('远程端口').waitFor();
+    assert.equal(await page.getByLabel('远程端口').inputValue(), port);
+  }
+  await page.getByLabel('远程端口').fill('8123');
+  await page.getByRole('button', { name: '连接工作台', exact: true }).click();
+  await page.locator('.desktop-workbench-status[data-state=connected]').waitFor();
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.name === 'axiom_remote').at(-1).args.port), 8123);
+  await page.getByRole('button', { name: '服务与更新', exact: false }).click();
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+  await page.getByRole('option', { name: /本地电脑/ }).click();
+  await page.locator('.startup-preparation > summary').click();
+  await page.evaluate(() => { (window as any).fixture.job = { action: 'node', running: false, phase: 'interrupted', message: '上次安装中断', lines: [] }; });
+  const recover = page.getByRole('button', { name: '确认安装器退出后解除占用' });
+  await recover.waitFor();
+  assert.ok(await page.getByRole('button', { name: '安装 Node.js', exact: true }).isDisabled());
+  page.once('dialog', dialog => void dialog.dismiss()); await recover.click();
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'acknowledge-interruption').length), 0);
+  page.once('dialog', dialog => void dialog.accept()); await recover.click();
+  await recover.waitFor({ state: 'hidden' });
+  assert.deepEqual(errors, []);
+  // A partial installation record must not unmount the page when no log exists.
+  await page.evaluate(() => { (window as any).fixture.job = { running: false, phase: 'error', message: '异常记录测试' }; });
+  await page.getByText('异常记录测试', { exact: true }).waitFor();
+  assert.equal(await page.locator('.connect-page').isVisible(), true);
+  assert.deepEqual(errors, []);
+  // An unresponsive local status call must leave remote device selection available.
+  await page.evaluate(() => { const bridge = (window as any).__TAURI_INTERNALS__; const original = bridge.invoke; bridge.invoke = (name: string, args: any) => name === 'axiom_service' ? new Promise(() => {}) : original(name, args); });
+  await page.getByRole('button', { name: '连接工作台 启动与验证' }).click();
+  await page.getByRole('button', { name: '刷新服务状态', exact: true }).click();
+  assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).isEnabled(), true);
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+  await page.getByRole('option', { name: /手动输入地址/ }).click();
+  await page.getByLabel('远程连接地址', { exact: true }).waitFor();
+  await page.getByRole('alert').filter({ hasText: '客户端响应超时' }).waitFor({ timeout: 30000 });
+  assert.deepEqual(errors, []);
+  console.log('PASS: first-install steps, real job polling UI, disabled actions, peer selection/default port, failure retry, successful address persistence/default and custom port recovery/interrupted install acknowledgement, header alignment/transparent hover/change acknowledgement, 360–1440px layouts. IPC is a controlled fixture; no software was installed.');
+} finally { await browser.close(); await server.close(); }

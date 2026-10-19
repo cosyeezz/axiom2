@@ -1,8 +1,10 @@
-import { fork, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
+import { performance } from "node:perf_hooks";
+import type { ExecutionLease } from "./execution-pool.js";
+import { sameLease } from "./execution-protocol.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { estimateTokens, type CompactionEntry } from "@earendil-works/pi-coding-agent";
 import { AppError, object, text, type Command, type Configuration, type Scope } from "../shared/protocol.js";
 import { agentScope, type Selection } from "../shared/agent.js";
@@ -19,6 +21,9 @@ type Live = {
   scope: Scope;
   job: Compression;
   input: CompressionInput;
+  controller: AbortController;
+  requestStartedAtMonoMs: number;
+  lease?: ExecutionLease;
   child?: ChildProcess;
   exit?: Promise<void>;
   cancel: boolean;
@@ -183,7 +188,7 @@ export class Compressions {
         messageCount: 0, before: null, after: null, summary: "", error: null, selection, usage: null,
       };
       const live: Live = {
-        scope, job, input, cancel: false, closed: false,
+        scope, job, input, cancel: false, closed: false, controller: new AbortController(), requestStartedAtMonoMs: performance.now(),
       };
       try {
         writeFileSync(input.modelsFile, raw, { flag: "wx", mode: 0o600 });
@@ -319,18 +324,35 @@ export class Compressions {
     this.save(live);
   }
   private launch(live: Live) {
+    live.exit = this.run(live);
+    void live.exit.catch(() => {});
+  }
+  private async run(live: Live) {
+    const { input } = live;
+    let environment: ReturnType<Agents["profiles"]["prepare"]> | undefined;
+    try {
+      environment = this.agents.profiles.prepare({ entry: "compression", cwd: input.cwd, modelDir: this.agents.models.dir,
+        modelsRaw: readFileSync(input.modelsFile, "utf8"), selection: input.selection, mode: this.agents.pool.mode });
+      const lease = await this.agents.pool.acquire({ environment, kind: "compression-summary", requestStartedAtMonoMs: live.requestStartedAtMonoMs, signal: live.controller.signal });
+      live.lease = lease;
+      const child = await lease.ensureReady();
+      if (live.cancel || !environment.current()) throw Error("摘要执行已取消或配置已变化");
+      await this.observe(live, child, lease);
+    } catch (error) {
+      if (live.lease) await this.agents.pool.retire(live.lease.ref, "compression_failed");
+      if (!live.cancel && this.live.get(live.scope.sessionId) === live) this.finish(live, "failed", compressionError(error));
+    } finally { environment?.release(); }
+  }
+  private observe(live: Live, child: ChildProcess, lease: ExecutionLease) {
     const { scope, job, input } = live;
-    const source = import.meta.url.endsWith(".ts");
-    const child = fork(fileURLToPath(new URL(source ? "./compression-worker.ts" : "./compression-worker.js", import.meta.url)), [], {
-      cwd: input.cwd, execArgv: source ? ["--import", import.meta.resolve("tsx")] : [], stdio: ["ignore", "ignore", "ignore", "ipc"],
-    });
     live.child = child;
     let exited!: () => void;
-    live.exit = new Promise<void>((r) => { exited = r; });
+    const closed = new Promise<void>((r) => { exited = r; });
     let terminal: "failed" | "cancelled" | undefined;
     let failure: string | undefined;
     let reap: NodeJS.Timeout | undefined;
     child.on("message", (event: any) => {
+      if (!sameLease(event.lease, lease.ref)) return;
       try {
         if (event.type === "closed") live.closed = true;
         // A stopped request can still report real usage before its worker exits.
@@ -374,9 +396,10 @@ export class Compressions {
         this.advance(live);
       }
     });
-    child.send({ type: "start", input }, (error) => {
+    child.send({ type: "start", input: { ...input, executionGate: true, modelsFile: lease.environment.modelsFile }, lease: lease.ref }, (error) => {
       if (error) { terminal = "failed"; failure = compressionError(error); child.kill("SIGKILL"); }
     });
+    return closed;
   }
   private updateUsage(live: Live) {
     const usage = this.agents.info(live.scope).usage;
@@ -422,15 +445,16 @@ export class Compressions {
     const live = this.live.get(scope.sessionId);
     if (!live) return;
     live.cancel = true;
+    live.controller.abort();
     // Abort the billable summarization first, even if the live agent is too busy
     // to acknowledge cancellation of its queued apply within the deadline.
     if (live.child) {
       const child = live.child;
-      if (child.connected) child.send({ type: "stop" }, () => {});
+      if (child.connected) child.send({ type: "stop", lease: live.lease?.ref }, () => {});
       const timer = setTimeout(() => child.kill("SIGKILL"), 2000);
       await live.exit;
       clearTimeout(timer);
-    }
+    } else await live.exit;
     const run = this.agents.info(scope).run;
     if (run && this.agents.active(scope) && live.cancelConfirmedRun !== run.id) {
       let ack!: () => void;

@@ -323,17 +323,18 @@ test(
       const childScope = { workspaceId: w.id, sessionId: b.sessionId };
       assert.equal(app.tasks.child(childScope)!.id, b.id);
       const pool = (app.agents as any).runs;
-      const cached = pool.idle.get(b.sessionId);
+      const cachedWorker = () => [...(app.agents.pool as any).instances.values()].find((instance: any) => instance.binding?.sessionId === b.sessionId) as any;
+      const cached = cachedWorker();
       assert.ok(cached, "completed child has a reusable worker");
-      assert.equal(dirname(cached.input.modelsFile), join(root, "run-models"));
-      const previousPid = cached.live.child.pid;
-      rmSync(cached.input.modelsFile);
+      assert.equal(dirname(cached.environment.modelsFile), join(root, "execution-models"));
+      const previousPid = cached.child.pid;
+      rmSync(cached.environment.modelsFile);
       await call("task.append", { taskId: b.id, text: "explicit-followup after missing snapshot" });
       await wait(() => app.tasks.list(scope).tasks.find((t) => t.id === b.id)!.results.length === 3,
         "follow-up after missing snapshot did not settle");
       const recovered = app.tasks.list(scope).tasks.find((t) => t.id === b.id)!;
       assert.equal(recovered.status, "completed", recovered.error ?? "follow-up failed");
-      assert.notEqual(pool.idle.get(b.sessionId)?.live.child.pid, previousPid, "missing snapshot retires the old owner before cold start");
+      assert.notEqual(cachedWorker()?.child.pid, previousPid, "missing snapshot retires the old owner before cold start");
       assert.equal(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(b.sessionId)!.file, boundChildFile);
       assert.deepEqual(app.tasks.result(scope, b.id, stopped.results[0].id), result);
       const launchWorker = pool.launchWorker;
@@ -418,9 +419,10 @@ test(
         assert.match(JSON.stringify(body.messages), /此前任务链累计执行：\d+ms/, "continuations receive the task chain's prior elapsed time");
       }
     } catch (e) {
-      mkdirSync("test-results", { recursive: true });
+      const artifacts = process.env.AXIOM_TEST_ARTIFACTS || "test-results";
+      mkdirSync(artifacts, { recursive: true });
       writeFileSync(
-        "test-results/tasks-debug.json",
+        join(artifacts, "tasks-debug.json"),
         JSON.stringify(
           {
             requests,

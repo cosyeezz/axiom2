@@ -25,6 +25,7 @@ function fixture() {
   const taskId = records.create(scope, "anchor", "context", [{ task: "first", role: "" }], selection).taskIds[0];
   let live: Run | null = null;
   const agents = { store, info: () => ({ selection, run: live }), active: () => !!live && ["starting", "running", "stopping"].includes(live.status),
+    executing: () => !!live && ["starting", "running", "stopping"].includes(live.status),
     thread: () => ({ ids: [] }), publish: () => {}, signal: () => true, assertContinuation: () => {}, stop: async () => {},
   } as unknown as Agents;
   const delivery = new TaskDelivery(agents, records); delivery.pause();

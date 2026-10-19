@@ -73,6 +73,7 @@ export function useConfiguration() {
         true,
       );
       setTab("models");
+      requestAnimationFrame(() => document.getElementById("new-model-id")?.focus());
       return null;
     }
     const model = { ...editor, id, name: editor.name.trim() || id };

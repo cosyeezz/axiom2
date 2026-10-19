@@ -1,3 +1,6 @@
+import { OutgoingQueue } from "./outgoing.js";
+import { remoteDirectory, remoteSelection } from "./remote-files.js";
+import { RemoteAccess } from "./remote-access.js";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -20,6 +23,7 @@ import { configuration } from "./models.js";
 import { ModelService } from "./model-service.js";
 import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
+import type { OpenMemoryFile } from "./memory-open.js";
 import { Costs } from "./costs.js";
 import { Tasks } from "./tasks.js";
 import { Preferences } from "./preferences.js";
@@ -33,6 +37,7 @@ import {
   type Command,
   type Configuration,
   type Snapshot,
+  type Scope,
 } from "../shared/protocol.js";
 
 export function dataRoot() {
@@ -51,8 +56,9 @@ export function dataRoot() {
 }
 
 export async function startServer(
-  options: { root?: string; port?: number; dev?: boolean; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
+  options: { root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
 ) {
+  let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
   const costs = new Costs(store);
   const drafts = new SessionDrafts(store);
@@ -88,6 +94,7 @@ export async function startServer(
     req.headers["sec-fetch-site"] !== "cross-site";
   const sockets = new WebSocketServer({ noServer: true, maxPayload: imagePayloadLimit });
   const subscriptions = new Map<WebSocket, Set<string>>();
+  const subscriptionLifetimes = new WeakMap<WebSocket, Map<string, object>>();
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
     if (scope === "workspace-preferences") return { ...store.workspacePreferences(), view: store.lastSession() };
@@ -100,14 +107,18 @@ export async function startServer(
     if (scope === "builtin-tools:opencli") return opencli.snapshot();
     if (scope === "authentication") return null;
     const parts = scope.split(":");
+    if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
     if (parts.length === 2 && parts[0] === "sessions")
       return store.sessions(parts[1]);
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "memory") return agents.memories.snapshot(target);
     if (parts.length === 3 && parts[0] === "costs") {
       costs.owner(target);
-      return { revision: seq };
+      // Subscription establishment is not an accounting invalidation. The client
+      // already performs an authoritative read on mount and reconnect.
+      return { revision: 0 };
     }
     if (parts.length === 3 && parts[0] === "tasks") return tasks.list(target);
     if (parts.length === 3 && parts[0] === "agent") return agents.info(target);
@@ -121,69 +132,95 @@ export async function startServer(
       return agents.message(target, parts[3]);
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
   };
-  const outgoing = new WeakMap<WebSocket, { queue: { payload: string; cost: number }[]; bytes: number; sending: boolean }>();
-  const send = (ws: WebSocket, value: unknown, history = false) => {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    const state = outgoing.get(ws) ?? { queue: [], bytes: 0, sending: false };
-    outgoing.set(ws, state);
-    const payload = JSON.stringify(value);
-    // A complete history snapshot may exceed 1 MiB. Serialize writes so its
-    // following receipt does not disconnect an otherwise healthy viewer.
-    // Additional queued deltas remain bounded; never silently drop final events.
-    const snapshot = value as Partial<Snapshot>;
-    const cost = history || snapshot.type === "snapshot" && snapshot.scope?.startsWith("messages:")
-      ? Math.min(Buffer.byteLength(payload), 200_000) : Buffer.byteLength(payload);
-    if (state.sending && state.bytes + cost > 1_000_000) {
-      ws.close(1013, "请重连读取快照"); return;
+  const outgoing = new WeakMap<WebSocket, OutgoingQueue>();
+  const channel = (ws: WebSocket) => {
+    let queue = outgoing.get(ws);
+    if (!queue) {
+      queue = new OutgoingQueue((payload, done) => {
+        if (ws.readyState !== WebSocket.OPEN) { done(new Error("连接已关闭")); return; }
+        ws.send(payload, (error) => done(error ?? undefined));
+      }, () => ws.close(1013, "请重连读取快照"));
+      outgoing.set(ws, queue);
     }
-    state.queue.push({ payload, cost }); state.bytes += cost;
-    const drain = () => {
-      if (state.sending || ws.readyState !== WebSocket.OPEN) return;
-      const next = state.queue.shift();
-      if (!next) return;
-      state.bytes -= next.cost; state.sending = true;
-      ws.send(next.payload, (error) => {
-        state.sending = false;
-        if (error) { ws.close(); return; }
-        drain();
-      });
-    };
-    drain();
+    return queue;
+  };
+  const send = (ws: WebSocket, value: unknown, admittedRead = false, done?: () => void) => {
+    if (ws.readyState !== WebSocket.OPEN) { done?.(); return; }
+    const event = value as Partial<Snapshot>;
+    const data = event.data as { streaming?: boolean } | undefined;
+    channel(ws).send(value, event.type === "snapshot" && event.scope?.startsWith("message:") && data?.streaming ? event.scope : undefined, done, admittedRead);
+  };
+  const receivers = (scope: string) => {
+    const collection = scope.startsWith("message:") ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : null;
+    return [...subscriptions].filter(([ws, scopes]) => ws.readyState === WebSocket.OPEN &&
+      (scopes.has(scope) || !!collection && scopes.has(collection))).map(([ws]) => ws);
   };
   let attention: SessionAttention | undefined;
-  const publish = (scope: string, data?: unknown) => {
+  const costWorkspaces = new Set<string>();
+  let costTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleCosts = (workspaceId: string) => {
+    if (shuttingDown) return;
+    costWorkspaces.add(workspaceId);
+    if (costTimer) return;
+    costTimer = setTimeout(() => {
+      costTimer = undefined;
+      const workspaces = new Set(costWorkspaces); costWorkspaces.clear();
+      const watching = new Set([...subscriptions.values()].flatMap((scopes) => [...scopes])
+        .filter((key) => key.startsWith("costs:") && workspaces.has(key.split(":")[1])));
+      const families = new Map<string, { scope: Scope; keys: string[] }>();
+      for (const key of watching) {
+        const [, workspaceId, sessionId] = key.split(":");
+        try {
+          const owner = costs.owner({ workspaceId, sessionId }), familyKey = JSON.stringify(owner);
+          const family = families.get(familyKey) ?? { scope: owner, keys: [] };
+          family.keys.push(key); families.set(familyKey, family);
+        } catch { publish(key, { revision: ++seq }, true); }
+      }
+      for (const family of families.values()) {
+        let changed = true;
+        try { changed = costs.changed(family.scope); } catch { /* Let the read expose unavailable accounting data. */ }
+        if (changed) for (const key of family.keys) publish(key, { revision: ++seq }, true);
+      }
+    }, 100);
+  };
+  const publish = (scope: string, data?: unknown, accountingUpdate = false) => {
+    // Explicit memory charges use the same owner routing as transcript and task changes.
+    if (scope.startsWith("costs:") && !accountingUpdate) { scheduleCosts(scope.split(":")[1]); return; }
     if (scope.startsWith("sessions:")) attention?.observe(scope.slice("sessions:".length));
-    const event: Snapshot = {
-      type: "snapshot",
-      scope,
-      streamId,
-      seq: ++seq,
-      data: data === undefined ? snapshots(scope) : data,
-    };
-    const collection = scope.startsWith("message:") ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : null;
-    for (const [ws, scopes] of subscriptions) {
-      if (scopes.has(scope) || (collection && scopes.has(collection))) send(ws, event);
+    const targets = receivers(scope);
+    const version = ++seq;
+    if (targets.length && scope.startsWith("messages:") && data === undefined) {
+      for (const ws of targets) {
+        const lifetime = subscriptionLifetimes.get(ws)?.get(scope);
+        channel(ws).lazy(() => {
+          const scopes = subscriptions.get(ws);
+          if (!scopes?.has(scope) || subscriptionLifetimes.get(ws)?.get(scope) !== lifetime) return;
+          const current = snapshots(scope), threadKey = scope.replace(/^messages:/, "thread:");
+          const thread = scopes.has(threadKey) ? snapshots(threadKey) : undefined;
+          // Capture body and layout synchronously at delivery, not at descriptor enqueue time.
+          return { type: "snapshot", scope, streamId, seq: ++seq, data: current, ...(thread === undefined ? {} : { thread }) };
+        });
+      }
+    } else if (targets.length) {
+      const event: Snapshot = { type: "snapshot", scope, streamId, seq: version, data: data === undefined ? snapshots(scope) : data };
+      for (const ws of targets) send(ws, event);
     }
     // All session summary changes (including background runs/tasks) refresh pins.
     if (scope.startsWith("sessions:")) publish("pinned-sessions");
-    // Only the independent accounting view is invalidated. No transcript reads
-    // occur when it is closed, and no chat/input subscription is refreshed.
-    if (/^(agent|compression|tasks|sessions|session):/.test(scope)) {
-      const workspaceId = scope.split(":")[1];
-      const watching = new Set([...subscriptions.values()].flatMap((scopes) => [...scopes])
-        .filter((key) => key.startsWith(`costs:${workspaceId}:`)));
-      for (const key of watching) publish(key, { revision: seq });
-    }
+    // Only changed accounting sources invalidate an open report. Progress alone
+    // neither queries costs nor scans transcripts; siblings share one source check.
+    if (/^(agent|compression|tasks|sessions|session):/.test(scope)) scheduleCosts(scope.split(":")[1]);
   };
   const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension);
-  const agents = new Agents(store, models, publish);
+  let agents: Agents;
+  agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
   const tasks = new Tasks(agents);
   attention = new SessionAttention(store, publish);
   store.beforeArchiveWorkspace = (workspaceId) => {
     if (workspaceOperations.get(workspaceId))
       throw new AppError("WORKSPACE_BUSY", "工作空间仍有操作处理中；请等待完成或先停止，再移除。");
     // Include active child sessions as well as their parent.
-    for (const row of store.db.prepare("SELECT id FROM sessions WHERE workspaceId=?").all(workspaceId)) {
+    for (const row of store.db.prepare("SELECT id FROM sessions WHERE workspaceId=? AND deletedAt IS NULL").all(workspaceId)) {
       const scope = { workspaceId, sessionId: String(row.id) };
       if (agents.active(scope))
         throw new AppError("WORKSPACE_BUSY", "工作空间仍有活动执行；请先停止后再移除。");
@@ -213,8 +250,10 @@ export async function startServer(
       }
     }
   };
-  models.beforeLogout = (providers, confirmed) =>
-    tasks.stopProviders(providers, confirmed);
+  models.beforeLogout = async (providers, confirmed) => {
+    await agents.memories.runner?.stopProviders?.(providers, confirmed);
+    await tasks.stopProviders(providers, confirmed);
+  };
   const logins = new Logins(
     models,
     (owner, state) =>
@@ -229,8 +268,15 @@ export async function startServer(
   );
   sockets.on("connection", (ws) => {
     subscriptions.set(ws, new Set());
+    // Pending attempts must not invalidate deliveries for an already active subscription.
+    const intents = new Map<string, object>(), lifetimes = new Map<string, object>();
+    subscriptionLifetimes.set(ws, lifetimes);
+    const subscriptionReads = new Map<string, AbortController>();
     send(ws, { type: "hello", streamId });
+    const reads = new Map<string, AbortController>();
     ws.on("close", () => {
+      for (const controller of reads.values()) controller.abort();
+      reads.clear(); subscriptionReads.clear(); intents.clear(); lifetimes.clear(); outgoing.get(ws)?.close();
       subscriptions.delete(ws);
       attention?.disconnect(ws);
       logins.disconnect(ws);
@@ -239,6 +285,8 @@ export async function startServer(
     const handle = async (raw: RawData) => {
       let requestId = "";
       let operationWorkspace: string | undefined;
+      let releaseRead: (() => void) | undefined;
+      let subscribing: string | undefined, subscriptionIntent: object | undefined;
       try {
         const value = object(JSON.parse(raw.toString()));
         requestId = text(value.requestId, "请求标识");
@@ -256,26 +304,52 @@ export async function startServer(
           send(ws, { type: "receipt", requestId, ok: true, data: { streamId } });
           return;
         }
+        if (c.op === "read.cancel") {
+          reads.get(text(c.params!.requestId, "读取请求标识"))?.abort();
+          send(ws, { type: "receipt", requestId, ok: true, data: {} });
+          return;
+        }
+        if (c.op === "unsubscribe") {
+          const key = text(c.params!.scope, "订阅范围", 300);
+          intents.delete(key); lifetimes.delete(key); subscriptionReads.get(key)?.abort(); subscriptionReads.delete(key);
+          subscriptions.get(ws)?.delete(key);
+          send(ws, { type: "receipt", requestId, ok: true, data: {} }); return;
+        }
         if (c.op === "subscribe") {
-          const scope = text(c.params!.scope, "订阅范围", 300),
-            data = snapshots(scope);
-          const scopes = subscriptions.get(ws)!;
-          if (scopes.size >= 500 && !scopes.has(scope))
-            throw new AppError("LIMIT", "订阅数量超限");
+          subscribing = text(c.params!.scope, "订阅范围", 300);
+          if (intents.size >= 500 && !intents.has(subscribing)) throw new AppError("LIMIT", "订阅数量超限");
+          subscriptionReads.get(subscribing)?.abort();
+          subscriptionIntent = {}; intents.set(subscribing, subscriptionIntent);
+        }
+        const historyRead = ["agent.original", "agent.editable", "message.get", "message.part", "files.document", "message.image"].includes(c.op) ||
+          c.op === "subscribe" && /^(messages|thread):/.test(String(c.params!.scope));
+        if (historyRead) {
+          const controller = new AbortController(); reads.set(requestId, controller);
+          if (subscribing) subscriptionReads.set(subscribing, controller);
+          releaseRead = await channel(ws).reserveRead(controller.signal);
+          if (controller.signal.aborted) throw new AppError("CANCELLED", "读取已取消");
+          if (ws.readyState !== WebSocket.OPEN) return;
+        }
+        if (c.op === "subscribe") {
+          if (intents.get(subscribing!) !== subscriptionIntent) {
+            send(ws, { type: "receipt", requestId, ok: true, data: { superseded: true } }, true, releaseRead);
+            releaseRead = undefined; return;
+          }
+          const scope = subscribing!, scopes = subscriptions.get(ws)!;
+          const data = snapshots(scope);
+          const threadKey = scope.replace(/^messages:/, "thread:");
+          const thread = scope.startsWith("messages:") && scopes.has(threadKey) ? snapshots(threadKey) : undefined;
           scopes.add(scope);
+          if (!lifetimes.has(scope)) lifetimes.set(scope, subscriptionIntent!);
           // JS run-to-completion puts this snapshot and following mutations on one cursor boundary.
-          send(ws, { type: "snapshot", scope, streamId, seq, data });
+          send(ws, { type: "snapshot", scope, streamId, seq, data, ...(thread === undefined ? {} : { thread }) }, historyRead);
           send(ws, {
             type: "receipt",
             requestId,
             ok: true,
             data: { subscribed: scope },
-          });
-          return;
-        }
-        if (c.op === "unsubscribe") {
-          subscriptions.get(ws)!.delete(text(c.params!.scope, "订阅范围", 300));
-          send(ws, { type: "receipt", requestId, ok: true, data: {} });
+          }, historyRead, releaseRead);
+          releaseRead = undefined;
           return;
         }
         if (c.op === "session.view") {
@@ -296,12 +370,18 @@ export async function startServer(
           if (c.op === "opencli.install") {
             // Includes prompts admitted before their async model preparation registers a run.
             if (workspaceOperations.size) throw new AppError("AGENT_BUSY", "工作空间仍有操作处理中，请完成后再安装或更新 OpenCLI。");
-            for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions").all()) {
+            for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
               if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
                 throw new AppError("AGENT_BUSY", "请等待本机 Agent 任务结束后再安装或更新 OpenCLI。");
             }
           }
           data = c.op === "opencli.get" ? await opencli.command(c) : await store.external(c, () => opencli.command(c));
+        } else if (c.op.startsWith("memory.")) {
+          const controller = new AbortController();
+          const abort = () => controller.abort();
+          ws.once("close", abort);
+          try { data = await agents.memories.command(c, controller.signal); }
+          finally { ws.off("close", abort); }
         } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
         } else if (c.op.startsWith("files.")) {
@@ -351,6 +431,7 @@ export async function startServer(
           c.op.startsWith("agent.") ||
           c.op.startsWith("task.") ||
           c.op === "message.get" ||
+          c.op === "message.part" ||
           c.op === "message.image"
         ) {
           if (c.op === "prompt" && c.params?.draftStamp !== undefined) {
@@ -374,12 +455,15 @@ export async function startServer(
         }
         if (c.op.startsWith("workspace.")) publishWorkspace(c, data);
         if (c.op.startsWith("session.")) {
+          const scope = c.sessionId ? { workspaceId: c.workspaceId!, sessionId: c.sessionId } : undefined;
+          // 已读和置顶只影响会话列表。删除需投影 retained memory，改名只改 catalog 标题。
+          if (c.op === "session.delete" && scope) agents.memories.refresh(scope);
+          if (c.op === "session.rename" && scope) agents.memories.rename(scope);
           if (c.op === "session.read")
             publish(`thread:${c.workspaceId}:${c.sessionId}`);
           if (c.op === "session.rename") {
-            const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! };
-            const run = agents.info(scope).run;
-            if (run) agents.signal(scope, run.id, { type: "title-settled" });
+            const run = agents.info(scope!).run;
+            if (run) agents.signal(scope!, run.id, { type: "title-settled" });
           }
           publish(`sessions:${c.workspaceId}`);
           if (c.op === "session.delete")
@@ -387,8 +471,13 @@ export async function startServer(
           else if (c.op !== "session.create")
             publish(`session:${c.workspaceId}:${c.sessionId}`);
         }
-        send(ws, { type: "receipt", requestId, ok: true, data }, c.op === "agent.original" || c.op === "files.document");
+        send(ws, { type: "receipt", requestId, ok: true, data }, historyRead, releaseRead);
+        releaseRead = undefined;
       } catch (error) {
+        if (subscribing && (reads.get(requestId)?.signal.aborted || intents.get(subscribing) !== subscriptionIntent)) {
+          send(ws, { type: "receipt", requestId, ok: true, data: { superseded: true } }, !!releaseRead, releaseRead);
+          releaseRead = undefined; return;
+        }
         send(ws, {
           type: "receipt",
           requestId,
@@ -400,8 +489,16 @@ export async function startServer(
                   code: "STORAGE_OR_REQUEST_ERROR",
                   message: "请求未完成，数据未确认保存；请检查服务或请求格式。",
                 },
-        });
+        }, !!releaseRead, releaseRead);
+        releaseRead = undefined;
       } finally {
+        if (subscribing && subscriptionIntent && intents.get(subscribing) === subscriptionIntent) {
+          const lifetime = lifetimes.get(subscribing);
+          if (lifetime) intents.set(subscribing, lifetime);
+          else intents.delete(subscribing);
+        }
+        if (subscribing && subscriptionReads.get(subscribing) === reads.get(requestId)) subscriptionReads.delete(subscribing);
+        releaseRead?.(); reads.delete(requestId);
         if (operationWorkspace) {
           const remaining = (workspaceOperations.get(operationWorkspace) ?? 1) - 1;
           if (remaining) workspaceOperations.set(operationWorkspace, remaining);
@@ -446,6 +543,32 @@ export async function startServer(
           res.writeHead(403);
           res.end("来源校验失败");
         }
+        return;
+      }
+      if (url.pathname === "/api/files/browse") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        try {
+          if (req.method === "GET") {
+            const offset = Number(url.searchParams.get("offset") ?? 0);
+            if (!Number.isSafeInteger(offset) || offset < 0) throw Error("目录页码无效");
+            res.end(JSON.stringify(await remoteDirectory(url.searchParams.get("path") || undefined, offset))); return;
+          }
+          if (req.method !== "POST" || req.headers.origin !== origin) { res.writeHead(403); res.end(JSON.stringify({ error: "来源校验失败" })); return; }
+          const chunks: Buffer[] = []; let size = 0;
+          for await (const chunk of req) { size += chunk.length; if (size > 220000) throw Error("选择内容过大"); chunks.push(Buffer.from(chunk)); }
+          const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          if (!Array.isArray(value.paths) || !value.paths.length || value.paths.length > 50 || value.paths.some((path: unknown) => typeof path !== "string" || path.length > 4096)) throw Error("请选择 1–50 个文件或文件夹");
+          const items = await remoteSelection(value.paths);
+          if (value.scope) files.registerPicked(value.scope, items);
+          res.end(JSON.stringify({ items }));
+        } catch (error) { res.writeHead(400); res.end(JSON.stringify({ error: (error as Error).message })); }
+        return;
+      }
+      if (url.pathname === "/api/remote") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (req.method !== "GET") { res.writeHead(405, { Allow: "GET" }); res.end(JSON.stringify({ error: "请使用 GET" })); return; }
+        if (!remoteAccess) { res.writeHead(503); res.end(JSON.stringify({ error: "服务正在准备" })); return; }
+        res.end(JSON.stringify(remoteAccess.status()));
         return;
       }
       if (url.pathname === "/api/draft") {
@@ -617,11 +740,6 @@ export async function startServer(
         vite.middlewares(req, res);
         return;
       }
-      if (url.pathname === "/favicon.ico") {
-        res.writeHead(204);
-        res.end();
-        return;
-      }
       const client = resolve(
         dirname(fileURLToPath(import.meta.url)),
         "../../dist/client",
@@ -641,6 +759,9 @@ export async function startServer(
         ".js": "text/javascript",
         ".css": "text/css",
         ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+        ".webmanifest": "application/manifest+json",
       };
       res.setHeader(
         "Content-Type",
@@ -690,6 +811,8 @@ export async function startServer(
     throw error;
   }
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  remoteAccess = new RemoteAccess(origin);
+  await remoteAccess.initialize();
   return {
     origin,
     accessUrl: `${origin}/`,
@@ -699,6 +822,8 @@ export async function startServer(
     tasks,
     close: async () => {
       shuttingDown = true;
+      clearTimeout(costTimer); costWorkspaces.clear();
+      await remoteAccess?.close();
       attention.close();
       await opencli.close();
       await Promise.all([openDialog.close(), fileManager.close()]);

@@ -48,6 +48,7 @@ export function Title({
             className="icon-btn"
             disabled={!workspace}
             aria-label="复制工作空间路径"
+            data-tooltip={workspace ? `复制路径 · ${workspace.path}` : undefined}
             onClick={() =>
               navigator.clipboard
                 .writeText(workspace!.path)
@@ -73,7 +74,7 @@ export function Title({
               finally { setRevealing(false); }
             }}
           >
-            <Icon name="workspace" />
+            <Icon name="folder-open" />
           </button>
         </span>
       </div>

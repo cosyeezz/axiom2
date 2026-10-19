@@ -47,6 +47,25 @@ try {
   for (const scope of [viewed, target]) await call(scope, "agent.model", { selection: { provider: "ui-retry-fixture", id: "fixture", thinking: "off" } });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
+  let heldResume: { request: any; send: () => void; reject: (code: string) => void } | undefined;
+  let resumeCommands = 0, resumeQueryStatus = "uncertain";
+  await page.routeWebSocket(/\/ws/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((raw) => {
+      const request = JSON.parse(String(raw));
+      if (request.op === "agent.resume") {
+        resumeCommands++;
+        heldResume = { request, send: () => server.send(raw), reject: (code) => socket.send(JSON.stringify({
+          type: "receipt", requestId: request.requestId, ok: false,
+          error: { code, message: code === "UNCERTAIN" ? "fixture uncertain" : "重试未受理测试" },
+        })) };
+      } else if (request.op === "request.get" && request.params?.requestId === heldResume?.request.requestId) {
+        socket.send(JSON.stringify({ type: "receipt", requestId: request.requestId, ok: true,
+          data: { status: resumeQueryStatus, data: { message: "重试未受理测试" } } }));
+      } else server.send(raw);
+    });
+    server.onMessage((raw) => socket.send(raw));
+  });
   await page.addInitScript((scope) => sessionStorage.setItem("view", JSON.stringify(scope)), viewed);
   await page.goto(app.origin);
   await page.locator("#prompt").waitFor({ timeout: 10000 }).catch(async (error) => {
@@ -67,7 +86,9 @@ try {
     const retryBox = await retryButton.boundingBox();
     const sendBox = await page.getByRole("button", { name: "发送消息", exact: true }).boundingBox();
     assert.ok(retryBox && sendBox && retryBox.width === 44 && retryBox.height === 44);
-    assert.ok(retryBox.x + retryBox.width <= sendBox.x && Math.abs(retryBox.y - sendBox.y) < 1);
+    assert.ok(retryBox.y + retryBox.height <= sendBox.y, "retry belongs above the composer");
+    assert.equal(await page.locator('#messages > .thread-tail-actions:last-child .retry-action').count(), 1);
+    assert.equal(await page.locator('.composer .retry-action').count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: `../artifacts/retry-icon-${width}.png` });
   }
@@ -75,13 +96,46 @@ try {
   assert.equal(await page.locator(`[data-session-id="${viewed.sessionId}"] .session-state.unread`).count(), 0, "opened session hides blue indicator even before its read receipt");
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
   await until(() => !app.store.session(workspace.id, viewed.sessionId).unread, "visible committed context wasn't acknowledged");
+  // Hold the request before it reaches the server: the click itself must remove the action.
+  const removedSynchronously = await retryButton.evaluate((node) => {
+    (node as HTMLButtonElement).click();
+    (node as HTMLButtonElement).click();
+    return !node.isConnected;
+  });
+  assert.equal(removedSynchronously, true);
+  await until(() => !!heldResume, "resume wasn't sent");
+  assert.equal(resumeCommands, 1, "rapid clicks cannot duplicate the command");
+  await page.waitForTimeout(400);
+  assert.equal(await retryButton.count(), 0, "waiting for admission stays silent");
+  await page.locator(`[data-session-id="${target.sessionId}"] button.history-item`).click();
+  await page.waitForFunction(() => document.querySelector('#chat-title')?.textContent === '运行与未读并存');
+  await page.locator(`[data-session-id="${viewed.sessionId}"] button.history-item`).click();
+  await page.waitForFunction(() => document.querySelector('#chat-title')?.textContent === '当前会话');
+  assert.equal(await retryButton.count(), 0, "navigation cannot restore an in-flight retry");
+  heldResume!.reject("UNCERTAIN");
+  await page.waitForTimeout(300);
+  assert.equal(await retryButton.count(), 0);
+  assert.doesNotMatch(await page.locator('.composer-foot').innerText(), /fixture uncertain|结果待确认|正在读取/);
+  assert.equal(await page.getByRole('button', { name: '发送消息', exact: true }).isEnabled(), true, "unknown retry cannot indefinitely block new input");
+  resumeQueryStatus = "failed";
+  await retryButton.waitFor({ timeout: 12000 });
+  assert.match(await page.locator('.composer-foot').innerText(), /重试未受理测试/);
+  assert.equal(await page.locator('#prompt').inputValue(), '保留正在编辑的草稿');
   mode = "success"; count = 0;
+  heldResume = undefined;
   await retryButton.focus();
   await page.keyboard.press("Enter");
+  assert.equal(await retryButton.count(), 0, "keyboard retry disappears before admission");
+  assert.equal(await page.locator('#prompt').evaluate((node) => document.activeElement === node), true);
+  await until(() => !!heldResume, "second resume wasn't sent");
+  heldResume!.send();
   await until(() => app.agents.info(viewed).run?.status === "completed", "continue did not complete");
   assert.equal(await page.locator("#prompt").inputValue(), "保留正在编辑的草稿");
   assert.equal(app.agents.messages(viewed).filter((message) => message?.role === "user").length, 1);
   assert.equal(count, 1);
+  // Keyboard retry focuses the composer; dismiss its tooltip before testing other overlays.
+  await page.keyboard.press("Escape");
+  await page.locator('.axiom-tooltip').waitFor({ state: 'hidden' });
 
   // Neither an overlay nor viewing the start of a long transcript confirms its end.
   await page.evaluate("const cover=document.createElement('div');cover.id='reading-cover';cover.style.cssText='position:fixed;inset:0;z-index:99999;background:black';document.body.append(cover)");
@@ -89,7 +143,18 @@ try {
   await page.waitForTimeout(1200);
   assert.equal(app.store.session(workspace.id, viewed.sessionId).unread, true, "covered thread is not read");
   await page.evaluate("document.getElementById('reading-cover').remove()");
-  await until(() => !app.store.session(workspace.id, viewed.sessionId).unread, "uncovered result wasn't acknowledged");
+  await until(() => !app.store.session(workspace.id, viewed.sessionId).unread, "uncovered result wasn't acknowledged").catch(async (error) => {
+    console.error("READ_DIAGNOSTICS", await page.evaluate(() => {
+      const thread = document.querySelector('#thread')!;
+      const rect = thread.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, Math.min(rect.bottom - 4, innerHeight - 1));
+      return { focus: document.hasFocus(), visibility: document.visibilityState, title: document.querySelector('#chat-title')?.textContent,
+        threads: document.querySelectorAll('#thread').length, active: document.activeElement?.outerHTML,
+        top: thread.scrollTop, height: thread.clientHeight, scrollHeight: thread.scrollHeight,
+        hit: hit?.outerHTML.slice(0, 300), contains: !!hit && thread.contains(hit) };
+    }));
+    throw error;
+  });
   await page.locator("#thread .thread-content").evaluate((el) => { (el as HTMLElement).style.minHeight = "2400px"; });
   await page.waitForTimeout(100);
   await page.locator("#thread").evaluate((el) => { el.scrollTop = 0; el.dispatchEvent(new Event("scroll", { bubbles: true })); });

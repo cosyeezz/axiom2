@@ -3,6 +3,7 @@ import {
   type ModelDraft as Model,
   type ProviderDraft as Provider,
 } from "../../shared/models.js";
+import { Icon } from "../Icon.js";
 import { Headers, BodyOverrides } from "./Overrides.js";
 export function ModelEditor({
   editor,
@@ -19,6 +20,7 @@ export function ModelEditor({
   discardEditor: (proceed: () => void) => void;
   feedback: string;
 }) {
+  const idError = !editor.id.trim() ? "请填写供应商提供的模型 ID。" : p.models.some((model) => model.key !== editor.key && model.id === editor.id.trim()) ? "模型 ID 重复，请使用该供应商下唯一的模型 ID。" : "";
   return (
     <section
       className="inline-model-editor"
@@ -45,11 +47,14 @@ export function ModelEditor({
               id="new-model-id"
               autoFocus
               required
+              aria-invalid={!!idError}
+              aria-describedby={idError ? "model-id-error" : undefined}
               maxLength={160}
               placeholder="供应商提供的模型 ID"
               value={editor.id}
               onChange={(e) => setEditor({ ...editor, id: e.target.value })}
             />
+            {idError && <span id="model-id-error" className="field-help">{idError}</span>}
           </div>
           <div className="field">
             <label htmlFor="new-model-name">显示名称</label>
@@ -66,14 +71,14 @@ export function ModelEditor({
             <label id="model-input-label">输入能力 <span className="meta">（多模态）</span></label>
             <div className="model-input-options" role="group" aria-labelledby="model-input-label" aria-describedby="model-input-help">
               <div className="model-input-option model-input-required">
-                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M12 5v14M8 19h8" /></svg>
+                <svg className="ui-glyph" aria-hidden="true" viewBox="3 4 18 16"><path d="M4 5h16M12 5v14M8 19h8" /></svg>
                 <span className="model-input-copy"><strong>文本</strong><small>对话与代码</small></span>
                 <span className="model-input-state">默认支持</span>
               </div>
               <label className="model-input-option" data-selected={editor.input?.includes("image") ?? false}>
                 <input type="checkbox" name="model-input-image" checked={editor.input?.includes("image") ?? false}
                   onChange={(e) => setEditor({ ...editor, input: e.target.checked ? ["text", "image"] : ["text"] })} />
-                <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8" cy="8" r="1" /><path d="m21 15-5-5L5 21" /></svg>
+                <Icon name="image" />
                 <span className="model-input-copy"><strong>图片</strong><small>理解图片内容</small></span>
                 <span className="model-input-toggle" aria-hidden="true" />
               </label>

@@ -1,3 +1,5 @@
+html:has(#root > .cost-page) { color-scheme: dark; background: var(--bg); }
+body:has(#root > .cost-page) { margin: 0; min-height: 100dvh; background: var(--bg); }
 .cost-page, .cost-page * { box-sizing: border-box; }
 .cost-page { color: var(--fg); font: 14px/1.6 var(--font-body); background: var(--bg); }
 .cost-page :where(h1, h2, h3, p) { margin: 0; }
@@ -7,7 +9,7 @@
 .cost-popover { position: fixed; inset: 0; margin: auto; padding: 0; width: min(900px, calc(100vw - 48px)); height: min(820px, calc(100dvh - 64px)); max-width: none; max-height: none; overflow: hidden; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 90px #0009, 0 2px 12px #0005; }
 .cost-popover:popover-open { display: flex; }
 .cost-popover > .cost-page { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 0; }
-.cost-popover .cost-content { flex: 1; min-height: 0; width: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scroll-behavior: smooth; }
+.cost-popover .cost-content { flex: 1; min-height: 0; width: 100%; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
 .cost-topbar { flex-shrink: 0; min-height: 76px; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--fg) 2%, var(--bg)); }
 .cost-heading { display: grid; gap: 2px; }
 .cost-heading > span { color: var(--muted); font-size: 10px; letter-spacing: .08em; }
@@ -93,4 +95,4 @@
   .cost-line > summary > .cost-number { max-width: 48%; white-space: normal; overflow-wrap: anywhere; text-align: right; }
 }
 @media (pointer: coarse) { .cost-refresh, .cost-close { min-height: 44px; } .cost-close { width: 44px; } }
-@media (prefers-reduced-motion: reduce) { .cost-popover .cost-content { scroll-behavior: auto; } .cost-line > summary::before, .cost-refresh, .cost-close { transition: none; } .cost-refresh[aria-busy="true"] svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cost-popover .cost-content { scroll-behavior: auto; } .cost-line > summary::before, .cost-refresh, .cost-close { transition: none; } }

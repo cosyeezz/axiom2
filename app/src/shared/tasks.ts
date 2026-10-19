@@ -35,7 +35,7 @@ export type TaskStatus =
   | "failed"
   | "cancelled"
   | "interrupted";
-export type TaskInputState = "queued" | "accepted" | "delivered" | "failed" | "cancelled";
+export type TaskInputState = "queued" | "unknown" | "accepted" | "delivered" | "failed" | "cancelled";
 export type StopSource = "user" | "agent" | "budget" | "parent" | "shutdown" | "provider";
 export interface TaskInputReceipt {
   inputId: string;

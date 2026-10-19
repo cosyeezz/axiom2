@@ -1,5 +1,5 @@
 import { createContext, memo, useContext, useEffect, useMemo, useState } from "react";
-import { command } from "../transport.js";
+import { MessagePartBody } from "./MessagePartBody.js";
 import { useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
 import { type ChatMessage } from "../../shared/agent.js";
@@ -8,11 +8,10 @@ import { ThinkingDots } from "./ThinkingDots.js";
 import { RunningDots } from "./RunningDots.js";
 import { Markdown } from "./Markdown.js";
 import "../styles/activity-status.css";
+import { useActivityFacts } from "./ActivityFacts.js";
 import { toolPreview, toolStatusLabels, toolSummary, type ToolCall, type ToolStatus } from "./tool-summary.js";
 
-export type ActivityFact = { name: string; icon: string; target: string; status: ToolStatus; kind?: "message" | "notice"; runId?: string; order: readonly [number, number] };
-type Reporter = (id: string, fact: ActivityFact | null) => void;
-export const ActivityContext = createContext<Reporter>(() => {});
+export type ActivityFact = { name: string; icon: string; target: string; status: ToolStatus; kind?: "message" | "notice"; evidence?: boolean; runId?: string; order: readonly [number, number] };
 export const ActivityExpanded = createContext(true);
 
 function CompletedStatusIcon({ animate }: { animate: boolean }) {
@@ -45,18 +44,14 @@ function ActivitySummary({ fact }: { fact: ActivityFact }) {
   return <><span className="tool-icon" data-tool-icon={fact.icon}><Icon name={`tool-${fact.icon}`} /></span><span><span className="tool-name">{fact.name}</span> · {fact.target}</span></>;
 }
 
-export function ActivityGroup({ children, awaitingMore = false, activeRunId, messageIds = [] }: { children: React.ReactNode; awaitingMore?: boolean; activeRunId?: string; messageIds?: string[] }) {
+export function ActivityGroup({ scope, children, awaitingMore = false, activeRunId, messageIds = [] }: {
+  scope: Scope; children: React.ReactNode | ((open: boolean, evidence: Set<string>) => React.ReactNode);
+  awaitingMore?: boolean; activeRunId?: string; messageIds?: string[];
+}) {
   const [open, setOpen] = useState(false);
-  const [facts, setFacts] = useState<Record<string, ActivityFact>>({});
-  const report = useMemo<Reporter>(() => (id, fact) => setFacts((previous) => {
-    if (fact && previous[id]?.name === fact.name && previous[id]?.icon === fact.icon && previous[id]?.target === fact.target && previous[id]?.status === fact.status && previous[id]?.kind === fact.kind && previous[id]?.runId === fact.runId && previous[id]?.order[0] === fact.order[0] && previous[id]?.order[1] === fact.order[1]) return previous;
-    if (!fact && !previous[id]) return previous;
-    const next = { ...previous };
-    if (fact) next[id] = fact;
-    else delete next[id];
-    return next;
-  }), []);
-  const entries = Object.entries(facts).sort((a, b) => a[1].order[0] - b[1].order[0] || a[1].order[1] - b[1].order[1]);
+  const entries = useActivityFacts(scope, messageIds);
+  const facts = new Map(entries);
+  const evidence = new Set(entries.filter(([, fact]) => fact.evidence).map(([id]) => id.slice("message:".length)));
   const items = entries.map(([, fact]) => fact);
   // Local tool/task outcomes belong to their rows, not the whole process.
   const messages = items.filter((item) => item.kind === "message");
@@ -68,7 +63,7 @@ export function ActivityGroup({ children, awaitingMore = false, activeRunId, mes
   const cancelled = outcome === "cancelled";
   const unknown = items.some((item) => item.status === "unknown");
   const calls = entries.filter(([, fact]) => !fact.kind);
-  const ready = messageIds.every(id => facts[`message:${id}`]);
+  const ready = messageIds.every(id => facts.has(`message:${id}`));
   // Notices may have no run ID; retain ownership from all messages in the group.
   const awaitingRun = !!activeRunId && items.some(item => item.runId === activeRunId);
   // The current process stays active through recovery; settled history reflects
@@ -99,7 +94,7 @@ export function ActivityGroup({ children, awaitingMore = false, activeRunId, mes
     const timeout = setTimeout(() => setPrevious(undefined), 320);
     return () => clearTimeout(timeout);
   }, [previous]);
-  return <ActivityContext.Provider value={report}>
+  return <>
     <details className="activity tool-activity" open={open} data-status={status}>
       <summary onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
         <span className="activity-status" data-state={status} role="img" aria-label={toolStatusLabels[status]} data-tooltip={toolStatusLabels[status]}>
@@ -116,61 +111,30 @@ export function ActivityGroup({ children, awaitingMore = false, activeRunId, mes
             {current && <span key={latest![0]} className={`activity-current${previous ? " activity-current-in" : ""}`} data-tool={current.name} data-status={current.status} data-tooltip={current.kind === "message" && current.icon === "thinking" ? undefined : `${current.name} · ${current.target}`}><ActivitySummary fact={current} /></span>}
           </span>}
       </summary>
-      <ActivityExpanded.Provider value={open}><div className="activity-content">{children}</div></ActivityExpanded.Provider>
+      <ActivityExpanded.Provider value={open}><div className="activity-content">{typeof children === "function" ? children(open, evidence) : children}</div></ActivityExpanded.Provider>
     </details>
-  </ActivityContext.Provider>;
+  </>;
 }
 
 function ToolDetails({ scope, call, message, result }: { scope: Scope; call: ToolCall; message: ChatMessage; result: ChatMessage | null }) {
-  const [full, setFull] = useState<ChatMessage | null>(null);
-  const [fullInput, setFullInput] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [attempt, retry] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setFull(null); setFullInput(null); setError(""); setLoading(false);
-    if (!result?.truncated && !message.truncated) return;
-    setLoading(true);
-    void Promise.all([
-      result?.truncated ? command<ChatMessage>("message.get", { id: result.id }, scope) : Promise.resolve(null),
-      message.truncated ? command<ChatMessage>("message.get", { id: message.id }, scope) : Promise.resolve(null),
-    ]).then(([output, parent]) => {
-      if (!active) return;
-      setFull(output);
-      setFullInput(parent?.calls?.find((item) => item.id === call.id)?.input ?? null);
-    }).catch((e: Error) => { if (active) setError(e.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [scope.workspaceId, scope.sessionId, result, message.id, message.truncated, call.id, call.input, attempt]);
-  const output = full ?? result;
   return <div className="tool-detail">
     <div className="tool-detail-label" data-tooltip={call.name}>输入参数</div>
-    <pre>{fullInput ?? call.input}</pre>
+    <MessagePartBody scope={scope} message={message} callId={call.id} fallback="无输入参数" />
     <div className="tool-detail-label">执行输出</div>
-    <pre>{output?.text || output?.error || "尚未记录输出"}</pre>
-    {loading && <p className="tool-truncated" role="status">正在加载完整记录…</p>}
-    {error && <p className="execution-alert" role="alert">{error}<button type="button" className="btn" onClick={() => retry((value) => value + 1)}>重新加载</button></p>}
-    {output?.truncated && <p className="tool-truncated">当前仅展示部分输出</p>}
-    {message.truncated && fullInput === null && <p className="tool-truncated">当前仅展示部分输入</p>}
+    <MessagePartBody scope={scope} message={result} />
   </div>;
 }
 
 export const Tool = memo(function Tool({ scope, call, message, messageOrder = 0, callOrder = 0 }: { scope: Scope; call: ToolCall; message: ChatMessage; messageOrder?: number; callOrder?: number }) {
   const result = useThreadMessage(scope, `tool-${call.id}`);
-  const report = useContext(ActivityContext);
   const groupOpen = useContext(ActivityExpanded);
   const [open, setOpen] = useState(false);
   useEffect(() => { if (!groupOpen) setOpen(false); }, [groupOpen]);
-  const summary = useMemo(() => toolSummary(call), [call.name, call.input]);
+  const summary = useMemo(() => toolSummary(call), [call.name, call.input, call.summary]);
   const status = result?.status || (message.status === "failed" || message.status === "cancelled" ? message.status : message.streaming ? "running" : "unknown");
   const preview = toolPreview(result);
   const duration = result?.durationMs != null ? `${(result.durationMs / 1000).toFixed(1)}s` : "—";
   const durationLabel = `${toolStatusLabels[status]} · ${result?.durationMs != null ? `耗时 ${duration}` : "耗时未知"}`;
-  useEffect(() => {
-    report(call.id, { name: summary.label, icon: summary.icon, target: `${summary.target}${summary.detail ? ` · ${summary.detail}` : ""}${status === "failed" ? ` · ${preview}` : ""}`, status, order: [messageOrder, callOrder] });
-  }, [report, call.id, summary.label, summary.icon, summary.target, summary.detail, status, preview, messageOrder, callOrder]);
-  useEffect(() => () => report(call.id, null), [report, call.id]);
   return <details className="tool-call" data-status={status} aria-label={summary.label} open={groupOpen && open}>
     <summary className="tool-header" onClick={(event) => { event.preventDefault(); setOpen(value => !value); }}>
       <span className="tool-heading" data-tool={summary.label} data-tooltip={call.name}><span className="tool-icon" data-tool-icon={summary.icon}><Icon name={`tool-${summary.icon}`} /></span><strong className="tool-name">{summary.label}</strong>{!open && <code className="tool-target" data-tooltip={summary.target}>{summary.target}</code>}{summary.detail && <span className="tool-input-detail">{summary.detail}</span>}{status === "failed" && !open && <span className="tool-input-detail" data-tooltip={preview}>{preview}</span>}</span>

@@ -12,6 +12,7 @@ test("cancellation confirmation belongs to the worker run, not the whole compres
   const live: any = {
     scope, job: { id: "job", state: "running", phase: "applying", error: null },
     cancel: false, cancelConfirmedRun: "run-A", applyRun: "run-B",
+    controller: new AbortController(), exit: Promise.resolve(),
   };
   coordinator.live = new Map([[scope.sessionId, live]]);
   coordinator.epochs = new Map();
@@ -31,6 +32,7 @@ test("cancellation confirmation belongs to the worker run, not the whole compres
     coordinator.live.delete(scope.sessionId);
   };
   const stopping = coordinator.stop(scope);
+  await new Promise<void>((resolve) => setImmediate(resolve));
   try {
     assert.deepEqual(signals, [{ runId: "run-B", value: { type: "compression-cancel", id: "job" } }]);
     assert.equal(finished, undefined, "A's exit must not acknowledge cancellation of B's queued apply");

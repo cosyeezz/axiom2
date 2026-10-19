@@ -23,6 +23,12 @@ function inputId(message: AgentMessage): string | undefined {
   const id = (message.details as { axiomInput?: unknown } | undefined)?.axiomInput;
   return typeof id === "string" ? id : undefined;
 }
+export function retainedInput(session: AgentSession, id: string): boolean {
+  const matches = (message: AgentMessage) => inputId(message) === id;
+  return nativeQueuedMessages(session).some(matches) || session.messages.some(matches) ||
+    session.sessionManager.getEntries().some((entry) => entry.type === "custom_message" &&
+      entry.customType === "axiom-append" && (entry.details as { axiomInput?: string } | undefined)?.axiomInput === id);
+}
 export function nativeInputs(session: AgentSession) {
   return Object.entries(queues(session)).flatMap(([mode, messages]) =>
     messages.flatMap((message) => {

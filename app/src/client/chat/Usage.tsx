@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useScope } from "../transport.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -8,147 +8,59 @@ import { AnnotationToggle } from "./ReplyAnnotations.js";
 import { OriginalConversationToggle } from "./OriginalConversation.js";
 import { durationTooltip, formatDuration, sessionDuration } from "./duration.js";
 import { CostsPopover } from "../pages/Costs.js";
-export function Usage({ scope }: { scope?: Scope }) {
-  const info = useScope(scope ? agentScope(scope) : null, emptyAgent),
-    usage = info.usage,
-    label = info.task ? "子会话" : "主会话";
+import { CacheUsageIcon } from "./UsageIcons.js";
+import { ContextMemoryIcon, cacheRatio, validRatio } from "../DataIcons.js";
+import { Icon } from "../Icon.js";
+import { MetricDetail } from "./MetricDetail.js";
+import "../styles/data-icons.css";
+export type ContextMemoryInfo = { percent: number | null; label: string; detail: ReactNode };
+export type UsageTools = { session: (context: ContextMemoryInfo) => ReactNode; global: ReactNode };
+type Metric = "context" | "cache";
+export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
+  const info = useScope(scope ? agentScope(scope) : null, emptyAgent), usage = info.usage, label = info.task ? "子会话" : "主会话";
   const [now, setNow] = useState(Date.now());
   const [costWindow, setCostWindow] = useState<{ scope: Scope; trigger: HTMLButtonElement } | null>(null);
-  useEffect(() => { setCostWindow(null); }, [scope?.workspaceId, scope?.sessionId]);
+  const [detail, setDetail] = useState<{ key: Metric; scope: string; trigger: HTMLButtonElement } | null>(null);
+  const scopeKey = `${scope?.workspaceId ?? ""}:${scope?.sessionId ?? ""}`;
+  useEffect(() => { setCostWindow(null); setDetail(null); }, [scopeKey]);
   useEffect(() => {
     if (!running(info.run)) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer);
   }, [info.run?.id, info.run?.status]);
-  const elapsed = sessionDuration(info, now);
-  const cacheTotal = usage
-    ? usage.input + usage.cacheRead + usage.cacheWrite
-    : 0;
-  const context = usage?.context;
-  const percent =
-    context?.tokens != null &&
-    Number.isFinite(context.tokens) &&
-    context.tokens >= 0 &&
-    Number.isFinite(context.window) &&
-    context.window > 0
-      ? Math.min(100, (context.tokens / context.window) * 100)
-      : null;
-  const contextLabel =
-    percent == null
-      ? "上下文占用率未知"
-      : `上下文占用率 ${Math.round(percent)}%（${context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算"}）`;
-  return (
-    <div
-      className="usage"
-      data-od-id="token-usage"
-      role="group"
-      aria-label="Token、缓存、耗时与预计花费统计"
-    >
-      <div className="usage-row">
-        <div className="context-controls" data-od-id="context-controls">
-          <span
-            className="usage-metric"
-            data-od-id="context-capacity"
-            data-tooltip={`${contextLabel}；${label}累计 Token：${usage?.total ?? "—"}`}
-          >
-            <svg
-              className="usage-icon"
-              viewBox="2 2 20 20"
-              role="progressbar"
-              aria-label={contextLabel}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent ?? undefined}
-            >
-              <circle
-                className="context-ring-track"
-                cx="12"
-                cy="12"
-                r="9"
-                strokeDasharray={percent == null ? "2 3" : undefined}
-              />
-              <circle
-                className="context-ring-fill"
-                cx="12"
-                cy="12"
-                r="9"
-                pathLength="100"
-                strokeDasharray="100 100"
-                strokeDashoffset={100 - (percent ?? 0)}
-                transform="rotate(-90 12 12)"
-              />
-            </svg>
-            <span className="screen-reader">上下文占用：</span>
-            <strong>{context?.tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
-            <strong aria-label={contextLabel}>
-              · {percent == null ? "—" : Math.round(percent)}%
-            </strong>
-          </span>
-        </div>
-        <span
-          className="usage-metric"
-          data-od-id="cache-tokens"
-          data-tooltip={
-            usage
-              ? `${label}缓存读取 ${usage.cacheRead} · 写入 ${usage.cacheWrite}`
-              : "缓存命中率：未知"
-          }
-        >
-          <svg className="usage-icon" viewBox="2 1 20 22" aria-hidden="true">
-            <g>
-              <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
-              <path d="M4 13h4" />
-            </g>
-            <g stroke="var(--accent-hover)">
-              <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" />
-              <path d="M16 17h4" />
-            </g>
-          </svg>
-          <strong>
-            {usage && cacheTotal
-              ? ((usage.cacheRead / cacheTotal) * 100).toFixed(0)
-              : "—"}
-            %
-          </strong>
-        </span>
-        <span
-          className="usage-metric"
-          data-od-id="run-duration"
-          data-tooltip={durationTooltip(info)}
-        >
-          <svg viewBox="2 2 20 20" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3 2" />
-          </svg>
-          <strong>{formatDuration(elapsed)}</strong>
-        </span>
-        <button
-          type="button"
-          className="usage-metric cost-trigger"
-          aria-label="查看费用明细"
-          aria-haspopup="dialog"
-          aria-expanded={!!costWindow}
-          disabled={!scope}
-          onClick={(event) => setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget })}
-          data-od-id="estimated-cost"
-          data-tooltip={`${label}累计预计费用（pi 定价）；点击查看主 Agent、各子 Agent、压缩与工具费用明细`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="354.9 255 313.8 514" aria-hidden="true">
-            <path fill="currentColor" d="M559.7 488.8l-25.4-5.9V348.6c38 5.2 61.5 29 65.5 58.2c.5 4 3.9 6.9 7.9 6.9h44.9c4.7 0 8.4-4.1 8-8.8c-6.1-62.3-57.4-102.3-125.9-109.2V263c0-4.4-3.6-8-8-8h-28.1c-4.4 0-8 3.6-8 8v33c-70.8 6.9-126.2 46-126.2 119c0 67.6 49.8 100.2 102.1 112.7l24.7 6.3v142.7c-44.2-5.9-69-29.5-74.1-61.3c-.6-3.8-4-6.6-7.9-6.6H363c-4.7 0-8.4 4-8 8.7c4.5 55 46.2 105.6 135.2 112.1V761c0 4.4 3.6 8 8 8h28.4c4.4 0 8-3.6 8-8.1l-.2-31.7c78.3-6.9 134.3-48.8 134.3-124c-.1-69.4-44.2-100.4-109-116.4m-68.6-16.2c-5.6-1.6-10.3-3.1-15-5c-33.8-12.2-49.5-31.9-49.5-57.3c0-36.3 27.5-57 64.5-61.7zM534.3 677V543.3c3.1.9 5.9 1.6 8.8 2.2c47.3 14.4 63.2 34.4 63.2 65.1c0 39.1-29.4 62.6-72 66.4" />
-          </svg>
-          <strong>
-            {usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}
-          </strong>
-        </button>
-        {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} />}
-      </div>
-      <div className="usage-settings" role="group" aria-label="批注、原始会话、子代理与压缩设置">
-        <AnnotationToggle scope={scope} />
-        <OriginalConversationToggle scope={scope} />
-        <TaskSettings />
-        <Compression key={scope?.sessionId ?? "empty"} scope={scope} />
-      </div>
+  const elapsed = sessionDuration(info, now), context = usage?.context;
+  const percent = validRatio(context?.tokens, context?.window), cache = cacheRatio(usage);
+  const estimate = context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算";
+  const contextLabel = percent == null ? "上下文占用率未知" : `上下文占用率 ${Math.round(percent)}%（${estimate}）`;
+  const cacheLabel = `输入侧缓存读取占比 ${cache == null ? "未知" : `${Math.round(cache)}%`}`;
+  const number = (n: number | null | undefined) => n != null && Number.isFinite(n) && n >= 0 ? n.toLocaleString("zh-CN") : "未知";
+  const contextDetail = <><div className="metric-summary"><span>上下文占用</span><strong>{percent == null ? "—" : `${percent.toFixed(1)}%`}</strong></div><dl className="metric-facts"><dt>已用 / 容量</dt><dd>{number(context?.tokens)} / {number(context?.window)}</dd><dt>当前会话累计 Token</dt><dd>{number(usage?.total)}</dd></dl><p className="metric-note">当前{label} · {estimate}。上下文占用与累计用量分别统计。</p>{percent != null && percent > 100 && <p className="metric-note" role="status">已超出上下文容量 {number(context!.tokens! - context!.window)} tokens；图标最多显示满圈。</p>}</>;
+  const inputTotal = cache == null ? null : (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
+  const contextInfo: ContextMemoryInfo = { percent, label: contextLabel, detail: contextDetail };
+  const metric = (key: Metric, title: string) => ({ type: "button" as const, "aria-label": `查看${title}`, "aria-haspopup": "dialog" as const, "aria-expanded": detail?.key === key, onClick: (event: React.MouseEvent<HTMLButtonElement>) => { setCostWindow(null); setDetail(detail?.key === key ? null : { key, scope: scopeKey, trigger: event.currentTarget }); } });
+  return <div className="usage" data-od-id="token-usage" role="group" aria-label="Token、缓存、耗时与预计花费统计">
+    <div className="usage-row">
+      {tools ? tools.session(contextInfo) : <button className="usage-metric context-memory-control" data-od-id="context-capacity" data-tooltip={`${contextLabel}；点击查看详情`} {...metric("context", contextLabel)}>
+        <ContextMemoryIcon percent={percent} label={contextLabel} />
+      </button>}
+      <button className="usage-metric" data-od-id="cache-tokens" data-tooltip={`${cacheLabel}；点击查看输入统计`} {...metric("cache", cacheLabel)}>
+        <CacheUsageIcon active={running(info.run)} percent={cache} />
+      </button>
+      <button type="button" className="usage-metric cost-trigger" aria-label="查看费用明细" aria-description="包含当前会话耗时" aria-haspopup="dialog" aria-expanded={!!costWindow} disabled={!scope}
+        onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${label}累计预计费用（pi 定价） · ${durationTooltip(info)}：${formatDuration(elapsed)}；点击查看费用与耗时明细`}>
+        <Icon name="chart-column-increasing" />
+      </button>
+      {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} sessionSummary={<section className="cost-session-duration" aria-label="当前会话用量"><dl className="cost-session-facts"><div><dt>当前{label}预计费用</dt><dd>{usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}</dd></div><div><dt>运行耗时</dt><dd data-od-id="run-duration" data-tooltip={durationTooltip(info)}>{formatDuration(elapsed)}</dd></div></dl><p>{durationTooltip(info)}；不叠加子会话耗时。</p></section>} />}
+      {detail && detail.scope === scopeKey && <MetricDetail trigger={detail.trigger} className={detail.key === "cache" ? "cache-detail" : ""} title={{ context: "上下文占用", cache: "缓存读取" }[detail.key]} subtitle={`当前${label} · ${detail.key === "cache" ? "累计输入统计" : "实时容量"}`} onClose={() => setDetail(null)}>
+        {detail.key === "context" ? contextDetail : <>
+          <div className="cache-summary"><span>输入复用比例</span><strong>{cache == null ? "—" : `${cache.toFixed(1)}%`}</strong></div>
+          <div className="cache-composition" aria-hidden="true">{inputTotal != null && inputTotal > 0 && [["cache-read", usage?.cacheRead], ["cache-input", usage?.input], ["cache-write", usage?.cacheWrite]].map(([key, value]) => typeof value === "number" && value > 0 ? <span key={key} className={String(key)} style={{ flexGrow: value / inputTotal }} /> : null)}</div>
+          <div className="cache-ledger-heading"><span>输入构成</span><span>Token</span></div>
+          <dl className="cache-ledger"><dt><i className="cache-read" />缓存读取</dt><dd>{number(usage?.cacheRead)}</dd><dt><i className="cache-input" />未缓存输入</dt><dd>{number(usage?.input)}</dd><dt><i className="cache-write" />缓存写入</dt><dd>{number(usage?.cacheWrite)}</dd></dl>
+          <p className="metric-note">仅统计当前{label}累计输入，不含模型输出。</p>
+          <details className="metric-method"><summary><span>统计口径</span><Icon name="chevron-down" /></summary><p className="metric-note">读取占比 = 缓存读取 ÷ 输入总量。输入总量包含上述三项；这是 Token 构成，不是请求命中概率。无有效输入时显示“—”。</p></details>
+        </>}
+      </MetricDetail>}
     </div>
-  );
+    <div className="usage-settings" role="group" aria-label="会话工具"><AnnotationToggle scope={scope} /><OriginalConversationToggle scope={scope} /><TaskSettings /><Compression key={scope?.sessionId ?? "empty"} scope={scope} />{tools?.global}</div>
+  </div>;
 }

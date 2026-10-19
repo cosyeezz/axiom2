@@ -158,7 +158,7 @@ export class TaskCommands {
       definitions,
       selection,
     );
-    this.agents.publish(tasksScope(scope), this.records.list(scope));
+    this.agents.publish(tasksScope(scope));
     this.scheduler.kick();
     this.agents.publish(`sessions:${scope.workspaceId}`);
     return { taskIds, status: "queued", budgets };
@@ -205,9 +205,9 @@ export class TaskCommands {
         if (p.budgets !== undefined) this.scheduler.preferencesChanged();
         this.agents.publish(taskPreferencesScope, this.records.settings());
         // Keep older task-list subscribers consistent with the global default.
-        for (const row of selection === undefined ? [] : this.store.db.prepare("SELECT s.id,s.workspaceId FROM task_parents p JOIN sessions s ON s.id=p.sessionId JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0").all()) {
+        for (const row of selection === undefined ? [] : this.store.db.prepare("SELECT s.id,s.workspaceId FROM task_parents p JOIN sessions s ON s.id=p.sessionId JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0 AND s.deletedAt IS NULL").all()) {
           const parent = { workspaceId: String(row.workspaceId), sessionId: String(row.id) };
-          this.agents.publish(tasksScope(parent), this.records.list(parent));
+          this.agents.publish(tasksScope(parent));
         }
         return c.op === "task.default-model" ? this.records.list(scope) : this.records.settings();
       }));
@@ -261,6 +261,7 @@ export class TaskCommands {
             images,
             mode: p.mode ?? "steer",
             expectedRunId: p.expectedRunId,
+            ...(p.rewrite === undefined ? {} : { rewrite: p.rewrite }),
           }, true, c.requestId),
         ),
       );
@@ -297,7 +298,7 @@ export class TaskCommands {
           "INSERT INTO task_parents(sessionId,frozen) VALUES(?,0) ON CONFLICT(sessionId) DO UPDATE SET frozen=0",
         )
         .run(scope.sessionId);
-      this.agents.publish(tasksScope(scope), this.records.list(scope));
+      this.agents.publish(tasksScope(scope));
       this.delivery.notify(scope);
     }
     return result;

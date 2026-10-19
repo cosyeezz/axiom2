@@ -55,7 +55,7 @@ try {
   await page.screenshot({ path: join(artifacts, "model-row-gray.png") });
   for (const button of [copy, edit, remove]) {
     await button.hover();
-    assert.equal(await color(button.locator("svg")), button === remove ? "rgb(153, 27, 27)" : bright);
+    assert.equal(await color(button.locator("svg")), button === remove ? "rgb(217, 149, 149)" : bright);
     assert.equal(await color((button === copy ? edit : copy).locator("svg")), gray, "only the targeted action highlights");
   }
   await copy.hover();

@@ -36,10 +36,12 @@ import {Composer} from '/chat/Composer.tsx';
 import {acceptSnapshot, connect} from '/transport.ts';
 const root = createRoot(document.getElementById('root'));
 let seq = 0;
+const fixtures = new Map();
+window.fixtureSnapshot = (scope) => ({type:'snapshot',scope,data:fixtures.get(scope),streamId:'fixture',seq:++seq});
 const selection = {provider:'fixture',id:'fixture',thinking:'off'};
 window.renderComposer = (sessionId = 'parent', active = false, nested = false) => {
   const scope = {workspaceId:'workspace',sessionId};
-  const publish = (scope,data) => acceptSnapshot({scope,data,streamId:'fixture',seq:++seq});
+  const publish = (scope,data) => { fixtures.set(scope,data); acceptSnapshot(window.fixtureSnapshot(scope)); };
   publish('configuration',{revision:'1',providerCount:1,modelCount:1,dataRoot:'fixture',available:[{provider:'fixture',id:'fixture',name:'Fixture',levels:['off'],input:['text','image']}]});
   publish('agent:workspace:'+sessionId,{selection,run:active?{id:'run',sessionId,status:'running',selection,startedAt:Date.now(),endedAt:null,error:null}:null,environment:null,usage:null,...(nested?{task:{id:'task',parentSessionId:'parent',status:active?'running':'completed'}}:{})});
   publish('tasks:workspace:'+sessionId,{tasks:[],frozen:false,defaultModel:null});
@@ -52,15 +54,20 @@ const html = '<!doctype html><html><body><div id="root"></div><script type="modu
 try {
   await page.route("**/thin-check", (route) => route.fulfill({ contentType: "text/html", body: html }));
   await page.route("**/api/status", (route) => route.fulfill({ json: {} }));
+  await page.route("**/api/draft?*", (route) => route.fulfill({ status: 404, json: { code: "DRAFT_UNAVAILABLE", error: "fixture persistence unavailable" } }));
   await page.route("**/api/attachments/pick?*", (route) => {
     assert.equal(route.request().method(), "POST");
     picks.push(new URL(route.request().url()));
     return route.fulfill({ json: { items: picked } });
   });
   await page.routeWebSocket("**/ws", (socket) => {
-    socket.onMessage((raw) => {
+    socket.onMessage(async (raw) => {
       const command = JSON.parse(raw.toString()) as Command;
       commands.push(command);
+      if (command.op === "subscribe") {
+        const snapshot = await page.evaluate((scope) => (window as any).fixtureSnapshot(scope), String(command.params?.scope));
+        if (snapshot.data !== undefined) socket.send(JSON.stringify(snapshot));
+      }
       const reply = () => socket.send(JSON.stringify(fail && command.op === "prompt"
         ? { type: "receipt", requestId: command.requestId, ok: false, error: { code: "TEST_ERROR", message: "test send failed" } }
         : { type: "receipt", requestId: command.requestId, ok: true, data: command.op === "files.upload"
@@ -148,7 +155,7 @@ try {
   await page.reload();
   assert.equal(await input.inputValue(), "");
   assert.deepEqual(errors, []);
-  console.log("PASS: in-memory scoped drafts, IME, late response preservation, plain send errors, no recovery UI/storage, scoped native attachment selection and large clipboard image upload, direct parent/child stop, reload discards drafts");
+  console.log("PASS: in-memory scoped drafts, IME, late response preservation, plain send errors, no recovery UI/storage, scoped native attachment selection and large clipboard image upload, direct parent/child stop, reload discards drafts when persistence is unavailable");
 } finally {
   await browser.close();
   await server.close();

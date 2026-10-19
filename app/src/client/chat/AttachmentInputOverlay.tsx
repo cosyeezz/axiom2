@@ -42,6 +42,8 @@ export function AttachmentInputOverlay({ input, draft }: { input: RefObject<HTML
         fontVariant: style.fontVariant, fontKerning: style.fontKerning,
         letterSpacing: style.letterSpacing, padding: style.padding,
         textIndent: style.textIndent, tabSize: style.tabSize, wordSpacing: style.wordSpacing,
+        whiteSpace: style.whiteSpace, overflowWrap: style.overflowWrap, wordBreak: style.wordBreak,
+        textAlign: style.textAlign, direction: style.direction,
       });
       // Keep the mirror aligned through textarea auto-growth and native scrolling.
       layer.scrollTop = node.scrollTop; layer.scrollLeft = node.scrollLeft;

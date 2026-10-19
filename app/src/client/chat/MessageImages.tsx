@@ -34,7 +34,7 @@ export function MessageImages({ images, scope, messageId }: {
       {images.map((image) => <li key={image.id}>
         <button type="button" className="message-image-icon" data-tooltip={`${image.id} · ${image.name}`}
           aria-label={`预览图片：${image.id} · ${image.name}`} aria-haspopup="dialog" onClick={() => open(image)}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="8" cy="8" r="1" /><path d="m3 17 6-6 4 4 3-3 5 5" /></svg>
+          <svg className="ui-glyph" viewBox="2 2 20 20" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="8" cy="8" r="1" /><path d="m3 17 6-6 4 4 3-3 5 5" /></svg>
           <span className="message-image-label" aria-hidden="true">{image.id}</span>
         </button>
       </li>)}

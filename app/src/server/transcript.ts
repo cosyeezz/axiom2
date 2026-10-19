@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { extname, resolve } from "node:path";
 import { SessionManager, buildSessionProjection } from "@earendil-works/pi-coding-agent";
 import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
 import { imageDisplayText, imagesInput } from "./images.js";
 import type { ChatMessage } from "../shared/agent.js";
+import { taskToolName } from "../shared/tasks.js";
+import { toolPreview, toolSummary } from "../shared/tool-summary.js";
 import { stripSessionTitle } from "./session-title.js";
 import { compactionDisplay } from "./compaction-display.js";
 import { thinkingDisplay } from "./thinking-display.js";
@@ -139,27 +141,56 @@ export function chatMessage(
 }
 export function boundedMessage(message: ChatMessage): ChatMessage {
   const cap = 16000;
+  const textCap = message.role === "toolResult" && !taskToolName(message.toolName ?? "") ? 320 : cap;
+  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+  const calls = message.calls?.map((call) => ({ ...call,
+    input: call.input.slice(0, taskToolName(call.name) ? cap : 512),
+    inputLength: call.input.length, inputRevision: hash(call.input),
+    summary: toolSummary(call),
+  }));
+  const truncated = message.text.length > textCap || (message.thinking?.length ?? 0) > 320 ||
+    calls?.some((call) => call.input.length < call.inputLength);
+  const textRevision = hash(message.text), thinkingRevision = hash(message.thinking ?? "");
   return {
     ...message,
-    text: message.text.slice(0, cap),
-    thinking: message.thinking?.slice(0, cap),
-    calls: message.calls?.map((c) => ({ ...c, input: c.input.slice(0, cap) })),
-    truncated:
-      message.text.length > cap ||
-      (message.thinking?.length ?? 0) > cap ||
-      message.calls?.some((c) => c.input.length > cap),
+    text: message.text.slice(0, textCap), textLength: message.text.length, textRevision,
+    thinking: message.thinking?.slice(0, 320), thinkingLength: message.thinking?.length, thinkingRevision,
+    calls,
+    ...(message.role === "toolResult" ? { preview: toolPreview(message) } : {}),
+    // Detect same-length edits beyond the preview and invalidate detail pages on live updates.
+    detailsRevision: truncated ? hash(JSON.stringify([textRevision, thinkingRevision, calls?.map((call) => call.inputRevision)])) : undefined,
+    truncated,
   };
+}
+/** Bounded ownership read; native body parsing and tail recovery remain pi's responsibility. */
+export function transcriptHeader(file: string) {
+  const fd = openSync(file, "r");
+  try {
+    const identity = fstatSync(fd);
+    if (!identity.isFile()) throw Error("Not a regular session file");
+    const chunks: Buffer[] = [];
+    let bytesRead = 0;
+    while (bytesRead < 64 * 1024) {
+      const chunk = Buffer.allocUnsafe(1024);
+      const size = readSync(fd, chunk, 0, chunk.length, null);
+      if (!size) throw Error("Session header has no newline");
+      bytesRead += size;
+      const newline = chunk.subarray(0, size).indexOf(10);
+      chunks.push(chunk.subarray(0, newline < 0 ? size : newline));
+      if (newline >= 0) return { header: JSON.parse(Buffer.concat(chunks).toString("utf8")), identity, bytesRead };
+    }
+    throw Error("Session header exceeds 64 KiB");
+  } finally { closeSync(fd); }
 }
 export function openTranscript(file: string, cwd: string): SessionManager {
   try {
     // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
-    const header = JSON.parse(readFileSync(file, "utf8").split("\n", 1)[0]);
-    if (
-      header?.type !== "session" ||
-      resolve(header?.cwd ?? "") !== resolve(cwd)
-    )
-      throw Error();
-    return SessionManager.open(file);
+    const { header, identity } = transcriptHeader(file);
+    if (header?.type !== "session" || typeof header.cwd !== "string" || resolve(header.cwd) !== resolve(cwd)) throw Error();
+    const manager = SessionManager.open(file);
+    const current = statSync(file);
+    if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");
+    return manager;
   } catch {
     throw new AppError(
       "SESSION_FILE_ERROR",
@@ -168,7 +199,7 @@ export function openTranscript(file: string, cwd: string): SessionManager {
   }
 }
 // One identity adapter for both metadata views and on-demand native image lookup.
-function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string }[] {
+function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string; entryId: string }[] {
   // Ignore compaction boundaries for reading, while retaining native retry/context edits.
   // Only the active branch is eligible; abandoned branches and system records stay private.
   const projection = original
@@ -178,17 +209,25 @@ function transcriptEntries(manager: SessionManager, original = false): { message
   return projection.entries.flatMap(({ sourceEntry: entry, messages }) => {
     if (!messages.length) return [];
     if (entry.type === "compaction") return [{ message: { role: "compactionSummary", summary: entry.summary,
-      compression: compactionDisplay(entry, manager.getBranch()) }, id: entry.id }];
+      compression: compactionDisplay(entry, manager.getBranch()) }, id: entry.id, entryId: entry.id }];
     if (entry.type === "custom_message" && entry.display) {
       return [{
         message: messages[0],
         id: (entry.details as any)?.axiomInput ? `input-${(entry.details as any).axiomInput}` : entry.id,
+        entryId: entry.id,
       }];
     }
     if (entry.type !== "message") return [];
     const m = messages[0] as any;
-    return [{ message: m, id: m.axiomId ?? (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id) }];
+    return [{ message: m, id: m.axiomId ?? (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id), entryId: entry.id }];
   });
+}
+/** Only user-authored, currently visible inputs are eligible, including pre-compaction history. */
+export function transcriptInput(manager: SessionManager, messageId: string) {
+  const input = transcriptEntries(manager, true).find(({ id }) => id === messageId);
+  if (!input || !(input.message.role === "user" || input.message.role === "custom" && input.message.customType === "axiom-append"))
+    throw new AppError("NOT_EDITABLE", "消息不存在、已离开当前对话，或不是可编辑的用户消息。");
+  return input;
 }
 export function transcriptMessages(manager: SessionManager, original = false): ChatMessage[] {
   return transcriptEntries(manager, original).flatMap(({ message, id }) => {

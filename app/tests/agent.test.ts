@@ -12,9 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { TaskRecords } from "../src/server/tasks/records.js";
 import { startServer } from "../src/server/index.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 import { running } from "../src/shared/agent.js";
+import { parseMemory } from "../src/shared/memory.js";
 const wait = async (check: () => boolean, message: string, timeout = 20000) => {
   const end = Date.now() + timeout;
   while (!check()) {
@@ -48,12 +50,15 @@ test(
       stall = false,
       providerFailure = false;
     const requests: any[] = [];
+    let memoryPath = "";
+    const observedProgress: (number | null)[] = [];
     const fixture = createServer(async (req, res) => {
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw);
       requests.push(body);
       count++;
+      if (count === 3 || count === 4) observedProgress.push(parseMemory(readFileSync(memoryPath, "utf8")).percent);
       if (providerFailure) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: { message: "Unsupported parameter: temperature; api_key=sk-fixture-secret", type: "invalid_request_error", code: "unsupported_parameter" } }));
@@ -82,6 +87,7 @@ test(
                 }),
               },
             },
+            { index: 1, id: "read-memory", type: "function", function: { name: "read", arguments: JSON.stringify({ path: memoryPath }) } },
           ],
         });
         chunk({}, "tool_calls");
@@ -98,6 +104,10 @@ test(
                 arguments: JSON.stringify({ path: "verified.txt" }),
               },
             },
+            { index: 1, id: "start-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
+              { oldText: "## 目标与范围\n尚未记录", newText: "## 目标与范围\n验证真实文件工具与进度更新" },
+              { oldText: "整体状态：尚未记录\n整体进度：待评估\n当前进展：尚未记录", newText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑" },
+            ] }) } },
           ],
         });
         chunk({}, "tool_calls");
@@ -130,6 +140,9 @@ test(
                 }),
               },
             },
+            { index: 2, id: "complete-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
+              { oldText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑", newText: "整体状态：已完成\n整体进度：100%\n当前进展：真实工具回环已完成" },
+            ] }) } },
           ],
         });
         chunk({}, "tool_calls");
@@ -195,6 +208,7 @@ test(
         workspaceId: w.id,
       }) as Session;
       const scope: Scope = { workspaceId: w.id, sessionId: s.id };
+      memoryPath = join(root, "memory", "sessions", s.id, "MEMORY.md");
       // Legacy explicit denials no longer gate this product's default authorization.
       app.store.db.exec("CREATE TABLE IF NOT EXISTS project_trust(workspaceId TEXT PRIMARY KEY, trusted INTEGER NOT NULL)");
       app.store.db.prepare("INSERT INTO project_trust VALUES(?,0)").run(w.id);
@@ -229,6 +243,15 @@ test(
           text: "Create and read verified.txt",
           attachment: { name: "context.ts", text: "// captured attachment" },
         };
+      // Reproduce a just-settled child's refresh before a cold main prompt.
+      // It must not reject this request or cause the model to receive it twice.
+      const records = new TaskRecords(app.store);
+      const child = records.create(scope, "settled-child", "context", [{ task: "finished child", role: "" }],
+        { provider: "axiom-product-fixture", id: "fixture", thinking: "off" });
+      app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(child.taskIds[0]);
+      const childSessionId = String(app.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(child.taskIds[0])!.sessionId);
+      await app.agents.memories.scanAsync(scope);
+      app.agents.memories.refresh({ ...scope, sessionId: childSessionId });
       const accepted = await call("prompt", params, scope, requestId);
       assert.deepEqual(
         await call("prompt", params, scope, requestId),
@@ -252,6 +275,17 @@ test(
         "真实工具编辑\n",
       );
       assert.equal(count, 4);
+      assert.deepEqual(observedProgress, [50, 100], "real pi file edits update progress during work and at completion");
+      app.agents.memories.scan();
+      assert.equal(app.agents.memories.view(scope).progress.percent, 100);
+      const assertMemoryPrompt = (request: any, path: string) => {
+        const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
+        assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
+        assert.match(system, /首次接到明确任务时/);
+        assert.match(system, /最终回复前同步/);
+        assert.match(system, /不要仅因等待用户查看而保留90%/);
+      };
+      assertMemoryPrompt(requests[0], memoryPath);
       assert.ok(
         app.agents
           .thread(scope)
@@ -288,14 +322,17 @@ test(
       assert.ok(requests[0].messages.some((message: any) =>
         message.role === "system" && JSON.stringify(message.content).includes("PROJECT_EXTENSION_EFFECTIVE_PROMPT")));
       await assert.rejects(call("agent.trust", { trusted: false, confirmed: true }), { code: "UNKNOWN_OPERATION" });
-      const pool = (app.agents as any).runs;
-      assert.equal(pool.idle.size, 1, "completed sessions remain warm");
-      const warmPid = pool.idle.get(scope.sessionId).live.child.pid;
+      const runs = (app.agents as any).runs;
+      await wait(() => app.agents.pool.hasAffinity(scope.sessionId), "completed session was not retained warm");
+      const warmInstance = [...(app.agents.pool as any).instances.values()]
+        .find((instance: any) => instance.binding?.sessionId === scope.sessionId) as any;
+      const warmPid = warmInstance.child.pid;
       stall = true;
       await call("prompt", { text: "stall" });
       await wait(() => count === 5, "stall did not start");
-      assert.equal(pool.live.get(scope.sessionId).child.pid, warmPid, "next prompt reuses the live pi worker");
-      assert.equal(pool.idle.size, 0, "busy worker is not an idle LRU entry");
+      assertMemoryPrompt(requests[4], memoryPath);
+      assert.equal(runs.live.get(scope.sessionId).child.pid, warmPid, "next prompt reuses the live pi worker");
+      assert.equal(warmInstance.state, "leased", "busy worker holds an execution lease");
       const other = app.store.execute({
         requestId: randomUUID(),
         op: "session.create",
@@ -321,6 +358,7 @@ test(
       );
       await call("prompt", { text: "independent session" }, otherScope);
       await wait(() => count === 6, "second worker did not start");
+      assertMemoryPrompt(requests[5], join(root, "memory", "sessions", other.id, "MEMORY.md"));
       await assert.rejects(call("agent.stop", { runId: randomUUID() }), {
         code: "RUN_MISMATCH",
       });
@@ -354,12 +392,14 @@ test(
       );
       assert.equal(count, 6, "duplicate accepted request must not replay");
       stall = false;
-      await call("prompt", { text: "Fresh message after stop and restart" });
+      rmSync(memoryPath);
+      await call("prompt", { text: "Fresh message after stop and restart without optional memory" });
       await wait(
         () => !running(app.agents.info(scope).run),
         "fresh prompt after stop did not finish",
       );
       assert.equal(count, 7);
+      assertMemoryPrompt(requests[6], memoryPath);
       assert.equal(app.agents.info(scope).run!.status, "completed");
       assert.ok(
         !requests[6].messages.some(

@@ -46,20 +46,23 @@ try {
   await page.waitForFunction(() => typeof (window as any).showUsage === "function");
   await page.waitForTimeout(100);
   assert.deepEqual(errors, [], "component loads without browser errors");
+  await page.locator('[data-od-id="estimated-cost"]').click();
   const timer = page.locator('[data-od-id="run-duration"]');
   const expectTime = async (text: string) => page.waitForFunction((expected) =>
-    document.querySelector('[data-od-id="run-duration"] strong')?.textContent === expected, text);
+    document.querySelector('[data-od-id="run-duration"]')?.textContent === expected, text);
   await expectTime("5s");
   assert.match((await timer.getAttribute("data-tooltip"))!, /最近一次运行时间.*重启后台/);
   await expectTime("6s");
   await page.evaluate(() => (window as any).showUsage({ status: "cancelled" }));
   await expectTime("5s");
   await page.waitForTimeout(1100);
-  assert.equal(await timer.locator("strong").textContent(), "5s");
+  assert.equal(await timer.textContent(), "5s");
   await page.evaluate(() => (window as any).showUsage({ id: "next", total: 15000 }));
   await expectTime("20s");
   assert.match((await timer.getAttribute("data-tooltip"))!, /主会话累计运行时间/);
   await page.evaluate(() => (window as any).showUsage({ sessionId: "child", child: true, total: 30000 }));
+  await page.locator('.cost-popover').waitFor({state:'detached'});
+  await page.locator('[data-od-id="estimated-cost"]').click();
   await expectTime("35s");
   assert.match((await timer.getAttribute("data-tooltip"))!, /子会话累计运行时间/);
   assert.deepEqual(errors, []);

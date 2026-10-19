@@ -107,6 +107,17 @@ try {
   assert.deepEqual(await page.locator(".composer").boundingBox(), composerBefore, "popover styles do not change the composer");
   await detail.locator(".cost-total > .cost-number").filter({ hasText: "$1.5500 + 未知" }).waitFor();
   console.log("cost UI: totals loaded");
+  assert.equal(await dialog.locator('.cost-title').count(), 0, 'popover does not repeat the session name as a large title');
+  assert.equal(await dialog.locator('.cost-refresh span').count(), 0, 'refresh stays an icon control');
+  assert.ok(await dialog.locator('.cost-total > .cost-number').evaluate(el => parseFloat(getComputedStyle(el).fontSize) <= 18), 'compact total size survives stylesheet ordering');
+  await page.waitForFunction(() => (window as any).__costInFlight === 0);
+  const idleReads = await page.evaluate(() => (window as any).__costReads);
+  const unrelated = app.store.execute({ op: 'session.create', requestId: crypto.randomUUID(), workspaceId: workspace.id, params: { title: '无关会话' } }) as Session;
+  const noise = setInterval(() => { app.agents.publish(agentScope(scope)); app.agents.publish(agentScope({ ...scope, sessionId: unrelated.id })); }, 25);
+  try { await page.waitForTimeout(900); } finally { clearInterval(noise); }
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => (window as any).__costReads), idleReads, 'unchanged progress and unrelated sessions do not reread costs');
+  assert.equal(await dialog.getByRole('button', { name: '刷新费用', exact: true }).getAttribute('aria-busy'), 'false');
   assert.equal(await page.locator("#prompt").inputValue(), "草稿保留在原会话");
   assert.equal(await detail.locator("#cost-subagent .cost-source").count(), 2);
   assert.equal(await detail.locator("#cost-compression .cost-source").count(), 1);
@@ -127,6 +138,8 @@ try {
   const burst = setInterval(() => app.agents.publish(agentScope(scope)), 25);
   try {
     await detail.waitForFunction((before) => (window as any).__costReads > before && (window as any).__costHeld > 0, readsBeforeBurst, { timeout: 4000 });
+    assert.equal(await dialog.getByRole('button', { name: '刷新费用', exact: true }).getAttribute('aria-busy'), 'false', 'automatic reads do not animate the refresh control');
+    assert.match(await dialog.locator('.cost-status').innerText(), /用量变化时自动更新/);
     manager.appendMessage(reply(.1));
     await detail.locator(".cost-total > .cost-number").filter({ hasText: "$1.8000 + 未知" }).waitFor({ timeout: 4000 });
     await detail.locator(".cost-total > .cost-number").filter({ hasText: "$1.9000 + 未知" }).waitFor({ timeout: 4000 });
@@ -154,7 +167,10 @@ try {
   assert.equal(await detail.locator("#cost-main details[open]").count(), 1, "reconnect preserves expanded calculation details");
   const artifacts = resolve("test-results/costs"); mkdirSync(artifacts, { recursive: true });
   for (const [width, height] of [[1440, 900], [820, 900], [390, 844], [320, 568], [820, 540]]) {
+    await dialog.locator('.cost-content').evaluate(el => { el.scrollTop = 0; });
     await detail.setViewportSize({ width, height });
+    assert.equal(await dialog.locator('.cost-total > .cost-number').evaluate(el => getComputedStyle(el).fontSize), '18px');
+    assert.equal(await dialog.locator('.cost-title,.cost-refresh span').count(), 0);
     assert.ok(await detail.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: no horizontal overflow`);
     assert.ok(await dialog.evaluate((el) => {
       const box = el.getBoundingClientRect(), content = el.querySelector(".cost-content")!;
@@ -174,8 +190,15 @@ try {
   app.agents.publish(agentScope(scope));
   await page.waitForTimeout(350);
   assert.equal(await page.evaluate(() => (window as any).__costReads), readsAfterClose, "closed popover stops cost queries");
+  await page.evaluate(() => { (window as any).__costDelay = 400; });
   await link.click();
   await dialog.waitFor();
+  assert.equal(await dialog.locator('.cost-total > .cost-number').textContent(), '$2.0250 + 未知', 'reopening immediately renders its cached report');
+  await page.waitForFunction(() => (window as any).__costHeld > 0);
+  assert.match(await dialog.locator('.cost-status').innerText(), /上次读取的记录/);
+  await page.evaluate(() => { (window as any).__costDelay = 0; });
+  await dialog.locator('.cost-status').filter({hasText:'用量变化时自动更新'}).waitFor();
+  assert.ok(await page.evaluate((before) => (window as any).__costReads > before, readsAfterClose), 'cached report is always revalidated');
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
   assert.ok(await link.evaluate((el) => el === document.activeElement), "Escape restores trigger focus");
@@ -192,7 +215,11 @@ try {
   await page.locator(".tool-activity > summary").click();
   await page.getByRole("button", { name: "打开子会话：调查数据来源", exact: true }).click();
   const childDialog = page.getByRole("dialog", { name: "子代理会话", exact: true });
+  await page.evaluate(() => { (window as any).__costDelay = 400; });
   await childDialog.getByRole("button", { name: "查看费用明细", exact: true }).click();
+  await page.waitForFunction(() => (window as any).__costHeld > 0);
+  assert.equal(await dialog.locator('.cost-total').count(), 0, 'parent cache is never reused for a child request');
+  await page.evaluate(() => { (window as any).__costDelay = 0; });
   await dialog.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
   await dialog.getByText(/当前查看的子会话/).waitFor();
   await page.keyboard.press("Escape");
@@ -206,6 +233,17 @@ try {
   await direct.getByText(/当前查看的子会话/).waitFor();
   await direct.reload();
   await direct.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
+  // Explicit memory charges in a sibling invalidate every open report in the same family.
+  const family = await context.newPage();
+  await family.goto(`${app.origin}/costs.html?${new URLSearchParams(scope)}`);
+  await family.locator('.cost-total > .cost-number').filter({ hasText: '$2.0250 + 未知' }).waitFor();
+  app.store.db.prepare('INSERT INTO memory_usage(id,sessionId,kind,provider,model,usage,createdAt) VALUES(?,?,?,?,?,?,?)').run('cost-ui-memory', childIds[1], 'query', 'fixture', 'memory-model', JSON.stringify(usage(.1)), Date.now());
+  app.agents.publish(`costs:${workspace.id}:${childIds[1]}`, { revision: Date.now() });
+  for (const target of [direct, family]) await target.locator('.cost-total > .cost-number').filter({ hasText: '$2.1250 + 未知' }).waitFor();
+  app.store.db.prepare('UPDATE memory_usage SET usage=? WHERE id=?').run(JSON.stringify(usage(.2)), 'cost-ui-memory');
+  app.agents.publish(`costs:${workspace.id}:${childIds[1]}`, { revision: Date.now() });
+  for (const target of [direct, family]) await target.locator('.cost-total > .cost-number').filter({ hasText: '$2.2250 + 未知' }).waitFor();
+  await family.close();
   await direct.goto(`${app.origin}/costs.html?workspaceId=foreign&sessionId=${parent.id}`);
   await direct.getByRole("alert").waitFor();
   assert.equal(await direct.locator(".cost-total").count(), 0, "foreign scope never shows costs");
@@ -220,7 +258,7 @@ try {
     socket.on("message", (raw) => { const message = JSON.parse(String(raw)); if (message.requestId === requestId) { socket.close(); resolve(message); } });
   });
   console.log("cost UI: query and responsive checks complete");
-  assert.equal(result.ok, true); assert.ok(Math.abs(result.data.total.knownCost - 2.025) < 1e-9);
+  assert.equal(result.ok, true); assert.ok(Math.abs(result.data.total.knownCost - 2.225) < 1e-9);
   assert.deepEqual(app.store.receipt(requestId, scope), { status: "not_found" });
   assert.deepEqual(errors, []);
   assert.equal(await page.locator("#prompt").inputValue(), "草稿保留在原会话");

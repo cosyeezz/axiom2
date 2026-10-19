@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { cacheRatio, validRatio, TaskProgressIcon, BatchProgressIcon, CompressionProgressIcon, ContextMemoryIcon, CacheDataIcon } from "../src/client/DataIcons.js";
+
+test("ratios distinguish unknown, valid zero and capacity overflow", () => {
+  assert.equal(validRatio(0, 100), 0); assert.equal(validRatio(150, 100), 150);
+  for (const [value, total] of [[null, 100], [0, 0], [-1, 100], [1, Infinity], [NaN, 100]] as const) assert.equal(validRatio(value, total), null);
+  assert.equal(cacheRatio({ input: 50, cacheRead: 25, cacheWrite: 25 }), 25);
+  assert.equal(cacheRatio({ input: 1, cacheRead: 0, cacheWrite: 0 }), 0);
+  assert.equal(cacheRatio({ input: 0, cacheRead: 0, cacheWrite: 0 }), null);
+  assert.equal(cacheRatio({ input: -1, cacheRead: 1, cacheWrite: 0 }), null);
+  assert.equal(cacheRatio({ input: Infinity, cacheRead: 1, cacheWrite: 0 }), null);
+});
+test("unknown task never fills segments; conflicts retain warning; ended mixed batches retain failed/stopped marks", () => {
+  const unknown = renderToStaticMarkup(createElement(TaskProgressIcon, { percent: null }));
+  assert.doesNotMatch(unknown, /class="data-filled"/); assert.match(unknown, /data-unknown/);
+  const conflict = renderToStaticMarkup(createElement(TaskProgressIcon, { percent: null, error: true }));
+  assert.match(conflict, /triangle-alert/); assert.doesNotMatch(conflict, /#i-check/);
+  const batch = renderToStaticMarkup(createElement(BatchProgressIcon, { states: ["completed", "failed", "cancelled"], label: "batch" }));
+  assert.equal((batch.match(/class="data-success"/g) ?? []).length, 1);
+  assert.match(batch, /data-error/); assert.match(batch, /data-stopped/); assert.doesNotMatch(batch, /<animate/);
+  const resumed = renderToStaticMarkup(createElement(BatchProgressIcon, { states: ["queued", "failed", "cancelled"], label: "batch" }));
+  assert.doesNotMatch(resumed, /data-success/);
+});
+test("context capacity and task thirds remain independent; only 100% lights all three bars", () => {
+  for (const [taskPercent, bars] of [[null, 0], [0, 0], [30, 0], [100 / 3, 1], [60, 1], [200 / 3, 2], [90, 2], [99.99, 2], [100, 3], [101, 0], [NaN, 0]] as const) {
+    const svg = renderToStaticMarkup(createElement(ContextMemoryIcon, { percent: 50, taskPercent }));
+    assert.equal((svg.match(/class="memory-progress-lit"/g) ?? []).length, bars, String(taskPercent));
+    assert.equal((svg.match(/class="data-filled context-ring"/g) ?? []).length, 1);
+    assert.match(svg, /stroke-dasharray="50 100"/);
+    assert.doesNotMatch(svg, /<animate|#i-check/);
+  }
+  for (const percent of [0, 49.99, 50, 100, null, NaN, -1]) {
+    const svg = renderToStaticMarkup(createElement(CacheDataIcon, { percent, active: false }));
+    assert.equal(svg.includes('data-icon-cache-low'), percent != null && Number.isFinite(percent) && percent >= 0 && percent < 50, String(percent));
+  }
+});
+
+test("compression waits for applied confirmation; terminal states remove activity", () => {
+  const waiting = renderToStaticMarkup(createElement(CompressionProgressIcon, { state: "running", phase: "applying" }));
+  assert.match(waiting, /<animate/); assert.doesNotMatch(waiting, /data-icon-complete/);
+  const done = renderToStaticMarkup(createElement(CompressionProgressIcon, { state: "completed", phase: "done" }));
+  assert.match(done, /data-icon-compression/); assert.doesNotMatch(done, /data-icon-complete|<animate/);
+  for (const state of ["cancelled", "failed", "interrupted"]) assert.doesNotMatch(renderToStaticMarkup(createElement(CompressionProgressIcon, { state, phase: "summarizing" })), /<animate/);
+  assert.match(renderToStaticMarkup(createElement(CompressionProgressIcon, { state: "completed", phase: "applying" })), /data-unknown/);
+});

@@ -59,14 +59,14 @@ export async function checkCompressionUI(
     // Seed measured boundary values only in the test, then restore actual worker statistics.
     const usage = app.agents.info(scope).usage!;
     const ring = page.locator(
-      '[data-od-id="context-capacity"] [role="progressbar"]',
+      '[data-od-id="context-capacity"] svg.data-icon',
     );
     for (const [tokens, window, expected] of [
       [0, 100, 0],
       [25, 100, 25],
       [50, 100, 50],
       [100, 100, 100],
-      [150, 100, 100],
+      [150, 100, 150],
       [20, 0, null],
       [20, -1, null],
       [null, 0, null], // A known capacity now allows a read-only pi history estimate.
@@ -84,22 +84,14 @@ export async function checkCompressionUI(
       await page.waitForFunction(
         (value) =>
           document
-            .querySelector('[role="progressbar"]')
-            ?.getAttribute("aria-valuenow") === value,
-        expected == null ? null : String(expected),
+            .querySelector('[data-od-id="context-capacity"] svg.data-icon')
+            ?.getAttribute("data-value") === value,
+        expected == null ? "unknown" : String(expected),
       );
-      assert.equal(
-        await ring
-          .locator(".context-ring-track")
-          .getAttribute("stroke-dasharray"),
-        expected == null ? "2 3" : null,
-      );
-      assert.equal(
-        await ring
-          .locator(".context-ring-fill")
-          .getAttribute("stroke-dashoffset"),
-        String(100 - (expected ?? 0)),
-      );
+      assert.equal(await ring.locator('.data-unknown').count(), expected == null ? 1 : 0);
+      const filled = await ring.locator('.data-filled').evaluateAll(paths => paths.reduce((sum, path) => sum + Number(path.getAttribute('stroke-dasharray')!.split(' ')[0]) * 10, 0));
+      assert.equal(filled, Math.min(100, expected ?? 0));
+      assert.equal(await ring.locator('use').getAttribute('href'), '#i-list-checks');
     }
     app.store.db
       .prepare("UPDATE agent_sessions SET usage=? WHERE sessionId=?")
@@ -206,17 +198,17 @@ export async function checkCompressionUI(
     }
     for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await page.emulateMedia({ reducedMotion });
-      const frames = await dialog.locator(".compression-status .bubble-loading").evaluate(node => {
+      const frames = await dialog.locator(".compression-status .data-icon").evaluate(node => {
         const svg = node as SVGSVGElement;
         svg.pauseAnimations();
         svg.setCurrentTime(0.2);
-        const first = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        const first = [...svg.querySelectorAll("circle")].map(circle => getComputedStyle(circle).opacity);
         svg.setCurrentTime(0.7);
-        const second = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
+        const second = [...svg.querySelectorAll("circle")].map(circle => getComputedStyle(circle).opacity);
         svg.unpauseAnimations();
         return { first, second };
       });
-      assert.equal(frames.first.length, 8);
+      assert.equal(frames.first.length, 3);
       assert.notDeepEqual(frames.first, frames.second, `compression bubbles animate in ${reducedMotion}`);
     }
     await close();
@@ -230,7 +222,8 @@ export async function checkCompressionUI(
     await page.waitForSelector(
       '[data-od-id="background-compression-trigger"][data-state="completed"]',
     );
-    assert.equal(await trigger.locator("rect").count(), 2);
+    assert.equal(await trigger.locator('use[href="#i-fold"]').count(), 1);
+    assert.equal(await trigger.locator("animate,animateTransform").count(), 0);
     assert.equal(
       await page.locator("#prompt").inputValue(),
       "压缩期间继续编辑的中文草稿",

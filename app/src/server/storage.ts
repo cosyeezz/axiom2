@@ -1,4 +1,5 @@
-import { DatabaseSync } from "node:sqlite";
+import { initializeMemory } from "./memory-files.js";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { realpathSync, statSync, mkdirSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -19,6 +20,16 @@ import {
 
 export class Store {
   readonly db: DatabaseSync;
+  private statements = new Map<string, StatementSync>();
+  prepare(sql: string) {
+    let statement = this.statements.get(sql);
+    if (!statement) {
+      statement = this.db.prepare(sql);
+      if (this.statements.size >= 128) this.statements.delete(this.statements.keys().next().value!);
+      this.statements.set(sql, statement);
+    }
+    return statement;
+  }
   private readonly lease: DatabaseSync;
   /** In-flight runtime operations also veto archival. */
   beforeArchiveWorkspace?: (workspaceId: string) => void;
@@ -52,10 +63,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS task_inputs(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,body TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,runId TEXT REFERENCES runs(id),createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS task_input_images(inputId TEXT PRIMARY KEY REFERENCES task_inputs(id) ON DELETE CASCADE,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_results(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,runId TEXT NOT NULL UNIQUE REFERENCES runs(id) ON DELETE CASCADE,body TEXT NOT NULL,delivery TEXT NOT NULL DEFAULT 'pending');
+      CREATE INDEX IF NOT EXISTS runs_session_started ON runs(sessionId,startedAt);
+      CREATE INDEX IF NOT EXISTS tasks_parent_status ON tasks(parentSessionId,status);
+      CREATE INDEX IF NOT EXISTS task_results_task ON task_results(taskId);
       UPDATE tasks SET status='interrupted',error='服务中断；队列保留，未自动续跑。' WHERE status IN ('queued','starting','running','wrapping','stopping','summarizing');
       UPDATE task_parents SET frozen=1;
       DELETE FROM task_inputs;
     `);
+    if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "deletedAt"))
+      this.db.exec("ALTER TABLE sessions ADD COLUMN deletedAt INTEGER");
     if (!this.db.prepare("PRAGMA table_info(compression_preferences)").all().some((c) => c.name === "auto"))
       this.db.exec("ALTER TABLE compression_preferences ADD COLUMN auto TEXT");
     // Read versions migrate once; the boolean remains a derived compatibility column.
@@ -145,7 +161,7 @@ export class Store {
     return { lastWorkspaceId: row ? String(row.id) : null };
   }
   lastSession(): Scope | null {
-    const row = this.db.prepare("SELECT p.workspaceId,p.sessionId FROM session_preferences p JOIN workspaces w ON w.id=p.workspaceId WHERE p.id=1 AND w.archived=0").get();
+    const row = this.db.prepare("SELECT p.workspaceId,p.sessionId FROM session_preferences p JOIN workspaces w ON w.id=p.workspaceId JOIN sessions s ON s.id=p.sessionId WHERE p.id=1 AND w.archived=0 AND s.deletedAt IS NULL").get();
     return row ? { workspaceId: String(row.workspaceId), sessionId: String(row.sessionId) } : null;
   }
   compressionPreferences(): CompressionPreferences {
@@ -159,9 +175,10 @@ export class Store {
     return this.compressionPreferences();
   }
   workspace(id: unknown): Workspace {
-    const w = this.workspaces().find((w) => w.id === text(id, "工作空间标识"));
+    const w = this.prepare("SELECT id,name,path,authorized,pinned FROM workspaces WHERE id=? AND archived=0")
+      .get(text(id, "工作空间标识")) as unknown as Workspace | undefined;
     if (!w) throw new AppError("NOT_FOUND", "工作空间不存在");
-    return w;
+    return { ...w, authorized: !!w.authorized, pinned: !!w.pinned };
   }
   sessions(workspaceId: unknown): Session[] {
     return this.sessionSummaries(this.workspace(workspaceId).id);
@@ -169,20 +186,20 @@ export class Store {
   pinnedSessions(): Session[] {
     return this.sessionSummaries();
   }
-  private sessionSummaries(workspaceId?: string): Session[] {
+  private sessionSummaries(workspaceId?: string, sessionId?: string): Session[] {
     return (
-      this.db
+      this
         .prepare(
-          "SELECT sessions.*,r.id AS runId,r.status AS runStatus,r.phase,r.retry,r.reasonCode,(SELECT COUNT(*) FROM tasks WHERE parentSessionId=sessions.id AND status IN ('queued','starting','running','stopping')) AS activeTaskCount FROM sessions LEFT JOIN runs r ON r.id=(SELECT id FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) WHERE " + (workspaceId === undefined ? "(pinned=1 OR unread=1 OR autoPinUntil>0 OR r.status IN ('starting','running','stopping') OR activeTaskCount>0)" : "workspaceId=?") + " AND EXISTS(SELECT 1 FROM workspaces w WHERE w.id=sessions.workspaceId AND w.archived=0) AND NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id) ORDER BY pinned DESC,updatedAt DESC,sessions.id",
+          "SELECT sessions.*,r.id AS runId,r.status AS runStatus,r.phase,r.retry,r.reasonCode,(SELECT COUNT(*) FROM tasks WHERE parentSessionId=sessions.id AND status IN ('queued','starting','running','stopping')) AS activeTaskCount FROM sessions LEFT JOIN runs r ON r.id=(SELECT id FROM runs WHERE sessionId=sessions.id ORDER BY startedAt DESC,rowid DESC LIMIT 1) WHERE " + (workspaceId === undefined ? "(pinned=1 OR unread=1 OR autoPinUntil>0 OR r.status IN ('starting','running','stopping') OR activeTaskCount>0)" : "workspaceId=?") + (sessionId === undefined ? "" : " AND sessions.id=?") + " AND sessions.deletedAt IS NULL AND EXISTS(SELECT 1 FROM workspaces w WHERE w.id=sessions.workspaceId AND w.archived=0) AND NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id) ORDER BY pinned DESC,updatedAt DESC,sessions.id",
         )
-        .all(...(workspaceId === undefined ? [] : [workspaceId])) as unknown as Session[]
+        .all(...(workspaceId === undefined ? [] : [workspaceId]), ...(sessionId === undefined ? [] : [sessionId])) as unknown as Session[]
     ).map((s) => ({ ...s, pinned: !!s.pinned, unread: !!s.unread,
       activeTasks: !!s.activeTaskCount, retry: s.retry ? JSON.parse(String(s.retry)) : null }));
   }
   /** Active sessions have no deadline; viewing an idle automatic pin renews cooling. */
   viewSession(scope: Scope, now = Date.now()): boolean {
     this.session(scope.workspaceId, scope.sessionId);
-    const summary = this.sessions(scope.workspaceId).find((s) => s.id === scope.sessionId);
+    const summary = this.sessionSummaries(scope.workspaceId, scope.sessionId)[0];
     const automatic = summary && isAutoTopSession(summary);
     return !!this.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE id=? AND ?")
       .run(summary && isActiveSession(summary) ? null : now + sessionPinCooldownMs, scope.sessionId, Number(!!automatic)).changes;
@@ -219,7 +236,7 @@ export class Store {
   }
   /** No ownership lookup here: a viewer may leave after its session was deleted/archived. */
   leaveSession(scope: Scope, now = Date.now()): boolean {
-    const summary = this.sessionSummaries(scope.workspaceId).find((s) => s.id === scope.sessionId);
+    const summary = this.sessionSummaries(scope.workspaceId, scope.sessionId)[0];
     if (summary && isActiveSession(summary))
       return !!this.db.prepare("UPDATE sessions SET autoPinUntil=NULL WHERE id=? AND autoPinUntil IS NOT NULL")
         .run(scope.sessionId).changes;
@@ -229,7 +246,7 @@ export class Store {
   session(workspaceId: unknown, sessionId: unknown): Session {
     const w = this.workspace(workspaceId);
     const s = this.db
-      .prepare("SELECT * FROM sessions WHERE workspaceId=? AND id=?")
+      .prepare("SELECT * FROM sessions WHERE workspaceId=? AND id=? AND deletedAt IS NULL")
       .get(w.id, text(sessionId, "会话标识")) as unknown as Session | undefined;
     if (!s) throw new AppError("SCOPE_MISMATCH", "会话不属于该工作空间");
     return { ...s, pinned: !!s.pinned, unread: !!s.unread };
@@ -435,13 +452,28 @@ export class Store {
       return this.workspace(w.id);
     }
     if (c.op === "session.create") {
-      const w = this.workspace(c.workspaceId),
-        id = randomUUID();
+      const w = this.workspace(c.workspaceId);
+      if (p.reuseEmpty !== undefined && typeof p.reuseEmpty !== "boolean")
+        throw new AppError("INVALID_INPUT", "复用新会话状态必须为布尔值");
+      if (p.reuseEmpty === true) {
+        // Lookup and insertion share execute's synchronous transaction, including across viewers.
+        // Drafts, attachments and model selection stay bound to the reused session.
+        const existing = this.db.prepare(`SELECT s.id FROM sessions s
+          WHERE s.workspaceId=? AND s.deletedAt IS NULL AND s.titleState='pending' AND s.title='新对话'
+            AND NOT EXISTS(SELECT 1 FROM runs r WHERE r.sessionId=s.id)
+            AND NOT EXISTS(SELECT 1 FROM agent_sessions a WHERE a.sessionId=s.id AND a.file IS NOT NULL)
+            AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id OR t.parentSessionId=s.id)
+          ORDER BY s.updatedAt DESC,s.rowid DESC LIMIT 1`).get(w.id);
+        if (existing) return this.session(w.id, String(existing.id));
+      }
+      const id = randomUUID();
       this.db
         .prepare(
           "INSERT INTO sessions(id,workspaceId,title,updatedAt) VALUES(?,?,?,?)",
         )
         .run(id, w.id, "新对话", Date.now());
+      try { initializeMemory(this.root, id); }
+      catch { /* Optional memory must not prevent creating a usable conversation. */ }
       // Copy once at creation; later default changes must not affect existing sessions.
       this.db
         .prepare(
@@ -466,7 +498,8 @@ export class Store {
     } else if (c.op === "session.delete") {
       if (p.confirmed !== true)
         throw new AppError("CONFIRMATION_REQUIRED", "删除会话需要确认");
-      this.db.prepare("DELETE FROM sessions WHERE id=?").run(s.id);
+      this.db.prepare("UPDATE sessions SET deletedAt=?,pinned=0,unread=0,autoPinUntil=0 WHERE id=? OR id IN (SELECT sessionId FROM tasks WHERE parentSessionId=?)").run(Date.now(), s.id, s.id);
+      this.db.prepare("DELETE FROM session_preferences WHERE sessionId=?").run(s.id);
       return { deleted: s.id };
     } else throw new AppError("UNKNOWN_OPERATION", "不支持的操作");
     return this.session(s.workspaceId, s.id);
@@ -484,6 +517,7 @@ export class Store {
     if (this.db.prepare("SELECT 1 FROM external_requests WHERE state='pending' AND json_valid(scope) AND json_extract(scope,'$[0]')=? LIMIT 1").get(id)) busy();
   }
   close() {
+    this.statements.clear();
     this.db.close();
     this.lease.close();
   }

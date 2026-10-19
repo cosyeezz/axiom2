@@ -22,7 +22,7 @@
 .annotation-marker { background: color-mix(in srgb, var(--accent-hover) 10%, var(--bg)); }
 .annotation-editor { padding: 12px; margin: 8px 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg-2); font-size: 12px; line-height: 1.6; }
 .annotation-quote { max-height: 88px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); border-left: 2px solid var(--border); padding-left: 10px; margin-bottom: 10px; }
-.annotation-editor textarea { display: block; width: 100%; min-height: 84px; max-height: 180px; resize: vertical; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 13px; }
+.annotation-editor textarea, .annotation-supplement textarea { display: block; width: 100%; min-height: 84px; max-height: 180px; resize: vertical; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 13px; }
 .annotation-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .annotation-editor-actions > span { flex: 1; color: var(--muted); font-size: 10px; }
 .annotation-editor-actions .btn { font-size: 12px; }
@@ -30,6 +30,9 @@
 .annotation-tray-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 4px 8px; }
 .annotation-tray-bar > span { flex: 1; min-width: 100px; color: var(--muted); padding: 4px; }
 .annotation-tray-bar .btn { font-size: 12px; padding-inline: 10px; }
+.annotation-supplement { padding: 0 8px 8px; }
+.annotation-supplement textarea { min-height: 64px; line-height: 1.6; }
+.annotation-supplement textarea:focus-visible { outline: 1px solid var(--accent-hover); outline-offset: 1px; }
 .annotation-tray > .annotation-editor { margin: 8px; max-height: 32dvh; overflow: auto; }
 .annotation-list { list-style: none; margin: 0; padding: 0 10px; max-height: min(240px, 28dvh); overflow: auto; border-top: 1px solid var(--border); }
 .annotation-list > li { display: flex; align-items: flex-start; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }

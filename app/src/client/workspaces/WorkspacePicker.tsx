@@ -60,14 +60,14 @@ export function WorkspacePicker({ workspaces, workspace, select, picking, choose
       id="workspace-picker"
       onToggle={() => { if (!details.current?.open) cancelSelection(); }}
       onKeyDown={(e) => {
-        if (e.key === "Escape" && !e.defaultPrevented && !(e.target instanceof HTMLInputElement)) {
+        if (e.key === "Escape" && details.current?.open && !e.defaultPrevented && !(e.target instanceof HTMLInputElement)) {
           e.preventDefault();
           close();
           summary.current?.focus();
         }
       }}
     >
-      <summary ref={summary} aria-label="切换工作空间">
+      <summary ref={summary} data-view-navigation aria-label={`切换工作空间：${workspace?.name || "尚未选择"}`}>
         <Icon name="workspace" />
         <span className="workspace-copy"><strong>{workspace?.name || "选择工作空间"}</strong></span>
         <Icon name="chevron" />
@@ -79,7 +79,7 @@ export function WorkspacePicker({ workspaces, workspace, select, picking, choose
               navigate={navigate} cancelSelection={cancelSelection} onError={onError} />
           ))}
         </div>
-        <button type="button" id="add-workspace" disabled={picking} aria-busy={picking}
+        <button type="button" id="add-workspace" data-view-navigation disabled={picking} aria-busy={picking}
           onClick={() => { close(); choose(); }}>
           <Icon name="folder-plus" />{picking ? "正在选择文件夹…" : "打开文件夹…"}
         </button>
@@ -203,7 +203,7 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
         confirmLabel="删除工作空间" danger onClose={() => setDeleting(null)}
         onConfirm={() => command("workspace.delete", { confirmed: true }, { workspaceId: deleting.id })} />}
       {editing ? <div className="workspace-option" aria-current={selected}>{content}</div> : (
-        <button ref={button} type="button" className="workspace-option" aria-current={selected}
+        <button ref={button} type="button" className="workspace-option" data-view-navigation aria-current={selected}
           aria-label={w.name} data-tooltip={`${w.name} · ${w.path} · 双击重命名（F2），Delete 删除`}
           onPointerDown={(e) => { if (e.detail > 1) cancelSelection(); }}
           onClick={(e) => { if (e.detail < 2) navigate(w, e.detail === 0); }}

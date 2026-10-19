@@ -2,8 +2,11 @@ import { useContext, useEffect, useState } from "react";
 import { Markdown } from "./Markdown.js";
 import { ActivityExpanded } from "./ToolActivity.js";
 import { ThinkingDots } from "./ThinkingDots.js";
+import { MessagePartBody } from "./MessagePartBody.js";
+import type { ChatMessage } from "../../shared/agent.js";
+import type { Scope } from "../../shared/protocol.js";
 
-export function Thinking({ text, active }: { text: string; active: boolean }) {
+export function Thinking({ text, active, scope, message }: { text: string; active: boolean; scope: Scope; message: ChatMessage }) {
   const groupOpen = useContext(ActivityExpanded);
   const [open, setOpen] = useState(false);
   useEffect(() => { if (!groupOpen) setOpen(false); }, [groupOpen]);
@@ -22,6 +25,6 @@ export function Thinking({ text, active }: { text: string; active: boolean }) {
       {active ? <ThinkingDots /> : <span className="thinking-label">thinking</span>}
       {!open && !active && text && <span className="thinking-preview"><Markdown text={text} compact /></span>}
     </summary>
-    {open && text && <div className="thinking-body markdown"><Markdown text={text} /></div>}
+    {open && text && <div className="thinking-body markdown"><MessagePartBody scope={scope} message={message} field="thinking" fallback="" /></div>}
   </details>;
 }

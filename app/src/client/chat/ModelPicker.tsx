@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAnchoredPopup } from "../useAnchoredPopup.js";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
@@ -24,9 +25,11 @@ export function ModelPicker({
   onDefaultSelect,
   onSelect,
   value,
+  inheritLabel,
   disabled = false,
 }: {
   value?: Selection | null;
+  inheritLabel?: string;
   onDefaultSelect?: (selection: Selection | null) => Promise<void>;
   disabled?: boolean;
   onSelect?: (selection: Selection) => Promise<void>;
@@ -35,8 +38,8 @@ export function ModelPicker({
   childDefault?: boolean;
 }) {
   const favorites = useScope("favorites", noFavorites);
-  const favorite = (m: { provider: string; id: string }) =>
-    favorites.some((f) => f.provider === m.provider && f.id === m.id);
+  const favoriteKeys = useMemo(() => new Set(favorites.map((f) => JSON.stringify([f.provider, f.id]))), [favorites]);
+  const favorite = (m: { provider: string; id: string }) => favoriteKeys.has(JSON.stringify([m.provider, m.id]));
   const config = useScope("configuration", emptyConfig),
     info = useScope(scope ? agentScope(scope) : null, emptyAgent),
     tasks = useScope(
@@ -49,6 +52,18 @@ export function ModelPicker({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const details = useRef<HTMLDetailsElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const floating = expanded && !details.current?.closest(".compression-settings,.memory-dialog");
+  const { panel } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 320, maxHeight: 440, fillMobile: true });
+  useLayoutEffect(() => {
+    if (floating && panel.current && !panel.current.matches(":popover-open")) panel.current.showPopover();
+  }, [floating]);
+  useEffect(() => {
+    if (!floating) return;
+    const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node)) close(false); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [floating]);
   const effortId = useId();
   useEffect(() => {
     if (onDefaultSelect) setDraft(selection);
@@ -62,18 +77,20 @@ export function ModelPicker({
     catch (e) { setDraft(selection); setError((e as Error).message); }
     finally { setBusy(false); }
   };
-  const close = () => {
+  const close = (restoreFocus = true) => {
     if (!details.current) return;
+    if (panel.current?.matches(":popover-open")) panel.current.hidePopover();
     details.current.open = false;
-    details.current.querySelector("summary")?.focus();
+    setExpanded(false);
+    if (restoreFocus) details.current.querySelector("summary")?.focus();
   };
-  const models = config.available
+  const models = useMemo(() => expanded ? config.available
     .filter((m) =>
       `${m.provider} ${m.name} ${m.id}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
     )
-    .sort((a, b) => Number(favorite(b)) - Number(favorite(a)));
+    .sort((a, b) => Number(favorite(b)) - Number(favorite(a))) : [], [expanded, config.available, query, favoriteKeys]);
   const chosen = config.available.find(
     (m) => m.provider === draft?.provider && m.id === draft.id,
   );
@@ -83,7 +100,10 @@ export function ModelPicker({
       className="model-picker"
       id={nested || childDefault || onSelect ? undefined : "model-picker"}
       onToggle={(e) => {
+        if (e.target !== e.currentTarget) return;
+        setExpanded(e.currentTarget.open);
         if (e.currentTarget.open && disabled) {
+          setExpanded(false);
           e.currentTarget.open = false;
           return;
         }
@@ -95,6 +115,8 @@ export function ModelPicker({
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape" && e.currentTarget.open) {
+          // An IME candidate cancellation must not close this menu or an outer settings panel.
+          if (e.nativeEvent.isComposing || e.keyCode === 229) { e.stopPropagation(); return; }
           e.preventDefault();
           e.stopPropagation();
           close();
@@ -112,13 +134,13 @@ export function ModelPicker({
           {childDefault ? "默认子模型 · " : ""}
           {selection
             ? `${config.available.find((m) => m.provider === selection.provider && m.id === selection.id)?.name ?? selection.id} · ${selection.thinking}`
-            : childDefault
+            : inheritLabel ?? (childDefault
               ? "继承主会话选择"
-              : "未选择模型"}
+              : "未选择模型")}
         </span>
         <Icon name="chevron" />
       </summary>
-      <div className="model-popover" aria-label="模型选择">
+      {expanded && <div ref={panel} className="model-popover" aria-label="模型选择" popover={floating ? "manual" : undefined} data-floating={floating || undefined}>
         <label className="model-search">
           <Icon name="search" />
           <input
@@ -130,7 +152,7 @@ export function ModelPicker({
           />
         </label>
         <div className="model-list" aria-label="可用模型" aria-busy={busy}>
-          {childDefault && (
+          {(childDefault || (inheritLabel && onDefaultSelect)) && (
             <button
               type="button"
               className="model-option"
@@ -138,7 +160,7 @@ export function ModelPicker({
               disabled={busy || disabled}
               onClick={() => void choose(null)}
             >
-              继承创建时的主会话模型
+              {inheritLabel ?? "继承创建时的主会话模型"}
             </button>
           )}
           {models.map((m) => (
@@ -165,13 +187,7 @@ export function ModelPicker({
                     <span className="model-name">{m.name}</span>
                     <small className="model-provider-name">{m.provider}</small>
                   </span>
-                  <svg
-                    className="model-check"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path d="m5 12 4 4L19 6" />
-                  </svg>
+                  <Icon className="model-check" name="check" />
                 </button>
                 <button
                   type="button"
@@ -190,9 +206,7 @@ export function ModelPicker({
                     }
                   }}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3L2.9 9.6l6.3-.9Z" />
-                  </svg>
+                  <Icon name="star" />
                 </button>
               </div>
             ))}
@@ -225,7 +239,7 @@ export function ModelPicker({
               ))}
             </div>
           ) : (
-            <p>{childDefault && !draft ? "随主会话模型继承" : "选择模型后设置"}</p>
+            <p>{!draft && inheritLabel ? inheritLabel : childDefault && !draft ? "随主会话模型继承" : "选择模型后设置"}</p>
           )}
         </fieldset>
         <div className="model-footer">
@@ -236,7 +250,7 @@ export function ModelPicker({
               className="model-cancel"
               aria-label="取消模型设置"
               disabled={busy}
-              onClick={close}
+              onClick={() => close()}
             >
               取消
             </button>
@@ -279,7 +293,7 @@ export function ModelPicker({
           </p>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}
-      </div>
+      </div>}
     </details>
   );
 }

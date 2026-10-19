@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { AppError, scopeKey, type Scope } from "../../shared/protocol.js";
 import {
   agentScope,
@@ -22,11 +23,16 @@ export class AgentViews {
   constructor(
     readonly store: Store,
     readonly publish: (scope: string, data?: unknown) => void,
+    readonly observed: (scope: string) => boolean = () => true,
   ) {}
   readonly messages = new Lru<string, Map<string, ChatMessage>>(5);
   // In-flight deltas are execution state, not an idle history cache. They cannot
   // be reconstructed from JSONL until pi finalizes them.
   private transient = new Map<string, Map<string, ChatMessage>>();
+  private contextRevision = new Map<string, number>();
+  private layouts = new WeakMap<Map<string, ChatMessage>, Pick<ThreadIndex, "ids" | "groups">>();
+  private originals = new Lru<string, { source: string; messages: Map<string, ChatMessage>; bytes: number }>(5);
+  private originalCleanup?: NodeJS.Immediate;
   private timers = new Map<string, NodeJS.Timeout>();
   private changedMessages = new Map<string, Map<string, ChatMessage>>();
   readonly queues = new Map<string, NonNullable<AgentInfo["queue"]>>();
@@ -114,16 +120,22 @@ export class AgentViews {
   thread(scope: Scope): ThreadIndex {
     const owner = this.owner(scope);
     try {
-      const messages = [...this.transcript(scope).values()];
+      const projection = this.transcript(scope);
+      let layout = this.layouts.get(projection);
+      if (!layout) {
+        const messages = [...projection.values()];
+        layout = { ids: messages.map((message) => message.id), groups: threadGroups(messages) };
+        this.layouts.set(projection, layout);
+      }
       const run = this.store.db.prepare("SELECT id,status FROM runs WHERE sessionId=? ORDER BY startedAt DESC,rowid DESC LIMIT 1").get(scope.sessionId);
       return {
+        contextRevision: this.contextRevision.get(scope.sessionId) ?? 0,
         runId: run ? String(run.id) : undefined,
         runStatus: run?.status as Run["status"] | undefined,
         resultVersion: owner.resultVersion,
         readVersion: owner.readVersion,
-        resultTasks: this.store.db.prepare("SELECT t.taskId,t.id AS resultId FROM session_results e JOIN task_results t ON t.id=e.sourceId WHERE e.sessionId=? AND e.kind='task' AND e.version>?").all(scope.sessionId, owner.readVersion ?? 0) as unknown as NonNullable<ThreadIndex["resultTasks"]>,
-        ids: messages.map((message) => message.id),
-        groups: threadGroups(messages),
+        resultTasks: this.store.db.prepare("SELECT t.taskId,t.id AS resultId FROM session_results e JOIN task_results t ON t.id=e.sourceId WHERE e.sessionId=? AND e.kind='task' AND e.version>? AND t.delivery!='discarded'").all(scope.sessionId, owner.readVersion ?? 0) as unknown as NonNullable<ThreadIndex["resultTasks"]>,
+        ...layout,
       };
     } catch (e) {
       return { ids: [], groups: [], error: (e as Error).message };
@@ -132,12 +144,29 @@ export class AgentViews {
   original(scope: Scope) {
     this.owner(scope);
     const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
-    const saved = row?.file ? transcriptMessages(openTranscript(String(row.file),
-      this.store.workspace(scope.workspaceId).path), true) : [];
-    const messages = new Map(saved.map((message) => [message.id, message]));
-    // Include the current in-memory turn, which may not have reached JSONL yet.
-    for (const message of this.transcript(scope).values())
+    const file = row?.file ? String(row.file) : null;
+    const stat = file ? statSync(file, { bigint: true }) : null;
+    const source = `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
+    let saved = this.originals.get(scope.sessionId);
+    if (saved?.source !== source) {
+      const list = file ? transcriptMessages(openTranscript(file, this.store.workspace(scope.workspaceId).path), true) : [];
+      const bytes = list.reduce((total, message) => total + 256 + 2 * (message.id.length + message.text.length +
+        (message.thinking?.length ?? 0) + (message.error?.length ?? 0) + (message.calls?.reduce((sum, call) => sum + call.input.length, 0) ?? 0)), 0);
+      saved = { source, messages: new Map(list.map((message) => [message.id, message])), bytes };
+      // Same-turn reuse has both a five-session and estimated 32 MiB text budget.
+      this.originals.delete(scope.sessionId);
+      if (bytes <= 32 * 1024 * 1024) {
+        while ([...this.originals.values()].reduce((sum, item) => sum + item.bytes, bytes) > 32 * 1024 * 1024)
+          this.originals.delete(this.originals.keys().next().value!);
+        this.originals.set(scope.sessionId, saved);
+      }
+      if (!this.originalCleanup) this.originalCleanup = setImmediate(() => { this.originals.clear(); this.originalCleanup = undefined; });
+    }
+    const messages = new Map(saved.messages);
+    // Current deltas may precede native persistence; never hydrate the default projection just to overlay them.
+    for (const message of this.messages.peek(scope.sessionId)?.values() ?? [])
       if (!message.compression) messages.set(message.id, message);
+    for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
     return messages;
   }
   message(scope: Scope, id: string, full = false) {
@@ -158,23 +187,20 @@ export class AgentViews {
     return transcriptImage(openTranscript(String(row.file), workspace.path), messageId, imageId, true);
   }
   changed(scope: Scope) {
-    this.publish(threadScope(scope), this.thread(scope));
-    this.publish(agentScope(scope), this.info(scope));
+    if (this.observed(threadScope(scope))) this.publish(threadScope(scope), this.thread(scope));
+    if (this.observed(agentScope(scope))) this.publish(agentScope(scope), this.info(scope));
     this.publish(`sessions:${scope.workspaceId}`);
     this.publish(scopeKey(scope));
   }
   messageChanged(scope: Scope, message: ChatMessage) {
-    // Hydrate against the old transient state. Writing the incoming delta first
-    // makes a cache miss compare the new message with itself and lose its layout update.
-    const messages = this.transcript(scope), previous = messages.get(message.id);
-    if (message.streaming || message.status === "running") {
-      const active = this.transient.get(scope.sessionId) ?? new Map<string, ChatMessage>();
-      active.set(message.id, message); this.transient.set(scope.sessionId, active);
-    } else {
-      const active = this.transient.get(scope.sessionId); active?.delete(message.id);
-      if (!active?.size) this.transient.delete(scope.sessionId);
-    }
-    const fresh = !messages.has(message.id),
+    this.owner(scope);
+    const messages = this.messages.peek(scope.sessionId) ??
+      (this.observed(threadScope(scope)) || this.observed(`messages:${scope.workspaceId}:${scope.sessionId}`) ? this.transcript(scope) : undefined);
+    const previous = messages?.get(message.id) ?? this.transient.get(scope.sessionId)?.get(message.id);
+    // message_end precedes native persistence. Retain terminal deltas until a complete disk record acknowledges them.
+    const active = this.transient.get(scope.sessionId) ?? new Map<string, ChatMessage>();
+    active.set(message.id, message); this.transient.set(scope.sessionId, active);
+    const fresh = !messages?.has(message.id),
       layoutChanged =
         previous?.role !== message.role ||
         JSON.stringify(previous?.selectionChange) !== JSON.stringify(message.selectionChange) ||
@@ -184,9 +210,11 @@ export class AgentViews {
           threadActivity(previous) !== threadActivity(message) ||
           threadThinking(previous) !== threadThinking(message) ||
           threadReplyThinking(previous) !== threadReplyThinking(message)));
-    messages.set(message.id, message);
-    if (fresh || layoutChanged)
-      this.publish(threadScope(scope), this.thread(scope));
+    messages?.set(message.id, message);
+    if (messages && (fresh || layoutChanged)) {
+      this.layouts.delete(messages);
+      if (this.observed(threadScope(scope))) this.publish(threadScope(scope), this.thread(scope));
+    }
     const pending =
       this.changedMessages.get(scope.sessionId) ?? new Map<string, ChatMessage>();
     pending.set(message.id, message);
@@ -201,17 +229,37 @@ export class AgentViews {
     clearTimeout(this.timers.get(scope.sessionId));
     this.timers.delete(scope.sessionId);
     for (const [id, message] of this.changedMessages.get(scope.sessionId) ?? [])
-      this.publish(messageScope(scope, id), boundedMessage(message));
+      if (this.observed(messageScope(scope, id))) this.publish(messageScope(scope, id), boundedMessage(message));
     this.changedMessages.delete(scope.sessionId);
   }
   publishMessages(scope: Scope) {
-    this.publish(`messages:${scope.workspaceId}:${scope.sessionId}`, [...this.transcript(scope).values()].map(boundedMessage));
+    const key = `messages:${scope.workspaceId}:${scope.sessionId}`;
+    if (this.observed(key)) this.publish(key);
   }
-  settled(scope: Scope) { this.transient.delete(scope.sessionId); }
+  current(scope: Scope, id: string) {
+    return this.transient.get(scope.sessionId)?.get(id) ?? this.messages.peek(scope.sessionId)?.get(id);
+  }
+  persisted(scope: Scope, ids: string[]) {
+    const active = this.transient.get(scope.sessionId);
+    for (const id of ids) {
+      const message = active?.get(id);
+      if (message && !message.streaming && message.status !== "running") active!.delete(id);
+    }
+    if (!active?.size) this.transient.delete(scope.sessionId);
+  }
+  forget(scope: Scope) {
+    clearTimeout(this.timers.get(scope.sessionId));
+    this.timers.delete(scope.sessionId); this.changedMessages.delete(scope.sessionId);
+    this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId);
+    this.contextRevision.delete(scope.sessionId); this.messages.delete(scope.sessionId); this.queues.delete(scope.sessionId);
+  }
+  settled(scope: Scope) { this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId); }
   refresh(scope: Scope) {
     this.flush(scope); // Old deltas must precede the compaction/reset snapshot.
+    this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
+    this.originals.delete(scope.sessionId);
+    this.transient.delete(scope.sessionId);
     this.messages.delete(scope.sessionId);
-    this.publish(threadScope(scope), this.thread(scope));
     this.publishMessages(scope);
     this.changed(scope);
   }

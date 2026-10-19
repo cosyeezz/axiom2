@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Locator, type Page, type WebSocketRoute } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { SessionDrafts } from "../src/server/session-drafts.js";
 import { agentScope, emptyAgent, messageScope, threadScope, type Selection } from "../src/shared/agent.js";
 import { defaultBudgets, emptyTasks, tasksScope, type Task } from "../src/shared/tasks.js";
 import type { Command, Draft, Scope, Session, Workspace } from "../src/shared/protocol.js";
@@ -62,6 +63,10 @@ async function doubleEscape(input: Locator) {
 }
 
 async function fixture(nested: boolean) {
+  const savedDrafts = new SessionDrafts(app!.store);
+  for (const scope of [owner, other, child]) savedDrafts.save(scope, {
+    revision: savedDrafts.read(scope).revision, writer: randomUUID(), sequence: 1, draft: blank(),
+  });
   const page = await browser!.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   page.setDefaultTimeout(5000);
   const errors: string[] = [], commands: Command[] = [];
@@ -130,7 +135,10 @@ async function fixture(nested: boolean) {
   try {
     await page.goto(app!.accessUrl);
     await page.locator('.connection-status[data-connected="true"]').waitFor();
-    if (nested) await page.getByRole("button", { name: `打开子会话：${task.description}`, exact: true }).click();
+    if (nested) {
+      await page.locator(".tool-activity > summary").click();
+      await page.getByRole("button", { name: `打开子会话：${task.description}`, exact: true }).click();
+    }
     const input = page.locator(nested ? `#prompt-${child.sessionId}` : "#prompt");
     const composer = page.locator(".composer-area").filter({ has: input });
     await input.waitFor();
@@ -266,6 +274,8 @@ try {
     await check(`${label}: empty queue still asks server and explains nothing can be recalled`, nested, async (f) => {
       f.setQueue([]); f.holdRecall();
       await f.input.fill("keep this input");
+      await f.composer.getByRole("button", { name: "停止执行", exact: true }).hover({ force: true });
+      await f.page.getByRole("tooltip").waitFor();
       await doubleEscape(f.input);
       await eventually(() => recalls(f.commands).length === 1, "empty queue snapshot cannot suppress authoritative recall command");
       f.releaseRecall();
@@ -290,6 +300,8 @@ try {
       f.holdRecall();
       await f.input.fill("@");
       await f.page.getByRole("listbox", { name: "pi 文件选择" }).waitFor();
+      await f.composer.getByRole("button", { name: "停止执行", exact: true }).hover({ force: true });
+      await f.page.getByRole("tooltip").waitFor();
       await f.input.press("Escape");
       await f.page.getByRole("listbox", { name: "pi 文件选择" }).waitFor({ state: "detached" });
       await f.input.press("Escape");
@@ -344,6 +356,7 @@ try {
       await eventually(() => recalls(f.commands).length === 1, "recall must be pending before navigation");
       if (nested) await f.page.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
       await f.page.locator("#history .history-item").filter({ hasText: "Steering B" }).click();
+      await f.page.waitForFunction(id => JSON.parse(sessionStorage.getItem("view") || "null")?.sessionId === id, other.sessionId);
       await f.page.locator("#prompt").fill("B stays untouched");
       f.releaseRecall();
       await eventually(async () => (await getDraft(f.page, f.scope)).text.includes("late recalled text"), "late recall must restore original scope");
@@ -360,6 +373,7 @@ try {
       await f.input.fill("new owner input");
       if (nested) await f.page.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
       await f.page.locator("#history .history-item").filter({ hasText: "Steering B" }).click();
+      await f.page.waitForFunction(id => JSON.parse(sessionStorage.getItem("view") || "null")?.sessionId === id, other.sessionId);
       await f.page.locator("#prompt").fill("new B input");
       f.releasePrompt(); await f.page.waitForTimeout(150);
       assert.equal((await getDraft(f.page, f.scope)).text, "new owner input");
@@ -368,7 +382,9 @@ try {
     });
     await check(`${label}: existing right-hand stop button still stops`, nested, async (f) => {
       await f.input.fill("must not be sent or discarded");
-      await f.composer.getByRole("button", { name: "停止执行", exact: true }).click();
+      // The button continuously scales; click its centre without waiting for an animation to end.
+      const stop = f.composer.getByRole("button", { name: "停止执行", exact: true });
+      await stop.click({ force: true });
       await eventually(() => stops(f.commands).length === 1, "stop button must issue a stop command");
       const stopped = stops(f.commands)[0];
       assert.equal(stopped.workspaceId, f.scope.workspaceId);

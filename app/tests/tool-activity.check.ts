@@ -50,9 +50,21 @@ try {
   views.flush(scope);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const loadPages = async (container: Locator) => {
+    await page.waitForFunction(() => !document.querySelector('.tool-truncated[role="status"]'));
+    while (await container.getByRole("button", { name: /^继续加载/ }).count()) {
+      await container.getByRole("button", { name: /^继续加载/ }).first().click();
+      await page.waitForFunction(() => !document.querySelector('.tool-truncated[role="status"]'));
+    }
+  };
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript((value) => sessionStorage.setItem("view", JSON.stringify(value)), scope);
+  let detailReads = 0;
+  page.on("websocket", socket => socket.on("framesent", event => {
+    const frame = JSON.parse(String(event.payload));
+    if (frame.op === "message.part") detailReads++;
+  }));
   await page.goto(app.origin);
   const group = page.locator(".tool-activity");
   await page.waitForFunction(() => document.querySelector(".tool-activity > summary")?.textContent?.includes("5 项"));
@@ -67,14 +79,16 @@ try {
   const current = group.locator(".activity-current:not(.activity-current-out)");
   const unknownColor = await toolColor(current, "custom_tool");
   assert.equal(await group.locator(".execution-pulse").count(), 0, "tool rows only show duration, without a status indicator");
+  assert.equal(detailReads, 0, "closed process sends no detail reads");
   assert.equal(await group.locator("pre").count(), 0, "closed tools do not mount heavy output");
-  assert.equal(await page.locator(".message-actions").count(), 1, "copy chrome only belongs to the visible answer");
+  assert.equal(await page.locator('.message-actions:has(button[aria-label="复制回复的 Markdown 原文"])').count(), 1, "copy chrome only belongs to the visible answer");
   assert.ok(await page.getByRole("heading", { name: "检查结论" }).isVisible());
   await group.locator(":scope > summary").focus();
   await page.keyboard.press("Enter");
   await page.locator(".tool-header").first().waitFor({ state: "visible" });
   assert.equal(await group.locator(".activity-ticker").count(), 0, "expanded group does not duplicate the latest summary");
   assert.equal(await group.locator(".tool-call > summary").count(), 5, "each tool has its own disclosure");
+  assert.equal(detailReads, 0, "opening process does not fetch tool bodies");
   assert.equal(await group.locator(".tool-detail").count(), 0, "opening the group only exposes the call list");
   const colors = new Map<string, string>();
   for (const name of ["read", "bash", "custom_tool"]) {
@@ -98,14 +112,19 @@ try {
   await page.keyboard.press("Enter");
   assert.equal(await group.locator(".tool-detail").count(), 1, "only the selected call loads records");
   assert.equal(await group.locator(".tool-header").first().evaluate(node => getComputedStyle(node, "::after").content), "none", "expanded rows have no minus sign");
+  await group.getByRole("button", { name: /^继续加载/ }).waitFor();
+  assert.ok(!(await group.locator('.tool-detail').innerText()).includes("FULL_OUTPUT_END"), "opening reads one bounded page");
+  await loadPages(group);
   await page.waitForFunction(() => document.querySelector(".tool-detail")?.textContent?.includes("FULL_OUTPUT_END"));
-  assert.equal(await group.locator(".tool-truncated").count(), 0, "long output loads automatically");
+  assert.equal(await group.locator(".tool-truncated").count(), 0, "all requested pages finished loading");
   assert.ok((await group.locator('.tool-call[data-status="failed"]').innerText()).includes("target text not found"));
   await group.locator(":scope > summary").click();
   assert.equal(await group.locator("pre").count(), 0, "collapsing the process releases expanded detail DOM");
   await group.locator(":scope > summary").click();
   assert.equal(await group.locator(".tool-detail, .tool-call[open]").count(), 0, "reopening the group resets child disclosures");
   await page.locator(".tool-call > summary").first().click();
+  await group.getByRole("button", { name: /^继续加载/ }).waitFor();
+  await loadPages(group);
   await page.waitForFunction(() => document.querySelector(".tool-detail")?.textContent?.includes("FULL_OUTPUT_END"));
   assert.equal(await group.locator("img").count(), 0);
   await group.locator('.tool-call[data-status="running"] > summary').click();
@@ -204,9 +223,13 @@ try {
   await longCall.locator(":scope > summary").waitFor();
   assert.equal(await longCall.locator(".tool-detail").count(), 0, "new calls arrive collapsed in an open group");
   await longCall.locator(":scope > summary").click();
+  await longCall.getByRole("button", { name: /^继续加载/ }).first().waitFor();
+  await loadPages(longCall);
   await longCall.getByText(/FULL_INPUT_END/).waitFor();
   views.messageChanged(scope, { id: "tool-long-write", role: "toolResult", text: "first\n".repeat(4000) + "FINAL_OUTPUT_END", status: "completed" });
   views.flush(scope);
+  await longCall.getByRole("button", { name: /^继续加载/ }).first().waitFor();
+  await loadPages(longCall);
   await longCall.getByText(/FINAL_OUTPUT_END/).waitFor();
   assert.equal(await group.getAttribute("open"), "", "streaming completion keeps the group open");
   assert.equal(await longCall.locator(".tool-truncated").count(), 0);

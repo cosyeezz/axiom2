@@ -1,20 +1,22 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FilePreviewContext, type OpenFileReference } from "./FileLink.js";
 import { FilePreviewPanel } from "./FilePreview.js";
-import { useScope } from "../transport.js";
+import { useScope, useScopeOrder } from "../transport.js";
 import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
 import { Message } from "./Message.js";
 import { ActivityGroup } from "./ToolActivity.js";
+import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
-import { optimisticState, useOptimistic } from "./optimistic.js";
+import { optimisticState, pendingMessageStatus, useOptimistic } from "./optimistic.js";
 import { MessageImages } from "./MessageImages.js";
 import { useReadReceipt } from "./useReadReceipt.js";
 import { reconcileInputs } from "./reconcile-inputs.js";
 import { useStickyDisclosures } from "./useStickyDisclosures.js";
 import { OriginalMessages, useOriginalConversation, useThreadMessage } from "./OriginalConversation.js";
+import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
 function ThreadActivityGroup({ scope, group, tail, tailReply, index }: {
   scope: Scope; group: NonNullable<ThreadIndex["groups"]>[number]; tail: boolean; tailReply?: string; index: ThreadIndex;
@@ -28,8 +30,9 @@ function ThreadActivityGroup({ scope, group, tail, tailReply, index }: {
     reply.status !== "failed" && reply.status !== "cancelled");
   const activeRunId = canContinue && activeStatus(index.runStatus) ? index.runId : undefined;
   const awaitingMore = canContinue && activeStatus(index.runStatus) && (!last?.runId || last.runId === index.runId);
-  return <ActivityGroup awaitingMore={awaitingMore} activeRunId={activeRunId} messageIds={group.ids}>
-    {group.ids.map((id, activityOrder) => <Message key={id} scope={scope} id={id} inActivity activityOrder={activityOrder} thinkingOnly={group.thinkingOnlyIds?.includes(id)} />)}
+  return <ActivityGroup scope={scope} awaitingMore={awaitingMore} activeRunId={activeRunId} messageIds={group.ids}>
+    {(open, evidence) => group.ids.map((id, activityOrder) => open || evidence.has(id)
+      ? <Message key={id} scope={scope} id={id} inActivity activityOrder={activityOrder} thinkingOnly={group.thinkingOnlyIds?.includes(id)} /> : null)}
   </ActivityGroup>;
 }
 
@@ -38,7 +41,10 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   const closePreview = () => { setPreview(null); if (preview?.trigger.isConnected) preview.trigger.focus({ preventScroll: true }); };
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
-  useScope(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null, null);
+  const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
+  const threadReceived = useScopeOrder(scope?.sessionId ? threadScope(scope) : null);
+  useScopeOrder(scope?.sessionId ? agentScope(scope) : null);
+  const historyReceived = !scope?.sessionId || !!messagesReceived && !!threadReceived;
   const original = useOriginalConversation(scope, index);
   const pending = useOptimistic(scope);
   useEffect(() => {
@@ -102,6 +108,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
           {original.error ? "原始会话读取失败，已保留当前对话" : original.loading ? "正在读取原始会话…" : "正在查看原始会话"}
           {original.error && <p className="execution-alert" role="alert">{original.error} <button type="button" className="btn" onClick={original.retry}>重新加载</button></p>}
         </div>}
+        <DerivedContext.Provider value={original.showing ? original.messages.derived : sessionDerivedCache(`${scope?.workspaceId}:${scope?.sessionId}`)}>
         <OriginalMessages.Provider value={original.showing ? original.messages : null}>
         {scope?.sessionId && groups.map((group, groupIndex) => <Fragment key={group.id}>
           {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
@@ -110,28 +117,30 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
             : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} activeRunId={groupIndex === groups.length - 1 && activeStatus(index.runStatus) ? index.runId : undefined} />}
         </Fragment>)}
         </OriginalMessages.Provider>
+        </DerivedContext.Provider>
         {scope && visiblePending.map((item) => <article key={item.id} className="log-row message-result" aria-label="用户消息">
           <div><div className="message-body user-text"><p style={{ whiteSpace: "pre-wrap" }}>{item.draft.text}</p>
             {(item.draft.attachments ?? []).filter((a) => a.kind !== "image").map((a) => <span className="meta" key={a.id}>{a.name} </span>)}
             <MessageImages images={item.message.images} scope={scope} messageId={item.id} />
           </div><small className="meta" role="status">
-            {{ sending: "正在发送…", accepted: "已受理，等待进入会话", uncertain: "正在确认发送结果…" }[item.state]}
+            {pendingMessageStatus(item)}
           </small></div>
         </article>)}
-        {!groups.length && !pending.length && !index.error && !original.loading && !original.error && <div className="empty-state">
+        {historyReceived && !groups.length && !pending.length && !index.error && !original.loading && !original.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>
             <button className="btn" key={label} disabled={!scope?.sessionId} onClick={() => {
               updateDraft(scope!, { text }); document.getElementById(nested ? `prompt-${scope!.sessionId}` : "prompt")?.focus();
             }}>{label}</button>)}</div>
         </div>}
+        {scope?.sessionId && historyReceived && <RetryAction scope={scope} nested={nested} />}
       </div></div>
     </section>
     <nav className="thread-navigation" aria-label="会话滚动">
       {([ ["top", "回到最上", "M7 5h10M7 14l5-5 5 5M12 9v11"], ["up", "向上滚动一屏", "m6 15 6-6 6 6"],
         ["down", "向下滚动一屏", "m6 9 6 6 6-6"], ["bottom", "回到最下", "M7 19h10M7 10l5 5 5-5M12 4v11"] ] as const).map(([direction, label, path]) =>
         <button type="button" className="action-icon" key={direction} data-tooltip={label} aria-label={label} disabled={direction === "top" || direction === "up" ? edges.top : edges.bottom} onClick={() => scroll(direction)}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
+          <svg className="ui-glyph" viewBox={direction === "top" ? "6 4 12 17" : direction === "bottom" ? "6 3 12 17" : "5 8 14 8"} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
         </button>)}
     </nav>
     {preview && <FilePreviewPanel key={`${preview.messageId}:${preview.href}`} reference={preview} onClose={closePreview} />}

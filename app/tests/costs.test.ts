@@ -126,6 +126,42 @@ test("compression cancellations retain known partial usage; snapshot-only jobs i
   } finally { f.close(); }
 });
 
+test("cost invalidation ignores progress but tracks family, unknown records and late accounting writes", () => {
+  const f = fixture();
+  try {
+    const main = f.transcript(f.scope.sessionId);
+    f.costs.get(f.scope);
+    assert.equal(f.costs.changed(f.scope), false);
+    f.transcript(f.create().id).appendMessage(reply(99));
+    assert.equal(f.costs.changed(f.scope), false, 'another owner is unrelated');
+    main.appendMessage(reply(0));
+    assert.equal(f.costs.changed(f.scope), true, 'unknown price is still a new record');
+    assert.equal(f.costs.changed(f.scope), false);
+    const [task] = f.tasks.create(f.scope, 'version-child', 'context', [{ task: 'child', role: '' }], { provider: 'fixture', id: 'model-one', thinking: 'off' }).taskIds;
+    const childScope = { ...f.scope, sessionId: String(f.store.db.prepare('SELECT sessionId FROM tasks WHERE id=?').get(task)!.sessionId) };
+    assert.equal(f.costs.changed(childScope), true, 'membership changes are visible from a child');
+    assert.equal(f.costs.changed(f.scope), false, 'one baseline per family');
+    f.transcript(childScope.sessionId);
+    assert.equal(f.costs.changed(f.scope), true);
+    f.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(task);
+    assert.equal(f.costs.changed(f.scope), true, 'task state is part of the report');
+    const job = f.job('late', childScope.sessionId, { state: 'cancelled', phase: 'summarizing', usage: null, appliedAt: null });
+    assert.equal(f.costs.changed(f.scope), true);
+    job.billing = usageCost(usage(.3));
+    f.store.db.prepare('UPDATE compressions SET body=? WHERE id=?').run(JSON.stringify(job), job.id);
+    assert.equal(f.costs.changed(f.scope), true, 'cancelled work can report late billing');
+    f.store.db.exec('CREATE TABLE memory_usage(id TEXT PRIMARY KEY,sessionId TEXT,kind TEXT,provider TEXT,model TEXT,usage TEXT)');
+    f.store.db.prepare('INSERT INTO memory_usage VALUES(?,?,?,?,?,?)').run('memory-charge', childScope.sessionId, 'query', 'fixture', 'model-one', JSON.stringify(usage(.1)));
+    assert.equal(f.costs.changed(f.scope), true);
+    f.store.db.prepare('UPDATE memory_usage SET usage=? WHERE id=?').run(JSON.stringify(usage(.2)), 'memory-charge');
+    f.costs.get(childScope);
+    assert.equal(f.costs.changed(f.scope), true, 'a direct read from one view must not consume a changed memory row notification owed to other views');
+    assert.equal(f.costs.changed(f.scope), false);
+    rmSync(main.getSessionFile()!);
+    assert.equal(f.costs.changed(f.scope), true, 'lost transcript must expose incomplete accounting');
+  } finally { f.close(); }
+});
+
 test("recorded parts are finite and consistent; totals do not round before aggregation", () => {
   assert.equal(usageCost({ cost: { total: Infinity } }).unknownCost, 1);
   assert.equal(usageCost({ cost: { total: -1 } }).knownCost, 0);

@@ -237,11 +237,11 @@ function AnnotationBlock({ scope, messageId, block, source, children, eligible }
   </div>;
 }
 export function AnnotationTray({ scope, disabled, send }: {
-  scope: Scope; disabled: boolean; send: (items: ReplyAnnotation[], text: string) => void;
+  scope: Scope; disabled: boolean; send: (items: ReplyAnnotation[], text: string, supplement: string) => void;
 }) {
-  const state = useAnnotations(scope, true), id = useId();
+  const state = useAnnotations(scope), id = useId();
   if (!state.enabled) return null;
-  const prompt = annotationPrompt(state.items), tooLong = prompt.length > messageTextLimit;
+  const prompt = annotationPrompt(state.items, state.supplement), tooLong = prompt.length > messageTextLimit;
   // The tray also edits saved quotes whose source has left the visible context.
   return <section className="annotation-tray" aria-label="回复批注">
     <div className="annotation-tray-bar">
@@ -249,10 +249,17 @@ export function AnnotationTray({ scope, disabled, send }: {
       {!!state.items.length && <><button type="button" className="btn btn-ghost" aria-expanded={state.expanded} aria-controls={id}
         onClick={() => updateAnnotations(scope, { expanded: !state.expanded })}>{state.expanded ? "收起" : "查看全部"}</button>
         <button type="button" className="btn" disabled={disabled || !!state.editor || tooLong}
-          data-tooltip={state.editor ? "请先保存或取消正在编辑的批注" : "统一发送原文与批注意见"}
-          onClick={() => send(state.items, prompt)}>发送批注</button></>}
+          data-tooltip={state.editor ? "请先保存或取消正在编辑的批注" : "统一发送原文、批注意见与补充说明"}
+          onClick={() => send(state.items, prompt, state.supplement)}>发送批注</button></>}
     </div>
-    {tooLong && <p className="annotation-error" role="alert">原文与批注合计超过 12,000 字，请缩短引用或减少本轮批注后发送。</p>}
+    <div className="annotation-supplement">
+      <label className="screen-reader" htmlFor={`${id}-supplement`}>批注补充说明</label>
+      <textarea id={`${id}-supplement`} placeholder="补充说明（可选），随批注一起发送给模型…"
+        rows={2} maxLength={messageTextLimit} value={state.supplement}
+        aria-invalid={tooLong} aria-describedby={tooLong ? `${id}-error` : undefined}
+        onChange={(e) => updateAnnotations(scope, { supplement: e.target.value })} />
+    </div>
+    {tooLong && <p id={`${id}-error`} className="annotation-error" role="alert">原文、批注与补充说明合计超过 12,000 字，请缩短内容或减少本轮批注后发送。</p>}
     {state.editorInTray && state.editor && <AnnotationEditor scope={scope} item={state.editor} />}
     {state.expanded && <ol id={id} className="annotation-list">{state.items.map((item, i) => <li key={item.id}>
       <div className="annotation-list-text"><button type="button" className="annotation-locate" data-tooltip="定位原文" onClick={() => {

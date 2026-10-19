@@ -16,12 +16,7 @@ export function TaskSettings() {
       data-od-id="subagent-settings-trigger" aria-label="子代理设置" data-tooltip="子代理设置"
       aria-haspopup="dialog" aria-expanded={open} aria-controls={id} popoverTarget={id}
       onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
-      <svg viewBox="1 1 22 22" aria-hidden="true">
-        <rect x="9" y="2" width="6" height="6" rx="1" />
-        <path d="M12 8v4M5 16v-4h14v4" />
-        <rect x="2" y="16" width="6" height="6" rx="1" />
-        <rect x="16" y="16" width="6" height="6" rx="1" />
-      </svg>
+      <Icon name="network" />
     </button>
     {open && <SettingsDialog id={id} trigger={trigger.current!} onClose={() => setOpen(false)} />}
   </>;

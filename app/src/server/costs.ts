@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+import { Lru } from "../shared/lru.js";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { Scope } from "../shared/protocol.js";
 import type { Compression } from "../shared/compression.js";
@@ -8,7 +10,37 @@ import { usageCost } from "./usage-cost.js";
 
 /** Read-only accounting over native history; independent from current context projection. */
 export class Costs {
+  private readonly versions = new Lru<string, string>(256);
   constructor(private readonly store: Store) {}
+  /** File metadata and accounting rows only: progress notifications never parse history. */
+  private sourceVersion(scope: Scope): string {
+    const root = this.store.session(scope.workspaceId, scope.sessionId);
+    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.description,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
+    const hasMemory = !!this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_usage'").get();
+    const sources = [root.id, ...children.map((row) => String(row.sessionId))].map((id) => {
+      const stored = this.store.db.prepare("SELECT file,usage FROM agent_sessions WHERE sessionId=?").get(id);
+      let file: unknown = null;
+      if (stored?.file) {
+        try {
+          const stat = statSync(String(stored.file), { bigint: true });
+          file = [stored.file, ...[stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs, stat.mode].map(String)];
+        } catch (error) { file = [stored.file, (error as NodeJS.ErrnoException).code ?? "unreadable"]; }
+      }
+      const jobs = this.store.db.prepare("SELECT body FROM compressions WHERE sessionId=? ORDER BY rowid").all(id).map((row) => {
+        const job = JSON.parse(String(row.body)) as Compression;
+        return [job.id, job.state, job.phase === "snapshot", job.phase === "applying", job.trigger, job.startedAt, job.selection, job.usage, job.billing];
+      });
+      const memory = hasMemory ? this.store.db.prepare("SELECT id,kind,provider,model,usage FROM memory_usage WHERE sessionId=? ORDER BY id").all(id) : [];
+      return [id, file, stored?.file ? null : stored?.usage, jobs, memory];
+    });
+    return JSON.stringify([root.title, children, sources]);
+  }
+  changed(requested: Scope): boolean {
+    const scope = this.owner(requested), key = JSON.stringify(scope);
+    const version = this.sourceVersion(scope), previous = this.versions.get(key);
+    this.versions.set(key, version);
+    return previous !== version;
+  }
   owner(scope: Scope): Scope {
     this.store.session(scope.workspaceId, scope.sessionId);
     const task = this.store.db.prepare("SELECT parentSessionId FROM tasks WHERE workspaceId=? AND sessionId=?").get(scope.workspaceId, scope.sessionId);
@@ -18,6 +50,9 @@ export class Costs {
   }
   get(requested: Scope): CostReport {
     const scope = this.owner(requested), root = this.store.session(scope.workspaceId, scope.sessionId);
+    // A direct read must not consume an invalidation still owed to other views.
+    const key = JSON.stringify(scope);
+    if (this.versions.get(key) === undefined) this.versions.set(key, this.sourceVersion(scope));
     const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.description,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
     const sessions: CostReport["sessions"] = [{ id: root.id, title: root.title, taskId: null, status: null },
       ...children.map((row) => ({ id: String(row.sessionId), title: String(row.description), taskId: String(row.id), status: String(row.status) }))];
@@ -69,6 +104,12 @@ export class Costs {
         } else if (entry.type === "usage") {
           const tool = entry.kind.startsWith("tool:") ? entry.kind.slice(5) : null;
           add(tool ? "tool" : "other", entry.kind, tool || entry.kind, usageCost(entry.usage), entry.provider, entry.model);
+        }
+      }
+      if (this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_usage'").get()) {
+        for (const row of this.store.db.prepare("SELECT * FROM memory_usage WHERE sessionId=?").all(session.id)) {
+          const query = row.kind === "query";
+          add(query ? "tool" : "other", query ? "memory_query" : "memory_organize", query ? "记忆查询" : "后台记忆整理", usageCost(row.usage ? JSON.parse(String(row.usage)) : null), row.provider ? String(row.provider) : null, row.model ? String(row.model) : null);
         }
       }
       for (const [id, job] of jobs) {

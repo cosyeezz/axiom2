@@ -6,6 +6,19 @@ import { tmpdir } from "node:os";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { PersistedInputCursor } from "../src/server/agents/persisted-inputs.js";
 
+test("failed message acknowledgement leaves both message and input confirmations retryable", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-persisted-ack-"));
+  try {
+    const file = join(root, "session.jsonl"), cursor = new PersistedInputCursor();
+    writeFileSync(file, notice("result-input"));
+    assert.throws(() => cursor.read(file, () => { throw Error("IPC failed"); }), /IPC failed/);
+    let messages: string[] = [];
+    assert.deepEqual(cursor.read(file, (ids) => { messages = ids; }), { ids: ["result-input"], notifications: ["result-input"] });
+    assert.deepEqual(messages, ["input-result-input"]);
+    assert.deepEqual(cursor.read(file).ids, []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 const notice = (id: string, content = "notice") => JSON.stringify({ type: "custom_message", customType: "axiom-result", details: { axiomInput: id }, content }) + "\n";
 
 test("SDK write failure leaves a memory entry but cannot produce a persisted input acknowledgement", () => {

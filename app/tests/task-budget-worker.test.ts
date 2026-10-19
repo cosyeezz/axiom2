@@ -52,21 +52,27 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
   manager.appendCustomEntry("axiom-test", {});
   const worker = process.env.AXIOM_TEST_COMPILED
     ? new URL("../dist/server/agent-worker.js", import.meta.url) : new URL("../src/server/agent-worker.ts", import.meta.url);
-  const child = fork(worker, [], { cwd, env: { ...process.env, AXIOM_PI_DIR: pi },
+  const instanceId = randomUUID();
+  let lease = { instanceId, generation: 1, leaseId: randomUUID() };
+  const child = fork(worker, [], { cwd, env: { ...process.env, AXIOM_PI_DIR: pi,
+    AXIOM_EXECUTION_INSTANCE: instanceId, AXIOM_EXECUTION_GENERATION: "1", AXIOM_EXECUTION_PROFILE: "fixture" },
     execArgv: worker.pathname.endsWith(".ts") ? ["--import", import.meta.resolve("tsx")] : [], stdio: ["ignore", "ignore", "pipe", "ipc"] });
   let stderr = "";
   child.stderr?.on("data", (data) => { stderr += data; });
   child.on("message", (event) => events.push(event));
   const exited = once(child, "exit");
   const watchdog = setTimeout(() => child.kill(), 55_000);
-  const start = (runId: string) => child.send({ type: "start", input: {
+  const send = (value: object) => child.send({ ...value, lease });
+  const start = (runId: string) => {
+    lease = { ...lease, leaseId: randomUUID() };
+    return send({ type: "start", input: {
     root, cwd, modelsFile, file: manager.getSessionFile(), runId,
     selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: "Investigate evidence.",
     task: { id: "budget-task", role: "", inputIds: [], budget: { workMs: 600_000, elapsedMs: 0, deadlineAt: Date.now() + 600_000 } },
-  } });
+  } }); };
   const barrier = async (runId: string) => {
     const key = randomUUID();
-    child.send({ type: "recall", runId, key, ids: [] });
+    send({ type: "recall", runId, key, ids: [] });
     await wait(() => events.some((event) => event.type === "recalled" && event.key === key), `IPC barrier failed: ${stderr}`);
   };
   try {
@@ -77,7 +83,7 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     assert.match(JSON.stringify(bodies[0].messages), /最多提前 60 秒/);
     const deadlineAt = Date.now() + 10_000;
     const update = { type: "budget", runId: firstRun, workMs: 60_000, deadlineAt };
-    child.send(update); child.send(update);
+    send(update); send(update);
     await barrier(firstRun);
     assert.equal(bodies.length, 1, "warning must not interrupt an in-flight request");
     releases[0]();
@@ -89,7 +95,7 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
 
     const refreshedDeadline = Date.now() + 600_000;
     const inputId = randomUUID();
-    child.send({ type: "input", runId: firstRun, id: inputId, text: "Continue after budget extension.", mode: "steer",
+    send({ type: "input", runId: firstRun, id: inputId, text: "Continue after budget extension.", mode: "steer",
       budget: { workMs: 600_000, elapsedMs: 0, deadlineAt: refreshedDeadline, revision: 1 } });
     await wait(() => events.some((event) => event.type === "input-accepted" && event.id === inputId), "follow-up was not accepted");
     releases[1]();
@@ -105,7 +111,7 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     start(secondRun);
     await wait(() => bodies.length === 4, "reused worker did not start new run");
     assert.doesNotMatch(JSON.stringify(bodies[3].messages), /子任务预算即将用尽/, "historical warning must not carry into a new execution");
-    child.send(update); // Old-run IPC cannot arm a warning in the new execution.
+    send(update); // Old-run IPC cannot arm a warning in the new execution.
     await barrier(secondRun);
     releases[3]();
     await wait(() => events.some((event) => event.type === "idle" && event.runId === secondRun), "second run did not settle");
@@ -119,7 +125,7 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     await wait(() => events.some((event) => event.runId === thirdRun && event.type === "tool" && event.status === "running"), "long tool did not start");
     const summary = { type: "summarize", runId: thirdRun, workMs: 1000, elapsedMs: 0,
       deadlineAt: Date.now(), summaryDeadlineAt: Date.now() + 180000, revision: 1 };
-    child.send(summary);
+    send(summary);
     await wait(() => bodies.length === 6, `tool abort did not enter summary: ${stderr}`);
     assert.deepEqual(bodies[5].tools ?? [], []);
     assert.match(JSON.stringify(bodies[5].messages.at(-1)), /工作预算已到/);
@@ -131,14 +137,14 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     assert.equal(existsSync(forbidden), false, "summary cannot execute tools even when the model invents a call");
     assert.deepEqual(bodies[6].tools ?? [], []);
     const appendId = randomUUID();
-    child.send({ type: "input", runId: thirdRun, id: appendId, text: "NEW-WORK-AFTER-SUMMARY", mode: "steer",
+    send({ type: "input", runId: thirdRun, id: appendId, text: "NEW-WORK-AFTER-SUMMARY", mode: "steer",
       budget: { workMs: 600000, elapsedMs: 0, deadlineAt: Date.now() + 600000, summaryDeadlineAt: null, revision: 2 } });
     await wait(() => bodies.length === 8, `summary append did not resume work: ${stderr}`);
     assert.ok(bodies[7].tools.some((tool: any) => tool.function.name === "read"));
     assert.match(JSON.stringify(bodies[7].messages), /NEW-WORK-AFTER-SUMMARY/);
     assert.doesNotMatch(JSON.stringify(bodies[7].messages), /现在只基于已有上下文生成最终总结/);
     assert.ok(events.some((event) => event.type === "input-accepted" && event.id === appendId));
-    child.send(summary); // Same-run, older revision must not undo the append.
+    send(summary); // Same-run, older revision must not undo the append.
     await barrier(thirdRun);
     writeFileSync(join(cwd, "evidence.txt"), "verified restored tools");
     releases[7]({ name: "read", args: { path: join(cwd, "evidence.txt") } });

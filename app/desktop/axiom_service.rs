@@ -5,10 +5,10 @@ use std::{env, fs, io::Read, path::PathBuf, process::{Command, Stdio}, sync::Mut
 use tauri::{Manager, Webview};
 use crate::axiom_views;
 
-static CONTROL: Mutex<()> = Mutex::new(());
+pub(crate) static CONTROL: Mutex<()> = Mutex::new(());
 static UPDATES: Mutex<()> = Mutex::new(());
 
-fn data_root() -> Result<PathBuf, String> {
+pub(crate) fn data_root() -> Result<PathBuf, String> {
     if let Some(root) = env::var_os("AXIOM_DATA_DIR") {
         let root = PathBuf::from(root);
         return Ok(if root.is_absolute() { root } else { env::current_dir().map_err(|e| e.to_string())?.join(root) });
@@ -113,13 +113,15 @@ pub async fn axiom_update(window: Webview, action: String, version: Option<Strin
     axiom_views::authorize(&window)?;
     if !["status", "check", "service", "client", "recover", "installer"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
     if ["client", "installer"].contains(&action.as_str()) && !cfg!(windows) { return Err("本机平台尚未提供客户端安装包，请从发布页下载。".into()); }
+    if action != "status" && action != "check" { crate::axiom_setup::ensure_idle()?; }
     let install = action == "installer";
     let backend = ["service", "recover"].contains(&action.as_str());
+    let observed = axiom_views::revision();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let _control = if backend { Some(CONTROL.lock().map_err(|_| "服务控制器不可用")?) } else { None };
         run_updater(&action, version.as_deref())
     }).await.map_err(|e| e.to_string())??;
-    if backend { axiom_views::controls(window.app_handle(), true)?; }
+    if backend { axiom_views::discard_managed(window.app_handle(), observed)?; }
     if install {
         #[cfg(windows)] {
             let installer = result["installer"].as_str().ok_or("缺少已校验的安装包")?;
@@ -136,9 +138,12 @@ pub async fn axiom_update(window: Webview, action: String, version: Option<Strin
 pub async fn axiom_service(window: Webview, action: String) -> Result<Value, String> {
     axiom_views::authorize(&window)?;
     if !["start", "stop", "status", "open"].contains(&action.as_str()) { return Err("不支持的服务操作".into()); }
+    if action != "status" { crate::axiom_setup::ensure_idle()?; }
     let open = action == "open";
     let stopping = action == "stop";
-    let observed = axiom_views::revision();
+    let request = open.then(axiom_views::begin_open_request);
+    let observed = request.as_ref().map_or_else(axiom_views::revision, |request| request.revision);
+    let request_deadline = Instant::now() + Duration::from_secs(55);
     let mut result = tauri::async_runtime::spawn_blocking(move || {
         let _guard = CONTROL.lock().map_err(|_| "服务控制器不可用")?;
         if ["start", "stop"].contains(&action.as_str()) {
@@ -152,16 +157,17 @@ pub async fn axiom_service(window: Webview, action: String) -> Result<Value, Str
     if result["state"] != "running" {
         // A lost control channel is reported as stopping; it cannot prove the
         // business connection closed. Preserve drafts until stopping is confirmed.
-        if result["state"] == "stopped" && observed == axiom_views::revision() {
+        if result["state"] == "stopped" && axiom_views::is_managed() && observed == axiom_views::revision() {
             let app = window.app_handle();
             let closed = stopping || app.get_webview("axiom-workbench").is_none() ||
                 crate::axiom_connection::observe(app).await.as_deref() == Ok("disconnected");
-            if closed && observed == axiom_views::revision() { axiom_views::controls(app, true)?; }
+            if closed { axiom_views::discard_managed(app, observed)?; }
         }
         if open { return Err("服务尚未就绪，请先启动后台服务。".into()); }
     } else if open {
+        if observed != axiom_views::revision() { return Err("连接选择已改变，请重试。".into()); }
         let target = tauri::Url::parse(result["url"].as_str().ok_or("缺少工作台地址")?).map_err(|e| e.to_string())?;
-        axiom_views::open(window.app_handle(), target).await?;
+        axiom_views::open(window.app_handle(), target, observed, true, request_deadline).await?;
     }
     result["desktopView"] = Value::from(axiom_views::current());
     Ok(result)

@@ -105,7 +105,14 @@ export interface ChatMessage {
   resultId?: string;
   /** Metadata only. Paths use files.preview; native blocks use message.image + this message's id. */
   images?: (Omit<import("./protocol.js").ImageAttachment, "data"> & { path?: string })[];
-  calls?: { id: string; name: string; input: string }[];
+  calls?: { id: string; name: string; input: string; inputLength?: number; inputRevision?: string; summary?: { label: string; icon: import("./tool-summary.js").ToolIcon; target: string; detail: string } }[];
+  /** Compact display fields; full records remain in the native transcript. */
+  textLength?: number;
+  textRevision?: string;
+  thinkingLength?: number;
+  thinkingRevision?: string;
+  detailsRevision?: string;
+  preview?: string;
   toolName?: string;
   toolCallId?: string;
   durationMs?: number;
@@ -118,6 +125,13 @@ export interface ChatMessage {
   /** Display metadata from an actual model request, never the menu draft. */
   selectionChange?: SelectionChange;
   runId?: string;
+}
+export interface MessagePart {
+  text: string;
+  offset: number;
+  totalLength: number;
+  nextOffset: number | null;
+  revision: string;
 }
 export interface ThreadIndex {
   ids: string[];
@@ -133,6 +147,8 @@ export interface ThreadIndex {
   }[];
   error?: string;
   /** Reading watermark published with this rendered context, never inferred from the sidebar. */
+  /** Monotonic within the server stream; advances on authoritative history rebuilds. */
+  contextRevision?: number;
   resultVersion?: number;
   readVersion?: number;
   resultTasks?: { taskId: string; resultId: string }[];

@@ -115,10 +115,17 @@ try {
   await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(2, 4));
   items = mixed;
   const sizes = [360, 390, 430, 600, 820, 1024, 1366, 1440, 1920];
-  const composerShape = () => page!.locator(".composer").evaluate((form) => {
-    const box = form.getBoundingClientRect(), input = form.querySelector("textarea")!.getBoundingClientRect();
-    return { height: box.height, inputHeight: input.height, inputWidth: input.width, inputOffset: input.top - box.top };
-  });
+  const composerShape = async () => {
+    // MatchMedia updates the React workbench class after a viewport change.
+    // Measure once that layout and the textarea ResizeObserver have settled.
+    await page!.waitForFunction(() => document.querySelector(".app")?.classList.contains("mobile-workbench") ===
+      matchMedia("(max-width:640px), (pointer:coarse) and (max-height:500px)").matches);
+    await page!.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    return page!.locator(".composer").evaluate((form) => {
+      const box = form.getBoundingClientRect(), input = form.querySelector("textarea")!.getBoundingClientRect();
+      return { height: box.height, inputHeight: input.height, inputWidth: input.width, inputOffset: input.top - box.top };
+    });
+  };
   const shapes = new Map<number, Awaited<ReturnType<typeof composerShape>>>();
   for (const width of sizes) {
     await page.setViewportSize({ width, height: 900 });
@@ -311,12 +318,17 @@ try {
   assert.equal(JSON.stringify(sent.params).includes(png.toString("base64")), false);
   assert.equal(JSON.stringify(sent.params).includes("DO NOT INLINE THIS FILE"), false);
   await page.getByRole("status").filter({ hasText: "Attachment smoke test blocks model execution" }).waitFor();
-  assert.deepEqual(await draft(owner), submitted, "confirmed rejection automatically preserves all selected paths");
+  assert.equal((await draft(owner)).text, "", "confirmed rejection never returns the submission to the composer");
+  assert.deepEqual((await draft(owner)).attachments, []);
+  const pendingDraft = await page.evaluate(async (scope) => {
+    const modulePath = "/chat/optimistic.ts";
+    return (await import(/* @vite-ignore */ modulePath)).pendingMessages(scope).at(-1)?.draft;
+  }, owner);
+  assert.deepEqual(pendingDraft, submitted, "all paths stay with the original failed message");
   assert.equal(await page.getByRole("button", { name: "恢复到输入框", exact: true }).count(), 0);
   assert.equal(app.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
-  await page.getByRole("button", { name: "移除附件：clipboard.png", exact: true }).click();
-  assert.equal(await input.inputValue(), "粘贴继续输入结束");
-  assert.deepEqual(readFileSync(uploaded.path), png, "removal does not delete the stored clipboard copy");
+  assert.equal(await input.inputValue(), "");
+  assert.deepEqual(readFileSync(uploaded.path), png, "sending does not delete the stored clipboard copy");
   assert.deepEqual(readFileSync(mixed[1].path), png, "original paths remain untouched");
   assert.deepEqual(errors, []);
   passed.push("outgoing prompt carries exact path metadata, no contents/native images; no model run; removal retains files");

@@ -34,11 +34,11 @@ try {
     await dialog.dismiss();
   });
   const mutations: { op: string; workspaceId: string; sessionId: string; params: Record<string, unknown> }[] = [];
-  const workspaceSelections: string[] = [];
+  const workspaceSelections: { workspaceId: string; params: { view: { workspaceId: string; sessionId: string } } }[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
     const message = JSON.parse(payload.toString());
-    if (message.op === "workspace.select") workspaceSelections.push(message.workspaceId);
+    if (message.op === "workspace.select") workspaceSelections.push(message);
     if (["session.rename", "session.pin", "session.delete"].includes(message.op)) mutations.push(message);
   }));
   await page.addInitScript((view) => {
@@ -59,15 +59,25 @@ try {
     assert.equal(app.store.session(a.workspace.id, a.session.id).title, title);
   };
   const switchWorkspace = async (name: string) => {
+    const target = name === "Local B" ? b : a;
+    const selectionsBefore = workspaceSelections.length;
     await page.locator("#workspace-picker > summary").click();
     await page.getByRole("button", { name, exact: true }).click();
+    // Selecting the current space still runs deferred navigation. Its old title
+    // and saved view cannot prove that this selection has completed.
+    await page.waitForFunction(() => !document.querySelector("#workspace-picker")?.hasAttribute("open"));
     await page.waitForFunction((expected) =>
       document.querySelector("#workspace-picker summary strong")?.textContent === expected, name);
     await page.waitForFunction((workspaceId) => {
       const view = JSON.parse(sessionStorage.getItem("view") || "null");
       return view?.workspaceId === workspaceId && Boolean(view.sessionId) &&
         document.querySelector("#chat-title")?.textContent !== "新对话";
-    }, name === "Local B" ? b.workspace.id : a.workspace.id);
+    }, target.workspace.id);
+    const observedSelection = () => workspaceSelections.slice(selectionsBefore).some(({ params }) =>
+      params.view?.workspaceId === target.workspace.id && params.view.sessionId === target.session.id);
+    const deadline = Date.now() + 5000;
+    while (!observedSelection() && Date.now() < deadline) await page.waitForTimeout(20);
+    assert.equal(observedSelection(), true, "workspace selection restores its session before the next action");
   };
   const selectedWorkspace = () => page.locator("#workspace-picker summary strong").textContent();
   const beginF2 = async () => {
@@ -166,7 +176,7 @@ try {
   for (const [index, selector] of [".session-pin", ".session-delete"].entries()) {
     await row.locator(selector).hover();
     const highlight = await geometry();
-    if (index === 1) assert.equal(highlight.buttons[index].iconColor, "rgb(153, 27, 27)", "delete icon turns deep red on hover");
+    if (index === 1) assert.equal(highlight.buttons[index].iconColor, "rgb(217, 149, 149)", "delete icon uses muted rose on hover");
     else assert.ok(await luminance(highlight.buttons[index].color) > await luminance(hovered.buttons[index].color), `${selector} brightens on hover`);
     assert.ok(Math.abs(highlight.buttons[index].centerY - (highlight.row.y + highlight.row.height / 2)) < 1, "actions are vertically centered in the row");
     assert.equal(highlight.buttons[1 - index].iconColor, hovered.buttons[1 - index].iconColor, "only hovered icon changes color");
@@ -234,7 +244,8 @@ try {
   await input.fill("Renamed A");
   await input.press("Enter");
   await waitTitle("Renamed A");
-  await pins.locator(".session-state").waitFor({ state: "hidden" });
+  assert.equal(await page.locator("#chat-title").textContent(), "Local B", "double-click rename keeps the viewed session");
+  assert.equal(await pins.locator(".session-state").getAttribute("aria-label"), "未读", "renaming an unread session does not mark its content read");
   assert.equal(mutations.length, 4);
   // Enter restores keyboard focus on the next animation frame after saving.
   // Wait for that handoff before moving focus away so it cannot steal focus back.
@@ -250,6 +261,13 @@ try {
   // Foreign pins open their real session without navigating the sidebar workspace.
   await switchWorkspace("Local B");
   await prompt.fill("B draft stays");
+  const waitPreference = async (workspaceId: string, sessionId: string) => {
+    const deadline = Date.now() + 5000;
+    while (app.store.lastSession()?.sessionId !== sessionId && Date.now() < deadline) await page.waitForTimeout(20);
+    assert.equal(app.store.workspacePreferences().lastWorkspaceId, workspaceId);
+    assert.equal(app.store.lastSession()?.sessionId, sessionId);
+  };
+  await waitPreference(b.workspace.id, b.session.id);
   const selectionsBefore = workspaceSelections.length;
   await search.fill("Renamed");
   await item.click();
@@ -257,7 +275,10 @@ try {
   assert.equal(await selectedWorkspace(), "Local B");
   assert.equal(await search.inputValue(), "Renamed", "opening a pin preserves sidebar search");
   assert.equal(await page.locator("#title-path").textContent(), a.workspace.path, "chat header uses the session owner");
-  assert.equal(workspaceSelections.length, selectionsBefore, "opening a foreign pin does not update workspace preference");
+  await waitPreference(b.workspace.id, a.session.id);
+  assert.equal(workspaceSelections.length, selectionsBefore + 1, "opening a foreign pin saves the viewed session separately");
+  assert.equal(workspaceSelections.at(-1)!.workspaceId, b.workspace.id, "sidebar preference remains B");
+  assert.deepEqual(workspaceSelections.at(-1)!.params.view, { workspaceId: a.workspace.id, sessionId: a.session.id });
   await search.fill("");
   const local = page.getByRole("region", { name: "当前空间对话", exact: true });
   assert.deepEqual(await local.locator("strong").allTextContents(), ["Local B"]);
@@ -311,7 +332,7 @@ try {
     assert.deepEqual(browserDialogs, [], "deletion must not use browser dialogs");
     await confirmation.waitFor();
     assert.match(await confirmation.innerText(), /Renamed A/);
-    assert.match(await confirmation.innerText(), /停止所属任务，不删除项目文件/);
+    assert.match(await confirmation.innerText(), /停止所属任务并从列表移除；保留对话、记忆与附件，不删除项目文件。/);
     const cancel = confirmation.getByRole("button", { name: "取消", exact: true });
     const confirm = confirmation.getByRole("button", { name: "删除会话", exact: true });
     assert.equal(await cancel.evaluate((el) => el === document.activeElement), true, "cancel receives default focus");
@@ -328,6 +349,9 @@ try {
       assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 845, "mobile confirmation fits viewport");
       assert.equal(await confirmation.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), true, "mobile confirmation has no horizontal overflow");
       await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForFunction(() =>
+        !document.getElementById("history-sidebar")?.hasAttribute("inert") &&
+        !document.getElementById("app")?.classList.contains("mobile-workbench"));
       await page.keyboard.press("Escape");
     } else if (action === "cancel") await cancel.click();
     else await confirm.click();

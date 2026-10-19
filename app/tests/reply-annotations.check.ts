@@ -188,11 +188,19 @@ try {
   }
   await page.getByRole("textbox", { name: "批注意见", exact: true }).press("Control+Enter");
   await page.getByText("待发送批注 2 条", { exact: true }).waitFor();
+  const supplement = page.getByRole("textbox", { name: "批注补充说明", exact: true });
+  await supplement.fill("请先解释整体修改思路，再逐条处理。");
+  await supplement.press("Enter");
+  await supplement.press("End");
+  await supplement.pressSequentially("Keep compatibility.");
+  const supplementText = await supplement.inputValue();
+  assert.equal(commands.length, 0, "supplement Enter adds a newline without sending");
   assert.ok(await page.evaluate(() => [...CSS.highlights.get("reply-annotation")!].some((range) => range.toString() === "30")));
   await toggle.click();
   assert.equal(await page.locator(".annotation-tray,.annotation-block").count(), 0);
   assert.equal(await toggle.locator(".annotation-count").innerText(), "2");
   await toggle.click();
+  assert.equal(await supplement.inputValue(), supplementText);
   await page.getByRole("button", { name: "查看全部", exact: true }).click();
   await page.getByRole("button", { name: "修改批注 2", exact: true }).click();
   await page.getByRole("textbox", { name: "批注意见", exact: true }).fill("缩短到 10 秒，解释重试策略。");
@@ -203,9 +211,15 @@ try {
   await toggle.click(); await toggle.click();
   assert.equal(await page.getByRole("textbox", { name: "批注意见", exact: true }).inputValue(), "尚未保存的批注");
   await page.locator(`.history-row[data-session-id="${other.id}"] .history-item`).click();
+  await page.locator(`.history-row[data-session-id="${other.id}"] .history-item[aria-current="true"]`).waitFor();
   assert.equal(await toggle.getAttribute("aria-pressed"), "false");
   assert.equal(await page.locator("#prompt").inputValue(), "");
+  await toggle.click();
+  assert.equal(await supplement.inputValue(), "");
+  await toggle.click();
   await page.locator(`.history-row[data-session-id="${s.id}"] .history-item`).click();
+  await page.locator(`.history-row[data-session-id="${s.id}"] .history-item[aria-current="true"]`).waitFor();
+  assert.equal(await supplement.inputValue(), supplementText);
   assert.equal(await page.getByRole("textbox", { name: "批注意见", exact: true }).inputValue(), "尚未保存的批注");
   await page.getByRole("button", { name: "取消", exact: true }).click();
   await first.locator(".annotation-source").click();
@@ -227,6 +241,11 @@ try {
     if ([390, 1440].includes(width)) await page.screenshot({ path: join(artifacts, `annotations-${width}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  await supplement.fill("补".repeat(12000));
+  await page.getByRole("alert").filter({ hasText: "原文、批注与补充说明合计超过" }).waitFor();
+  assert.ok(await page.getByRole("button", { name: "发送批注", exact: true }).isDisabled());
+  assert.equal(commands.length, 0);
+  await supplement.fill(supplementText);
   await page.getByRole("button", { name: "发送批注", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".annotation-count"));
   assert.equal(commands.length, 1);
@@ -234,6 +253,8 @@ try {
   assert.ok(String(commands[0].params?.text).includes("批注 2"));
   assert.ok(String(commands[0].params?.text).includes("解释重试策略"));
   assert.ok(String(commands[0].params?.text).includes('回复 "answer"'));
+  assert.ok(String(commands[0].params?.text).endsWith(`补充说明：\n${supplementText.trim()}`));
+  assert.equal(await supplement.inputValue(), "");
   assert.equal(commands[0].params?.mode, undefined);
   assert.equal(await page.locator("#prompt").inputValue(), "保留输入框里的草稿");
   active = true; publishInfo();
@@ -241,26 +262,40 @@ try {
   await first.locator(".annotation-source").click();
   await page.getByRole("textbox", { name: "批注意见", exact: true }).fill("运行时补充意见");
   await page.getByRole("button", { name: "保存批注", exact: true }).click();
+  await supplement.fill("运行期间也附上整体要求");
   await page.getByRole("button", { name: "发送批注", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".annotation-count"));
   assert.equal(commands.length, 2); assert.equal(commands[1].params?.mode, "steer");
+  assert.ok(String(commands[1].params?.text).includes("补充说明：\n运行期间也附上整体要求"));
   active = false; fail = true; publishInfo();
   await page.getByRole("button", { name: "发送消息", exact: true }).waitFor();
   await first.locator(".annotation-source").click();
   await page.getByRole("textbox", { name: "批注意见", exact: true }).fill("发送失败的意见不能丢失");
   await page.getByRole("button", { name: "保存批注", exact: true }).click();
+  await supplement.fill("发送失败时补充说明也不能丢失");
   await page.getByRole("button", { name: "发送批注", exact: true }).click();
-  await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value.includes("发送失败的意见不能丢失"));
-  const recovered = await page.locator("#prompt").inputValue();
-  assert.ok(recovered.includes("保留输入框里的草稿")); assert.ok(recovered.includes("发送失败的意见不能丢失"));
+  await page.getByRole("status").filter({ hasText: "批注发送测试失败" }).waitFor();
+  assert.equal(await page.locator("#prompt").inputValue(), "保留输入框里的草稿");
+  assert.equal(await page.locator(".user-text").filter({ hasText: "发送失败的意见不能丢失" }).count(), 1);
+  assert.equal(await page.locator(".user-text").filter({ hasText: "发送失败时补充说明也不能丢失" }).count(), 1);
   assert.equal(commands.length, 3, "failures must not auto-resend");
-  // Two individually valid drafts can exceed the limit after failure recovery.
+  // Failed annotations remain separate even when merging them would exceed the limit.
   const longDraft = "原稿".repeat(5500), longComment = "意见".repeat(950);
   await page.locator("#prompt").fill(longDraft);
   await clickText(first.locator(".annotation-source"), "接口采用逐条提交");
   await page.getByRole("textbox", { name: "批注意见", exact: true }).fill(longComment);
   await page.getByRole("button", { name: "保存批注", exact: true }).click();
   await page.getByRole("button", { name: "发送批注", exact: true }).click();
+  await page.locator(".user-text").filter({ hasText: longComment }).waitFor();
+  assert.equal(await page.locator("#prompt").inputValue(), longDraft);
+  assert.ok(await page.getByRole("button", { name: "发送消息", exact: true }).isEnabled());
+  // Restored drafts can exceed the native typing limit; exercise the send guard
+  // without letting textarea.maxLength truncate this recovery fixture.
+  await page.locator("#prompt").evaluate((node, value) => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(node, value);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  }, longDraft + longComment);
+  assert.equal(await page.locator("#prompt").inputValue(), longDraft + longComment);
   await page.getByRole("status").filter({ hasText: "超过 12,000 字上限" }).waitFor();
   const complete = await page.locator("#prompt").inputValue();
   assert.ok(complete.includes(longDraft) && complete.includes(longComment));

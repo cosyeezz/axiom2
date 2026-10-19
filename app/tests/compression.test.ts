@@ -187,17 +187,17 @@ test(
         await assert.rejects(call("compression.start", { selection: summarySelection }), { code: "REVISION_CONFLICT" });
         assert.equal(app.agents.compressions.info(scope), null, "changed configuration cannot create a mismatched snapshot");
       } finally { changedRevision.mock.restore(); }
-      let accepted: unknown;
-      t.mock.timers.enable({ apis: ["setTimeout"] });
-      try {
-        accepted = await call("compression.start", { selection: summarySelection }, scope, requestId);
-        t.mock.timers.tick(120001);
-        assert.equal(app.agents.compressions.info(scope)!.state, "running", "passing two minutes must not cancel compression");
-      } finally { t.mock.timers.reset(); }
+      const accepted = await call("compression.start", { selection: summarySelection }, scope, requestId);
       await wait(
         () => summaries.length === 1,
         "native compact did not request a summary",
       );
+      // Advance the execution clock only after bounded worker preparation finished.
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      try {
+        t.mock.timers.tick(120001);
+        assert.equal(app.agents.compressions.info(scope)!.state, "running", "passing two minutes must not cancel compression");
+      } finally { t.mock.timers.reset(); }
       assert.deepEqual(
         await call("compression.start", { selection: summarySelection }, scope, requestId),
         accepted,
@@ -400,18 +400,19 @@ test(
       app = await start({ root, port: 0 });
       assert.equal(app.agents.compressions.info(scope)!.state, "interrupted");
       assert.equal(summaries.length, 4);
+      const compressionHistory = app.store.db.prepare("SELECT id,body FROM compressions WHERE sessionId=? ORDER BY id").all(scope.sessionId);
       await app.tasks.remove({
         op: "session.delete",
         requestId: randomUUID(),
         ...scope,
         params: { confirmed: true },
       });
-      assert.equal(
-        app.store.db
-          .prepare("SELECT COUNT(*) AS n FROM compressions WHERE sessionId=?")
-          .get(scope.sessionId)!.n,
-        0,
-      );
+      assert.deepEqual(app.store.db.prepare("SELECT id,body FROM compressions WHERE sessionId=? ORDER BY id").all(scope.sessionId), compressionHistory,
+        "logical deletion preserves compression history");
+      assert.throws(() => app.store.session(scope.workspaceId, scope.sessionId), { code: "SCOPE_MISMATCH" });
+      await assert.rejects(app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope,
+        params: { text: "must not start a deleted session" } }), { code: "SCOPE_MISMATCH" });
+      assert.equal(summaries.length, 4, "deleted sessions cannot restart model work");
     } finally {
       await app.close();
       fixture.closeAllConnections();

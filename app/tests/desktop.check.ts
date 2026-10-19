@@ -83,6 +83,7 @@ try {
   page.on("console", (message) => { if (message.type() === "error") console.error("WebView console:", message.text()); });
   await mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/desktop-service-initial.png" });
+  await page.locator('.startup-preparation > summary').click();
   try { await page.getByRole("heading", { name: "服务已停止", exact: true }).waitFor({ timeout: 15_000 }); }
   catch (error) { console.error("Controller URL:", page.url(), "Content:", await page.locator("body").innerText()); throw error; }
   await page.screenshot({ path: "test-results/desktop-service-stopped.png" });
@@ -342,6 +343,7 @@ try {
   // Install the clock before the controller registers its polling interval.
   await page.clock.install();
   await page.reload();
+  await page.locator('.startup-preparation > summary').click();
   await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
   await page.getByRole("button", { name: "打开工作台" }).click();
   for (let i = 0; i < 50 && context.pages().length < 2; i++) await delay(100);
@@ -369,6 +371,11 @@ try {
   assert.equal((await control("status")).state, "running", "Forced desktop exit must also preserve detached service");
   console.log("PASS: real Windows Pake/WebView2 single native window, child-view permission isolation, retained draft/selection/focus/scroll, native resize, offline control, startup cancellation, close/reopen, service port change, and service survival after normal/forced desktop exit.");
   completed = true;
+} catch (error) {
+  const failedPage = browser?.contexts()[0]?.pages().find(candidate => candidate.url().includes("tauri.localhost"));
+  await failedPage?.screenshot({ path: "test-results/desktop-failure.png", fullPage: true }).catch(() => {});
+  if (failedPage) console.error("Controller at failure:", await failedPage.locator("body").innerText().catch(() => "unavailable"));
+  throw error;
 } finally {
   try {
     if (native.exitCode === null && native.signalCode === null) {

@@ -2,17 +2,16 @@ import { createContext, memo, useContext } from "react";
 import { type ChatMessage } from "../../shared/agent.js";
 import { useThreadMessage } from "../chat/OriginalConversation.js";
 import { Icon } from "../components.js";
+import { BatchProgressIcon } from "../DataIcons.js";
 import { BubbleLoadingIcon } from "../StatusIcons.js";
 import { toolPreview, type ToolCall } from "../chat/tool-summary.js";
 import { callObject, taskCallLabel, taskCallStatus } from "./task-call.js";
 import "../styles/task-calls.css";
-import { useScope } from "../transport.js";
+import { useAnchorTasks } from "./task-selectors.js";
 import type { Scope } from "../../shared/protocol.js";
 import {
-  emptyTasks,
   taskActive,
   taskLabels,
-  tasksScope,
   type Task,
 } from "../../shared/tasks.js";
 export const OpenTask = createContext<(id: string) => void>(() => {});
@@ -22,14 +21,12 @@ export function TaskState({ task }: { task: Task }) {
       ? "completed"
       : ["failed", "interrupted"].includes(task.status)
         ? "failed"
-        : taskActive(task.status)
+        : task.status === "cancelled" ? "stopped" : task.status === "queued" ? "waiting" : taskActive(task.status)
           ? "running"
           : "waiting";
   return (
     <span className="agent-state" data-state={state}>
-      {state === "running" ? <BubbleLoadingIcon /> : <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d={state === "completed" ? "m5 12 4 4L19 6" : "M12 5v9m0 4v1"} />
-      </svg>}
+      {state === "running" ? <BubbleLoadingIcon /> : <Icon name={state === "completed" ? "circle-check" : state === "failed" ? "triangle-alert" : state === "stopped" ? "square" : "hourglass"} />}
       <span className="agent-state-label">{task.summaryDeadlineAt && ["starting", "running"].includes(task.status) ? "正在总结" : taskLabels[task.status]}</span>
     </span>
   );
@@ -43,22 +40,25 @@ export const TaskCards = memo(function TaskCards({
   call: ToolCall;
   message: ChatMessage;
 }) {
-  const list = useScope(tasksScope(scope), emptyTasks),
-    open = useContext(OpenTask);
+  const open = useContext(OpenTask);
   const result = useThreadMessage(scope, `tool-${call.id}`);
-  const tasks = list.tasks.filter((t) => t.anchor === call.id);
+  const tasks = useAnchorTasks(scope, call.id);
   const input = callObject(call.input);
   const definitions = Array.isArray(input?.tasks) ? input.tasks.map((item: unknown) =>
     item && typeof item === "object" && "task" in item && typeof item.task === "string" ? item.task : "准备子任务") : [];
   const status = taskCallStatus(result, message);
   const label = taskCallLabel("delegate", status, callObject(result?.text ?? ""));
+  const completed = tasks.filter(t => t.status === "completed").length;
+  const failed = tasks.filter(t => ["failed", "interrupted"].includes(t.status)).length;
+  const cancelled = tasks.filter(t => t.status === "cancelled").length;
+  const batchLabel = `${completed} / ${tasks.length} 已完成${failed ? ` · ${failed} 失败或中断` : ""}${cancelled ? ` · ${cancelled} 已停止` : ""} · 本次委派成员的最新执行状态`;
   const showFeedback = status === "failed" || status === "cancelled" || !tasks.length;
   return (
     <section className="subagents delegation-card" data-tool="delegate" data-status={showFeedback ? status : "completed"} aria-label="子代理协作">
       <header className="subagents-head">
         <Icon name="tool-delegate" />
         <strong>子代理协作</strong>
-        {tasks.length > 0 ? <span>{tasks.filter((t) => t.status === "completed").length} / {tasks.length} 已完成</span> : <span className="task-operation-status" role="status">{status === "running" && <span className="execution-pulse" aria-hidden="true" />}{label}</span>}
+        {tasks.length > 0 ? <span className="task-batch-progress" data-tooltip={batchLabel}><BatchProgressIcon states={tasks.map(t => t.status)} label={batchLabel} /><span>{completed} / {tasks.length} 已完成{failed > 0 && ` · ${failed} 失败`}{cancelled > 0 && ` · ${cancelled} 停止`}</span></span> : <span className="task-operation-status" role="status">{status === "running" && <span className="execution-pulse" aria-hidden="true" />}{label}</span>}
       </header>
       {showFeedback && <div className="delegation-feedback">
         {status === "failed" ? <p className="task-call-error" role="alert">{tasks.length > 0 && "委派失败 · "}{toolPreview(result)}</p> : tasks.length > 0 ? <p className="task-call-meta">{label}</p> : null}
@@ -85,9 +85,7 @@ export const TaskCards = memo(function TaskCards({
               </small>
             </span>
             <TaskState task={t} />
-            <svg className="agent-open" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M14 4h6v6m0-6-9 9M10 5H5v14h14v-5" />
-            </svg>
+            <Icon className="agent-open" name="external-link" />
           </button>
           {t.error && <p className="task-call-error" role="alert">{t.error}</p>}
         </div>

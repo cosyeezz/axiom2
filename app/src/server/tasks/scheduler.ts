@@ -1,3 +1,4 @@
+import { rewriteTarget } from "../session-rewrite.js";
 import { randomUUID } from "node:crypto";
 import type { Agents } from "../agents.js";
 import { AppError, text, attachmentsInput, attachmentPrompt } from "../../shared/protocol.js";
@@ -24,6 +25,9 @@ export class TaskScheduler {
   private cancelling = new Map<string, Promise<void>>();
   private launching = new Set<string>();
   private nativePending = new Map<string, Set<string>>();
+  private nativeQueues = new Map<string, string>();
+  private pendingViews = new Set<string>();
+  private viewFlush?: NodeJS.Immediate;
   private handed = new Set<string>();
   private recalling = new Set<string>();
   private failedInputs = new Set<string>();
@@ -47,10 +51,15 @@ export class TaskScheduler {
     for (const input of ["queued", "starting", "inflight"].flatMap((state) => this.records.inputs(row, state))) {
       this.records.drafts.delete(input.id);
       this.handed.delete(input.id);
+      const state = input.state === "queued" || this.failedInputs.has(input.id) ? "failed" : "unknown";
       this.failedInputs.delete(input.id);
-      this.records.receipt(input.id, "failed", "执行已结束，输入未确认送达；未自动重发。", run.id);
+      this.records.receipt(input.id, state, state === "unknown"
+        ? "执行已结束，输入送达未确认；未自动重发。" : "执行已结束，输入未发送；未自动重发。", run.id, row.id);
     }
+    this.store.db.prepare(`UPDATE task_input_receipts SET state='unknown',error='执行已结束，输入送达未确认；未自动重发。',updatedAt=?
+      WHERE taskId=? AND runId=? AND state IN ('accepted','unknown')`).run(Date.now(), row.id, run.id);
     this.nativePending.delete(row.id);
+    this.nativeQueues.delete(row.id);
     this.delivery.save(row, run);
     const waiting = this.records.inputs(row, "waiting");
     if (waiting.length && !recovery && !this.closing) {
@@ -81,25 +90,35 @@ export class TaskScheduler {
       this.changed(row);
     }
     if (event.type === "queue") {
+      const key = JSON.stringify([run.id, event.queue, event.native]);
+      if (this.nativeQueues.get(row.id) === key) return;
+      this.nativeQueues.set(row.id, key);
       this.nativePending.set(row.id, new Set([...event.queue, ...event.native].map((input: { id: string }) => input.id)));
-      this.changed(row);
+      this.changed(row, "queue");
     }
     if (event.type === "input-accepted") {
-      this.records.receipt(event.id, "accepted", null, run.id);
-      this.changed(row);
+      if (!this.records.receipt(event.id, "accepted", null, run.id, row.id)) return;
+      this.failedInputs.delete(event.id);
+      this.changed(row, "input");
     }
     if (event.type === "input-error") {
-      this.handed.delete(event.id);
-      this.records.receipt(event.id, "failed", event.error || "追加输入未送达；未自动重发。", run.id);
-      if (this.records.drafts.has(event.id)) this.failedInputs.add(event.id);
-      else this.store.db.prepare("DELETE FROM task_inputs WHERE id=? AND taskId=? AND runId=? AND state='inflight'").run(event.id, row.id, run.id);
-      this.store.db.prepare("UPDATE tasks SET error=? WHERE id=?").run(event.error || "追加输入未送达；未自动重发。", row.id);
-      this.changed(row);
+      const receipt = this.store.db.prepare("SELECT state FROM task_input_receipts WHERE inputId=? AND taskId=? AND runId=?")
+        .get(event.id, row.id, run.id);
+      // An uncertain transport error is weaker evidence than an actual acceptance.
+      if (!receipt || event.uncertain && receipt.state === "accepted" ||
+          !this.records.receipt(event.id, event.uncertain ? "unknown" : "failed",
+            event.error || (event.uncertain ? "追加输入送达未确认；未自动重发。" : "追加输入未送达；未自动重发。"), run.id, row.id)) return;
+      if (!event.uncertain) {
+        this.handed.delete(event.id);
+        if (this.records.drafts.has(event.id)) this.failedInputs.add(event.id);
+        else this.store.db.prepare("DELETE FROM task_inputs WHERE id=? AND taskId=? AND runId=? AND state='inflight'").run(event.id, row.id, run.id);
+      }
+      this.changed(row, "input");
     }
     if (event.type === "delivered") {
       this.records.deliver(row, event.ids, "delivered", run.id);
       for (const id of event.ids) { this.handed.delete(id); this.failedInputs.delete(id); this.nativePending.get(row.id)?.delete(id); }
-      this.changed(row);
+      this.changed(row, "input");
     }
   }
   async stop(rows: Row[], reason: string, source: StopSource = "parent") {
@@ -119,8 +138,21 @@ export class TaskScheduler {
     for (const row of rows) this.records.freeze(parent(row));
     await Promise.all([this.stop(rows, "服务正在退出", "shutdown"), this.agents.close()]);
     await Promise.allSettled(this.jobs);
+    this.flushViews();
   }
-  private changed(row: Row) {
+  private flushViews() {
+    if (this.viewFlush) clearImmediate(this.viewFlush);
+    this.viewFlush = undefined;
+    const scopes = [...this.pendingViews];
+    this.pendingViews.clear();
+    for (const scope of scopes) {
+      try { this.agents.publish(scope); }
+      catch (error) {
+        if (!(error instanceof AppError) || error.code !== "SCOPE_MISMATCH") throw error;
+      }
+    }
+  }
+  private changed(row: Row, kind: "queue" | "input" | "lifecycle" = "lifecycle") {
     const order = new Map([...this.records.drafts.keys()].map((id, index) => [id, index]));
     const queue = ["queued", "waiting", "starting", "inflight"].flatMap((state) => this.records.inputs(row, state))
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
@@ -128,18 +160,17 @@ export class TaskScheduler {
         (input.state === "queued" || (input.state === "starting" && !this.nativePending.has(row.id)) || this.failedInputs.has(input.id) || !this.handed.has(input.id) || this.nativePending.get(row.id)?.has(input.id)))
       .map((input) => ({ id: input.id, text: this.records.drafts.get(input.id)!.text,
         mode: input.mode as "steer" | "followUp" }));
-    this.agents.setQueue?.(target(row), queue);
-    this.agents.publish(
-      tasksScope(parent(row)),
-      this.records.list(parent(row)),
-    );
-    this.agents.publish(
-      `agent:${row.workspaceId}:${row.sessionId}`,
-      this.agents.info(target(row)),
-    );
-    this.agents.publish(`agent:${row.workspaceId}:${row.parentSessionId}`, this.agents.info(parent(row)));
-    this.agents.publish(`thread:${row.workspaceId}:${row.parentSessionId}`, this.agents.thread(parent(row)));
-    this.agents.publish(`sessions:${row.workspaceId}`);
+    this.agents.setQueue?.(target(row), queue, false);
+    this.pendingViews.add(`agent:${row.workspaceId}:${row.sessionId}`);
+    if (kind !== "queue") this.pendingViews.add(tasksScope(parent(row)));
+    if (kind === "lifecycle") {
+      this.pendingViews.add(`agent:${row.workspaceId}:${row.parentSessionId}`);
+      this.pendingViews.add(`thread:${row.workspaceId}:${row.parentSessionId}`);
+      this.pendingViews.add(`sessions:${row.workspaceId}`);
+    }
+    // Publish invalidations, not captured snapshots. The production publisher
+    // retains attention/cost side effects and only builds observed payloads.
+    this.viewFlush ??= setImmediate(() => this.flushViews());
   }
   private track<T>(job: Promise<T>) {
     this.jobs.add(job);
@@ -181,12 +212,15 @@ export class TaskScheduler {
         "TASK_LIMIT",
         "此子会话待处理输入达到 32 条，请稍后发送",
       );
+    const rewrite = p.rewrite === undefined ? undefined : rewriteTarget(p.rewrite);
+    if (rewrite && this.agents.editable(target(row), rewrite.messageId).revision !== rewrite.revision)
+      throw new AppError("REWRITE_CONFLICT", "编辑期间会话已变化；请重新打开该消息后修改。");
     if (p.expectedRunId !== undefined) this.agents.assertContinuation(target(row), p.expectedRunId);
     let id: string;
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
       if (!taskActive(row.status)) this.records.enqueue(row);
-      id = this.records.queue(row.id, body, mode, images, requestId);
+      id = this.records.queue(row.id, rewrite ? JSON.stringify({ text: p.text, attachments, rewrite }) : body, rewrite ? "rewrite" : mode, images, requestId);
       if (row.status === "stopping") this.store.db.prepare("UPDATE task_inputs SET state='waiting',runId=? WHERE id=?").run(row.runId, id);
       if (["starting", "running"].includes(row.status)) {
         const now = Date.now(), budgets = this.records.preferences();
@@ -268,11 +302,9 @@ export class TaskScheduler {
         })
       ) {
         this.handed.delete(input.id);
-        this.records.receipt(input.id, "failed", "追加输入未送达；未自动重发。", row.runId);
+        this.records.receipt(input.id, "failed", "追加输入未送达；未自动重发。", row.runId, row.id);
         if (this.records.drafts.has(input.id)) this.failedInputs.add(input.id);
         else this.store.db.prepare("DELETE FROM task_inputs WHERE id=?").run(input.id);
-        this.store.db.prepare("UPDATE tasks SET error=? WHERE id=?")
-          .run("追加输入未送达；未自动重发。", row.id);
       }
     }
   }
@@ -288,26 +320,17 @@ export class TaskScheduler {
     if (this.pumping || this.closing) return;
     this.pumping = true;
     try {
+      const concurrency = this.records.preferences().concurrency;
+      let active = Number(this.store.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE status IN ('starting','running','stopping')").get()!.n) +
+        this.records.rows("WHERE status='queued'").filter((t) => this.launching.has(t.id)).length;
       for (const row of this.records.rows(
         "JOIN task_queue_order q ON q.taskId=tasks.id WHERE status='queued' ORDER BY q.seq",
       )) {
-        const active =
-          this.records
-            .rows()
-            .filter((t) =>
-              [
-                "starting",
-                "running",
-                "stopping",
-              ].includes(t.status),
-            ).length +
-          this.records
-            .rows("WHERE status='queued'")
-            .filter((t) => this.launching.has(t.id)).length;
-        if (active >= this.records.preferences().concurrency || this.closing)
+        if (active >= concurrency || this.closing)
           break;
         if (this.launching.has(row.id) || this.recalling.has(row.id) || this.cancelling.has(row.id) || this.agents.active(target(row))) continue;
         this.launching.add(row.id);
+        active++;
         this.track(
           this.start(row).finally(() => {
             this.launching.delete(row.id);
@@ -323,9 +346,10 @@ export class TaskScheduler {
     const queued = this.records.inputs(row, "queued");
     // Editable drafts retain independent identity; legacy delegation/tool inputs
     // keep their initial batching through the first image-bearing input.
-    const editableAt = queued.findIndex((input) => this.records.drafts.has(input.id));
+    const editableAt = queued.findIndex((input) => this.records.drafts.has(input.id) || input.mode === "resume" || input.mode === "rewrite");
     const resuming = queued[0]?.mode === "resume";
-    const batch = resuming || editableAt === 0 ? queued.slice(0, 1) : editableAt < 0 ? queued : queued.slice(0, editableAt);
+    const rewriting = queued[0]?.mode === "rewrite";
+    const batch = resuming || rewriting || editableAt === 0 ? queued.slice(0, 1) : editableAt < 0 ? queued : queued.slice(0, editableAt);
     const firstImage = batch.findIndex((input) => this.records.images(input.id).length > 0);
     const inputs = firstImage < 0 ? batch : batch.slice(0, firstImage + 1);
     const images = firstImage < 0 ? [] : this.records.images(inputs.at(-1)!.id);
@@ -345,10 +369,10 @@ export class TaskScheduler {
           requestId: randomUUID(),
           op: resuming ? "agent.resume" : "prompt",
           ...target(row),
-          params: resuming ? { expectedRunId: inputs[0].body } : { text: "处理明确委派／追加的子任务", images },
+          params: resuming ? { expectedRunId: inputs[0].body } : rewriting ? { ...JSON.parse(inputs[0].body), images } : { text: "处理明确委派／追加的子任务", images },
         },
         {
-          prompt: resuming ? undefined : inputs.map((i) => i.body).join("\n\n"),
+          prompt: resuming || rewriting ? undefined : inputs.map((i) => i.body).join("\n\n"),
           task: {
             id: row.id,
             role: row.role,
@@ -365,6 +389,11 @@ export class TaskScheduler {
               )
             )
               throw new AppError("TASK_STOPPED", "子任务已停止，未启动");
+            const active = Number(this.store.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE status IN ('starting','running','stopping')").get()!.n);
+            const earlier = this.records.rows("JOIN task_queue_order q ON q.taskId=tasks.id WHERE status='queued' AND q.seq < (SELECT seq FROM task_queue_order WHERE taskId=?)", row.id)
+              .filter((candidate) => this.launching.has(candidate.id)).length;
+            if (active + earlier >= this.records.preferences().concurrency)
+              throw new AppError("TASK_CAPACITY_DEFERRED", "等待可用子任务容量");
           },
           onStart: (run) => {
             this.store.db
@@ -386,12 +415,14 @@ export class TaskScheduler {
             const budgets = JSON.stringify(this.records.preferences());
             this.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(budgets, row.id);
             Object.assign(budgetContext, this.budget(this.records.rows("WHERE id=?", row.id)[0]));
+            this.syncBudget(this.records.rows("WHERE id=?", row.id)[0]);
             this.arm(this.records.rows("WHERE id=?", row.id)[0], run);
             this.changed(row);
           },
         },
       );
     } catch (e) {
+      if (e instanceof AppError && e.code === "TASK_CAPACITY_DEFERRED") return;
       const current = this.records.rows("WHERE id=?", row.id)[0];
       if (!current) return;
       const run = this.agents.info(target(current)).run;
@@ -482,6 +513,7 @@ export class TaskScheduler {
       this.records.drafts.delete(input.id);
     }
     this.nativePending.delete(row.id);
+    this.nativeQueues.delete(row.id);
     this.store.db.prepare("DELETE FROM task_inputs WHERE taskId=?").run(row.id);
     if (this.cancelling.has(row.id) || row.status === "stopping") {
       this.changed(row);
@@ -491,13 +523,15 @@ export class TaskScheduler {
     this.store.db
       .prepare("UPDATE tasks SET status=?,error=? WHERE id=?")
       .run(
-        this.agents.active(target(row)) ? "stopping" : "cancelled",
+        this.agents.executing(target(row)) ? "stopping" : "cancelled",
         reason,
         row.id,
       );
     clearTimeout(this.timers.get(row.runId ?? ""));
     this.timers.delete(row.runId ?? "");
-    if (!this.agents.active(target(row))) {
+    if (!this.agents.executing(target(row))) {
+      // A resource waiter owns no Run yet. Revoke it before recording its single unstarted result.
+      void this.agents.stop(target(row), source).catch(() => {});
       this.finishUnstarted(row, "cancelled", reason);
       this.kick();
       return { taskId: row.id, status: "cancelled" };

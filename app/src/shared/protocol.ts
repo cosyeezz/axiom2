@@ -106,6 +106,8 @@ export interface Snapshot {
   streamId: string;
   seq: number;
   data: unknown;
+  /** Optional same-boundary thread paired with an authoritative messages collection. */
+  thread?: unknown;
 }
 export const scopeKey = ({ workspaceId, sessionId }: Scope) =>
   `session:${workspaceId}:${sessionId}`;

@@ -44,17 +44,39 @@ test("snapshot preparation failure is persisted as failed, with no launch or aut
     mkdirSync(join(root, "run-models"));
     await assert.rejects(agents.command(command), { code: "PROMPT_PREPARATION_FAILED" });
     assert.equal(launches, 0, "same request returns its saved rejection after the directory is repaired");
+    rmSync(join(root, "execution-models"), { recursive: true });
+    const environmentFailure = { ...command, requestId: crypto.randomUUID() };
+    await assert.rejects(agents.command(environmentFailure), { code: "PROMPT_PREPARATION_FAILED" });
+    assert.equal(store.receipt(environmentFailure.requestId, scope).status, "failed");
+    assert.equal(agents.active(scope), false);
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
+    mkdirSync(join(root, "execution-models"));
+    await assert.rejects(agents.command(environmentFailure), { code: "PROMPT_PREPARATION_FAILED" });
+    assert.equal(launches, 0, "failed environment preparation never dispatches or replays");
+    const profiles = (agents as any).profiles, prepare = profiles.prepare.bind(profiles);
+    let cleanupFailure = true;
+    profiles.prepare = (...args: unknown[]) => {
+      const environment = prepare(...args);
+      return { ...environment, release() {
+        environment.release();
+        if (cleanupFailure) { cleanupFailure = false; throw Error("fixture cleanup failure"); }
+      } };
+    };
     (agents as any).runs.launch = async (_scope: unknown, run: { id: string }) => {
       launches++;
       store.finishRun(run.id, "interrupted", "IPC delivery unconfirmed", "UNCERTAIN");
       throw new AppError("UNCERTAIN", "IPC delivery unconfirmed");
     };
+    let memoryScans = 0;
+    agents.memories.scanAsync = async () => { memoryScans++; throw new AppError("SCOPE_MISMATCH", "unavailable optional memory"); };
     const uncertain = { ...command, requestId: crypto.randomUUID() };
     await assert.rejects(agents.command(uncertain), { code: "UNCERTAIN" });
     assert.equal(store.receipt(uncertain.requestId, scope).status, "uncertain", "command wrapper must not relabel an attempted dispatch as a definite failure");
     assert.equal(agents.info(scope).run!.status, "interrupted", "existing settlement is not overwritten");
     await assert.rejects(agents.command(uncertain), { code: "UNCERTAIN" });
     assert.equal(launches, 1, "unconfirmed IPC must not replay the prompt");
+    assert.equal(cleanupFailure, false, "environment cleanup failure was exercised without replacing UNCERTAIN");
+    assert.equal(memoryScans, 0, "prompt admission must not wait for or require memory scans");
   } finally {
     await agents.close(); store.close();
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

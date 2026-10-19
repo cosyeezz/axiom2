@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto";
-import { fork, spawn, type ChildProcess } from "node:child_process";
-import { rmSync, statSync, readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join, extname } from "node:path";
-import { fileURLToPath } from "node:url";
+import type { ChildProcess } from "node:child_process";
+import { ExecutionPool, type ExecutionLease } from "../execution-pool.js";
+import { fileRevision } from "../execution-profile.js";
+import { sameLease } from "../execution-protocol.js";
 import { AppError, type Scope, type Draft } from "../../shared/protocol.js";
 import { agentScope, threadScope, type Run } from "../../shared/agent.js";
 import type { Store } from "../storage.js";
 import type { StopSource } from "../../shared/tasks.js";
 import type { WorkerInput } from "../agent-worker.js";
 import { AgentViews } from "./views.js";
-import { resourceIdentity } from "./resource-identity.js";
 import { errorMessage } from "../error-message.js";
 type Live = {
   scope: Scope;
   task: boolean;
   run: Run;
+  lease: ExecutionLease;
   child: ChildProcess;
   bornAt?: number;
   exit: Promise<void>;
   finish?: { status: Run["status"]; error?: string; reasonCode?: string };
   storageFailed?: boolean;
+  terminating?: boolean;
   closed?: boolean;
   receive?: (event: any) => void;
   timer?: NodeJS.Timeout;
@@ -29,77 +29,27 @@ type Live = {
   accepting: Map<string, { resolve: () => void; reject: (error: Error) => void }>;
 };
 
-const idleLimit = 10;
-const idleTimeoutMs = 15 * 60 * 1000;
-type Idle = { live: Live; input: WorkerInput; identity: string; timer: NodeJS.Timeout; close: () => void };
-function identity(input: WorkerInput, includeFile = true) {
-  const stamp = (file: string) => { try { const s = statSync(file); return `${s.size}:${s.mtimeMs}:${s.ctimeMs}`; } catch { return "missing"; } };
-  const config = createHash("sha256").update(readFileSync(input.modelsFile)).digest("hex");
-  let resources: string;
-  try { resources = resourceIdentity(input.cwd, join(input.root, "pi")); }
-  catch { resources = randomUUID(); } // Unverifiable resources disable reuse, not execution.
-  return JSON.stringify([input.cwd, input.file, input.selection, input.task?.id, input.task?.role,
-    config, resources, includeFile ? stamp(input.file) : null, stamp(join(process.env.AXIOM_PI_DIR || join(input.root, "pi"), "auth.json")),
-    stamp(join(input.root, "pi", "settings.json")), stamp(join(input.cwd, ".pi", "settings.json"))]);
-}
 
 export class AgentRuns {
   constructor(
     readonly store: Store,
     readonly views: AgentViews,
     readonly publish: (scope: string, data?: unknown) => void,
+    readonly pool = new ExecutionPool(),
   ) {}
   private live = new Map<string, Live>();
-  private idle = new Map<string, Idle>();
-  private retiring = new Set<Promise<void>>();
-  private retiringSessions = new Map<string, Promise<void>>();
   private epochs = new Map<string, number>();
-  private pending = new Map<string, { scope: Scope; run: Run; done: Promise<void> }>();
+  private pending = new Map<string, { scope: Scope; run: Run; input: WorkerInput; lease: ExecutionLease; done: Promise<void> }>();
   epoch(scope: Scope) { return this.epochs.get(scope.sessionId) ?? 0; }
   assertEpoch(scope: Scope, epoch: number) {
     if (this.closing || this.epoch(scope) !== epoch)
       throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
   }
-  hasIdle(scope: Scope) { return this.idle.has(scope.sessionId) || this.retiringSessions.has(scope.sessionId); }
-  async releaseIdle(scope: Scope) {
-    const entry = this.idle.get(scope.sessionId);
-    if (entry) await this.retire(entry);
-    await this.retiringSessions.get(scope.sessionId);
-  }
-  private retire(entry: Idle) {
-    this.idle.delete(entry.live.scope.sessionId);
-    clearTimeout(entry.timer);
-    const closed = new Promise<void>((resolve) => {
-      if (entry.live.child.exitCode !== null || entry.live.child.signalCode !== null) { resolve(); return; }
-      const deadline = setTimeout(() => this.kill(entry.live), 2000);
-      entry.live.child.once("close", () => { clearTimeout(deadline); resolve(); });
-      try {
-        if (entry.live.child.connected) entry.live.child.send({ type: "shutdown" }, (error) => { if (error) this.kill(entry.live); });
-        else this.kill(entry.live);
-      } catch { this.kill(entry.live); }
-    });
-    this.retiring.add(closed);
-    this.retiringSessions.set(entry.live.scope.sessionId, closed);
-    void closed.finally(() => {
-      this.retiring.delete(closed);
-      if (this.retiringSessions.get(entry.live.scope.sessionId) === closed) this.retiringSessions.delete(entry.live.scope.sessionId);
-    });
-    return closed;
-  }
-  private keep(live: Live, input: WorkerInput) {
-    const close = () => {
-      const item = this.idle.get(live.scope.sessionId);
-      if (item?.live === live) { clearTimeout(item.timer); this.idle.delete(live.scope.sessionId); }
-      try { rmSync(input.modelsFile, { force: true }); } catch { /* Retry on service startup. */ }
-    };
-    live.bornAt ??= Date.now();
-    const remaining = Math.max(1, Math.min(idleTimeoutMs, live.bornAt + idleTimeoutMs - Date.now()));
-    const entry: Idle = { live, input, identity: identity(input), close,
-      timer: setTimeout(() => { void this.retire(entry); }, remaining) };
-    entry.timer.unref();
-    live.child.once("close", close);
-    this.idle.set(live.scope.sessionId, entry);
-    while (this.idle.size > idleLimit) void this.retire(this.idle.values().next().value!);
+  hasIdle(scope: Scope) { return this.pool.hasAffinity(scope.sessionId); }
+  releaseIdle(scope: Scope) { return this.pool.releaseAffinity(scope.sessionId); }
+  lease(scope: Scope, runId: string) {
+    const live = this.live.get(scope.sessionId);
+    return live?.run.id === runId && this.pool.isActive(live.lease.ref) ? live.lease.ref : undefined;
   }
   closing = false;
   onEvent?: (scope: Scope, run: Run, event: any) => void;
@@ -111,6 +61,11 @@ export class AgentRuns {
   signal(scope: Scope, runId: string, value: Record<string, unknown>) {
     this.store.session(scope.workspaceId, scope.sessionId);
     const live = this.live.get(scope.sessionId);
+    const preparing = this.pending.get(scope.sessionId);
+    if (!live && preparing?.run.id === runId && ["budget", "summarize"].includes(String(value.type)) && preparing.input.task?.budget) {
+      preparing.input.task.budget = { ...preparing.input.task.budget, ...value } as NonNullable<NonNullable<WorkerInput["task"]>["budget"]>;
+      return true;
+    }
     if (
       !live ||
       live.run.id !== runId ||
@@ -127,17 +82,23 @@ export class AgentRuns {
       // after enqueue has installed its receipt waiter, without replaying.
       const items = Array.isArray(value.notifications) ? value.notifications : [{ id: value.id }];
       queueMicrotask(() => {
-        for (const item of items) live.receive?.({ type: "input-error", id: item.id, runId, uncertain: true,
+        for (const item of items) live.receive?.({ type: "input-error", id: item.id, runId, lease: live.lease.ref, uncertain: true,
           error: "输入发送结果未获确认；须核对会话记录，未自动重发。" });
       });
     };
     try {
-      live.child.send({ ...value, runId }, (error) => { if (error) uncertain(); });
+      live.child.send({ ...value, runId, lease: live.lease.ref }, (error) => { if (error) uncertain(); });
       return true; // false from child.send() is backpressure, not rejection.
     } catch {
       uncertain();
       return value.type === "input";
     }
+  }
+  private confirmLateInput(live: Live, id: string, status: "committed" | "failed", data: object) {
+    // Only the still-owned input can resolve its original uncertain receipt.
+    // Never change another scope, a pending transaction, or a confirmed result.
+    this.store.db.prepare("UPDATE external_requests SET state=?,response=? WHERE id=? AND scope=? AND state='uncertain'")
+      .run(status, JSON.stringify(data), id, JSON.stringify([live.scope.workspaceId, live.scope.sessionId]));
   }
   private queueChanged(live: Live) {
     if (live.task) return; // TaskScheduler owns the child's queued + native projection.
@@ -204,14 +165,15 @@ export class AgentRuns {
     this.queueChanged(live);
     return { drafts, ...(ids.length ? { ids } : {}) };
   }
-  async launch(scope: Scope, run: Run, input: WorkerInput) {
+  async launch(scope: Scope, run: Run, input: WorkerInput, lease: ExecutionLease, onStart?: (run: Run) => void) {
     if (this.active(scope)) throw new AppError("AGENT_BUSY", "会话已有启动或执行");
     let resolve!: () => void;
-    const pending = { scope, run, done: new Promise<void>((r) => { resolve = r; }) };
+    const pending = { scope, run, input, lease, done: new Promise<void>((r) => { resolve = r; }) };
     const startup = { settled: false };
     this.pending.set(scope.sessionId, pending);
-    try { await this.launchWorker(scope, run, input, startup); }
+    try { onStart?.(run); await this.launchWorker(scope, run, input, lease, startup); }
     catch (error) {
+      await this.pool.retire(lease.ref, "launch_failed");
       if (startup.settled) throw error;
       run.status = run.reasonCode?.endsWith("_STOPPED") || (error as AppError).code === "AGENT_STOPPED" ? "cancelled" : "failed";
       run.endedAt = Date.now(); run.error = errorMessage(error, "工作进程启动失败：未收到具体错误原因。");
@@ -225,57 +187,27 @@ export class AgentRuns {
       resolve();
     }
   }
-  private async launchWorker(scope: Scope, run: Run, input: WorkerInput, startup = { settled: false }) {
+  private async launchWorker(scope: Scope, run: Run, input: WorkerInput, lease: ExecutionLease, startup = { settled: false }) {
     const epoch = this.epoch(scope);
-    if (this.retiringSessions.has(scope.sessionId)) await this.retiringSessions.get(scope.sessionId);
     this.assertEpoch(scope, epoch);
-    // Validate while any cached process is still owned by the idle pool. Reuse
-    // requires identical configuration, so this also describes the reused input.
-    const environmentIdentity = identity(input, false);
-    let reused: ChildProcess | undefined;
-    const cached = this.idle.get(scope.sessionId);
-    if (cached) {
-      let compatible = false;
-      try {
-        compatible = !this.closing && Date.now() - (cached.live.bornAt ?? 0) < idleTimeoutMs &&
-          cached.live.child.connected && cached.identity === identity(input) && cached.identity === identity(cached.input);
-      } catch { /* A missing or changed cached snapshot requires a fresh worker. */ }
-      if (compatible) {
-        // A cleanup failure must leave the cached owner registered and reusable.
-        rmSync(input.modelsFile, { force: true });
-        input.modelsFile = cached.input.modelsFile;
-        clearTimeout(cached.timer);
-        cached.live.child.removeListener("close", cached.close);
-        this.idle.delete(scope.sessionId);
-        reused = cached.live.child;
-      } else await this.retire(cached);
-    }
-    if (this.closing || (this.epochs.get(scope.sessionId) ?? 0) !== epoch) {
-      if (reused) reused.kill();
-      throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
-    }
-    const path = fileURLToPath(
-      new URL(
-        import.meta.url.endsWith(".ts")
-          ? "../agent-worker.ts"
-          : "../agent-worker.js",
-        import.meta.url,
-      ),
-    );
-    const child = reused ?? fork(path, [], {
-      cwd: input.cwd,
-      execArgv:
-        extname(path) === ".ts" ? ["--import", import.meta.resolve("tsx")] : [],
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-      detached: process.platform !== "win32",
-    });
+    const child = await lease.ensureReady();
+    this.assertEpoch(scope, epoch);
+    if (!this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
+    // Preserve a full check before trusted extension callbacks can run during SDK binding.
+    const verified = await (lease.validateEnvironment?.() ?? lease.environment.current());
+    this.assertEpoch(scope, epoch);
+    if (!this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
+    if (!verified || !lease.environment.current(false) || !lease.environment.snapshotValid())
+      throw new AppError("REVISION_CONFLICT", "工作进程准备期间配置或资源已变化；消息未发送。");
+    input.modelsFile = lease.environment.modelsFile;
+    input.executionGate = true;
     let exited!: () => void;
     const live: Live = {
       scope,
       task: !!input.task,
       run,
       child,
-      bornAt: cached && reused ? cached.live.bornAt : Date.now(),
+      lease,
       inputs: new Map(),
       recalls: new Map(),
       accepting: new Map(),
@@ -284,28 +216,40 @@ export class AgentRuns {
       }),
     };
     this.live.set(scope.sessionId, live);
-    const onMessage = (event: any) => {
-      if (this.live.get(scope.sessionId) !== live || live.run.status === "stopping" || event.runId !== run.id) return;
+    const onMessage = async (event: any) => {
+      if (this.live.get(scope.sessionId) !== live || live.run.status === "stopping" || event.runId !== run.id || !sameLease(event.lease, lease.ref)) return;
       try {
-        if (event.type === "idle" && live.finish && !live.storageFailed && !this.closing) {
-          if (environmentIdentity === identity(input, false)) settle(true);
+        if (event.type === "idle" && live.finish && !live.storageFailed && !live.terminating && !this.closing) {
+          const verified = await (lease.validateEnvironment?.() ?? lease.environment.current());
+          if (this.live.get(scope.sessionId) !== live || this.live.get(scope.sessionId)?.run.status === 'stopping' || live.terminating || this.closing || !this.pool.isActive(lease.ref)) return;
+          if (verified && !live.storageFailed && lease.environment.current(false) && lease.environment.snapshotValid()) settle(true);
           else this.kill(live);
           return;
         }
         if (event.type === "input-accepted") {
           const input = live.inputs.get(event.id);
-          if (input) input.pending = false;
+          if (input) {
+            input.pending = false;
+            input.failed = false;
+            if (!live.accepting.has(event.id)) this.confirmLateInput(live, event.id, "committed",
+              { runId: run.id, inputId: event.id, status: "queued" });
+          }
           live.accepting.get(event.id)?.resolve();
           live.accepting.delete(event.id);
         }
         if (event.type === "input-error") {
           const input = live.inputs.get(event.id);
           const waiting = live.accepting.get(event.id);
+          const error = errorMessage(event.error, "追加输入未送达；原输入已保留，未自动重发。");
           if (waiting) {
-            waiting.reject(new AppError(event.uncertain ? "UNCERTAIN" : "INPUT_REJECTED", event.error || "追加输入未送达；原输入已保留，未自动重发。"));
+            waiting.reject(new AppError(event.uncertain ? "UNCERTAIN" : "INPUT_REJECTED", error));
             live.accepting.delete(event.id);
-            live.inputs.delete(event.id);
-          } else if (input) { input.failed = true; input.pending = true; }
+          } else if (input && !event.uncertain) {
+            this.confirmLateInput(live, event.id, "failed", { code: "INPUT_REJECTED", message: error });
+          }
+          // Transport uncertainty is not a rejection. Retain identity for a later
+          // worker acknowledgement/rejection instead of orphaning the receipt.
+          if (!event.uncertain) live.inputs.delete(event.id);
           this.queueChanged(live);
         }
         if (event.type === "queue") {
@@ -337,11 +281,12 @@ export class AgentRuns {
           if (this.store.generatedTitle(scope, event.title)) this.views.changed(scope);
         }
         if (event.type === "context-rebuilt") this.views.refresh(scope);
+        if (event.type === "messages-persisted") this.views.persisted(scope, event.ids);
         if (event.type === "message")
           this.views.messageChanged(scope, event.message);
         if (event.type === "tool") {
           const id = `tool-${event.id}`,
-            old = this.views.transcript(scope).get(id);
+            old = this.views.current(scope, id);
           const output = event.output?.content
             ?.filter((c: any) => c.type === "text")
             .map((c: any) => c.text)
@@ -415,11 +360,6 @@ export class AgentRuns {
       clearTimeout(live.timer);
       let terminal: Run | undefined;
       try {
-        try {
-          if (!keepAlive) rmSync(input.modelsFile, { force: true });
-        } catch {
-          /* Protected runtime snapshot is retried on service startup. */
-        }
         this.views.flush(scope);
         const status = live.finish?.status ?? "interrupted";
         const error = live.finish?.error ?? (live.finish ? null : "工作进程中断；流式尾部可能未保存，未自动重做。");
@@ -428,14 +368,11 @@ export class AgentRuns {
           ? { ...live.run.retry, state: "cancelled" as const, nextRetryAt: undefined } : live.run.retry;
         this.store.finishRun(run.id, status, error, reasonCode, retry);
         this.views.settled(scope);
-        this.views.messages.delete(scope.sessionId);
         this.views.queues.delete(scope.sessionId);
-        this.publish(threadScope(scope), this.views.thread(scope));
-        this.views.publishMessages(scope);
-        this.views.changed(scope);
+        this.views.refresh(scope);
         terminal = { ...run, status, endedAt: Date.now(), error, reasonCode, retry, phase: null };
       } catch {
-        if (keepAlive) { this.kill(live); keepAlive = false; rmSync(input.modelsFile, { force: true }); }
+        if (keepAlive) { this.kill(live); keepAlive = false; }
         this.publish(agentScope(scope), {
           ...this.views.info(scope),
           run: {
@@ -453,14 +390,22 @@ export class AgentRuns {
         live.accepting.clear();
         this.live.delete(scope.sessionId);
         if (this.pending.get(scope.sessionId)?.run === run) this.pending.delete(scope.sessionId);
-        if (keepAlive) {
-          try { this.keep(live, input); } catch { this.kill(live); rmSync(input.modelsFile, { force: true }); }
-        }
-        exited();
         try {
-          if (terminal) this.onSettled?.(scope, terminal);
+          if (keepAlive && !live.terminating) {
+            void this.pool.release(lease.ref, { clean: true, keepSession: true,
+              affinity: { sessionId: scope.sessionId, fileRevision: fileRevision(input.file) } })
+              .catch(() => { this.kill(live); });
+          }
         } catch {
-          /* Persisted run remains available for reconciliation on restart; do not acknowledge delivery. */
+          // Synchronous snapshot/stat errors must not skip the business settlement.
+          this.kill(live);
+        } finally {
+          exited();
+          try {
+            if (terminal) this.onSettled?.(scope, terminal);
+          } catch {
+            /* Persisted run remains available for reconciliation on restart; do not acknowledge delivery. */
+          }
         }
       }
     };
@@ -488,7 +433,7 @@ export class AgentRuns {
         // Once send is invoked, an error alone cannot prove non-delivery. Its
         // boolean return value is backpressure, not an acknowledgement.
         dispatched = true;
-        try { child.send({ type: "start", input }, finish); }
+        try { child.send({ type: "start", input, lease: lease.ref }, finish); }
         catch (error) { finish(error as Error); }
       });
     } catch (error) {
@@ -511,10 +456,9 @@ export class AgentRuns {
     const starting = this.live.get(scope.sessionId);
     if (pending) pending.run.reasonCode ??= `${source.toUpperCase()}_STOPPED`;
     if (pending && starting) this.stopLive(starting, source);
+    else if (pending) await this.pool.retire(pending.lease.ref, "stopped_before_ready");
     if (pending) await pending.done;
-    const idle = this.idle.get(scope.sessionId);
-    if (idle) await this.retire(idle);
-    await this.retiringSessions.get(scope.sessionId);
+    await this.pool.releaseAffinity(scope.sessionId);
     const live = this.live.get(scope.sessionId);
     if (!live) return;
     this.stopLive(live, source);
@@ -534,35 +478,17 @@ export class AgentRuns {
     clearTimeout(live.timer);
     live.timer = setTimeout(() => this.kill(live), ms);
   }
-  // Best-effort termination of the owned process tree, not proof of external side-effect rollback.
+  // The pool revokes reuse before terminating the owned process tree.
   private kill(live: Live) {
     clearTimeout(live.timer);
-    if (process.platform === "win32" && live.child.pid) {
-      const kill = spawn(
-        join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
-        ["/F", "/T", "/PID", String(live.child.pid)],
-        { stdio: "ignore", windowsHide: true },
-      );
-      kill.on("error", () => live.child.kill());
-      const deadline = setTimeout(() => {
-        kill.kill();
-        live.child.kill();
-      }, 2000);
-      kill.once("close", (code) => {
-        clearTimeout(deadline);
-        if (code !== 0) live.child.kill();
-      });
-    } else if (live.child.pid) {
-      try {
-        process.kill(-live.child.pid, "SIGKILL");
-      } catch {
-        live.child.kill("SIGKILL");
-      }
-    }
+    if (live.terminating) return;
+    live.terminating = true;
+    void this.pool.retire(live.lease.ref, "forced_stop", true).catch(() => {});
   }
   affected(providers: string[]) {
-    return [...this.live.values(), ...this.pending.values()]
+    return [...new Map([...this.live.values(), ...this.pending.values()]
       .filter((l) => providers.includes(l.run.selection.provider))
+      .map((l) => [l.scope.sessionId, l])).values()]
       .map((l) => ({
         ...l.scope,
         title: this.store.session(l.scope.workspaceId, l.scope.sessionId).title,
@@ -575,15 +501,13 @@ export class AgentRuns {
         "ACTIVE_RUNS_CONFIRMATION_REQUIRED",
         `需先停止受影响会话：${affected.map((a) => a.title).join("、")}。确认后才退出登录。`,
       );
-    for (const entry of [...this.idle.values()])
-      if (providers.includes(entry.live.run.selection.provider)) await this.retire(entry);
+    await this.pool.invalidate(providers);
     for (const scope of affected) await this.stop(scope, "provider");
   }
   async close() {
     this.closing = true;
     await Promise.all([...this.pending.values()].map((entry) => this.stop(entry.scope, "shutdown")));
-    await Promise.all([...this.idle.values()].map((entry) => this.retire(entry)));
-    await Promise.all(this.retiring);
+    await this.pool.trim();
     await Promise.allSettled(
       [...this.live.values()].map((l) =>
         this.stop(l.scope, "shutdown"),

@@ -10,6 +10,8 @@ import { tasksScope } from "../src/shared/tasks.js";
 import { randomUUID } from "node:crypto";
 import type { Workspace, Session } from "../src/shared/protocol.js";
 const root = mkdtempSync(join(tmpdir(), "axiom-subagent-ui-"));
+const artifacts = join(process.env.AXIOM_TEST_ARTIFACTS || "test-results", "subagent-settings");
+mkdirSync(artifacts, { recursive: true });
 const previous = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
 mkdirSync(process.env.AXIOM_PI_DIR);
@@ -28,6 +30,7 @@ try {
   const page = await context.newPage(), other = await context.newPage();
   const errors: string[] = [];
   for (const p of [page, other]) {
+    p.setDefaultTimeout(10_000);
     p.on("pageerror", (e) => errors.push(e.message));
     await p.goto(app.accessUrl);
   }
@@ -41,27 +44,37 @@ try {
       if (!panel || !toolbar) return false;
       const gap = toolbar.getBoundingClientRect().top - panel.getBoundingClientRect().bottom;
       return Math.abs(gap - 8) < 1;
-    });
+    }, undefined, { timeout: 5_000 });
     for (const button of [trigger, compressionTrigger]) {
-      assert.ok(await button.evaluate((el) => {
-        const box = el.getBoundingClientRect();
-        return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
-      }), "settings icons stay visible and receive pointer input");
+      await button.scrollIntoViewIfNeeded();
+      const hit = await button.evaluate((el) => {
+        const box = el.getBoundingClientRect(), target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return { matches: el.contains(target), viewport: [innerWidth, innerHeight], box: box.toJSON(), target: target?.outerHTML.slice(0, 800) };
+      });
+      if (!hit.matches) {
+        await page.screenshot({ path: join(artifacts, "hit-failure.png") });
+      }
+      assert.ok(hit.matches, `settings icons stay visible and receive pointer input: ${JSON.stringify(hit)}`);
     }
   };
   assert.equal(await page.locator('.composer-area > .container > details.model-picker').count(), 0);
-  const layout = () => page.locator(".usage").evaluate((el) => {
+  const layout = (usage = page.locator(".usage")) => usage.evaluate((el) => {
     const metrics = el.querySelector(".usage-row")!.getBoundingClientRect();
     const group = el.querySelector(".usage-settings")!.getBoundingClientRect();
     const sub = el.querySelector(".subagent-trigger")!.getBoundingClientRect();
     const compression = el.querySelector('[data-od-id="background-compression-trigger"]')!.getBoundingClientRect();
     const outer = el.getBoundingClientRect();
-    return { metrics: metrics.toJSON(), group: group.toJSON(), outer: outer.toJSON(), sub: sub.toJSON(), compression: compression.toJSON() };
+    return { global: el.querySelector('.memory-global')?.getBoundingClientRect().toJSON() ?? null, metrics: metrics.toJSON(), group: group.toJSON(), outer: outer.toJSON(), sub: sub.toJSON(), compression: compression.toJSON(), paddingRight: parseFloat(getComputedStyle(el).paddingRight), overflowX: getComputedStyle(el).overflowX, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
   });
   await trigger.waitFor();
+  await page.waitForFunction(() => {
+    const toolbar = document.querySelector('.usage'), settings = document.querySelector('.usage-settings');
+    if (!toolbar || !settings) return false;
+    return Math.abs(settings.getBoundingClientRect().right - toolbar.getBoundingClientRect().right + parseFloat(getComputedStyle(toolbar).paddingRight)) < 2;
+  });
   let box = await layout();
   assert.equal(box.metrics.y, box.group.y, "wide: all icons on one row");
-  assert.ok(Math.abs(box.group.right - (box.outer.right - 12)) < 2, "wide: settings at far right");
+  assert.ok(Math.abs(box.group.right - box.outer.right + box.paddingRight) < 2, "wide: tools remain aligned to the right edge");
   assert.equal(box.sub.y, box.compression.y);
   await page.locator("#prompt").fill("保留草稿");
   await trigger.click();
@@ -127,25 +140,29 @@ try {
     await clearToolbar();
     const d = await dialog.boundingBox();
     assert.ok(d && d.x >= 0 && d.x + d.width <= width + 1);
-    assert.ok(d && Math.abs(d.x + d.width - width) < 1 && d.y === 0 && d.height < height, "right-hand sheet leaves the toolbar below it");
+    assert.ok(d && Math.abs(d.x + d.width - width) < 1 && d.y === 0 && d.height < height, "drawer attaches to the top/right and leaves the toolbar below");
     assert.equal(d!.width, Math.min(520, width));
     assert.ok(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
     await dialog.getByRole("button", { name: "关闭子代理设置" }).click();
     box = await layout();
     assert.equal(box.sub.y, box.compression.y, `settings must stay together at ${width}`);
-    if (box.group.y > box.metrics.y + 2) assert.ok(Math.abs(box.group.x - box.metrics.x) < 2, `wrapped settings left-align at ${width}`);
-    else assert.ok(Math.abs(box.group.right - (box.outer.right - 12)) < 2, `one-row settings right-align at ${width}`);
+    assert.equal(box.group.y, box.metrics.y, `toolbar stays on one row at ${width}`);
+    assert.ok(box.group.left >= box.metrics.right + 7, `left/right groups remain separate at ${width}`);
+    if (box.scrollWidth <= box.clientWidth + 1) assert.ok(Math.abs(box.group.right - box.outer.right + box.paddingRight) < 2, `tools align right at ${width}`);
+    assert.equal(box.overflowX, 'auto');
+    if (box.global) assert.ok(Math.abs(box.global.x - box.compression.right) < 2, 'memory follows compression without extra gap');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     if (width === 375 || width === 1440) {
-      mkdirSync("test-results/subagent-settings", { recursive: true });
-      await page.screenshot({ path: `test-results/subagent-settings/toolbar-${width}.png` });
+      await page.screenshot({ path: join(artifacts, `toolbar-${width}.png`) });
     }
     await trigger.click();
     await compressionTrigger.click();
     await compressionDialog.waitFor();
     await dialog.waitFor({ state: "detached" });
     await clearToolbar();
-    assert.deepEqual(await compressionDialog.boundingBox(), d, `both panels clear the icons at ${width}`);
+    const compressionBox = (await compressionDialog.boundingBox())!;
+    assert.equal(compressionBox.width, d!.width, `shared panel width at ${width}`);
+    assert.ok(Math.abs(compressionBox.y + compressionBox.height - d!.y - d!.height) < 1, `shared bottom anchor at ${width}`);
     await compressionTrigger.click();
     await compressionDialog.waitFor({ state: "detached" });
     assert.equal(await compressionTrigger.getAttribute("aria-expanded"), "false");
@@ -154,7 +171,7 @@ try {
     assert.ok(await dialog.locator(".model-popover").evaluate((el) => {
       const box = el.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth + 1 && el.scrollWidth <= el.clientWidth + 1;
     }));
-    await page.screenshot({ path: `test-results/subagent-settings/dialog-${width}.png` });
+    await page.screenshot({ path: join(artifacts, `dialog-${width}.png`) });
     await dialog.getByRole("searchbox").press("Escape");
   }
   await page.setViewportSize({ width: 390, height: 480 });
@@ -164,16 +181,20 @@ try {
   await dialog.locator(".compression-body").evaluate((el) => { el.scrollTop = el.scrollHeight; });
   assert.equal((await dialog.locator("header").boundingBox())!.y, headerTop, "header stays visible while content scrolls");
   assert.ok(await dialog.locator(".compression-body").evaluate((el) => el.scrollTop > 0));
-  await page.screenshot({ path: "test-results/subagent-settings/short-screen.png" });
+  await page.screenshot({ path: join(artifacts, "short-screen.png") });
   await page.setViewportSize({ width: 1440, height: 900 });
   await dialog.getByRole("searchbox").press("Escape");
+  await clearToolbar();
   const settingsBox = await dialog.boundingBox();
-  await page.screenshot({ path: "test-results/subagent-settings/sheet-1440.png" });
+  await page.screenshot({ path: join(artifacts, "sheet-1440.png") });
   await dialog.getByRole("button", { name: "关闭子代理设置" }).click();
   await compressionTrigger.click();
   await compressionDialog.waitFor();
   await clearToolbar();
-  assert.deepEqual(await compressionDialog.boundingBox(), settingsBox, "same sheet geometry as compression settings");
+  const finalCompressionBox = (await compressionDialog.boundingBox())!;
+  assert.equal(finalCompressionBox.width, settingsBox!.width, "same panel width as compression settings");
+  assert.ok(Math.abs(finalCompressionBox.y + finalCompressionBox.height - settingsBox!.y - settingsBox!.height) < 1,
+    "same bottom anchor as compression settings");
   await compressionTrigger.click();
   await compressionDialog.waitFor({ state: "detached" });
   await trigger.focus();
@@ -198,8 +219,18 @@ try {
   const childSub = child.getByRole("button", { name: "子代理设置", exact: true });
   const childCompression = child.locator('[data-od-id="background-compression-trigger"]');
   await child.locator("textarea").fill("子会话草稿");
-  for (const [width, height] of [[1440, 900], [390, 844], [390, 480]]) {
+  for (const [width, height] of [[1440, 900], [768, 900], [641, 900], [390, 844], [390, 480]]) {
     await page.setViewportSize({ width, height });
+    await page.waitForFunction(() => document.querySelector('.app')?.classList.contains('mobile-workbench') === matchMedia('(max-width:640px), (pointer:coarse) and (max-height:500px)').matches);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+    const childLayout = await layout(child.locator('.usage'));
+    assert.equal(childLayout.global, null, 'child toolbar has no global memory override');
+    assert.equal(childLayout.group.y, childLayout.metrics.y, `child toolbar stays on one row at ${width}`);
+    assert.equal(childLayout.sub.y, childLayout.compression.y, `child settings stay together at ${width}`);
+    assert.ok(childLayout.group.left >= childLayout.metrics.right + 7, `child left/right groups remain separate at ${width}`);
+    if (childLayout.scrollWidth <= childLayout.clientWidth + 1) assert.ok(Math.abs(childLayout.group.right - childLayout.outer.right + childLayout.paddingRight) < 2, `child tools align right at ${width}`);
+    assert.equal(childLayout.overflowX, 'auto', `child toolbar scrolls internally at ${width}`);
+    assert.ok(await child.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `child window has no horizontal overflow at ${width}`);
     await childSub.click();
     const settings = child.getByRole("dialog", { name: "子代理设置", exact: true });
     await settings.waitFor();

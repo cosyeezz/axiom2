@@ -41,7 +41,7 @@ export class Tasks {
     };
     // Restart restores reports only; no worker launch or input replay.
     for (const row of this.records.rows(
-      "WHERE tasks.runId IS NOT NULL AND EXISTS (SELECT 1 FROM workspaces WHERE workspaces.id=tasks.workspaceId AND archived=0)",
+      "WHERE tasks.runId IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE s.id=tasks.sessionId AND s.deletedAt IS NULL AND w.archived=0)",
     )) {
       const run = agents.info(target(row)).run;
       if (
@@ -134,7 +134,7 @@ export class Tasks {
         await this.agents.compressions.stop(target(row));
       }),
     ]);
-    this.agents.publish(tasksScope(scope), this.records.list(scope));
+    this.agents.publish(tasksScope(scope));
     const failed = outcomes.find((o) => o.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
   }
@@ -144,7 +144,7 @@ export class Tasks {
     this.agents.compressions.checkProviders(providers, confirmed);
     // Archived workspaces retain history, but are not valid execution scopes.
     const rows = this.records.rows(
-      "WHERE EXISTS (SELECT 1 FROM workspaces WHERE workspaces.id=tasks.workspaceId AND archived=0)",
+      "WHERE EXISTS (SELECT 1 FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE s.id=tasks.sessionId AND s.deletedAt IS NULL AND w.archived=0)",
     );
     const queued = rows.filter((row) =>
       row.status === "queued" && providers.includes(
@@ -181,7 +181,7 @@ export class Tasks {
     if (c.params?.confirmed !== true)
       throw new AppError(
         "CONFIRMATION_REQUIRED",
-        "删除需要确认；同时停止并删除所属子会话记录，不删除项目文件",
+        "删除需要确认；停止所属执行并从列表移除，保留对话、子任务结果和记忆，不删除项目文件",
       );
     await this.stopParent(scope);
     for (const row of this.records.rows(

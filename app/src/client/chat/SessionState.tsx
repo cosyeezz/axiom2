@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
@@ -8,9 +9,10 @@ import {
 import type { Scope } from "../../shared/protocol.js";
 export function Environment({ scope }: { scope: Scope }) {
   const info = useScope(agentScope(scope), emptyAgent);
+  const [open, setOpen] = useState(false);
   return (
     <section className="session-init" aria-label="会话初始化信息">
-      <details className="session-environment">
+      <details className="session-environment" onToggle={(event) => { if (event.target === event.currentTarget) setOpen(event.currentTarget.open); }}>
         <summary>
           <Icon name="chevron" />
           <span>会话环境</span>
@@ -19,7 +21,7 @@ export function Environment({ scope }: { scope: Scope }) {
             {info.run ? runLabels[info.run.status] : "尚未运行"}
           </small>
         </summary>
-        <header className="session-init-head">
+        {open && <><header className="session-init-head">
           <span>会话初始化</span>
           <span>
             {info.run
@@ -59,7 +61,7 @@ export function Environment({ scope }: { scope: Scope }) {
               ? "此会话尚未记录系统提示词，下次执行时加载并展示。"
               : "尚未初始化，首次发送后展示实际生效的系统提示词。"}</p>
           )}
-        </div>
+        </div></>}
       </details>
     </section>
   );

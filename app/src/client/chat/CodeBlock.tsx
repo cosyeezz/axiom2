@@ -1,5 +1,7 @@
 /// <reference types="highlight.js" />
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Icon } from "../Icon.js";
+import { DerivedContext } from "./derived-cache.js";
 import hljs from "highlight.js/lib/core.js";
 import javascript from "highlight.js/lib/languages/javascript.js";
 import typescript from "highlight.js/lib/languages/typescript.js";
@@ -19,28 +21,19 @@ for (const [name, grammar] of Object.entries({
 }))
   hljs.registerLanguage(name, grammar);
 hljs.configure({ classPrefix: "tok-" });
-function nodes(parent: Node): ReactNode {
-  return Array.from(parent.childNodes, (node, i) =>
-    node.nodeType === Node.TEXT_NODE ? (
-      node.textContent
-    ) : node instanceof HTMLElement && node.tagName === "SPAN" ? (
-      <span
-        key={i}
-        className={node.className
-          .split(/\s+/)
-          .filter((c) => /^tok-[a-z-]+$/.test(c))
-          .join(" ")}
-      >
-        {nodes(node)}
-      </span>
-    ) : (
-      node.textContent
-    ),
-  );
+type HighlightToken = string | { classes: string; children: HighlightToken[] };
+function parseTokens(parent: Node): HighlightToken[] {
+  return Array.from(parent.childNodes, (node) => node instanceof HTMLElement && node.tagName === "SPAN"
+    ? { classes: node.className.split(/\s+/).filter((c) => /^tok-[a-z-]+$/.test(c)).join(" "), children: parseTokens(node) }
+    : node.textContent ?? "");
+}
+function nodes(tokens: HighlightToken[]): ReactNode {
+  return tokens.map((token, index) => typeof token === "string" ? token : <span key={index} className={token.classes}>{nodes(token.children)}</span>);
 }
 export const CodeBlock = memo(
   ({ text, language }: { text: string; language: string }) => {
     const [copied, setCopied] = useState("");
+    const cache = useContext(DerivedContext);
     useEffect(() => {
       if (copied !== "已复制") return;
       const timer = setTimeout(() => setCopied(""), 1500);
@@ -51,17 +44,13 @@ export const CodeBlock = memo(
       const lang = language.split(/\s+/)[0]?.toLowerCase();
       if (text.length > 20000 || !hljs.getLanguage(lang)) return text;
       try {
-        return nodes(
-          new DOMParser().parseFromString(
-            hljs.highlight(text, { language: lang, ignoreIllegals: true })
-              .value,
-            "text/html",
-          ).body,
-        );
+        const parse = () => parseTokens(new DOMParser().parseFromString(
+          hljs.highlight(text, { language: lang, ignoreIllegals: true }).value, "text/html").body);
+        return nodes(cache ? cache.get(`highlight:10:tok:${lang}:${text}`, parse) : parse());
       } catch {
         return text;
       }
-    }, [text, language]);
+    }, [text, language, cache]);
     return (
       <div className="code-card">
         <div className="code-head">
@@ -81,9 +70,7 @@ export const CodeBlock = memo(
               }
             }}
           >
-            {copied === "已复制" ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-            ) : <svg aria-hidden="true"><use href={`#i-${copied === "复制失败" ? "close" : "copy"}`} /></svg>}
+            <Icon name={copied === "已复制" ? "check" : copied === "复制失败" ? "close" : "copy"} />
           </button>
           <span className="screen-reader" role="status" aria-live="polite">{copied}</span>
         </div>

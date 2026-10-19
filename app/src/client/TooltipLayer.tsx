@@ -82,8 +82,9 @@ export function TooltipLayer() {
       const selected = document.getSelection()?.anchorNode;
       if (["Control", "Meta", "Shift", "Alt"].includes(event.key) ||
         ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selected && ref.current?.contains(selected))) return;
-      // Dismiss the visible hint before Escape reaches an enclosing menu/dialog.
-      if (event.key === "Escape" && visible) {
+      // Input shortcuts and completion own Escape even when a nearby hint is visible.
+      const editing = event.target instanceof Element && !!event.target.closest("input,textarea,[contenteditable=true]");
+      if (event.key === "Escape" && visible && !editing) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }

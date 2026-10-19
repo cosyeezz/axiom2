@@ -1,6 +1,7 @@
 /** Access-ordered, bounded cache. Eviction never writes or deletes persistent data. */
 export class Lru<K, V> extends Map<K, V> {
   constructor(readonly capacity: number) { super(); if (capacity < 1) throw Error("Invalid capacity"); }
+  peek(key: K): V | undefined { return super.get(key); }
   override get(key: K): V | undefined {
     if (!super.has(key)) return undefined;
     const value = super.get(key)!;

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { taskLabels, taskToolName } from "../../shared/tasks.js";
-import { command } from "../transport.js";
+import { useFullMessage } from "../chat/useFullMessage.js";
 import { TaskReportBody } from "./TaskReportBody.js";
 import type { ToolCall } from "../chat/tool-summary.js";
 import { callObject, readTaskReport } from "./task-call.js";
@@ -11,36 +11,19 @@ import { callObject, readTaskReport } from "./task-call.js";
 export function TaskCallDetails({ scope, call, result, message }: {
   scope: Scope; call: ToolCall; result: ChatMessage | null; message: ChatMessage;
 }) {
-  const [full, setFull] = useState<ChatMessage | null>(null);
-  const [fullInput, setFullInput] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [attempt, retry] = useState(0);
+  const outputRead = useFullMessage(scope, result, !!result?.truncated);
+  const inputRead = useFullMessage(scope, message, call.inputLength !== undefined ? call.inputLength > call.input.length : !!message.truncated);
+  const loading = outputRead.loading || inputRead.loading;
+  const error = outputRead.error || inputRead.error;
   const [rawOpen, setRawOpen] = useState(false);
-  useEffect(() => {
-    let active = true;
-    setFull(null); setFullInput(null); setError(""); setLoading(false);
-    if (!result?.truncated && !message.truncated) return;
-    setLoading(true);
-    void Promise.all([
-      result?.truncated ? command<ChatMessage>("message.get", { id: result.id }, scope) : Promise.resolve(null),
-      message.truncated ? command<ChatMessage>("message.get", { id: message.id }, scope) : Promise.resolve(null),
-    ]).then(([output, parent]) => {
-      if (!active) return;
-      setFull(output);
-      setFullInput(parent?.calls?.find((item) => item.id === call.id)?.input ?? null);
-    }).catch((e: Error) => { if (active) setError(e.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [scope.workspaceId, scope.sessionId, result?.id, result?.truncated, message.id, message.truncated, call.id, attempt]);
-  const output = full ?? result;
-  const input = fullInput ?? call.input;
+  const output = outputRead.message ?? result;
+  const input = inputRead.message?.calls?.find((item) => item.id === call.id)?.input ?? call.input;
   const params = callObject(input);
   const name = taskToolName(call.name);
   const report = name === "read_result" && output?.status === "completed" && !output.truncated ? readTaskReport(output.text, params) : null;
   return <div className="task-call-detail">
     {loading && <p className="task-call-meta" role="status">正在加载完整记录…</p>}
-    {error && <div className="task-call-error" role="alert">{error}<button type="button" className="btn" onClick={() => retry((value) => value + 1)}>重新加载</button></div>}
+    {error && <div className="task-call-error" role="alert">{error}<button type="button" className="btn" onClick={() => { if (outputRead.error) void outputRead.load(); if (inputRead.error) void inputRead.load(); }}>重新加载</button></div>}
     {name === "append" && typeof params?.text === "string" && <div className="task-call-content"><span className="task-call-meta">{params.mode === "followUp" ? "结束后追问" : "补充任务内容"}</span><p>{params.text}</p></div>}
     {name === "cancel_task" && typeof params?.reason === "string" && <div className="task-call-content"><span className="task-call-meta">停止原因</span><p>{params.reason}</p></div>}
     {report && <div className="task-report">

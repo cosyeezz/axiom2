@@ -32,6 +32,6 @@
 .confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .confirm-actions .btn { min-height: 44px; min-width: 80px; }
 .confirm-actions .confirm-danger { background: var(--danger); border-color: transparent; color: var(--fg); }
-.confirm-actions .confirm-danger:hover { background: color-mix(in srgb, var(--danger) 85%, var(--fg)); }
+.confirm-actions .confirm-danger:hover:not([aria-disabled=true]) { background: var(--danger-hover); }
 .confirm-actions .btn[aria-disabled=true] { opacity: .5; cursor: wait; }
 @media (max-width: 640px) { .confirm-dialog { padding: 20px; } }

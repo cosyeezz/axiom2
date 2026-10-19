@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { desktopInvoke } from "./desktop-bridge.js";
+import { IconButton } from "./StartupControls.js";
 
 type UpdateAction = "status" | "check" | "service" | "client" | "recover" | "installer";
 type Update = {
@@ -13,10 +15,10 @@ function newer(a: string | undefined, b: string | null | undefined) {
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
   return false;
 }
-function invoke(action: UpdateAction, version?: string): Promise<Update> {
-  const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (command: string, args: object) => Promise<Update> } }).__TAURI_INTERNALS__;
-  if (!bridge) return Promise.reject(Error("请在 Axiom2 桌面客户端内检查更新。"));
-  return bridge.invoke("axiom_update", { action, version: version || null });
+async function invoke(action: UpdateAction, version?: string): Promise<Update> {
+  const result = await desktopInvoke<Update>("axiom_update", { action, version: version || null });
+  if (action !== "installer" && (!result || typeof result.clientVersion !== "string")) throw Error("更新状态不完整，请重新读取。");
+  return result;
 }
 export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onAvailableChange, onServiceChange }: {
   service: { state: string; active: string[] } | null; serviceBusy: boolean;
@@ -36,9 +38,8 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const backendBusy = (running && update?.job?.kind !== "client") || busy === "service" || busy === "recover";
   const disabled = !!busy || running || serviceBusy;
   async function act(action: UpdateAction, quiet = false) {
-    if (pending.current && quiet) return;
+    if (pending.current) { if (!quiet) setError("正在读取更新状态，请稍后重试。"); return; }
     if (!quiet) { setBusy(action); setError(""); manualError.current = false; }
-    while (pending.current) await new Promise((resolve) => window.setTimeout(resolve, 80));
     pending.current = true;
     if (action === "service" || action === "recover") onBusyChange(true);
     try {
@@ -69,7 +70,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const ask = (action: "service" | "recover" | "installer") => { trigger.current = document.activeElement as HTMLElement; setConfirm(action); };
   return (
     <section className="connect-updates" aria-label="版本与更新">
-      <div className="connect-updates-heading"><div><p className="connect-eyebrow">保持就绪</p><h2>版本与更新</h2></div><button className="connect-secondary" disabled={disabled} onClick={() => void act("check")}>{busy === "check" ? "正在检查…" : "检查更新"}</button></div>
+      <div className="connect-updates-heading"><div><p className="connect-eyebrow">保持就绪</p><h2>版本与更新</h2></div><IconButton label="检查更新" icon="refresh-cw" spinning={busy === "check"} disabled={disabled} onClick={() => void act("check")} /></div>
       <dl className="connect-versions"><div><dt>桌面客户端</dt><dd>{update?.clientVersion || "—"}</dd></div><div><dt>后台服务</dt><dd>{update?.serviceVersion || "—"}</dd></div><div><dt>最新版本</dt><dd>{latest || "尚未检查"}</dd></div></dl>
       <p className="connect-update-detail">后台更新会结束当前任务、保留项目与会话记录。安装包准备好后再切换版本，更新任务会在关闭客户端后继续。</p>
       {update && !update.managed && <p className="connect-message">当前服务不是标准安装，请使用原安装方式更新后台。</p>}
@@ -78,14 +79,14 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       {error && error !== update?.job?.message && <p className="connect-error" role="alert">{error}</p>}
       <div className="connect-actions">
         <button className="connect-secondary" disabled={disabled || !update?.managed || update.recovery || !newer(latest, update.serviceVersion) || !["running", "stopped"].includes(service?.state || "")} onClick={() => ask("service")}>更新后台服务{newer(latest, update?.serviceVersion) ? ` · ${latest}` : ""}</button>
-        {update?.clientSupported && update.release?.assets["Axiom2.msi"] && <button className="connect-secondary" disabled={disabled || !newer(latest, update.clientVersion)} onClick={() => void act("client")}>下载客户端更新</button>}
+        {update?.clientSupported && update.release?.assets?.["Axiom2.msi"] && <button className="connect-secondary" disabled={disabled || !newer(latest, update.clientVersion)} onClick={() => void act("client")}>下载客户端更新</button>}
         {update?.job?.kind === "client" && update.job.phase === "ready" && <button className="connect-secondary" disabled={disabled} onClick={() => ask("installer")}>运行安装器</button>}
         {update?.recovery && <button className="connect-secondary" disabled={disabled} onClick={() => ask("recover")}>恢复旧版本</button>}
       </div>
       {update?.log && <p className="connect-log">更新日志：<code>{update.log}</code></p>}
       <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(null)} onClose={() => setConfirm(null)} aria-labelledby="update-title">
         <h2 id="update-title">{confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : `更新后台至 ${latest}？`}</h2>
-        <p>{confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "工作台视图会关闭，正在运行的任务将结束。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
+        <p>{confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "受管理后台正在运行的任务将结束，其工作台视图会关闭；直接连接的开发或远程工作台保留。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
         {confirm !== "installer" && <p>应用内更新与恢复要求此安装仅用于当前数据目录。多个数据目录共用安装时，请停止所有相关服务并使用原安装方式更新；各数据目录使用独立安装目录后才能使用此功能。</p>}
         {confirm !== "installer" && !!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
         <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(null)}>暂不更新</button><button className="connect-primary" onClick={() => { const action = confirm; setConfirm(null); if (action) void act(action); }}>{confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : "确认更新服务"}</button></div>

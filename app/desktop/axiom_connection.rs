@@ -19,7 +19,7 @@ pub async fn axiom_connection(webview: Webview) -> Result<String, String> {
 pub async fn observe(app: &AppHandle) -> Result<String, String> {
     let Some(workbench) = app.get_webview("axiom-workbench") else { return Ok("checking".into()); };
     let url = workbench.url().map_err(|e| e.to_string())?;
-    if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") { return Ok("checking".into()); }
+    if !crate::axiom_remote::valid_target(&url) { return Ok("checking".into()); }
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
     let deadline = Instant::now() + Duration::from_millis(800);
     {

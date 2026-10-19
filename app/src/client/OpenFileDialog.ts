@@ -10,6 +10,10 @@ export type OpenFileDialogRequest =
  * Callers retain their own trigger, draft ownership and authorization confirmation.
  */
 export async function openFileDialog(options: OpenFileDialogRequest, signal: AbortSignal): Promise<PickedAttachment[]> {
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(location.hostname)) {
+    const { remoteFileDialog } = await import("./mobile/remote-files.js");
+    return remoteFileDialog(options, signal);
+  }
   const timeout = new AbortController();
   const timer = window.setTimeout(() => timeout.abort(Error("选择超时，请重试。")), 125_000);
   const combined = AbortSignal.any([signal, timeout.signal]);

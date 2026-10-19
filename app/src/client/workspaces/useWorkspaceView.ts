@@ -41,7 +41,7 @@ export function useWorkspaceView(onError: (message: string) => void) {
     }
     if (workspaceId)
       void command("workspace.select", { view: next?.sessionId ? next : null }, { workspaceId })
-        .catch((e: Error) => onError(`上次工作空间未保存：${e.message}`));
+        .catch(() => { /* Best-effort navigation preference; failure must not interrupt the current view. */ });
   };
   useEffect(() => {
     if (!workspaces || !preferences) return;
@@ -59,7 +59,7 @@ export function useWorkspaceView(onError: (message: string) => void) {
       }
       if (sidebarExists && viewExists) {
         void command("workspace.select", {}, { workspaceId: existing.workspaceId! })
-          .catch((e: Error) => onError(`上次工作空间未保存：${e.message}`));
+          .catch(() => { /* Restoring a window remains usable when the background preference save fails. */ });
         return;
       }
     } else if (sidebarExists && viewExists) return;

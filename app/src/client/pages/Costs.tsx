@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { Lru } from "../../shared/lru.js";
 import { createPortal } from "react-dom";
+import { Icon } from "../Icon.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
 import { command, useConnectionState, useScope } from "../transport.js";
 import { costAmount, costCategories, costLabels, costPartLabels, costParts, costsScope, sumCosts, type CostReport, type CostRow, type CostTotals } from "../../shared/costs.js";
@@ -7,11 +9,14 @@ import { AppError, type Scope } from "../../shared/protocol.js";
 import "../styles/costs.css";
 
 const emptyRevision = { revision: 0 };
+// Reopening may show the last report immediately; every mount still revalidates.
+const recentReports = new Lru<string, CostReport>(5);
 const number = (value: number) => value.toLocaleString("zh-CN");
 function Breakdown({ row }: { row: CostRow }) {
-  return <details className="cost-line">
+  const [open, setOpen] = useState(false);
+  return <details className="cost-line" onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary><span><strong>{row.model ?? "模型未记录"}</strong><small>{row.provider ?? "供应商未记录"} · {row.records} 条用量记录</small></span><strong className="cost-number">{costAmount(row)}</strong></summary>
-    <div className="cost-breakdown">
+    {open && <div className="cost-breakdown">
       <table><caption>按 Token 类型计算 · 美元</caption><thead><tr><th>类型</th><th>已知 Token</th><th>折算单价 / 百万</th><th>已知费用</th></tr></thead>
         <tbody>{costParts.map((part) => <tr key={part}><th>{costPartLabels[part]}</th><td>{number(row.tokens[part])}</td>
           <td>{!row.unknownParts && !row.unknownTokens && row.tokens[part] > 0 ? `$${(row.parts[part] / row.tokens[part] * 1_000_000).toFixed(4)}` : "—"}</td>
@@ -19,13 +24,13 @@ function Breakdown({ row }: { row: CostRow }) {
       {!!row.unknownTokens && <p>部分记录未提供完整 Token 明细，表内仅列已知数量。</p>}
       {!!row.unknownParts && <p>部分记录缺少分项价格；已知总额仍计入汇总，不能据此推算各项单价。</p>}
       <p>折算单价 = 已记录分项费用 ÷ 对应 Token × 1,000,000；多次请求或阶梯价格会形成加权均价。</p>
-    </div>
+    </div>}
   </details>;
 }
 function Amount({ value }: { value: CostTotals }) {
   return <strong className="cost-number">{costAmount(value)}</strong>;
 }
-function Report({ report }: { report: CostReport }) {
+const Report = memo(function Report({ report }: { report: CostReport }) {
   const totals = Object.fromEntries(costCategories.map((category) => [category, sumCosts(report.rows.filter((row) => row.category === category))]));
   const sessionTitle = (id: string) => report.sessions.find((session) => session.id === id)?.title ?? "未知会话";
   const children = report.sessions.filter((session) => session.taskId);
@@ -72,69 +77,75 @@ function Report({ report }: { report: CostReport }) {
       <p>总费用 = 主 Agent + 全部子 Agent + 压缩 + 工具内部调用 + 其他模型调用。各分类互不重复。</p>
       <p>单次费用 = 输入、输出、缓存读取、缓存写入各自的 Token × 对应每百万 Token 单价 ÷ 1,000,000。使用请求时记录的费用，不以当前模型价格重算历史；阶梯价和缓存策略以模型记录为准。</p>
       <p>保留压缩前、重试及历史分支的已记录消费。失败、取消或未应用摘要不等于未消费；没有返回的用量无法推断。压缩任务的“用量记录”可能合并多次摘要请求。</p>
-      <p>输入框金额为当前会话累计，本页为整个主会话及所属子任务的分类汇总。金额保留四位小数，分项保留六位；未知价格显示未知，实际扣款以供应商账单为准。</p>
+      <p>上方费用为当前会话累计，下方分类汇总包含整个主会话及所属子任务。金额保留四位小数，分项保留六位；未知价格显示未知，实际扣款以供应商账单为准。</p>
     </section>
   </>;
-}
-function CostPage({ scope, closeControl }: { scope: Scope; closeControl?: ReactNode }) {
+});
+function CostPage({ scope, closeControl, sessionSummary }: { scope: Scope; closeControl?: ReactNode; sessionSummary?: ReactNode }) {
   const revision = useScope(costsScope(scope), emptyRevision);
   const connection = useConnectionState();
-  const [report, setReport] = useState<CostReport | null>(null), [error, setError] = useState("");
-  const [attempt, setAttempt] = useState(0), [loading, setLoading] = useState(true);
-  const refresh = useRef<(() => void) | null>(null);
+  const cacheKey = JSON.stringify([connection.generation, scope.workspaceId, scope.sessionId]);
+  const [report, setReport] = useState<CostReport | null>(() => recentReports.get(cacheKey) ?? null), [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const refresh = useRef<((visible?: boolean) => void) | null>(null);
   useEffect(() => {
     if (!connection.connected) return;
-    let active = true, inFlight = false, dirty = false;
+    let active = true, inFlight = false, dirty = false, visiblePending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Keep the first deadline under continuous notifications. Serialize reads and
     // remember invalidations received while a query is in flight.
-    const schedule = () => {
+    const schedule = (visible = false, delay = 150) => {
       dirty = true;
+      visiblePending ||= visible;
+      if (visible) setLoading(true);
       if (!active || inFlight || timer !== undefined) return;
       timer = setTimeout(() => {
         timer = undefined;
         dirty = false;
         inFlight = true;
-        setLoading(true);
+        const showLoading = visiblePending;
+        visiblePending = false;
+        if (showLoading) setLoading(true);
         void command<CostReport>("costs.get", {}, scope).then((value) => {
-          if (active) { setReport(value); setError(""); }
+          if (active) { recentReports.set(cacheKey, value); setReport(value); setError(""); }
         }).catch((reason: Error) => {
           if (active) setError(reason instanceof AppError && reason.code === "UNKNOWN_OPERATION" ? "当前后台尚未支持费用明细，请在任务结束后重启后台服务。" : reason.message);
         }).finally(() => {
           inFlight = false;
           if (!active) return;
-          setLoading(false);
+          if (showLoading && !visiblePending) setLoading(false);
           if (dirty) schedule();
         });
-      }, 150);
+      }, delay);
     };
     refresh.current = schedule;
-    schedule();
+    schedule(true, 0);
     return () => { active = false; clearTimeout(timer); refresh.current = null; };
   }, [scope.workspaceId, scope.sessionId, connection.connected, connection.generation]);
-  useEffect(() => { refresh.current?.(); }, [revision.revision, attempt]);
+  useEffect(() => { if (revision.revision > 0) refresh.current?.(); }, [revision.revision]);
   return <div className="cost-page">
     <header className="cost-topbar"><div className="cost-heading"><span>用量与账单</span><strong>费用明细</strong></div><div className="cost-actions">
-      <button className="cost-refresh" type="button" aria-label="刷新费用" aria-busy={loading} disabled={!connection.connected || loading} onClick={() => setAttempt((value) => value + 1)}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.1 7a7 7 0 0 1 11.55-2L20 8M4 16l2.35 3A7 7 0 0 0 17.9 17" /></svg><span>{loading ? "更新中" : "刷新"}</span>
+      <button className="cost-refresh" type="button" aria-label="刷新费用" data-tooltip="刷新费用" aria-busy={loading} disabled={!connection.connected || loading} onClick={() => refresh.current?.(true)}>
+        <Icon name="rotate-cw" />
       </button>{closeControl ?? <a className="cost-back" href="/">返回工作台</a>}
     </div></header>
     <div className="cost-content">
-      <div className="cost-title"><p>会话费用</p><h1>{report?.title ?? "费用明细"}</h1><span>主 Agent、子 Agent 与模型调用的累计明细</span></div>
-      <p className="cost-status" role="status">{!connection.connected ? "连接已断开或正在连接，显示的费用可能尚未更新。" : loading ? "正在读取费用记录…" : report ? `更新于 ${new Date(report.updatedAt).toLocaleTimeString("zh-CN")} · 用量变化时自动更新` : "尚未读取费用"}</p>
-      {error && <div className="cost-warning" role="alert"><p>{error}</p><button className="cost-refresh" type="button" disabled={!connection.connected || loading} onClick={() => setAttempt((value) => value + 1)}>重新加载</button></div>}
+      {!closeControl && <div className="cost-title"><p>会话费用</p><h1>{report?.title ?? "费用明细"}</h1><span>主 Agent、子 Agent 与模型调用的累计明细</span></div>}
+      <p className="cost-status" role="status">{!connection.connected ? "连接已断开或正在连接，显示的费用可能尚未更新。" : loading ? report ? "正在更新，暂时显示上次读取的记录…" : "正在读取费用记录…" : report ? "用量变化时自动更新 · 金额以供应商账单为准" : "尚未读取费用"}</p>
+      {error && <div className="cost-warning" role="alert"><p>{error}</p><button className="cost-refresh" type="button" disabled={!connection.connected || loading} onClick={() => refresh.current?.(true)}>重新加载</button></div>}
+      {sessionSummary}
       {report && <Report report={report} />}
     </div>
   </div>;
 }
-export function CostsPopover({ scope, trigger, onClose }: { scope: Scope; trigger: HTMLButtonElement; onClose: () => void }) {
-  const { panel, close, host } = useSettingsPopover(trigger, onClose);
+export function CostsPopover({ scope, trigger, onClose, sessionSummary }: { scope: Scope; trigger: HTMLButtonElement; onClose: () => void; sessionSummary?: ReactNode }) {
+  const { panel, close, host } = useSettingsPopover(trigger, onClose, "anchored");
   return createPortal(<dialog ref={panel} open popover="auto" className="cost-popover" aria-label="费用明细" onKeyDown={(event) => {
     event.stopPropagation();
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") event.preventDefault();
   }}>
-    <CostPage scope={scope} closeControl={<button ref={close} type="button" className="cost-close action-icon" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
+    <CostPage scope={scope} sessionSummary={sessionSummary} closeControl={<button ref={close} type="button" className="cost-close action-icon" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
+      <Icon name="close" />
     </button>} />
   </dialog>, host);
 }

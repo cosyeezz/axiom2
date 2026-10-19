@@ -35,10 +35,13 @@ test("Markdown images: real WS, historical assistant ownership, restart, errors 
     const scope = { workspaceId: w.id, sessionId: create().id }, other = { ...scope, sessionId: create().id };
     const image = join(root, "generated image.png"), href = image.replace(/\\/g, "/");
     writeFileSync(image, Buffer.from(png, "base64"));
+    const svgPath = join(root, "图标候选.svg"), svgHref = svgPath.replace(/\\/g, "/");
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 12h20" stroke="black"/></svg>';
+    writeFileSync(svgPath, svg);
     const file = join(root, "bound.jsonl");
     writeFileSync(file, [
       { type: "session", version: 3, id: randomUUID(), timestamp: new Date().toISOString(), cwd },
-      { type: "message", id: "reply", parentId: null, timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: `![生成的图片](<${href}>)` }], timestamp: 1 } },
+      { type: "message", id: "reply", parentId: null, timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: `![生成的图片](<${href}>)\n![矢量图标](<${svgHref}>)` }], timestamp: 1 } },
       { type: "message", id: "user", parentId: "reply", timestamp: new Date().toISOString(), message: { role: "user", content: `![图](<${href}>)`, timestamp: 2 } },
       { type: "message", id: "code", parentId: "user", timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: `\`![图](<${href}>)\`` }], timestamp: 3 } },
     ].map((row) => JSON.stringify(row)).join("\n") + "\n");
@@ -63,6 +66,15 @@ test("Markdown images: real WS, historical assistant ownership, restart, errors 
     const params = { messageId: "reply", href };
     assert.equal((await call(scope, params)).data, png);
     assert.equal((await call(scope, params)).mimeType, "image/png");
+    const svgParams = { messageId: "reply", href: svgHref };
+    const vector = await call(scope, svgParams);
+    assert.equal(vector.mimeType, "image/svg+xml");
+    assert.equal(Buffer.from(vector.data, "base64").toString(), svg);
+    await assert.rejects(call(other, svgParams), { code: "NOT_FOUND" });
+    await assert.rejects(call(scope, { ...svgParams, messageId: "user" }), { code: "IMAGE_PREVIEW_FORBIDDEN" });
+    writeFileSync(svgPath, '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>');
+    await assert.rejects(call(scope, svgParams), { code: "INVALID_IMAGE" });
+    writeFileSync(svgPath, svg);
     assert.ok(!JSON.stringify(app.agents.messages(scope)).includes(png));
     await assert.rejects(call(other, params), { code: "NOT_FOUND" });
     for (const messageId of ["user", "code"])
@@ -75,6 +87,7 @@ test("Markdown images: real WS, historical assistant ownership, restart, errors 
     app.store.db.prepare("UPDATE workspaces SET authorized=1 WHERE id=?").run(w.id);
     ws!.terminate(); await app.close(); app = await startServer({ root, port: 0 }); await connect();
     assert.equal((await call(scope, params)).data, png);
+    assert.equal((await call(scope, svgParams)).mimeType, "image/svg+xml");
     writeFileSync(image, "<svg onload='alert(1)'></svg>");
     await assert.rejects(call(scope, params), { code: "INVALID_IMAGE" });
     const large = Buffer.alloc(10 * 1024 * 1024 + 1); Buffer.from(png, "base64").copy(large); writeFileSync(image, large);

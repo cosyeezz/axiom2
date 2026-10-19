@@ -1,3 +1,4 @@
+import { discardedResults } from "../session-rewrite.js";
 import { randomUUID } from "node:crypto";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Agents } from "../agents.js";
@@ -40,6 +41,10 @@ export class TaskDelivery {
     this.notify(scope);
   }
   reconcilePending(scope: Scope, retryFailed = true) {
+    // Lifecycle callbacks have nothing to reconcile once all deliveries are
+    // terminal. Explicit recovery still reads rewrite markers before retrying.
+    if (!retryFailed && !this.store.db.prepare(`SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId
+      WHERE t.parentSessionId=? AND r.delivery IN ('pending','inflight','unknown') LIMIT 1`).get(scope.sessionId)) return;
     if (!this.reconcileNotifications(scope) || this.notifying.has(scope.sessionId)) return;
     // Only an explicit new operation authorizes retries. An unconfirmed active
     // attempt stays unknown until its owner has stopped and history is readable.
@@ -56,7 +61,7 @@ export class TaskDelivery {
   }
   rejected(scope: Scope, id: string, error = "通知未进入安全交付边界", uncertain = false) {
     const state = uncertain ? "unknown" : "failed";
-    this.store.db.prepare(`UPDATE task_results SET delivery=? WHERE id=? AND delivery!='delivered'
+    this.store.db.prepare(`UPDATE task_results SET delivery=? WHERE id=? AND delivery NOT IN ('delivered','discarded')
       AND taskId IN (SELECT id FROM tasks WHERE parentSessionId=?)`).run(state, id, scope.sessionId);
     this.store.db.prepare("UPDATE task_notification_attempts SET state=?,error=? WHERE sessionId=? AND state IN ('inflight','unknown') AND EXISTS (SELECT 1 FROM json_each(resultIds) WHERE value=?)")
       .run(state, error, scope.sessionId, id);
@@ -67,7 +72,7 @@ export class TaskDelivery {
         AND NOT EXISTS (SELECT 1 FROM json_each(resultIds) j JOIN task_results r ON r.id=j.value WHERE r.delivery!='delivered' AND r.id!=?)`).run(scope.sessionId, id);
       this.store.db
         .prepare(
-          "UPDATE task_results SET delivery='delivered' WHERE id=? AND taskId IN (SELECT id FROM tasks WHERE parentSessionId=?)",
+          "UPDATE task_results SET delivery='delivered' WHERE id=? AND delivery!='discarded' AND taskId IN (SELECT id FROM tasks WHERE parentSessionId=?)",
         )
         .run(id, scope.sessionId);
     }
@@ -139,7 +144,7 @@ export class TaskDelivery {
         status,
         report,
         reportKind,
-        ...(row.summaryDeadlineAt ? { budgetSummary: true } : {}),
+        ...(row.summaryDeadlineAt || run.reasonCode === "BUDGET_SUMMARY" ? { budgetSummary: true } : {}),
         elapsedMs: Math.max(0, (run.endedAt ?? Date.now()) - run.startedAt),
         ...(stop ? { stop: JSON.parse(String(stop.body)) } : {}),
         reason: row.error || run.error,
@@ -147,7 +152,7 @@ export class TaskDelivery {
         endedAt: run.endedAt ?? Date.now(),
         unfinished:
           status === "completed"
-            ? [row.summaryDeadlineAt ? "工作预算已到，本次交付为无工具总结；请核对实际完成情况和未验证项。" : "模型报告不等于全部验收通过；请核对交付中的未验证项。"]
+            ? [row.summaryDeadlineAt || run.reasonCode === "BUDGET_SUMMARY" ? "工作预算已到，本次交付为无工具总结；请核对实际完成情况和未验证项。" : "模型报告不等于全部验收通过；请核对交付中的未验证项。"]
             : ["任务未正常完成；只保留已记录产出，未自动重做。"],
         sideEffects: `${known.length ? known.slice(-30).join("；") : "未记录工具返回"}。文件及外部副作用未回滚。`,
       };
@@ -188,10 +193,12 @@ export class TaskDelivery {
       truncated: end < saved.report.length, nextOffset: end < saved.report.length ? end : null };
   }
   reconcileNotifications(scope: Scope) {
-    if (!this.store.db.prepare(`SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId
-      WHERE t.parentSessionId=? AND r.delivery!='delivered' LIMIT 1`).get(scope.sessionId)) return true;
     try {
-      for (const entry of this.manager(scope)?.getEntries() ?? [])
+      const manager = this.manager(scope);
+      // The JSONL marker closes the crash window between switching branch and SQLite updates.
+      if (manager) for (const id of discardedResults(manager))
+        this.store.db.prepare("UPDATE task_results SET delivery='discarded' WHERE id=? AND taskId IN (SELECT id FROM tasks WHERE parentSessionId=?)").run(id, scope.sessionId);
+      for (const entry of manager?.getEntries() ?? [])
         if (
           entry.type === "custom_message" && entry.customType === "axiom-result" &&
           (entry.details as any)?.axiomInput
@@ -206,7 +213,12 @@ export class TaskDelivery {
     if (
       this.closing ||
       this.records.frozen(scope) ||
-      this.notifying.has(scope.sessionId)
+      this.notifying.has(scope.sessionId) ||
+      // Running/delivered events arrive even when there is no notification to
+      // send. Do not reopen a potentially huge parent JSONL just to learn that.
+      !this.store.db.prepare(`SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId
+        WHERE t.parentSessionId=? AND r.delivery='pending' LIMIT 1`).get(scope.sessionId) ||
+      !this.reconcileNotifications(scope)
     )
       return;
     this.notifying.add(scope.sessionId);
@@ -242,7 +254,9 @@ export class TaskDelivery {
               notification: { ...items[0], items },
               onStart: (owner) => { this.store.db.prepare("UPDATE task_notification_attempts SET runId=? WHERE id=?").run(owner.id, attemptId); },
               beforeStart: () => {
-                if (this.closing || this.records.frozen(scope)) throw new AppError("PARENT_FROZEN", "父会话已停止，不自动启动结果处理");
+                if (this.closing || this.records.frozen(scope) || items.some((item) =>
+                  this.store.db.prepare("SELECT delivery FROM task_results WHERE id=?").get(item.id)?.delivery !== "inflight"))
+                  throw new AppError("PARENT_FROZEN", "父会话已停止或回滚，不自动启动旧结果处理");
               },
             });
               if (receipt && typeof receipt === "object" && "runId" in receipt && typeof receipt.runId === "string")
@@ -252,9 +266,9 @@ export class TaskDelivery {
             const known = error instanceof AppError && ["INVALID_CONFIG", "MODEL_UNAVAILABLE", "PARENT_FROZEN", "AGENT_STOPPED", "SHUTTING_DOWN", "NOTIFICATION_NOT_SENT", "AGENT_BUSY", "REVISION_CONFLICT", "PROMPT_PREPARATION_FAILED", "WORKER_START_FAILED"].includes(error.code);
             const state = known ? "failed" : "unknown";
             this.reconcileNotifications(scope);
-            this.store.db.prepare("UPDATE task_notification_attempts SET state=?,error=? WHERE id=? AND state!='delivered'")
+            this.store.db.prepare("UPDATE task_notification_attempts SET state=?,error=? WHERE id=? AND state NOT IN ('delivered','discarded')")
               .run(state, known ? (error as AppError).message : "投递结果未知；须先核对会话记录。", attemptId);
-            for (const item of items) this.store.db.prepare("UPDATE task_results SET delivery=? WHERE id=? AND delivery!='delivered'").run(state, item.id);
+            for (const item of items) this.store.db.prepare("UPDATE task_results SET delivery=? WHERE id=? AND delivery NOT IN ('delivered','discarded')").run(state, item.id);
           }
         } finally {
           this.notifying.delete(scope.sessionId);

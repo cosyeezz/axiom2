@@ -140,7 +140,7 @@ export function Compression({ scope }: { scope?: Scope }) {
         aria-expanded={open}
         popoverTarget={id}
         aria-label={job ? `打开后台压缩 · ${compressionStatusLabel(job)}` : "打开后台压缩"}
-        data-tooltip="打开压缩页面：选择模型、开始压缩或取消任务"
+        data-tooltip={pending ? "压缩操作待核实；点击查看详情" : error ? `压缩：${error}；点击查看详情` : "后台压缩：查看进度与设置"}
         style={{
           width: 44,
           minWidth: 44,
@@ -150,26 +150,11 @@ export function Compression({ scope }: { scope?: Scope }) {
         disabled={!scope}
         onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}
       >
-        <CompressionIcon state={state} />
+        <CompressionIcon state={state} phase={job?.phase} />
         <span className="screen-reader" role="status" aria-live="polite">
           {job ? `${compressionStatusLabel(job)} · 查看` : "后台压缩"}
         </span>
       </button>
-      {!open && error && (
-        <span className="compression-feedback" role="status">
-          {error}
-        </span>
-      )}
-      {!open && pending && (
-        <button
-          type="button"
-          className="compression-trigger"
-          disabled={busy || connection !== "已连接本地服务"}
-          onClick={() => void reconcile()}
-        >
-          核实压缩状态（不重发）
-        </button>
-      )}
       {open && (
         <CompressionDetail
           id={id}

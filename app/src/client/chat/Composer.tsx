@@ -6,10 +6,8 @@ import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running, type Selection } from "../../shared/agent.js";
 import { tasksScope, emptyTasks, taskActive } from "../../shared/tasks.js";
-import { canContinue } from "../../shared/session-state.js";
-import { useOptimistic } from "./optimistic.js";
 import { ModelPicker } from "./ModelPicker.js";
-import { Usage } from "./Usage.js";
+import { Usage, type UsageTools } from "./Usage.js";
 import { useSubmission } from "./useSubmission.js";
 import { AttachmentList, AttachmentPicker } from "./Attachments.js";
 import { AttachmentInputOverlay } from "./AttachmentInputOverlay.js";
@@ -29,16 +27,17 @@ const noConfig: Configuration = {
 export function Composer({
   scope,
   nested = false,
+  tools,
 }: {
   scope: Scope;
   nested?: boolean;
+  tools?: UsageTools;
 }) {
   const info = useScope(agentScope(scope), emptyAgent),
     tasks = useScope(!nested ? tasksScope(scope) : null, emptyTasks),
     config = useScope("configuration", noConfig),
     connection = useConnection();
   const connected = useConnectionState().connected;
-  const pending = useOptimistic(scope);
   const active = nested
       ? info.task
         ? taskActive(info.task.status)
@@ -95,8 +94,8 @@ export function Composer({
       <div className="container">
         <SteeringQueue scope={scope} />
         <AnnotationTray scope={scope} disabled={busy || !connected || (!active && !selected)}
-          send={(items, text) => void submit(active ? "append" : "prompt", {
-            draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items),
+          send={(items, text, supplement) => void submit(active ? "append" : "prompt", {
+            draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items, supplement),
           })} />
 
         <AttachmentList scope={scope} draft={draft} reading={reading} />
@@ -166,16 +165,6 @@ export function Composer({
               <ModelPicker scope={scope} nested={nested} />
             </div>
             <div className="composer-actions">
-            {!active && canContinue(info.run) && <button
-              type="button" className="icon-btn retry-action" aria-label="重试"
-              data-tooltip="从中断处重试，保留已有工具结果"
-              disabled={busy || !connected || !selected || pending.length > 0}
-              onClick={() => void submit("continue")}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 10a9 9 0 1 1 2.8 8.5M3 4v6h6" />
-              </svg>
-            </button>}
             <button
               className={`btn btn-primary send${active ? " is-running" : ""}`}
               type="submit"
@@ -205,7 +194,7 @@ export function Composer({
             </div>
           </div>
         </form>
-        <Usage scope={scope} />
+        <Usage scope={scope} tools={tools} />
         {persistence.conflict && <div className="draft-status" role="status" aria-live="polite">
           <span>另一个窗口有不同的草稿，当前输入已保留。</span>
           <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, true)}>保存当前输入</button>
@@ -216,7 +205,8 @@ export function Composer({
     </section>
   );
 }
-export function EmptyComposer({ onSelect, openWorkspace }: {
+export function EmptyComposer({ onSelect, openWorkspace, tools }: {
+  tools?: UsageTools;
   onSelect?: (selection: Selection) => Promise<void>;
   openWorkspace: () => void;
 }) {
@@ -258,7 +248,7 @@ export function EmptyComposer({ onSelect, openWorkspace }: {
             </button>
           </div>
         </form>
-        <Usage />
+        <Usage tools={tools} />
         <Connection />
       </div>
     </section>

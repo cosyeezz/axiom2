@@ -1,3 +1,4 @@
+import { Icon } from "../Icon.js";
 import { useEffect, useRef } from "react";
 import type {
   ProviderDraft as Provider,
@@ -216,10 +217,7 @@ export function ProviderConnection({
                     aria-pressed={showKey}
                     onClick={() => setShowKey(!showKey)}
                   >
-                    <svg aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
+                    <Icon name={showKey ? "eye-off" : "eye"} />
                   </button>
                 </div>
                 <span className="field-help" id="provider-key-status" role="status">

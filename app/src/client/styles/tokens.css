@@ -8,7 +8,7 @@
   --fg:   #f7f8f8;                      /* near-white primary text */
   --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
   --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
-  --meta:  #62666d;                     /* quaternary — timestamps, disabled */
+  --meta:  #8a8f98;                     /* readable metadata and placeholders */
 
   /* ─── Border ───────────────────────────────────────────────────── */
   --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */
@@ -23,8 +23,11 @@
 
   /* ─── Semantic ─────────────────────────────────────────────────── */
   --success: #27a644;                   /* Linear green */
-  --warn:    #eab308;
-  --danger:  #dc2626;
+  --warn:    #c5aa78;                   /* muted amber on dark surfaces */
+  --danger:  #a85656;                   /* muted red button fill */
+  --danger-icon: #d99595;               /* dusty rose icons on dark surfaces */
+  --danger-text: var(--danger-icon);    /* readable error text, separate from fill */
+  --danger-hover: #934949;              /* white-label contrast; stop icon/glow on light surfaces */
 
   /* ─── Typography ───────────────────────────────────────────────── */
   --font-display: "Inter Variable", "Inter", "SF Pro Display", "PingFang SC", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;

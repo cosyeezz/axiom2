@@ -106,6 +106,9 @@ try {
   mkdirSync(resolve("test-results"), { recursive: true });
   for (const [width, height] of [[360, 800], [390, 844], [430, 932], [600, 960], [820, 1180], [1024, 768], [1366, 768], [1440, 900], [1920, 1080]]) {
     await page.setViewportSize({ width, height });
+    await page.waitForFunction(() => document.querySelector(".app")?.classList.contains("mobile-workbench") === matchMedia("(max-width:640px), (pointer:coarse) and (max-height:500px)").matches);
+    // Viewport emulation resolves before resize/visualViewport and ResizeObserver positioning.
+    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     const panel = picker.locator(".model-popover");
     const box = await panel.boundingBox();
     assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.y + box.height <= height + 1, `panel fits ${width}`);

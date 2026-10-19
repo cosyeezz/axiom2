@@ -65,9 +65,9 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
         observed.delete(node);
       }
       for (const { node, top, depth } of headings.values()) {
-        node.setAttribute("data-sticky-disclosure", "");
-        node.style.setProperty("--disclosure-top", `${top}px`);
-        node.style.setProperty("--disclosure-layer", String(100 - depth));
+        if (!node.hasAttribute("data-sticky-disclosure")) node.setAttribute("data-sticky-disclosure", "");
+        if (node.style.getPropertyValue("--disclosure-top") !== `${top}px`) node.style.setProperty("--disclosure-top", `${top}px`);
+        if (node.style.getPropertyValue("--disclosure-layer") !== String(100 - depth)) node.style.setProperty("--disclosure-layer", String(100 - depth));
         if (!observed.has(node)) { observed.add(node); resize.observe(node); }
       }
     };

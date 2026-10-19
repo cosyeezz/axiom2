@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
-import { Dialog, SettingsSidebar } from "../components.js";
+import { Icon, Dialog, SettingsSidebar } from "../components.js";
 import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
 import { ModelRegistry } from "../models/ModelRegistry.js";
@@ -107,6 +107,7 @@ export default function Models() {
                     <button
                       key={p.id}
                       className="supplier-option"
+                      data-tooltip={p.name || "新供应商"}
                       data-configured={p.auth?.configured || false}
                       aria-current={!adding && selected === p.id}
                       disabled={!!login}
@@ -114,7 +115,7 @@ export default function Models() {
                     >
                       <span>
                         <strong>
-                          <span className="supplier-name" title={p.name || "新供应商"}>
+                          <span className="supplier-name">
                             {p.name || "新供应商"}
                           </span>
                           <span className="tag">{p.models.length}</span>
@@ -268,7 +269,7 @@ export default function Models() {
                   className="btn btn-primary"
                   id="save-provider"
                   disabled={busy || !!login || needsReconcile || !dirty || !revision}
-                  title={needsReconcile ? "请先重新读取配置" : "统一保存所有供应商和模型的修改"}
+                  data-tooltip={needsReconcile ? "请先重新读取配置" : "统一保存所有供应商和模型的修改"}
                   onClick={() => void save()}
                 >
                   保存
@@ -289,7 +290,7 @@ export default function Models() {
                   className="icon-btn config-reload"
                   type="button"
                   aria-label="重新读取配置"
-                  title="重新读取配置"
+                  data-tooltip="重新读取配置"
                   disabled={busy || !!login}
                   onClick={() => {
                     if (dirty || editor) setDecision({
@@ -300,8 +301,7 @@ export default function Models() {
                     else void load();
                   }}
                 >
-                  {/* Tabler Icons · refresh · MIT; see ICONS-LICENSE.txt. */}
-                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4m-4 4a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                  <Icon name="rotate-cw" />
                 </button>
                 <span className="save-state" data-dirty={dirty} role="status">
                   {busy ? "处理中…" : dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}

@@ -1,3 +1,4 @@
+import { acceptsLease, awaitExecutionPermit, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { join } from "node:path";
 import {
   createAgentSession,
@@ -14,6 +15,7 @@ import { sumCosts, type CostTotals } from "../shared/costs.js";
 import { usageCost } from "./usage-cost.js";
 
 export interface CompressionInput {
+  executionGate?: boolean;
   root: string;
   cwd: string;
   file: string;
@@ -23,21 +25,26 @@ export interface CompressionInput {
 let session: AgentSession | undefined,
   cancelled = false,
   started = false;
-const send = (value: unknown) => {
-  if (process.connected) process.send?.(value);
-};
+let activeLease: LeaseRef | undefined;
+const send = (value: unknown) => leaseSender(activeLease)(value);
 process.on("disconnect", () => process.exit(1));
 process.on("message", (event: any) => {
-  if (event.type === "stop") {
+  if (event.type === "shutdown" && !started) { process.exit(0); return; }
+  if (event.type === "start" && !acceptsLease(event.lease)) return;
+  if (event.type !== "start" && !(event.type === "shutdown" && sameInstance(event.instance)) && workerInstance && !sameLease(event.lease, activeLease)) return;
+  if (event.type === "stop" || event.type === "shutdown") {
     cancelled = true;
     session?.abortCompaction();
   }
   if (event.type === "start" && !started) {
     started = true;
+    activeLease = event.lease ? Object.freeze({ ...event.lease }) : undefined;
     void run(event.input);
   }
 });
 async function run(input: CompressionInput) {
+  const send = leaseSender(activeLease);
+  const accounting: Promise<unknown>[] = [];
   try {
     const runtime = await new ModelService(input.root).runtime(
       input.modelsFile,
@@ -84,6 +91,7 @@ async function run(input: CompressionInput) {
     session.subscribe((event) => {
       if (event.type === "compaction_start") send({ type: "phase" });
     });
+    await awaitExecutionPermit(activeLease, input.executionGate);
     if (cancelled) return send({ type: "cancelled" });
     // Pi 1.1.0 drops customInstructions in generateTurnPrefixSummary (split turns).
     // This session only compacts snapshots: include the same requirement in every
@@ -99,10 +107,10 @@ async function run(input: CompressionInput) {
         messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }],
       }, options);
       // result() observes the same stream without consuming/replaying its events.
-      void response.result().then((message) => {
+      accounting.push(response.result().then((message) => {
         charges[index] = usageCost(message.usage);
         publishBilling();
-      }).catch(() => { /* The unknown request remains accounted for. */ });
+      }).catch(() => { /* The unknown request remains accounted for. */ }));
       return response;
     };
     const result = await session.compact(compactionInstructions);
@@ -128,9 +136,11 @@ async function run(input: CompressionInput) {
   } catch (error) {
     send(cancelled ? { type: "cancelled" } : { type: "failed", error: compressionError(error) });
   } finally {
+    await Promise.allSettled(accounting);
+    await session?.waitForIdle();
     session?.dispose();
     if (process.connected)
-      process.send?.({ type: "closed" }, () => process.exit(0));
+      process.send?.({ type: "closed", lease: activeLease }, () => process.exit(0));
     else process.exit(0);
   }
 }

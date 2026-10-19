@@ -208,7 +208,11 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     await wait(() => !running(app.agents.info(to).run), "decode test unfinished");
     assert.equal(app.store.db.prepare("SELECT state FROM task_inputs WHERE id=?").get(healthy.inputId), undefined);
     assert.ok(JSON.stringify(requests.at(-1)).includes("healthy after decode failure"), "later healthy input still reaches pi");
-    assert.match(records.rows("WHERE id=?", taskId)[0].error!, /无法解码/);
+    const failedInput = app.store.db.prepare("SELECT taskId,runId,state,error FROM task_input_receipts WHERE inputId=?").get(bad.inputId)!;
+    assert.equal(failedInput.taskId, taskId); assert.equal(failedInput.runId, bad.runId);
+    assert.equal(failedInput.state, "failed"); assert.match(String(failedInput.error), /无法解码/);
+    assert.equal(records.rows("WHERE id=?", taskId)[0].error, null, "one rejected input does not poison the task outcome");
+    assert.equal(app.agents.info(to).run!.status, "completed");
     assert.ok(!JSON.stringify(requests.at(-1)).includes("invalid decode"));
 
     // Race image normalization with turn completion. It may be consumed in this

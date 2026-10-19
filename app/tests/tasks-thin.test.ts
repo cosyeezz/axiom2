@@ -33,6 +33,7 @@ function fixture() {
     assertContinuation: () => {},
     thread: () => ({ ids: [] }),
     active: () => !!run && ["running", "starting", "stopping"].includes(run.status),
+    executing: () => !!run && ["running", "starting", "stopping"].includes(run.status),
     publish: () => {},
     signal: (_scope: unknown, _runId: string, event: unknown) => { signals.push(event); return true; },
     stop: (...args: unknown[]) => {
@@ -72,7 +73,7 @@ test("queued cancellation creates one result without a worker or cleanup state",
   try {
     assert.deepEqual(f.scheduler.cancel(f.row(), { reason: "stop" }), { taskId: f.taskId, status: "cancelled" });
     f.scheduler.cancel(f.row(), {});
-    assert.equal(f.stops.length, 0);
+    assert.equal(f.stops.length, 1, "cancellation revokes any pending startup even before Run activation");
     assert.equal(f.records.inputs(f.row(), "queued").length, 0);
     const result = f.records.list(f.scope).tasks[0].results;
     assert.equal(result.length, 1);

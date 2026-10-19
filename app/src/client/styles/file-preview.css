@@ -78,4 +78,4 @@
 @media(max-width:640px) { .file-preview-panel { inset: 6px 6px 6px 10%; border-radius: 10px; } }
 @keyframes file-enter { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes file-spin { to { transform: rotate(360deg); } }
-@media(prefers-reduced-motion:reduce) { .file-preview-panel, .file-loading { animation: none; } .file-action { transition: none; } }
+@media(prefers-reduced-motion:reduce) { .file-preview-panel { animation: none; } .file-action { transition: none; } }

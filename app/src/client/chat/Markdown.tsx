@@ -1,4 +1,5 @@
-import { memo, type ReactNode } from "react";
+import { memo, useContext, useMemo, type ReactNode } from "react";
+import { DerivedContext } from "./derived-cache.js";
 import type { Token } from "marked";
 import { FileLink } from "./FileLink.js";
 import { localFileLink } from "../../shared/file-preview.js";
@@ -45,7 +46,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
       case "list": {
         const Tag = t.ordered ? "ol" : "ul";
         return (
-          <Tag key={i}>
+          <Tag key={i} {...(t.ordered ? { start: t.start } : {})}>
             {t.items.map((item: any, n: number) => (
               <li key={n}>
                 {item.task && (
@@ -123,6 +124,8 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean }) => (
-  <>{tokens(markdown.lexer(text), images, renderBlock, compact)}</>
-));
+export const Markdown = memo(({ text, images, renderBlock, compact = false }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean }) => {
+  const cache = useContext(DerivedContext);
+  const ast = useMemo(() => cache ? cache.get(`markdown:chinese-emphasis-v1:${text}`, () => markdown.lexer(text)) : markdown.lexer(text), [cache, text]);
+  return <>{tokens(ast, images, renderBlock, compact)}</>;
+});

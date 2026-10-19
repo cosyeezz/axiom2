@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Icon } from "../Icon.js";
 import { createPortal } from "react-dom";
 import type { OpenCliSettings } from "../../shared/builtin-tools.js";
 
@@ -68,7 +69,7 @@ export function BrowserWindowSelect({ value, disabled, onChange }: {
         } else if (event.key === "Tab") setOpen(false);
       }}>
       <span>{options.find((option) => option.value === value)?.label}</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      <Icon name="chevron-down" />
     </button>
     {expanded && createPortal(<div ref={menu} id="opencli-window-options" className="tools-window-menu" role="listbox" aria-label="浏览器窗口" style={position}
       onPointerDown={(event) => event.preventDefault()}>
@@ -76,7 +77,7 @@ export function BrowserWindowSelect({ value, disabled, onChange }: {
         aria-selected={value === option.value} className={`tools-window-option${active === index ? " is-active" : ""}`}
         onPointerMove={() => setActive(index)} onClick={() => choose(index)}>
         <span>{option.label}</span>
-        {value === option.value && <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>}
+        {value === option.value && <Icon name="check" />}
       </div>)}
     </div>, document.body)}
   </>;

@@ -1,3 +1,4 @@
+import type { RewriteTarget } from "../../shared/rewrite.js";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { command } from "../transport.js";
@@ -12,6 +13,7 @@ import type { DraftStamp } from "../../shared/drafts.js";
 import { optimisticStart, optimisticState } from "./optimistic.js";
 import { beginRecall, finishRecall, pendingRecall, reconcileInputs, beginResume, finishResume, pendingResume } from "./reconcile-inputs.js";
 import { messageLengthError } from "./message-limit.js";
+import { resumeAttempt } from "./resume-state.js";
 import { rejectSubmission, setSubmissionError, useSubmissionError } from "./submission-feedback.js";
 
 // A request belongs to the captured session/draft even if its receipt arrives after navigation.
@@ -30,7 +32,7 @@ export function useSubmission(
   const [busy, setBusy] = useState(false);
   const error = useSubmissionError(scope);
   const setError = (message: string) => setSubmissionError(scope, message);
-  async function submit(op: "prompt" | "append" | "stop" | "continue" = "prompt", provided?: { draft: Draft; onStart: () => void }) {
+  async function submit(op: "prompt" | "append" | "stop" | "continue" = "prompt", provided?: { draft: Draft; onStart: () => void; rewrite?: RewriteTarget }) {
     const continuing = op === "continue";
     const stopping = op === "stop";
     if (
@@ -39,8 +41,12 @@ export function useSubmission(
       (!stopping && !state.active && !state.selected)
     )
       return;
-    if (continuing && pendingResume(scope)) {
+    if (continuing && pendingResume(scope, state.runId)) {
       void reconcileInputs(scope).catch(() => {});
+      return;
+    }
+    if (provided?.rewrite && state.active) {
+      setError("请先停止此会话及活动子任务，再修改并重新发送。");
       return;
     }
     const current = provided?.draft ?? getDraft(scope);
@@ -49,12 +55,17 @@ export function useSubmission(
       if (lengthError) { setError(lengthError); return; }
     }
     if (!stopping && !continuing && !current.text.trim() && !current.attachment && !current.attachments?.length && !current.images?.length) return;
+    const requestId = crypto.randomUUID();
+    if (continuing) {
+      if (state.active || !state.runId) return;
+      let begun = false;
+      flushSync(() => { begun = beginResume(scope, requestId, state.runId); });
+      if (!begun) return;
+    }
     inFlight.current = true;
     setBusy(true);
     setError("");
     const captured = draftContent(current);
-    const requestId = crypto.randomUUID();
-    if (continuing) beginResume(scope, requestId);
     let stamp: DraftStamp | undefined;
     let started = false;
     try {
@@ -72,17 +83,18 @@ export function useSubmission(
         continuing ? "agent.resume" : stopping ? (task ? "task.cancel" : "agent.stop") : "prompt",
         continuing ? { expectedRunId: state.runId } : stopping
           ? (task ? { taskId: task.id } : { runId: state.runId })
-          : { ...captured, ...(stamp ? { draftStamp: stamp } : {}), ...(state.nested || state.active ? { mode: "steer" } : {}) },
+          : { ...captured, ...(provided?.rewrite ? { rewrite: provided.rewrite } : {}), ...(stamp ? { draftStamp: stamp } : {}), ...(state.nested || state.active ? { mode: "steer" } : {}) },
         task ? { ...scope, sessionId: task.parentSessionId } : scope,
         requestId,
       );
       if (stamp) completeDraftSubmission(scope, stamp);
-      if (continuing) finishResume(scope, requestId);
+      if (continuing) finishResume(scope, requestId, true);
       else if (!stopping) optimisticState(scope, requestId, "accepted", receipt.inputId ?? receipt.runId, receipt.inputId ? true : receipt.runId ? false : undefined);
     } catch (e) {
       if (continuing) {
+        const attempt = resumeAttempt(scope);
+        if (attempt?.requestId !== requestId || attempt.accepted) return;
         if ((e as AppError).code === "UNCERTAIN") {
-          setError("重试结果待确认，正在读取原回执；不会重复启动。");
           void reconcileInputs(scope).catch(() => {});
         } else {
           finishResume(scope, requestId);

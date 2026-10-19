@@ -21,7 +21,7 @@ export function ImagePreview({ image, loading = false, error = "", onClose }: {
       if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, []);
-  const supported = ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(image.mimeType);
+  const supported = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"].includes(image.mimeType);
   const outside = (x: number, y: number) => {
     const box = dialog.current!.getBoundingClientRect();
     return x < box.left || x > box.right || y < box.top || y > box.bottom;

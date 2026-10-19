@@ -57,10 +57,10 @@ function write(e: Entry, draft: Draft, submissionId?: string) {
   return value;
 }
 function restoreRemote(e: Entry, saved: DraftRecord) {
-  if (saved.submissionId && saved.submissionStatus !== "failed") {
+  if (saved.submissionId) {
     if (!pendingMessages(e.scope).some(item => item.id === saved.submissionId)) {
       optimisticStart(e.scope, saved.submissionId, saved.draft);
-      optimisticState(e.scope, saved.submissionId, "uncertain");
+      optimisticState(e.scope, saved.submissionId, saved.submissionStatus === "failed" ? "failed" : "uncertain");
     }
     restoreDraft(e.scope, { text: "", attachment: null, attachments: [], images: [] });
     void reconcileInputs(e.scope).catch(() => {});

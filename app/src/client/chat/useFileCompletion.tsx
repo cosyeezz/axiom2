@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject 
 import { command } from "../transport.js";
 import { updateDraft } from "../drafts.js";
 import type { Scope } from "../../shared/protocol.js";
+import { FileCompletionPopup } from "./FileCompletionPopup.js";
 import { atFileToken, insertFileSuggestion, type FileSuggestions, type FileSuggestion } from "./file-completion.js";
 
 export function useFileCompletion(scope: Scope, text: string, input: RefObject<HTMLTextAreaElement | null>) {
@@ -69,15 +70,15 @@ export function useFileCompletion(scope: Scope, text: string, input: RefObject<H
       "aria-expanded": open,
       "aria-activedescendant": open && result?.items[index] ? `${id}-${index}` : undefined,
     },
-    popup: open ? <div className="file-completion">
+    popup: open ? <FileCompletionPopup input={input}>
       <div className="file-picker-heading"><strong>引用文件 · pi</strong><span>↑↓ 选择 · Enter / Tab 插入 · Esc 关闭</span></div>
       <div id={id} role="listbox" aria-label="pi 文件选择" aria-busy={loading}>
         {result?.items.map((item, i) => <button type="button" role="option" id={`${id}-${i}`} key={item.value}
-          aria-selected={i === index} data-tooltip={item.value} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(item)}>
+          aria-selected={i === index} data-tooltip={item.value} onPointerDown={(e) => e.preventDefault()} onClick={() => choose(item)}>
           <span>{item.label}</span>{item.description && <small>{item.description}</small>}
         </button>)}
       </div>
       {(loading || error || !result?.items.length) && <p role="status">{loading ? "正在搜索工作空间文件…" : error || "没有匹配文件，继续输入路径或按 Esc 返回编辑"}</p>}
-    </div> : null,
+    </FileCompletionPopup> : null,
   };
 }

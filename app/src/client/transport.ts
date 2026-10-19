@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
+import { emptyMemoryView } from "../shared/memory.js";
 import { clearOptimistic, reconcileOptimistic } from "./chat/optimistic.js";
 import type { ChatMessage } from "../shared/agent.js";
 import {
@@ -10,7 +11,7 @@ import {
 
 const cache = new Map<
   string,
-  { streamId: string; seq: number; data: unknown; generation?: number; received?: number }
+  { streamId: string; seq: number; data: unknown; generation?: number; received?: number; synthetic?: boolean }
 >();
 let received = 0;
 const listeners = new Map<string, Set<() => void>>();
@@ -18,10 +19,11 @@ const sessionLru = new Map<string, true>();
 const remote = new Map<string, number>();
 const wireScope = (scope: string) => scope.startsWith("message:")
   ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : scope;
-const pinned = (key: string) => [...listeners.keys()].some((scope) => sessionKey(scope) === key);
+const sessionSubscriptions = new Map<string, number>();
+const pinned = (key: string) => sessionSubscriptions.has(key);
 function sessionKey(scope: string) {
   const parts = scope.split(":");
-  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs"].includes(parts[0]) && parts.length >= 3
+  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs", "memory"].includes(parts[0]) && parts.length >= 3
     ? `${parts[1]}:${parts[2]}` : null;
 }
 function touchSession(scope: string) {
@@ -41,6 +43,7 @@ const pending = new Map<
     resolve: (data: unknown) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    cleanup?: () => void;
   }
 >();
 let socket: WebSocket | undefined;
@@ -72,7 +75,13 @@ if (typeof window !== "undefined") {
     if (!bridge || !Number.isSafeInteger(probe) || (probe as number) < 1) return;
     void bridge.invoke("axiom_connection_report", { probe, state: connectionHealth() }).catch(() => {});
   });
-  const resume = () => { if (document.visibilityState === "visible") probeConnection(); };
+  const resume = () => {
+    if (document.visibilityState !== "visible") return;
+    if (socket?.readyState === WebSocket.OPEN && Date.now() - lastResponse >= 15000) socket.close();
+    else if (!socket || socket.readyState === WebSocket.CLOSED) void connect();
+    else probeConnection();
+  };
+  window.addEventListener("online", resume);
   window.addEventListener("focus", resume);
   window.addEventListener("pageshow", resume);
   document.addEventListener("visibilitychange", resume);
@@ -111,7 +120,9 @@ export function command<T>(
   params: Record<string, unknown> = {},
   target: { workspaceId?: string; sessionId?: string } = {},
   requestId: string = crypto.randomUUID(),
+  signal?: AbortSignal,
 ): Promise<T> {
+  if (signal?.aborted) return Promise.reject(new AppError("CANCELLED", "读取已取消"));
   if (socket?.readyState !== WebSocket.OPEN)
     return Promise.reject(new AppError("DISCONNECTED", "尚未连接，操作未发送"));
   const value: Command = { requestId, op, ...target, params };
@@ -126,9 +137,23 @@ export function command<T>(
         `请求超过 ${attachmentCommand ? "22 MiB" : "200 KB"}；操作未发送，请减少条目或附件。`,
       ),
     );
+  const sendingSocket = socket;
+  const cancelRead = () => {
+    if (!["agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document"].includes(op) ||
+      socket !== sendingSocket || sendingSocket?.readyState !== WebSocket.OPEN) return;
+    try { sendingSocket.send(JSON.stringify({ op: "read.cancel", requestId: crypto.randomUUID(), params: { requestId } })); } catch { /* Connection already closed. */ }
+  };
   return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer); pending.delete(requestId);
+      signal?.removeEventListener("abort", abort);
+      reject(new AppError("CANCELLED", "读取已取消"));
+      cancelRead();
+    };
     const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
       pending.delete(requestId);
+      cancelRead();
       reject(
         new AppError(
           "UNCERTAIN",
@@ -146,52 +171,81 @@ export function command<T>(
       },
       reject,
       timer,
+      cleanup: () => signal?.removeEventListener("abort", abort),
     });
+    signal?.addEventListener("abort", abort, { once: true });
     try {
       socket!.send(payload);
     } catch (error) {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       pending.delete(requestId);
       reject(error);
     }
   });
 }
 export function acceptSnapshot(event: Snapshot) {
-  if (sessionKey(event.scope) && !remote.has(wireScope(event.scope))) return;
-  if (event.scope.startsWith("messages:")) {
-    const previous = cache.get(event.scope);
-    if (previous?.streamId === event.streamId && previous.seq >= event.seq) return;
-    const [, workspaceId, sessionId] = event.scope.split(":");
-    const messages = (event.data ?? []) as ChatMessage[];
-    reconcileOptimistic({ workspaceId, sessionId }, messages);
-    const prefix = `message:${workspaceId}:${sessionId}:`;
-    const ids = new Set(messages.map((message) => prefix + message.id));
-    for (const name of cache.keys()) if (name.startsWith(prefix) && !ids.has(name)) {
-      cache.delete(name); listeners.get(name)?.forEach((fn) => fn());
-    }
-    for (const message of messages) acceptSnapshot({ ...event, scope: prefix + message.id, data: message });
-    cache.set(event.scope, { ...event, data: null, generation: connection.generation, received: ++received });
-    listeners.get(event.scope)?.forEach((fn) => fn());
-    return;
-  }
-  if (event.scope.startsWith("message:") && event.data) {
-    const [, workspaceId, sessionId] = event.scope.split(":");
-    reconcileOptimistic({ workspaceId, sessionId }, [event.data as ChatMessage]);
+  if ((sessionKey(event.scope) || event.scope.startsWith("memory-catalog:")) && !remote.has(wireScope(event.scope))) return;
+  if (event.scope.startsWith("message:")) {
+    const collection = cache.get(event.scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:"));
+    if (collection?.streamId === event.streamId && event.seq <= collection.seq) return;
   }
   const previous = cache.get(event.scope);
-  if (previous?.streamId === event.streamId && previous.seq >= event.seq)
-    return;
-  if (event.scope.startsWith("session:") && event.data === null) {
-    const [, workspaceId, sessionId] = event.scope.split(":");
-    clearOptimistic({ workspaceId, sessionId });
-  }
+  const sameStream = previous?.streamId === event.streamId;
+  if (sameStream && (previous.seq > event.seq || previous.seq === event.seq && previous.generation === connection.generation && !previous.synthetic)) return;
   touchSession(event.scope);
-  cache.set(event.scope, { ...event, generation: connection.generation, received: ++received });
-  listeners.get(event.scope)?.forEach((fn) => fn());
+  const changed = new Set<string>();
+  const put = (scope: string, data: unknown) => {
+    const old = cache.get(scope);
+    if (old?.streamId === event.streamId && old.seq > event.seq) return;
+    const duplicate = old?.streamId === event.streamId && old.seq === event.seq && !old.synthetic;
+    cache.set(scope, { streamId: event.streamId, seq: event.seq, data: duplicate ? old.data : data,
+      generation: connection.generation, received: ++received });
+    changed.add(scope);
+  };
+  if (event.scope.startsWith("messages:")) {
+    const [, workspaceId, sessionId] = event.scope.split(":");
+    const messages = (event.data ?? []) as ChatMessage[];
+    const prefix = `message:${workspaceId}:${sessionId}:`;
+    const ids = new Set(messages.map((message) => prefix + message.id));
+    for (const [name, old] of cache) if (name.startsWith(prefix) && !ids.has(name) &&
+      (old.streamId !== event.streamId || old.seq <= event.seq)) {
+      cache.delete(name); changed.add(name);
+    }
+    for (const message of messages) put(prefix + message.id, message);
+    put(event.scope, null);
+    const thread = `thread:${workspaceId}:${sessionId}`;
+    if (event.thread !== undefined && remote.has(thread)) put(thread, event.thread);
+    // Commit the entire collection and its freshness before any observer runs.
+    reconcileOptimistic({ workspaceId, sessionId }, messages);
+  } else {
+    put(event.scope, event.data);
+    if (event.scope.startsWith("message:") && event.data) {
+      const [, workspaceId, sessionId] = event.scope.split(":");
+      reconcileOptimistic({ workspaceId, sessionId }, [event.data as ChatMessage]);
+    }
+    if (event.scope.startsWith("session:") && event.data === null) {
+      const [, workspaceId, sessionId] = event.scope.split(":");
+      clearOptimistic({ workspaceId, sessionId });
+    }
+  }
+  const notify = new Set<() => void>();
+  for (const name of changed) for (const fn of listeners.get(name) ?? []) notify.add(fn);
+  notify.forEach((fn) => fn());
+}
+function optionalMemorySubscription(scope: string) {
+  const [kind, workspaceId, sessionId] = scope.split(":");
+  if (kind !== "memory" && kind !== "memory-catalog") return false;
+  const previous = cache.get(scope);
+  cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
+    generation: connection.generation, received: ++received,
+    data: kind === "memory" ? emptyMemoryView({ workspaceId, sessionId }) : [] });
+  listeners.get(scope)?.forEach((fn) => fn());
+  return true;
 }
 export function subscribeScope(scope: string, fn: () => void) {
   const key = sessionKey(scope);
-  if (key && !pinned(key) && new Set([...listeners.keys()].map(sessionKey).filter(Boolean)).size >= 5) {
+  if (key && !pinned(key) && sessionSubscriptions.size >= 5) {
     setStatus("同时展示的会话不能超过 5 个；请关闭其他会话后重新打开。");
     return () => {};
   }
@@ -200,18 +254,27 @@ export function subscribeScope(scope: string, fn: () => void) {
   if (!group) {
     group = new Set();
     listeners.set(scope, group);
+    if (key) sessionSubscriptions.set(key, (sessionSubscriptions.get(key) ?? 0) + 1);
     const wire = wireScope(scope), count = remote.get(wire) ?? 0;
     remote.set(wire, count + 1);
     const current = socket;
     if (!count) void command("subscribe", { scope: wire }).catch((error) => {
-      if (socket === current && current?.readyState === WebSocket.OPEN && remote.has(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
+      if (socket === current && current?.readyState === WebSocket.OPEN && remote.has(wire) && !optionalMemorySubscription(wire)) setStatus(`订阅读取失败：${error.message}；请重新连接或打开会话。`);
     });
   }
-  group.add(fn);
+  const listener = () => fn();
+  group.add(listener);
+  let active = true;
   return () => {
-    group!.delete(fn);
+    if (!active) return;
+    active = false;
+    group!.delete(listener);
     if (!group!.size) {
       listeners.delete(scope);
+      if (key) {
+        const count = sessionSubscriptions.get(key)! - 1;
+        if (count) sessionSubscriptions.set(key, count); else sessionSubscriptions.delete(key);
+      }
       const wire = wireScope(scope), count = (remote.get(wire) ?? 1) - 1;
       if (count) remote.set(wire, count);
       else { remote.delete(wire); void command("unsubscribe", { scope: wire }).catch(() => {}); }
@@ -219,6 +282,11 @@ export function subscribeScope(scope: string, fn: () => void) {
   };
 }
 export function scopeOrder(scope: string) { return cache.get(scope)?.received ?? 0; }
+/** Observe delivery even when a reconnect reuses an unchanged data object. */
+export function useScopeOrder(scope: string | null) {
+  const listen = useCallback((fn: () => void) => scope ? subscribeScope(scope, fn) : () => {}, [scope]);
+  return useSyncExternalStore(listen, () => scope ? scopeOrder(scope) : 0);
+}
 /** A reconnect must deliver fresh context before old cached content can confirm reading. */
 export function renderedContextReady(scope: { workspaceId: string; sessionId: string }, ids: string[], terminal: boolean) {
   const suffix = `${scope.workspaceId}:${scope.sessionId}`;
@@ -251,25 +319,29 @@ export async function connect() {
   const reconnect = () => { clearTimeout(retry); retry = setTimeout(() => void connect(), 1500); };
   try {
     const response = await fetch("/api/status", { signal: AbortSignal.timeout(10_000), cache: "no-store" });
-    if (!response.ok) throw Error("本地服务尚未就绪");
+    if (!response.ok) throw Error(response.status === 401 ? "设备授权已失效，请重新连接。" : "后台服务尚未就绪");
     const current = new WebSocket(location.origin.replace(/^http/, "ws") + "/ws");
+    const handshake = setTimeout(() => { if (current.readyState === WebSocket.CONNECTING) current.close(); }, 10000);
     socket = current;
     lastResponse = 0;
     const owns = () => socket === current;
     current.onopen = () => {
       if (!owns()) return;
+      clearTimeout(handshake);
       phase = "checking";
       connection = { connected: true, generation: connection.generation + 1 };
       setStatus("已连接本地服务");
       // The server's hello (or a valid receipt) confirms actual response evidence.
       for (const scope of remote.keys())
         void command("subscribe", { scope }).catch((error) => {
-          if (owns() && current.readyState === WebSocket.OPEN && remote.has(scope)) setStatus(`订阅读取失败：${error.message}；请重新打开会话。`);
+          if (owns() && current.readyState === WebSocket.OPEN && remote.has(scope) && !optionalMemorySubscription(scope)) setStatus(`订阅读取失败：${error.message}；请重新打开会话。`);
         });
       if (typeof window !== "undefined") {
         clearInterval(heartbeat);
         heartbeat = setInterval(() => {
-          if (owns() && Date.now() - lastResponse >= 5000) probeConnection();
+          if (!owns()) return;
+          if (lastResponse && Date.now() - lastResponse >= 20000) current.close();
+          else if (Date.now() - lastResponse >= 5000) probeConnection();
         }, 3000);
       }
     };
@@ -288,6 +360,7 @@ export async function connect() {
         const waiting = pending.get(value.requestId);
         if (!waiting) return;
         clearTimeout(waiting.timer);
+        waiting.cleanup?.();
         pending.delete(value.requestId);
         if (value.ok) waiting.resolve(value.data);
         else waiting.reject(new AppError(value.error.code, value.error.message));
@@ -295,6 +368,7 @@ export async function connect() {
     };
     current.onclose = () => {
       if (!owns()) return;
+      clearTimeout(handshake);
       clearInterval(heartbeat);
       probing = undefined;
       lastResponse = 0; phase = "disconnected";
@@ -302,14 +376,15 @@ export async function connect() {
       setStatus("连接已断开，正在重连；不会自动重发操作。");
       for (const waiting of pending.values()) {
         clearTimeout(waiting.timer);
+        waiting.cleanup?.();
         waiting.reject(new AppError("UNCERTAIN", "连接中断，未收到服务端响应；操作可能已执行，不会自动重发。"));
       }
       pending.clear();
       reconnect();
     };
-  } catch {
+  } catch (error) {
     phase = "disconnected";
-    setStatus("无法连接本地服务，正在重试；不会自动重发操作。");
+    setStatus(`${(error as Error).message || "连接暂不可用"} 正在重试；不会自动重发操作。`);
     reconnect();
   } finally { connecting = false; }
 }

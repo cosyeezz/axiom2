@@ -5,7 +5,7 @@
 .activity-status { position: relative; display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; color: var(--muted); }
 .activity-status[data-state="running"] { color: var(--success); }
 .activity-status[data-state="completed"] { color: var(--success); }
-.activity-status[data-state="failed"] { color: var(--danger); }
+.activity-status[data-state="failed"] { color: var(--danger-icon); }
 .activity-status[data-state="cancelled"], .activity-status[data-state="unknown"] { color: var(--warn); }
 .activity-status svg { width: 20px; height: 20px; }
 .activity-status .activity-status-dots { width: 24px; height: 24px; stroke: none; }

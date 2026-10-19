@@ -7,7 +7,7 @@ export class PersistedInputCursor {
   private offset = 0;
   private anchor = Buffer.alloc(0);
 
-  read(file: string): { ids: string[]; notifications: string[] } {
+  read(file: string, onMessages?: (ids: string[]) => void): { ids: string[]; notifications: string[] } {
     let fd: number;
     try { fd = openSync(file, "r"); }
     catch (error) {
@@ -32,7 +32,7 @@ export class PersistedInputCursor {
       // before continuing instead of trusting an old byte offset into new JSON.
       if (start && !bytes(start - this.anchor.length, this.anchor.length).equals(this.anchor)) start = 0;
       let position = start, committed = start, tail = Buffer.alloc(0);
-      const ids = new Set<string>(), notifications = new Set<string>();
+      const ids = new Set<string>(), notifications = new Set<string>(), messages = new Set<string>();
       while (position < stat.size) {
         const chunk = bytes(position, Math.min(65536, stat.size - position));
         position += chunk.length;
@@ -42,6 +42,8 @@ export class PersistedInputCursor {
           const line = data.subarray(lineStart, end).toString("utf8");
           if (line.trim()) {
             const entry = JSON.parse(line);
+            if (entry.type === "message" && typeof entry.message?.axiomId === "string") messages.add(entry.message.axiomId);
+            if (entry.type === "custom_message" && typeof entry.details?.axiomInput === "string") messages.add(`input-${entry.details.axiomInput}`);
             if (entry.type === "custom_message" && typeof entry.details?.axiomInput === "string") {
               ids.add(entry.details.axiomInput);
               if (entry.customType === "axiom-result") notifications.add(entry.details.axiomInput);
@@ -56,6 +58,8 @@ export class PersistedInputCursor {
       }
       const anchor = bytes(Math.max(0, committed - 64), Math.min(64, committed));
       // Commit the cursor only after every read/parse succeeds. Failed reads can retry.
+      // A failed acknowledgement must leave the whole batch available for retry.
+      onMessages?.([...messages]);
       this.file = file; this.identity = identity; this.offset = committed; this.anchor = anchor;
       return { ids: [...ids], notifications: [...notifications] };
     } finally { closeSync(fd); }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { command, scopeOrder, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import { PulseRingsIcon } from "../StatusIcons.js";
@@ -24,7 +24,8 @@ export function History({
 }) {
   useSessionAttention(selected);
   const snapshot = useScope<Session[] | null>(workspace ? `sessions:${workspace.id}` : null, null);
-  const sessions = [...(snapshot ?? noSessions)].sort(compareSessions);
+  const sessions = useMemo(() => [...(snapshot ?? noSessions)].sort(compareSessions), [snapshot]);
+  const paths = useMemo(() => new Map(workspaces.map((item) => [item.id, item.path])), [workspaces]);
   const pinnedSessions = useScope<Session[]>("pinned-sessions", noSessions);
   // Keep the viewed session subscribed even if it leaves the global top group.
   const viewedSessions = useScope<Session[] | null>(
@@ -33,7 +34,7 @@ export function History({
   const [query, setQuery] = useState("");
   // Defer crossing groups during editing/confirmation so the row stays mounted.
   const [heldRows, setHeldRows] = useState<Record<string, { session: Session; top: boolean }>>({});
-  const holdRow = (session: Session, top: boolean, hold: boolean) => {
+  const holdRow = useCallback((session: Session, top: boolean, hold: boolean) => {
     setHeldRows((previous) => {
       if (!hold && !previous[session.id]) return previous;
       const next = { ...previous };
@@ -41,7 +42,7 @@ export function History({
       else delete next[session.id];
       return next;
     });
-  };
+  }, []);
   useEffect(() => {
     if (!workspace || !snapshot) return;
     // A foreign pinned session is valid independently of the sidebar's list.
@@ -50,15 +51,17 @@ export function History({
       select({ workspaceId: workspace.id, sessionId: sessions[0]?.id ?? "" });
   }, [snapshot, viewedSessions, selected?.sessionId]);
   // The global top subscription overlaps the current workspace; render each ID once.
-  const overlapping = scopeOrder(workspace ? `sessions:${workspace.id}` : "") >= scopeOrder("pinned-sessions")
-    ? [...pinnedSessions, ...sessions] : [...sessions, ...pinnedSessions];
-  const filtered = [...new Map([
-    ...Object.values(heldRows).map(({ session }) => session),
-    ...overlapping,
-  ].map((s) => [s.id, s])).values()]
-    .filter((s) => s.title.toLowerCase().includes(query.toLowerCase()))
-    .sort(compareSessions);
-  const run = async (
+  const workspaceOrder = scopeOrder(workspace ? `sessions:${workspace.id}` : ""), pinnedOrder = scopeOrder("pinned-sessions");
+  const filtered = useMemo(() => {
+    const overlapping = workspaceOrder >= pinnedOrder ? [...pinnedSessions, ...sessions] : [...sessions, ...pinnedSessions];
+    return [...new Map([
+      ...Object.values(heldRows).map(({ session }) => session), ...overlapping,
+    ].map((s) => [s.id, s])).values()]
+      .filter((s) => s.title.toLowerCase().includes(query.toLowerCase())).sort(compareSessions);
+  }, [sessions, pinnedSessions, heldRows, query, workspaceOrder, pinnedOrder]);
+  const groups = useMemo(() => [true, false].map((pinned) => filtered.filter((s) =>
+    (heldRows[s.id]?.top ?? isTopSession(s)) === pinned && (pinned || s.workspaceId === workspace?.id))), [filtered, heldRows, workspace?.id]);
+  const run = useCallback(async (
     op: string,
     params: Record<string, unknown>,
     s: Session,
@@ -70,7 +73,7 @@ export function History({
       onError((e as Error).message);
       return false;
     }
-  };
+  }, [onError]);
   return (
     <>
       <div className="search">
@@ -86,8 +89,7 @@ export function History({
       </div>
       <div className="history" id="history">
         {[true, false].map((pinned) => {
-          const rows = filtered.filter((s) => (heldRows[s.id]?.top ?? isTopSession(s)) === pinned &&
-            (pinned || s.workspaceId === workspace?.id));
+          const rows = groups[pinned ? 0 : 1];
           return (
             (rows.length > 0 || !pinned) && (
               <section
@@ -103,10 +105,11 @@ export function History({
                     key={s.id}
                     session={s}
                     selected={s.id === selected?.sessionId}
-                    workspacePath={pinned ? workspaces.find((w) => w.id === s.workspaceId)?.path : undefined}
+                    workspacePath={pinned ? paths.get(s.workspaceId) : undefined}
                     select={select}
                     run={run}
-                    hold={(value) => holdRow(s, pinned, value)}
+                    top={pinned}
+                    onHold={holdRow}
                   />
                 ))}
                 {!rows.length && (
@@ -123,14 +126,16 @@ export function History({
   );
 }
 
-function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: {
+const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePath, select, run, top, onHold }: {
   session: Session;
   selected: boolean;
   workspacePath?: string;
   select: (scope: Scope) => void;
   run: (op: string, params: Record<string, unknown>, session: Session) => Promise<boolean>;
-  hold: (value: boolean) => void;
+  top: boolean;
+  onHold: (session: Session, top: boolean, hold: boolean) => void;
 }) {
+  const hold = (value: boolean) => onHold(s, top, value);
   const [deleting, setDeleting] = useState<Session | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -141,8 +146,20 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   const editingRef = useRef(false);
   const savingRef = useRef(false);
   const composing = useRef(false);
+  const blurredDuringComposition = useRef(false);
   const button = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const navigation = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cancelSelection = () => {
+    if (navigation.current !== undefined) { clearTimeout(navigation.current); navigation.current = undefined; hold(false); }
+  };
+  useEffect(() => () => clearTimeout(navigation.current), []);
+  const navigate = (keyboard: boolean) => {
+    cancelSelection();
+    const apply = () => { navigation.current = undefined; hold(false); select({ workspaceId: s.workspaceId, sessionId: s.id }); };
+    if (keyboard) apply();
+    else { hold(true); navigation.current = setTimeout(apply, 300); }
+  };
   // Hold across the click window, confirmation, and command so live grouping
   // cannot replace the trigger between clicks or leave a deleted row behind.
   useEffect(() => {
@@ -150,9 +167,12 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   }, [deleting, deletePending, removing]);
   useEffect(() => () => hold(false), []);
   const rename = () => {
+    cancelSelection();
     if (removingRef.current) return;
     hold(true);
     setTitle(s.title);
+    composing.current = false;
+    blurredDuringComposition.current = false;
     editingRef.current = true;
     setEditing(true);
   };
@@ -169,7 +189,11 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   };
   const save = async (restoreFocus: boolean) => {
     if (!editingRef.current || savingRef.current) return;
-    const nextTitle = title.trim();
+    if (composing.current) {
+      blurredDuringComposition.current = true;
+      return;
+    }
+    const nextTitle = (input.current?.value ?? title).trim();
     if (!nextTitle || nextTitle === s.title) {
       finish(restoreFocus);
       return;
@@ -220,7 +244,13 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
             onFocus={(e) => e.currentTarget.select()}
             onChange={(e) => setTitle(e.target.value)}
             onCompositionStart={() => { composing.current = true; }}
-            onCompositionEnd={() => { composing.current = false; }}
+            onCompositionEnd={() => {
+              composing.current = false;
+              if (blurredDuringComposition.current) {
+                blurredDuringComposition.current = false;
+                void save(false);
+              }
+            }}
             onBlur={() => { void save(false); }}
             onKeyDown={(e) => {
               if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -229,6 +259,7 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
                 void save(true);
               } else if (e.key === "Escape" && !savingRef.current) {
                 e.preventDefault();
+                e.stopPropagation();
                 finish(true);
               }
             }}
@@ -253,7 +284,7 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
   return (
     <div className="history-row" data-editing={editing} data-session-id={s.id}>
       {deleting && <ConfirmDialog title="删除会话" subject={deleting.title}
-        description="停止所属任务，不删除项目文件。" confirmLabel="删除会话" danger
+        description="停止所属任务并从列表移除；保留对话、记忆与附件，不删除项目文件。" confirmLabel="删除会话" danger
         onClose={() => setDeleting(null)}
         onConfirm={() => command("session.delete", { confirmed: true }, {
           workspaceId: deleting.workspaceId, sessionId: deleting.id,
@@ -265,9 +296,11 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
           ref={button}
           type="button"
           className="history-item"
+          data-view-navigation
           aria-current={selected}
-          data-tooltip={`${s.title} · 双击重命名（F2），Delete 删除`}
-          onClick={() => select({ workspaceId: s.workspaceId, sessionId: s.id })}
+          data-tooltip={`${s.title}${workspacePath ? ` · ${workspacePath}` : ""} · 双击重命名（F2），Delete 删除`}
+          onClick={(event) => navigate(event.detail === 0)}
+          onBlur={cancelSelection}
           onDoubleClick={rename}
           onKeyDown={(e) => {
             if (e.key === "F2") { e.preventDefault(); rename(); }
@@ -301,4 +334,4 @@ function HistoryRow({ session: s, selected, workspacePath, select, run, hold }: 
       </div>
     </div>
   );
-}
+});

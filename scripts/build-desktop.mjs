@@ -45,6 +45,7 @@ if (testInstance) {
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
 await cp(join(repo, "app/desktop/axiom_connection.rs"), join(template, "src-tauri/src/axiom_connection.rs"));
+for (const name of ["axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
 for (const [input, output] of [["test-probe.rs", "axiom_probe.rs"], ["test-controller-probe.js", "axiom_controller_probe.js"], ["test-workbench-probe.js", "axiom_workbench_probe.js"]]) {
   const destination = join(template, "src-tauri/src", output);
   if (testInstance) await cp(join(repo, "app/desktop", input), destination);
@@ -60,7 +61,7 @@ const libPath = join(template, "src-tauri/src/lib.rs");
 let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
-lib = "mod axiom_service;\nmod axiom_views;\nmod axiom_connection;\n" + lib.replace(marker, marker + "\n            axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls, axiom_connection::axiom_connection, axiom_connection::axiom_connection_report,");
+lib = "mod axiom_service;\nmod axiom_views;\nmod axiom_connection;\nmod axiom_remote;\nmod axiom_setup;\n" + lib.replace(marker, marker + "\n            axiom_setup::axiom_setup, axiom_remote::axiom_peers, axiom_remote::axiom_remote, axiom_remote::axiom_local, axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls, axiom_views::axiom_page_ready, axiom_connection::axiom_connection, axiom_connection::axiom_connection_report,");
 if (testInstance) {
   const loadedMarker = "let label = webview.label();";
   if (!lib.includes(loadedMarker)) throw Error("Pake template changed: page-load hook not found");
@@ -69,14 +70,22 @@ if (testInstance) {
 }
 const pageLoadMarker = '.on_page_load(move |webview, payload| {';
 if (!lib.includes(pageLoadMarker)) throw Error("Pake template changed: page load callback not found");
-lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); }');
+lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            axiom_views::watch_control(webview);\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); }');
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
 lib = lib.replace(closeMarker, closeMarker + `
             // The controller owns the desktop lifetime, never the detached service.
-            if _window.label() == "pake" && matches!(_event, tauri::WindowEvent::CloseRequested { .. }) {
-                _window.app_handle().exit(0);
-                return;
+            if _window.label() == "pake" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                    api.prevent_close();
+                    let app = _window.app_handle().clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        if axiom_setup::is_running() {
+                            let _ = axiom_views::controls(&app, false);
+                        } else { app.exit(0); }
+                    });
+                    return;
+                }
             }
             if _window.label() == "pake" && matches!(_event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
                 let _ = axiom_views::layout(_window.app_handle());
@@ -115,6 +124,7 @@ await writeFile(configPath, JSON.stringify(config, null, 2));
 // Pake's Rust package version is also used by Windows executable metadata.
 const cargoPath = join(template, "src-tauri/Cargo.toml");
 let cargo = await readFile(cargoPath, "utf8");
+cargo = cargo.replace(/rust-version = "[^"]+"/, 'rust-version = "1.89.0"');
 const featureMarker = 'tauri = { version = "2.10.2", features = [';
 if (!cargo.includes(featureMarker)) throw Error("Pake template changed: Tauri features not found");
 cargo = cargo.replace(featureMarker, featureMarker + '\n  "unstable",');

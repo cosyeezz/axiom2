@@ -1,4 +1,4 @@
-import { SettingsSidebar } from "../components.js";
+import { Icon, SettingsSidebar } from "../components.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
 import { useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
@@ -41,9 +41,7 @@ export default function Settings() {
                     ? `${config.providerCount} 个供应商 · ${config.modelCount} 个模型`
                     : "正在读取配置…"}
               </span>
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
+              <Icon name="chevron-right" />
             </a>
             <a className="log-row module-row" href="/tools.html">
               <div>
@@ -51,7 +49,7 @@ export default function Settings() {
                 <p>安装、配置与更新 OpenCLI 等工具</p>
               </div>
               <span className="meta">浏览器与网站操作</span>
-              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+              <Icon name="chevron-right" />
             </a>
             <p className="overview-message" role={config.error ? "alert" : "status"}>
               {config.error ||

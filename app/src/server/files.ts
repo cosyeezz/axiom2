@@ -1,3 +1,4 @@
+import { staticSvg } from "./svg-preview.js";
 import { DocumentFiles } from "./document-files.js";
 import type { FilePreview } from "../shared/file-preview.js";
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
@@ -123,8 +124,9 @@ export class Files {
         const mimeType = bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? "image/png"
           : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? "image/jpeg"
           : ["GIF87a", "GIF89a"].some((signature) => bytes.subarray(0, 6).equals(Buffer.from(signature))) ? "image/gif"
-          : bytes.subarray(0, 4).equals(Buffer.from("RIFF")) && bytes.subarray(8, 12).equals(Buffer.from("WEBP")) ? "image/webp" : null;
-        if (!mimeType) throw new AppError("INVALID_IMAGE", "文件不是支持的图片：仅可预览 PNG/JPEG/GIF/WebP");
+          : bytes.subarray(0, 4).equals(Buffer.from("RIFF")) && bytes.subarray(8, 12).equals(Buffer.from("WEBP")) ? "image/webp"
+          : reference && extname(path).toLowerCase() === ".svg" && staticSvg(bytes) ? "image/svg+xml" : null;
+        if (!mimeType) throw new AppError("INVALID_IMAGE", "文件不是支持的图片：可预览 PNG/JPEG/GIF/WebP，回复图片另支持安全的静态 SVG（最多 1 MiB）");
         this.authorize(scope); // Session deletion/authorization changes may overtake filesystem reads.
         reference?.(); // The bound assistant image must still exist after the asynchronous read.
         return { id, name: String(name), mimeType, data: bytes.toString("base64") };
