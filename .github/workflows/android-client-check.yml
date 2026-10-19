@@ -14,7 +14,9 @@ on:
         required: true
         type: string
 permissions:
-  contents: read
+  # GitHub requires repository write access to read unpublished draft assets.
+  # This workflow only downloads them; publishing remains a separate action.
+  contents: write
 jobs:
   android:
     runs-on: ubuntu-latest
