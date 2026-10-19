@@ -52,7 +52,6 @@ export default function Settings() {
               <span className="meta">浏览器与网站操作</span>
               <Icon name="chevron-right" />
             </a>
-            <PhoneConnect />
             <p className="overview-message" role={config.error ? "alert" : "status"}>
               {config.error ||
                 (config.revision
@@ -60,6 +59,7 @@ export default function Settings() {
                   : `${connection} · 正在读取配置…`)}
             </p>
           </section>
+          <PhoneConnect />
           <section className="overview-section" aria-labelledby="scope-heading">
             <h2 id="scope-heading">存储与隐私</h2>
             <dl className="scope-list">
