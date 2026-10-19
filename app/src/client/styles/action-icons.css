@@ -30,6 +30,16 @@
 }
 .compression-trigger[data-od-id="background-compression-trigger"]:is([data-state="completed"],[data-state="cancelled"]) { --action-rest: var(--action-icon-fg); --action-highlight: var(--fg); }
 .compression-trigger[data-od-id="background-compression-trigger"]:is([data-state="failed"],[data-state="interrupted"]) { --action-rest: var(--danger-text); --action-highlight: var(--danger-text); }
+/* Toolbar state is expressed by backgrounds, shapes and motion; all glyphs
+   share the system's neutral rest color and interactive highlight. */
+:root .usage button.action-icon {
+  --action-rest: var(--action-icon-fg);
+  --action-highlight: var(--fg);
+}
+:root .usage button.action-icon:is([aria-expanded="true"], [aria-pressed="true"]):not(:disabled) {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.usage .action-icon > svg, .usage .annotation-count { color: inherit; }
 .execution-alert .icon-btn > svg { color: inherit; }
 .message-actions[data-feedback="copied"] { --action-rest: var(--success); --action-highlight: var(--success); }
 .message-actions[data-feedback="failed"] { --action-rest: var(--danger-icon); --action-highlight: var(--danger-icon); }

@@ -53,6 +53,14 @@ try {
   await delay(30000);
   assert.equal(await page.locator('.connect-page').isVisible(), true);
   assert.deepEqual(errors, []);
+  const coldLayout = await page.evaluate(() => {
+    const main = document.querySelector('.connect-page')!.getBoundingClientRect();
+    const header = document.querySelector('.connect-header')!.getBoundingClientRect();
+    const footer = document.querySelector('.connect-footer')!.getBoundingClientRect();
+    return { height: innerHeight, scrollHeight: document.documentElement.scrollHeight, mainTop: main.top, centerOffset: (header.top + footer.bottom) / 2 - innerHeight / 2 };
+  });
+  assert.ok(coldLayout.scrollHeight <= coldLayout.height + 2, JSON.stringify(coldLayout));
+  assert.ok(Math.abs(coldLayout.mainTop) <= 1 && Math.abs(coldLayout.centerOffset) <= 5, JSON.stringify(coldLayout));
   await mkdir(resolve('../artifacts/startup-polish/native'), { recursive: true });
   await page.screenshot({ path: resolve('../artifacts/startup-polish/native/cold-start.png'), fullPage: true });
   await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
@@ -66,6 +74,14 @@ try {
   await page.getByLabel('本地端口').fill(String(targetPort));
   await page.getByRole('button', { name: '连接工作台', exact: true }).click();
   await page.locator('.desktop-workbench-status[data-state=connected]').waitFor({ timeout: 30000 });
+  await page.waitForFunction(() => innerHeight < 100);
+  const nativeBar = await page.evaluate(() => {
+    const bar = document.querySelector('.desktop-workbench-bar')!.getBoundingClientRect();
+    const button = document.querySelector('.desktop-workbench-bar button')!;
+    const bounds = button.getBoundingClientRect();
+    return { top: bar.top, bottom: bar.bottom, height: innerHeight, buttonHit: button.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)) };
+  });
+  assert.ok(Math.abs(nativeBar.top) <= 1 && nativeBar.bottom <= nativeBar.height + 2 && nativeBar.buttonHit, JSON.stringify(nativeBar));
   const localView = context.pages().find(candidate => candidate.url().startsWith(app.origin));
   assert.ok(localView, 'explicit local connection opens existing dev service with no installation');
   const localDenied = await localView.evaluate(async () => {

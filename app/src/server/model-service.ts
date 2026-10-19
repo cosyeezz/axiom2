@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 import {
   ModelRuntime,
   ModelRegistry,
   CredentialSynchronizationError,
+  readStoredCredential,
 } from "@earendil-works/pi-coding-agent";
 import {
   list,
@@ -63,7 +65,9 @@ export class ModelService {
   authActive = false;
   beforeLogout?: (providers: string[], confirmed: boolean) => Promise<void>;
   constructor(readonly root: string) {
-    this.dir = process.env.AXIOM_PI_DIR || join(root, "pi");
+    const configured = process.env.AXIOM_PI_DIR || join(root, "pi");
+    const homeRelative = configured.startsWith("~/") || (process.platform === "win32" && configured.startsWith("~\\"));
+    this.dir = resolve(configured === "~" ? homedir() : homeRelative ? join(homedir(), configured.slice(2)) : configured);
   }
   // Watchers only invalidate; admission still verifies content, including missed events and partial saves.
   watchConfiguration(changed: () => void): () => void {
@@ -167,8 +171,80 @@ export class ModelService {
       );
     return { raw, config, runtime, revision: digest(raw) };
   }
-  async read(): Promise<ModelConfiguration> {
-    const { config, runtime, revision } = await this.load();
+  private async storeApiKey(runtime: ModelRuntime, providerId: string, key: string, migrating = false) {
+    let supplied = false;
+    await runtime.login(providerId, "api_key", {
+      signal: AbortSignal.timeout(15000),
+      notify: () => {},
+      prompt: async (prompt) => {
+        if (prompt.type !== "secret" || supplied)
+          throw new AppError("AUTH_INTERACTION_REQUIRED", "该供应商需要额外认证步骤，请使用单独登录流程。");
+        if (migrating && readStoredCredential(providerId, join(this.dir, "auth.json")))
+          throw new AppError("REVISION_CONFLICT", "认证在迁移期间已改变；原密钥已保留，请重新读取。");
+        supplied = true;
+        return key;
+      },
+    });
+  }
+  // Called only inside serial(). Persist and verify credentials before removing
+  // legacy keys; an existing auth.json entry (including OAuth) always wins.
+  private async normalizeCredentials(state: Awaited<ReturnType<ModelService["load"]>>) {
+    const candidate: Json = JSON.parse(state.raw);
+    const legacy = Object.entries(candidate.providers).filter(([, value]) =>
+      Object.hasOwn(value as Json, "apiKey")) as [string, Json][];
+    if (!legacy.length || this.authActive) return state;
+    const path = join(this.dir, `models-credentials-${randomUUID()}.tmp`);
+    const signal = AbortSignal.timeout(15000);
+    const removed: string[] = [];
+    try {
+      for (const [providerId, provider] of legacy) {
+        if (digest(await this.raw()) !== state.revision)
+          throw new AppError("REVISION_CONFLICT", "密钥迁移期间配置已改变；原配置未覆盖，请重新读取。");
+        if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
+        const current = await this.runtime();
+        const stored = await current.listCredentials({ signal });
+        if (!stored.some((item) => item.providerId === providerId)) {
+          // An empty legacy value is a repairable missing-key state, not a migration.
+          if (typeof provider.apiKey !== "string" || !provider.apiKey.trim()) continue;
+          // Keep expressions intact: pi resolves environment/command values at use time.
+          await this.storeApiKey(current, providerId, provider.apiKey, true);
+          const persisted = readStoredCredential(providerId, join(this.dir, "auth.json"));
+          if (persisted?.type !== "api_key" || persisted.key !== provider.apiKey)
+            throw new AppError("CREDENTIAL_NOT_PERSISTED", "未能确认密钥已保存到 auth.json；models.json 中的密钥已保留。");
+        }
+        delete provider.apiKey;
+        removed.push(providerId);
+      }
+      if (!removed.length) return state;
+      // Compare credential bytes too: a concurrent logout must not discard the source.
+      const authRevision = digest(await readFile(join(this.dir, "auth.json"), "utf8"));
+      const stored = await (await this.runtime()).listCredentials({ signal });
+      if (removed.some((providerId) => !stored.some((item) => item.providerId === providerId)))
+        throw new AppError("CREDENTIAL_NOT_PERSISTED", "未能确认密钥已保存到 auth.json；models.json 中的密钥已保留。");
+      const file = await open(path, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify(candidate, null, 2) + "\n");
+        await file.sync();
+      } finally { await file.close(); }
+      const checked = await this.runtime(path);
+      if (checked.getError()) throw new AppError("INVALID_CONFIG", "密钥迁移后的配置未通过校验；models.json 中的密钥已保留。");
+      if (digest(await this.raw()) !== state.revision ||
+          digest(await readFile(join(this.dir, "auth.json"), "utf8")) !== authRevision)
+        throw new AppError("REVISION_CONFLICT", "密钥迁移期间配置或认证已改变；原配置未覆盖，请重新读取。");
+      if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
+      await rename(path, join(this.dir, "models.json"));
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("CREDENTIAL_MIGRATION_FAILED", "密钥存储同步未完成；models.json 中的密钥已保留，请重新读取后重试。");
+    } finally { await rm(path, { force: true }); }
+    return this.load();
+  }
+  read(options: { normalizeCredentials?: boolean } = {}): Promise<ModelConfiguration> {
+    return this.serial(() => this.readConfiguration(options.normalizeCredentials !== false));
+  }
+  private async readConfiguration(normalize: boolean): Promise<ModelConfiguration> {
+    const state = await this.load();
+    const { config, runtime, revision } = normalize ? await this.normalizeCredentials(state) : state;
     const credentials = await runtime.listCredentials();
     const providers: ProviderDraft[] = [];
     for (const [providerId, p] of Object.entries(config.providers) as [
@@ -179,6 +255,8 @@ export class ModelService {
         check = await runtime.checkAuth(providerId, {
           signal: AbortSignal.timeout(5000),
         });
+      const credential = credentials.find((item) => item.providerId === providerId);
+      const oauth = credential?.type === "oauth" || (!credential && provider?.auth.oauth && !p.baseUrl && !p.api && !p.apiKey);
       providers.push({
         id: providerId,
         originalId: providerId,
@@ -199,7 +277,10 @@ export class ModelService {
         headers: headersView(p.headers),
         body: [],
         auth: {
-          configured: !!check,
+          configured: !!credential && !!check,
+          error: !oauth && (!credential || !check)
+            ? "未配置有效 API 密钥：请填写密钥并保存到 auth.json 后重试。"
+            : undefined,
           source: credentials.some((c) => c.providerId === providerId)
             ? "stored"
             : (runtime.getProviderAuthStatus(providerId).source ??
@@ -247,6 +328,7 @@ export class ModelService {
   // Discovery uses connection settings only. models.json is the import target;
   // its models and modelOverrides must never become catalog entries or metadata.
   private async withCatalogRuntime<T>(providerId: string, connection: Json, run: (runtime: ModelRuntime) => Promise<T>): Promise<T> {
+    // Apply authHeader at the HTTP boundary so explicit provider headers keep precedence.
     const { models: _models, modelOverrides: _overrides, authHeader: _authHeader, ...settings } = connection;
     const path = join(this.dir, `models-catalog-${randomUUID()}.tmp`);
     try {
@@ -268,9 +350,13 @@ export class ModelService {
     return this.serial(async () => {
       if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
       const providerId = id(provider, "供应商 ID");
-      const { config, revision } = await this.load();
-      if (expectedRevision !== revision)
+      let state = await this.load();
+      if (expectedRevision !== state.revision)
         throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后拉取模型列表。");
+      state = await this.normalizeCredentials(state);
+      const { config, revision } = state;
+      if (expectedRevision !== revision)
+        throw new AppError("REVISION_CONFLICT", "密钥已统一保存到 auth.json，请重新读取配置后拉取模型列表。");
       if (!Object.hasOwn(config.providers, providerId))
         throw new AppError("NOT_FOUND", "请先保存供应商连接配置，再拉取模型列表。");
       return this.withCatalogRuntime(providerId, config.providers[providerId], async (runtime) => {
@@ -286,6 +372,8 @@ export class ModelService {
         let message: string;
         try {
           if (!oauth) {
+            if (!credential)
+              throw new AppError("MODEL_AUTH_MISSING", "未配置 API 密钥：auth.json 和 models.json 中均无该供应商密钥，请填写密钥并保存后重试。");
             const baseUrl = connection.baseUrl ?? native.baseUrl ?? runtime.getModels(providerId)[0]?.baseUrl;
             if (!baseUrl) throw new AppError("MODEL_DISCOVERY_FAILED", "请先配置 Base URL，再拉取模型列表。");
             const api = connection.api ?? runtime.getModels(providerId)[0]?.api;
@@ -297,7 +385,9 @@ export class ModelService {
               cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             });
             if (!auth.ok) throw new AppError("MODEL_DISCOVERY_FAILED", "无法解析接口认证或请求头，请检查连接配置后重试。");
-            const discovered = await discoverModels({ baseUrl, api, auth, signal });
+            if (credential.type === "api_key" && !auth.apiKey)
+              throw new AppError("MODEL_AUTH_MISSING", "auth.json 中的 API 密钥无法解析，请检查密钥配置后重试。");
+            const discovered = await discoverModels({ baseUrl, api, auth, authHeader: connection.authHeader === true, signal });
             models = discovered.map((model) => {
               // Native metadata can describe a returned ID, but cannot add identities to the response.
               // This runtime excludes all models and overrides in the target configuration.
@@ -396,20 +486,7 @@ export class ModelService {
         published = true;
         const active = await this.runtime();
         for (const [providerId, key] of keys) {
-          let supplied = false;
-          await active.login(providerId, "api_key", {
-            signal: AbortSignal.timeout(15000),
-            notify: () => {},
-            prompt: async (prompt) => {
-              if (prompt.type !== "secret" || supplied)
-                throw new AppError(
-                  "AUTH_INTERACTION_REQUIRED",
-                  "该供应商需要额外认证步骤，请使用单独登录流程。",
-                );
-              supplied = true;
-              return key;
-            },
-          });
+          await this.storeApiKey(active, providerId, key);
           credentialsChanged = true;
         }
         // Reopen the on-disk store: an in-memory login alone must not count as saved.
@@ -425,7 +502,8 @@ export class ModelService {
           signal: AbortSignal.timeout(5000),
         });
         if (persisted.getError()) throw Error();
-        return { revision: digest(raw), loggedOut: [...logout] };
+        const normalized = await this.normalizeCredentials(await this.load());
+        return { revision: normalized.revision, loggedOut: [...logout] };
       } catch (error) {
         if (
           published ||

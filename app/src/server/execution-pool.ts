@@ -52,7 +52,7 @@ export class ExecutionPool {
   onMetric?: (metric: PoolMetric) => void;
   private instances = new Map<string, Instance>();
   private waiters: Waiter[] = [];
-  private recent = new Map<string, PreparedEnvironment>();
+  private recent = new Map<string, { environment: PreparedEnvironment; lastDemandAt: number }>();
   private backoff = new Map<string, number>();
   private generation = 0;
   private stopping = false;
@@ -286,11 +286,11 @@ export class ExecutionPool {
     while(idle.length>this.limits.maxIdleRetained)void this.retireInstance(idle.shift()!,'idle_limit');
   }
   private remember(e:PreparedEnvironment) {
-    const old=this.recent.get(e.profileHash);
-    if(old?.snapshotValid()){this.recent.delete(e.profileHash);this.recent.set(e.profileHash,old);return;}
-    if(old){this.recent.delete(e.profileHash);old.release();}
-    e.retain();this.recent.set(e.profileHash,e);
-    while(this.recent.size>8){const [key,value]=this.recent.entries().next().value!;this.recent.delete(key);value.release();}
+    const old=this.recent.get(e.profileHash),lastDemandAt=Date.now();
+    if(old?.environment.snapshotValid()){this.recent.delete(e.profileHash);this.recent.set(e.profileHash,{environment:old.environment,lastDemandAt});return;}
+    if(old){this.recent.delete(e.profileHash);old.environment.release();}
+    e.retain();this.recent.set(e.profileHash,{environment:e,lastDemandAt});
+    while(this.recent.size>8){const [key,value]=this.recent.entries().next().value!;this.recent.delete(key);value.environment.release();}
   }
   private schedule() {
     if(this.scheduled||this.stopping)return;this.scheduled=true;
@@ -302,23 +302,27 @@ export class ExecutionPool {
     this.prewarm();
   }
   private prewarm() {
-    if(this.stopping||this.mode==='managed'||this.waiters.length)return;
+    if(this.stopping)return;
+    const now=Date.now();
+    // Only real admitted demand renews this window; idle retirement must not feed prewarming forever.
+    for(const [key,value] of this.recent)if(now-value.lastDemandAt>=this.limits.idleTtlMs){this.recent.delete(key);value.environment.release();}
+    if(this.mode==='managed'||this.waiters.length)return;
     const rows=[...this.instances.values()],free=rows.filter(i=>!i.lease&&!i.binding&&['available','preparing'].includes(i.state));
     if(free.length>=this.limits.targetReadyTotal||free.filter(i=>i.state==='preparing').length>=this.limits.maxPrewarming||rows.length>=this.limits.maxLiveProcesses)return;
-    const e=[...this.recent.values()].reverse().find(e=>(this.backoff.get(e.profileHash)??0)<=Date.now()&&e.prewarmAllowed!==false&&!free.some(i=>i.environment.profileHash===e.profileHash)&&e.current()&&e.snapshotValid());
+    const e=[...this.recent.values()].reverse().map(value=>value.environment).find(e=>(this.backoff.get(e.profileHash)??0)<=Date.now()&&e.prewarmAllowed!==false&&!free.some(i=>i.environment.profileHash===e.profileHash)&&e.current()&&e.snapshotValid());
     if(!e)return;
     const i=this.create(e);void this.start(i).then(()=>this.schedule()).catch(()=>{});
   }
   hasAffinity(sessionId:string) {return [...this.instances.values()].some(i=>(i.binding ?? i.lease?.request.affinity)?.sessionId===sessionId);}
   async releaseAffinity(sessionId:string) {await Promise.all([...this.instances.values()].filter(i=>(i.binding ?? i.lease?.request.affinity)?.sessionId===sessionId&&(!i.lease||i.state==='retiring'||i.state==='exiting')).map(i=>this.retireInstance(i,'session_handoff')));}
   async invalidate(providers?:string[]) {
-    for(const [key,e] of this.recent)if(!providers||!e.provider||providers.includes(e.provider)){this.recent.delete(key);e.release();}
+    for(const [key,{environment:e}] of this.recent)if(!providers||!e.provider||providers.includes(e.provider)){this.recent.delete(key);e.release();}
     await Promise.all([...this.instances.values()].filter(i=>!i.lease&&(!providers||!i.environment.provider||providers.includes(i.environment.provider))).map(i=>this.retireInstance(i,'configuration')));
   }
-  async trim() {for(const e of this.recent.values())e.release();this.recent.clear();await Promise.all([...this.instances.values()].filter(i=>!i.lease).map(i=>this.retireInstance(i,'trim')));}
+  async trim() {for(const {environment:e} of this.recent.values())e.release();this.recent.clear();await Promise.all([...this.instances.values()].filter(i=>!i.lease).map(i=>this.retireInstance(i,'trim')));}
   async waitForPrewarm() {this.prewarm();await Promise.all([...this.instances.values()].filter(i=>!i.lease&&i.ready).map(i=>i.ready!.catch(()=>{})));}
   async close() {
-    this.stopping=true;for(const w of [...this.waiters])w.abort();for(const e of this.recent.values())e.release();this.recent.clear();
+    this.stopping=true;for(const w of [...this.waiters])w.abort();for(const {environment:e} of this.recent.values())e.release();this.recent.clear();
     await Promise.all([...this.instances.values()].map(i=>this.retireInstance(i,'shutdown')));
     await Promise.all(this.validations);
   }

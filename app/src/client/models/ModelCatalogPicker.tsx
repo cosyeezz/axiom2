@@ -62,7 +62,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
         {error || (busy ? "正在读取供应商模型目录…" : catalog?.message)}
       </p>
       <div className="row-between">
-        <span className="meta">{rows.length} 个模型 · 已选 {picked.length} 个</span>
+        <span className="meta">{catalog ? `${rows.length} 个模型 · 已选 ${picked.length} 个` : error ? "模型列表读取失败" : "等待读取模型列表"}</span>
         <button type="button" className="btn btn-ghost" disabled={busy || blocked || !choices.length} onClick={() => {
           const allSelected = choices.every((model) => selected.has(model.id));
           setSelected((old) => {
@@ -84,7 +84,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
             {existing.has(model.id) ? <span className="tag">已添加</span> : provider.connectionType !== "oauth" && model.api !== provider.api ? <span className="meta">需使用 {model.api} 协议</span> : null}
           </label>
         ))}
-        {!busy && !rows.length && <p className="model-empty">{query ? "没有匹配的模型，请调整搜索。" : "暂无可列出的模型；请检查连接和认证，或手动添加模型。"}</p>}
+        {!busy && !error && catalog && !rows.length && <p className="model-empty">{query ? "没有匹配的模型，请调整搜索。" : "暂无可列出的模型；请检查连接和认证，或手动添加模型。"}</p>}
       </div>
       {overflow && <p role="alert" className="auth-error">每个供应商最多配置 1,000 个模型，请减少选择。</p>}
       <div className="model-catalog-actions">

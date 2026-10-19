@@ -72,7 +72,7 @@ try {
   const color=async(selector:string)=>page.locator(selector).first().evaluate(el=>getComputedStyle(el).color);
   await show({...base,input:100,cost:12.9876});
   await page.waitForFunction(()=>document.querySelector('[data-od-id="estimated-cost"]')?.textContent==='');
-  assert.equal(await color('[data-od-id="estimated-cost"] svg'),'rgb(184, 190, 200)');
+  assert.equal(await color('[data-od-id="estimated-cost"] svg'),'rgb(138, 143, 152)');
   assert.equal(await cost.locator('use').getAttribute('href'),'#i-chart-column-increasing');
   assert.equal(await cost.locator('[data-od-id="run-duration"]').count(),0);
   assert.equal(await page.locator('.usage-row > button').count(),3);
@@ -82,14 +82,24 @@ try {
   await escape();
   assert.ok(await cost.evaluate(n=>n===document.activeElement));
   assert.deepEqual(await page.locator('.usage-row [data-od-id]').evaluateAll(els=>els.map(el=>el.getAttribute('data-od-id'))),['context-capacity','cache-tokens','estimated-cost']);
-  for(const ratio of [0,49.99,50,100]) {
+  for(const ratio of [0,49.99,50,70,70.01,90,90.01,100]) {
     await show({...base,input:100-ratio,cacheRead:ratio});
     await page.waitForFunction(value=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')===String(value),ratio);
-    assert.equal(await color('[data-od-id="cache-tokens"] svg'),ratio<50?'rgb(217, 149, 149)':'rgb(184, 190, 200)');
+    assert.equal(await color('[data-od-id="cache-tokens"] svg'),'rgb(138, 143, 152)');
+    const lightning=cache.locator('.cache-lightning');
+    const expected=ratio>90?'rgb(39, 166, 68)':ratio>70?'rgb(252, 188, 124)':'rgb(217, 149, 149)';
+    assert.equal(await lightning.evaluate(el=>getComputedStyle(el).stroke),expected,`lightning at ${ratio}%`);
+    await cache.hover();
+    await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-od-id="cache-tokens"] svg')!).color==='rgb(247, 248, 248)');
+    assert.equal(await lightning.evaluate(el=>getComputedStyle(el).stroke),expected,`lightning retains tone on hover at ${ratio}%`);
+    await page.mouse.move(0,0);
+    await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-od-id="cache-tokens"] svg')!).color==='rgb(138, 143, 152)');
   }
   await show(base);
   await page.waitForFunction(()=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')==='unknown');
-  assert.equal(await color('[data-od-id="cache-tokens"] svg'),'rgb(184, 190, 200)');
+  assert.equal(await color('[data-od-id="cache-tokens"] svg'),'rgb(138, 143, 152)');
+  assert.equal(await cache.locator('.cache-lightning').getAttribute('data-tone'),'unknown');
+  assert.equal(await cache.locator('.cache-lightning').evaluate(el=>getComputedStyle(el).stroke),'rgb(138, 143, 152)');
   for(const [estimate,state,bars,valid] of [['约 30%','进行中',0,'30'],['约 40%','进行中',1,'40'],['约 70%','进行中',2,'70'],['约 90%','进行中',2,'90'],['100%','已完成',3,'100'],['100%','进行中',0,'unknown'],['待评估','尚未记录',0,'unknown']] as const) {
     const memory=`# 会话记忆\n\n## 目标与范围\n三等分验证\n\n## 任务进度\n整体状态：${state}\n整体进度：${estimate}\n`;
     await page.evaluate(memory=>(window as any).show({memory}),memory);
@@ -97,7 +107,7 @@ try {
     assert.equal(await context.locator('.memory-progress-lit').count(),bars,estimate+' '+state);
     assert.equal(await context.innerText(),'');
     assert.equal(await context.locator('.data-filled').count(),1);
-    if(bars)assert.equal(await color('.memory-progress-lit'),'rgb(252, 188, 124)');
+    if(bars)assert.equal(await color('.memory-progress-lit'),'rgb(138, 143, 152)');
   }
   for(const width of [1440,820,390,360]) {
     await page.setViewportSize({width,height:844});

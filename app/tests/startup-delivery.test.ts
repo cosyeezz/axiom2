@@ -33,7 +33,7 @@ function fixture(t: TestContext) {
     ensureReady: async () => child };
   const emit = child.emit.bind(child);
   child.emit = ((name: string, ...args: any[]) => emit(name, ...(name === "message" ? [{ ...args[0], lease: lease.ref }] : args))) as typeof child.emit;
-  runs.pool = { isActive: () => child.exitCode === null, hasAffinity: () => false,
+  runs.pool = { limits: { prepareTimeoutMs: 30000 }, isActive: () => child.exitCode === null, hasAffinity: () => false,
     releaseAffinity: async () => {}, trim: async () => {}, invalidate: async () => {},
     retire: async () => { if (child.exitCode === null) { const closed = new Promise<void>(resolve => child.once("close", resolve)); runs.kill(); await closed; } },
     release: async () => {} };
@@ -197,6 +197,32 @@ test("stop during send acknowledgement kills the owner immediately and preserves
   assert.equal(f.settlements[0].status, "cancelled");
   assert.equal(f.settlements[0].reasonCode, "USER_STOPPED");
 });
+
+for (const outcome of ["verified", "expired", "closed"] as const) {
+  test(`idle resource validation has its own deadline and ownership: ${outcome}`, async t => {
+    const f = fixture(t);
+    await f.runs.launch(f.scope, f.run, f.input);
+    const live = f.runs.live.get(f.scope.sessionId);
+    let resolve!: (valid: boolean) => void, releases = 0, validations = 0;
+    const checking = new Promise<boolean>(r => { resolve = r; });
+    live.lease.validateEnvironment = () => { validations++; return checking; };
+    f.runs.pool.release = async () => { releases++; };
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    f.child.emit("message", { type: "done", runId: f.run.id, status: "completed" });
+    f.child.emit("message", { type: "idle", runId: f.run.id });
+    t.mock.timers.tick(2100);
+    assert.equal(f.killed(), 0, "timely idle retires the worker-cleanup deadline");
+    f.child.emit("message", { type: "idle", runId: f.run.id });
+    assert.equal(validations, 1, "duplicate idle cannot renew the verification deadline");
+    if (outcome === "expired") { t.mock.timers.tick(27900); await live.exit; }
+    if (outcome === "closed") await f.runs.close();
+    resolve(true); await new Promise(r => setImmediate(r));
+    await live.exit;
+    assert.equal(releases, outcome === "verified" ? 1 : 0);
+    assert.equal(f.settlements.length, 1);
+    t.mock.timers.reset();
+  });
+}
 
 test("done timeout revokes reuse before a late idle and waits for physical close", async t => {
   const f = fixture(t);

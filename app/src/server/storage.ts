@@ -55,6 +55,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS external_requests(id TEXT PRIMARY KEY,hash TEXT NOT NULL,state TEXT NOT NULL,response TEXT);
       UPDATE external_requests SET state='uncertain' WHERE state='pending';
       CREATE TABLE IF NOT EXISTS agent_sessions(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,selection TEXT,file TEXT,environment TEXT,usage TEXT);
+      CREATE TABLE IF NOT EXISTS session_capabilities(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,selection TEXT,catalog TEXT,revision INTEGER NOT NULL DEFAULT 0,lockedAt INTEGER,legacy INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS agent_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS compression_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,status TEXT NOT NULL,selection TEXT NOT NULL,startedAt INTEGER NOT NULL,endedAt INTEGER,error TEXT);

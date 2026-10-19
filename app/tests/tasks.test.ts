@@ -301,8 +301,8 @@ test(
         "forced cancellation did not finish",
       );
       const stopped = app.tasks.list(scope).tasks.find((t) => t.id === b.id)!;
-      assert.equal(stopped.status, "cancelled");
       const result = app.tasks.result(scope, b.id, stopped.results[0].id);
+      assert.equal(stopped.status, "cancelled", JSON.stringify({ error: stopped.error, reason: result.reason, report: result.report }));
       assert.ok(!("cleanup" in result));
       assert.equal(result.reason, "Explicit test cancellation");
       assert.ok(!requests.some((body) => JSON.stringify(body.messages.at(-1)).includes("工作已停止：")), "cancellation never asks the model for a summary");

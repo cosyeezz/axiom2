@@ -3,12 +3,12 @@ import { test, type TestContext } from "node:test";
 import { EventEmitter } from "node:events";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-import { ExecutionPool, type ExecutionLease } from "../src/server/execution-pool.js";
-import type { PreparedEnvironment } from "../src/server/execution-profile.js";
+import { ExecutionPool, type ExecutionLease, type PoolLimits } from "../src/server/execution-pool.js";
+import type { PreparedEnvironment, ExecutionMode } from "../src/server/execution-profile.js";
 
-function harness(t: TestContext, max = 3) {
+function harness(t: TestContext, max = 3, limits: Partial<PoolLimits> = {}, mode: ExecutionMode = "managed") {
   const children: any[] = [];
-  const pool = new ExecutionPool({ maxLiveProcesses:max, maxIdleRetained:max, targetReadyTotal:0, nestedLeafReserve:1 }, "managed");
+  const pool = new ExecutionPool({ maxLiveProcesses:max, maxIdleRetained:max, targetReadyTotal:0, nestedLeafReserve:1, ...limits }, mode);
   const mock=t.mock.method(childProcess,"fork",((_path:any,_args:any,options:any)=>{
     const child:any=Object.assign(new EventEmitter(),{connected:true,exitCode:null,signalCode:null,stderr:undefined,messages:[],
       send(value:any,callback?:(error?:Error)=>void){child.messages.push(value);callback?.();return true;},
@@ -20,19 +20,82 @@ function harness(t: TestContext, max = 3) {
   }) as typeof childProcess.fork);
   syncBuiltinESMExports();
   t.after(async()=>{for(const child of children)child.close();await pool.close();mock.mock.restore();syncBuiltinESMExports();});
-  let refs=0;
+  let refs=0;const references=new Map<string,number>();
   const environment=(key='same',reuse:PreparedEnvironment['reuse']='cross-binding'):PreparedEnvironment=>({
     profileHash:key,entry:'memory',reuse,cwd:process.cwd(),root:process.cwd(),modelDir:process.cwd(),modelsFile:'fixture.json',workerPath:'fixture.js',execArgv:[],env:{},environmentWarm:false,configRevision:'1',
-    current:()=>true,snapshotValid:()=>true,retain:()=>{refs++;},release:()=>{refs--;},
+    current:()=>true,snapshotValid:()=>true,retain:()=>{refs++;references.set(key,(references.get(key)??0)+1);},release:()=>{refs--;references.set(key,(references.get(key)??0)-1);},
   });
   const acquire=(key='same',extra:Record<string,unknown>={})=>pool.acquire({environment:environment(key),kind:'agent',signal:new AbortController().signal,requestStartedAtMonoMs:performance.now(),...extra});
   const cleaned=async(lease:ExecutionLease,keepSession=false,sessionId='session')=>{
     const child=await lease.ensureReady();child.emit('message',{type:'cleaned',lease:lease.ref});
     await pool.release(lease.ref,{clean:true,keepSession,...(keepSession?{affinity:{sessionId,fileRevision:'1'}}:{})});
   };
-  return {pool,children,environment,acquire,cleaned,refs:()=>refs};
+  return {pool,children,environment,acquire,cleaned,refs:(key?:string)=>key===undefined?refs:references.get(key)??0};
 }
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('idle retirement stops prewarming after the last real demand expires',async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:10000});
+  const h=harness(t,3,{targetReadyTotal:1,idleTtlMs:1000,maxLifetimeMs:10000},'D');
+  const lease=await h.acquire();await lease.ensureReady();await h.pool.waitForPrewarm();await h.cleaned(lease);
+  assert.equal(h.pool.stats().created,2);
+  t.mock.timers.tick(1000);
+  assert.equal(h.pool.stats().retiring,2);
+  for(const child of h.children)child.close();
+  await turn();
+  assert.equal(h.pool.stats().total,0);assert.equal(h.refs(),0);
+  t.mock.timers.tick(3000);await h.pool.waitForPrewarm();await turn();
+  assert.equal(h.pool.stats().created,2);assert.equal(h.children.length,2);
+});
+
+for(const age of [999,1000])test(`prewarming observes the exact last-demand TTL boundary at ${age}ms`,async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:10000});
+  const h=harness(t,3,{targetReadyTotal:1,idleTtlMs:1000,maxLifetimeMs:10000},'D');
+  const lease=await h.acquire();await h.pool.retire(lease.ref,'uncommitted');
+  t.mock.timers.tick(age);await h.pool.waitForPrewarm();
+  assert.equal(h.pool.stats().created,age<1000?1:0);
+  assert.equal(h.refs(),age<1000?2:0);
+  if(age===999){
+    t.mock.timers.tick(1);await h.pool.waitForPrewarm();
+    assert.equal(h.pool.stats().created,1);assert.equal(h.refs(),1,'prewarming did not renew real demand');
+    t.mock.timers.tick(999);h.children[0].close();await turn();
+    assert.equal(h.pool.stats().created,1);assert.equal(h.refs(),0);
+  }
+});
+
+test('real demand renews prewarm eligibility across instance lifetimes without interrupting an active lease',async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:10000});
+  const h=harness(t,3,{targetReadyTotal:1,idleTtlMs:1000,maxLifetimeMs:400},'D');
+  const first=await h.acquire();await h.cleaned(first);
+  t.mock.timers.tick(400);h.children[0].close();await h.pool.waitForPrewarm();
+  assert.equal(h.pool.stats().created,2);
+  t.mock.timers.tick(300);
+  const second=await h.acquire();assert.notEqual(second.ref.instanceId,first.ref.instanceId);await h.cleaned(second);
+  t.mock.timers.tick(100);h.children[1].close();await h.pool.waitForPrewarm();
+  assert.equal(h.pool.stats().created,3);
+  t.mock.timers.tick(200);
+  const active=await h.acquire();const child:any=await active.ensureReady();
+  t.mock.timers.tick(1000);await h.pool.waitForPrewarm();
+  assert.equal(h.pool.isActive(active.ref),true);
+  assert.equal(child.messages.some((message:any)=>message.type==='shutdown'),false);
+  assert.equal(h.pool.stats().created,3);assert.equal(h.refs(),1,'only the active instance retains the expired profile');
+  const cleaning=h.cleaned(active);await turn();
+  assert.equal(h.pool.stats().retiring,1);child.close();await cleaning;
+  assert.equal(h.refs(),0);
+});
+
+test('recent-profile LRU and demand expiry release exactly their own references',async t=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:10000});
+  const h=harness(t,3,{idleTtlMs:1000},'D');
+  const demand=async(key:string)=>{const lease=await h.acquire(key);await h.pool.retire(lease.ref,'uncommitted');};
+  for(let i=0;i<8;i++)await demand(String(i));
+  assert.equal(h.refs(),8);
+  t.mock.timers.tick(900);await demand('0');await demand('8');assert.equal(h.refs(),8);
+  assert.equal(h.refs('1'),0);assert.equal(h.refs('0'),1);assert.equal(h.refs('8'),1);
+  t.mock.timers.tick(100);await h.pool.waitForPrewarm();assert.equal(h.refs(),2);
+  t.mock.timers.tick(900);await h.pool.waitForPrewarm();assert.equal(h.refs(),0);
+  await h.pool.trim();await h.pool.close();assert.equal(h.refs(),0);
+});
 
 test('binding completion revalidates configuration and snapshot before permitting inference', async t => {
   const h=harness(t);let valid=true;

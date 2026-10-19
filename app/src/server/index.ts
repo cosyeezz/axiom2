@@ -81,9 +81,10 @@ export async function startServer(
   const refreshConfiguration = async () => {
     const reading = ++configurationRead;
     const next = await configuration(store.root);
+    const editable = !next.error ? await models.read({ normalizeCredentials: false }) : undefined;
     if (reading === configurationRead) {
       config = next;
-      if (!config.error) preferences.prune(await models.read());
+      if (editable) preferences.prune(editable);
       publish("configuration");
       publish("favorites");
     }
@@ -113,6 +114,7 @@ export async function startServer(
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "capabilities") return agents.capabilities.state(target);
     if (parts.length === 3 && parts[0] === "memory") return agents.memories.snapshot(target);
     if (parts.length === 3 && parts[0] === "costs") {
       costs.owner(target);
@@ -376,6 +378,8 @@ export async function startServer(
             }
           }
           data = c.op === "opencli.get" ? await opencli.command(c) : await store.external(c, () => opencli.command(c));
+        } else if (c.op.startsWith("capabilities.")) {
+          data = await agents.capabilities.command(c);
         } else if (c.op.startsWith("memory.")) {
           const controller = new AbortController();
           const abort = () => controller.abort();
@@ -391,8 +395,8 @@ export async function startServer(
           try { data = await files.command(c, controller.signal); }
           finally { ws.off("close", abort); }
         } else if (c.op === "configuration.get") {
-          await refreshConfiguration();
           data = await models.read();
+          await refreshConfiguration();
         } else if (c.op === "configuration.catalog") {
           data = await models.catalog(c.params!.providerId, c.params!.revision);
         } else if (c.op === "auth.start")

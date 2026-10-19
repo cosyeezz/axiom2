@@ -153,15 +153,14 @@ export default function Connect() {
     <>
     <nav className="desktop-workbench-bar" aria-label="桌面导航" hidden={view !== "workbench"}>
       <div className="desktop-workbench-left">
-        <span className="desktop-workbench-brand"><BrandMark size={26} /><span className="desktop-brand-name">AXIOM<span>2</span></span></span>
         <span className="desktop-workbench-status" data-state={connection} role="status" aria-live="polite" aria-label={connectionLabel}>
-          <Icon name="link-2" />
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.52" d="M1.88 12.21q2.32.02 4.62-.36q1.21-3.49 2.99-6.73q2.26 7.09 5.12 13.96q1.44-3.57 2.8-7.17q2.22.15 4.44.31" /></svg>
           <span>{connectionLabel}</span>
         </span>
       </div>
       {error && <span role="alert" className="desktop-workbench-error" title={error}>{error}</span>}
       <button onClick={() => void showControls()} disabled={returning} aria-label={showDot ? "服务与更新，有待查看的变化" : "服务与更新"}>
-        <Icon name="settings-2" />
+        <Icon name="sliders-horizontal" />
         <span>服务与更新</span>{showDot && <i className="desktop-update-dot" aria-hidden="true" />}
       </button>
     </nav>

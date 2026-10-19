@@ -24,6 +24,62 @@ test('async resource verification preserves ordered bytes and rechecks config af
   }finally{sync?.release();asyncEnvironment?.release();rmSync(root,{recursive:true,force:true});}
 });
 
+test('concurrent scans bound reads globally and recover after a queued cancellation and read error', async t => {
+  const root=mkdtempSync(join(tmpdir(),'axiom-resource-capacity-')),cwd=join(root,'project'),pi=join(root,'pi'),skills=join(cwd,'.pi','skills');
+  mkdirSync(skills,{recursive:true});mkdirSync(pi);
+  for(let i=0;i<20;i++)writeFileSync(join(skills,`${i}.md`),'fixture contents');
+  const handle=await fs.promises.open(join(skills,'0.md'),'r'),prototype=Object.getPrototypeOf(handle),read=prototype.read;
+  await handle.close();
+  let entered!:()=>void,release!:()=>void,active=0,peak=0,fail=true;
+  const saturated=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
+  const patched=t.mock.method(prototype,'read',async function(this:any,...args:any[]) {
+    active++;peak=Math.max(peak,active);if(active===8)entered();
+    try { await gate;if(fail){fail=false;throw Error('fixture read failure');}return await read.apply(this,args); }
+    finally { active--; }
+  });
+  const controller=new AbortController();
+  try {
+    const failed=resourceIdentityAsync(cwd,pi),cancelled=resourceIdentityAsync(cwd,pi,controller.signal),survivor=resourceIdentityAsync(cwd,pi);
+    const completed=Promise.all([assert.rejects(failed,/fixture read failure/),assert.rejects(cancelled),survivor]);
+    await saturated;controller.abort();release();
+    const results=await completed;
+    assert.equal(peak,8);assert.equal(active,0);
+    assert.equal(results[2],resourceIdentity(cwd,pi));
+    assert.equal(await resourceIdentityAsync(cwd,pi),resourceIdentity(cwd,pi));
+  } finally { release();patched.mock.restore();rmSync(root,{recursive:true,force:true}); }
+});
+
+for (const mutation of ['earlier-file', 'directory-entry', 'missing-parent', 'deleted-file', 'unrelated-entry'] as const) {
+  test(`async inspection distinguishes resource changes from unrelated entries: ${mutation}`, async t => {
+    const root=mkdtempSync(join(tmpdir(),'axiom-resource-race-')),cwd=join(root,'project'),pi=join(root,'missing-pi'),skills=join(cwd,'.pi','skills');
+    mkdirSync(skills,{recursive:true});
+    if(mutation==='unrelated-entry')mkdirSync(pi);
+    for(let index=0;index<20;index++)writeFileSync(join(skills,`${String(index).padStart(2,'0')}.md`),`${index} content`);
+    const first=join(skills,'00.md'),handle=await fs.promises.open(first,'r'),prototype=Object.getPrototypeOf(handle),read=prototype.read;
+    await handle.close();
+    let changed=false;
+    const patched=t.mock.method(prototype,'read',async function(this: any,...args: any[]) {
+      const result=await read.apply(this,args);
+      if(!changed && (args[0] as Buffer).toString().startsWith('10 content')) {
+        changed=true;
+        if(mutation==='earlier-file') { const stat=statSync(first);writeFileSync(first,'x content');utimesSync(first,stat.atime,stat.mtime); }
+        if(mutation==='directory-entry')writeFileSync(join(skills,'added.md'),'new resource');
+        if(mutation==='missing-parent') { mkdirSync(pi);writeFileSync(join(pi,'AGENTS.md'),'new instructions'); }
+        if(mutation==='deleted-file')rmSync(first);
+        if(mutation==='unrelated-entry')writeFileSync(join(pi,'settings.lock'),'unrelated SDK file');
+      }
+      return result;
+    });
+    try {
+      if(mutation==='unrelated-entry')assert.equal(await resourceIdentityAsync(cwd,pi),resourceIdentity(cwd,pi));
+      else await assert.rejects(resourceIdentityAsync(cwd,pi),/Resource changed/);
+      assert.equal(changed,true,'mutation occurs during the later read batch');
+      patched.mock.restore();
+      assert.equal(await resourceIdentityAsync(cwd,pi),resourceIdentity(cwd,pi),'failed reads release capacity for a fresh scan');
+    } finally { patched.mock.restore();rmSync(root,{recursive:true,force:true}); }
+  });
+}
+
 test('resource scanning detects new ancestor resources and rejects nested and root directory links',()=>{
   const root=mkdtempSync(join(tmpdir(),'axiom-resource-tree-')),cwd=join(root,'project'),pi=join(root,'agent');
   mkdirSync(cwd);mkdirSync(pi);

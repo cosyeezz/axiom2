@@ -1,3 +1,4 @@
+import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -33,7 +34,7 @@ const sdkVersions = Object.fromEntries(['pi-coding-agent', 'pi-agent-core', 'pi-
 }));
 export interface EnvironmentInput {
   entry: WorkerEntry; cwd: string; modelDir: string; modelsRaw: string; selection?: Selection;
-  taskRole?: string; mode: ExecutionMode;
+  taskRole?: string; capabilities?: CapabilityRuntime; mode: ExecutionMode;
 }
 export interface PreparedEnvironment {
   readonly profileHash: string;
@@ -103,7 +104,7 @@ export class ExecutionProfiles {
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,
       entry: input.entry, reuse, cwd: canonicalPath(input.cwd), agentDir: resolve(this.root, "pi"),
       modelDir: canonicalPath(input.modelDir), env, execArgv, modelDigest, configRevision, settings, resourceVersion,
-      selection: input.entry === "agent" ? input.selection : null, taskRole: input.taskRole ?? null }));
+      selection: input.entry === "agent" ? input.selection : null, capabilities: input.capabilities ?? null, taskRole: input.taskRole ?? null }));
     let snapshot = this.snapshots.get(modelDigest);
     if (snapshot) {
       try { snapshot.valid = snapshot.valid && jsonRevision(snapshot.path) === modelDigest; }
@@ -119,7 +120,8 @@ export class ExecutionProfiles {
     const owned = snapshot;
     const current = (checkResources = true) => {
       try { const revisions = modelFiles.map(jsonRevision), currentModels = revisions[0];
-        return (currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) === modelDigest &&
+        return (input.capabilities?.files.every(file => capabilityFileDigest(file.path) === file.digest) ?? true) &&
+        (currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) === modelDigest &&
         configRevision === digest(stable(revisions)) &&
         (input.entry !== "agent" || stable(settingsFiles.map(jsonRevision)) === stable(settings) && (!checkResources || !verifiable || resources() === resourceVersion)); }
       catch { return false; }

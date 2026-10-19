@@ -1,3 +1,4 @@
+import { Capabilities } from "./capabilities.js";
 import { performance } from "node:perf_hooks";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
 import { ExecutionProfiles, fileRevision } from "./execution-profile.js";
@@ -43,6 +44,7 @@ import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
 type PendingStart = { scope: Scope; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
 export class Agents {
+  readonly capabilities: Capabilities;
   readonly pool: ExecutionPool;
   readonly profiles: ExecutionProfiles;
   private starts = new Map<string, PendingStart>();
@@ -171,6 +173,7 @@ export class Agents {
     openMemoryFile?: OpenMemoryFile,
     observed?: (scope: string) => boolean,
   ) {
+    this.capabilities = new Capabilities(store, publish, models.dir);
     this.pool = new ExecutionPool();
     this.profiles = new ExecutionProfiles(store.root);
     this.unwatchConfiguration = models.watchConfiguration(() => { void this.pool.invalidate().catch(() => {}); });
@@ -408,6 +411,7 @@ export class Agents {
         const prompt = resuming ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
         const content = imagePrompt(
           internal.prompt ?? attachmentPrompt(prompt, attachments), images);
+        const capabilities = internal.task ? undefined : await this.capabilities.prepare(scope);
         const cwd = this.store.workspace(scope.workspaceId).path;
         const id = randomUUID();
         const modelsFile = join(this.store.root, "run-models", `run-${id}.json`);
@@ -455,7 +459,7 @@ export class Agents {
           throw new AppError("PROMPT_PREPARATION_FAILED",
             `消息未发送：${errorMessage(error, "准备会话或模型配置失败。")}`);
         }
-        return { start: { cwd, file, modelsFile, selection: selection!, commit: (lease: ExecutionLease) => {
+        return { start: { cwd, file, modelsFile, capabilities, selection: selection!, commit: (lease: ExecutionLease) => {
           validate();
           if (ownStart?.controller.signal.aborted || !this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
           internal.beforeStart?.();
@@ -497,7 +501,11 @@ export class Agents {
           phase: "initializing",
           resumedFromRunId: typeof p.expectedRunId === "string" ? p.expectedRunId : null,
         };
-        const requestTitle = !internal.task && this.store.requestTitle(scope,
+        let requestTitle = false;
+        this.store.db.exec("BEGIN IMMEDIATE");
+        try {
+        if (capabilities) this.capabilities.lock(scope, capabilities);
+        requestTitle = !internal.task && this.store.requestTitle(scope,
           internal.notification || resuming ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
         this.store.db
           .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId) VALUES(?,?,?,?,?,?,?)")
@@ -513,6 +521,9 @@ export class Agents {
         this.store.db
           .prepare("UPDATE sessions SET updatedAt=?,autoPinUntil=NULL WHERE id=?")
           .run(run.startedAt, scope.sessionId);
+        this.store.db.exec("COMMIT");
+        } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+        if (capabilities) this.capabilities.changed(scope);
         this.publish(threadScope(scope), this.thread(scope));
         // Invoke now: launch installs pending synchronously before its first await.
         const completion = (async () => {
@@ -527,6 +538,7 @@ export class Agents {
             cwd,
             file,
             modelsFile,
+            capabilities: capabilities?.runtime,
             memoryPath: internal.task ? undefined : join(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md"),
             runId: id,
             requestId: c.requestId,
@@ -575,7 +587,8 @@ export class Agents {
       let commitAttempted = false;
       try {
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
-          modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, taskRole: internal.task?.role, mode: this.pool.mode }, ownStart!.controller.signal);
+          modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
+          taskRole: internal.task?.role, mode: this.pool.mode }, ownStart!.controller.signal);
         const revision = fileRevision(start.file);
         validate();
         ownStart!.provider = start.selection.provider;

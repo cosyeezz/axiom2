@@ -53,10 +53,10 @@ test("snapshot preparation failure is persisted as failed, with no launch or aut
     mkdirSync(join(root, "execution-models"));
     await assert.rejects(agents.command(environmentFailure), { code: "PROMPT_PREPARATION_FAILED" });
     assert.equal(launches, 0, "failed environment preparation never dispatches or replays");
-    const profiles = (agents as any).profiles, prepare = profiles.prepare.bind(profiles);
+    const profiles = (agents as any).profiles, prepare = profiles.prepareAsync.bind(profiles);
     let cleanupFailure = true;
-    profiles.prepare = (...args: unknown[]) => {
-      const environment = prepare(...args);
+    profiles.prepareAsync = async (...args: unknown[]) => {
+      const environment = await prepare(...args);
       return { ...environment, release() {
         environment.release();
         if (cleanupFailure) { cleanupFailure = false; throw Error("fixture cleanup failure"); }

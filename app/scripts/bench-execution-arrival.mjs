@@ -7,9 +7,11 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import { loadPoolLimits } from './execution-bench-limits.mjs';
 const args=Object.fromEntries(process.argv.slice(2).map(v=>{const [key,...rest]=v.replace(/^--/,'').split('=');return[key,rest.join('=')];}));
 const build=resolve(args.build||'dist'),mode=args.mode||'D',scenario=args.scenario||'memory',count=Number(args.samples||100),interval=Number(args.interval||250);
 const output=resolve(args.output||`test-results/execution-pool/${mode}-arrival.json`);
+const limits=await loadPoolLimits(build,args);
 assert.ok(['memory','agent-process'].includes(scenario));assert.ok(count>0&&interval>0);
 const load=name=>import(pathToFileURL(join(build,'server',`${name}.js`)).href);
 const {Store}=await load('storage'),{ModelService}=await load('model-service'),{Agents}=await load('agents');
@@ -17,7 +19,7 @@ const root=mkdtempSync(join(tmpdir(),'axiom-arrival-')),pi=join(root,'pi'),cwd=j
 for(const p of [pi,cwd,probe])mkdirSync(p);
 process.env.AXIOM_PI_DIR=pi;process.env.AXIOM_EXECUTION_MODE=mode;process.env.AXIOM_BENCH_PROBE=probe;
 process.env.NODE_OPTIONS=`${process.env.NODE_OPTIONS||''} --import=${new URL('./execution-bench-probe.mjs',import.meta.url).href}`;
-const report={measurementVersion:3,probeSha256:createHash('sha256').update(readFileSync(new URL('./execution-bench-probe.mjs',import.meta.url))).digest('hex'),kind:'fixed-arrival',build,mode,scenario,count,interval,node:process.version,prepareEndpoint:'mock_received',status:'running',samples:[],metrics:[],hashes:Object.fromEntries(['agents','execution-pool','agent-worker','memory-worker'].map(name=>[name,createHash('sha256').update(readFileSync(join(build,'server',`${name}.js`))).digest('hex')]))};
+const report={measurementVersion:3,arguments:args,benchmarkSha256:createHash('sha256').update(readFileSync(new URL(import.meta.url))).digest('hex'),limitsHelperSha256:createHash('sha256').update(readFileSync(new URL('./execution-bench-limits.mjs',import.meta.url))).digest('hex'),probeSha256:createHash('sha256').update(readFileSync(new URL('./execution-bench-probe.mjs',import.meta.url))).digest('hex'),kind:'fixed-arrival',build,mode,scenario,count,interval,node:process.version,prepareEndpoint:'mock_received',status:'running',samples:[],metrics:[],hashes:Object.fromEntries(['agents','execution-pool','agent-worker','memory-worker'].map(name=>[name,createHash('sha256').update(readFileSync(join(build,'server',`${name}.js`))).digest('hex')]))};
 const byId=new Map(),byScope=new Map();let fixtureFailure;
 const http=createServer(async(req,res)=>{try{
   let text='';for await(const chunk of req)text+=chunk;
@@ -31,6 +33,7 @@ writeFileSync(join(pi,'models.json'),JSON.stringify({providers:{fixture:{api:'op
 writeFileSync(join(pi,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'fixture'}}));
 writeFileSync(join(pi,'settings.json'),JSON.stringify({retry:{enabled:false},compaction:{enabled:false},cacheWarming:'off'}));
 const store=new Store(root),models=new ModelService(root),agents=new Agents(store,models,()=>{}),selection={provider:'fixture',id:'fixture',thinking:'off'};
+if(limits)Object.assign(agents.pool.limits,limits);
 report.poolLimits={...agents.pool.limits};
 const space=store.execute({requestId:randomUUID(),op:'workspace.open',params:{path:cwd,authorized:true}});
 const create=()=>{const session=store.execute({requestId:randomUUID(),op:'session.create',workspaceId:space.id});store.db.prepare('INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)').run(session.id,JSON.stringify(selection));return{workspaceId:space.id,sessionId:session.id};};

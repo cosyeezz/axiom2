@@ -63,6 +63,7 @@ export interface ProviderDraft {
   models: ModelDraft[];
   auth?: {
     configured: boolean;
+    error?: string;
     source?: string;
     type?: "api_key" | "oauth";
     methods: ("api_key" | "oauth")[];

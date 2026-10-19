@@ -49,6 +49,8 @@ test("catalog fetches the configured baseUrl with pi auth and imports only upstr
     } } });
     writeFileSync(join(service.dir, "models.json"), raw);
     let draft = await service.read();
+    const migratedRaw = await service.raw();
+    assert.equal(JSON.parse(migratedRaw).providers.openai.apiKey, undefined);
     body = JSON.stringify({ data: [{ id: known.id, name: "Upstream name" }, { id: "upstream-only" }] });
     const catalog = await service.catalog("openai", draft.revision);
     assert.equal(catalog.source, "endpoint");
@@ -60,7 +62,7 @@ test("catalog fetches the configured baseUrl with pi auth and imports only upstr
     const chosen = catalog.models.find((model) => model.id === "upstream-only")!;
     assert.equal(chosen.contextWindow, undefined);
     assert.equal(chosen.levels, undefined);
-    assert.equal(await service.raw(), raw, "fetching does not publish config");
+    assert.equal(await service.raw(), migratedRaw, "fetching does not publish config after credential normalization");
     draft.providers[0].models.push({ key: chosen.id, id: chosen.id, name: chosen.name, levels: chosen.levels ?? ["none"], input: chosen.input ?? ["text"], headers: [], body: [] });
     await service.save(draft);
     draft = await service.read();
@@ -84,7 +86,7 @@ test("catalog fetches the configured baseUrl with pi auth and imports only upstr
     await assert.rejects(service.catalog("openai", draft.revision), { code: "REVISION_CONFLICT" });
     assert.ok(!readdirSync(service.dir).some((name) => name.startsWith("models-catalog-")));
 
-    // Unknown providers support discovery too. Header-only auth is resolved by pi, including env values.
+    // A custom header is not a substitute for the canonical API-key configuration.
     drift = false;
     expectedKey = undefined;
     const config = JSON.parse(raw);
@@ -94,9 +96,10 @@ test("catalog fetches the configured baseUrl with pi auth and imports only upstr
     config.providers = { "header-only-fixture": custom };
     writeFileSync(join(service.dir, "models.json"), JSON.stringify(config));
     draft = await service.read();
-    assert.equal((await service.catalog("header-only-fixture", draft.revision)).models[0].id, "upstream-only");
+    await assert.rejects(service.catalog("header-only-fixture", draft.revision), { code: "MODEL_AUTH_MISSING" });
 
     // The endpoint protocol wins over a same-ID native model with another protocol.
+    expectedKey = "Bearer TEST-KEY";
     custom.api = "openai-completions";
     custom.models = [];
     custom.modelOverrides = {};

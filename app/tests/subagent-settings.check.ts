@@ -200,6 +200,13 @@ try {
   await trigger.focus();
   await trigger.press("Enter");
   await dialog.waitFor();
+  // Keyboard focus shows the close button's hint. Escape dismisses that top
+  // layer first; waiting explicitly avoids racing its zero-delay display.
+  const closeHint = page.getByRole("tooltip").filter({ hasText: "返回会话（Esc）" });
+  await closeHint.waitFor();
+  await page.keyboard.press("Escape");
+  await closeHint.waitFor({ state: "detached" });
+  assert.ok(await dialog.isVisible(), "Escape dismisses the visible hint before its settings drawer");
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
   assert.ok(await trigger.evaluate((el) => el === document.activeElement));

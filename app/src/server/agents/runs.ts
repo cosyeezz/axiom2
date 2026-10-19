@@ -21,6 +21,7 @@ type Live = {
   finish?: { status: Run["status"]; error?: string; reasonCode?: string };
   storageFailed?: boolean;
   terminating?: boolean;
+  validatingIdle?: boolean;
   closed?: boolean;
   receive?: (event: any) => void;
   timer?: NodeJS.Timeout;
@@ -220,6 +221,11 @@ export class AgentRuns {
       if (this.live.get(scope.sessionId) !== live || live.run.status === "stopping" || event.runId !== run.id || !sameLease(event.lease, lease.ref)) return;
       try {
         if (event.type === "idle" && live.finish && !live.storageFailed && !live.terminating && !this.closing) {
+          if (live.validatingIdle) return;
+          live.validatingIdle = true;
+          // Worker cleanup has completed. Bound resource verification separately;
+          // the two-second cleanup deadline must not kill a healthy idle worker.
+          this.escalate(live, this.pool.limits.prepareTimeoutMs);
           const verified = await (lease.validateEnvironment?.() ?? lease.environment.current());
           if (this.live.get(scope.sessionId) !== live || this.live.get(scope.sessionId)?.run.status === 'stopping' || live.terminating || this.closing || !this.pool.isActive(lease.ref)) return;
           if (verified && !live.storageFailed && lease.environment.current(false) && lease.environment.snapshotValid()) settle(true);
@@ -264,7 +270,7 @@ export class AgentRuns {
           recall?.resolve(event.ids);
         }
         if (event.type === "closed") live.closed = true;
-        if (event.type === "done") this.escalate(live, 2000);
+        if (event.type === "done" && !live.validatingIdle) this.escalate(live, 2000);
         if (event.type === "ready")
           this.store.db
             .prepare(

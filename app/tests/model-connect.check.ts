@@ -17,6 +17,7 @@ let catalogStatus = 200;
 const catalogModel = builtinProviders().find((provider) => provider.id === "openai")!.getModels()[0];
 const endpoint = createServer((req, res) => {
   assert.equal(req.url, "/proxy/v1/models");
+  assert.equal(req.headers.authorization, "Bearer UI-FIXTURE-KEY");
   res.writeHead(catalogStatus, { "content-type": "application/json" });
   res.end(JSON.stringify({ data: [{ id: catalogModel.id, name: "A known model" }, { id: "remote-fixture-model", name: "Unknown model" }] }));
 });
@@ -150,6 +151,7 @@ try {
   assert.ok(await page.locator("#provider-id").evaluate((el) => el === document.activeElement));
   await page.locator("#provider-id").fill("openai");
   await page.locator("#provider-url").fill(endpointUrl);
+  await page.locator("#provider-key").fill("UI-FIXTURE-KEY");
   await page.locator("#provider-protocol").selectOption(catalogModel.api);
   await capture("custom");
   await page.locator("#add-supplier").click();
@@ -195,6 +197,8 @@ try {
   await dialog.getByRole("button", { name: "重新拉取", exact: true }).click();
   await dialog.getByRole("alert").filter({ hasText: "HTTP 401" }).waitFor();
   assert.equal(await dialog.locator(".model-catalog-item").count(), 0, "failed refresh must clear previous results");
+  assert.equal(await dialog.locator(".model-empty").count(), 0, "failed refresh must not show a successful empty list");
+  assert.doesNotMatch(await dialog.innerText(), /0 个模型/);
   catalogStatus = 200;
   await dialog.getByRole("button", { name: "重新拉取", exact: true }).click();
   await dialog.getByText(/已从当前 Base URL 拉取模型列表/).waitFor();

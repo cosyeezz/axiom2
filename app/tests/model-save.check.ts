@@ -73,6 +73,18 @@ try {
   const banner = await page.locator(".configuration-feedback").boundingBox();
   assert.ok(banner && banner.y >= 0 && banner.y + banner.height < 900);
 
+  // Tall windows must not stretch the form and push its actions to the viewport bottom.
+  await page.setViewportSize({ width: 1440, height: 1400 });
+  for (const tab of ["suppliers", "models"]) {
+    await page.locator(`#${tab}-tab`).click();
+    const content = await page.locator(`#${tab}-screen`).boundingBox();
+    const actions = await page.locator(".configuration-actions").boundingBox();
+    assert.ok(content && actions);
+    assert.ok(actions.y >= content.y + content.height - 1 && actions.y - content.y - content.height < 90, `${tab}: actions follow content`);
+    assert.ok(actions.y + actions.height < 1200, `${tab}: actions are not pinned to the bottom`);
+  }
+  await page.locator("#suppliers-tab").click();
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.reload();
   await page.locator("#provider-key-status").filter({ hasText: "已保存到本地" }).waitFor();
   await page.locator("#provider-key").fill("TEST-ONLY-REPLACEMENT");
@@ -150,7 +162,7 @@ try {
   await page.locator(".configuration-feedback[data-error=false]").waitFor();
   assert.ok(await page.locator("#logout-provider").isEnabled());
   assert.deepEqual(errors, []);
-  console.log("Model save UI: disk persistence, replacement, reload, blank retention, feedback, failure preservation, mobile layout, bottom controls, immediate logout/model preservation/active-run confirmation/duplicate clicks/reconciliation passed.");
+  console.log("Model save UI: disk persistence, replacement, reload, blank retention, feedback, failure preservation, mobile layout, controls following content, immediate logout/model preservation/active-run confirmation/duplicate clicks/reconciliation passed.");
 } finally {
   await browser.close();
   await app.close();

@@ -2,7 +2,6 @@ import { MemoryToolbar } from "../memory/MemoryToolbar.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { command, useConnectionState } from "../transport.js";
 import { Icon, PanelIcon } from "../components.js";
-import { BrandMark } from "../BrandMark.js";
 import {
   scopeKey,
   type Scope,
@@ -149,11 +148,16 @@ export default function Workbench() {
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }}>
-        <div className="row brand">
-          <span className="axiom-wordmark" role="img" aria-label="AXIOM 2 · 工作台">
-            <BrandMark size={38} className="brand-mark axiom-mark" />
-            <span className="axiom-brand-type" aria-hidden="true"><strong>AXIOM<span className="axiom-edition">2</span></strong><span className="axiom-brand-caption">工作台 <i /> WORKSPACE</span></span>
-          </span>
+        <div className="sidebar-actions">
+          <button
+            className="new-chat"
+            id="new-chat"
+            data-view-navigation
+            onClick={() => navigationGuard.current(() => { void create(); })}
+          >
+            <Icon name="new-chat" />
+            <span>新建会话</span>
+          </button>
           <button
             className="icon-btn"
             id="collapse-history"
@@ -176,15 +180,6 @@ export default function Workbench() {
           choose={() => void chooseFolder()}
           onError={setError}
         />
-        <button
-          className="btn new-chat"
-          id="new-chat"
-          data-view-navigation
-          onClick={() => navigationGuard.current(() => { void create(); })}
-        >
-          <Icon name="new-chat" />
-          <span>新建会话</span>
-        </button>
         <History
           key={workspace?.id ?? "empty"}
           workspace={workspace}
@@ -230,9 +225,15 @@ export default function Workbench() {
                 aria-label="展开侧栏"
                 aria-controls="history-sidebar"
                 aria-expanded={expanded}
-                onClick={() =>
-                  isMobile ? setMobileOpen(true) : setCollapsed(false)
-                }
+                onClick={() => {
+                  if (isMobile) setMobileOpen(true);
+                  else {
+                    setCollapsed(false);
+                    requestAnimationFrame(() =>
+                      document.getElementById("collapse-history")?.focus({ preventScroll: true }),
+                    );
+                  }
+                }}
               >
                 <PanelIcon />
               </button>

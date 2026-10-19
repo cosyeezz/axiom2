@@ -62,7 +62,7 @@ try {
     }), true, `header fits at ${width}px with an actual update marker`);
     if (width === 390) await page.screenshot({ path: `${output}/narrow.png` });
   }
-  await page.getByRole("button", { name: "服务与更新，有可用更新" }).click();
+  await page.getByRole("button", { name: "服务与更新，有待查看的变化" }).click();
   await page.locator('.connect-page').waitFor();
   assert.equal(await page.locator('.desktop-workbench-bar').isVisible(), false);
   assert.deepEqual(errors, []);

@@ -1,3 +1,4 @@
+import { capabilityExtensions, type CapabilityRuntime } from "./capability-resources.js";
 import { performance } from "node:perf_hooks";
 import { acceptsLease, awaitExecutionPermit, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
@@ -11,6 +12,7 @@ import { queueTaskNotifications } from "./agents/task-notifications.js";
 import { join, resolve, dirname } from "node:path";
 import {
   createAgentSession,
+  loadSkills,
   DefaultResourceLoader,
   SettingsManager,
   resizeImage,
@@ -53,6 +55,7 @@ export interface WorkerInput {
   cwd: string;
   file: string;
   modelsFile: string;
+  capabilities?: CapabilityRuntime;
   memoryPath?: string;
   runId: string;
   selection: Selection;
@@ -523,14 +526,19 @@ async function run(input: WorkerInput) {
       settingsManager,
       // Managed skills replace same-named legacy links without modifying user files.
       // Children don't load the managed browser automation skills.
-      skillsOverride: (base) => opencli?.managed || input.task ? {
-        skills: [...base.skills.filter((skill) => !openCliSkillNames.includes(skill.name)), ...(opencli?.skills ?? [])],
-        diagnostics: [...base.diagnostics, ...(opencli?.diagnostics ?? [])],
-      } : base,
+      noSkills: !input.task && input.capabilities?.skillPaths !== undefined && input.capabilities.skillPaths !== null,
+      skillsOverride: (base) => {
+        if (!input.task && input.capabilities?.skillPaths) return loadSkills({ cwd: input.cwd, agentDir: join(input.root, "pi"),
+          skillPaths: input.capabilities.skillPaths, includeDefaults: false });
+        return opencli?.managed || input.task ? {
+          skills: [...base.skills.filter((skill) => !openCliSkillNames.includes(skill.name)), ...(opencli?.skills ?? [])],
+          diagnostics: [...base.diagnostics, ...(opencli?.diagnostics ?? [])],
+        } : base;
+      },
       // Extensions execute arbitrary JS, may shadow read tools or add commands.
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),
-      extensionFactories: [(pi) => {
+      extensionFactories: [...(!input.task && input.capabilities ? capabilityExtensions(input.capabilities, input.root) : []), (pi) => {
         pi.on("before_provider_request", () => { send({ type: "provider_request" }); });
         pi.on("tool_call", (event) => {
           const inputPath = (event.input as Record<string, unknown>).path;

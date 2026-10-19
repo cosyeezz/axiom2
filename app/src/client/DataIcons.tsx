@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 export function validRatio(value: number | null | undefined, total: number | null | undefined): number | null {
   const ratio = value != null && total != null && Number.isFinite(value) && value >= 0 && Number.isFinite(total) && total > 0 ? value / total * 100 : null;
@@ -8,11 +8,11 @@ export function cacheRatio(usage: { input: number; cacheRead: number; cacheWrite
   return usage && [usage.input, usage.cacheRead, usage.cacheWrite].every(n => Number.isFinite(n) && n >= 0)
     ? validRatio(usage.cacheRead, usage.input + usage.cacheRead + usage.cacheWrite) : null;
 }
-function Frame({ children, kind, label, value }: { children: ReactNode; kind: string; label?: string; value?: number | null }) {
-  return <svg className={`data-icon data-icon-${kind}`} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} data-value={value ?? "unknown"}>{children}</svg>;
+function Frame({ children, kind, label, value, viewBox = "0 0 32 32" }: { children: ReactNode; kind: string; label?: string; value?: number | null; viewBox?: string }) {
+  return <svg className={`data-icon data-icon-${kind}`} viewBox={viewBox} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} data-value={value ?? "unknown"}>{children}</svg>;
 }
 function Core({ name }: { name: string }) { return <use href={`#i-${name}`} x="10" y="10" width="12" height="12" />; }
-function Unknown() { return <g className="data-unknown" transform="translate(-2 0)"><circle cx="26" cy="25" r="5" fill="var(--surface, #222)" stroke="none" /><path d="M24.5 23.5a1.6 1.6 0 1 1 2.7 1.2c-.8.5-1.2.6-1.2 1.3m0 2h.01" /></g>; }
+function Unknown({ dx = -2, dy = 0 }: { dx?: number; dy?: number }) { return <g className="data-unknown" transform={`translate(${dx} ${dy})`}><circle cx="26" cy="25" r="5" fill="var(--surface, #222)" stroke="none" /><path d="M24.5 23.5a1.6 1.6 0 1 1 2.7 1.2c-.8.5-1.2.6-1.2 1.3m0 2h.01" /></g>; }
 function Activity({ active }: { active?: boolean }) { return active ? <circle className="data-activity" cx="27" cy="5" r="2" fill="currentColor" stroke="none"><animate attributeName="opacity" values="1;.25;1" dur="1.8s" repeatCount="indefinite" /></circle> : null; }
 function arc(i: number, n: number) { const gap = Math.min(8, 90 / n), a = (i * 360 / n - 90 + gap) * Math.PI / 180, b = ((i + 1) * 360 / n - 90 - gap) * Math.PI / 180; return `M${16+13*Math.cos(a)} ${16+13*Math.sin(a)} A13 13 0 ${b-a>Math.PI?1:0} 1 ${16+13*Math.cos(b)} ${16+13*Math.sin(b)}`; }
 export function TaskProgressIcon({ percent, active, error, label }: { percent: number | null; active?: boolean; error?: boolean; label?: string }) {
@@ -35,12 +35,15 @@ export function ContextMemoryIcon({ percent, taskPercent = null, label }: { perc
   </Frame>;
 }
 export function CacheDataIcon({ percent, active }: { percent: number | null; active: boolean }) {
+  const clipId = useId();
   const valid = percent != null && Number.isFinite(percent) && percent >= 0;
   const fill = valid ? Math.min(100, percent) : 0;
-  return <Frame kind={valid && percent < 50 ? "cache-low" : "cache"} value={valid ? percent : null}>
-    <rect className="data-level" x="5" y={24 - 15 * fill / 100} width="22" height={15 * fill / 100} fill="currentColor" stroke="none" opacity=".55" />
-    <g className="cache-outline"><ellipse cx="16" cy="8" rx="12" ry="3" /><path d="M4 8v15c0 4 24 4 24 0V8M4 15c0 4 24 4 24 0M4 22c0 4 24 4 24 0" />{active && <animate attributeName="opacity" values="1;.45;1" dur="1.8s" repeatCount="indefinite" />}</g>
-    {!valid && <Unknown />}
+  return <Frame kind={valid && percent < 50 ? "cache-low" : "cache"} value={valid ? percent : null} viewBox="0.5 0 24 24">
+    <defs><clipPath id={clipId}><path d="M3 5a9 3 0 0 0 18 0v3h-6v13.84A9 3 0 0 1 3 19Z" /></clipPath></defs>
+    <rect className="data-level" x="3" y={22 - 15 * fill / 100} width="18" height={15 * fill / 100} clipPath={`url(#${clipId})`} fill="currentColor" stroke="none" opacity=".18" />
+    {/* C001: Lucide database-zap, original outline paths (ISC). */}
+    <g className="cache-outline"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 12 2.84M21 5v3" /><path className="cache-lightning" data-tone={!valid ? "unknown" : percent > 90 ? "success" : percent > 70 ? "warning" : "danger"} d="m21 12-3 5h4l-3 5" /><path d="M3 12a9 3 0 0 0 11.59 2.87" />{active && <animate attributeName="opacity" values="1;.45;1" dur="1.8s" repeatCount="indefinite" />}</g>
+    {!valid && <Unknown dx={-16} dy={-7} />}
   </Frame>;
 }
 export function BatchProgressIcon({ states, label }: { states: string[]; label: string }) {

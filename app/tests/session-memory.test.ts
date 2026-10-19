@@ -702,6 +702,10 @@ test("Chinese partial phrases rank an older relevant source into the 24 query ca
 });
 test("query post-validation scans only selected or actually read sources", async () => {
   const f = fixture(); try {
+    // This case observes query-directed scans. Disable independent filesystem events
+    // before creating fixtures; clearing a timer cannot discard undelivered OS events.
+    (f.memories as any).watcher?.close();
+    (f.memories as any).watcher = undefined;
     const unrelatedProject = join(f.project, "unrelated"); mkdirSync(unrelatedProject);
     const unrelatedWorkspace = f.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: unrelatedProject, authorized: true } }) as Workspace;
     const unrelatedSession = f.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: unrelatedWorkspace.id }) as Session;
@@ -709,11 +713,8 @@ test("query post-validation scans only selected or actually read sources", async
     writeFileSync(join(f.directory, "MEMORY.md"), "当前工作空间的事实");
     writeFileSync(join(memoryDirectory(f.root, unrelated.sessionId), "MEMORY.md"), "无关工作空间的资料");
     f.memories.scan();
-    // 上述写入可留下与查询无关的 watch 队列；先清空它，计数只观察本次
-    // 查询及其后验校验是否错误地重新安排无关 workspace。
-    if ((f.memories as any).scanDelay) clearTimeout((f.memories as any).scanDelay);
-    (f.memories as any).scanDelay = undefined; (f.memories as any).queueAll = false;
-    (f.memories as any).queuedScopes.clear();
+    // Drain any initialization scan before counting query and post-validation work.
+    await f.memories.scanAsync();
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.memories.runner = { close: async () => {}, execute: async (input) => ({ answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false }) };
     const original = (f.memories as any).scanDirectory.bind(f.memories);

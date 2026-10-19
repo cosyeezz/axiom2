@@ -175,7 +175,7 @@ export function ProviderConnection({
               <div className="field">
                 <div className="row-between credential-heading">
                   <label htmlFor="provider-key">
-                    API 密钥 <span className="meta">（可选）</span>
+                    API 密钥
                   </label>
                   <button
                     id="logout-provider"

@@ -210,6 +210,7 @@ export default function Models() {
                       </button>
                     ))}
                   </nav>
+                  {p.auth?.error && !p.key.trim() && <p className="auth-error" role="alert">配置错误 · {p.auth.error}</p>}
                   <ProviderConnection
                     {...{
                       p,

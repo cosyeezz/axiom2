@@ -11,6 +11,7 @@ export async function discoverModels(options: {
   baseUrl: string;
   api: string;
   auth?: ModelAuth;
+  authHeader?: boolean;
   signal: AbortSignal;
 }): Promise<{ id: string; name: string }[]> {
   if (!modelApis.includes(options.api as typeof modelApis[number]))
@@ -29,7 +30,8 @@ export async function discoverModels(options: {
   if (anthropic) headers.set("anthropic-version", "2023-06-01");
   const key = options.auth?.apiKey;
   if (key) headers.set(google ? "x-goog-api-key" : anthropic ? "x-api-key" : "authorization", google || anthropic ? key : `Bearer ${key}`);
-  // pi resolves provider headers, including header-only authentication and dynamic values.
+  if (key && options.authHeader) headers.set("authorization", `Bearer ${key}`);
+  // Explicit headers resolved by pi override all generated authentication headers.
   for (const [name, value] of Object.entries(options.auth?.headers ?? {})) {
     if (value === null) headers.delete(name);
     else headers.set(name, value);

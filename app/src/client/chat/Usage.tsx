@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useScope } from "../transport.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
+import { Capabilities } from "./Capabilities.js";
 import { Compression } from "./Compression.js";
 import { TaskSettings } from "../tasks/TaskSettings.js";
 import { AnnotationToggle } from "./ReplyAnnotations.js";
@@ -39,13 +40,13 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
   const metric = (key: Metric, title: string) => ({ type: "button" as const, "aria-label": `查看${title}`, "aria-haspopup": "dialog" as const, "aria-expanded": detail?.key === key, onClick: (event: React.MouseEvent<HTMLButtonElement>) => { setCostWindow(null); setDetail(detail?.key === key ? null : { key, scope: scopeKey, trigger: event.currentTarget }); } });
   return <div className="usage" data-od-id="token-usage" role="group" aria-label="Token、缓存、耗时与预计花费统计">
     <div className="usage-row">
-      {tools ? tools.session(contextInfo) : <button className="usage-metric context-memory-control" data-od-id="context-capacity" data-tooltip={`${contextLabel}；点击查看详情`} {...metric("context", contextLabel)}>
+      {tools ? tools.session(contextInfo) : <button className="usage-metric context-memory-control action-icon" data-od-id="context-capacity" data-tooltip={`${contextLabel}；点击查看详情`} {...metric("context", contextLabel)}>
         <ContextMemoryIcon percent={percent} label={contextLabel} />
       </button>}
-      <button className="usage-metric" data-od-id="cache-tokens" data-tooltip={`${cacheLabel}；点击查看输入统计`} {...metric("cache", cacheLabel)}>
+      <button className="usage-metric action-icon" data-od-id="cache-tokens" data-tooltip={`${cacheLabel}；点击查看输入统计`} {...metric("cache", cacheLabel)}>
         <CacheUsageIcon active={running(info.run)} percent={cache} />
       </button>
-      <button type="button" className="usage-metric cost-trigger" aria-label="查看费用明细" aria-description="包含当前会话耗时" aria-haspopup="dialog" aria-expanded={!!costWindow} disabled={!scope}
+      <button type="button" className="usage-metric cost-trigger action-icon" aria-label="查看费用明细" aria-description="包含当前会话耗时" aria-haspopup="dialog" aria-expanded={!!costWindow} disabled={!scope}
         onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${label}累计预计费用（pi 定价） · ${durationTooltip(info)}：${formatDuration(elapsed)}；点击查看费用与耗时明细`}>
         <Icon name="chart-column-increasing" />
       </button>
@@ -61,6 +62,6 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
         </>}
       </MetricDetail>}
     </div>
-    <div className="usage-settings" role="group" aria-label="会话工具"><AnnotationToggle scope={scope} /><OriginalConversationToggle scope={scope} /><TaskSettings /><Compression key={scope?.sessionId ?? "empty"} scope={scope} />{tools?.global}</div>
+    <div className="usage-settings" role="group" aria-label="会话工具"><AnnotationToggle scope={scope} /><OriginalConversationToggle scope={scope} />{!info.task && <Capabilities key={scopeKey} scope={scope} />}<TaskSettings /><Compression key={scope?.sessionId ?? "empty"} scope={scope} />{tools?.global}</div>
   </div>;
 }

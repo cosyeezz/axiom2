@@ -276,8 +276,8 @@ try {
     assert.equal(await page.evaluate(() => {
       const status = document.querySelector('.desktop-workbench-status')!.getBoundingClientRect();
       const button = document.querySelector('.desktop-workbench-bar button')!.getBoundingClientRect();
-      return status.width > 0 && status.right + 5 <= button.left && button.right <= innerWidth;
-    }), true, "status stays visible without overlapping the service button");
+      return status.width > 0 && status.right + 5 <= button.left && button.right <= innerWidth && status.top >= -1 && status.bottom <= innerHeight + 1 && button.top >= -1 && button.bottom <= innerHeight + 1;
+    }), true, "status and service button stay inside the native header viewport without overlapping");
     const nativeViews: { windows: string[]; views: { label: string; x: number; y: number; width: number; height: number }[] } = await page.evaluate(() => (window as any).__TAURI_INTERNALS__.invoke("axiom_test_probe", { action: "snapshot" }));
     const bar = nativeViews.views.find((view) => view.label === "pake");
     const content = nativeViews.views.find((view) => view.label === "axiom-workbench");
