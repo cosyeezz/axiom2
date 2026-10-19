@@ -40,6 +40,7 @@ public final class TailnetInstrumentation extends Instrumentation {
                     check(saved != null && saved.secret.equals(SECRET) && saved.port == 4317, "Saved configuration missing after restart");
                     new TailnetCredentialStore(getTargetContext()).clear();
                 });
+                test("QR connection history survives process restart", () -> check(getTargetContext().getSharedPreferences("connection",0).getString("last","").equals(QrInstrumentationChecks.ENDPOINT), "QR history missing after restart"));
             } else {
                 test("literal Tailnet address boundary", this::addresses);
                 test("strict inventory and cloud-state parsing", this::parsing);
@@ -48,6 +49,9 @@ public final class TailnetInstrumentation extends Instrumentation {
                 test("bounded HTTP, redirect refusal and cancellation", this::http);
                 test("Keystore encryption, corruption and removal", this::storage);
                 test("native selection, stale callbacks, configuration and lifecycle", this::ui);
+                test("QR address contract and rotated camera frames", QrInstrumentationChecks::contract);
+                test("QR camera permission, pause, resume and cancellation", () -> QrInstrumentationChecks.lifecycle(this));
+                test("QR results, failure, readiness and successful history", () -> QrInstrumentationChecks.results(this));
                 new TailnetCredentialStore(getTargetContext()).save(credentials());
             }
             result.putString("AXIOM_TAILNET_PASS", "true"); result.putInt("passed", passed); finish(Activity.RESULT_OK, result);

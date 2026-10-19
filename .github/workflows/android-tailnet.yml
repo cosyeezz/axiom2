@@ -41,6 +41,7 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front none
           script: python3 scripts/check-android-tailnet.py --serial emulator-5554
       - name: Save test evidence
         if: always()

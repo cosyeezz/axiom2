@@ -18,6 +18,8 @@ $build = Join-Path $OutputDirectory 'build'
 $java = Join-Path $JavaHome 'bin\java.exe'
 $javac = Join-Path $JavaHome 'bin\javac.exe'
 $platformJar = Join-Path $AndroidPlatform 'android.jar'
+$qrJar = Join-Path $android 'libs\core-3.5.3.jar'
+if ((Get-FileHash $qrJar -Algorithm SHA256).Hash.ToLower() -ne '8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82') { throw 'ZXing dependency checksum mismatch' }
 foreach ($required in @($java,$javac,$platformJar,(Join-Path $BuildTools 'aapt2.exe'))) { if (!(Test-Path $required)) { throw "Missing build tool: $required" } }
 New-Item -ItemType Directory -Force $build,$OutputDirectory | Out-Null
 Add-Type -AssemblyName System.IO.Compression
@@ -39,13 +41,13 @@ ZipDirectory $aar (Join-Path $OutputDirectory 'axiom2-android-sdk.aar')
 $aapt = Join-Path $BuildTools 'aapt2.exe'; $resources = Join-Path $build 'resources.zip'
 Run $aapt @('compile','--dir',(Join-Path $android 'app\src\main\res'),'-o',$resources)
 $unsigned = Join-Path $build 'unsigned.apk'
-Run $aapt @('link','-o',$unsigned,'-I',$platformJar,'--manifest',(Join-Path $android 'app\src\main\AndroidManifest.xml'),'--version-name',$version,'--version-code',[string]$versionCode,'--java',$generated,$resources)
+Run $aapt @('link','-o',$unsigned,'-I',$platformJar,'--manifest',(Join-Path $android 'app\src\main\AndroidManifest.xml'),'--version-name',$version,'--version-code',[string]$versionCode,'--java',$generated,'-A',(Join-Path $android 'app\src\main\assets'),$resources)
 $buildConfig = Join-Path $generated 'com\axiom2\android\BuildConfig.java'
 [System.IO.File]::WriteAllText($buildConfig,'package com.axiom2.android; public final class BuildConfig { public static final boolean DEBUG = false; }')
 $appSources = @(Get-ChildItem (Join-Path $android 'app\src\main\java'),$generated -Recurse -Filter '*.java' | ForEach-Object FullName)
-Run $javac (@('--release','8','-encoding','UTF-8','-classpath',"$platformJar;$sdkJar",'-d',$appClasses) + $appSources)
+Run $javac (@('--release','8','-encoding','UTF-8','-classpath',"$platformJar;$sdkJar;$qrJar",'-d',$appClasses) + $appSources)
 $appJar = Join-Path $build 'app.jar'; ZipDirectory $appClasses $appJar
-Run $java @('-cp',(Join-Path $BuildTools 'lib\d8.jar'),'com.android.tools.r8.D8','--release','--min-api','26','--lib',$platformJar,'--output',$dex,$sdkJar,$appJar)
+Run $java @('-cp',(Join-Path $BuildTools 'lib\d8.jar'),'com.android.tools.r8.D8','--release','--min-api','26','--lib',$platformJar,'--output',$dex,$sdkJar,$appJar,$qrJar)
 $zip = [System.IO.Compression.ZipFile]::Open($unsigned,[System.IO.Compression.ZipArchiveMode]::Update)
 try { Get-ChildItem $dex -Filter '*.dex' | ForEach-Object { [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$_.FullName,$_.Name) | Out-Null } } finally { $zip.Dispose() }
 $aligned = Join-Path $build 'aligned.apk'; Run (Join-Path $BuildTools 'zipalign.exe') @('-f','-p','4',$unsigned,$aligned)

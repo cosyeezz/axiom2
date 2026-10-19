@@ -11,4 +11,6 @@ android {
     buildFeatures { buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
 }
-dependencies { implementation project(':sdk') }
+def qrJar = rootProject.file('libs/core-3.5.3.jar')
+if (java.security.MessageDigest.getInstance('SHA-256').digest(qrJar.bytes).encodeHex().toString() != '8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82') throw new GradleException('ZXing dependency checksum mismatch')
+dependencies { implementation project(':sdk'); implementation files(qrJar) }

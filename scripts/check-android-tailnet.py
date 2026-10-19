@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build an isolated, self-instrumenting Android test app; never install the production package."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -50,6 +51,9 @@ def main():
             shutil.rmtree(target)
         target.mkdir()
     android = ROOT / 'app/android'
+    qr_jar = android / 'libs/core-3.5.3.jar'
+    if hashlib.sha256(qr_jar.read_bytes()).hexdigest() != '8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82':
+        raise RuntimeError('ZXing dependency checksum mismatch')
     namespace = 'http://schemas.android.com/apk/res/android'
     ET.register_namespace('android', namespace)
     manifest = ET.parse(android / 'app/src/main/AndroidManifest.xml')
@@ -62,14 +66,14 @@ def main():
     manifest.write(out / 'AndroidManifest.xml', encoding='utf-8', xml_declaration=True)
     run([aapt, 'compile', '--dir', android / 'app/src/main/res', '-o', out / 'resources.zip'])
     unsigned = out / 'unsigned.apk'
-    run([aapt, 'link', '-o', unsigned, '-I', platform, '--manifest', out / 'AndroidManifest.xml', '--version-name', 'tailnet-test', '--version-code', '1', '--custom-package', 'com.axiom2.android', '--java', out / 'generated', out / 'resources.zip'])
+    run([aapt, 'link', '-o', unsigned, '-I', platform, '--manifest', out / 'AndroidManifest.xml', '--version-name', 'tailnet-test', '--version-code', '1', '--custom-package', 'com.axiom2.android', '--java', out / 'generated', '-A', android / 'app/src/main/assets', out / 'resources.zip'])
     generated = out / 'generated/com/axiom2/android/BuildConfig.java'
     generated.parent.mkdir(parents=True, exist_ok=True)
     generated.write_text('package com.axiom2.android; public final class BuildConfig { public static final boolean DEBUG = true; }', encoding='utf-8')
     sources = [file for base in [android / 'app/src/main/java', android / 'sdk/src/main/java', android / 'tests', out / 'generated'] for file in base.rglob('*.java')]
-    run([javac, '--release', '8', '-encoding', 'UTF-8', '-classpath', platform, '-d', out / 'classes', *sources])
+    run([javac, '--release', '8', '-encoding', 'UTF-8', '-classpath', os.pathsep.join([str(platform), str(qr_jar)]), '-d', out / 'classes', *sources])
     archive(out / 'classes', out / 'tests.jar')
-    run([java, '-cp', tools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--min-api', '26', '--lib', platform, '--output', out / 'dex', out / 'tests.jar'])
+    run([java, '-cp', tools / 'lib/d8.jar', 'com.android.tools.r8.D8', '--min-api', '26', '--lib', platform, '--output', out / 'dex', out / 'tests.jar', qr_jar])
     with zipfile.ZipFile(unsigned, 'a', zipfile.ZIP_DEFLATED) as apk:
         for dex in (out / 'dex').glob('*.dex'):
             apk.write(dex, dex.name)
@@ -87,6 +91,7 @@ def main():
     if not adb.exists():
         adb = sdk / 'platform-tools-package/platform-tools' / ('adb' + suffix)
     run([adb, '-s', args.serial, 'install', '-r', apk], timeout=60)
+    run([adb, '-s', args.serial, 'shell', 'pm', 'clear', PACKAGE], timeout=20)
     # Only the explicitly selected test emulator: dismiss the OS first-use overlay before UI evidence.
     run([adb, '-s', args.serial, 'shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed'], timeout=20)
     for phase in ['full', 'restart']:

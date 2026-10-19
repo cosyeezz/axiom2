@@ -1,5 +1,6 @@
 import { Icon, SettingsSidebar } from "../components.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
+import { PhoneConnect } from "../settings/PhoneConnect.js";
 import { useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
 import "../styles/settings.css";
@@ -51,6 +52,7 @@ export default function Settings() {
               <span className="meta">浏览器与网站操作</span>
               <Icon name="chevron-right" />
             </a>
+            <PhoneConnect />
             <p className="overview-message" role={config.error ? "alert" : "status"}>
               {config.error ||
                 (config.revision
