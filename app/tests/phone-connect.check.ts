@@ -34,7 +34,7 @@ try {
   assert.equal(await page.locator(".phone-connect-code code").textContent(),v4,"IPv4 is preferred");
   assert.equal(await qr.evaluate(node => getComputedStyle(node).stroke),"none","Global icon stroke must not contaminate QR");
   await image("qr-ipv4.png",v4); await page.screenshot({path:join(output,"desktop.png")});
-  await page.evaluate(() => { Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:() => new Promise<void>(resolve => { (window as any).finishCopy = resolve; })}}); });
+  await page.evaluate('Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:() => new Promise(resolve => { window.finishCopy = resolve; })}})');
   await page.getByRole("button",{name:"复制地址",exact:true}).click();
   await page.getByLabel("选择连接地址").selectOption(v6);
   await page.evaluate(() => (window as any).finishCopy());
