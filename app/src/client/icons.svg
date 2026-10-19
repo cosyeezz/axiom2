@@ -1,5 +1,5 @@
 <svg aria-hidden="true" style="position:absolute;width:0;height:0"><defs>
-<!-- Non-brand Lucide glyphs (ISC), Tabler fold and hand-click (MIT), Phosphor-inspired rounded note-pencil (MIT). See ICONS-LICENSE.txt. -->
+<!-- Non-brand Lucide glyphs (ISC), Tabler fold and hand-click (MIT), Phosphor note-pencil (MIT). See ICONS-LICENSE.txt. -->
 <symbol id="i-hand-click" class="ui-symbol" viewBox="1 0 21 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4.5a1.5 1.5 0 0 1 3 0V12m0-.5v-2a1.5 1.5 0 0 1 3 0V12m0-1.5a1.5 1.5 0 0 1 3 0V12"/><path d="M17 11.5a1.5 1.5 0 0 1 3 0V16a6 6 0 0 1-6 6h-2h.208a6 6 0 0 1-5.012-2.7L7 19q-.468-.718-3.286-5.728a1.5 1.5 0 0 1 .536-2.022a1.87 1.87 0 0 1 2.28.28L8 13M5 3L4 2m0 5H3m11-4l1-1m0 4h1"/></g></symbol>
 <symbol id="i-arrow-up-right" class="ui-symbol" viewBox="6 6 12 12"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M7 7h10v10M7 17 17 7"/></symbol>
 <symbol id="i-monitor" class="ui-symbol" viewBox="1 2 22 20"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></g></symbol>
@@ -89,7 +89,7 @@
 <symbol id="i-panel" class="ui-symbol" viewBox="2 2 20 20"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></g></symbol>
 <symbol id="i-arrow" class="ui-symbol" viewBox="4 4 16 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="m5 12l7-7l7 7m-7 7V5"/></symbol>
 <symbol id="i-clip" class="ui-symbol" viewBox="4 4 16 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7v14"/></symbol>
-<symbol id="i-new-chat" class="ui-symbol" viewBox="3 3 18 18"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M9 15v-3l9-9 3 3-9 9ZM16 5l3 3"/></g></symbol>
+<symbol id="i-new-chat" class="ui-symbol" viewBox="24 16 216 216"><path fill="currentColor" stroke="none" d="M229.66,58.34l-32-32a8,8,0,0,0-11.32,0l-96,96A8,8,0,0,0,88,128v32a8,8,0,0,0,8,8h32a8,8,0,0,0,5.66-2.34l96-96A8,8,0,0,0,229.66,58.34ZM124.69,152H104V131.31l64-64L188.69,88ZM200,76.69,179.31,56,192,43.31,212.69,64ZM224,128v80a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32h80a8,8,0,0,1,0,16H48V208H208V128a8,8,0,0,1,16,0Z"/></symbol>
 <symbol id="i-context" class="ui-symbol" viewBox="2 2 20 20"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/></g></symbol>
 <symbol id="i-cache" class="ui-symbol" viewBox="2 1 20 21.999"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></g></symbol>
 <symbol id="i-close" class="ui-symbol" viewBox="5 5 14 14"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M18 6L6 18M6 6l12 12"/></symbol>

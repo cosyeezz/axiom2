@@ -10,7 +10,7 @@ import { createServer } from "node:net";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { inspectDesktopWindow } from "./desktop-window.js";
 import { waitForUpdateExit, type UpdateCleanupJob } from "./desktop-update-cleanup.js";
 const { installerRecordName } = await import(new URL("../../scripts/desktop-test-bridge.mjs", import.meta.url).href);
@@ -78,6 +78,10 @@ const launch = async () => {
   for (let i = 0; i < 50; i++) { const page = context.pages().find((page) => page.url().includes("tauri.localhost")); if (page) return page; await delay(100); }
   throw Error("Controller missing");
 };
+const expandSection = async (page: Page, selector: ".startup-preparation" | ".startup-maintenance") => {
+  const section = page.locator(selector);
+  if (await section.getAttribute("open") === null) await section.locator(":scope > summary").click();
+};
 const killDesktop = async () => {
   if (native && native.exitCode === null && native.signalCode === null) {
     native.kill();
@@ -102,7 +106,8 @@ try {
     db.prepare("INSERT INTO sessions(id,workspaceId,title,updatedAt) VALUES(?,?,?,?)").run("upgrade-session", "upgrade-workspace", "更新保留会话", Date.now());
   } finally { db.close(); }
   let page = await launch();
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
+  await page.locator('.connection-status-tag[data-state="running"]').waitFor();
+  await expandSection(page, ".startup-preparation");
   await page.getByRole("button", { name: "打开工作台" }).click();
   for (let i = 0; i < 50 && browser!.contexts()[0].pages().length < 2; i++) await delay(100);
   const oldWorkbench = browser!.contexts()[0].pages().find((candidate) => candidate.url().startsWith(`http://127.0.0.1:${port}`));
@@ -110,6 +115,7 @@ try {
   await inspectDesktopWindow(native!.pid!);
   await page.getByRole("button", { name: "服务与更新" }).click();
   assert.ok(!oldWorkbench.isClosed(), "Returning to updates must retain the workbench until update confirmation");
+  await expandSection(page, ".startup-maintenance");
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.getByRole("button", { name: `更新后台服务 · ${version}`, exact: true }).waitFor();
   await inspectDesktopWindow(native!.pid!, { width: 430, height: 900 });
@@ -136,10 +142,12 @@ try {
   await killDesktop();
   assert.equal((await control("status")).state, "running", "Preparing an update must not stop the old backend");
   page = await launch();
+  await expandSection(page, ".startup-maintenance");
   await page.getByText("正在下载 axiom2.tgz…", { exact: true }).waitFor();
   releaseDownload();
   await page.getByText(`后台服务已更新至 ${version}，现在可以打开工作台。`, { exact: true }).waitFor({ timeout: 900000 });
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
+  await page.locator('.connection-status-tag[data-state="running"]').waitFor();
+  await expandSection(page, ".startup-preparation");
   assert.equal((await control("status")).version, version);
   assert.equal((await run(process.execPath, [cli, "--version"])).stdout.trim(), version);
   const restored = new DatabaseSync(join(root, "axiom.sqlite"));
@@ -156,6 +164,7 @@ try {
   }), true, "Remote workbench must not invoke updater");
   await inspectDesktopWindow(native!.pid!);
   await page.getByRole("button", { name: "服务与更新" }).click();
+  await expandSection(page, ".startup-maintenance");
   const parts = version.split(".").map(Number); parts[2]++;
   releaseVersion = parts.join(".");
   await page.getByRole("button", { name: "检查更新", exact: true }).click();

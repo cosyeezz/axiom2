@@ -48,7 +48,7 @@ Source: https://icon-sets.iconify.design/tabler/hand-click/
 Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
 Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
 Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths).
-New-session entry: custom rounded outline adaptation of the user-selected Phosphor note-pencil (option 05); keeps the notebook/pencil silhouette, with round caps/joins and a shared 1.25px non-scaling stroke. Sidebar glyph viewBoxes fit their geometry; non-square glyphs retain their aspect ratio and visible stroke overflow.
+New-session entry: the user-selected Phosphor note-pencil (option 05), with its original filled path and no added stroke. Its viewBox is 24 16 216 216. Sidebar glyph viewBoxes fit their geometry; non-square glyphs retain their aspect ratio and visible stroke overflow.
 Source: https://github.com/phosphor-icons/core/blob/main/assets/regular/note-pencil.svg
 MIT License: Copyright (c) 2023 Phosphor Icons. Full text: assets/PHOSPHOR-LICENSE.txt
 Lucide symbols use 1.5px non-scaling rounded strokes; ordinary desktop glyphs
