@@ -10,7 +10,7 @@ export function Icons() {
 export { Icon } from "./Icon.js";
 export function PanelIcon() {
   return (
-    <svg className="sidebar-motion ui-glyph" viewBox="2 3 20 18" aria-hidden="true">
+    <svg className="sidebar-motion ui-glyph" viewBox="3 4 18 16" aria-hidden="true">
       <rect className="panel-fill" x="4" y="5" width="5" height="14" rx="1" />
       <rect x="3" y="4" width="18" height="16" rx="3" />
       <path className="panel-divider" d="M9 5v14" />

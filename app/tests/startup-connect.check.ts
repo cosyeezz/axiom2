@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
-const output = resolve('../artifacts/startup-polish/browser'); await mkdir(output, { recursive: true });
+const output = resolve(process.env.AXIOM_CONNECT_OUTPUT || '../artifacts/connect-implementation/browser'); await mkdir(output, { recursive: true });
 const server = await createServer({ configFile: resolve('desktop/vite.config.ts'), server: { host: '127.0.0.1', port: 0 } }); await server.listen();
 const origin = server.resolvedUrls!.local[0];
 const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
@@ -14,7 +14,7 @@ try {
   await page.addInitScript({ content: 'window.__name = value => value;' });
   await page.addInitScript(() => {
     function assertFixture(confirmed: boolean) { if (!confirmed) throw Error('缺少解除确认'); }
-    const state = { node: false, installed: false, view: 'control', connection: 'connected', job: null as any, calls: [] as any[], remoteFail: false, remoteDelay: false, stopped: false };
+    const state = { node: false, installed: false, view: 'control', connection: 'connected', job: null as any, calls: [] as any[], remoteFail: false, remoteDelay: false, stopped: false, starting: false, statusFail: false };
     (window as any).fixture = state;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, args });
@@ -30,10 +30,11 @@ try {
         return {};
       }
       if (name === 'axiom_service') {
+        if (state.statusFail && args.action === 'status') throw Error('服务状态读取失败');
         if (args.action === 'open') state.view = 'workbench';
         if (args.action === 'stop') { state.stopped = true; state.view = 'control'; }
         if (args.action === 'start') state.stopped = false;
-        return { desktopView: state.view, state: state.installed ? state.stopped ? 'stopped' : 'running' : 'missing', active: [], url: 'http://127.0.0.1:4317/' };
+        return { desktopView: state.view, state: state.installed ? state.starting ? 'starting' : state.stopped ? 'stopped' : 'running' : 'missing', active: ['设计会话', '代码检查'], url: 'http://127.0.0.1:4317/' };
       }
       if (name === 'axiom_peers') return { peers: [{ name: 'Studio', ip: '100.64.0.8' }, { name: 'Laptop', ip: '100.70.1.2' }] };
       if (name === 'axiom_remote' || name === 'axiom_local') { if (name === 'axiom_local') args = { ...args, address: '127.0.0.1' }; if (state.remoteDelay) await new Promise(resolve => setTimeout(resolve, 600)); if (state.remoteFail) throw Error('目标服务尚未启动'); state.view = 'workbench'; return { url: (() => { const url = new URL(args.address.includes('://') ? args.address : `http://${args.address}`); url.port = String(args.port); return url.href; })() }; }
@@ -47,12 +48,24 @@ try {
   await page.getByRole('button', { name: '连接工作台', exact: true }).waitFor();
   await page.waitForTimeout(400);
   assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => ['axiom_local', 'axiom_remote'].includes(call.name) || call.args.action === 'open').length), 0, 'never auto-connect');
-  for (const [width, height] of [[1440, 1000], [1100, 768], [820, 650], [390, 844], [360, 640]]) {
+  for (const [width, height] of [[1440, 900], [1100, 768], [1024, 768], [820, 1180], [844, 390], [600, 960], [430, 900], [390, 844], [360, 800]]) {
     await page.setViewportSize({ width, height });
     const geometry = await page.evaluate(() => { const first = document.querySelector('.connect-header')!.getBoundingClientRect(), last = document.querySelector('.connect-footer')!.getBoundingClientRect(); return { height: document.documentElement.scrollHeight, width: document.documentElement.scrollWidth, center: (first.top + last.bottom) / 2 }; });
     assert.ok(geometry.height <= height + 1 && geometry.width <= width + 1, `no unnecessary scrolling ${width}x${height}`);
     assert.ok(Math.abs(geometry.center - height / 2) <= 4, `content centered ${width}x${height}`);
+    assert.equal(await page.locator('.startup-title h1').textContent(), '就绪之后，专注创造。');
+    const controls = await page.evaluate(() => { const port = document.querySelector('.connection-port input')!.getBoundingClientRect(), connect = document.querySelector('.startup-connect-button')!.getBoundingClientRect(), device = document.querySelector('.device-trigger')!.getBoundingClientRect(); return { gap: connect.left - port.right, height: connect.height, portCenter: port.top + port.height / 2, connectCenter: connect.top + connect.height / 2, deviceCenter: device.top + device.height / 2 }; });
+    assert.equal(controls.height, 44);
+    assert.ok(Math.abs(controls.gap - 12) <= 1, 'port and connect are adjacent with 12px gap');
+    assert.ok(Math.abs(controls.portCenter - controls.connectCenter) <= 1, 'port/button center alignment');
+    if (width > 580) assert.ok(Math.abs(controls.deviceCenter - controls.connectCenter) <= 1, 'desktop field alignment');
+    assert.equal(await page.locator('.connection-service').isVisible(), true, 'service controls remain visible with preparation collapsed');
+    assert.equal(await page.getByLabel('Node.js：未就绪', { exact: true }).isVisible(), true);
+    assert.equal(await page.getByLabel('Tailscale：已检测到', { exact: true }).isVisible(), true);
+    await page.screenshot({ path: resolve(output, `direct-${width}x${height}.png`), fullPage: true });
     await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+    const menu = await page.locator('.device-menu').boundingBox();
+    assert.ok(menu && menu.y >= 0 && menu.y + menu.height <= height, 'menu stays within viewport');
     await page.getByRole('button', { name: '刷新设备', exact: true }).focus();
     assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `menu stays inside viewport ${width}x${height}`);
     await page.keyboard.press('Escape');
@@ -90,6 +103,37 @@ try {
   await page.getByRole('button', { name: '安装并启动服务', exact: true }).click();
   await page.getByRole('button', { name: '打开工作台', exact: false }).waitFor();
   await page.waitForFunction(() => !(document.querySelector('.setup-job .startup-spin')));
+  await page.locator('.startup-preparation > summary').click();
+  await page.getByLabel('本地端口').fill('4317');
+  for (const [width, height] of [[1440, 900], [820, 1180], [844, 390], [600, 960], [390, 844], [360, 800]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight + 1), `running layout fits ${width}x${height}`);
+    assert.equal(await page.getByRole('button', { name: '关闭后台服务', exact: true }).isVisible(), true);
+    assert.equal(await page.locator('.startup-maintenance > summary').isVisible(), true);
+    assert.equal(await page.locator('.startup-connect-button svg').evaluate(node => node.getBoundingClientRect().width), 21);
+    await page.locator('.connect-header').click();
+    await page.screenshot({ path: resolve(output, `ready-${width}x${height}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
+  await page.screenshot({ path: resolve(output, 'ready-portrait-menu.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { (window as any).fixture.starting = true; });
+  await page.getByRole('button', { name: '刷新服务状态', exact: true }).click();
+  await page.locator('.connection-status-tag').filter({ hasText: '启动中' }).waitFor();
+  await page.getByRole('button', { name: '关闭后台服务', exact: true }).click();
+  await page.getByRole('dialog', { name: '关闭后台服务？' }).waitFor();
+  assert.ok((await page.getByRole('dialog').innerText()).includes('当前有 2 个会话'));
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('button', { name: '关闭后台服务', exact: true }).evaluate(node => node === document.activeElement), true);
+  await page.evaluate(() => { Object.assign((window as any).fixture, { starting: false, statusFail: true }); });
+  await page.getByRole('button', { name: '刷新服务状态', exact: true }).click();
+  await page.locator('.connection-status-tag[data-state=unknown]').waitFor();
+  assert.equal(await page.getByRole('button', { name: '关闭后台服务', exact: true }).isDisabled(), true);
+  await page.evaluate(() => { (window as any).fixture.statusFail = false; });
+  await page.getByRole('button', { name: '刷新服务状态', exact: true }).click();
+  await page.locator('.connection-status-tag[data-state=running]').waitFor();
+  await page.locator('.startup-preparation > summary').click();
   for (const width of [1440, 820, 390, 360]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `local fits ${width}`);
@@ -112,9 +156,9 @@ try {
   await page.getByRole('button', { name: '确认关闭服务', exact: true }).click();
   assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => call.name === 'axiom_service' && call.args.action === 'stop').length), 0);
   await page.evaluate(() => (window as any).fixture.releaseStatus());
-  await page.getByRole('heading', { name: '服务已停止', exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: '已停止' }).waitFor();
   await page.getByRole('button', { name: '启动后台服务', exact: true }).click();
-  await page.getByRole('heading', { name: '服务运行中', exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: '运行中' }).waitFor();
   await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
   await page.screenshot({ path: resolve(output, 'device-menu.png'), fullPage: true });
   assert.equal(await page.getByRole('option').count(), 4);
@@ -122,13 +166,14 @@ try {
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('Enter');
-  await page.getByLabel('远程连接地址', { exact: true }).waitFor();
+  await page.locator('.device-name small').filter({ hasText: '100.64.0.8' }).waitFor();
+  assert.equal(await page.locator('.connection-service').count(), 0, 'remote target has no local stop action');
   await page.evaluate(() => { (window as any).fixture.remoteFail = true; (window as any).fixture.remoteDelay = true; });
   await page.getByRole('button', { name: '连接工作台', exact: true }).click();
   assert.ok(await page.getByRole('combobox', { name: '连接设备', exact: true }).isDisabled());
   assert.ok(await page.getByRole('button', { name: '连接环境 Tailscale' }).isDisabled());
   await page.getByRole('alert').filter({ hasText: '目标服务尚未启动' }).waitFor();
-  assert.equal(await page.getByLabel('远程连接地址', { exact: true }).inputValue(), '100.64.0.8');
+  assert.equal(await page.locator('.device-name small').textContent(), '100.64.0.8');
   await page.screenshot({ path: resolve(output, 'remote-failure.png'), fullPage: true });
   await page.evaluate(() => { (window as any).fixture.remoteFail = false; });
   await page.getByRole('button', { name: '连接工作台', exact: true }).click();

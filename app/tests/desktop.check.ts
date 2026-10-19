@@ -84,7 +84,7 @@ try {
   await mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/desktop-service-initial.png" });
   await page.locator('.startup-preparation > summary').click();
-  try { await page.getByRole("heading", { name: "服务已停止", exact: true }).waitFor({ timeout: 15_000 }); }
+  try { await page.locator('.connection-status-tag').filter({ hasText: "已停止" }).waitFor({ timeout: 15_000 }); }
   catch (error) { console.error("Controller URL:", page.url(), "Content:", await page.locator("body").innerText()); throw error; }
   await page.screenshot({ path: "test-results/desktop-service-stopped.png" });
   await inspectDesktopWindow(native.pid!, { width: 430, height: 900 });
@@ -108,7 +108,7 @@ try {
     try { await stat(join(data, "initializing")); break; } catch { if (i >= 100) throw Error("Fixture did not initialize"); await delay(100); }
   }
   assert.match((await timedOutStart).message, /仍在启动/);
-  await page.getByRole("heading", { name: "服务正在启动", exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: "启动中" }).waitFor();
   await page.getByRole("button", { name: "关闭后台服务", exact: true }).click();
   await page.getByRole("button", { name: "确认关闭服务", exact: true }).click();
   for (let i = 0; ; i++) {
@@ -117,11 +117,11 @@ try {
     await delay(100);
   }
   await writeFile(join(data, "initialize-gate"), "");
-  await page.getByRole("heading", { name: "服务已停止", exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: "已停止" }).waitFor();
   assert.equal(JSON.parse((await fixtureCommand("status")).stdout).state, "stopped");
   await writeFile(join(data, "installation.json"), JSON.stringify({ node: process.execPath, cli }));
   await page.getByRole("button", { name: "启动后台服务" }).click();
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor({ timeout: 50_000 });
+  await page.locator('.connection-status-tag').filter({ hasText: "运行中" }).waitFor({ timeout: 50_000 });
   assert.equal((await control("status")).background, true);
   const workspace = join(root, "workspace"); await mkdir(workspace);
   const db = new DatabaseSync(join(data, "axiom.sqlite"));
@@ -251,7 +251,7 @@ try {
   await draft.evaluate((input: HTMLTextAreaElement) => { input.focus(); input.setSelectionRange(3, 8); });
   await workbench.locator("#thread").evaluate((thread) => { thread.scrollTop = 237; });
   await page.getByRole("button", { name: "服务与更新" }).click();
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: "运行中" }).waitFor();
   assert.ok(!workbench.isClosed(), "Returning to controls must keep the workbench instance");
   await inspectDesktopWindow(native.pid!);
   await page.getByRole("button", { name: "打开工作台" }).click();
@@ -309,12 +309,12 @@ try {
   assert.equal((await control("status")).state, "running", "Cancelling must preserve service");
   await page.getByRole("button", { name: "关闭后台服务" }).click();
   await page.getByRole("button", { name: "确认关闭服务" }).click();
-  await page.getByRole("heading", { name: "服务已停止", exact: true }).waitFor({ timeout: 50_000 });
+  await page.locator('.connection-status-tag').filter({ hasText: "已停止" }).waitFor({ timeout: 50_000 });
   assert.equal((await control("status")).state, "stopped");
   assert.ok(workbench.isClosed(), "Stopping closes workbench but preserves controller");
   assert.ok(page.url().includes("tauri.localhost"));
   await page.getByRole("button", { name: "启动后台服务" }).click();
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor({ timeout: 50_000 });
+  await page.locator('.connection-status-tag').filter({ hasText: "运行中" }).waitFor({ timeout: 50_000 });
   await page.getByRole("button", { name: "打开工作台" }).click();
   for (let i = 0; i < 50 && context.pages().length < 2; i++) await delay(100);
   workbench = context.pages().find((candidate) => candidate.url().startsWith(`http://127.0.0.1:${port}`));
@@ -344,7 +344,7 @@ try {
   await page.clock.install();
   await page.reload();
   await page.locator('.startup-preparation > summary').click();
-  await page.getByRole("heading", { name: "服务运行中", exact: true }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: "运行中" }).waitFor();
   await page.getByRole("button", { name: "打开工作台" }).click();
   for (let i = 0; i < 50 && context.pages().length < 2; i++) await delay(100);
   workbench = context.pages().find((candidate) => candidate.url().startsWith(`http://127.0.0.1:${port}`));

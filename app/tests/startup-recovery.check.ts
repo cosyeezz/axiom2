@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
-const output = resolve('../artifacts/startup-polish/recovery'); await mkdir(output, { recursive: true });
+const output = resolve(process.env.AXIOM_CONNECT_OUTPUT || '../artifacts/connect-implementation/recovery'); await mkdir(output, { recursive: true });
 const server = await createServer({ configFile: resolve('desktop/vite.config.ts'), server: { host: '127.0.0.1', port: 0 } }); await server.listen();
 const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : undefined });
 try {
@@ -29,8 +29,9 @@ try {
     } };
   });
   await page.goto(server.resolvedUrls!.local[0]);
+  await page.locator('.connection-status-tag').filter({ hasText: '已停止' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: '启动后台服务', exact: true }).isVisible(), true);
   await page.locator('.startup-preparation > summary').click();
-  await page.getByRole('heading', { name: '服务已停止' }).waitFor();
   await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
   await page.getByText('设备列表暂时不可用，请重新读取。 本地连接和手动输入仍可使用。').waitFor();
   assert.equal(await page.getByRole('option', { name: /本地电脑/ }).count(), 1);
@@ -54,8 +55,7 @@ try {
   await page.getByRole('heading', { name: '连接页面未能正常显示' }).waitFor();
   await page.screenshot({ path: resolve(output, 'render-fallback.png'), fullPage: true });
   await page.getByRole('button', { name: '重新加载', exact: true }).click();
-  await page.locator('.startup-preparation > summary').click();
-  await page.getByRole('heading', { name: '服务已停止' }).waitFor();
+  await page.locator('.connection-status-tag').filter({ hasText: '已停止' }).waitFor();
   // Even a failed module fetch leaves a visible static loading/reload surface.
   await page.route('**/main.tsx', route => route.abort());
   await page.reload();
