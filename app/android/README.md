@@ -6,9 +6,9 @@
 
 要求 Android 8.0（API 26）或更新版本、更新的 Android System WebView，以及官方 [Tailscale Android](https://tailscale.com/download/android)。电脑也需安装并登录 Tailscale，手机与电脑处于同一 tailnet，ACL 允许手机访问电脑的 TCP 4317。
 
-将构建产物 `Axiom2-Android.apk` 传到手机并安装。启动后输入电脑的 Tailscale 地址，例如 `100.106.9.14`，省略端口时使用 `4317`；也可输入完整 `http://IP:端口`。下拉保留最多8条最近成功连接记录，选择后连接，无访问密钥或登录步骤。版本来自发布 tag 中根 `package.json`，与同一 Release 的后台和桌面端一致；保留原签名，可覆盖安装此前同签名版本。工作台根页面按返回键可选择“切换连接”；连接中可取消。Android 不读取其他应用的私有数据，当前不提供 Tailscale 在线设备发现。
+从 [v0.4.9 Release](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.9) 下载 [Axiom2-Android.apk](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2-Android.apk) 并在手机安装；SDK 为 [axiom2-android-sdk.aar](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/axiom2-android-sdk.aar)，全部正式包的校验值见 [SHA256SUMS](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/SHA256SUMS)。启动后输入电脑的 Tailscale 地址，例如 `100.106.9.14`，省略端口时使用 `4317`；也可输入完整 `http://IP:端口`。下拉保留最多8条最近成功连接记录，选择后连接，无访问密钥或登录步骤。版本来自发布 tag 中根 `package.json`，与同一 Release 的后台和桌面端一致；保留原签名，可覆盖安装此前同签名版本。工作台根页面按返回键可选择“切换连接”；连接中可取消。Android 不读取其他应用的私有数据，当前不提供 Tailscale 在线设备发现。
 
-电脑当前已有服务通过 `scripts/dev-tailnet.mjs` 接入，保持原服务和任务运行；新版后台默认开启 Tailnet 监听。若电脑重启后继续使用旧开发进程，可在仓库根目录运行 `node scripts/dev-tailnet.mjs`；其目标默认是 `http://127.0.0.1:4317`，检测到新版后台后自动交回监听。
+后台默认开启 Tailnet 监听。仍在运行旧开发服务时，可在仓库根目录运行 `node scripts/dev-tailnet.mjs`，保持原服务和任务运行；其目标默认是 `http://127.0.0.1:4317`，检测到新版后台后自动交回监听。
 
 连接失败可点「重新连接」，返回前台也会再次尝试。系统返回键优先关闭工作台弹层／侧栏，再处理页面历史或退出；连接期间按返回可取消。没有设备数、模型或任务的移动端专属限额，工作台原有约束仍适用。
 
