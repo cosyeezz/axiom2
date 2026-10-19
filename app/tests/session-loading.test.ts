@@ -44,11 +44,13 @@ test("transcript ownership accepts a workspace alias but rejects a different dir
   mkdirSync(cwd); mkdirSync(other);
   symlinkSync(cwd, alias, process.platform === "win32" ? "junction" : "dir");
   try {
-    const manager = SessionManager.create(alias, join(root, "sessions"));
-    manager.appendMessage({ role: "user", content: "saved through alias", timestamp: 1 });
-    const file = manager.getSessionFile()!;
-    assert.equal(openTranscript(file, cwd).getSessionId(), manager.getSessionId());
-    assert.throws(() => openTranscript(file, other), { code: "SESSION_FILE_ERROR" });
+    for (const spelling of [alias, ...(process.platform === "win32" ? [cwd.toUpperCase()] : [])]) {
+      const manager = SessionManager.create(spelling, join(root, "sessions"));
+      manager.appendMessage({ role: "user", content: "saved through alias", timestamp: 1 });
+      const file = manager.getSessionFile()!;
+      assert.equal(openTranscript(file, cwd).getSessionId(), manager.getSessionId());
+      assert.throws(() => openTranscript(file, other), { code: "SESSION_FILE_ERROR" });
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test("transcript ownership accepts Windows short names in either cwd position without rewriting history", { skip: process.platform !== "win32" }, (t) => {

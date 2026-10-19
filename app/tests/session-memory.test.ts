@@ -634,7 +634,6 @@ test("a targeted scan settles when another source requeues, without waiting for 
     const other = f.create();
     writeFileSync(join(f.directory, "MEMORY.md"), "来源 A");
     writeFileSync(join(memoryDirectory(f.root, other.sessionId), "MEMORY.md"), "来源 B");
-    f.memories.scan();
     await f.memories.scanAsync(); // Drain initialization and warm the real scanner before gating A.
     const original = (f.memories as any).scanDirectory.bind(f.memories);
     let calls = 0, entered!: () => void;

@@ -98,7 +98,9 @@ test('recent-profile LRU and demand expiry release exactly their own references'
 });
 
 test('binding completion revalidates configuration and snapshot before permitting inference', async t => {
-  const h=harness(t);let valid=true;
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h=harness(t);let valid=true,kills=0;
+  (h.pool as any).kill=()=>{kills++;};
   const environment={...h.environment(),current:()=>valid};
   const first=await h.acquire('same',{environment});const child:any=await first.ensureReady();
   child.emit('message',{type:'binding_ready',lease:{...first.ref,leaseId:'old'}});
@@ -107,10 +109,12 @@ test('binding completion revalidates configuration and snapshot before permittin
   child.emit('message',{type:'binding_ready',lease:first.ref});
   await turn();
   assert.equal(child.messages.find((m:any)=>m.type==='execution_permit')?.allowed,false);
-  const shutdown=child.messages.find((m:any)=>m.type==='shutdown');
-  assert.equal(shutdown.instance.instanceId,first.ref.instanceId);
-  assert.equal(shutdown.instance.generation,first.ref.generation);
+  assert.equal(child.messages.some((m:any)=>m.type==='shutdown'),false,'the denied run owns failure reporting and cleanup');
+  assert.equal(h.pool.isActive(first.ref),false,'rejection revokes the lease before the worker closes');
   assert.equal(h.pool.stats().total,1,'rejection still holds physical capacity until close');
+  t.mock.timers.tick(1499);assert.equal(kills,0);
+  t.mock.timers.tick(1);assert.equal(kills,1,'a denied worker that does not close is still force-stopped');
+  assert.equal(h.pool.stats().total,1,'initiating forced termination does not release capacity');
   child.close();await first.released;
   const snapshot={...h.environment(),snapshotValid:()=>false};
   const second=await h.acquire('same',{environment:snapshot});
