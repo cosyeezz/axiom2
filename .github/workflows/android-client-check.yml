@@ -1,5 +1,8 @@
 name: Validate published Android client
 on:
+  push:
+    branches: [release/clients-0.4.8]
+    paths: [.github/workflows/android-client-check.yml, scripts/check-android-release.py]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -24,8 +27,8 @@ jobs:
       - name: Download exact APK and existing backend
         env:
           GH_TOKEN: ${{ github.token }}
-          CLIENT_TAG: ${{ inputs.release_tag }}
-          APK_SHA256: ${{ inputs.apk_sha256 }}
+          CLIENT_TAG: ${{ inputs.release_tag || 'v0.4.8' }}
+          APK_SHA256: ${{ inputs.apk_sha256 || '5d7492c0dfb3e0fc5e739f1da8e08563620b71098adc044074dba6ff717f38d6' }}
         shell: bash
         run: |
           set -euo pipefail
