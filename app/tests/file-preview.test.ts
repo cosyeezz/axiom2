@@ -7,6 +7,7 @@ import { tmpdir } from "./temporary.js";
 import { Store } from "../src/server/storage.js";
 import { DocumentFiles, decodeFileText } from "../src/server/document-files.js";
 import { hasFileLink, localFileLink, type FilePreview } from "../src/shared/file-preview.js";
+import { htmlResourceLinks, htmlResourceTags } from "../src/shared/html-preview.js";
 import type { ChatMessage } from "../src/shared/agent.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
@@ -77,5 +78,45 @@ test("document preview is tied to actual assistant link and session, bounded, re
     await assert.rejects(call("hardlink.md"), { code: "FILE_PREVIEW_FORBIDDEN" });
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM external_requests").get()!.n, 0);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("HTML resource scanning skips inert text and preserves source positions", () => {
+  const fake = `<link rel='stylesheet' href='fake.css'>`;
+  const html = `<!--${fake}--><script>const fragment = "${fake}";</script><textarea>${fake}</textarea><title>${fake}</title><style>${fake}</style><template>${fake}</template><div data-example="${fake}"></div><link rel="stylesheet" href="p&#97;ge.css?a=1&amp;b=2"><script defer src='page.js'></script>`;
+  assert.deepEqual(htmlResourceLinks(html), [{ href: "page.css?a=1&b=2", kind: "style" }, { href: "page.js", kind: "script" }]);
+  assert.deepEqual(htmlResourceTags(html).map(tag => html.slice(tag.start, tag.end)), ['href="p&#97;ge.css?a=1&amp;b=2"', "src='page.js'"]);
+});
+
+test("HTML companion resources stay bounded and inside the linked document directory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-html-resources-")), project = join(root, "project"); mkdirSync(project);
+  const store = new Store(join(root, "data"));
+  const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
+  const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
+  let message: ChatMessage = { id: "html", role: "assistant", text: "[页面](page.html)" };
+  const files = new DocumentFiles(store, () => message);
+  const read = () => files.command({ requestId: randomUUID(), workspaceId: workspace.id, sessionId: session.id, op: "files.document", params: { messageId: "html", href: "page.html" } }) as Promise<FilePreview>;
+  try {
+    writeFileSync(join(project, "页面.css"), "body { color: red }");
+    writeFileSync(join(project, "page.js"), "document.body.dataset.ready = 'true';");
+    writeFileSync(join(root, "outside.css"), "secret");
+    writeFileSync(join(project, ".secret.css"), "secret");
+    linkSync(join(root, "outside.css"), join(project, "hardlink.css"));
+    writeFileSync(join(project, "huge.css"), "x".repeat(1024 * 1024 + 1));
+    writeFileSync(join(project, "bad.css"), Buffer.from([0xff, 0xff]));
+    writeFileSync(join(project, "page.html"), `<link rel="stylesheet" href="%E9%A1%B5%E9%9D%A2.css?v=1&amp;mode=2"><script defer src="p&#97;ge.js"></script>` +
+      ["../outside.css", "%2e%2e/outside.css", "&#46;&#46;/outside.css", "&#47;outside.css", ".secret.css", "hardlink.css", "huge.css", "bad.css", "https://example.com/a.css", "/outside.css", "missing.css"].map(href => `<link rel="stylesheet" href="${href}">`).join(""));
+    const result = await read();
+    assert.equal(result.kind, "code");
+    assert.deepEqual(result.resources?.map(resource => [resource.kind, resource.text]), [["style", "body { color: red }"], ["script", "document.body.dataset.ready = 'true';"]]);
+    // Encoded aliases are decoded before deduplication and path validation.
+    assert.match(result.resourceNotice!, /^9 个/);
+    // The auxiliary file remains unavailable as a standalone document link.
+    await assert.rejects(files.command({ requestId: randomUUID(), workspaceId: workspace.id, sessionId: session.id, op: "files.document", params: { messageId: "html", href: "page.js" } }), { code: "FILE_PREVIEW_FORBIDDEN" });
+    writeFileSync(join(project, "page.html"), Array.from({ length: 18 }, (_, i) => `<link rel="stylesheet" href="tiny${i}.css">`).join(""));
+    for (let i = 0; i < 18; i++) writeFileSync(join(project, `tiny${i}.css`), "body{}");
+    assert.equal((await read()).resources?.length, 16);
+    message = { ...message, role: "user" };
+    await assert.rejects(read(), { code: "FILE_PREVIEW_FORBIDDEN" });
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });

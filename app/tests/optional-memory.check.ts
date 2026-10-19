@@ -25,19 +25,21 @@ try {
   const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript((value) => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   await page.goto(app.origin);
-  const toggle = page.getByRole("button", { name: "上下文与会话记忆", exact: true });
+  const todo = page.getByRole("region", { name: "本会话任务进度", exact: true });
+  const toggle = todo.getByRole("button", { name: "上下文与会话记忆", exact: true });
   await toggle.click();
-  const todo = page.getByRole("region", { name: "本会话任务", exact: true });
-  await todo.getByText("可选记忆验证", { exact: true }).waitFor();
-  await todo.getByRole("button", { name: "收起任务进度" }).click();
+  // MetricDetail 通过 portal 渲染，toolbar region 内只定位触发按钮。
+  const detail = page.getByRole("dialog", { name: "上下文与会话记忆", exact: true });
+  await detail.getByText("可选记忆验证", { exact: true }).waitFor();
+  await detail.getByRole("button", { name: "关闭统计详情", exact: true }).click();
   const chat = page.locator("#content textarea").first();
   await chat.fill("记忆失败也要保留的聊天草稿");
   rmSync(path);
   await app.agents.memories.scanAsync(scope);
   await toggle.click();
-  await todo.getByText("还没有任务记录", { exact: true }).waitFor();
-  assert.equal(await todo.getByRole("alert").count(), 0);
-  await todo.getByRole("button", { name: "查看记忆" }).click();
+  await detail.getByText("暂无记忆", { exact: true }).waitFor();
+  assert.equal(await detail.getByRole("alert").count(), 0);
+  await detail.getByRole("button", { name: "查看完整记忆" }).click();
   const dialog = page.getByRole("dialog", { name: "会话记忆", exact: true });
   await dialog.getByText("暂无记忆", { exact: true }).waitFor();
   assert.equal(await dialog.getByRole("alert").count(), 0);
@@ -50,18 +52,24 @@ try {
   // Emulate a failed/older memory endpoint and failed subscription independently
   // of the new server's normal empty-result contract.
   const original = app.agents.memories.command.bind(app.agents.memories);
+  let commandCalls = 0, snapshotCalls = 0;
   app.agents.memories.command = async (command, signal) => {
-    if (["memory.get", "memory.read", "memory.catalog"].includes(command.op)) throw new AppError("SCOPE_MISMATCH", "optional-memory-read-failure");
+    if (["memory.get", "memory.read", "memory.catalog"].includes(command.op)) {
+      commandCalls++;
+      throw new AppError("SCOPE_MISMATCH", "optional-memory-read-failure");
+    }
     return original(command, signal);
   };
-  app.agents.memories.snapshot = () => { throw new AppError("SCOPE_MISMATCH", "optional-memory-subscription-failure"); };
+  app.agents.memories.snapshot = () => { snapshotCalls++; throw new AppError("SCOPE_MISMATCH", "optional-memory-subscription-failure"); };
   await page.reload();
   await toggle.click();
-  await todo.getByText("还没有任务记录", { exact: true }).waitFor();
+  await detail.getByText("记忆暂不可用", { exact: true }).waitFor();
   assert.equal(await page.getByText(/订阅读取失败/).count(), 0);
-  assert.equal(await todo.getByRole("alert").count(), 0);
-  await todo.getByRole("button", { name: "查看记忆" }).click();
-  await dialog.getByText("暂无记忆", { exact: true }).waitFor();
+  assert.equal(await detail.getByRole("alert").count(), 0);
+  await detail.getByRole("button", { name: "查看完整记忆" }).click();
+  await dialog.getByText("记忆暂不可用", { exact: true }).waitFor();
+  assert.ok(snapshotCalls > 0, "订阅异常夹具必须实际调用 snapshot");
+  assert.ok(commandCalls > 0, "详情读取异常夹具必须实际调用 memory.read");
   assert.equal(await dialog.getByRole("alert").count(), 0);
   await dialog.getByRole("button", { name: "关闭记忆" }).click();
   await page.getByRole("button", { name: "全局记忆", exact: true }).click();

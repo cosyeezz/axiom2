@@ -16,6 +16,7 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
   const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
   mkdirSync(project); mkdirSync(join(root, "pi"));
   const requests: any[] = [];
+  let mode: "normal" | "repeat" | "output" | "length" = "normal";
   let hanging = false, entered!: () => void;
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
@@ -24,10 +25,10 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     const message = value.messages.find((m: any) => m.role === "user");
     const content = typeof message.content === "string" ? message.content : message.content.map((c: any) => c.text ?? "").join("");
     const scope = JSON.parse(content) as Scope;
-    const toolRead = value.messages.some((m: any) => m.role === "tool");
-    const delta = toolRead ? { role: "assistant", content: `来源 ${scope.sessionId} 已读取，仅当前查询事实。` } : { role: "assistant", tool_calls: [{ index: 0, id: randomUUID(), type: "function", function: { name: "memory_read", arguments: JSON.stringify({ sessionId: scope.sessionId, path: "MEMORY.md" }) } }] };
+    const toolRead = value.messages.some((m: any) => m.role === "tool") && mode !== "repeat";
+    const delta = mode === "output" || mode === "length" ? { role: "assistant", content: mode === "output" ? "x".repeat(32001) : "部分回答" } : toolRead ? { role: "assistant", content: `来源 ${scope.sessionId} 已读取，仅当前查询事实。` } : { role: "assistant", tool_calls: [{ index: 0, id: randomUUID(), type: "function", function: { name: "memory_read", arguments: JSON.stringify({ sessionId: scope.sessionId, path: "MEMORY.md" }) } }] };
     res.writeHead(200, { "Content-Type": "text/event-stream" });
-    res.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta, finish_reason: toolRead ? "stop" : "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
+    res.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta, finish_reason: mode === "length" ? "length" : mode === "output" || toolRead ? "stop" : "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
   });
   await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
   const provider = { api: "openai-completions", baseUrl: `http://127.0.0.1:${(fixture.address() as any).port}/v1`, models: [{ id: "fixture", cost: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }] };
@@ -90,6 +91,26 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     hanging = false; assert.ok((await execute(b)).answer.includes(b.sessionId));
     const partial = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), read: () => { throw Error("引用资料读取失败"); } });
     assert.equal(partial.incomplete, true, "tool read failure must not become a complete answer");
+    assert.equal(partial.incompleteReason, "read_failed", "read errors are not budget exhaustion");
+    const configure = (params: Record<string, unknown>) => memories.command({ requestId: randomUUID(), op: "memory.configure", workspaceId: workspace.id, params });
+    await configure({ maxTurns: 1 });
+    assert.equal((await execute(a)).incompleteReason, "turn_limit", "turn budget applies to the next binding, including empty aborted answers");
+    await configure({ maxTurns: 8, readChars: 16000 });
+    mode = "repeat";
+    writeFileSync(join(root, "memory", "sessions", a.sessionId, "MEMORY.md"), "x".repeat(20000));
+    assert.equal((await execute(a)).incompleteReason, "read_limit");
+    mode = "output";
+    assert.equal((await execute(a)).incompleteReason, "output_limit");
+    mode = "length";
+    assert.equal((await execute(a)).incompleteReason, "model_output_limit");
+    mode = "normal";
+    await configure({ timeoutMs: 1000, readChars: 240000, maxTurns: 32 });
+    hanging = true;
+    const timeoutStarted = new Promise<void>((resolve) => { entered = resolve; });
+    const timed = assert.rejects(execute(a), /执行时限已到.*1 秒/);
+    await timeoutStarted;
+    await configure({ timeoutMs: 300000 });
+    await timed;
     hanging = true;
     const providerStarted = new Promise<void>((r) => { entered = r; });
     const running = execute(a), runningDone = assert.rejects(running, /取消|超时/);

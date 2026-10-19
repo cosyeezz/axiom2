@@ -8,22 +8,49 @@ import { useSettingsPopover } from "../useSettingsPopover.js";
 import type { ContextMemoryInfo, UsageTools } from "../chat/Usage.js";
 import { command, useScope } from "../transport.js";
 import type { Scope, Workspace } from "../../shared/protocol.js";
-import { emptyMemoryView, memoryScope, memoryCatalogScope, type MemoryView, type MemoryCatalogEntry } from "../../shared/memory.js";
-import type { Selection } from "../../shared/agent.js";
+import { emptyMemoryView, memoryScope, memoryCatalogScope, memoryBudgetLimits, type MemoryPreferences as Preferences, type MemoryView, type MemoryCatalogEntry, type MemoryReason } from "../../shared/memory.js";
 import { ModelPicker } from "../chat/ModelPicker.js";
 import { MemoryDocumentView } from "./MemoryDocumentView.js";
 import { MemoryFilter } from "./MemoryFilter.js";
 import "../styles/memory.css";
-type Preferences = { queryModel: Selection | null; organizerModel: Selection | null; intervalMs: number };
+function BudgetInput({ label, value, min, max, save }: { label: string; value: number; min: number; max: number; save: (value: number) => Promise<void> }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  return <label>{label}<input type="number" min={min} max={max} step={1} required value={draft}
+    onChange={(event) => setDraft(event.target.value)}
+    onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.blur(); } }}
+    onBlur={(event) => { if (event.currentTarget.reportValidity() && Number(draft) !== value) void save(Number(draft)).catch(() => {}); }} /></label>;
+}
 
 function MemoryIcon({ name }: { name: "tasks" | "book" | "search" | "settings" | "chevron" | "back" | "close" | "file" }) {
   const names = { tasks: "list-checks", book: "book-open", search: "search", settings: "settings-2", chevron: "chevron-right", back: "arrow-left", close: "close", file: "file-text" };
   return <Icon name={names[name]} />;
 }
+function memoryReasonText(reason?: MemoryReason) {
+  switch (reason) {
+    case "missing": return "暂无记忆";
+    case "unavailable": return "记忆暂不可用";
+    case "correction_pending": return "记忆正在等待纠正完成";
+    case "timeout": return "读取记忆超时";
+    case "revision_conflict": return "资料已更新，请重新读取";
+    case "read_failed": return "无法读取记忆";
+    default: return "";
+  }
+}
+
+function publicMemoryError(value: string) {
+  const normalized = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
+    .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{8,}\b/gi, "[凭据已隐藏]")
+    .replace(/((?:api[-_ ]?key|authorization|bearer|access[-_ ]?token|refresh[-_ ]?token|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;，；]+)/gi, "$1[凭据已隐藏]")
+    .replace(/(?:[A-Za-z]:\\|\\\\)[^,;，；\r\n]{20,}/g, "[本地路径]")
+    .replace(/(^|[\s(])\/(?:[^/\s,;，；]+\/){2,}[^\s,;，；)]*/g, "$1[本地路径]");
+  const chars = Array.from(normalized || "整理失败");
+  return chars.length > 500 ? `${chars.slice(0, 500).join("")}…` : chars.join("");
+}
 
 function useMemory(scope: Scope) {
   const snapshot = useScope<MemoryView | null>(memoryScope(scope), null);
-  const view = snapshot?.error ? emptyMemoryView(scope) : snapshot;
+  const view = snapshot?.error ? { ...emptyMemoryView(scope), reason: snapshot.reason ?? "unavailable" } : snapshot;
   return { view };
 }
 function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: () => void; context: ContextMemoryInfo }) {
@@ -32,22 +59,23 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: () => 
   const detailsId = useId();
   const progress = view?.progress;
   const recorded = (text?: string) => !!text && text !== "尚未记录";
-  const hasContent = !!progress && (recorded(progress.goal) || recorded(progress.state) || progress.tasks.length > 0);
-  const percent = progress?.progressState === "valid" ? progress.percent : null;
+  const hasProgress = !view?.reason && !!progress && (recorded(progress.goal) || recorded(progress.state) || progress.tasks.length > 0);
+  const percent = hasProgress && progress?.progressState === "valid" ? progress.percent : null;
   const estimate = percent == null ? "进度待评估" : `${percent < 100 ? "约 " : ""}${percent}%`;
   const inProgress = progress?.state === "进行中";
-  const status = !view ? "读取中…" : !hasContent ? "暂无记录" : progress?.progressState === "conflict" ? "进度待核对" : estimate;
+  const availability = memoryReasonText(view?.reason);
+  const status = !view ? "读取中…" : availability || (!hasProgress ? "暂无记录" : progress?.progressState === "conflict" ? "进度待核对" : estimate);
   return <section className="memory-todo" aria-label="本会话任务进度">
     <button ref={toggle} className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip={`${context.label}；任务进度 · ${status}`} aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined} onClick={() => setExpanded(!expanded)}>
       <ContextMemoryIcon percent={context.percent} taskPercent={percent} label={`${context.label}；任务进度 · ${status}`} />
     </button>
     {expanded && <MetricDetail trigger={toggle.current!} title="上下文与会话记忆" subtitle="当前会话 · 上下文容量与任务进展" className="memory-todo-body" onClose={() => setExpanded(false)} footer={<button className="memory-text-button" onClick={() => { setExpanded(false); toggle.current?.focus(); openMemory(); }}><MemoryIcon name="book" />查看完整记忆<MemoryIcon name="chevron" /></button>}>
       <div id={detailsId} className="memory-context-detail">{context.detail}</div>
-      {!view ? <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆…</p> : !hasContent ? <div className="memory-todo-empty"><MemoryIcon name="tasks" /><strong>还没有任务记录</strong><p>记录任务后，在这里查看进展与下一步。</p></div> : <>
+      {!view ? <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆…</p> : !hasProgress ? <div className="memory-todo-empty"><MemoryIcon name="tasks" /><strong>{memoryReasonText(view.reason) || "还没有任务记录"}</strong><p>{view.reason ? "主任务可继续执行；可稍后重新读取。" : "记录任务后，在这里查看进展与下一步。"}</p></div> : <>
         {recorded(progress?.goal) && <h3>{progress?.goal}</h3>}
         <div className="memory-progress-summary"><span>{inProgress && <BubbleLoadingIcon />}{progress?.state}</span><span>{status}</span></div>
         {percent != null && <><progress value={percent} max={100} aria-label="任务整体进度" /><p className="meta">整体进度为模型估计，与下方已完成事项数量分别统计。</p></>}
-        {!!progress?.tasks.length && <><p className="memory-task-count">已完成 {progress.tasks.filter((t) => t.state === "已完成").length} / {progress.tasks.length} 项</p><ul>{progress.tasks.map((t, i) => <li key={i} data-state={t.state}><span className="memory-task-marker" aria-hidden="true">{t.state === "已完成" ? <Icon name="check" /> : t.state === "进行中" ? <BubbleLoadingIcon /> : null}</span><span className="memory-task-title">{t.title}</span><span className="memory-task-state">{t.state}</span></li>)}</ul></>}
+        {progress?.tasks.length ? <><p className="memory-task-count">已完成 {progress.tasks.filter((t) => t.state === "已完成").length} / {progress.tasks.length} 项</p><ul>{progress.tasks.map((t, i) => <li key={i} data-state={t.state}><span className="memory-task-marker" aria-hidden="true">{t.state === "已完成" ? <Icon name="check" /> : t.state === "进行中" ? <BubbleLoadingIcon /> : null}</span><span className="memory-task-title">{t.title}</span><span className="memory-task-state">{t.state}</span></li>)}</ul></> : <p className="memory-task-empty">尚未记录任务清单</p>}
         <dl className="memory-next">{recorded(progress?.current) && <><dt>当前进展</dt><dd>{progress?.current}</dd></>}{recorded(progress?.next) && <><dt>下一步</dt><dd>{progress?.next}</dd></>}</dl>
         {progress?.overLimit && <p className="meta" role="status">入口超过 2,000 字，请将详情移入分类资料。</p>}
       </>}
@@ -99,22 +127,40 @@ function Global({ workspaceId, workspaces, select, open }: { workspaceId: string
     finally { if (mounted.current) setBusy(false); }
   };
   // Keep the full catalog for background indexing; this browser only presents usable summaries.
-  const organized = (entries ?? []).filter((entry) => entry.status === "ready" && entry.summary.trim() && !entry.error);
+  const organized = (entries ?? []).filter((entry) => entry.status === "ready" && entry.summary.trim() && !entry.error && !entry.reason);
   useEffect(() => { if (entries && session && !organized.some((entry) => entry.sessionId === session)) setSession(""); }, [entries, session]);
-  const filtered = organized.filter((e) => (!session || e.sessionId === session) && `${e.title} ${e.summary} ${e.keywords.join(" ")}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = organized.filter((e) => (!session || e.sessionId === session) && `${e.title} ${e.sourceTitle ?? ""} ${e.summary} ${e.keywords.join(" ")}`.toLowerCase().includes(query.toLowerCase()));
+  const failures = (entries ?? []).filter((entry) => entry.status === "error" || !!entry.error || !!entry.reason).map((entry) => ({ entry,
+    detail: publicMemoryError(entry.error?.trim() || memoryReasonText(entry.reason) || "整理失败") }));
+  const visibleFailures = failures.filter(({ entry, detail }) => (!session || entry.sessionId === session) && `${entry.sourceTitle ?? entry.title} ${entry.title} ${detail}`.toLowerCase().includes(query.toLowerCase()));
+  const catalogStates = (entries ?? []).reduce((counts, entry) => {
+    // 具体错误优先于流程状态，避免异常来源被误计为“待整理”或“整理中”。
+    if (entry.status === "error" || entry.error || entry.reason) counts.error++;
+    else if (entry.status === "pending") counts.pending++;
+    else if (entry.status === "indexing") counts.indexing++;
+    return counts;
+  }, { pending: 0, indexing: 0, error: 0 });
+  const catalogStatus = [[catalogStates.pending, "待整理"], [catalogStates.indexing, "整理中"], [catalogStates.error, "出错"]]
+    .filter(([count]) => Number(count) > 0).map(([count, label]) => `${label} ${count}`).join(" · ");
   return <>
     <div className="memory-search"><MemoryIcon name="search" /><input aria-label="搜索记忆" placeholder="搜索主题、摘要或关键词" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
     <div className="memory-filters"><MemoryFilter label="记忆工作空间" value={workspaceId} onChange={select} options={workspaces.map((w) => ({ value: w.id, label: w.name }))} />
-      <MemoryFilter label="来源会话" value={session} onChange={setSession} options={[{ value: "", label: "全部来源会话" }, ...organized.map((entry) => ({ value: entry.sessionId, label: entry.title }))]} /></div>
+      <MemoryFilter label="来源会话" value={session} onChange={setSession} options={[{ value: "", label: "全部来源会话" }, ...organized.map((entry) => ({ value: entry.sessionId, label: entry.sourceTitle ?? entry.title }))]} /></div>
     {error && <p role="alert">{error} <button className="btn" onClick={() => setRetry((n) => n + 1)}>重试</button></p>}
-    <div className="memory-list-heading"><span>已整理会话{entries && <span className="memory-count">{filtered.length}</span>}</span><button className="memory-icon-button" aria-label="记忆设置与纠正" data-tooltip="记忆设置与纠正" aria-expanded={settings} onClick={() => setSettings(!settings)}><MemoryIcon name="settings" /></button></div>
+    <div className="memory-list-heading"><span>已整理会话{entries && <span className="memory-count">{filtered.length}</span>}{catalogStatus && <small role="status">{catalogStatus}</small>}</span><button className="memory-icon-button" aria-label="记忆设置与纠正" data-tooltip="记忆设置与纠正" aria-expanded={settings} onClick={() => setSettings(!settings)}><MemoryIcon name="settings" /></button></div>
+    {!!visibleFailures.length && <section className="memory-catalog-errors" aria-label="整理错误详情"><h3>整理出错</h3><ul>{visibleFailures.map(({ entry, detail }) => <li key={entry.id}><strong>{entry.sourceTitle ?? entry.title}</strong><span>{detail}</span></li>)}</ul></section>}
     {settings && !preferences && !error && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆设置…</p>}
     {settings && preferences && <fieldset className="memory-settings" disabled={busy} aria-busy={busy}>{busy && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在处理…</p>}<h3>查询模型</h3><ModelPicker value={preferences.queryModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(queryModel) => configure({ queryModel })} /><h3>后台整理模型</h3><ModelPicker value={preferences.organizerModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(organizerModel) => configure({ organizerModel })} />
       <p className="meta">未单独选择时使用来源会话模型。浏览资料不调用模型；后台定时整理会产生实际用量。</p>
-      <label>整理间隔（秒）<input type="number" min={1} max={86400} defaultValue={preferences.intervalMs / 1000} onBlur={(e) => { if (Number(e.target.value) * 1000 !== preferences.intervalMs) void configure({ intervalMs: Number(e.target.value) * 1000 }).catch(() => {}); }} /></label>
+      <BudgetInput label="整理间隔（秒）" value={preferences.intervalMs / 1000} min={1} max={86400} save={(value) => configure({ intervalMs: value * 1000 })} />
+      <h3>执行预算</h3>
+      <BudgetInput label="执行时限（秒）" value={preferences.timeoutMs / 1000} min={memoryBudgetLimits.timeoutMs.min / 1000} max={memoryBudgetLimits.timeoutMs.max / 1000} save={(value) => configure({ timeoutMs: value * 1000 })} />
+      <BudgetInput label="读取上限（字符）" value={preferences.readChars} min={memoryBudgetLimits.readChars.min} max={memoryBudgetLimits.readChars.max} save={(readChars) => configure({ readChars })} />
+      <BudgetInput label="模型交互轮数" value={preferences.maxTurns} min={memoryBudgetLimits.maxTurns.min} max={memoryBudgetLimits.maxTurns.max} save={(maxTurns) => configure({ maxTurns })} />
+      <p className="meta">按 Enter 或离开输入框自动保存，无需重启；从下一次查询或整理执行生效，进行中的执行保持原预算。时限包含排队，每轮为一次模型交互；提高预算可能增加耗时和用量。失败来源会在后续整理周期重试。</p>
       <label>明确不再保留的条目原文<textarea value={correction} onChange={(e) => setCorrection(e.target.value)} /></label><p className="meta">仅清理当前工作空间中与原文完全匹配的记忆内容及摘要，保留原始对话。</p><button className="btn" disabled={busy || !correction.trim()} onClick={() => void correct()}>删除此条记忆及重复内容</button>
     </fieldset>}
-    <div className="memory-catalog">{filtered.map((entry) => <button key={entry.id} className="memory-catalog-item" onClick={() => open(entry)}><span className="memory-source-icon"><MemoryIcon name="file" /></span><span className="memory-source-copy"><strong>{entry.title}</strong><span className="memory-source-summary">{entry.summary}</span><span className="memory-source-meta"><span data-tooltip="MEMORY.md 字符数，含标点及空白">入口 {entry.entryChars == null ? "—" : entry.entryChars.toLocaleString("zh-CN")} 字</span><span data-status="ready">已整理</span>{entry.deleted && <span>来源会话已移除</span>}<time>{new Date(entry.updatedAt).toLocaleDateString()}</time></span>{entry.error && <span className="memory-error">{entry.error}</span>}</span><MemoryIcon name="chevron" /></button>)}{!entries ? !error && <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆目录…</p> : !organized.length ? <div className="memory-catalog-empty"><MemoryIcon name="book" /><strong>暂无已整理的会话</strong><p>整理完成后，会话摘要会显示在这里。</p></div> : !filtered.length ? <div className="memory-catalog-empty"><MemoryIcon name="search" /><strong>没有符合筛选条件的记忆</strong><button className="memory-text-button" onClick={() => { setQuery(""); setSession(""); }}>清除筛选</button></div> : null}</div>
+    <div className="memory-catalog">{filtered.map((entry) => <button key={entry.id} className="memory-catalog-item" onClick={() => open(entry)}><span className="memory-source-icon"><MemoryIcon name="file" /></span><span className="memory-source-copy"><strong>{entry.title}</strong><span className="memory-source-summary">{entry.summary}</span><span className="memory-source-meta"><span data-tooltip="MEMORY.md 字符数，含标点及空白">入口 {entry.entryChars == null ? "—" : entry.entryChars.toLocaleString("zh-CN")} 字</span><span data-status="ready">已整理</span>{entry.deleted && <span>来源会话已移除</span>}<time>{new Date(entry.updatedAt).toLocaleDateString()}</time></span></span><MemoryIcon name="chevron" /></button>)}{!entries ? !error && <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆目录…</p> : !organized.length ? <div className="memory-catalog-empty"><MemoryIcon name="book" /><strong>暂无已整理的会话</strong><p>{catalogStatus ? `${catalogStatus}；完成后会显示可用摘要。` : "整理完成后，会话摘要会显示在这里。"}</p></div> : !filtered.length ? <div className="memory-catalog-empty"><MemoryIcon name="search" /><strong>没有符合筛选条件的记忆</strong><button className="memory-text-button" onClick={() => { setQuery(""); setSession(""); }}>清除筛选</button></div> : null}</div>
   </>;
 }
 type MemoryLocation = { scope: Scope; path: string; title?: string };

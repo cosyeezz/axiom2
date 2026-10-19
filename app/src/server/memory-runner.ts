@@ -7,6 +7,7 @@ import type { MemoryWorkerInput } from "./memory-worker.js";
 import { AppError } from "../shared/protocol.js";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
 import { ExecutionProfiles } from "./execution-profile.js";
+import { memoryIncompleteMessages, type MemoryExecutionResult, type MemoryIncompleteReason } from "../shared/memory.js";
 import { sameLease } from "./execution-protocol.js";
 
 type Job = { controller: AbortController; provider: string; promise?: Promise<unknown> };
@@ -35,8 +36,12 @@ export class PooledMemoryRunner implements MemoryRunner {
   private async run(input: MemoryExecution, controller: AbortController, requestStartedAtMonoMs:number) {
     if(this.stopped)throw Error("记忆执行器已关闭");
     const preferences = this.memories.preferences();
-    const deadlineAt=Date.now()+preferences.timeoutMs;
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(preferences.timeoutMs), ...(input.signal ? [input.signal] : [])]);
+    const deadlineAt=input.deadlineAt??Date.now()+preferences.timeoutMs;
+    const remaining=Math.max(0,deadlineAt-Date.now());
+    if (!remaining) throw Error('记忆执行已超时；未返回完整结果');
+    const timeout = AbortSignal.timeout(remaining);
+    const timeoutError = () => Error(`记忆执行时限已到（${Math.round((input.deadlineAt ? remaining : preferences.timeoutMs) / 1000)} 秒，含排队）；请在记忆设置中提高执行时限后重试`);
+    const signal = AbortSignal.any([controller.signal, timeout, ...(input.signal ? [input.signal] : [])]);
     signal.throwIfAborted();
     const cwd = this.memories.store.workspace(input.scope.workspaceId).path;
     const environment=this.profiles.prepare({entry:'memory',cwd,modelDir:this.models.dir,modelsRaw:await this.models.raw(),selection:input.selection,mode:this.pool.mode});
@@ -48,16 +53,17 @@ export class PooledMemoryRunner implements MemoryRunner {
       signal.throwIfAborted();
       if(!environment.current())throw Error('记忆模型配置在准备期间变化，请重试');
       const revisionAware = input as RevisionAwareExecution;
-      return await this.observe(child,lease,revisionAware,signal,{executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,readChars:preferences.readChars,revisionChecks:typeof revisionAware.revision === "function"});
+      return await this.observe(child,lease,revisionAware,signal,{executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,readChars:preferences.readChars,maxTurns:preferences.maxTurns,revisionChecks:typeof revisionAware.revision === "function"});
     } catch(error) {
       if(lease)await this.pool.retire(lease.ref,'memory_failed');
+      if(timeout.aborted)throw timeoutError();
       if(signal.aborted)throw Error('记忆执行已取消或超时；未返回完整结果');
       throw error;
     } finally {environment.release();}
   }
-  private observe(child:ChildProcess,lease:ExecutionLease,input:RevisionAwareExecution,signal:AbortSignal,start:MemoryWorkerInput):Promise<{answer:string;incomplete:boolean}> {
+  private observe(child:ChildProcess,lease:ExecutionLease,input:RevisionAwareExecution,signal:AbortSignal,start:MemoryWorkerInput):Promise<MemoryExecutionResult> {
     return new Promise((resolve,reject)=>{
-      let result:{answer:string;incomplete:boolean}|undefined,failure:Error|undefined,used=0,settled=false;
+      let result:MemoryExecutionResult|undefined,failure:Error|undefined,used=0,settled=false;
       let reap:NodeJS.Timeout|undefined;
       const charges=new Map<string,string>();
       const cleanup=()=>{clearTimeout(reap);signal.removeEventListener('abort',abort);child.removeListener('message',message);child.removeListener('error',error);child.removeListener('close',close);};
@@ -90,7 +96,8 @@ export class PooledMemoryRunner implements MemoryRunner {
           }
           if(event.type==='completed'){
             if(typeof event.answer!=='string'||!event.answer||event.answer.length>32000||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
-            result={answer:event.answer,incomplete:event.incomplete};
+            if(event.incompleteReason !== undefined && (typeof event.incompleteReason !== 'string' || !Object.hasOwn(memoryIncompleteMessages,event.incompleteReason)))throw Error('记忆未完成原因无效');
+            result={answer:event.answer,incomplete:event.incomplete,...(event.incompleteReason ? {incompleteReason:event.incompleteReason as MemoryIncompleteReason} : {})};
             reap=setTimeout(()=>{failure=Error('记忆清理未完成');void this.pool.retire(lease.ref,'cleanup_timeout');},1500);
           }
           if(event.type==='failed'){failure=Error(typeof event.error==='string'?event.error:'记忆执行失败');void this.pool.retire(lease.ref,'memory_failed');}

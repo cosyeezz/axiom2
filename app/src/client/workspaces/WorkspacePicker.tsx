@@ -81,7 +81,7 @@ export function WorkspacePicker({ workspaces, workspace, select, picking, choose
         </div>
         <button type="button" id="add-workspace" data-view-navigation disabled={picking} aria-busy={picking}
           onClick={() => { close(); choose(); }}>
-          <Icon name="folder-plus" />{picking ? "正在选择文件夹…" : "打开文件夹…"}
+          <Icon name="workspace-open" />{picking ? "正在选择文件夹…" : "打开文件夹…"}
         </button>
       </div>
     </details>

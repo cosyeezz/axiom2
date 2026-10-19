@@ -1,10 +1,12 @@
 import { markdown } from "./markdown.js";
+import type { HtmlResource } from "./html-preview.js";
 
 export interface FileReference { messageId: string; href: string }
 export interface FilePreview {
   name: string; path: string; size: number; modified: string;
   kind: "markdown" | "code" | "text" | "image" | "pdf" | "unsupported";
   language?: string; text?: string; encoding?: string; data?: string; mimeType?: string; reason?: string; line?: number;
+  resources?: HtmlResource[]; resourceNotice?: string;
 }
 /** A local link, never a remote, device, anchor-only or executable URL. */
 export function localFileLink(href: string): { path: string; line?: number } | null {

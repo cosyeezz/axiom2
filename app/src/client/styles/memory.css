@@ -47,6 +47,7 @@
 .memory-todo-body>footer button{width:100%;justify-content:flex-start;color:var(--fg-2)}
 .memory-todo-body>footer button svg:last-child{margin-left:auto;width:12px}
 .memory-todo-body>.meta,.memory-inline-error{padding:12px 20px;font-size:12px}
+.memory-task-empty{padding:0 20px 14px;margin:0;color:var(--muted);font-size:12px}
 .memory-todo-empty,.memory-catalog-empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:32px 20px;gap:10px}
 .memory-todo-empty>svg,.memory-catalog-empty>svg{width:24px;height:24px;color:var(--meta);margin-bottom:2px}
 .memory-todo-empty strong,.memory-catalog-empty strong{font-size:13px;font-weight:510;color:var(--fg-2)}
@@ -96,6 +97,13 @@
 @media(prefers-reduced-motion:reduce){.memory-filter-trigger>svg{transition:none}}
 .memory-list-heading{display:flex;align-items:center;justify-content:space-between;min-height:40px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
 .memory-count{font-family:var(--font-mono);font-size:11px;margin-left:8px;color:var(--meta)}
+.memory-catalog-errors{margin:12px 0;padding:12px 14px;border:1px solid color-mix(in srgb,var(--danger-text) 24%,var(--border));border-radius:8px;background:color-mix(in srgb,var(--danger-text) 4%,transparent)}
+.memory-catalog-errors>h3{margin:0 0 8px;color:var(--danger-text)}
+.memory-catalog-errors>ul{display:grid;gap:10px;max-height:180px;margin:0;padding:0;overflow:auto;list-style:none}
+.memory-catalog-errors li{display:grid;gap:3px;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.memory-catalog-errors li+li{padding-top:10px;border-top:1px solid var(--border-soft)}
+.memory-catalog-errors strong{color:var(--fg-2);font-weight:510}
+.memory-catalog-errors span{color:var(--danger-text)}
 .memory-catalog{display:grid}
 .memory-catalog-item{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);border-radius:0;color:var(--fg-2);padding:16px 2px}
 .memory-catalog-item:hover{background:color-mix(in srgb,var(--fg) 3%,transparent)}

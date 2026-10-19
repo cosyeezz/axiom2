@@ -10,7 +10,12 @@
 .file-type-icon svg { width: 22px; height: 22px; }
 .file-title > div { min-width: 0; display: grid; gap: 4px; }
 .file-title strong { font-size: 14px; font-weight: 550; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-title > div > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.6 var(--font-mono); color: var(--muted); }
+.file-path-copy { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-width: 0; min-height: 44px; padding: 0 6px; margin-left: -6px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 10px/1.6 var(--font-mono); text-align: left; cursor: pointer; }
+.file-path-copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-path-copy > svg { width: 14px; height: 14px; flex-shrink: 0; }
+.file-path-copy:not(:disabled):hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.file-path-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.file-path-copy:disabled { cursor: default; opacity: .5; }
 .file-header-actions, .file-view-actions { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
 .file-action { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; flex-shrink: 0; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 7px; cursor: pointer; transition: color 120ms, background 120ms; }
 .file-action svg { width: 18px; height: 18px; }
@@ -47,6 +52,7 @@
 .file-source-scroll.is-wrapped .file-source-lines { display: none; }
 .file-source-scroll.is-wrapped .file-source-code { min-width: 0; }
 .file-source-scroll.is-wrapped pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-html-frame { display: block; flex: 1; width: 100%; min-height: 0; border: 0; background: #fff; color-scheme: normal; }
 .file-reading-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: none; }
 .file-reading { max-width: 850px; margin: 0 auto; padding: 32px 40px 64px; font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; color: var(--fg-2); }
 .file-reading > :first-child { margin-top: 0; }

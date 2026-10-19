@@ -52,7 +52,7 @@ const shortText = (value: string, limit: number) => Array.from(value).slice(0, l
  * Keep every selected source visible to the model while bounding descriptive
  * fields. The caller still provides the complete document only through read.
  */
-export function compactMemoryCandidates(candidates: readonly Pick<MemoryCatalogEntry, "sessionId" | "title" | "revision" | "summary" | "keywords">[], options: {
+export function compactMemoryCandidates(candidates: readonly (Pick<MemoryCatalogEntry, "sessionId" | "title" | "revision" | "summary" | "keywords"> & { sourceTitle?: string })[], options: {
   totalSources?: number; unreadableCandidates?: number; maxChars?: number;
 } = {}) {
   const maxChars = options.maxChars ?? 16000;
@@ -61,6 +61,9 @@ export function compactMemoryCandidates(candidates: readonly Pick<MemoryCatalogE
     // never abbreviated. Only descriptive text is eligible for a budget cut.
     sessionId: candidate.sessionId,
     title: shortText(candidate.title, 160),
+    // The original conversation title is a locating hint only. It never
+    // replaces the model-produced topic or grants additional read scope.
+    ...(candidate.sourceTitle && candidate.sourceTitle !== candidate.title ? { sourceTitle: shortText(candidate.sourceTitle, 160) } : {}),
     revision: candidate.revision,
     keywords: candidate.keywords.slice(0, 6).map((keyword) => shortText(keyword, 40)),
     summary: "",
@@ -105,6 +108,33 @@ export function compactMemoryCandidates(candidates: readonly Pick<MemoryCatalogE
     text = envelope();
   }
   return text;
+}
+/**
+ * Organizer input has no automatic compaction. Keep immutable identities
+ * whole, then include only a complete prefix of files that fits the prompt
+ * budget so omitted paths cannot be mistaken for inspected evidence.
+ */
+export function compactOrganizerProjection(files: readonly MemoryFile[], related: readonly { sessionId: string; title: string; revision: string; sourceTitle?: string }[], maxChars: number) {
+  const navigation = related.map((entry) => ({
+    sessionId: entry.sessionId,
+    revision: entry.revision,
+    title: shortText(entry.title, 160),
+    ...(entry.sourceTitle && entry.sourceTitle !== entry.title ? { sourceTitle: shortText(entry.sourceTitle, 160) } : {}),
+  }));
+  const selected: MemoryFile[] = [];
+  const envelope = () => JSON.stringify({
+    files: selected,
+    omittedFiles: files.length - selected.length,
+    related: navigation,
+    omittedRelated: 0,
+    coverage: "文件清单和关联来源仅供导航，不是已读取或可据以断言的证据。",
+  });
+  if (envelope().length > maxChars) throw new AppError("MEMORY_LIMIT", "整理导航身份元数据超过提示投影预算");
+  for (const file of files) {
+    selected.push(file);
+    if (envelope().length > maxChars) { selected.pop(); break; }
+  }
+  return envelope();
 }
 type Evidence = { revision: string; nextOffset: number | null; content: string; complete: boolean };
 /** Tracks only gap-free pages from offset zero; revision changes discard evidence. */
@@ -196,6 +226,16 @@ export function readMemoryBytes(path: string, maxBytes = 4 * 1024 * 1024) {
     return bytes.subarray(0, length);
   } finally { closeSync(fd); }
 }
+/**
+ * A correction must derive both its replacement text and CAS token from the
+ * same checked byte snapshot.  TextDecoder intentionally keeps the editor
+ * facing BOM behavior, while the revision remains the exact on-disk bytes.
+ */
+export function readMemoryTextSnapshot(path: string, maxBytes = 4 * 1024 * 1024): Pick<MemoryTextSnapshot, "revision" | "content"> {
+  const bytes = readMemoryBytes(path, maxBytes);
+  if (bytes.includes(0)) throw new AppError("MEMORY_BINARY", "此产物不是文本，请使用支持的预览方式");
+  return { revision: digest(bytes), content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+}
 export function replaceMemoryFile(path: string, revision: string, content: string) {
   const before = lstatSync(path);
   const original = readMemoryBytes(path);
@@ -215,9 +255,7 @@ export function replaceMemoryFile(path: string, revision: string, content: strin
   } finally { closeSync(fd); }
 }
 export function textFile(path: string, maxBytes = 4 * 1024 * 1024) {
-  const buffer = readMemoryBytes(path, maxBytes);
-  if (buffer.includes(0)) throw new AppError("MEMORY_BINARY", "此产物不是文本，请使用支持的预览方式");
-  return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  return readMemoryTextSnapshot(path, maxBytes).content;
 }
 export function referencedPaths(directory: string, document: string) {
   return [...document.matchAll(/\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g)].flatMap((m) => {

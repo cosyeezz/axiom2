@@ -78,9 +78,9 @@ try {
     const compact = await page.locator(".composer-area").evaluate((area) => {
       const input = area.querySelector("textarea")!, usage = area.querySelector(".usage")!, row = usage.querySelector(".usage-row")!, tools = usage.querySelector(".usage-settings")!;
       const a = row.getBoundingClientRect(), b = tools.getBoundingClientRect();
-      return { inputHeight: input.getBoundingClientRect().height, font: getComputedStyle(input).fontSize, wrap: getComputedStyle(usage).flexWrap, aligned: Math.abs(a.top + a.height / 2 - b.top - b.height / 2) < 1 };
+      return { inputHeight: input.getBoundingClientRect().height, composerHeight: area.querySelector(".composer")!.getBoundingClientRect().height, font: getComputedStyle(input).fontSize, wrap: getComputedStyle(usage).flexWrap, aligned: Math.abs(a.top + a.height / 2 - b.top - b.height / 2) < 1 };
     });
-    assert.deepEqual(compact, { inputHeight: 40, font: "14px", wrap: "nowrap", aligned: true }, "single-line input and one uninterrupted toolbar row");
+    assert.deepEqual(compact, { inputHeight: 40, composerHeight: 56, font: "14px", wrap: "nowrap", aligned: true }, "single-line input and one uninterrupted toolbar row");
     await page.screenshot({ animations: "disabled", path: join(artifacts, `${width}x${height}-expanded.png`) });
     await page.getByRole("button", { name: "收起工作台，只看对话" }).click();
     assert.equal(await page.locator("#prompt").isVisible(), false);
@@ -153,6 +153,16 @@ try {
   await nativePage.setViewportSize({ width: 390, height: 844 });
   await nativePage.getByRole("button", { name: "展开工作台", exact: true }).click();
   assert.equal(await nativePage.locator("#prompt").isVisible(), true);
+  await nativePage.locator("#prompt").fill("");
+  const singleRow = await nativePage.locator(".composer").evaluate((form) => {
+    const rect = form.getBoundingClientRect();
+    const controls = ["textarea", ".attach-button", ".model-picker > summary", ".send"].map((selector) => form.querySelector(selector)!.getBoundingClientRect());
+    return { height: rect.height, aligned: controls.every((box) => Math.abs(box.top + box.height / 2 - rect.top - rect.height / 2) < 1), visible: controls.every((box) => box.left >= rect.left && box.right <= rect.right) };
+  });
+  assert.deepEqual(singleRow, { height: 56, aligned: true, visible: true }, "empty Android composer including its controls occupies one row");
+  await nativePage.locator(".model-picker > summary").click();
+  await nativePage.locator(".model-picker .model-popover").waitFor({ state: "visible" });
+  await nativePage.keyboard.press("Escape");
   await nativePage.locator("#prompt").fill("这是一行足够长的输入，用来确认文字横向滚动而不会自动换行。".repeat(8));
   assert.equal(await nativePage.locator("#prompt").evaluate((node) => node.scrollWidth > node.clientWidth && node.getBoundingClientRect().height === 40 && node.scrollHeight <= node.clientHeight + 2), true, "long input stays on one line");
   await nativePage.locator(".usage").evaluate((node) => { node.scrollLeft = node.scrollWidth; });

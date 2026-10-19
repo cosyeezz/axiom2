@@ -119,13 +119,15 @@ test("query cache decodes a revision once, then invalidates changed or deleted f
       assert.throws(() => input.read(f.scope.sessionId, "MEMORY.md"), { code: "REVISION_CONFLICT" });
       return { answer: "不应发布", incomplete: false };
     } };
-    assert.deepEqual(await f.memories.query(f.scope, "可查询资料"), { answer: "", scope: f.scope, incomplete: true, sources: [] });
+    const changed = await f.memories.query(f.scope, "可查询资料");
+    assert.equal(changed.answer, ""); assert.equal(changed.incomplete, true); assert.equal(changed.reason, "revision_conflict");
     f.memories.runner = { close: async () => {}, execute: async (input) => {
       rmSync(f.entry);
       assert.throws(() => input.read(f.scope.sessionId, "MEMORY.md"));
       return { answer: "不应发布", incomplete: false };
     } };
-    assert.deepEqual(await f.memories.query(f.scope, "已替换的资料"), { answer: "", scope: f.scope, incomplete: true, sources: [] });
+    const unreadable = await f.memories.query(f.scope, "已替换的资料");
+    assert.equal(unreadable.answer, ""); assert.equal(unreadable.incomplete, true); assert.ok(unreadable.reason);
   } finally { (globalThis as { TextDecoder: typeof TextDecoder }).TextDecoder = original; await f.close(); }
 });
 

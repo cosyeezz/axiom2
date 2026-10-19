@@ -55,6 +55,14 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   }, [scope?.workspaceId, scope?.sessionId]);
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent);
   const scroller = useRef<HTMLElement>(null), content = useRef<HTMLDivElement>(null), bottom = useRef(true);
+  const lastScrollTop = useRef(0);
+  const scrollToBottom = () => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    // scroll events arrive later and may see a newer, taller layout.
+    lastScrollTop.current = el.scrollTop;
+  };
   const previousOriginal = useRef(original.enabled);
   useLayoutEffect(() => {
     if (previousOriginal.current !== original.enabled) bottom.current = false;
@@ -69,9 +77,20 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
     const top = el.scrollTop < 2, end = el.scrollHeight - el.scrollTop - el.clientHeight < 2;
     setEdges((old) => old.top === top && old.bottom === end ? old : { top, bottom: end });
   };
+  // A new keyed view starts at the latest message, including asynchronously loaded history.
+  // This positioning is independent of selections left elsewhere in the workbench.
+  useLayoutEffect(() => {
+    if (!historyReceived || !bottom.current) return;
+    scrollToBottom();
+    measure();
+  }, [historyReceived]);
   useEffect(() => {
     const observer = new ResizeObserver(() => {
-      if (bottom.current && !getSelection()?.toString()) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+      const el = scroller.current;
+      const selection = getSelection();
+      const selectingMessages = !!el && !!selection?.toString() &&
+        (el.contains(selection.anchorNode) || el.contains(selection.focusNode));
+      if (bottom.current && !selectingMessages) scrollToBottom();
       measure();
     });
     if (content.current) observer.observe(content.current);
@@ -81,7 +100,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   const visiblePending = pending.filter((item) => !item.queued);
   const lastPendingId = visiblePending.at(-1)?.id;
   useEffect(() => {
-    if (lastPendingId) { bottom.current = true; scroller.current?.scrollTo({ top: scroller.current.scrollHeight }); }
+    if (lastPendingId) { bottom.current = true; scrollToBottom(); }
   }, [lastPendingId]);
   useEffect(() => {
     if (!scope || !info.run || !["failed", "cancelled", "interrupted"].includes(info.run.status)) return;
@@ -100,7 +119,14 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   };
   return <FilePreviewContext.Provider value={setPreview}><div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
-      onScroll={(e) => { const n = e.currentTarget; bottom.current = n.scrollHeight - n.scrollTop - n.clientHeight < 60; measure(); }}>
+      onScroll={(e) => {
+        const n = e.currentTarget;
+        const nearBottom = n.scrollHeight - n.scrollTop - n.clientHeight < 60;
+        // Only movement away from the tail cancels following, not growth since our last scroll.
+        bottom.current = nearBottom || bottom.current && n.scrollTop >= lastScrollTop.current - 1;
+        lastScrollTop.current = n.scrollTop;
+        measure();
+      }}>
       <div ref={content} className="container thread-content"><div id={nested ? undefined : "messages"}>
         {scope?.sessionId && <Environment scope={scope} />}
         {index.error && <p className="execution-alert">{index.error}</p>}

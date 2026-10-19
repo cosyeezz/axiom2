@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { chromium, type Browser } from "playwright";
 import { startServer } from "../src/server/index.js";
 import type { AgentViews } from "../src/server/agents/views.js";
@@ -25,17 +25,37 @@ try {
   writeFileSync(join(root, "example.ts"), "const title = '中文文件内容';\n" + Array.from({ length: 60 }, (_, i) => `export const value${i} = ${i};`).join("\n"));
   writeFileSync(join(root, "legacy.txt"), Buffer.from([0xd6, 0xd0, 0xce, 0xc4]));
   writeFileSync(join(root, "report.docx"), "PK-not-rendered");
-  writeFileSync(join(root, "unsafe.html"), "<script>window.previewUnsafe = true</script>");
+  writeFileSync(join(root, "unsafe.html"), `<!doctype html><html lang="zh-CN"><head><link rel="stylesheet" href="p&#97;ge.css?a=1&amp;b=2"><script defer src="page.js"></script></head><body><h1>HTML 页面已显示</h1><button id="counter">点击 0</button><textarea hidden><link rel='stylesheet' href='page.css'></textarea><script>
+    const fragment = "<link rel='stylesheet' href='page.css'>";
+    document.body.dataset.literal = fragment;
+    window.previewUnsafe = true;
+    try { parent.document.body.dataset.unsafe = 'true'; } catch { document.body.dataset.parentBlocked = 'true'; }
+    try { localStorage.setItem('unsafe', 'true'); } catch { document.body.dataset.storageBlocked = 'true'; }
+    fetch('/api/status').then(() => document.body.dataset.networkBlocked = 'false', () => document.body.dataset.networkBlocked = 'true');
+    let clicks = 0; document.querySelector('#counter').onclick = event => event.target.textContent = '点击 ' + ++clicks;
+  </script></body></html>`);
+  writeFileSync(join(root, "page.css"), "body { background: rgb(235, 245, 250); padding: 24px; } h1 { color: rgb(20, 60, 90); }");
+  writeFileSync(join(root, "page.js"), "document.body.dataset.companion = 'loaded';");
+  if (process.env.AXIOM_HTML_FIXTURE) {
+    copyFileSync(process.env.AXIOM_HTML_FIXTURE, join(root, "connection-draft.html"));
+    copyFileSync(join(dirname(process.env.AXIOM_HTML_FIXTURE), "connection-draft.css"), join(root, "connection-draft.css"));
+  }
   app = await startServer({ root: join(root, "data"), port: 0, dev: true });
   const workspace = app.store.execute({ requestId: crypto.randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: crypto.randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
   const scope = { workspaceId: workspace.id, sessionId: session.id };
+  // This fixture injects display messages only; name it so empty-session reuse
+  // does not turn the navigation assertion into a selection of the same session.
+  app.store.execute({ requestId: crypto.randomUUID(), op: "session.rename", ...scope, params: { title: "文件预览回归" } });
   const views = (app.agents as unknown as { views: AgentViews }).views;
-  const source = `已整理以下文件，点击即可查看：\n\n[设计说明](<${join(root, "设计说明.md").replace(/\\/g, "/")}>) · [示例代码](example.ts:12) · [中文文本](legacy.txt) · [Office 文件](report.docx) · [HTML 源码](unsafe.html) · [缺失文件](missing.md) · [图片文件](picture.png) · [特殊文件名](spec%231.md) · [PDF 文件](preview.pdf)`;
+  const source = `已整理以下文件，点击即可查看：\n\n[设计说明](<${join(root, "设计说明.md").replace(/\\/g, "/")}>) · [示例代码](example.ts:12) · [中文文本](legacy.txt) · [Office 文件](report.docx) · [HTML 文件](unsafe.html) · [缺失文件](missing.md) · [图片文件](picture.png) · [特殊文件名](spec%231.md) · [PDF 文件](preview.pdf) · [实际页面](connection-draft.html)`;
   views.messageChanged(scope, { id: "file-reply", role: "assistant", text: source }); views.flush(scope);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: app.origin });
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  const externalRequests: string[] = [];
+  await page.route("https://preview-egress.invalid/**", route => { externalRequests.push(route.request().url()); return route.abort(); });
   let hold = false, held: (() => void) | undefined;
   const requests = new Map<string, string>(); let revealRequest: any;
   await page.routeWebSocket("**/ws", socket => {
@@ -64,6 +84,15 @@ try {
     });
     assert.ok(boxes.panel.x >= boxes.shell.x + boxes.shell.width * .1 - 1);
     assert.ok(boxes.panel.bottom <= boxes.composer.y + 1); assert.ok(boxes.panel.right <= boxes.shell.right + 1); assert.equal(boxes.overflow, false);
+  };
+  const htmlGeometry = async () => {
+    const iframe = page.locator(".file-html-frame"), box = (await iframe.boundingBox())!;
+    const pane = (await page.locator(".file-reading-pane").boundingBox())!;
+    assert.ok(Math.abs(box.width - pane.width) < 2);
+    const wrapper = (await (await iframe.elementHandle())!.contentFrame())!;
+    const frame = (await (await wrapper.locator("iframe").elementHandle())!.contentFrame())!;
+    await frame.waitForFunction(width => Math.abs(innerWidth - width) < 2, box.width);
+    await frame.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   };
   await open("设计说明"); await page.locator(".file-reading h1").waitFor();
   assert.ok((await page.locator(".file-reading").innerText()).includes("中文 Markdown 文档"));
@@ -99,7 +128,72 @@ try {
   await open("示例代码"); assert.ok(await page.locator(".file-source-scroll").evaluate(n => n.scrollTop > 100)); await close();
   await open("中文文本"); assert.equal(await page.locator(".file-source-code pre").innerText(), "中文"); await close();
   await open("Office 文件"); await page.getByText(/此格式暂不支持内嵌预览/).waitFor(); await close();
-  await open("HTML 源码"); assert.equal(await page.evaluate(() => (window as any).previewUnsafe), undefined); await close();
+  await open("HTML 文件");
+  const html = page.frameLocator(".file-html-frame").frameLocator("iframe");
+  await html.getByRole("heading", { name: "HTML 页面已显示" }).waitFor();
+  await page.waitForFunction(() => document.querySelector(".file-html-frame") !== null);
+  assert.equal(await html.locator("body").getAttribute("data-companion"), "loaded");
+  assert.equal(await html.locator("body").getAttribute("data-literal"), "<link rel='stylesheet' href='page.css'>");
+  assert.equal(await html.locator("textarea").inputValue(), "<link rel='stylesheet' href='page.css'>");
+  assert.equal(await html.locator("body").getAttribute("data-parent-blocked"), "true");
+  assert.equal(await html.locator("body").getAttribute("data-storage-blocked"), "true");
+  assert.equal(await html.locator("body").getAttribute("data-network-blocked"), "true");
+  assert.equal(await html.locator("body").evaluate(node => getComputedStyle(node).backgroundColor), "rgb(235, 245, 250)");
+  assert.equal(await page.evaluate(() => (window as any).previewUnsafe), undefined);
+  assert.equal(await page.locator(".file-html-frame").getAttribute("sandbox"), "allow-scripts");
+  await html.getByRole("button", { name: "点击 0", exact: true }).click();
+  await html.getByRole("button", { name: "点击 1", exact: true }).waitFor();
+  await page.getByRole("button", { name: "HTML 源码", exact: true }).click();
+  assert.ok((await page.locator(".file-source-code pre").innerText()).includes('<link rel="stylesheet" href="p&#97;ge.css?a=1&amp;b=2">'));
+  await page.getByRole("button", { name: "HTML 预览", exact: true }).click();
+  await html.getByRole("button", { name: "点击 1", exact: true }).waitFor();
+  const copy = page.getByRole("button", { name: "复制文件路径", exact: true });
+  await copy.click();
+  await page.locator('.file-title [role="status"]').filter({ hasText: "已复制路径" }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), join(root, "unsafe.html"));
+  await page.evaluate(() => {
+    const original = navigator.clipboard.writeText.bind(navigator.clipboard);
+    let failed = false;
+    navigator.clipboard.writeText = async text => { if (!failed) { failed = true; throw new Error("clipboard denied"); } await original(text); };
+  });
+  await copy.click();
+  const retryCopy = page.getByRole("button", { name: "复制失败，点击重试", exact: true });
+  await retryCopy.waitFor(); await retryCopy.focus(); await page.keyboard.press("Enter");
+  await page.locator('.file-title [role="status"]').filter({ hasText: "已复制路径" }).waitFor();
+  for (const width of [390, 820, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["HTML 源码", "源码与预览对比", "HTML 预览"]) { await page.getByRole("button", { name: mode, exact: true }).click(); await geometry(); }
+    await htmlGeometry();
+    await page.screenshot({ path: join(artifacts, `html-${width}.png`) });
+  }
+  await page.getByRole("button", { name: "重新加载文件", exact: true }).click();
+  await html.getByRole("button", { name: "点击 0", exact: true }).waitFor();
+  for (const method of ["script", "link", "refresh"]) {
+    const wrapper = (await (await page.locator(".file-html-frame").elementHandle())!.contentFrame())!;
+    const frame = (await (await wrapper.locator("iframe").elementHandle())!.contentFrame())!;
+    await frame.evaluate(method => {
+      const url = "https://preview-egress.invalid/blocked";
+      if (method === "script") location.assign(url);
+      else if (method === "link") { const link = document.createElement("a"); link.href = url; document.body.append(link); link.click(); }
+      else { const meta = document.createElement("meta"); meta.httpEquiv = "refresh"; meta.content = `0; url=${url}`; document.head.append(meta); }
+    }, method);
+    await frame.waitForURL("chrome-error://chromewebdata/");
+    assert.deepEqual(externalRequests, []);
+    await page.getByRole("button", { name: "重新加载文件", exact: true }).click();
+    await html.getByRole("button", { name: "点击 0", exact: true }).waitFor();
+  }
+  await close();
+  if (process.env.AXIOM_HTML_FIXTURE) {
+    await open("实际页面");
+    const draft = page.frameLocator(".file-html-frame").frameLocator("iframe");
+    await draft.locator("#device").waitFor();
+    assert.deepEqual(await draft.locator(".sprite").evaluate(node => { const style = getComputedStyle(node); return [style.position, style.width, style.height]; }), ["absolute", "0px", "0px"]);
+    await draft.locator("#device").click(); await draft.locator("#devices").waitFor({ state: "visible" });
+    await draft.locator("#device").click();
+    for (const width of [390, 1440]) { await page.setViewportSize({ width, height: 900 }); await geometry(); await htmlGeometry(); await page.screenshot({ path: join(artifacts, `connection-draft-${width}.png`) }); }
+    await close();
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await open("特殊文件名"); await page.getByRole("heading",{name:"带井号的文件名"}).waitFor(); await close();
   await open("PDF 文件"); await page.locator('.file-pdf object[data^="blob:"]').waitFor();
   // Chromium's native PDF viewer rasterizes in its own frame after the object mounts.

@@ -590,7 +590,7 @@ async function run(input: WorkerInput) {
           if (input.task && taskPhase.stage === "summary") messages.push({ role: "custom", customType: "axiom-task-summary",
             content: taskSummaryInstruction, display: false, timestamp: Date.now() });
           if (input.memoryPath && session && pendingMemoryRead(session.sessionManager)) messages.push({
-            role: "custom", customType: "axiom-memory-restore", content: `上下文压缩已实际应用。尝试用 read 重新读取 ${input.memoryPath}；记忆是可选资料，读不到就按空记忆继续工作，不报错或等待修复。提示送达不代表已读取，也不要声称已恢复未读到的背景。`, display: false, timestamp: Date.now(),
+            role: "custom", customType: "axiom-memory-restore", content: `上下文压缩已实际应用。尝试用 read 重新读取 ${input.memoryPath}；记忆是可选资料，读不到就按空记忆继续工作，不报错或等待修复。提示送达不代表已读取，也不要声称已恢复未读到的背景。保留本次 compactionId 与既有对话边界，不把压缩前原对话回填为当前上下文。`, display: false, timestamp: Date.now(),
           });
           if (!wantsTitle || titleSettled) return { messages };
           // Request-local copy: neither original input, system prompt nor JSONL

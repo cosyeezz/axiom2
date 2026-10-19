@@ -239,7 +239,9 @@ function optionalMemorySubscription(scope: string) {
   const previous = cache.get(scope);
   cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
     generation: connection.generation, received: ++received,
-    data: kind === "memory" ? emptyMemoryView({ workspaceId, sessionId }) : [] });
+    // Optional memory subscription failures must not affect the connection, but
+    // callers still need to distinguish an unavailable source from a missing one.
+    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : [] });
   listeners.get(scope)?.forEach((fn) => fn());
   return true;
 }

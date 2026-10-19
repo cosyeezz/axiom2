@@ -1,5 +1,6 @@
 import { Icon, SettingsSidebar } from "../components.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
+import { PhoneConnect } from "../settings/PhoneConnect.js";
 import { useConnection, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
 import "../styles/settings.css";
@@ -58,6 +59,7 @@ export default function Settings() {
                   : `${connection} · 正在读取配置…`)}
             </p>
           </section>
+          <PhoneConnect />
           <section className="overview-section" aria-labelledby="scope-heading">
             <h2 id="scope-heading">存储与隐私</h2>
             <dl className="scope-list">

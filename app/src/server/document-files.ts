@@ -5,6 +5,7 @@ import { AppError, object, type Command, type Scope } from "../shared/protocol.j
 import { hasFileLink, localFileLink, type FilePreview } from "../shared/file-preview.js";
 import type { ChatMessage } from "../shared/agent.js";
 import type { Store } from "./storage.js";
+import { htmlResources } from "./html-preview.js";
 const key = (p: string) => process.platform === "win32" ? p.toLowerCase() : p;
 const forbidden = () => new AppError("FILE_PREVIEW_FORBIDDEN", "只能查看本会话助手回复中明确链接的本地文件，不支持符号链接或设备路径");
 const languages: Record<string, string> = { js:"javascript", jsx:"javascript", mjs:"javascript", cjs:"javascript", ts:"typescript", tsx:"typescript", json:"json", css:"css", html:"xml", htm:"xml", xml:"xml", svg:"xml", py:"python", sh:"bash", bash:"bash", yml:"yaml", yaml:"yaml", toml:"toml", rs:"rust", go:"go", java:"java", c:"c", h:"c", cpp:"cpp", cs:"csharp", sql:"sql", ps1:"powershell" };
@@ -91,7 +92,9 @@ export class DocumentFiles {
         if (media) return { ...result, reason: "文件内容与格式不符，无法预览。" };
         const decoded = decodeFileText(bytes);
         if (!decoded) return { ...result, reason: "无法可靠解码此文件，或文件包含二进制内容。请在本地应用中查看。" };
-        return { ...result, ...decoded, kind: ["md", "markdown", "mdown"].includes(ext) ? "markdown" : languages[ext] ? "code" : "text", language: languages[ext] };
+        const companions = ["html", "htm"].includes(ext) ? await htmlResources(path, decoded.text, authorize, signal) : {};
+        signal.throwIfAborted(); authorize();
+        return { ...result, ...decoded, ...companions, kind: ["md", "markdown", "mdown"].includes(ext) ? "markdown" : languages[ext] ? "code" : "text", language: languages[ext] };
       } finally { await handle.close(); }
     } catch (error) {
       if (error instanceof AppError) throw error;
