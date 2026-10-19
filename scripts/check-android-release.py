@@ -61,14 +61,17 @@ def address(value):
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 
 def screenshot(name):
+    (out / (name + '.xml')).write_text(ET.tostring(tree(), encoding='unicode'), encoding='utf-8')
     png = adb('exec-out', 'screencap', '-p', binary=True)
     (out / (name + '.png')).write_bytes(png)
-    (out / (name + '.xml')).write_text(ET.tostring(tree(), encoding='unicode'), encoding='utf-8')
     return int.from_bytes(png[16:20], 'big'), int.from_bytes(png[20:24], 'big')
 
 def ready(root):
     web = node(root, cls='android.webkit.WebView')
-    return web if web is not None and node(root, text='连接工作台') is None else None
+    # Wait for actual rendered workbench controls, not the initially empty WebView.
+    return web if (web is not None and node(root, text='连接工作台') is None
+                   and node(root, text='新对话') is not None
+                   and node(root, text='已连接本地服务') is not None) else None
 
 def launch():
     adb('shell', 'am', 'start', '-W', '-n', package + '/.MainActivity')
