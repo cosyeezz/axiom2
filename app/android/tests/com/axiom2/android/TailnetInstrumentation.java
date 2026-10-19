@@ -211,6 +211,7 @@ public final class TailnetInstrumentation extends Instrumentation {
                 findPassword(dialog.getWindow().getDecorView(), password); check(password.get() != null && password.get().length() == 0, "Saved secret was exposed in form");
                 password.get().setText("replacement-fake-secret"); dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
             });
+            waitForIdleSync();
             check(password.get().length() == 0 && store.load().secret.equals(SECRET), "Cancel saved or retained secret draft");
             click(panel, "配置设备发现");
             runOnMainSync(() -> { try { ((AlertDialog) member(panel, "dialog")).getButton(AlertDialog.BUTTON_NEUTRAL).performClick(); } catch (Exception e) { throw new AssertionError(e); } });
@@ -246,7 +247,12 @@ public final class TailnetInstrumentation extends Instrumentation {
                     Method persist = TailnetPanel.class.getDeclaredMethod("persist", TailnetApi.Credentials.class); persist.setAccessible(true);
                     TailnetPanel old = new TailnetPanel(activity, value -> { });
                     persist.invoke(old, credentials()); old.close();
-                    TailnetPanel fresh = new TailnetPanel(activity, value -> { }); replacement.set(fresh); persist.invoke(fresh, new Object[]{null});
+                    TailnetPanel fresh = new TailnetPanel(activity, value -> { }); replacement.set(fresh);
+                    Field saved = TailnetPanel.class.getDeclaredField("credentials"); saved.setAccessible(true); saved.set(fresh, credentials());
+                    persist.invoke(fresh, new Object[]{null});
+                    check(member(fresh, "credentials") == null, "Removal retained old secret while queued");
+                    ((Button) member(fresh, "cancel")).performClick();
+                    check(member(fresh, "credentials") == null, "Cancelling wait restored removed secret");
                 } catch (Exception e) { throw new AssertionError(e); }
             });
         } finally { release.countDown(); }

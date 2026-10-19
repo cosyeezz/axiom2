@@ -62,7 +62,7 @@ final class TailnetPanel extends LinearLayout implements AutoCloseable {
         add(content, text("设备清单来自 Tailscale 管理 API。服务检查使用配置端口；进入工作台时还会确认实时连接。手机 VPN 应与凭据属于同一 Tailnet。", MUTED), 12);
         toggle.setOnClickListener(v -> { if (expanded) collapse(); else { expanded = true; content.setVisibility(VISIBLE); toggle.setText("收起 Tailscale 设备"); loadSaved(); } });
         refresh.setOnClickListener(v -> loadSaved()); configure.setOnClickListener(v -> configure());
-        cancel.setOnClickListener(v -> { stopWork(); devices = Collections.emptyList(); clearRows(); show("已取消，可刷新设备或手动连接。", false); });
+        cancel.setOnClickListener(v -> { stopWork(); devices = Collections.emptyList(); clearRows(); show("已停止等待，可刷新读取最新配置和设备，或手动连接。", false); });
         previous.setOnClickListener(v -> { page--; renderPage(); }); next.setOnClickListener(v -> { page++; renderPage(); });
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
@@ -113,7 +113,7 @@ final class TailnetPanel extends LinearLayout implements AutoCloseable {
     private void collapse() { stopWork(); expanded = false; content.setVisibility(GONE); toggle.setText("选择 Tailscale 设备"); toggle.requestFocus(); }
     private void loadSaved() {
         if (!usable() || !expanded) return;
-        stopWork(); int owned = generation; setBusy(true); clearRows(); devices = Collections.emptyList(); show("正在读取设备配置…", false);
+        stopWork(); int owned = generation; credentials = null; setBusy(true); clearRows(); devices = Collections.emptyList(); show("正在读取设备配置…", false);
         armDeadline(owned);
         loading = TailnetCredentialStore.SERIAL.submit(() -> {
             try {
@@ -188,7 +188,10 @@ final class TailnetPanel extends LinearLayout implements AutoCloseable {
         AlertDialog current = new AlertDialog.Builder(activity).setTitle("配置 Tailscale 设备发现").setView(scroll)
                 .setPositiveButton("保存并加载", null).setNegativeButton("取消", null).setNeutralButton("移除配置", null).create();
         dialog = current; current.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        current.setOnDismissListener(d -> { secret.setText(""); if (dialog == current) dialog = null; configure.requestFocus(); });
+        current.setOnDismissListener(d -> {
+            secret.setText(""); if (dialog == current) dialog = null; configure.requestFocus();
+            main.post(() -> { if (usable() && expanded && !busy) renderPage(); });
+        });
         current.setOnShowListener(d -> {
             current.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 try {
@@ -211,7 +214,7 @@ final class TailnetPanel extends LinearLayout implements AutoCloseable {
         current.show();
     }
     private void persist(TailnetApi.Credentials replacement) {
-        stopWork(); int owned = generation; clearRows(); devices = Collections.emptyList(); setBusy(true); show(replacement == null ? "正在移除配置…" : "正在加密保存凭据…", false);
+        stopWork(); int owned = generation; credentials = null; clearRows(); devices = Collections.emptyList(); setBusy(true); show(replacement == null ? "正在移除配置…" : "正在加密保存凭据…", false);
         // Serialize durable changes with reads. Once explicitly saved, a background transition does not undo it.
         armDeadline(owned);
         TailnetCredentialStore.SERIAL.execute(() -> {

@@ -92,6 +92,8 @@ def main():
         (out / f'{phase}.log').write_text(result, encoding='utf-8')
         print(result)
         if 'AXIOM_TAILNET_PASS=true' not in result or 'INSTRUMENTATION_CODE: -1' not in result:
+            subprocess.run([str(adb), '-s', args.serial, 'pull', f'/sdcard/Android/data/{PACKAGE}/files/tailnet-tests', str(out / 'screenshots')], check=False, timeout=30)
+            run([adb, '-s', args.serial, 'shell', 'am', 'force-stop', PACKAGE], timeout=20)
             raise RuntimeError(f'Instrumentation {phase} did not explicitly pass')
         run([adb, '-s', args.serial, 'shell', 'am', 'force-stop', PACKAGE])
     run([adb, '-s', args.serial, 'pull', f'/sdcard/Android/data/{PACKAGE}/files/tailnet-tests', out / 'screenshots'])
