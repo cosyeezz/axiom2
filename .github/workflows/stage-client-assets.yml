@@ -1,0 +1,41 @@
+name: Stage verified macOS client asset
+on:
+  push:
+    branches: [release/clients-0.4.8]
+    paths: [.github/workflows/stage-client-assets.yml]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: cosyeezz/axiom2
+    steps:
+      - name: Check build and draft identities
+        run: |
+          set -euo pipefail
+          gh api repos/cosyeezz/axiom2/actions/runs/39239533939 > build.json
+          gh release view v0.4.8 --json isDraft,targetCommitish,assets > release.json
+          python3 - <<'PY'
+          import json
+          source = '461714873f72729b29219b3c0ffdbce7051357d8'
+          build = json.load(open('build.json'))
+          release = json.load(open('release.json'))
+          assert build['conclusion'] == 'success' and build['head_sha'] == source
+          assert release['isDraft'] and release['targetCommitish'] == source
+          assert not any(asset['name'] == 'Axiom2.dmg' for asset in release['assets'])
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 39239533939
+          name: Axiom2-macOS-universal
+          path: staging
+      - name: Verify and stage the production disk image
+        run: |
+          set -euo pipefail
+          (cd staging && sha256sum -c SHA256SUMS-macos && cat SHA256SUMS-macos)
+          gh release upload v0.4.8 staging/Axiom2.dmg
