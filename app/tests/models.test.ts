@@ -21,25 +21,34 @@ test("configuration watchers preserve invalidation when TEMP uses a filesystem a
     const service = new ModelService(root);
     let changes = 0;
     close = service.watchConfiguration(() => { changes++; });
-    const changed = async (expected: number) => {
-      const deadline = Date.now() + 5000;
+    const changed = async (expected: number, operation: string, deadline = Date.now() + 5000) => {
       while (changes < expected) {
-        assert.ok(Date.now() < deadline, "configuration watcher must deliver the file change");
+        assert.ok(Date.now() < deadline, `configuration watcher must deliver ${operation}`);
         await delay(10);
       }
     };
+    // Native subscriptions can start asynchronously. Establish readiness through
+    // a separate watched file, then issue each target mutation only once.
+    const readyDeadline = Date.now() + 5000;
+    for (let attempt = 0; changes === 0; attempt++) {
+      assert.ok(Date.now() < readyDeadline, "configuration watcher must observe the readiness probe");
+      writeFileSync(join(service.dir, "models-store.json"), JSON.stringify({ probe: attempt }));
+      await delay(10);
+    }
+    // Keep the observed probe unchanged so queued events cannot add revisions.
+    const beforeCreate = changes;
     const models = join(service.dir, "models.json");
     writeFileSync(models, '{"providers":{}}');
-    await changed(1);
+    await changed(beforeCreate + 1, "models creation", readyDeadline);
     const beforeEdit = changes;
     writeFileSync(models, '{ "providers": {} }');
-    await changed(beforeEdit + 1);
+    await changed(beforeEdit + 1, "models edit");
     const beforeAuth = changes;
     writeFileSync(join(service.dir, "auth.json"), '{}');
-    await changed(beforeAuth + 1);
+    await changed(beforeAuth + 1, "auth creation");
     const beforeDelete = changes;
     rmSync(models);
-    await changed(beforeDelete + 1);
+    await changed(beforeDelete + 1, "models deletion");
   } finally {
     close();
     if (previous === undefined) delete process.env.AXIOM_PI_DIR;
