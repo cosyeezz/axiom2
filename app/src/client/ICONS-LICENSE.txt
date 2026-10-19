@@ -40,12 +40,15 @@ Tabler icon: https://tabler.io/icons/icon/progress-check
 Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
 Model configuration reload: shared Lucide rotate-cw (ISC).
 Tabler fold is also used as the shared static compression symbol in icons.svg.
+Workspace folder: restored from the original ui design, including its horizontal divider.
+Open workspace: adapted from that folder silhouette with a tilted front inspired by Tabler folder-open (option 04), in icons.svg as i-workspace-open.
+Reference: https://icon-sets.iconify.design/tabler/folder-open/ (Tabler MIT notice below).
 Session capabilities: Tabler hand-click, original paths in icons.svg, shared 16px composer styling.
 Source: https://icon-sets.iconify.design/tabler/hand-click/
 Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
 Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
 Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths).
-New-session entry: note-pencil (regular), user-selected option 05; original filled path in icons.svg as i-new-chat, cropped viewBox, no added outline.
+New-session entry: custom rounded outline adaptation of the user-selected Phosphor note-pencil (option 05); keeps the notebook/pencil silhouette, with round caps/joins and a shared 1.25px non-scaling stroke. Sidebar glyph viewBoxes fit their geometry; non-square glyphs retain their aspect ratio and visible stroke overflow.
 Source: https://github.com/phosphor-icons/core/blob/main/assets/regular/note-pencil.svg
 MIT License: Copyright (c) 2023 Phosphor Icons. Full text: assets/PHOSPHOR-LICENSE.txt
 Lucide symbols use 1.5px non-scaling rounded strokes; ordinary desktop glyphs

@@ -11,7 +11,8 @@ svg.ui-glyph { display: block; flex-shrink: 0; overflow: visible; }
 .send { --icon-stroke: 1.8px; }
 /* These controls formerly relied on empty SVG canvas for their visual inset. */
 .send:not(.is-running) > svg { width: 18px; height: 18px; }
-:is(.model-picker > summary, .workspace-picker > summary) > svg:last-child { width: 10px; height: 10px; }
+.model-picker > summary > svg:last-child { width: 10px; height: 10px; }
+.workspace-picker > summary > svg:last-child { width: 12px; height: 6px; }
 /* A common optical row, with spacing owned by the controls, not by SVG padding. */
 .usage { --toolbar-icon-size: 16px; --toolbar-gap: 0px; --icon-stroke: 1.2px; column-gap: var(--toolbar-gap); padding-inline: 4px; }
 .usage-row { column-gap: var(--toolbar-gap); }
@@ -22,7 +23,6 @@ svg.ui-glyph { display: block; flex-shrink: 0; overflow: visible; }
 .memory-todo-toggle { padding-inline: 8px; gap: 8px; }
 .usage .cost-trigger { min-width: 44px; }
 .usage .memory-progress-bars { --icon-stroke: 1px; }
-.usage .context-ring.data-track { opacity: .4; }
 /* Keep curves antialiased and line weight independent of the SVG canvas. */
 .usage .action-icon > svg { shape-rendering: geometricPrecision; overflow: visible; }
 .usage .action-icon > svg.data-icon :is(path, circle, ellipse, rect, line, polyline) { vector-effect: non-scaling-stroke; stroke-width: var(--icon-stroke); }

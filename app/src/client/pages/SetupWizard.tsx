@@ -3,6 +3,7 @@ import { desktopInvoke } from "./desktop-bridge.js";
 import { Icon } from "../Icon.js";
 import { CommandLine, IconButton, ResourceLink } from "./StartupControls.js";
 type Environment = { nodeReady: boolean; nodeVersion: string; writable: boolean; tailscale: boolean; platform: string };
+export type PreparationDetection = { environment: Environment | null; checking: boolean; failed: boolean };
 type Job = { id?: string; action: string; running: boolean; phase: string; message: string; lines: string[] };
 function readJob(value: unknown): Job | null {
   if (value === null || value === undefined) return null;
@@ -10,10 +11,12 @@ function readJob(value: unknown): Job | null {
   const job = value as Job;
   return { ...job, action: typeof job.action === "string" ? job.action : "", message: typeof job.message === "string" ? job.message : "正在核实安装状态", lines: Array.isArray(job.lines) ? job.lines.filter(line => typeof line === "string") : [] };
 }
-export default function SetupWizard({ remote, service, blocked, onBusy, onComplete, children }: { remote: boolean; service: { state: string } | null; blocked: boolean; onBusy: (busy: boolean) => void; onComplete: () => void; children: ReactNode }) {
+export default function SetupWizard({ remote, service, blocked, onBusy, onComplete, onDetection, children }: { remote: boolean; service: { state: string } | null; blocked: boolean; onBusy: (busy: boolean) => void; onComplete: () => void; onDetection: (detection: PreparationDetection) => void; children: ReactNode }) {
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [checking, setChecking] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [checkFailed, setCheckFailed] = useState(false);
+  useEffect(() => { onDetection({ environment, checking, failed: checkFailed }); }, [environment, checking, checkFailed, onDetection]);
   const [submitting, setSubmitting] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [error, setError] = useState("");
@@ -26,12 +29,12 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const callbacks = useRef({ onBusy, onComplete }); callbacks.current = { onBusy, onComplete };
   const command = windows ? "irm https://raw.githubusercontent.com/cosyeezz/axiom2/master/install.ps1 | iex" : "curl -fsSL https://raw.githubusercontent.com/cosyeezz/axiom2/master/install.sh | sh";
   async function check() {
-    const epoch = ++checkEpoch.current; setChecking(true); setError("");
+    const epoch = ++checkEpoch.current; setChecking(true); setCheckFailed(false); setError("");
     try {
       const next = await desktopInvoke<Environment>("axiom_setup", { action: "check" });
       if (!next || typeof next.nodeReady !== "boolean" || typeof next.writable !== "boolean" || typeof next.tailscale !== "boolean") throw Error("环境检测结果不完整，请重新验证。");
       if (alive.current && epoch === checkEpoch.current) setEnvironment(next);
-    } catch (cause) { if (alive.current && epoch === checkEpoch.current) setError(String(cause instanceof Error ? cause.message : cause)); }
+    } catch (cause) { if (alive.current && epoch === checkEpoch.current) { setCheckFailed(true); setError(String(cause instanceof Error ? cause.message : cause)); } }
     finally { if (alive.current && epoch === checkEpoch.current) setChecking(false); }
   }
   async function status() {

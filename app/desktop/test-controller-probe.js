@@ -17,7 +17,11 @@
     const connect = await wait(() => [...details.querySelectorAll(".startup-steps button")].find((item) => item.textContent.includes("连接工作台") && !item.disabled));
     connect.click();
   };
-  const heading = async (text) => wait(() => [...document.querySelectorAll("h2")].some((item) => item.textContent === text && item.getClientRects().length));
+  const heading = async (text) => {
+    const state = { "服务运行中": "running", "服务已停止": "stopped" }[text];
+    check(state, `Unknown service state: ${text}`);
+    return wait(() => [...document.querySelectorAll(`.connection-status-tag[data-state="${state}"]`)].some((item) => item.getClientRects().length));
+  };
   const observation = async (condition) => wait(async () => {
     const value = (await invoke("snapshot")).observation;
     if (value?.error) throw Error(value.error);
