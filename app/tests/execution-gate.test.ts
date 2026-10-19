@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { ExecutionPool } from '../src/server/execution-pool.js';
 import { ExecutionProfiles } from '../src/server/execution-profile.js';
 import { Agents } from '../src/server/agents.js';
@@ -48,7 +49,7 @@ for (const failure of ['configuration', 'snapshot', 'cancel'] as const) {
   });
 }
 
-for (const failure of ['configuration', 'resource', 'snapshot'] as const) {
+for (const failure of ['configuration', 'resource', 'snapshot', 'snapshot-batched'] as const) {
   test(`real affinity binding gate rejects ${failure} before a second provider request`, { timeout: 20000 }, async () => {
     const root=mkdtempSync(join(tmpdir(),'axiom-affinity-gate-')),pi=join(root,'pi'),cwd=join(root,'project');
     mkdirSync(pi);mkdirSync(cwd);
@@ -62,12 +63,30 @@ for (const failure of ['configuration', 'resource', 'snapshot'] as const) {
     const store=new Store(root),agents=new Agents(store,new ModelService(root),()=>{});
     const acquire=agents.pool.acquire.bind(agents.pool);let borrow=0,firstInstance='',injected=false,retired=false;
     agents.pool.onMetric=m=>{if(m.phase==='retiring'&&m.reason==='binding_changed')retired=true;};
+    const terminal: any[]=[];
     agents.pool.acquire=async request=>{
+      if(failure==='snapshot-batched')request={...request,environment:{...request.environment,workerPath:fileURLToPath(new URL('./worker-binding-fixture.ts',import.meta.url))}};
       const lease=await acquire(request);borrow++;
       if(borrow===1)firstInstance=lease.ref.instanceId;
       if(borrow===2){
         assert.equal(lease.ref.instanceId,firstInstance,'second request must use the original session process');
         const child=await lease.ensureReady();
+        child.on('message',(event:any)=>{if(event.type==='done'||event.type==='closed')terminal.push(event);});
+        if(failure==='snapshot-batched'){
+          const send=child.send.bind(child);
+          let batch: any[]=[];
+          let callbacks: ((error: Error | null)=>void)[]=[];
+          child.send=((message:any,...args:any[])=>{
+            if(message.type!=='execution_permit'&&message.type!=='shutdown')return (send as any)(message,...args);
+            if(!batch.length)queueMicrotask(()=>{
+              const messages=batch,done=callbacks;batch=[];callbacks=[];
+              send({type:'fixture-ipc-batch',messages},error=>{for(const callback of done)callback(error);});
+            });
+            batch.push(message);
+            if(typeof args.at(-1)==='function')callbacks.push(args.at(-1));
+            return true;
+          }) as typeof child.send;
+        }
         child.prependListener('message',(event:any)=>{
           if(event.type!=='binding_ready')return;
           injected=true;
@@ -89,6 +108,8 @@ for (const failure of ['configuration', 'resource', 'snapshot'] as const) {
       await agents.command({requestId:randomUUID(),op:'prompt',...scope,params:{text:'Must not infer after changed binding.'}});
       await wait(()=>!agents.active(scope)&&agents.pool.stats().total===0);
       assert.equal(injected,true);assert.equal(retired,true);assert.equal(requests,1);assert.equal(agents.info(scope).run?.status,'failed');
+      assert.deepEqual(terminal.map(event=>event.type),['done','closed'],'failure must be reported once before a single close handshake');
+      assert.equal(terminal[0].reasonCode,'EXECUTION_ERROR');
     }finally{
       await agents.close();store.close();http.closeAllConnections();await new Promise<void>(r=>http.close(()=>r()));
       if(previousDir===undefined)delete process.env.AXIOM_PI_DIR;else process.env.AXIOM_PI_DIR=previousDir;

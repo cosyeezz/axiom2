@@ -221,7 +221,9 @@ export class ExecutionPool {
     const allowed = verified && this.isActive(ref) && i.environment.current(false) && i.environment.snapshotValid();
     try { i.child.send({type:'execution_permit',lease:ref,allowed},error=>{if(error)void this.retireInstance(i,'send_failed');}); }
     catch { void this.retireInstance(i,'send_failed'); return; }
-    if (!allowed) void this.retireInstance(i,'binding_changed');
+    // A denied permit already makes the run fail and close itself. Sending
+    // shutdown as well can cancel it or close IPC before its failure is sent.
+    if (!allowed) void this.retireInstance(i,'binding_changed',false);
   }
   private releaseOwner(i:Instance) {
     const lease=i.lease;if(!lease)return;
@@ -249,14 +251,14 @@ export class ExecutionPool {
     if(force&&i.child)this.kill(i.child);
     return closed;
   }
-  private retireInstance(i:Instance,reason:string):Promise<void> {
+  private retireInstance(i:Instance,reason:string,sendShutdown=true):Promise<void> {
     if(['retiring','exiting','exited'].includes(i.state))return i.closed.promise;
     i.state='retiring';i.validationAbort.abort();clearTimeout(i.idleTimer);this.metric(i,'retiring',{reason});
     i.processReady.reject(Error('工作进程已停止'));i.environmentReady.reject(Error('执行环境已停止'));
     if(!i.child){this.closed(i);return i.closed.promise;}
     const child=i.child;i.state='exiting';
     i.killTimer=setTimeout(()=>this.kill(child),i.environment.entry==='memory'?1500:2000);
-    try {if(child.connected)child.send({type:'shutdown',instance:{instanceId:i.id,generation:i.generation,profileHash:i.environment.profileHash},lease:i.lease?.ref},error=>{if(error)this.kill(child);});else this.kill(child);}catch{this.kill(child);}
+    if(sendShutdown)try {if(child.connected)child.send({type:'shutdown',instance:{instanceId:i.id,generation:i.generation,profileHash:i.environment.profileHash},lease:i.lease?.ref},error=>{if(error)this.kill(child);});else this.kill(child);}catch{this.kill(child);}
     return i.closed.promise;
   }
   private kill(child:ChildProcess) {

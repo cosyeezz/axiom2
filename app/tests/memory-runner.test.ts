@@ -36,6 +36,13 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
   const store = new Store(root), memories = new Memories(store, () => {}), runner = new ColdMemoryRunner(memories, new ModelService(root)); memories.runner = runner;
   const metrics: any[] = [];
   runner.pool.onMetric = event => metrics.push(event);
+  const waitForQueued = async () => {
+    const deadline = Date.now() + 5000;
+    while (runner.pool.stats().queued !== 1) {
+      assert.ok(Date.now() < deadline, "the intended request must enter the bounded queue");
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  };
   try {
     const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
     const create = () => { const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session; return { workspaceId: workspace.id, sessionId: session.id }; };
@@ -75,6 +82,9 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     const one = execute(a, active.signal); const oneDone = assert.rejects(one, /取消|中断|abort/i);
     await started;
     const two = execute(b, waiting.signal); const twoDone = assert.rejects(two, /取消|超时/);
+    // Configuration preparation is asynchronous; observe admission before
+    // submitting overflow so filesystem completion order cannot swap requests.
+    await waitForQueued();
     await assert.rejects(execute(b), { code: "MEMORY_BUSY" });
     waiting.abort(); active.abort(); await Promise.all([oneDone, twoDone]);
     hanging = false; assert.ok((await execute(b)).answer.includes(b.sessionId));
@@ -85,6 +95,7 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     const running = execute(a), runningDone = assert.rejects(running, /取消|超时/);
     await providerStarted;
     const queued = execute(b), queuedDone = assert.rejects(queued, /取消|超时/);
+    await waitForQueued();
     await assert.rejects(runner.stopProviders(["fixture"], false), { code: "ACTIVE_RUNS" });
     const beforeLogout = requests.length;
     await runner.stopProviders(["fixture"], true);

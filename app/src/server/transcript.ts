@@ -189,7 +189,9 @@ export function openTranscript(file: string, cwd: string): SessionManager {
     if (header?.type !== "session" || typeof header.cwd !== "string") throw Error();
     // System aliases such as macOS /var and /private/var can name the same
     // workspace. Distinct spellings must resolve to the same real directory.
-    if (resolve(header.cwd) !== resolve(cwd) && realpathSync(header.cwd) !== realpathSync(cwd)) throw Error();
+    // Native resolution also restores actual Windows casing and short names,
+    // matching workspace registration without folding case-sensitive paths.
+    if (resolve(header.cwd) !== resolve(cwd) && realpathSync.native(header.cwd) !== realpathSync.native(cwd)) throw Error();
     const manager = SessionManager.open(file);
     const current = statSync(file);
     if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");
