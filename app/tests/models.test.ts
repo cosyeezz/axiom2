@@ -21,21 +21,32 @@ test("configuration watchers preserve invalidation when TEMP uses a filesystem a
     const service = new ModelService(root);
     let changes = 0;
     close = service.watchConfiguration(() => { changes++; });
-    const changed = async (expected: number) => {
+    const changed = async (expected: number, message = "configuration watcher must deliver the file change") => {
       const deadline = Date.now() + 5000;
       while (changes < expected) {
-        assert.ok(Date.now() < deadline, "configuration watcher must deliver the file change");
+        assert.ok(Date.now() < deadline, message);
         await delay(10);
       }
     };
-    const models = join(service.dir, "models.json");
+    // macOS starts its FSEvents stream asynchronously after fs.watch returns.
+    // Establish delivery on this watcher before making the one-shot assertions.
+    const auth = join(service.dir, "auth.json"), readyDeadline = Date.now() + 5000;
+    for (let probe = 0; changes === 0; probe++) {
+      assert.ok(Date.now() < readyDeadline, "configuration watcher must become active");
+      writeFileSync(auth, JSON.stringify({ watcherProbe: probe }));
+      await delay(25);
+    }
+    const beforeCleanup = changes;
+    rmSync(auth);
+    await changed(beforeCleanup + 1, "configuration watcher must observe probe removal");
+    const models = join(service.dir, "models.json"), beforeCreate = changes;
     writeFileSync(models, '{"providers":{}}');
-    await changed(1);
+    await changed(beforeCreate + 1);
     const beforeEdit = changes;
     writeFileSync(models, '{ "providers": {} }');
     await changed(beforeEdit + 1);
     const beforeAuth = changes;
-    writeFileSync(join(service.dir, "auth.json"), '{}');
+    writeFileSync(auth, '{}');
     await changed(beforeAuth + 1);
     const beforeDelete = changes;
     rmSync(models);
