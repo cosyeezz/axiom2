@@ -95,6 +95,11 @@ export class WindowsOpenHost {
     let warmed = false;
     const terminate = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
     process.once("exit", terminate);
+    child.once("exit", () => {
+      // Windows can report process exit while inherited output handles remain open.
+      // Stopped hosts have no result left to drain; normal requests still read to EOF.
+      if (child.killed || this.closed) this.closeExitedPipes(child);
+    });
     const done = new Promise<void>((resolve) => child.once("close", () => {
       process.removeListener("exit", terminate);
       this.children.delete(child);
@@ -208,6 +213,13 @@ export class WindowsOpenHost {
     this.directory = undefined;
   }
 
+  private closeExitedPipes(child: ChildProcess) {
+    if (child.exitCode === null && child.signalCode === null) return;
+    child.stdin?.destroy();
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+  }
+
   async close() {
     this.closed = true;
     this.controller.abort();
@@ -215,6 +227,8 @@ export class WindowsOpenHost {
     await this.pending?.catch(() => {});
     for (const child of this.children.keys()) {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      // Also handle a natural exit that preceded shutdown but has not reached EOF.
+      this.closeExitedPipes(child);
     }
     await Promise.all(this.children.values());
     await this.remove();
