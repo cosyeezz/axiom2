@@ -50,9 +50,26 @@ jobs:
       - run: npm ci
       - run: node --test scripts/auto-release.test.mjs
       - run: npm test
+  package:
+    # Windows tests and package checks can exceed 30 minutes together.
+    # Run installation, upgrade, rollback and cleanup with their own bounded job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        node: ['22.19.0', '24']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
       - run: npm run check:package
   publish:
-    needs: validate
+    needs: [validate, package]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'cosyeezz/axiom2'
     runs-on: ubuntu-latest
     timeout-minutes: 30

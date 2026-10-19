@@ -301,7 +301,7 @@ npm audit --omit=dev
 
 设计更新先独立提交，再按 `docs/ui-sync.md` 的设计提交差异移植至 `app/`，不整目录覆盖已接入功能。采用提交在完整设计验收前不提前提升。源码发布到 `https://github.com/cosyeezz/axiom2`，安装包与桌面二进制通过 Releases 分发，不提交到 Git。
 
-根目录 `package.json` 是分发入口，也是 CLI 与后台运行状态报告的版本来源。推送到 `master` 后，`Validate Axiom2` 在 Windows、macOS、Linux × Node.js 22.19.0／24 的六组验证全部成功后自动发布后台；PR、手动运行 CI、失败或取消的验证不发布。发布前与公开前检查源提交仍是远端 `master`，已经过时的提交跳过。仅本地 `git commit` 不会触发，必须 `git push origin master`，并等待工作流的 `publish` 成功，其他端才能通过“检查更新”发现新版。
+根目录 `package.json` 是分发入口，也是 CLI 与后台运行状态报告的版本来源。推送到 `master` 后，`Validate Axiom2` 在 Windows、macOS、Linux × Node.js 22.19.0／24 六组环境分别运行独立的测试任务和安装包验收任务，每个任务限时 30 分钟；两类任务并行执行，各自安装依赖并构建，避免完整测试挤占安装、升级、回滚及清理的预算。十二个任务全部成功后才自动发布后台；PR、手动运行 CI、失败或取消的验证不发布。发布前与公开前检查源提交仍是远端 `master`，已经过时的提交跳过。仅本地 `git commit` 不会触发，必须 `git push origin master`，并等待工作流的 `publish` 成功，其他端才能通过“检查更新”发现新版。
 
 自动发布从源码版本及已有正式格式 tag／Release 的最大版本递增补丁号，同步根包、`npm-shrinkwrap.json`（顶层及根包条目）、`app/package.json`、`app/package-lock.json`（顶层及根包条目）和 `app/desktop/pake.json`。这五个文件的版本变更形成源提交的直接子提交，仅由 `v<版本>` tag 引用，不回写 `master`，不会触发递归发布；因此开发分支上的版本可能落后于已安装版本，实际发布源码以 tag 为准。同一源提交重跑复用已保留的 tag／草稿；已公开版本只重新核验附件与公开下载，不重复发布、改写附件或重设 Latest，允许桌面发布追加校验条目。新 push 取消旧 push 的整条 CI／发布流程，避免旧流水线占据等待中的发布位置；历史重跑使用隔离的并发组，不取消当前 master 的流水线。公开前仍检查源 SHA 与最新正式版本。后台任务只在草稿阶段修改附件，macOS 任务只向正式版本追加附件，并独立串行，因此不会抢占后台发布的等待位置。
 
