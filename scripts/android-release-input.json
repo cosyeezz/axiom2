@@ -1,0 +1,9 @@
+{
+  "repository": "cosyeezz/axiom2",
+  "release_tag": "v0.4.9",
+  "release_commit": "c04888560dd6f0e0cd3d597d62eddfa950602970",
+  "source_commit": "9f559b38b34f68dc785df4fdafaddc3bc71a69d4",
+  "apk_sha256": "c9f8ffb33b80ba88ea9af61ecc4c5c9df3140c4d1bf83965c431f26fe43de480",
+  "backend_sha256": "9174e9d70114a6e3f556e011e2b07e02f1a2661f2360a1301ee5500bace4e5a3",
+  "apk_signer_sha256": "ae00055c6143ea3739613150527aed2f91135daab0ab9c8ef0dd2e74872993a2"
+}

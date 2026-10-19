@@ -1,0 +1,211 @@
+name: Validate unified Android release
+on:
+  push:
+    branches: ['validation/unified-android-*']
+    paths:
+      - .github/workflows/android-client-check.yml
+      - scripts/check-android-release.py
+      - scripts/android-release-input.json
+permissions:
+  contents: read
+concurrency:
+  group: android-release-validation-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AXIOM_RELEASE_TEST_ROOT: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}
+      AXIOM_DATA_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/data
+      AXIOM_PI_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/pi
+      PI_CODING_AGENT_DIR: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/pi
+      npm_config_cache: ${{ runner.temp }}/axiom-android-${{ github.run_id }}-${{ github.run_attempt }}/npm-cache
+      AXIOM_PORT: '4319'
+      NODE_PATH: ''
+      NO_PROXY: 127.0.0.1,localhost
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify source and download exact public packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-runtime "$AXIOM_RELEASE_TEST_ROOT"
+          cp scripts/android-release-input.json artifacts/android-runtime/input.json
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { verifyTag } from './scripts/auto-release.mjs';
+          const input = JSON.parse(readFileSync('scripts/android-release-input.json', 'utf8'));
+          const out = 'artifacts/android-runtime';
+          const save = (name, value) => writeFileSync(`${out}/${name}`, typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value, null, 2) + '\n');
+          const run = (command, args) => execFileSync(command, args, { encoding: 'utf8', timeout: 60000 }).trim();
+          const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+          assert.equal(input.repository, 'cosyeezz/axiom2');
+          assert.equal(input.source_commit, '9f559b38b34f68dc785df4fdafaddc3bc71a69d4', 'Input must match the candidate approved for this validation branch');
+          assert.equal(input.apk_signer_sha256, 'ae00055c6143ea3739613150527aed2f91135daab0ab9c8ef0dd2e74872993a2', 'Preserve the independently recorded original signer');
+          assert.match(input.release_tag, /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/);
+          for (const key of ['release_commit', 'source_commit']) assert.match(input[key], /^[a-f0-9]{40}$/);
+          for (const key of ['apk_sha256', 'backend_sha256', 'apk_signer_sha256']) assert.match(input[key], /^[a-f0-9]{64}$/);
+          verifyTag(input.release_tag, input.source_commit);
+          assert.equal(run('git', ['rev-parse', `${input.release_tag}^{commit}`]), input.release_commit);
+          const readRelease = () => JSON.parse(run('gh', ['api', `repos/${input.repository}/releases/tags/${input.release_tag}`]));
+          const release = readRelease();
+          save('release-before.json', release);
+          assert.equal(release.tag_name, input.release_tag);
+          assert.equal(release.draft, false);
+          assert.equal(release.prerelease, false);
+          assert.ok(release.body.split(/\r?\n/).includes(`Axiom-Source-Commit: ${input.source_commit}`));
+          const downloaded = {};
+          const identities = [];
+          for (const name of ['axiom2.tgz', 'Axiom2-Android.apk', 'SHA256SUMS']) {
+            const matches = release.assets.filter(asset => asset.name === name);
+            assert.equal(matches.length, 1, name);
+            const asset = matches[0];
+            const url = `https://github.com/${input.repository}/releases/download/${input.release_tag}/${name}`;
+            assert.equal(asset.state, 'uploaded');
+            assert.equal(asset.browser_download_url, url);
+            assert.match(asset.digest, /^sha256:[a-f0-9]{64}$/);
+            assert.ok(Number.isSafeInteger(asset.size) && asset.size > 0 && asset.size < 128 * 1024 * 1024);
+            // Public downloads intentionally contain no Authorization header.
+            const response = await fetch(url, { signal: AbortSignal.timeout(60000) });
+            assert.equal(response.status, 200, name);
+            const chunks = []; let size = 0;
+            for await (const chunk of response.body) {
+              size += chunk.length;
+              assert.ok(size <= asset.size, `${name}: oversized response`);
+              chunks.push(chunk);
+            }
+            const bytes = Buffer.concat(chunks);
+            assert.equal(bytes.length, asset.size);
+            assert.equal(`sha256:${hash(bytes)}`, asset.digest);
+            downloaded[name] = bytes;
+            save(name, bytes);
+            identities.push({ name, id: asset.id, size: asset.size, digest: asset.digest });
+          }
+          assert.equal(hash(downloaded['axiom2.tgz']), input.backend_sha256);
+          assert.equal(hash(downloaded['Axiom2-Android.apk']), input.apk_sha256);
+          const lines = downloaded.SHA256SUMS.toString('utf8').trim().split(/\r?\n/);
+          for (const [name, expected] of [['axiom2.tgz', input.backend_sha256], ['Axiom2-Android.apk', input.apk_sha256]]) {
+            const matching = lines.filter(line => line.slice(66) === name);
+            assert.deepEqual(matching, [`${expected}  ${name}`], `Missing, duplicate or wrong checksum: ${name}`);
+          }
+          const after = readRelease();
+          assert.equal(after.id, release.id);
+          assert.equal(after.draft, false);
+          assert.equal(after.prerelease, false);
+          for (const identity of identities) {
+            const matches = after.assets.filter(asset => asset.name === identity.name);
+            assert.equal(matches.length, 1);
+            const asset = matches[0];
+            assert.deepEqual({ name: asset.name, id: asset.id, size: asset.size, digest: asset.digest }, identity);
+          }
+          save('release-after.json', after);
+          const toolsRoot = `${process.env.ANDROID_HOME}/build-tools`;
+          const signer = readdirSync(toolsRoot).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).map(version => `${toolsRoot}/${version}/apksigner`).find(existsSync);
+          assert.ok(signer, 'Android apksigner unavailable');
+          const signature = run(signer, ['verify', '--verbose', '--print-certs', `${out}/Axiom2-Android.apk`]);
+          save('apksigner.txt', signature + '\n');
+          save('apksigner-version.txt', run(signer, ['version']) + '\n');
+          const signers = [...signature.matchAll(/^Signer #\d+ certificate SHA-256 digest: ([a-f0-9]{64})$/gm)];
+          assert.deepEqual(signers.map(match => match[1]), [input.apk_signer_sha256]);
+          assert.match(signature, /^Verified using v2 scheme .*: true$/m);
+          assert.match(signature, /^Verified using v3 scheme .*: true$/m);
+          for (const path of ['package/package.json', 'package/app/package.json']) {
+            const metadata = JSON.parse(run('tar', ['-xOf', `${out}/axiom2.tgz`, path]));
+            assert.equal(metadata.version, input.release_tag.slice(1));
+          }
+          save('download-verification.json', { success: true, input, assets: identities, verifiedAt: new Date().toISOString() });
+          NODE
+      - name: Install exact released backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$AXIOM_RELEASE_TEST_ROOT/install" --ignore-scripts --no-audit --no-fund "$GITHUB_WORKSPACE/artifacts/android-runtime/axiom2.tgz"
+      - name: Start isolated released backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createServer } from 'node:net';
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync, readFileSync } from 'node:fs';
+          const root = process.env.AXIOM_RELEASE_TEST_ROOT;
+          const cli = `${root}/install/node_modules/@cosyeezz/axiom2/bin/axiom2.mjs`;
+          const command = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', timeout: 60000 });
+          for (const port of [4319, 4320]) {
+            await new Promise((resolve, reject) => {
+              const server = createServer();
+              server.once('error', reject);
+              server.listen(port, '127.0.0.1', () => server.close(error => error ? reject(error) : resolve()));
+            });
+          }
+          const input = JSON.parse(readFileSync('scripts/android-release-input.json', 'utf8'));
+          assert.equal(command('--version').trim(), input.release_tag.slice(1));
+          assert.equal(JSON.parse(command('status', '--json')).state, 'stopped');
+          writeFileSync('artifacts/android-runtime/backend-start.json', command('start', '--json'));
+          const status = JSON.parse(command('status', '--json'));
+          assert.equal(status.state, 'running');
+          assert.equal(status.version, input.release_tag.slice(1));
+          assert.equal(status.url.replace(/\/$/, ''), 'http://127.0.0.1:4319');
+          writeFileSync('artifacts/android-runtime/backend-start-status.json', JSON.stringify(status, null, 2));
+          NODE
+      - name: Enable hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and exercise signed APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 scripts/check-android-release.py artifacts/android-runtime/Axiom2-Android.apk artifacts/android-runtime scripts/android-release-input.json
+      - name: Stop isolated backend and confirm cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-runtime
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { existsSync, writeFileSync, copyFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const root = process.env.AXIOM_RELEASE_TEST_ROOT;
+          const cli = `${root}/install/node_modules/@cosyeezz/axiom2/bin/axiom2.mjs`;
+          if (existsSync(cli)) {
+            try {
+              const run = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', timeout: 60000 });
+              writeFileSync('artifacts/android-runtime/backend-stop.json', run('stop', '--json'));
+              const status = JSON.parse(run('status', '--json'));
+              writeFileSync('artifacts/android-runtime/backend-stopped-status.json', JSON.stringify(status, null, 2));
+              assert.equal(status.state, 'stopped');
+            } finally {
+              const log = `${process.env.AXIOM_DATA_DIR}/service.log`;
+              if (existsSync(log)) copyFileSync(log, 'artifacts/android-runtime/backend-service.log');
+            }
+          }
+          NODE
+      - name: Preserve runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-Android-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/android-runtime/
+          if-no-files-found: error
+          retention-days: 30
