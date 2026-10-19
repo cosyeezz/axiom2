@@ -61,8 +61,10 @@ def address(value):
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 
 def screenshot(name):
-    (out / (name + '.png')).write_bytes(adb('exec-out', 'screencap', '-p', binary=True))
+    png = adb('exec-out', 'screencap', '-p', binary=True)
+    (out / (name + '.png')).write_bytes(png)
     (out / (name + '.xml')).write_text(ET.tostring(tree(), encoding='unicode'), encoding='utf-8')
+    return int.from_bytes(png[16:20], 'big'), int.from_bytes(png[20:24], 'big')
 
 def ready(root):
     web = node(root, cls='android.webkit.WebView')
@@ -95,13 +97,15 @@ try:
     address('127.0.0.1:4319')
     click('连接工作台')
     wait(ready, 'real released backend HTTP and WebSocket ready', seconds=80)
-    screenshot('03-workbench-portrait')
+    width, height = screenshot('03-workbench-portrait')
+    assert height > width, (width, height)
     checks.append('released-0.4.7-backend-http-websocket-ready')
     adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
     adb('shell', 'settings', 'put', 'system', 'user_rotation', '1')
     time.sleep(2)
     wait(ready, 'landscape workbench')
-    screenshot('04-workbench-landscape')
+    width, height = screenshot('04-workbench-landscape')
+    assert width > height, (width, height)
     checks.append('landscape-workbench-survives')
     adb('shell', 'settings', 'put', 'system', 'user_rotation', '0')
     time.sleep(2)
@@ -112,7 +116,8 @@ try:
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     click('切换连接')
     saved = wait(lambda root: node(root, cls='android.widget.AutoCompleteTextView'), 'switch connection')
-    assert saved.get('text') == 'http://127.0.0.1:4319', saved.attrib
+    # Switching keeps the current input; normalized history is loaded on restart.
+    assert saved.get('text') == '127.0.0.1:4319', saved.attrib
     screenshot('05-switch-connection')
     checks.append('native-back-and-switch-connection')
     adb('shell', 'am', 'force-stop', package)
