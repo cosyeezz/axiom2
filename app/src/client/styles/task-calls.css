@@ -6,8 +6,8 @@
 .task-operation > details > summary:focus-visible { outline-offset: -3px; }
 .task-operation-icon { width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; color: var(--tool-color); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--tool-color) 9%, transparent); }
 .task-operation-icon svg { width: 18px; height: 18px; }
-.task-operation-heading { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
-.task-operation-heading strong { font-size: 12px; font-weight: 510; flex-shrink: 0; white-space: nowrap; }
+.task-operation-heading { display: grid; grid-template-rows: repeat(2, var(--thread-line-height, 24px)); gap: 0; flex: 1; min-width: 0; }
+.task-operation-heading strong { font-size: 12px; font-weight: 510; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .task-operation-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
 .task-operation-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
 :is(.task-operation, .delegation-card)[data-status=failed] { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }

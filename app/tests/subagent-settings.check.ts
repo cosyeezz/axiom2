@@ -220,7 +220,6 @@ try {
   views.messageChanged(scope, { id: "settings-child-message", role: "assistant", text: "子会话设置验证", calls: [{ id: "settings-child", name: "delegate", input: "{}" }] });
   views.flush(scope);
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));
-  await page.locator(".tool-activity > summary").click();
   await page.getByRole("button", { name: "打开子会话：设置面板子会话", exact: true }).click();
   const child = page.getByRole("dialog", { name: "子代理会话", exact: true });
   const childSub = child.getByRole("button", { name: "子代理设置", exact: true });

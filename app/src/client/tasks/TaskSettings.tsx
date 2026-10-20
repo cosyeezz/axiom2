@@ -16,7 +16,7 @@ export function TaskSettings() {
       data-od-id="subagent-settings-trigger" aria-label="子代理设置" data-tooltip="子代理设置"
       aria-haspopup="dialog" aria-expanded={open} aria-controls={id} popoverTarget={id}
       onClick={(e) => { e.preventDefault(); setOpen((value) => !value); }}>
-      <Icon name="network" />
+      <Icon name="subagent-settings" />
     </button>
     {open && <SettingsDialog id={id} trigger={trigger.current!} onClose={() => setOpen(false)} />}
   </>;

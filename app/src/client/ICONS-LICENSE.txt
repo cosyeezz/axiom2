@@ -18,10 +18,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-Subagent identity and append: Lucide bot (A04) and mail-plus (P38), original paths in icons.svg (ISC notice below).
+Subagent settings entry: user-selected Lucide git-branch (A01), original geometry in icons.svg; ISC notice below.
+Source: https://icon-sets.iconify.design/lucide/git-branch/
+Subagent identity: Lucide bot (A04), original path in icons.svg (ISC notice below).
+Subagent append: Tabler message-plus (P02), original path in icons.svg (MIT notice below).
 Subagent running and cancelled/abnormal states: Tabler loader (I12, CSS rotation) and alert-triangle (F02), original paths in icons.svg (MIT notice below).
 Subagent completion and result reading: Iconoir badge-check (C27) and eye (O24), original paths in icons.svg (MIT notice below).
-Sources: https://icon-sets.iconify.design/lucide/bot/ https://icon-sets.iconify.design/lucide/mail-plus/ https://icon-sets.iconify.design/tabler/loader/ https://icon-sets.iconify.design/tabler/alert-triangle/ https://icon-sets.iconify.design/iconoir/badge-check/ https://icon-sets.iconify.design/iconoir/eye/
+Sources: https://icon-sets.iconify.design/lucide/bot/ https://icon-sets.iconify.design/tabler/message-plus/ https://icon-sets.iconify.design/tabler/loader/ https://icon-sets.iconify.design/tabler/alert-triangle/ https://icon-sets.iconify.design/iconoir/badge-check/ https://icon-sets.iconify.design/iconoir/eye/
 Open subagent window: user-selected Lucide square-arrow-out-up-right (W14), original path in icons.svg; ISC notice below.
 Source: https://icon-sets.iconify.design/lucide/square-arrow-out-up-right/
 Iconoir license: MIT, https://github.com/iconoir-icons/iconoir/blob/main/LICENSE
