@@ -60,7 +60,7 @@ test(
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
       if (!body.tools?.length) summaries.push(res);
-      else reply(res, "真实会话回复");
+      else reply(res, "<title>压缩测试</title>\n真实会话回复");
     });
     await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
     writeFileSync(
@@ -130,11 +130,13 @@ test(
         app.agents.command({ op, params, ...target, requestId: randomUUID() });
       const idle = (target = scope) =>
         wait(() => !app.agents.active(target), "agent did not settle");
-      const settled = () =>
+      const settled = (onPoll = () => {}) =>
         wait(
-          () =>
-            app.agents.compressions.info(scope)?.state !== "running" &&
-            !readdirSync(join(root, "compression-snapshots")).length,
+          () => {
+            onPoll();
+            return app.agents.compressions.info(scope)?.state !== "running" &&
+              !readdirSync(join(root, "compression-snapshots")).length;
+          },
           "compression did not settle",
         );
       await assert.rejects(call("compression.start"), {
@@ -236,11 +238,18 @@ test(
       assert.ok(requests.filter((r) => r.tools?.length).every((r) => r.model === "fixture"));
       assert.match(JSON.stringify(summaryRequest), /第一条已保存请求/);
       assert.doesNotMatch(JSON.stringify(summaryRequest), /快照之后的新消息/);
-      reply(
-        summaries[0],
-        "## Goal\n真实 pi 快照摘要 <script>不可执行</script>",
-      );
-      await settled();
+      // Native compaction can summarize history and a split turn separately.
+      // Release every request from this frozen snapshot before checking completion.
+      await settled(() => {
+        for (const response of summaries) {
+          if (!response.writableEnded) reply(response, "## Goal\n真实 pi 快照摘要 <script>不可执行</script>");
+        }
+      });
+      const initialSummaryCount = summaries.length;
+      for (const request of requests.filter((r) => !r.tools?.length)) {
+        assert.equal(request.model, "summarizer");
+        assert.doesNotMatch(JSON.stringify(request), /快照之后的新消息/);
+      }
       assert.equal(app.agents.compressions.info(scope)!.state, "completed");
       assert.match(
         app.agents.compressions.info(scope)!.summary,
@@ -292,7 +301,7 @@ test(
       );
       assert.equal(
         summaries.length,
-        1,
+        initialSummaryCount,
         "restore and duplicate requests do not call model again",
       );
 
@@ -320,7 +329,7 @@ test(
         'import { writeFileSync } from "node:fs"; export default () => writeFileSync("unwanted.txt", "ran");',
       );
       await call("compression.start");
-      await wait(() => summaries.length === 2, "cancel target did not start");
+      await wait(() => summaries.length === initialSummaryCount + 1, "cancel target did not start");
       assert.notEqual(app.agents.compressions.info(scope)!.id, completed!.id, "completed job can be started again");
       assert.deepEqual(app.agents.compressions.info(scope)!.selection, summarySelection, "start uses saved global selection");
       assert.equal(requests.filter((r) => !r.tools?.length).at(-1).model, "summarizer");
@@ -334,7 +343,7 @@ test(
       assert.equal(readFileSync(file, "utf8"), beforeCancelled, "cancel cannot apply a compaction");
       await app.agents.compressions.command({ op: "compression.preferences.save", requestId: randomUUID(), params: { selection: null } });
       await call("compression.start");
-      await wait(() => summaries.length === 3, "stop target did not start");
+      await wait(() => summaries.length === initialSummaryCount + 2, "stop target did not start");
       assert.notEqual(app.agents.compressions.info(scope)!.id, cancelId, "cancelled job can be started again");
       assert.deepEqual(app.agents.compressions.info(scope)!.selection, mainSelection, "cleared preference falls back to the chat model");
       assert.equal(requests.filter((r) => !r.tools?.length).at(-1).model, "fixture");
@@ -359,11 +368,11 @@ test(
       release();
       await lock;
       await rejected;
-      assert.equal(summaries.length, 3);
+      assert.equal(summaries.length, initialSummaryCount + 2);
 
       await call("compression.start");
       await wait(
-        () => summaries.length === 4,
+        () => summaries.length === initialSummaryCount + 3,
         "revocation target did not start",
       );
       const draft = await app.agents.models.read();
@@ -399,7 +408,7 @@ test(
       await app.close();
       app = await start({ root, port: 0 });
       assert.equal(app.agents.compressions.info(scope)!.state, "interrupted");
-      assert.equal(summaries.length, 4);
+      assert.equal(summaries.length, initialSummaryCount + 3);
       const compressionHistory = app.store.db.prepare("SELECT id,body FROM compressions WHERE sessionId=? ORDER BY id").all(scope.sessionId);
       await app.tasks.remove({
         op: "session.delete",
@@ -412,7 +421,7 @@ test(
       assert.throws(() => app.store.session(scope.workspaceId, scope.sessionId), { code: "SCOPE_MISMATCH" });
       await assert.rejects(app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope,
         params: { text: "must not start a deleted session" } }), { code: "SCOPE_MISMATCH" });
-      assert.equal(summaries.length, 4, "deleted sessions cannot restart model work");
+      assert.equal(summaries.length, initialSummaryCount + 3, "deleted sessions cannot restart model work");
     } finally {
       await app.close();
       fixture.closeAllConnections();

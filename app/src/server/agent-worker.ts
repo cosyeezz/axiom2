@@ -900,9 +900,10 @@ async function run(input: WorkerInput) {
     handledTaskTransition = taskPhase.revision;
     let phaseMessageStart = 0;
     if (!cancelled) {
-      // Append, never remove or relocate, title protocol messages. Pending runs
-      // retry once at their start; tool turns reuse the persisted instruction.
-      const titleMessage = wantsTitle && !titleSettled
+      // Append, never remove or relocate, title protocol messages. A manual
+      // retry reuses the original instruction and leaves the failed response at
+      // the tail so resumeSession can exclude it before requesting continuation.
+      const titleMessage = input.resume ? undefined : wantsTitle && !titleSettled
         ? { customType: "axiom-title", content: TITLE_INSTRUCTION, display: false }
         : titleSettlementMessage(session.messages);
       if (titleMessage) await session.sendCustomMessage(titleMessage, { triggerTurn: false });
