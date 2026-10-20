@@ -4,15 +4,13 @@
 .task-operation > details > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; list-style: none; }
 .task-operation summary::-webkit-details-marker { display: none; }
 .task-operation > details > summary:focus-visible { outline-offset: -3px; }
-.task-operation-icon { width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; color: var(--tool-color); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--tool-color) 9%, transparent); }
+.task-operation-icon { position: relative; width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; color: var(--muted); border-radius: var(--radius-sm); background: color-mix(in srgb, currentColor 9%, transparent); }
 .task-operation-icon svg { width: 18px; height: 18px; }
-.task-operation-heading { display: grid; grid-template-rows: repeat(2, var(--thread-line-height, 24px)); gap: 0; flex: 1; min-width: 0; }
+.task-operation-heading { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; gap: 0; flex: 1; min-width: 0; }
+.task-operation-heading > * { min-width: 0; max-height: var(--thread-line-height, 24px); }
 .task-operation-heading strong { font-size: 12px; font-weight: 510; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .task-operation-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
 .task-operation-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
-:is(.task-operation, .delegation-card)[data-status=failed] { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
-:is(.task-operation, .delegation-card)[data-status=failed] .task-operation-status { color: color-mix(in srgb, var(--danger) 65%, var(--fg)); }
-:is(.task-operation, .delegation-card)[data-status=cancelled] .task-operation-status { color: color-mix(in srgb, var(--warn) 65%, var(--fg)); }
 .task-running-icon { animation: task-icon-spin 1.4s linear infinite; transform-origin: center; }
 @keyframes task-icon-spin { to { transform: rotate(360deg); } }
 .task-call-error { margin: 0; padding: 8px 12px; color: color-mix(in srgb, var(--danger) 65%, var(--fg)); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
@@ -33,25 +31,28 @@
 .delegation-card .subagents-head { min-height: 36px; padding: 4px 10px; gap: 6px; flex-wrap: nowrap; border-bottom: 0; }
 .delegation-card .subagents-head > .subagent-identity-icon { width: 18px; height: 18px; flex-shrink: 0; }
 .delegation-card .subagent { grid-template-columns: 18px minmax(0, 1fr) 16px; min-height: 0; gap: 8px; padding: 6px 10px; }
-.delegation-card .agent-identity { gap: 0; height: calc(2 * var(--thread-line-height, 24px)); align-content: center; }
+.delegation-card .agent-identity { grid-template-columns: minmax(0, 1fr); gap: 0; height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; align-content: center; }
 .delegation-card .agent-identity:has(.task-call-error) strong { -webkit-line-clamp: 1; }
 .delegation-card .agent-identity .task-call-error { padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--thread-line-height, 24px); }
 .delegation-card .subagent .agent-state { display: inline-flex; grid-column: 1; grid-row: 1; }
 .delegation-card .subagent .agent-state svg { width: 18px; height: 18px; padding: 0; border-radius: 0; background: none; }
 .delegation-card .subagent .agent-open { grid-column: 3; }
-.delegation-pending { padding: 8px 12px; color: var(--fg-2); font-size: 13px; }
-.delegation-pending p { margin: 0; min-height: calc(2 * var(--thread-line-height, 24px)); }
-.delegation-card .agent-identity strong, .delegation-pending p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.delegation-pending p + p { border-top: 1px solid var(--border-soft); padding-top: 8px; margin-top: 8px; }
-.delegation-feedback > .task-call-meta { padding: 8px 12px; margin: 0; }
+.delegation-pending { padding: 6px 10px; color: var(--fg-2); font-size: 13px; }
+.delegation-pending-item { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; }
+.delegation-pending-item p { margin: 0; grid-row: 1 / -1; }
+.delegation-card .agent-identity strong, .delegation-pending-item p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.delegation-pending-item:has(> span) p { grid-row: 1; -webkit-line-clamp: 1; }
+.delegation-pending-item > span { min-width: 0; padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--thread-line-height, 24px); }
+.delegation-pending-item + .delegation-pending-item { margin-top: 12px; }
 .log-row:has(.task-operation, .delegation-card):not(:has(.message-body .markdown, .message-images)) { padding-block: 0 2px; border-top: 0; }
-.task-operation[data-status="failed"] > details > summary,
-.task-operation[data-status="failed"] > details > summary *,
-.task-operation[data-status="failed"] > details > summary .task-operation-status,
-.delegation-card[data-status="failed"] > .subagents-head,
-.delegation-card[data-status="failed"] > .subagents-head *,
-.subagent-card > .subagent[data-status="failed"],
-.subagent-card > .subagent[data-status="failed"] * { color: var(--danger-text); --tool-color: var(--danger-icon); }
+/* Status belongs to the left icon; titles and card surfaces stay neutral. */
+.delegation-card .subagent { color: var(--fg-2); }
+.delegation-card .subagent .agent-state,
+.delegation-card .subagents-head > .subagent-identity-icon { color: var(--muted); }
+.task-operation:is([data-status="failed"], [data-status="cancelled"]) > details > summary .task-operation-icon,
+.delegation-card:is([data-status="failed"], [data-status="cancelled"]) .subagent-identity-icon,
+.delegation-card .subagent .agent-state:is([data-state="failed"], [data-state="stopped"]) { color: var(--danger-icon); }
+.task-operation-error, .delegation-card .task-call-error { color: var(--danger-text); }
 @media (max-width: 640px) {
   .task-operation > details > summary { gap: 8px; padding-inline: 10px; }
   .task-call-detail { padding: 10px; }

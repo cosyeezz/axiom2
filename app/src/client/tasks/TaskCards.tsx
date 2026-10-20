@@ -52,18 +52,18 @@ export const TaskCards = memo(function TaskCards({
   const cancelled = tasks.filter(t => t.status === "cancelled").length;
   const batchLabel = `${completed} / ${tasks.length} 已完成${failed ? ` · ${failed} 失败或中断` : ""}${cancelled ? ` · ${cancelled} 已停止` : ""} · 本次委派成员的最新执行状态`;
   const showFeedback = status === "failed" || status === "cancelled" || !tasks.length;
+  const feedback = status === "failed" ? `委派失败 · ${toolPreview(result)}` : status === "completed" && !tasks.length ? "委派已受理，等待任务记录同步" : status === "cancelled" ? label : "";
   return (
     <section className="subagents delegation-card" data-tool="delegate" data-status={showFeedback ? status : "completed"} aria-label="子代理协作">
       <header className="subagents-head">
         <Icon name="subagent-identity" className="subagent-identity-icon" role="img" aria-hidden={undefined} aria-label={tasks.length ? `子 Agent · ${batchLabel}` : label} data-tooltip={tasks.length ? batchLabel : label} />
         <strong>子代理协作</strong>
       </header>
-      {showFeedback && <div className="delegation-feedback">
-        {status === "failed" ? <p className="task-call-error" role="alert">委派失败 · {toolPreview(result)}</p> : tasks.length > 0 ? <p className="task-call-meta">{label}</p> : null}
-        {!tasks.length && <div className="delegation-pending">
-          {(definitions.length ? definitions : ["准备子任务"]).map((description, index) => <p key={index} data-tooltip={description}>{description}</p>)}
-          {status === "completed" && <span className="task-call-meta">委派已受理，等待任务记录同步</span>}
-        </div>}
+      {showFeedback && <div className="delegation-pending">
+        {(tasks.length ? ["委派回执"] : definitions.length ? definitions : ["准备子任务"]).map((description, index) => <div className="delegation-pending-item" key={index} data-tooltip={feedback ? `${description} · ${feedback}` : description}>
+          <p>{description}</p>
+          {feedback && <span className={status === "failed" ? "task-call-error" : "task-call-meta"} role={status === "failed" ? "alert" : "status"}>{feedback}</span>}
+        </div>)}
       </div>}
       {tasks.map((t) => (
         <div className="subagent-card" key={t.id} data-task-id={t.id} data-result-ids={JSON.stringify(t.results.map((result) => result.id))}>

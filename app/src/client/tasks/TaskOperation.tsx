@@ -34,15 +34,14 @@ export const TaskOperation = memo(function TaskOperation({ scope, call, message,
   return <section className="task-operation" data-tool={name} data-status={status} aria-label={title}>
     <details open={groupOpen && open}>
       <summary data-tooltip={label} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}>
-        <span className="task-operation-icon" aria-hidden="true"><Icon name={name === "read_result" ? "tool-result" : name === "append" ? "tool-append" : "tool-cancel"} /></span>
+        <span className="task-operation-icon"><Icon name={name === "read_result" ? "tool-result" : name === "append" ? "tool-append" : "tool-cancel"} /><span className="task-operation-status" role="status">{label}</span></span>
         <span className="task-operation-heading" data-tooltip={task?.description}><strong>{title}</strong><span className={`task-operation-target${error ? " task-operation-error" : ""}`} role={error ? "alert" : undefined} data-tooltip={preview}>{compactText(preview, 180)}</span></span>
-        <span className="task-operation-status" role="status">{label}</span>
       </summary>
       {groupOpen && open && <>
+        {error && <p className="task-call-error">{error}</p>}
         <TaskCallDetails scope={scope} call={call} result={result} message={message} />
         {task && <button type="button" className="task-open-link" aria-haspopup="dialog" onClick={() => openTask(task.id)}>打开子会话<Icon name="subagent-open" /></button>}
       </>}
     </details>
-    {error && open && <p className="task-call-error">{error}</p>}
   </section>;
 });
