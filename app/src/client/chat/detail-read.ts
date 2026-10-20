@@ -3,9 +3,6 @@ import type { Scope } from "../../shared/protocol.js";
 
 type Entry = { promise: Promise<unknown>; controller: AbortController; users: number; ready: boolean; chars: number; expires: number };
 const entries = new Map<string, Entry>();
-export function forgetDetailReads(prefix: string) {
-  for (const key of entries.keys()) if (key.startsWith(prefix)) entries.delete(key);
-}
 function prune() {
   for (const [key, entry] of entries) if (entry.ready && entry.expires < Date.now()) entries.delete(key);
   let chars = [...entries.values()].reduce((sum, entry) => sum + entry.chars, 0);

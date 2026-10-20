@@ -17,6 +17,14 @@ const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_B
 async function settled(page: Page) {
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
+async function readHistory(page: Page, top: number) {
+  const thread = page.locator("#thread");
+  const box = (await thread.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, top - await thread.evaluate(el => el.scrollTop));
+  await page.waitForFunction(top => Math.abs(document.querySelector("#thread")!.scrollTop - top) < 2, top);
+  await settled(page);
+}
 async function atBottom(page: Page, label: string) {
   await settled(page);
   await page.waitForFunction(() => {
@@ -46,14 +54,14 @@ try {
   await page.getByText(`${sessions[0].title} 消息 99`, { exact: false }).waitFor();
   await atBottom(page, "initial history");
   for (const target of [sessions[1], sessions[0], sessions[1]]) {
-    await page.locator("#thread").evaluate(el => { el.scrollTop = 0; });
+    await readHistory(page, 0);
     await settled(page);
     await page.locator(`.history-row[data-session-id="${target.scope.sessionId}"] .history-item`).click();
     await page.getByText(`${target.title} 消息 99`, { exact: false }).waitFor();
     await atBottom(page, `switch to ${target.title}`);
   }
   // Reading history must stop following later output.
-  await page.locator("#thread").evaluate(el => { el.scrollTop = 200; });
+  await readHistory(page, 200);
   await settled(page);
   const before = await page.locator("#thread").evaluate(el => el.scrollTop);
   views.messageChanged(sessions[1].scope, { id: "new-output", role: "assistant", text: "新增流式消息\n\n".repeat(40) });
@@ -85,6 +93,45 @@ try {
   await page.evaluate(() => getSelection()!.removeAllRanges());
   await page.getByRole("button", { name: "回到最下", exact: true }).click();
   await atBottom(page, "resume following after selection");
+  // Sending while reading history must resume following, including queued steering.
+  // Use the same scoped optimistic store as useSubmission, without starting a model.
+  for (const queued of [true, false]) {
+    await readHistory(page, 200);
+    await settled(page);
+    const id = `sent-${queued}`;
+    await page.evaluate(async ({ scope, id, queued }) => {
+      const modulePath = "/chat/optimistic.ts";
+      (await import(/* @vite-ignore */ modulePath)).optimisticStart(scope, id, { text: `本次输入 ${id}`, attachment: null }, queued);
+    }, { scope: sessions[0].scope, id, queued });
+    await atBottom(page, queued ? "queued steering submission" : "idle submission");
+    const delivered = { id: `delivered-${id}`, role: "user" as const, text: `本次输入 ${id}`, inputIds: [id] };
+    views.messageChanged(sessions[0].scope, delivered); views.flush(sessions[0].scope);
+    await page.locator("#thread .user-text").filter({ hasText: delivered.text }).waitFor();
+    await atBottom(page, "optimistic input reconciles with formal message");
+    views.messageChanged(sessions[0].scope, { id: `reply-${id}`, role: "assistant", text: "发送后的流式输出\n\n".repeat(40) });
+    views.flush(sessions[0].scope);
+    await page.locator("#thread .markdown").filter({ hasText: "发送后的流式输出" }).last().waitFor();
+    await atBottom(page, "streaming after submission");
+  }
+  // Removing the newest pending input must not treat an older pending item as a new send.
+  await page.evaluate(async scope => {
+    const modulePath = "/chat/optimistic.ts";
+    const { optimisticStart } = await import(/* @vite-ignore */ modulePath);
+    optimisticStart(scope, "older-pending", { text: "较早的待执行输入", attachment: null }, true);
+    optimisticStart(scope, "newer-pending", { text: "最新待执行输入", attachment: null }, true);
+  }, sessions[0].scope);
+  await atBottom(page, "multiple pending inputs");
+  await readHistory(page, 200);
+  await settled(page);
+  const pendingRemovalTop = await page.locator("#thread").evaluate(el => el.scrollTop);
+  await page.evaluate(async scope => {
+    const modulePath = "/chat/optimistic.ts";
+    (await import(/* @vite-ignore */ modulePath)).optimisticRemove(scope, "newer-pending");
+  }, sessions[0].scope);
+  await settled(page);
+  assert.equal(await page.locator("#thread").evaluate(el => el.scrollTop), pendingRemovalTop, "removing a pending item preserves manual reading");
+  await page.getByRole("button", { name: "回到最下", exact: true }).click();
+  await atBottom(page, "resume after pending removal");
   // Content can grow (e.g. a late message/image) before the previous scroll event is delivered.
   // Dispatch that event before ResizeObserver to make this ordering deterministic.
   await page.locator("#thread").evaluate(el => {
@@ -93,13 +140,26 @@ try {
     el.dispatchEvent(new Event("scroll"));
   });
   await atBottom(page, "late layout before an earlier scroll event");
+  // A short-lived tail can disappear during input reconciliation before new output grows it.
+  // The browser clamps scrollTop during the shrink; its queued scroll event arrives after growth.
+  await page.locator("#thread").evaluate(el => {
+    const content = el.querySelector<HTMLElement>(".thread-content")!;
+    const originalHeight = content.getBoundingClientRect().height;
+    content.style.height = `${originalHeight - 900}px`;
+    content.style.overflow = "hidden";
+    void el.scrollTop; // Force the browser's automatic clamp, without any user scroll.
+    content.style.height = "";
+    content.style.overflow = "";
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await atBottom(page, "tail shrink and regrowth before its scroll event");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator("#toggle-history").click();
   await page.locator(`.history-row[data-session-id="${sessions[1].scope.sessionId}"] .history-item`).click();
   await page.getByText(`${sessions[1].title} 消息 99`, { exact: false }).waitFor();
   await atBottom(page, "mobile session switch");
   assert.deepEqual(errors, []);
-  console.log("PASS: initial history, cold/warm and mobile session switches, late-layout scroll race, manual history reading, scoped selection protection");
+  console.log("PASS: initial history, cold/warm and mobile session switches, late-layout scroll race, manual history reading, scoped selection protection, idle/queued submission, reconciliation, post-send streaming, pending removal");
 } finally {
   await browser.close(); await app.close();
   if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi;

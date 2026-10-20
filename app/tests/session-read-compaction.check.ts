@@ -84,6 +84,8 @@ try {
   assert.deepEqual(transcriptMessages(manager).filter(m => m.taskNotice).map(m => m.resultId), ["retained"], "agent context stays compacted");
 
   await otherRow.locator("button.history-item").click();
+  // Pointer navigation waits for double-click rename arbitration.
+  await otherRow.locator("button.history-item[aria-current=true]").waitFor();
   assert.equal(await targetRow.locator(".session-state.unread").count(), 0, "switching away cannot resurrect the dot");
   await page.reload();
   await otherRow.locator("button.history-item[aria-current=true]").waitFor();
@@ -104,6 +106,7 @@ try {
   assert.equal(await page.locator('[data-result-id="late"]').count(), 1);
   assert.equal(await page.locator('[data-result-id="archived-one"]').count(), 0, "cache rebuild does not restore acknowledged history");
   await otherRow.locator("button.history-item").click();
+  await otherRow.locator("button.history-item[aria-current=true]").waitFor();
   assert.equal(await targetRow.locator(".session-state.unread").count(), 0);
   assert.deepEqual(errors, []);
   console.log("PASS: compacted unread task notices are rendered and acknowledged; switching/reload stay read; new and undelivered results stay unread; live compaction recovers notices without changing agent context");

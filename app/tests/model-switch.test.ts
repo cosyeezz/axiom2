@@ -53,7 +53,7 @@ test("change sits above the matching request or resumed process and is not folde
     { id: "resume", runId: "resume", role: "assistant", text: "", thinking: "retry", selectionChange: change },
   ];
   const groups = threadGroups(messages);
-  assert.deepEqual(groups.filter((g) => g.selectionChange).map((g) => g.id), ["request", "resume"]);
+  assert.deepEqual(groups.filter((g) => g.selectionChange).map((g) => g.ids[0]), ["request", "resume"]);
   const resumed = threadGroups([messages[0], messages[4]]);
   assert.equal(resumed.length, 2);
   assert.deepEqual(resumed[1].selectionChange, change);

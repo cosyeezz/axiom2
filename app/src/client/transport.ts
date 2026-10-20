@@ -185,7 +185,7 @@ export function command<T>(
   });
 }
 export function acceptSnapshot(event: Snapshot) {
-  if ((sessionKey(event.scope) || event.scope.startsWith("memory-catalog:")) && !remote.has(wireScope(event.scope))) return;
+  if ((sessionKey(event.scope) || /^(memory-catalog|memory-organization):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
   if (event.scope.startsWith("message:")) {
     const collection = cache.get(event.scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:"));
     if (collection?.streamId === event.streamId && event.seq <= collection.seq) return;
@@ -235,13 +235,13 @@ export function acceptSnapshot(event: Snapshot) {
 }
 function optionalMemorySubscription(scope: string) {
   const [kind, workspaceId, sessionId] = scope.split(":");
-  if (kind !== "memory" && kind !== "memory-catalog") return false;
+  if (kind !== "memory" && kind !== "memory-catalog" && kind !== "memory-organization") return false;
   const previous = cache.get(scope);
   cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
     generation: connection.generation, received: ++received,
     // Optional memory subscription failures must not affect the connection, but
     // callers still need to distinguish an unavailable source from a missing one.
-    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : [] });
+    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-organization" ? null : [] });
   listeners.get(scope)?.forEach((fn) => fn());
   return true;
 }

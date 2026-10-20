@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, readFileSync, realpathSync, lstatSync, readdirSync, statSync, openSync, closeSync, fstatSync, readSync, writeSync, ftruncateSync, constants } from "node:fs";
 import { dirname, join, resolve, relative, isAbsolute, extname, sep } from "node:path";
+import { markdownLocalLinks } from "../shared/markdown.js";
 import { AppError } from "../shared/protocol.js";
-import { memoryTemplate, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
+import { memoryRoot, memoryRulesPath, ensureMemoryDirectory } from "./memory-storage.js";
+import { memoryRules, memoryTemplate, memorySummaryMaxChars, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
 
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 export const within = (root: string, path: string) => { const rel = relative(root, path); return rel === "" || !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`); };
@@ -47,87 +49,29 @@ export class MemoryLinkCache {
   }
   clear() { this.entries.clear(); }
 }
-const shortText = (value: string, limit: number) => Array.from(value).slice(0, limit).join("");
-/**
- * Keep every selected source visible to the model while bounding descriptive
- * fields. The caller still provides the complete document only through read.
- */
-export function compactMemoryCandidates(candidates: readonly (Pick<MemoryCatalogEntry, "sessionId" | "title" | "revision" | "summary" | "keywords"> & { sourceTitle?: string })[], options: {
-  totalSources?: number; unreadableCandidates?: number; maxChars?: number;
-} = {}) {
-  const maxChars = options.maxChars ?? 16000;
-  const projection = candidates.map((candidate) => ({
-    // These identify subsequent read calls and evidence checks, so they are
-    // never abbreviated. Only descriptive text is eligible for a budget cut.
-    sessionId: candidate.sessionId,
-    title: shortText(candidate.title, 160),
-    // The original conversation title is a locating hint only. It never
-    // replaces the model-produced topic or grants additional read scope.
-    ...(candidate.sourceTitle && candidate.sourceTitle !== candidate.title ? { sourceTitle: shortText(candidate.sourceTitle, 160) } : {}),
-    revision: candidate.revision,
-    keywords: candidate.keywords.slice(0, 6).map((keyword) => shortText(keyword, 40)),
-    summary: "",
-  }));
-  const envelope = () => JSON.stringify({
-    totalSources: options.totalSources ?? candidates.length,
-    candidateCount: candidates.length,
-    unreadableCandidates: options.unreadableCandidates ?? 0,
-    coverage: "候选摘要只是有界索引投影，可能不完整或过时；必须读取当前资料后才能据此断言。",
-    candidates: projection,
+/** The complete short-summary index: never rank, drop or truncate source summaries. */
+export function memorySummaryIndex(candidates: readonly Pick<MemoryCatalogEntry, "sessionId" | "revision" | "summary">[], totalSources: number) {
+  if (candidates.some(({ summary }) => !summary.trim() || Array.from(summary).length > memorySummaryMaxChars))
+    throw new AppError("MEMORY_LIMIT", "摘要必须为非空且不超过200字");
+  return JSON.stringify({
+    totalSources,
+    summaryCount: candidates.length,
+    pendingSources: totalSources - candidates.length,
+    coverage: "以下为当前工作空间全部有效摘要，仅用于定位。尚未整理或失效的来源未包含在摘要中；选中后读取原记忆及必要详情，不凭摘要断言事实。",
+    sources: candidates.map(({ sessionId, revision, summary }) => ({ sessionId, revision, path: "MEMORY.md", summary })),
   });
-  let base = envelope();
-  // Prefer retaining a little metadata from every source, but identity is
-  // sacred: exhaust descriptive text before rejecting an unrepresentable set.
-  while (base.length > maxChars) {
-    const title = [...projection].sort((a, b) => b.title.length - a.title.length)[0];
-    if (title?.title.length) title.title = shortText(title.title, Array.from(title.title).length - 1);
-    else {
-      const keyword = [...projection].reverse().find((item) => item.keywords.some(Boolean));
-      if (!keyword) throw new AppError("MEMORY_LIMIT", "候选身份元数据超过提示投影预算");
-      const index = keyword.keywords.length - 1;
-      const value = keyword.keywords[index]!;
-      if (Array.from(value).length === 1) keyword.keywords.pop();
-      else keyword.keywords[index] = shortText(value, Array.from(value).length - 1);
-    }
-    base = envelope();
-  }
-  let remaining = maxChars - base.length;
-  for (let index = 0; index < candidates.length; index++) {
-    const slots = candidates.length - index;
-    const summary = shortText(candidates[index]!.summary, Math.floor(remaining / slots));
-    projection[index]!.summary = summary;
-    remaining -= summary.length;
-  }
-  let text = envelope();
-  // JSON escaping can expand a quote or a control character beyond the source
-  // string length, so trim previews against the serialized budget as well.
-  while (text.length > maxChars) {
-    const target = [...projection].reverse().find((item) => item.summary.length);
-    if (!target) throw new AppError("MEMORY_LIMIT", "候选元数据超过提示投影预算");
-    target.summary = shortText(target.summary, Array.from(target.summary).length - 1);
-    text = envelope();
-  }
-  return text;
 }
 /**
  * Organizer input has no automatic compaction. Keep immutable identities
  * whole, then include only a complete prefix of files that fits the prompt
  * budget so omitted paths cannot be mistaken for inspected evidence.
  */
-export function compactOrganizerProjection(files: readonly MemoryFile[], related: readonly { sessionId: string; title: string; revision: string; sourceTitle?: string }[], maxChars: number) {
-  const navigation = related.map((entry) => ({
-    sessionId: entry.sessionId,
-    revision: entry.revision,
-    title: shortText(entry.title, 160),
-    ...(entry.sourceTitle && entry.sourceTitle !== entry.title ? { sourceTitle: shortText(entry.sourceTitle, 160) } : {}),
-  }));
+export function compactOrganizerProjection(files: readonly MemoryFile[], maxChars: number) {
   const selected: MemoryFile[] = [];
   const envelope = () => JSON.stringify({
     files: selected,
     omittedFiles: files.length - selected.length,
-    related: navigation,
-    omittedRelated: 0,
-    coverage: "文件清单和关联来源仅供导航，不是已读取或可据以断言的证据。",
+    coverage: "文件清单仅供导航，不是已读取的证据。",
   });
   if (envelope().length > maxChars) throw new AppError("MEMORY_LIMIT", "整理导航身份元数据超过提示投影预算");
   for (const file of files) {
@@ -157,23 +101,18 @@ export class MemoryReadEvidence {
 }
 export function memoryDirectory(root: string, sessionId: string) {
   if (!/^[a-zA-Z0-9-]+$/.test(sessionId)) throw new AppError("INVALID_INPUT", "记忆会话标识无效");
-  return join(root, "memory", "sessions", sessionId);
+  return join(memoryRoot(root), sessionId);
 }
 export function initializeMemory(root: string, sessionId: string) {
-  // The application root is trusted; descendants are not. Resolve only this
-  // boundary, then validate each level before creating the next one.
+  // Resolve the trusted data root, then validate the selected memory location.
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const actualRoot = realpathSync(root);
   const directory = memoryDirectory(actualRoot, sessionId);
-  let current = actualRoot;
-  for (const segment of relative(actualRoot, directory).split(sep)) {
-    current = join(current, segment);
-    try { mkdirSync(current, { mode: 0o700 }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-    const stat = lstatSync(current);
-    if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(current) !== current)
-      throw new AppError("MEMORY_PATH", "记忆目录不能使用符号链接");
-  }
+  ensureMemoryDirectory(directory);
+  const rules = memoryRulesPath(actualRoot);
+  try { writeFileSync(rules, memoryRules, { flag: "wx", mode: 0o600 }); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  if (!lstatSync(rules).isFile() || lstatSync(rules).isSymbolicLink() || lstatSync(rules).nlink !== 1) throw new AppError("MEMORY_PATH", "记忆规则不是普通文件");
   const path = join(directory, "MEMORY.md");
   try { writeFileSync(path, memoryTemplate, { flag: "wx", mode: 0o600 }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
@@ -258,8 +197,8 @@ export function textFile(path: string, maxBytes = 4 * 1024 * 1024) {
   return readMemoryTextSnapshot(path, maxBytes).content;
 }
 export function referencedPaths(directory: string, document: string) {
-  return [...document.matchAll(/\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g)].flatMap((m) => {
-    try { const target = decodeURIComponent((m[1] ?? m[2]).replace(/#.*$/, "")); return /^(?:https?:|data:|javascript:|file:)/i.test(target) ? [] : [resolve(dirname(directory), target)]; }
+  return markdownLocalLinks(document).flatMap(({ href }) => {
+    try { return [resolve(dirname(directory), decodeURIComponent(href.replace(/#.*$/, "")))]; }
     catch { return []; }
   });
 }

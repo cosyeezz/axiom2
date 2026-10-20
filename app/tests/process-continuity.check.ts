@@ -34,11 +34,11 @@ try {
   page.on("pageerror", e => errors.push(e.message));
   await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   await page.goto(app.origin);
-  const card = page.locator(".tool-activity");
-  await page.waitForFunction(() => document.querySelector(".activity-title")?.textContent?.includes("31 项"));
+  const card = page.locator("#messages > .process-live");
+  await page.waitForFunction(() => document.querySelector('.process-live')?.getAttribute('data-call-count') === '31');
   assert.equal(await card.count(), 1);
   assert.ok(await page.locator(".reply-body").isVisible());
-  await card.locator(":scope > summary").click();
+  await card.locator(':scope > summary').click();
   const node = await card.elementHandle();
   const split = views.thread(scope);
 
@@ -47,41 +47,47 @@ try {
   const withCalls = { ...reply, calls: [call("call-31")] };
   views.messageChanged(scope, withCalls);
   views.flush(scope);
-  await page.waitForFunction(() => document.querySelector(".activity-title")?.textContent?.includes("32 项"));
-  assert.equal(await card.count(), 1, "cache reload must merge the new call into the original process");
-  assert.equal(await page.locator(".reply-body").count(), 0, "the body moves inside its tool message");
-  assert.equal(await card.locator(".tool-call").count(), 32, "identical commands with distinct call IDs remain separate calls");
+  await page.waitForFunction(() => document.querySelectorAll(".process-live").length === 2);
+  assert.equal(await card.count(), 2, "cache reload places new calls after the existing body");
+  assert.equal(await page.locator(".reply-body").count(), 1, "the body remains in the conversation flow");
+  assert.equal(await card.first().locator(".tool-call").count(), 31);
+  await card.last().locator(':scope > summary').click();
+  assert.equal(await card.last().locator(".tool-call").count(), 1, "distinct call IDs remain separate calls");
   assert.ok(await node!.evaluate(n => n.isConnected && n.hasAttribute("open")));
 
   // Reproduce original-view lag: a split layout can outlive the live message's first call.
   views.publish(threadScope(scope), split);
   await page.locator(".reply-body").waitFor({ state: "visible" });
-  assert.equal(await card.count(), 1, "the body-only location never creates another process card");
-  assert.equal(await card.locator(".tool-call").count(), 32, "the process location owns the new call exactly once");
+  await page.waitForFunction(() => document.querySelectorAll(".process-live").length === 1);
+  assert.equal(await card.count(), 1, "a stale layout cannot create duplicate processes");
+  assert.equal(await card.locator(".tool-call").count(), 31, "the thinking slice never takes calls from after the body");
   assert.ok(await node!.evaluate(n => n.isConnected && n.hasAttribute("open")));
   views.publish(threadScope(scope), views.thread(scope));
-  await page.waitForFunction(() => document.querySelector(".reply-body") === null);
+  await page.waitForFunction(() => document.querySelectorAll(".process-live").length === 2);
+  assert.equal(await page.locator(".reply-body").count(), 1);
 
   const empty: ChatMessage = { id: "placeholder", role: "assistant", text: " \n", streaming: true };
   const next: ChatMessage = { id: "next", role: "assistant", text: "", calls: [call("call-32")], streaming: true };
   views.messageChanged(scope, empty);
   views.messageChanged(scope, next);
   views.flush(scope);
-  await page.waitForFunction(() => document.querySelector(".activity-title")?.textContent?.includes("33 项"));
-  assert.equal(await card.count(), 1, "invisible placeholders do not split adjacent calls");
-  await card.screenshot({ path: join(artifacts, "merged-expanded.png") });
-  await card.locator(":scope > summary").click();
-  await card.screenshot({ path: join(artifacts, "merged-collapsed.png") });
+  await page.waitForFunction(() => [...document.querySelectorAll('.process-live')].at(-1)?.getAttribute('data-call-count') === '2');
+  assert.equal(await card.count(), 2, "invisible placeholders do not split adjacent calls after the body");
+  await card.last().locator(':scope > summary').click();
+  assert.equal(await card.last().locator('.tool-call').count(), 2);
+  await card.last().screenshot({ path: join(artifacts, "merged-expanded.png") });
+  await card.last().locator(':scope > summary').click();
+  await card.last().screenshot({ path: join(artifacts, "merged-collapsed.png") });
   await page.reload();
-  await page.waitForFunction(() => document.querySelector(".activity-title")?.textContent?.includes("33 项"));
-  assert.equal(await card.count(), 1, "reload keeps the merged group");
+  await page.waitForFunction(() => [...document.querySelectorAll('.process-live')].at(-1)?.getAttribute('data-call-count') === '2');
+  assert.equal(await card.count(), 2, "reload keeps the same body boundary");
 
   views.messageChanged(scope, { ...empty, text: "这里是独立回复正文。" });
   views.flush(scope);
-  await page.locator(".reply-body").waitFor({ state: "visible" });
-  assert.equal(await card.count(), 2, "real body content restores a visible boundary");
+  await page.getByText("这里是独立回复正文。", { exact: true }).waitFor();
+  assert.equal(await card.count(), 3, "real body content restores another visible boundary");
   assert.deepEqual(errors, []);
-  console.log(`PASS: 31+1 calls remain one card after cache eviction, split-layout lag, empty placeholders and reload; distinct calls and real body boundaries retained. ${artifacts}`);
+  console.log(`PASS: body boundaries retained after cache eviction, late calls, split-layout lag and reload; placeholders keep adjacent calls together. ${artifacts}`);
 } finally {
   await browser?.close();
   await app?.close();

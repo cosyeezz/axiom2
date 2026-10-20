@@ -174,8 +174,9 @@ export class TaskDelivery {
       throw e;
     }
   }
-  result(scope: Scope, taskId: unknown, resultId: unknown, offset: unknown = 0, limit: unknown = 16000): TaskResult {
-    if (!Number.isSafeInteger(offset) || Number(offset) < 0 || !Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 16000)
+  /** Model `read_result` pages by `limit` (≤16000); the session UI passes `whole` and reads the remainder at once. */
+  result(scope: Scope, taskId: unknown, resultId: unknown, offset: unknown = 0, limit: unknown = 16000, whole = false): TaskResult {
+    if (!Number.isSafeInteger(offset) || Number(offset) < 0 || !whole && (!Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 16000))
       throw new AppError("INVALID_INPUT", "offset 必须为非负整数，limit 必须为 1–16000");
     const task = this.records.own(scope, taskId),
       id = text(resultId, "结果标识");
@@ -188,7 +189,7 @@ export class TaskDelivery {
         "结果不存在或不属于此任务；读取结果不是进度查询",
       );
     const saved: TaskResult = JSON.parse(String(result.body));
-    const start = Number(offset), end = Math.min(saved.report.length, start + Number(limit));
+    const start = Number(offset), end = whole ? saved.report.length : Math.min(saved.report.length, start + Number(limit));
     return { ...saved, report: saved.report.slice(start, end), offset: start, totalLength: saved.report.length,
       truncated: end < saved.report.length, nextOffset: end < saved.report.length ? end : null };
   }

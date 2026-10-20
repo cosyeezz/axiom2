@@ -9,7 +9,7 @@ import {
   type Run,
   type ThreadIndex,
 } from "../../shared/agent.js";
-import { threadActivity, threadEmpty, threadGroups, threadReplyThinking, threadThinking } from "../../shared/thread-layout.js";
+import { threadGroups } from "../../shared/thread-layout.js";
 import type { Store } from "../storage.js";
 import { contextUsage } from "../context-usage.js";
 import { Lru } from "../../shared/lru.js";
@@ -202,14 +202,13 @@ export class AgentViews {
     active.set(message.id, message); this.transient.set(scope.sessionId, active);
     const fresh = !messages?.has(message.id),
       layoutChanged =
+        previous?.phase !== message.phase ||
+        previous?.runId !== message.runId ||
         previous?.role !== message.role ||
         JSON.stringify(previous?.selectionChange) !== JSON.stringify(message.selectionChange) ||
         (message.role === "assistant" &&
           !!previous?.calls?.length !== !!message.calls?.length) ||
-        (!!previous && (threadEmpty(previous) !== threadEmpty(message) ||
-          threadActivity(previous) !== threadActivity(message) ||
-          threadThinking(previous) !== threadThinking(message) ||
-          threadReplyThinking(previous) !== threadReplyThinking(message)));
+        (!!previous && JSON.stringify(threadGroups([previous])) !== JSON.stringify(threadGroups([message])));
     messages?.set(message.id, message);
     if (messages && (fresh || layoutChanged)) {
       this.layouts.delete(messages);

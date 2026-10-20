@@ -30,22 +30,14 @@ test("compact results preserve failures occurring after the preview", () => {
   assert.match(preview.preview!, /missing file/);
 });
 
-test("message detail pages reconstruct exact Unicode content and bind revision", () => {
+test("message details return the exact full field in one response", () => {
   const message: ChatMessage = { id: "m", role: "toolResult", text: "x".repeat(15999) + "😀" + "中".repeat(20000) };
-  let page = messagePart(message, { id: message.id, field: "text" });
-  assert.equal(page.text.length, 15999);
-  let text = page.text;
-  while (page.nextOffset !== null) {
-    page = messagePart(message, { id: message.id, field: "text", offset: page.nextOffset, revision: page.revision });
-    text += page.text;
-  }
-  assert.equal(text, message.text);
-  assert.throws(() => messagePart({ ...message, text: message.text + "!" }, { field: "text", offset: 1, revision: page.revision }), /已更新/);
-  assert.throws(() => messagePart({ ...message, text: "short" }, { field: "text", offset: 16000, revision: page.revision }),
-    (error: any) => error.code === "REVISION_CONFLICT", "shortened records report a revision conflict before checking old offsets");
-  for (const offset of [-1, 0.5, NaN, 16000, message.text.length + 1])
-    assert.throws(() => messagePart(message, { field: "text", offset, revision: page.revision }));
-  assert.throws(() => messagePart(message, { field: "text", offset: 1 }));
+  const part = messagePart(message, { id: message.id, field: "text" });
+  assert.equal(part.text, message.text, "no 16,000-unit page split");
+  assert.equal(part.totalLength, message.text.length);
+  assert.notEqual(messagePart({ ...message, text: message.text + "!" }, { field: "text" }).revision, part.revision);
+  for (const key of ["offset", "revision", "limit"])
+    assert.throws(() => messagePart(message, { field: "text", [key]: 0 }), (error: any) => error.code === "INVALID_INPUT", `${key} is not a paging parameter`);
 });
 
 test("input and thinking pages never include unrelated message fields", () => {

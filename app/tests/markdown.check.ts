@@ -22,10 +22,13 @@ try {
   const scope = { workspaceId: w.id, sessionId: s.id };
   const views = (app.agents as unknown as { views: AgentViews }).views;
   const publish = (text: string, streaming: boolean) => {
-    views.messageChanged(scope, { id: "markdown-regression", role: "assistant", text, streaming });
+    views.messageChanged(scope, { id: "markdown-regression", role: "assistant", phase: "final_answer", text, streaming });
     views.flush(scope);
   };
   publish("**验证：", true);
+  const userSource = "第一行\n**第二行**\n第三行\n\n- 列表项\n\n```text\n代码第一行\n代码第二行\n```";
+  views.messageChanged(scope, { id: "user-newline-regression", role: "user", text: userSource, streaming: false });
+  views.flush(scope);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ permissions: ["clipboard-read", "clipboard-write"] });
   const errors: string[] = [];
@@ -34,6 +37,12 @@ try {
   await page.goto(app.origin);
   const message = page.locator('[aria-label="助手回复"] .markdown');
   await message.waitFor();
+  const userMessage = page.locator('[aria-label="用户消息"] .markdown');
+  await userMessage.locator("strong").waitFor();
+  assert.equal(await userMessage.locator("p").first().innerText(), "第一行\n第二行\n第三行");
+  assert.equal(await userMessage.locator("br").count(), 2);
+  assert.equal(await userMessage.locator("li").innerText(), "列表项");
+  assert.equal(await userMessage.locator("pre code").innerText(), "代码第一行\n代码第二行");
   assert.equal(await message.locator("strong").count(), 0);
   const quote = "“整理索引时检查冲突，核实后修正或删除；用户明确否定的内容直接删除”";
   const quotedSource = `可以，简化为**${quote}**就够了。`;
@@ -54,13 +63,17 @@ try {
   for (const width of [375, 820, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    const lineTops = await userMessage.locator("p").first().evaluate((element) => Array.from(element.children)
+      .filter((child) => child.tagName !== "BR").map((child) => child.getBoundingClientRect().top));
+    assert.ok(lineTops[0] < lineTops[1] && lineTops[1] < lineTops[2], `visible input newlines at ${width}px`);
     await page.screenshot({ path: join(artifacts, `markdown-${width}.png`) });
   }
   await page.reload();
   await message.locator("strong").nth(1).waitFor();
   assert.deepEqual(await message.locator("strong").allTextContents(), ["验证：", quote]);
+  assert.equal(await userMessage.locator("p").first().innerText(), "第一行\n第二行\n第三行");
   assert.deepEqual(errors, []);
-  console.log("PASS: Chinese bold, streaming completion, literal code, unchanged clipboard, reload and 3 widths");
+  console.log("PASS: user message newlines, Markdown lists/code, Chinese bold, streaming completion, unchanged clipboard, reload and 3 widths");
 } finally {
   await browser?.close();
   await app?.close();

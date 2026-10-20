@@ -83,10 +83,23 @@ try {
   mode = "hold"; const sessionRequest = pendingRequest(); await expand().click(); await sessionRequest;
   await answer.getByRole("button", { name: "正在加载…", exact: true }).waitFor();
   assert.ok(release);
-  // Keyboard selection is immediate; mobile pointer navigation deliberately waits for double click.
+  // Keyboard selection bypasses the pointer delay used to detect double-click renaming.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator(`[data-session-id="${second.id}"] .history-item`).press("Enter");
-  await page.getByText("另一会话正文", { exact: true }).waitFor(); (release as () => void)(); release = undefined;
+  const otherSession = page.locator(`[data-session-id="${second.id}"] button.history-item`);
+  await otherSession.waitFor({ state: "visible" });
+  await otherSession.press("Enter");
+  try {
+    await page.waitForFunction(id => document.querySelector(`[data-session-id="${id}"] button.history-item`)?.getAttribute("aria-current") === "true", second.id);
+    await page.getByText("另一会话正文", { exact: true }).waitFor();
+  } catch (error) {
+    console.error("Session switch diagnostics:", await page.evaluate(() => ({
+      view: sessionStorage.getItem("view"),
+      selected: document.querySelector('.history-row:has([aria-current="true"])')?.getAttribute("data-session-id"),
+      text: document.querySelector(".thread")?.textContent?.slice(0, 1200),
+    })), { errors });
+    throw error;
+  }
+  (release as () => void)(); release = undefined;
   assert.equal(await heading().count(), 0);
   await page.locator(`[data-session-id="${first.id}"] .history-item`).press("Enter");
   await expand().waitFor(); assert.equal(await heading().count(), 0);
@@ -108,14 +121,15 @@ try {
   // Each hidden field loads independently; reading thinking must retain loaded tool input.
   full.answer = { id: "answer", role: "assistant", text: "", thinking: `${"思考内容。".repeat(4000)}思考全文末尾`, calls: [{ id: "read-call", name: "read", input: JSON.stringify({ path: `${"long-path/".repeat(2000)}工具输入末尾` }) }] };
   views.messageChanged(scope, full.answer); views.flush(scope);
-  const activity = page.locator(".tool-activity"); await activity.locator(":scope > summary").click();
+  const activity = page.locator(".process-live");
+  await activity.locator(':scope > summary').click();
   await activity.locator(".tool-call > summary").click();
-  await activity.getByRole("button", { name: /^继续加载/ }).click();
   await activity.locator(".tool-detail > pre").first().filter({ hasText: "工具输入末尾" }).waitFor();
+  assert.equal(await activity.getByRole("button", { name: /^继续加载/ }).count(), 0, "tool input loads in full without paging");
   assert.equal(await activity.getByRole("button", { name: "展开完整文本", exact: true }).count(), 0, "hidden fields do not add a redundant whole-message control");
   await activity.locator(".thinking-header").click();
-  await activity.locator(".thinking-body").getByRole("button", { name: /^继续加载/ }).click();
   await activity.locator(".thinking-body").getByText(/思考全文末尾/).waitFor();
+  assert.equal(await activity.getByRole("button", { name: /^继续加载/ }).count(), 0, "thinking loads in full without paging");
   assert.match(await activity.locator(".tool-detail > pre").first().innerText(), /工具输入末尾/);
   assert.deepEqual(errors, []);
   console.log("Full-message UI passed: Markdown replacement, overflow, retry, preview/history invalidation, late response/session isolation, compaction and user text.");

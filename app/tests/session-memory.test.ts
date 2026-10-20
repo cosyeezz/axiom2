@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, linkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import { Costs } from "../src/server/costs.js";
 import { textFileCommand, type OpenMemoryFile } from "../src/server/memory-open.js";
 import { initializeMemory, memoryDirectory, digest, replaceMemoryFile, readMemoryTextSnapshot, textFile } from "../src/server/memory-files.js";
 import { pendingMemoryRead, recordMemoryRead } from "../src/server/memory-recovery.js";
-import { memoryInstruction, memoryTemplate, parseMemory } from "../src/shared/memory.js";
+import { memoryInstruction, memoryRules, memoryTemplate, memorySummaryVersion, parseMemory } from "../src/shared/memory.js";
 import { AppError, type Scope, type Workspace, type Session } from "../src/shared/protocol.js";
 function fixture(openFile?: OpenMemoryFile, replaceFile?: typeof replaceMemoryFile, readCorrectionFile?: typeof textFile, observed?: (scope: string) => boolean, readCorrectionSnapshot?: typeof readMemoryTextSnapshot) {
   const root = mkdtempSync(join(tmpdir(), "axiom-memory-")), project = mkdtempSync(join(tmpdir(), "axiom-memory-project-"));
@@ -21,6 +21,18 @@ function fixture(openFile?: OpenMemoryFile, replaceFile?: typeof replaceMemoryFi
   const create = () => { const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session; return { workspaceId: workspace.id, sessionId: session.id }; };
   const scope = create(), events: string[] = [], memories = new Memories(store, (key) => events.push(key), openFile, replaceFile, readCorrectionFile, observed, readCorrectionSnapshot);
   return { root, project, store, scope, create, events, memories, directory: memoryDirectory(root, scope.sessionId), async close() { await memories.close(); store.close(); rmSync(root, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); } };
+}
+function ageSources(t: TestContext) {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 30 * 60_000 });
+}
+/** Query fixtures start with independently prepared short index entries. */
+function indexSources(f: ReturnType<typeof fixture>) {
+  for (const entry of f.memories.catalog(f.scope.workspaceId)) {
+    if (!entry.hasContent || entry.reason) continue;
+    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({
+      ...entry, status: "ready", summaryVersion: memorySummaryVersion, summary: Array.from(entry.excerpt || "测试来源摘要").slice(0, 200).join(""), indexedAt: Date.now(),
+    }), entry.sessionId);
+  }
 }
 test("memory budget patches persist, validate limits and preserve existing saved values", async () => {
   const f = fixture(); try {
@@ -302,14 +314,14 @@ test("progress accepts explicit legacy fields and real checkboxes without turnin
   assert.equal(hiddenFields.current, "");
   assert.deepEqual(hiddenFields.tasks, []);
   assert.equal(hiddenFields.progressState, "conflict", "没有显式任务的已完成 100% 不能成为有效进度");
-  assert.match(memoryInstruction("C:/memory/MEMORY.md"), /必须保留“## 目标与范围”和“## 任务进度”/);
-  assert.match(memoryInstruction("C:/memory/MEMORY.md"), /不能用部署摘要、验证证据链接或普通正文代替任务清单/);
+  assert.match(memoryRules, /保留“## 目标与范围”和“## 任务进度”栏目/);
+  assert.match(memoryInstruction("C:/memory/session/MEMORY.md", "C:/memory/RULES.md"), /首次维护前先读取/);
 });
 test("file changes invalidate semantic content immediately, subscribe locally and reject stale saves", async () => {
   const f = fixture(); try {
     writeFileSync(join(f.directory, "MEMORY.md"), "原始事实"); f.memories.scan();
     const initial = f.memories.read(f.scope), catalog = f.memories.catalog(f.scope.workspaceId)[0];
-    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...catalog, status: "ready", summary: "旧结论" }), f.scope.sessionId);
+    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...catalog, status: "ready", summaryVersion: memorySummaryVersion, summary: "旧结论" }), f.scope.sessionId);
     writeFileSync(join(f.directory, "MEMORY.md"), "新结论"); f.events.length = 0; f.memories.scan();
     assert.equal(f.memories.catalog(f.scope.workspaceId)[0].summary, "");
     assert.ok(f.events.every((key) => key.startsWith("memory:") || key.startsWith("memory-catalog:")));
@@ -361,7 +373,7 @@ test("explicit correction clears exact duplicates without deleting unrelated his
     assert.equal(f.memories.catalog(f.scope.workspaceId).find((e) => e.sessionId === f.scope.sessionId)?.summary, "");
   } finally { await f.close(); }
 });
-test("organized topics do not invalidate an unchanged source title or trigger another organizer request", async () => {
+test("organized topics do not invalidate an unchanged source title or trigger another organizer request", async (t) => {
   const f = fixture(); try {
     f.store.execute({ requestId: randomUUID(), op: "session.rename", ...f.scope, params: { title: "原始会话标题" } });
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
@@ -371,6 +383,7 @@ test("organized topics do not invalidate an unchanged source title or trigger an
       calls++; input.read(f.scope.sessionId, "MEMORY.md");
       return { answer: JSON.stringify({ title: "模型生成主题", summary: "可复用摘要", keywords: ["事实"], edits: [] }), incomplete: false };
     } };
+    ageSources(t);
     await f.memories.organize();
     const indexed = f.memories.catalog(f.scope.workspaceId)[0]!;
     assert.equal(indexed.status, "ready");
@@ -393,7 +406,7 @@ test("organized topics do not invalidate an unchanged source title or trigger an
     assert.equal(calls, 1, "an unchanged source must not be summarized again");
   } finally { await f.close(); }
 });
-test("one organizer wake drains a fair bounded batch and a failed source does not monopolize it", async () => {
+test("one organizer cycle drains a fair bounded batch and a failed source does not monopolize it", async (t) => {
   const f = fixture(); try {
     const sources = [f.scope, ...Array.from({ length: 4 }, () => f.create())];
     for (const [index, source] of sources.entries()) {
@@ -408,35 +421,35 @@ test("one organizer wake drains a fair bounded batch and a failed source does no
       input.read(input.scope.sessionId, "MEMORY.md");
       return { answer: JSON.stringify({ title: `主题 ${calls.length}`, summary: "已整理", keywords: [], edits: [] }), incomplete: false };
     } };
+    ageSources(t);
     await f.memories.organize();
     const catalog = f.memories.catalog(f.scope.workspaceId);
-    assert.equal(calls.length, 4, "一次唤醒最多推进内部小批，不应在首个失败后停止");
+    assert.equal(calls.length, 4, "一次周期最多推进内部小批，不应在首个失败后停止");
     assert.equal(new Set(calls).size, 4, "同一来源在同一批内不能垄断重试机会");
     assert.equal(catalog.filter((entry) => entry.status === "ready").length, 3);
     assert.equal(catalog.filter((entry) => entry.status === "error").length, 1);
     assert.equal(catalog.filter((entry) => entry.status === "pending").length, 1);
   } finally { await f.close(); }
 });
-test("four persisted empty templates cannot consume the organizer batch before a real pending source", async () => {
+test("four persisted empty templates cannot consume the organizer batch before a real pending source", async (t) => {
   const f = fixture(); try {
     const empty = [f.scope, ...Array.from({ length: 3 }, () => f.create())], usable = f.create();
     for (const source of [...empty, usable])
       f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(source.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     writeFileSync(join(memoryDirectory(f.root, usable.sessionId), "MEMORY.md"), "真实待整理的来源");
     f.memories.scan();
-    const internals = f.memories as any;
-    if (internals.organizerWake) { clearTimeout(internals.organizerWake); internals.organizerWake = undefined; }
+    ageSources(t);
     const calls: string[] = [];
     f.memories.runner = { close: async () => {}, execute: async (input) => {
       calls.push(input.scope.sessionId); input.read(input.scope.sessionId, "MEMORY.md");
       return { answer: JSON.stringify({ title: "真实来源", summary: "真实摘要", keywords: [], edits: [] }), incomplete: false };
     } };
-    await f.memories.organize(true);
+    await f.memories.organize();
     assert.deepEqual(calls, [usable.sessionId]);
     assert.equal(f.memories.catalog(f.scope.workspaceId).find((entry) => entry.sessionId === usable.sessionId)?.status, "ready");
   } finally { await f.close(); }
 });
-test("organizer prioritizes persisted pending content and bounds rotating unknown-template discovery", async () => {
+test("organizer prioritizes persisted pending content and bounds rotating unknown-template discovery", async (t) => {
   const f = fixture(); try {
     const usable = f.create();
     for (let index = 0; index < 12; index++) f.create();
@@ -444,8 +457,7 @@ test("organizer prioritizes persisted pending content and bounds rotating unknow
     writeFileSync(join(memoryDirectory(f.root, usable.sessionId), "MEMORY.md"), "优先整理的已建档来源");
     f.memories.scan(usable);
     const internals = f.memories as any;
-    if (internals.organizerWake) { clearTimeout(internals.organizerWake); internals.organizerWake = undefined; }
-    internals.organizerWakePending = false;
+    ageSources(t);
     const scanAsync = internals.scanAsync.bind(internals); let unknownScans = 0, calls = 0;
     internals.scanAsync = async (scope: Scope) => {
       if (scope.sessionId !== usable.sessionId) unknownScans++;
@@ -456,28 +468,27 @@ test("organizer prioritizes persisted pending content and bounds rotating unknow
       input.read(usable.sessionId, "MEMORY.md");
       return { answer: JSON.stringify({ title: "已建档主题", summary: "已建档摘要", keywords: [], edits: [] }), incomplete: false };
     } };
-    await f.memories.organize(true);
+    await f.memories.organize();
     assert.equal(calls, 1, "已知有效 pending 必须先取得模型槽位");
     assert.ok(unknownScans <= 4, "单次整理最多探测四个未知模板，不得线性扫描全部会话");
   } finally { await f.close(); }
 });
-test("a content wake arriving during organization schedules the next bounded batch", async () => {
+test("a save during organization waits for a later cycle and thirty unchanged minutes", async (t) => {
   const f = fixture(); let release!: () => void, entered!: () => void;
   const blocked = new Promise<void>((resolve) => { release = resolve; });
   const started = new Promise<void>((resolve) => { entered = resolve; });
   try {
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     writeFileSync(join(f.directory, "MEMORY.md"), "整理中的来源 A"); f.memories.scan(f.scope);
-    const internals = f.memories as any;
-    if (internals.organizerWake) { clearTimeout(internals.organizerWake); internals.organizerWake = undefined; }
-    internals.organizerWakePending = false;
+    ageSources(t);
+    await f.memories.command({ requestId: randomUUID(), op: "memory.configure", ...f.scope, params: { intervalMs: 1000 } });
     const calls: string[] = [];
     f.memories.runner = { close: async () => {}, execute: async (input) => {
       calls.push(input.scope.sessionId); input.read(input.scope.sessionId, "MEMORY.md");
       if (input.scope.sessionId === f.scope.sessionId) { entered(); await blocked; }
       return { answer: JSON.stringify({ title: "主题", summary: "摘要", keywords: [], edits: [] }), incomplete: false };
     } };
-    const first = f.memories.organize(true);
+    const first = f.memories.organize();
     await started;
     // Create B only after organizerCandidates has frozen A's first batch.
     const later = f.create();
@@ -485,12 +496,14 @@ test("a content wake arriving during organization schedules the next bounded bat
     writeFileSync(join(memoryDirectory(f.root, later.sessionId), "MEMORY.md"), "运行中写入的来源 B"); f.memories.scan(later);
     await new Promise<void>((resolve) => setTimeout(resolve, 280));
     release(); await first;
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(Error("整理中的唤醒没有推进来源 B")), 1000);
-      const poll = () => calls.includes(later.sessionId) ? (clearTimeout(timer), resolve()) : setTimeout(poll, 10);
-      poll();
-    });
-    assert.ok(calls.includes(later.sessionId), "运行期间的新内容在当前批结束后必须短时推进");
+    await new Promise<void>((resolve) => setTimeout(resolve, 350));
+    assert.deepEqual(calls, [f.scope.sessionId], "当前批结束后不得立即续排新来源");
+    t.mock.timers.tick(29 * 60_000);
+    await f.memories.organize();
+    assert.deepEqual(calls, [f.scope.sessionId]);
+    t.mock.timers.tick(60_000);
+    await f.memories.organize();
+    assert.deepEqual(calls, [f.scope.sessionId, later.sessionId]);
   } finally { release?.(); await f.close(); }
 });
 test("a reintroduced corrected entry stays externally blocked, then cleanup restores remaining content", async () => {
@@ -555,7 +568,7 @@ test("a restarted service retains its private cleanup manifest for reintroduced 
     } finally { await restarted.close(); }
   } finally { await f.close(); }
 });
-test("without corrections, oversized detail files do not block unrelated organizer work", async () => {
+test("without corrections, oversized detail files do not block unrelated organizer work", async (t) => {
   let correctionReads = 0;
   const f = fixture(undefined, undefined, (path, maxBytes) => {
     correctionReads++;
@@ -571,13 +584,14 @@ test("without corrections, oversized detail files do not block unrelated organiz
       calls++; input.read(f.scope.sessionId, "MEMORY.md");
       return { answer: JSON.stringify({ title: "主题", summary: "正常摘要", keywords: [], edits: [] }), incomplete: false };
     } };
+    f.memories.scan(); ageSources(t);
     await f.memories.organize();
     assert.equal(calls, 1);
     assert.equal(correctionReads, 0, "the correction stage must not read files without correction records");
     assert.equal(f.memories.catalog(f.scope.workspaceId)[0]?.status, "ready");
   } finally { await f.close(); }
 });
-test("a correction failure in one source does not prevent another source from becoming organized", async () => {
+test("a correction failure in one source does not prevent another source from becoming organized", async (t) => {
   const f = fixture(); try {
     const other = f.create();
     for (const scope of [f.scope, other]) {
@@ -593,12 +607,15 @@ test("a correction failure in one source does not prevent another source from be
       return { answer: JSON.stringify({ title: "已恢复来源", summary: "可用摘要", keywords: [], edits: [] }), incomplete: false };
     } };
     await f.memories.organize();
+    assert.equal(calls, 0, "纠正改变的来源先等待安静窗口");
+    ageSources(t);
+    await f.memories.organize();
     assert.ok(calls > 0, "one failed detail must not stop the organizer");
     assert.ok(f.memories.catalog(f.scope.workspaceId).some((entry) => entry.status === "ready"));
     assert.equal(f.memories.read(f.scope).content.includes("待清理的重复事实"), false);
   } finally { await f.close(); }
 });
-test("a summary failure does not make a readable source unavailable to queries", async () => {
+test("a summary failure reports missing index coverage without hiding directly readable memory", async () => {
   const f = fixture(); try {
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     writeFileSync(join(f.directory, "MEMORY.md"), "仍可读取的原始事实"); f.memories.scan();
@@ -611,19 +628,19 @@ test("a summary failure does not make a readable source unavailable to queries",
       return { answer: "原文仍可查询", incomplete: false };
     } };
     const result = await f.memories.query(f.scope, "原始事实");
-    assert.equal(reads, 1);
-    assert.equal(result.answer, "原文仍可查询");
-    assert.equal(result.incomplete, true, "summary quality remains incomplete without hiding readable memory");
+    assert.equal(reads, 0, "没有有效摘要时不发起模型查询");
+    assert.equal(result.answer, "");
+    assert.equal(result.incomplete, true);
+    assert.equal(f.memories.read(f.scope).content, "仍可读取的原始事实");
   } finally { await f.close(); }
 });
 test("organizer status changes during a query preserve unchanged facts and mark coverage incomplete", async () => {
   const f = fixture(); try {
-    (f.memories as any).scheduleOrganizerWake = () => {};
     (f.memories as any).watcher?.close();
     (f.memories as any).watcher = undefined;
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     writeFileSync(join(f.directory, "MEMORY.md"), "未发生变化的事实");
-    await f.memories.scanAsync();
+    await f.memories.scanAsync(); indexSources(f);
     f.memories.runner = { close: async () => {}, execute: async (input) => {
       assert.equal(input.kind, "query");
       const document = input.read(f.scope.sessionId, "MEMORY.md");
@@ -641,7 +658,7 @@ test("organizer status changes during a query preserve unchanged facts and mark 
 test("query discards a late answer as empty after its actually-read source changes", async () => {
   const f = fixture(); try {
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
-    writeFileSync(join(f.directory, "MEMORY.md"), "历史事实"); f.memories.scan();
+    writeFileSync(join(f.directory, "MEMORY.md"), "历史事实"); f.memories.scan(); indexSources(f);
     let resolve!: (result: { answer: string; incomplete: boolean }) => void;
     f.memories.runner = { close: async () => {}, execute: async (input) => { input.read(f.scope.sessionId, "MEMORY.md"); return new Promise((r) => { resolve = r; }); } };
     const query = f.memories.query(f.scope, "历史");
@@ -650,7 +667,7 @@ test("query discards a late answer as empty after its actually-read source chang
     assert.equal(discarded.answer, ""); assert.equal(discarded.incomplete, true); assert.deepEqual(discarded.sources, []); assert.equal(discarded.reason, "revision_conflict");
   } finally { await f.close(); }
 });
-test("organizer cannot publish results against a changed source", async () => {
+test("organizer cannot publish results against a changed source", async (t) => {
   const f = fixture(); try {
     writeFileSync(join(f.directory, "MEMORY.md"), "待核实事实"); f.memories.scan();
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
@@ -658,6 +675,7 @@ test("organizer cannot publish results against a changed source", async () => {
       input.read(f.scope.sessionId, "MEMORY.md"); writeFileSync(join(f.directory, "MEMORY.md"), "用户的新事实");
       return { answer: JSON.stringify({ title: "旧主题", summary: "旧摘要", keywords: [], edits: [] }), incomplete: false };
     } };
+    ageSources(t);
     await f.memories.organize(); f.memories.scan();
     assert.notEqual(f.memories.catalog(f.scope.workspaceId)[0].summary, "旧摘要");
     assert.equal(f.memories.read(f.scope).content, "用户的新事实");
@@ -666,12 +684,12 @@ test("organizer cannot publish results against a changed source", async () => {
 test("summary-only queries discard correction races and external references are rechecked", async () => {
   const f = fixture(); try {
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
-    writeFileSync(join(f.directory, "MEMORY.md"), "旧事实"); f.memories.scan();
+    writeFileSync(join(f.directory, "MEMORY.md"), "旧事实"); f.memories.scan(); indexSources(f);
     f.memories.runner = { close: async () => {}, execute: async () => { await f.memories.correct(f.scope.workspaceId, "旧事实"); return { answer: "旧事实", incomplete: false }; } };
     const corrected = await f.memories.query(f.scope, "事实");
     assert.equal(corrected.answer, ""); assert.equal(corrected.incomplete, true); assert.equal(corrected.reason, "revision_conflict");
     const projectFile = join(f.project, "evidence.md"); writeFileSync(projectFile, "v1");
-    writeFileSync(join(f.directory, "MEMORY.md"), `[当前依据](${projectFile})`); f.memories.scan();
+    writeFileSync(join(f.directory, "MEMORY.md"), `[当前依据](${projectFile})`); f.memories.scan(); indexSources(f);
     f.memories.runner = { close: async () => {}, execute: async (input) => { input.read(f.scope.sessionId, projectFile); writeFileSync(projectFile, "v2"); return { answer: "v1", incomplete: false }; } };
     const changedEvidence = await f.memories.query(f.scope, "依据");
     assert.equal(changedEvidence.answer, ""); assert.equal(changedEvidence.incomplete, true); assert.equal(changedEvidence.reason, "revision_conflict");
@@ -684,7 +702,7 @@ test("query discards an exposed summary when its persisted external dependency c
     writeFileSync(join(f.directory, "MEMORY.md"), `[当前依据](${evidence})`); f.memories.scan();
     const entry = f.memories.catalog(f.scope.workspaceId)[0]!;
     f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({
-      ...entry, status: "ready", title: "旧主题", summary: "依赖 v1 的旧摘要",
+      ...entry, status: "ready", summaryVersion: memorySummaryVersion, title: "旧主题", summary: "依赖 v1 的旧摘要",
       dependencies: [{ sessionId: f.scope.sessionId, path: evidence, revision: digest(readFileSync(evidence)) }],
     }), f.scope.sessionId);
     f.memories.runner = { close: async () => {}, execute: async () => {
@@ -709,7 +727,7 @@ test("background scans verify stable external dependencies in the worker once pe
     f.memories.scan();
     const current = f.memories.catalog(f.scope.workspaceId).find((entry) => entry.sessionId === f.scope.sessionId)!;
     f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({
-      ...current, status: "ready", summary: "只依赖 v1 的摘要", dependencies: [
+      ...current, status: "ready", summaryVersion: memorySummaryVersion, summary: "只依赖 v1 的摘要", dependencies: [
         { sessionId: f.scope.sessionId, path: evidence, revision: digest(readFileSync(evidence)) },
         { sessionId: other.sessionId, path: evidence, revision: digest(readFileSync(evidence)) },
       ],
@@ -742,7 +760,7 @@ test("query post-validation groups separately authorized reads of one external f
     writeFileSync(evidence, "两份来源共同读取的依据");
     for (const source of [f.scope, other])
       writeFileSync(join(memoryDirectory(f.root, source.sessionId), "MEMORY.md"), `[当前依据](${evidence})`);
-    f.memories.scan();
+    f.memories.scan(); indexSources(f);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.memories.runner = { close: async () => {}, execute: async (input) => ({
       answer: `${input.read(f.scope.sessionId, evidence).content}\n${input.read(other.sessionId, evidence).content}`,
@@ -760,27 +778,28 @@ test("query post-validation groups separately authorized reads of one external f
     assert.equal(result.readDocuments?.length, 2, "each source/path reading record remains available to callers");
   } finally { await f.close(); }
 });
-test("organizer rechecks external evidence, invalidates dependencies and rotates failed sources", async () => {
+test("organizer stays within its source and rotates failed sources", async (t) => {
   const f = fixture(); try {
     const other = f.create(), file = join(f.project, "current.md"); writeFileSync(file, "v1");
     for (const scope of [f.scope, other]) {
       f.store.db.prepare("INSERT OR REPLACE INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
       writeFileSync(join(memoryDirectory(f.root, scope.sessionId), "MEMORY.md"), `[当前依据](${file})`);
     }
-    f.memories.scan();
+    f.memories.scan(); ageSources(t);
     const attempted: string[] = [];
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      attempted.push(input.scope.sessionId); input.read(input.scope.sessionId, "MEMORY.md"); input.read(input.scope.sessionId, file);
-      if (attempted.length === 1) writeFileSync(file, "v2");
-      return { answer: JSON.stringify({ title: "主题", summary: "依据当前文件", keywords: [], edits: [] }), incomplete: false };
+      attempted.push(input.scope.sessionId); input.read(input.scope.sessionId, "MEMORY.md");
+      assert.throws(() => input.read(input.scope.sessionId, file), { code: "MEMORY_PATH" });
+      assert.throws(() => input.read(input.scope.sessionId === other.sessionId ? f.scope.sessionId : other.sessionId, "MEMORY.md"), { code: "SCOPE_MISMATCH" });
+      if (attempted.length === 1) throw Error("首个来源失败");
+      return { answer: JSON.stringify({ title: "主题", summary: "记忆记录了对当前文件的引用" }), incomplete: false };
     } };
     await f.memories.organize();
     assert.equal(f.memories.catalog(f.scope.workspaceId).find((s) => s.sessionId === attempted[0])?.status, "error");
-    (f.memories as any).lastOrganized = 0; await f.memories.organize();
-    assert.equal(new Set(attempted).size, 2, "failed source cannot monopolize later cycles");
+    assert.equal(new Set(attempted).size, 2, "failed source cannot monopolize a cycle");
     assert.equal(f.memories.catalog(f.scope.workspaceId).find((s) => s.sessionId === attempted[1])?.status, "ready");
     writeFileSync(file, "v3"); f.memories.scan();
-    assert.equal(f.memories.catalog(f.scope.workspaceId).find((s) => s.sessionId === attempted[1])?.summary, "");
+    assert.equal(f.memories.catalog(f.scope.workspaceId).find((s) => s.sessionId === attempted[1])?.status, "ready", "导航摘要描述记忆，不验证外部当前事实");
   } finally { await f.close(); }
 });
 test("blank templates never request summaries and deleted sources retain referenced attachments", async () => {
@@ -815,7 +834,7 @@ test("catalog excludes empty scaffolds, shows literal excerpts and retains real 
     assert.equal(entry.entryChars, [...readFileSync(path, "utf8")].length);
     writeFileSync(path, "中文😀\n"); f.memories.scan();
     assert.equal(f.memories.catalog(f.scope.workspaceId)[0].entryChars, 4, "count Unicode characters, not UTF-8 bytes or surrogate halves");
-    const cached = { ...f.memories.catalog(f.scope.workspaceId)[0], summary: "已整理", entryChars: undefined };
+    const cached = { ...f.memories.catalog(f.scope.workspaceId)[0], status: "ready", summaryVersion: memorySummaryVersion, summary: "已整理", entryChars: undefined };
     f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify(cached), f.scope.sessionId);
     f.memories.scan();
     assert.equal(f.memories.catalog(f.scope.workspaceId)[0].entryChars, 4);
@@ -964,12 +983,12 @@ test("a targeted scan settles when another source requeues, without waiting for 
     await f.close();
   }
 });
-test("a restarted service queries its cached source while reporting catalog sources it has not loaded", async () => {
+test("a restarted service presents all persisted summaries and lazily reads a cold source", async () => {
   const f = fixture(); try {
     const other = f.create();
     writeFileSync(join(f.directory, "MEMORY.md"), "可查询的当前事实");
     writeFileSync(join(memoryDirectory(f.root, other.sessionId), "MEMORY.md"), "尚未载入的来源");
-    f.memories.scan();
+    f.memories.scan(); indexSources(f);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     const restarted = new Memories(f.store, () => {});
     try {
@@ -984,20 +1003,18 @@ test("a restarted service queries its cached source while reporting catalog sour
       assert.equal((restarted as any).cachedViews.has(other.sessionId), false, "B must be unloaded before the query");
       let reads = 0;
       restarted.runner = { close: async () => {}, execute: async (input) => {
-        reads++; return { answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false };
+        assert.ok(input.prompt.includes(f.scope.sessionId) && input.prompt.includes(other.sessionId));
+        reads++; return { answer: input.read(other.sessionId, "MEMORY.md").content, incomplete: false };
       } };
       const result = await restarted.query(f.scope, "当前事实");
-      assert.equal(result.answer, "可查询的当前事实");
-      assert.equal(result.incomplete, true, "未载入的持久目录条目必须明确为未覆盖");
+      assert.equal(result.answer, "尚未载入的来源");
+      assert.equal(result.incomplete, false, "正文缓存未载入不能隐藏有效摘要");
       assert.equal(reads, 1);
     } finally { await restarted.close(); }
   } finally { await f.close(); }
 });
-test("Chinese partial phrases rank an older relevant source into the 24 query candidates", async () => {
+test("queries show every short summary beyond 24 sources before reading related memory", async () => {
   const f = fixture(); try {
-    // This test observes query ranking; filesystem events and organization have
-    // their own tests and must not consume this query-only runner fixture.
-    (f.memories as any).scheduleOrganizerWake = () => {};
     (f.memories as any).watcher?.close();
     (f.memories as any).watcher = undefined;
     const relevant = f.scope, sources = [relevant, ...Array.from({ length: 24 }, () => f.create())];
@@ -1005,16 +1022,25 @@ test("Chinese partial phrases rank an older relevant source into the 24 query ca
       writeFileSync(join(memoryDirectory(f.root, source.sessionId), "MEMORY.md"), index === 0 ? "模型迁移已经完成验证" : `无关资料 ${index}`);
     f.memories.scan();
     // 让建档写入产生的 watch 队列完成，再观察查询自身的候选行为。
-    await f.memories.scanAsync();
+    await f.memories.scanAsync(); indexSources(f);
+    const summaries = new Map(f.memories.catalog(f.scope.workspaceId).map((entry) => [entry.sessionId, entry.summary]));
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     let enteredCandidates = false, readSource = "";
     f.memories.runner = { close: async () => {}, execute: async (input) => {
+      const index = JSON.parse(input.prompt.split("摘要目录：")[1]!);
+      assert.equal(index.sources.length, 25);
+      for (const source of index.sources) {
+        assert.equal(source.summary, summaries.get(source.sessionId));
+        assert.equal(source.path, "MEMORY.md");
+      }
       enteredCandidates = input.prompt.includes(`\"sessionId\":\"${relevant.sessionId}\"`);
       const document = input.read(relevant.sessionId, "MEMORY.md"); readSource = relevant.sessionId;
       return { answer: document.content, incomplete: false };
     } };
     const result = await f.memories.query(f.scope, "请问模型迁移现在如何");
-    assert.equal(enteredCandidates, true, "非整句中文问法仍应召回较旧的相关来源");
+    assert.equal(enteredCandidates, true, "较旧来源也进入完整摘要目录");
+    assert.equal(result.sources.length, 25);
+    assert.equal(result.incomplete, false);
     assert.equal(readSource, relevant.sessionId);
     assert.equal(result.answer, "模型迁移已经完成验证");
   } finally { await f.close(); }
@@ -1033,7 +1059,7 @@ test("query post-validation scans only selected or actually read sources", async
     writeFileSync(join(memoryDirectory(f.root, unrelated.sessionId), "MEMORY.md"), "无关工作空间的资料");
     f.memories.scan();
     // Drain any initialization scan before counting query and post-validation work.
-    await f.memories.scanAsync();
+    await f.memories.scanAsync(); indexSources(f);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.memories.runner = { close: async () => {}, execute: async (input) => ({ answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false }) };
     const original = (f.memories as any).scanDirectory.bind(f.memories);
@@ -1055,7 +1081,7 @@ test("summary-only query revalidates a changed generation and never applies a st
     await f.memories.scanAsync(f.scope);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     const entry = f.memories.catalog(f.scope.workspaceId)[0]!;
-    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...entry, status: "ready", summary: "仅存在于 R0 的旧摘要" }), f.scope.sessionId);
+    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...entry, status: "ready", summaryVersion: memorySummaryVersion, summary: "仅存在于 R0 的旧摘要" }), f.scope.sessionId);
     f.memories.runner = { close: async () => {}, execute: async () => ({ answer: "根据旧摘要的回答", incomplete: false }) };
     const memories = f.memories as any, staleView = memories.cachedViews.get(f.scope.sessionId);
     const readInWorker = memories.readViewInWorker.bind(memories), apply = memories.applyScan.bind(memories);
@@ -1082,7 +1108,7 @@ test("query cancellation detaches post-validation and never publishes a late wor
   const f = fixture(); let release!: () => void;
   const hold = new Promise<void>((resolve) => { release = resolve; });
   try {
-    writeFileSync(join(f.directory, "MEMORY.md"), "可取消的当前事实"); f.memories.scan();
+    writeFileSync(join(f.directory, "MEMORY.md"), "可取消的当前事实"); f.memories.scan(); indexSources(f);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.memories.runner = { close: async () => {}, execute: async (input) => ({ answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false }) };
     const view = (f.memories as any).cachedViews.get(f.scope.sessionId), memories = f.memories as any;
@@ -1114,7 +1140,7 @@ test("query deadline covers post-validation scans and does not apply their late 
   const f = fixture(); let release!: () => void;
   const hold = new Promise<void>((resolve) => { release = resolve; });
   try {
-    writeFileSync(join(f.directory, "MEMORY.md"), "有界查询的当前事实"); f.memories.scan();
+    writeFileSync(join(f.directory, "MEMORY.md"), "有界查询的当前事实"); f.memories.scan(); indexSources(f);
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.store.db.prepare("INSERT INTO memory_preferences VALUES(1,?)").run(JSON.stringify({ timeoutMs: 25 }));
     f.memories.runner = { close: async () => {}, execute: async (input) => ({ answer: input.read(f.scope.sessionId, "MEMORY.md").content, incomplete: false }) };

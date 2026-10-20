@@ -1,12 +1,34 @@
-import { memo, useContext, useMemo, type ReactNode } from "react";
+import { createContext, memo, useContext, useId, useMemo, useRef, type ReactNode } from "react";
 import { DerivedContext } from "./derived-cache.js";
 import type { Token } from "marked";
 import { FileLink } from "./FileLink.js";
 import { localFileLink } from "../../shared/file-preview.js";
 import { CodeBlock } from "./CodeBlock.js";
-import { markdown, markdownImagePath } from "../../shared/markdown.js";
+import { markdown, markdownTokens, markdownImagePath, type FootnoteDefinition } from "../../shared/markdown.js";
 import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
 // Render token AST as React nodes, never untrusted HTML. Raw HTML stays literal.
+type Note = FootnoteDefinition & { number: number };
+const MarkdownContext = createContext<{ prefix: string; notes: Map<string, Note>; returns: Map<string, string>; onLocalLink?: (href: string) => void } | null>(null);
+function focusNote(id?: string) {
+  const target = id ? document.getElementById(id) : null;
+  target?.scrollIntoView({ block: "nearest" });
+  target?.focus({ preventScroll: true });
+}
+function FootnoteReference({ id, raw, compact }: { id: string; raw: string; compact: boolean }) {
+  const context = useContext(MarkdownContext), referenceId = useId();
+  const note = context?.notes.get(id);
+  if (!context || !note) return <>{raw}</>;
+  if (compact) return <sup>{note.number}</sup>;
+  const target = `${context.prefix}-note-${note.number}`;
+  return <sup><a id={referenceId} data-footnote-target={target} href={`#${target}`} aria-label={`查看引用 ${note.number}`} onClick={(event) => {
+    event.preventDefault(); context.returns.set(id, referenceId); focusNote(target);
+  }}>{note.number}</a></sup>;
+}
+function LocalMarkdownLink({ href, images, children }: { href: string; images?: MarkdownImageOwner; children: ReactNode }) {
+  const context = useContext(MarkdownContext);
+  if (context?.onLocalLink) return <a href={href} onClick={(event) => { event.preventDefault(); context.onLocalLink!(href); }}>{children}</a>;
+  return images ? <FileLink href={href} owner={images}>{children}</FileLink> : <span>{children}</span>;
+}
 type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
 function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false): ReactNode {
   return items.map((t: any, i) => {
@@ -24,7 +46,10 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     }
     switch (t.type) {
       case "space":
+      case "footnote_definition":
         return null;
+      case "footnote_reference":
+        return <FootnoteReference key={i} id={t.id} raw={t.raw} compact={compact} />;
       case "heading": {
         const Tag = `h${Math.min(6, t.depth)}` as "h1";
         return <Tag key={i}>{inner()}</Tag>;
@@ -70,7 +95,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
           if (token.type === "image") linkedImage = true;
         });
         if (linkedImage) return <span key={i}>{inner()}</span>;
-        if (localFileLink(t.href)) return images ? <FileLink key={i} href={t.href} owner={images}>{inner()}</FileLink> : <span key={i}>{inner()}</span>;
+        if (localFileLink(t.href.split("#")[0])) return <LocalMarkdownLink key={i} href={t.href} images={images}>{inner()}</LocalMarkdownLink>;
         let safe = false;
         try {
           safe = /^(?:https?:\/\/|mailto:)/i.test(t.href) && ["http:", "https:", "mailto:"].includes(
@@ -124,8 +149,29 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean }) => {
-  const cache = useContext(DerivedContext);
-  const ast = useMemo(() => cache ? cache.get(`markdown:chinese-emphasis-v1:${text}`, () => markdown.lexer(text)) : markdown.lexer(text), [cache, text]);
-  return <>{tokens(ast, images, renderBlock, compact)}</>;
+export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void }) => {
+  const cache = useContext(DerivedContext), prefix = useId(), returns = useRef(new Map<string, string>());
+  const ast = useMemo(() => cache ? cache.get(`markdown:footnotes-v2:breaks:${text}`, () => markdownTokens(text)) : markdownTokens(text), [cache, text]);
+  const notes = useMemo(() => {
+    const definitions = new Map<string, FootnoteDefinition>(), order = new Set<string>();
+    markdown.walkTokens(ast, (token) => {
+      if (token.type === "footnote_definition" && !definitions.has(token.id)) definitions.set(token.id, token as FootnoteDefinition);
+      if (token.type === "footnote_reference") order.add(token.id);
+    });
+    const result = new Map<string, Note>();
+    for (const id of [...order, ...definitions.keys()]) {
+      const note = definitions.get(id);
+      if (note && !result.has(id)) result.set(id, { ...note, number: result.size + 1 });
+    }
+    return result;
+  }, [ast]);
+  return <MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink }}>
+    {tokens(ast, images, renderBlock, compact)}
+    {!compact && notes.size > 0 && <section aria-label="引用"><hr /><ol>{[...notes.values()].map((note) => {
+      const target = `${prefix}-note-${note.number}`;
+      return <li key={note.id} id={target} tabIndex={-1}>{tokens(note.tokens, images)} <a href={`#${target}`} aria-label={`返回引用 ${note.number}`} onClick={(event) => {
+        event.preventDefault(); focusNote(returns.current.get(note.id) ?? document.querySelector<HTMLAnchorElement>(`[data-footnote-target="${CSS.escape(target)}"]`)?.id);
+      }}>↩</a></li>;
+    })}</ol></section>}
+  </MarkdownContext.Provider>;
 });

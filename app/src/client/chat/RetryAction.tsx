@@ -1,5 +1,4 @@
 import { useConnectionState, useScope } from "../transport.js";
-import { Icon } from "../components.js";
 import type { Configuration, Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import { emptyTasks, taskActive, tasksScope } from "../../shared/tasks.js";
@@ -24,7 +23,9 @@ export function RetryAction({ scope, nested }: { scope: Scope; nested: boolean }
   if (active || !canContinue(info.run) || submitting || attempt &&
     (attempt.expectedRunId === info.run?.id || !attempt.expectedRunId && !attempt.accepted)) return null;
   return <div className="thread-tail-actions">
-    <button type="button" className="icon-btn retry-action" aria-label="重试"
+    <span className="retry-notice">{info.run?.status === "failed" ? "回复失败" : info.run?.status === "cancelled" ? "回复已停止" : "回复已中断"}</span>
+    <span className="retry-separator" aria-hidden="true">·</span>
+    <button type="button" className="retry-action" aria-label="重试"
       data-tooltip={!connected ? "连接后可重试" : !selected ? "请先选择可用模型" : "从中断处重试"}
       disabled={busy || !connected || !selected}
       onClick={(event) => {
@@ -32,7 +33,7 @@ export function RetryAction({ scope, nested }: { scope: Scope; nested: boolean }
         void submit("continue");
         if (keyboard) document.getElementById(nested ? `prompt-${scope.sessionId}` : "prompt")?.focus({ preventScroll: true });
       }}>
-      <Icon name="rotate-cw" />
+      重试
     </button>
   </div>;
 }

@@ -5,7 +5,8 @@ import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { dataRoot } from "./data-root.js";
+export { dataRoot } from "./data-root.js";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
@@ -39,21 +40,6 @@ import {
   type Snapshot,
   type Scope,
 } from "../shared/protocol.js";
-
-export function dataRoot() {
-  if (process.env.AXIOM_DATA_DIR) return resolve(process.env.AXIOM_DATA_DIR);
-  return process.platform === "win32"
-    ? join(
-        process.env.APPDATA || join(homedir(), "AppData", "Roaming"),
-        "Axiom2",
-      )
-    : process.platform === "darwin"
-      ? join(homedir(), "Library", "Application Support", "Axiom2")
-      : join(
-          process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
-          "Axiom2",
-        );
-}
 
 export async function startServer(
   options: { root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
@@ -109,6 +95,7 @@ export async function startServer(
     if (scope === "authentication") return null;
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
+    if (parts.length === 2 && parts[0] === "memory-organization") return agents.memories.organization(parts[1]);
     if (parts.length === 2 && parts[0] === "sessions")
       return store.sessions(parts[1]);
     if (parts.length === 3 && parts[0] === "session")

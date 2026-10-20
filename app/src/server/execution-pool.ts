@@ -14,6 +14,8 @@ export interface AcquireRequest {
   environment: PreparedEnvironment; kind: ExecutionKind; requestStartedAtMonoMs: number;
   /** Agent caller performs a full resource check before start and again at binding_ready. */
   bindingGate?: true;
+  /** Recheck business admission immediately before start dispatch and the model execution permit. */
+  beforeExecute?: () => void;
   affinity?: { sessionId: string; fileRevision: string };
   parentLease?: LeaseRef; signal: AbortSignal; deadlineAt?: number;
   memory?: { concurrency: number; queue: number };
@@ -24,6 +26,7 @@ export interface ExecutionLease {
   readonly environment: PreparedEnvironment;
   readonly released: Promise<void>;
   validateEnvironment?(): Promise<boolean>;
+  beforeExecute?(): void;
   ensureReady(): Promise<ChildProcess>;
 }
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: Error) => void };
@@ -150,7 +153,7 @@ export class ExecutionPool {
         const hit=source==='affinity'?'affinity_hit':cold?'cold_start':i.environmentReadyAt!==undefined&&i.environmentReadyAt<=r.requestStartedAtMonoMs?'environment_hit':i.processReadyAt!==undefined&&i.processReadyAt<=r.requestStartedAtMonoMs?'process_hit':'preparation_inflight';
         this.metric(i,'acquired',{source,hit,kind:r.kind,durationMs:performance.now()-w.at,requestStartedAtMonoMs:r.requestStartedAtMonoMs,processReadyAt:i.processReadyAt,environmentReadyAt:i.environmentReadyAt});
         let ready:Promise<ChildProcess>|undefined;
-        w.done.resolve({ref,source,environment:i.environment,released:done.promise,validateEnvironment:()=>this.verify(instance),ensureReady:()=>{
+        w.done.resolve({ref,source,environment:i.environment,released:done.promise,beforeExecute:r.beforeExecute,validateEnvironment:()=>this.verify(instance),ensureReady:()=>{
           if(ready)return ready;
           const begin=performance.now();
           ready=(async()=>{if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','执行租约已失效');const child=await this.start(instance);if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','准备期间执行已停止');if(!instance.environment.current(!(r.kind==='agent'&&r.bindingGate))||!instance.environment.snapshotValid())throw new AppError('REVISION_CONFLICT','准备期间配置或模型快照已变化');this.metric(instance,'ready_wait',{durationMs:performance.now()-begin});return child;})();
@@ -218,7 +221,8 @@ export class ExecutionPool {
     const verified = await this.verify(i);
     // Validation yields to cancellation and process close. Never apply its result to a successor.
     if (i.lease !== lease || i.state !== 'leased' || !i.child) return;
-    const allowed = verified && this.isActive(ref) && i.environment.current(false) && i.environment.snapshotValid();
+    let allowed = verified && this.isActive(ref) && i.environment.current(false) && i.environment.snapshotValid();
+    if (allowed) { try { lease.request.beforeExecute?.(); } catch { allowed = false; } }
     try { i.child.send({type:'execution_permit',lease:ref,allowed},error=>{if(error)void this.retireInstance(i,'send_failed');}); }
     catch { void this.retireInstance(i,'send_failed'); return; }
     // A denied permit already makes the run fail and close itself. Sending

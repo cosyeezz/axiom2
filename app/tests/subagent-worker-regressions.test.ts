@@ -277,6 +277,14 @@ test("allowed platform shell can change synthetic source; parallel tasks isolate
         await wait(() => f.bodies.length > previous + 1);
         assert.match(JSON.stringify(f.bodies.at(-1).messages), /ISOLATED_TEST_PASSED/);
         f.releases.at(-1)!(); await f.idle();
+        const toolEvents = f.events.filter(e => e.runId === f.runId && e.type === "tool");
+        const completed = toolEvents.find(e => e.status === "completed");
+        assert.ok(completed && Number.isFinite(completed.durationMs) && completed.durationMs >= 0,
+          "completed tool events retain the measured pi execution duration");
+        assert.ok(toolEvents.filter(e => e.status === "running").every(e => e.durationMs === undefined));
+        const result = f.events.find(e => e.runId === f.runId && e.type === "message" &&
+          e.message.role === "toolResult" && e.message.toolCallId === completed.id);
+        assert.equal(completed.durationMs, result?.message.durationMs, "tool event and native result use the same measured duration");
         assert.equal(readFileSync(join(f.cwd, "synthetic-source.ts"), "utf8"), `changed-${index}`);
         assert.equal(readFileSync(join(f.cwd, "test-output/result.txt"), "utf8"), `result-${index}`);
         assert.equal(f.done().length, 1);

@@ -99,6 +99,11 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     mode = "repeat";
     writeFileSync(join(root, "memory", "sessions", a.sessionId, "MEMORY.md"), "x".repeat(20000));
     assert.equal((await execute(a)).incompleteReason, "read_limit");
+    const limits: number[] = [];
+    const remaining = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), readChars: 2,
+      read: (id, path, offset, limit) => { assert.equal(id, a.sessionId); limits.push(limit!); return memories.read(a, path, offset, limit); } });
+    assert.equal(remaining.incompleteReason, "read_limit");
+    assert.deepEqual(limits, [2], "主进程和 worker 都使用扣除摘要提示后的剩余预算");
     mode = "output";
     assert.equal((await execute(a)).incompleteReason, "output_limit");
     mode = "length";

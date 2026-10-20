@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, copyFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Browser } from "playwright";
@@ -7,7 +7,7 @@ import { startServer } from "../src/server/index.js";
 import type { AgentViews } from "../src/server/agents/views.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
-const root = mkdtempSync(join(tmpdir(), "axiom-markdown-images-ui-"));
+const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-markdown-images-ui-")));
 const artifacts = resolve("test-results/markdown-images");
 mkdirSync(artifacts, { recursive: true }); mkdirSync(join(root, "pi"));
 const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -22,7 +22,7 @@ try {
   const scope = { workspaceId: w.id, sessionId: s.id };
   const views = (app.agents as unknown as { views: AgentViews }).views;
   const publish = (text: string, streaming = false) => {
-    views.messageChanged(scope, { id: "image-reply", role: "assistant", text, streaming }); views.flush(scope);
+    views.messageChanged(scope, { id: "image-reply", role: "assistant", phase: "final_answer", text, streaming }); views.flush(scope);
   };
   publish("图片示意正在生成…", true);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });

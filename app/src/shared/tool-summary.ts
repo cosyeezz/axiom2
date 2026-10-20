@@ -6,34 +6,37 @@ export const toolStatusLabels: Record<ToolStatus, string> = {
   running: "执行中", completed: "已完成", failed: "失败", cancelled: "已停止", unknown: "未确认完成",
 };
 export type ToolIcon = "read" | "edit" | "write" | "bash" | "search" | "web" | "agents" | "delegate" | "append" | "cancel" | "result" | "tool";
-const tools: Record<string, ToolIcon> = {
-  read: "read",
-  edit: "edit",
-  write: "write",
-  powershell: "bash",
-  bash: "bash",
-  pwsh: "bash",
-  grep: "search",
-  find: "search",
-  ls: "search",
-  web_search: "search",
-  source_check: "search",
-  fetch_content: "web",
-  get_search_content: "web",
-  delegate: "delegate",
-  append: "append",
-  cancel_task: "cancel",
-  read_result: "result",
+const tools: Record<string, { icon: ToolIcon; label: string }> = {
+  read: { icon: "read", label: "读取文件" },
+  edit: { icon: "edit", label: "编辑文件" },
+  write: { icon: "write", label: "写入文件" },
+  powershell: { icon: "bash", label: "执行命令" },
+  bash: { icon: "bash", label: "执行命令" },
+  pwsh: { icon: "bash", label: "执行命令" },
+  grep: { icon: "search", label: "搜索文本" },
+  find: { icon: "search", label: "查找文件" },
+  ls: { icon: "search", label: "列出目录" },
+  memory_query: { icon: "tool", label: "查询记忆" },
+  web_search: { icon: "search", label: "搜索网页" },
+  source_check: { icon: "search", label: "核查来源" },
+  fetch_content: { icon: "web", label: "读取网页" },
+  get_search_content: { icon: "web", label: "读取搜索结果" },
+  delegate: { icon: "delegate", label: "委派子任务" },
+  append: { icon: "append", label: "补充子任务" },
+  cancel_task: { icon: "cancel", label: "停止子任务" },
+  read_result: { icon: "result", label: "读取子任务结果" },
 };
 export function compactText(text: string, limit = 160) {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > limit ? `${line.slice(0, limit)}…` : line;
 }
 export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; target: string; detail: string } {
-  if (call.summary) return call.summary;
   const name = call.name.replace(/^functions\./, "");
-  const label = name === "powershell" ? "bash" : compactText(name) || "tool";
-  const icon = Object.hasOwn(tools, name) ? tools[name] : "tool";
+  const tool = Object.hasOwn(tools, name) ? tools[name] : undefined;
+  const label = tool?.label ?? (compactText(name) || "调用工具");
+  // Relabel compact snapshots without reparsing their truncated input preview.
+  if (call.summary) return tool ? { ...call.summary, label } : call.summary;
+  const icon = tool?.icon ?? "tool";
   let input: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(call.input);
@@ -72,6 +75,9 @@ export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; ta
   }
   if (!target) target = Object.keys(input).length ? compactText(call.input) : "无输入参数";
   return { label, icon, target: compactText(target, 240), detail: compactText(detail) };
+}
+export function ordinaryToolStatus(message: ChatMessage, result: ChatMessage | null): ToolStatus {
+  return result?.status ?? (message.status === "failed" || message.status === "cancelled" ? message.status : "unknown");
 }
 export function toolPreview(result: ChatMessage | null) {
   if (!result) return "等待执行结果";

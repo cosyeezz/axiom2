@@ -1,4 +1,5 @@
-export const TITLE_INSTRUCTION = "另在本次回复开头单独一行输出<title>不超过10字的会话标题</title>。";
+export const TITLE_INSTRUCTION = "请在本次回复开头单独一行输出<title>不超过10个字符的会话标题</title>（英文字母、标点和空格也计入）。标题只生成一次，收到标题已确定的提醒后，后续回复无需重复输出。";
+export const TITLE_SETTLED_INSTRUCTION = "会话标题已确定，后续回复无需再生成或输出会话标题标签。";
 
 /** Shared IPC/storage validation; count Unicode code points, not UTF-16 units. */
 export function validSessionTitle(value: unknown): string | undefined {

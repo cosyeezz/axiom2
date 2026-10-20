@@ -6,6 +6,7 @@ import { memoryQueryTool } from "./memory-tool.js";
 import { memoryInstruction } from "../shared/memory.js";
 import { pendingMemoryRead, recordMemoryRead } from "./memory-recovery.js";
 import { within } from "./memory-files.js";
+import { memoryRoot, memoryRulesPath } from "./memory-storage.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { nativeInputs, recallNativeInputs, retainedInput } from "./agents/native-queue.js";
 import { queueTaskNotifications } from "./agents/task-notifications.js";
@@ -34,7 +35,7 @@ import { compressionError } from "./compression-error.js";
 import { errorMessage } from "./error-message.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "./request-selection.js";
-import { TITLE_INSTRUCTION, extractSessionTitle } from "./session-title.js";
+import { TITLE_INSTRUCTION, TITLE_SETTLED_INSTRUCTION, extractSessionTitle } from "./session-title.js";
 import { taskTools } from "./task-tools.js";
 import { TaskPhase, TaskBudgetReminder, taskBudgetIntro, taskBudgetWarning, taskSummaryInstruction, type TaskBudget } from "./task-budget.js";
 import {
@@ -61,6 +62,7 @@ export interface WorkerInput {
   selection: Selection;
   prompt: string;
   resume?: boolean;
+  memoryContinuation?: boolean;
   rewrite?: boolean;
   images?: ImageAttachment[];
   requestTitle?: boolean;
@@ -75,6 +77,38 @@ let session: AgentSession | undefined,
   inputClosed = false;
 let titleSettled = false;
 let wantsTitle = false;
+let titleConfirmation: Promise<void> | undefined;
+let resolveTitleConfirmation: (() => void) | undefined;
+
+function titleSettlementMessage(messages: readonly AgentMessage[]) {
+  if (activeInput?.task || !titleSettled || messages.some((message) =>
+    message.role === "custom" && message.customType === "axiom-title-settled")) return;
+  return { customType: "axiom-title-settled", content: TITLE_SETTLED_INSTRUCTION, display: false };
+}
+
+async function titleBoundary(event: BoundaryState): Promise<BoundaryResult | undefined> {
+  // Only acknowledge a durable title. The coordinator replies after its CAS;
+  // waiting here cannot insert a message between a tool call and its result.
+  await titleConfirmation;
+  if (cancelled) return;
+  const message = titleSettlementMessage(event.context.contextMessages);
+  if (message) return { entries: [...event.entries, { type: "custom_message", ...message }] };
+}
+
+function requestTitleConfirmation(title: string) {
+  titleConfirmation = new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      resolveTitleConfirmation = undefined;
+      resolve(); // The next run rechecks durable state if acknowledgement was lost.
+    }, 5000);
+    resolveTitleConfirmation = () => {
+      clearTimeout(timer);
+      resolveTitleConfirmation = undefined;
+      resolve();
+    };
+    send({ type: "title", title });
+  });
+}
 let activeInput: WorkerInput | undefined;
 let activeLease: LeaseRef | undefined;
 let environment: AgentInfo["environment"];
@@ -289,8 +323,12 @@ process.on("message", (value: any) => {
     }, { triggerTurn: false }).catch(() => {});
     return;
   }
-  if (value.type === "title-settled") {
-    titleSettled = true;
+  if (value.type === "title-settled" || value.type === "title-result") {
+    if (value.type === "title-settled" || value.settled === true) {
+      titleSettled = true;
+      wantsTitle = false;
+    }
+    resolveTitleConfirmation?.();
     return;
   }
   if (typeof value.id === "string" && value.id) {
@@ -438,6 +476,8 @@ process.on("message", (value: any) => {
     resumeSubmission = undefined;
     lastQueue = "";
     titleSettled = false;
+    resolveTitleConfirmation?.();
+    titleConfirmation = undefined;
     inputQueue = Promise.resolve();
     pendingInputs.clear();
     budgetReminder?.dispose();
@@ -487,6 +527,7 @@ async function run(input: WorkerInput) {
   const bindStarted = performance.now();
   const runSend = leaseSender(activeLease, input.runId);
   wantsTitle = Boolean(input.requestTitle) && !input.task;
+  titleSettled ||= !input.requestTitle && !input.task;
   let reusable = false;
   try {
     process.chdir(input.cwd);
@@ -544,7 +585,7 @@ async function run(input: WorkerInput) {
           const inputPath = (event.input as Record<string, unknown>).path;
           if (!["edit", "write"].includes(event.toolName) || typeof inputPath !== "string") return;
           const path = resolve(input.cwd, inputPath);
-          if (within(join(input.root, "memory"), path) && (!input.memoryPath || !within(dirname(input.memoryPath), path)))
+          if ((within(join(input.root, "memory"), path) || within(memoryRoot(input.root), path)) && (!input.memoryPath || !within(dirname(input.memoryPath), path)))
             return { block: true, reason: "只能维护所属主会话的记忆；其他来源记忆只读。" };
         });
         if (input.memoryPath) pi.on("tool_result", (event) => {
@@ -592,13 +633,7 @@ async function run(input: WorkerInput) {
           if (input.memoryPath && session && pendingMemoryRead(session.sessionManager)) messages.push({
             role: "custom", customType: "axiom-memory-restore", content: `上下文压缩已实际应用。尝试用 read 重新读取 ${input.memoryPath}；记忆是可选资料，读不到就按空记忆继续工作，不报错或等待修复。提示送达不代表已读取，也不要声称已恢复未读到的背景。保留本次 compactionId 与既有对话边界，不把压缩前原对话回填为当前上下文。`, display: false, timestamp: Date.now(),
           });
-          if (!wantsTitle || titleSettled) return { messages };
-          // Request-local copy: neither original input, system prompt nor JSONL
-          // gains an instruction entry. Repeated tool turns keep requesting it.
-          return { messages: [...messages, {
-            role: "custom", customType: "axiom-title", content: TITLE_INSTRUCTION,
-            display: false, timestamp: Date.now(),
-          }] };
+          return { messages };
         });
         // Axiom owns proactive thresholds and the independent summary model.
         // Keep pi's overflow recovery and explicit compaction available.
@@ -607,6 +642,8 @@ async function run(input: WorkerInput) {
         });
         pi.on("turn_end", (event) => compressionBoundary(event));
         pi.on("agent_before_settle", (event) => compressionBoundary(event));
+        pi.on("turn_end", titleBoundary);
+        pi.on("agent_before_settle", titleBoundary);
       }],
       appendSystemPromptOverride: (base) => [...base, "引用本地文件时，使用 Markdown 链接 [文件名](路径)", ...(input.task
         ? [
@@ -614,7 +651,7 @@ async function run(input: WorkerInput) {
             subagentPolicy,
           ]
         : [
-            ...(input.memoryPath ? [memoryInstruction(input.memoryPath)] : []),
+            ...(input.memoryPath ? [memoryInstruction(input.memoryPath, memoryRulesPath(input.root))] : []),
             "delegate、append、cancel_task、read_result 是独立的子任务工具。子代理可用于调研、分析、审查以及执行测试、构建和静态检查；彼此独立的测试应优先拆分委派并行执行，不必由主代理串行运行。委派测试时给出工作目录、命令或测试范围、必要前置条件与交付要求，协调独立端口、临时目录和输出路径；有依赖或争用共享资源的检查须等待前置完成或串行执行。测试期间不要修改其覆盖的文件；收到结果后若相关文件变化，重跑受影响的检查。子代理可生成必要测试产物，但不得修改源码、测试代码、配置、锁文件或基准快照，不得安装依赖；所有代码修改由你（主代理）完成。委派后继续独立工作，不轮询；完成通知到达后读取指定结果，核对实际命令、退出码、关键输出及未验证项。已验证且相关文件未变的检查无需由主代理重复执行。应用调研建议前重新核对当前文件。",
           ])],
     });
@@ -798,6 +835,7 @@ async function run(input: WorkerInput) {
           type: "tool",
           id: toolKey(input.runId, event.toolCallId),
           name: event.toolName,
+          durationMs: event.type === "tool_execution_end" ? event.durationMs : undefined,
           status:
             event.type === "tool_execution_end"
               ? event.isError
@@ -830,7 +868,7 @@ async function run(input: WorkerInput) {
           const title = extractSessionTitle(text);
           if (title) {
             wantsTitle = false;
-            send({ type: "title", title });
+            requestTitleConfirmation(title);
           }
         }
         setImmediate(() => {
@@ -862,12 +900,21 @@ async function run(input: WorkerInput) {
     handledTaskTransition = taskPhase.revision;
     let phaseMessageStart = 0;
     if (!cancelled) {
+      // Append, never remove or relocate, title protocol messages. Pending runs
+      // retry once at their start; tool turns reuse the persisted instruction.
+      const titleMessage = wantsTitle && !titleSettled
+        ? { customType: "axiom-title", content: TITLE_INSTRUCTION, display: false }
+        : titleSettlementMessage(session.messages);
+      if (titleMessage) await session.sendCustomMessage(titleMessage, { triggerTurn: false });
       send({ type: "usage", usage: usage(), autoCheck: true });
       if (input.resume) {
         if (input.task?.budget) await session.sendCustomMessage({ customType: "axiom-budget", display: false,
           content: taskBudgetIntro(input.task.budget), details: { runId: input.runId } }, { triggerTurn: false });
         await resumeSession(session, input.task?.inputIds[0] ?? input.requestId);
         send({ type: "context-rebuilt" });
+      } else if (input.memoryContinuation) {
+        await session.sendCustomMessage({ customType: "axiom-memory-continuation", content: input.prompt, display: false,
+          details: { runId: input.runId } }, { triggerTurn: true });
       } else if (input.notification) {
         const all = input.notification.items ?? [input.notification];
         const items = all.filter((item) => !notificationIds.has(item.id));
@@ -937,6 +984,8 @@ async function run(input: WorkerInput) {
     // cannot mistake unfinished decode work for an input safe to replay.
     await inputQueue;
     await session.waitForIdle();
+    const titleMessage = titleSettlementMessage(session.messages);
+    if (titleMessage && !cancelled) await session.sendCustomMessage(titleMessage, { triggerTurn: false });
     const outcome = executionOutcome(runMessages.slice(phaseMessageStart), cancelled, aborted, announcedRunning);
     compressionBoundary();
     closeCompressionRequests();
@@ -960,6 +1009,7 @@ async function run(input: WorkerInput) {
       error: errorMessage(error, "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {
+    resolveTitleConfirmation?.();
     budgetReminder?.dispose();
     closeCompressionRequests();
     unsubscribeRun?.();

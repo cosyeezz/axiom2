@@ -7,37 +7,45 @@ import { scopeSnapshot, subscribeScope } from "../transport.js";
 import { taskCallStatus } from "../tasks/task-call.js";
 import { tasksAt } from "../tasks/task-selectors.js";
 import type { ActivityFact } from "./ToolActivity.js";
-import { toolPreview, toolSummary } from "./tool-summary.js";
+import { ordinaryToolStatus, toolPreview, toolSummary } from "./tool-summary.js";
 
 export function messageFacts(message: ChatMessage, order: number, get: (id: string) => ChatMessage | null, list: TaskList): [string, ActivityFact][] {
   const entries: [string, ActivityFact][] = [[`message:${message.id}`, {
     name: message.thinkingActive && message.streaming ? "thinking" : !message.calls?.length && message.thinking ? "thought" : message.taskNotice ? "subagent" : "",
-    icon: message.taskNotice ? "agents" : "thinking", target: message.taskNotice ? message.text : message.thinkingActive && message.streaming ? "" : message.thinking ?? "",
+    icon: message.taskNotice ? "agents" : "thinking", target: message.taskNotice ? message.text : message.thinking ?? "",
     kind: message.taskNotice ? "notice" : "message", evidence: !!message.taskNotice || !!message.calls?.some((call) => taskToolName(call.name)), runId: message.runId, order: [order, -1],
     status: message.error || message.status === "failed" || message.taskNotice === "failed" || message.taskNotice === "interrupted" ? "failed" :
       message.status === "cancelled" || message.taskNotice === "cancelled" ? "cancelled" : message.streaming || message.status === "running" ? "running" : "completed",
   }]];
   for (const [callOrder, call] of (message.calls ?? []).entries()) {
     const result = get(`tool-${call.id}`), summary = toolSummary(call), task = taskToolName(call.name);
-    let status = task ? taskCallStatus(result, message) : result?.status ||
-      (message.status === "failed" || message.status === "cancelled" ? message.status : message.streaming ? "running" : "unknown");
+    let status = task ? taskCallStatus(result, message) : ordinaryToolStatus(message, result);
     const tasks = tasksAt(list, call.id);
     if (task && status === "completed" && tasks.length) status = tasks.some((item) => taskActive(item.status)) ? "running" :
       tasks.some((item) => item.status === "failed" || item.status === "interrupted") ? "failed" :
       tasks.some((item) => item.status === "cancelled") ? "cancelled" : "completed";
     entries.push([call.id, { name: summary.label, icon: summary.icon,
       target: task ? summary.target : `${summary.target}${summary.detail ? ` · ${summary.detail}` : ""}${status === "failed" ? ` · ${toolPreview(result)}` : ""}`,
-      status, order: [order, callOrder] }]);
+      status, startedAt: result?.toolStartedAt, durationMs: result?.durationMs, order: [order, callOrder] }]);
   }
   return entries;
 }
 
 /** One initial facts snapshot. Hidden presentation components have no registration responsibility. */
-export function useActivityFacts(scope: Scope, ids: string[]) {
+export function useActivityFacts(scope: Scope, ids: string[], thinkingOnlyIds: string[] = [], callsOnlyIds: string[] = [], callIds?: string[]) {
   const original = useContext(OriginalMessages);
-  const key = JSON.stringify(ids);
+  const key = JSON.stringify([ids, thinkingOnlyIds, callsOnlyIds, callIds]);
   const store = useMemo(() => {
-    const get = (id: string) => scopeSnapshot<ChatMessage>(messageScope(scope, id)) ?? original?.get(id) ?? null;
+    const get = (id: string) => {
+      const raw = scopeSnapshot<ChatMessage>(messageScope(scope, id)) ?? original?.get(id) ?? null;
+      const message = raw && callIds && raw.calls ? { ...raw, calls: raw.calls.filter(call => callIds.includes(call.id)) } : raw;
+      if (!message) return null;
+      if (thinkingOnlyIds.includes(id)) return { ...message, calls: undefined,
+        streaming: !!message.thinkingActive && !!message.streaming,
+        status: message.thinkingActive && message.streaming ? "running" as const : "completed" as const, error: undefined };
+      if (callsOnlyIds.includes(id)) return { ...message, thinking: undefined, thinkingActive: false };
+      return message;
+    };
     const tasks = () => scopeSnapshot<TaskList>(tasksScope(scope)) ?? emptyTasks;
     const chunks = ids.map((id, order) => { const message = get(id); return message ? messageFacts(message, order, get, tasks()) : []; });
     let snapshot = chunks.flat();

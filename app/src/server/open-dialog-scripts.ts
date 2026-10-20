@@ -20,8 +20,21 @@ function run() {
   if (options.initialDirectory) panel.directoryURL = $.NSURL.fileURLWithPath(options.initialDirectory);
   panel.center;
   panel.makeKeyAndOrderFront(null);
-  app.activateIgnoringOtherApps(true);
-  if (panel.runModal !== $.NSModalResponseOK) return '[]';
+  // Activate only from inside the modal session. runModal first blocks the main
+  // thread while it connects the remote Open panel; activating before that makes
+  // the host frontmost while it cannot drain events, so mouse movement overflows
+  // its event buffer and WindowServer drops the activation notification. The
+  // host then stays inactive, the panel ignores every click, and later requests
+  // are no-ops because it is already front. Retry until the panel is key.
+  let attempts = 0;
+  const activation = $.NSTimer.timerWithTimeIntervalRepeatsBlock(0.1, true, () => {
+    if ((app.isActive && panel.isKeyWindow) || ++attempts > 50) { activation.invalidate; return; }
+    app.activateIgnoringOtherApps(true);
+  });
+  $.NSRunLoop.mainRunLoop.addTimerForMode(activation, $.NSModalPanelRunLoopMode);
+  const response = panel.runModal;
+  activation.invalidate;
+  if (response !== $.NSModalResponseOK) return '[]';
   const urls = panel.URLs;
   const paths = [];
   for (let i = 0; i < urls.count; i++) paths.push(ObjC.unwrap(urls.objectAtIndex(i).path));

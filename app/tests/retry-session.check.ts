@@ -78,19 +78,20 @@ try {
   await until(() => !app.agents.active(viewed), "failure did not settle");
   await page.getByRole("button", { name: "重试", exact: true }).waitFor();
   const retryButton = page.getByRole("button", { name: "重试", exact: true });
-  assert.equal(await retryButton.innerText(), "", "retry is an icon, not a text button");
-  assert.equal(await retryButton.locator("svg").count(), 1);
+  assert.equal(await retryButton.innerText(), "重试");
+  assert.equal(await retryButton.locator("svg").count(), 0);
+  assert.equal(await page.locator(".retry-notice").innerText(), "回复失败");
   mkdirSync("../artifacts", { recursive: true });
   for (const width of [390, 820, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const retryBox = await retryButton.boundingBox();
     const sendBox = await page.getByRole("button", { name: "发送消息", exact: true }).boundingBox();
-    assert.ok(retryBox && sendBox && retryBox.width === 44 && retryBox.height === 44);
+    assert.ok(retryBox && sendBox && retryBox.width >= 44 && retryBox.height === 32);
     assert.ok(retryBox.y + retryBox.height <= sendBox.y, "retry belongs above the composer");
     assert.equal(await page.locator('#messages > .thread-tail-actions:last-child .retry-action').count(), 1);
     assert.equal(await page.locator('.composer .retry-action').count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: `../artifacts/retry-icon-${width}.png` });
+    await page.screenshot({ path: `../artifacts/retry-notice-${width}.png` });
   }
   assert.equal(app.store.session(workspace.id, viewed.sessionId).unread, true);
   assert.equal(await page.locator(`[data-session-id="${viewed.sessionId}"] .session-state.unread`).count(), 0, "opened session hides blue indicator even before its read receipt");
@@ -197,7 +198,7 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   }
   assert.deepEqual(errors, []);
-  console.log("PASS: retry activity wins unread; only visible uncovered bottom results acknowledge; SVG retry resumes without new input and preserves draft; remaining child work stays active in the sidebar; 390/820/1440 fit");
+  console.log("PASS: retry activity wins unread; only visible uncovered bottom results acknowledge; flat text retry resumes without new input and preserves draft; remaining child work stays active in the sidebar; 390/820/1440 fit");
 } finally {
   await browser.close(); await app.close(); fixture.closeAllConnections(); await new Promise<void>((resolve) => fixture.close(() => resolve()));
   if (oldPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = oldPi;

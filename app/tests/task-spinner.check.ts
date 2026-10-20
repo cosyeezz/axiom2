@@ -29,7 +29,8 @@ const bundle = await build({
   bundle: true, write: false, format: "iife", platform: "browser",
   loader: { ".svg": "text", ".css": "empty" }, define: { "process.env.NODE_ENV": '"production"' },
 });
-const css = ["tokens", "workbench", "thread-navigation"].map(name => readFileSync(new URL(`../src/client/styles/${name}.css`, import.meta.url), "utf8")).join("\n");
+const css = ["tokens", "workbench", "thread-navigation", "icon-geometry", "task-calls"].map(name => readFileSync(new URL(`../src/client/styles/${name}.css`, import.meta.url), "utf8")).join("\n");
+const sprite = readFileSync(new URL("../src/client/icons.svg", import.meta.url), "utf8");
 mkdirSync("test-results/status-icons", { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
@@ -38,29 +39,29 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.emulateMedia({ reducedMotion });
-    await page.setContent(`<style>${css}</style><div id="icons" style="padding:24px"></div>`);
+    await page.setContent(`<style>${css}</style>${sprite}<div id="icons" style="padding:24px"></div>`);
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    await page.locator("#running .bubble-loading").waitFor();
+    await page.locator("#running .task-running-icon").waitFor();
     for (const status of statuses) {
-      const active = ["queued", "starting", "running", "stopping"].includes(status);
+      const active = ["starting", "running", "stopping"].includes(status);
       const icon = page.locator(`#${status} svg`);
-      assert.equal(await icon.locator("animate").count(), active ? 8 : 0, `${status}, ${reducedMotion}`);
+      const expected = active ? "subagent-running" : status === "queued" ? "hourglass" : status === "completed" ? "subagent-completed" : "subagent-ended";
+      assert.equal(await icon.locator("use").getAttribute("href"), `#i-${expected}`);
+      assert.equal(await icon.evaluate(node => getComputedStyle(node).animationName), active ? "task-icon-spin" : "none", `${status}, ${reducedMotion}`);
       if (active) {
-        const radii = await icon.evaluate(node => {
-          const svg = node as SVGSVGElement;
-          svg.pauseAnimations();
-          svg.setCurrentTime(0.2);
-          const first = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
-          svg.setCurrentTime(0.7);
-          const second = [...svg.querySelectorAll("circle")].map(circle => circle.r.animVal.value);
-          svg.unpauseAnimations();
-          return { first, second, stroke: getComputedStyle(svg).stroke };
+        const frames = await icon.evaluate(node => {
+          const animation = node.getAnimations()[0];
+          animation.pause(); animation.currentTime = 0;
+          const first = getComputedStyle(node).transform;
+          animation.currentTime = 350;
+          const second = getComputedStyle(node).transform;
+          animation.play();
+          return { first, second };
         });
-        assert.notDeepEqual(radii.first, radii.second, "fixed-position bubbles change size");
-        assert.ok(radii.first.some(r => r > 0) && radii.second.some(r => r > 0));
-        assert.equal(radii.stroke, "none", "global outline styles do not add strokes");
+        assert.notEqual(frames.first, frames.second, "only the Tabler loader rotates");
+      } else {
+        assert.equal(await icon.evaluate(node => getComputedStyle(node).transform), "none", "queued and terminal icons remain static");
       }
-      assert.equal(await icon.evaluate(node => getComputedStyle(node).transform), "none");
       assert.equal(await page.locator(`#${status} .agent-state-label`).evaluate(node => getComputedStyle(node).transform), "none");
     }
     const colors = await page.locator('.session-state').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color));
@@ -112,12 +113,13 @@ try {
     const title = await page.locator(".session-state.running").first().elementHandle();
     await page.evaluate(() => (window as any).renderIcons(true));
     await page.locator('#running .agent-state[data-state="completed"]').waitFor();
-    assert.equal(await page.locator("#running animate").count(), 0, "completion unmounts the loading animation");
+    assert.equal(await page.locator("#running .task-running-icon").count(), 0, "completion removes the loading animation");
+    assert.equal(await page.locator('#running svg').evaluate(node => node.getAnimations().length), 0);
     assert.equal(await title!.evaluate(node => node === document.querySelector(".session-state.running")), true, "updates retain title SVG identity");
     await page.screenshot({ path: `test-results/status-icons/${reducedMotion}.png` });
   }
   assert.deepEqual(errors, []);
-  console.log("PASS: official bubble loading, running/unread rings distinguished by color, fill over 2s, hold solid for 2s and reverse over 2s at 8px, animated fold, normal/reduced motion, stable labels and state transitions.");
+  console.log("PASS: selected subagent icons, rotating Tabler loader, static queued/terminal states, running/unread rings distinguished by color, fill over 2s, hold solid for 2s and reverse over 2s at 8px, animated fold, normal/reduced motion, stable labels and state transitions.");
 } finally {
   await browser.close();
 }

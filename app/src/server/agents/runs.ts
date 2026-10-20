@@ -13,6 +13,7 @@ import { errorMessage } from "../error-message.js";
 type Live = {
   scope: Scope;
   task: boolean;
+  automatic?: boolean;
   run: Run;
   lease: ExecutionLease;
   child: ChildProcess;
@@ -40,6 +41,7 @@ export class AgentRuns {
   ) {}
   private live = new Map<string, Live>();
   private epochs = new Map<string, number>();
+  private automaticStops = new Map<string, Promise<void>>();
   private pending = new Map<string, { scope: Scope; run: Run; input: WorkerInput; lease: ExecutionLease; done: Promise<void> }>();
   epoch(scope: Scope) { return this.epochs.get(scope.sessionId) ?? 0; }
   assertEpoch(scope: Scope, epoch: number) {
@@ -58,6 +60,19 @@ export class AgentRuns {
   active(scope: Scope) {
     this.store.session(scope.workspaceId, scope.sessionId);
     return this.live.has(scope.sessionId) || this.pending.has(scope.sessionId);
+  }
+  preemptAutomatic(scope: Scope) {
+    const stopping = this.automaticStops.get(scope.sessionId);
+    if (stopping) return stopping;
+    const pending = this.pending.get(scope.sessionId), live = this.live.get(scope.sessionId);
+    if (!(pending?.input.memoryContinuation && pending.run.status === "starting" || live?.automatic && live.run.status === "starting")) return;
+    // Concurrent user inputs share one preemption. Explicit stops still advance the epoch independently.
+    const stopped = this.stop(scope);
+    this.automaticStops.set(scope.sessionId, stopped);
+    void stopped.finally(() => {
+      if (this.automaticStops.get(scope.sessionId) === stopped) this.automaticStops.delete(scope.sessionId);
+    }).catch(() => {});
+    return stopped;
   }
   signal(scope: Scope, runId: string, value: Record<string, unknown>) {
     this.store.session(scope.workspaceId, scope.sessionId);
@@ -200,12 +215,14 @@ export class AgentRuns {
     if (!this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
     if (!verified || !lease.environment.current(false) || !lease.environment.snapshotValid())
       throw new AppError("REVISION_CONFLICT", "工作进程准备期间配置或资源已变化；消息未发送。");
+    lease.beforeExecute?.();
     input.modelsFile = lease.environment.modelsFile;
     input.executionGate = true;
     let exited!: () => void;
     const live: Live = {
       scope,
       task: !!input.task,
+      automatic: !!input.memoryContinuation,
       run,
       child,
       lease,
@@ -285,6 +302,7 @@ export class AgentRuns {
         }
         if (event.type === "title" && !live.task && !live.finish && !live.closed) {
           if (this.store.generatedTitle(scope, event.title)) this.views.changed(scope);
+          this.signal(scope, run.id, { type: "title-result", settled: !this.store.requestTitle(scope) });
         }
         if (event.type === "context-rebuilt") this.views.refresh(scope);
         if (event.type === "messages-persisted") this.views.persisted(scope, event.ids);
@@ -297,9 +315,12 @@ export class AgentRuns {
             ?.filter((c: any) => c.type === "text")
             .map((c: any) => c.text)
             .join("\n");
+          const toolStartedAt = old?.toolStartedAt ?? (event.status === "running" ? Date.now() : undefined);
           this.views.messageChanged(scope, {
             id,
             role: "toolResult",
+            toolStartedAt,
+            durationMs: event.status === "running" ? undefined : event.durationMs,
             toolName: event.name,
             toolCallId: event.id,
             text: output ?? old?.text ?? "",

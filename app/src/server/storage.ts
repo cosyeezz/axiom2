@@ -1,4 +1,5 @@
 import { initializeMemory } from "./memory-files.js";
+import { initializeMemoryStorage } from "./memory-storage.js";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { realpathSync, statSync, mkdirSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
@@ -150,6 +151,13 @@ export class Store {
       ) DESC,a.rowid DESC
       LIMIT 1;
     `);
+    try {
+      const sessions = this.db.prepare("SELECT id FROM sessions WHERE NOT EXISTS(SELECT 1 FROM tasks WHERE tasks.sessionId=sessions.id)").all();
+      initializeMemoryStorage(this.root, sessions.map((row) => String(row.id)));
+    } catch (error) {
+      // Migration never removes originals or blocks conversation recovery.
+      console.warn("会话记忆目录初始化未完成，保留既有位置：", error instanceof Error ? error.message : String(error));
+    }
   }
   workspaces(): Workspace[] {
     return (

@@ -53,7 +53,7 @@ export class PooledMemoryRunner implements MemoryRunner {
       signal.throwIfAborted();
       if(!environment.current())throw Error('记忆模型配置在准备期间变化，请重试');
       const revisionAware = input as RevisionAwareExecution;
-      return await this.observe(child,lease,revisionAware,signal,{executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,readChars:preferences.readChars,maxTurns:preferences.maxTurns,revisionChecks:typeof revisionAware.revision === "function"});
+      return await this.observe(child,lease,revisionAware,signal,{executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,readChars:input.readChars??preferences.readChars,maxTurns:preferences.maxTurns,revisionChecks:typeof revisionAware.revision === "function"});
     } catch(error) {
       if(lease)await this.pool.retire(lease.ref,'memory_failed');
       if(timeout.aborted)throw timeoutError();

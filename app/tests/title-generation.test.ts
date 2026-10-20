@@ -13,7 +13,8 @@ import { running } from "../src/shared/agent.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 // Deliberately assert the product contract, rather than importing its implementation constant.
-const instruction = "另在本次回复开头单独一行输出<title>不超过10字的会话标题</title>。";
+const instruction = "请在本次回复开头单独一行输出<title>不超过10个字符的会话标题</title>（英文字母、标点和空格也计入）。标题只生成一次，收到标题已确定的提醒后，后续回复无需重复输出。";
+const settledInstruction = "会话标题已确定，后续回复无需再生成或输出会话标题标签。";
 const systemMarker = "SYSTEM_TITLE_FIXTURE <title>系统原文</title>";
 const wait = async (check: () => boolean, label: string) => {
   const deadline = Date.now() + 25000;
@@ -30,13 +31,20 @@ type ModelRequest = {
   tool: (text?: string) => void;
 };
 
-function requestsTitle(request: ModelRequest, expected: boolean) {
+function requestsTitle(request: ModelRequest, pending: boolean, instructionCount = 1) {
   const messages = request.body.messages;
   const count = JSON.stringify(messages).split(instruction).length - 1;
-  assert.equal(count, expected ? 1 : 0, "exactly one transient instruction while pending; none once settled");
+  assert.equal(count, instructionCount, "persisted instructions remain in place; only pending runs append a request");
+  assert.equal(JSON.stringify(messages).split(settledInstruction).length - 1, pending ? 0 : 1,
+    "exactly one settled reminder accompanies the next normal request");
   assert.ok(messages.some((message) => message.role === "system" && JSON.stringify(message.content).includes(systemMarker)));
   assert.ok(messages.filter((message) => message.role === "system").every((message) => !JSON.stringify(message.content).includes(instruction)),
     "title request must not alter the system prompt");
+}
+
+function preservesPrefix(previous: ModelRequest, next: ModelRequest) {
+  assert.deepEqual(next.body.messages.slice(0, previous.body.messages.length), previous.body.messages,
+    "title protocol only appends messages; the previous provider request remains an exact prefix");
 }
 
 test("session titles: real worker context, durable projection, retries, manual priority and isolation (loopback)", { timeout: 180000 }, async (t) => {
@@ -144,12 +152,16 @@ test("session titles: real worker context, durable projection, retries, manual p
     first.tool();
     const second = await next(initial + 1);
     requestsTitle(second, true);
+    preservesPrefix(first, second);
     assert.equal(title(scope), fallback, "a tool-only response cannot settle the title");
     assert.ok(second.body.messages.some((message) => message.role === "tool" && JSON.stringify(message.content).includes("TOOL_TITLE_FIXTURE")),
       "the real pi read tool ran between provider requests");
     second.tool("<title>工具核验</title>\n继续读取。");
     const third = await next(initial + 2);
     requestsTitle(third, false);
+    preservesPrefix(second, third);
+    const reminderIndex = third.body.messages.findIndex((message) => JSON.stringify(message.content).includes(settledInstruction));
+    assert.equal(third.body.messages[reminderIndex - 1].role, "tool", "reminder follows the complete tool call/result pair");
     await wait(() => title(scope) === "工具核验", "generated title was not saved");
     assert.equal(state(scope).titleState, "generated");
     third.finish("读取完成。正文保留 <title>正文标签</title>。");
@@ -165,9 +177,15 @@ test("session titles: real worker context, durable projection, retries, manual p
     assert.ok(!environment.includes(instruction));
     const saved = transcript(scope);
     assert.ok(saved.raw.includes("<title>工具核验</title>"), "pi JSONL retains the original assistant title");
-    assert.ok(!saved.raw.includes(instruction), "temporary context instruction must never become JSONL history");
+    assert.ok(saved.raw.includes(instruction), "title instruction is durable JSONL history");
     const entries = saved.raw.trim().split("\n").map((line) => JSON.parse(line));
-    assert.ok(!entries.some((entry) => entry.customType === "axiom-title" || entry.message?.customType === "axiom-title"));
+    for (const customType of ["axiom-title", "axiom-title-settled"]) {
+      const protocol = entries.filter((entry) => entry.type === "custom_message" && entry.customType === customType);
+      assert.equal(protocol.length, 1, `${customType} is persisted exactly once`);
+      assert.equal(protocol[0].display, false);
+    }
+    assert.ok(displayed.every((message) => !message.text.includes(instruction) && !message.text.includes(settledInstruction)),
+      "title protocol messages stay hidden from chat");
     assert.ok(entries.some((entry) => entry.message?.role === "user" && entry.message.content.some((part: any) => part.text === input)));
     const ids = app!.agents.thread(scope).ids;
     await app!.close(); app = undefined;
@@ -180,6 +198,7 @@ test("session titles: real worker context, durable projection, retries, manual p
     assert.equal(requests.length, initial + 3, "restart must not replay or generate titles");
     const later = await begin(scope, "后续运行不得再次索要标题");
     requestsTitle(later, false);
+    preservesPrefix(third, later);
     assert.ok(JSON.stringify(later.body.messages).includes("<title>工具核验</title>"), "model context still reads the unmodified assistant history");
     later.finish("<title>不应覆盖</title>\n后续完成。");
     await settle(scope, initial + 4);
@@ -197,14 +216,14 @@ test("session titles: real worker context, durable projection, retries, manual p
     ];
     for (const [index, response] of cases.entries()) {
       const request = await begin(scope, index === 0 ? "首条兜底保持不变" : `后续输入 ${index}`);
-      requestsTitle(request, true);
+      requestsTitle(request, true, index + 1);
       request.finish(response.text, response.reason);
       await settle(scope, initial + index + 1, response.reason === "length" ? "failed" : "completed");
       assert.equal(title(scope), "首条兜底保持不变", "later inputs must not replace the first fallback");
       assert.equal(state(scope).titleState, "pending");
     }
     const retry = await begin(scope, "下一次继续索要");
-    requestsTitle(retry, true);
+    requestsTitle(retry, true, cases.length + 1);
     retry.finish("<title>终于生成</title>\n完成。");
     await settle(scope, initial + cases.length + 1);
     assert.equal(title(scope), "终于生成");
@@ -223,7 +242,7 @@ test("session titles: real worker context, durable projection, retries, manual p
     await settle(scope, initial + 1, "cancelled");
     assert.equal(state(scope).titleState, "pending");
     const retry = await begin(scope, "取消后继续");
-    requestsTitle(retry, true);
+    requestsTitle(retry, true, 2);
     retry.finish("<title>恢复完成</title>\n完成。");
     await settle(scope, initial + 2);
     assert.equal(title(scope), "恢复完成");
@@ -253,12 +272,14 @@ test("session titles: real worker context, durable projection, retries, manual p
     first.tool("<title>迟到模型标题</title>\n继续工作。");
     const second = await next(initial + 1);
     requestsTitle(second, false);
+    preservesPrefix(first, second);
     second.finish("<title>再次尝试覆盖</title>\n完成。");
     await settle(scope, initial + 2);
     assert.equal(title(scope), "用户指定名称");
     assert.equal(state(scope).titleState, "manual");
     const later = await begin(scope, "手动命名后的新运行");
     requestsTitle(later, false);
+    preservesPrefix(second, later);
     later.finish("完成。");
     await settle(scope, initial + 3);
     assert.equal(title(scope), "用户指定名称");

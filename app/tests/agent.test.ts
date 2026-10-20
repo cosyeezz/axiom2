@@ -281,9 +281,10 @@ test(
       const assertMemoryPrompt = (request: any, path: string) => {
         const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
         assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
-        assert.match(system, /首次接到明确任务时/);
-        assert.match(system, /最终回复前同步/);
-        assert.match(system, /不要仅因等待用户查看而保留90%/);
+        assert.match(system, /主动维护会话记忆文件/);
+        assert.match(system, /最终回复前，核对记忆/);
+        assert.match(system, /RULES\.md/);
+        assert.match(system, /首次维护前先读取/);
       };
       assertMemoryPrompt(requests[0], memoryPath);
       assert.ok(

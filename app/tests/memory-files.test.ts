@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { test } from "node:test";
-import { compactMemoryCandidates, digest, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, replaceMemoryFile, textFile } from "../src/server/memory-files.js";
+import { memorySummaryIndex, digest, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, replaceMemoryFile, textFile } from "../src/server/memory-files.js";
 
 test("memory files retain a UTF-8 BOM while revisions are derived from the raw bytes", () => {
   const directory = mkdtempSync(join(tmpdir(), "axiom-memory-files-"));
@@ -57,33 +57,23 @@ test("page evidence only completes after a contiguous same-revision read from of
   assert.equal(evidence.record("doc", { revision: "b", offset: 3, content: "DEF", nextOffset: null }), true);
 });
 
-test("candidate prompt projection preserves every selected source within a fixed serialized budget", () => {
-  const candidates = Array.from({ length: 24 }, (_, index) => ({
-    sessionId: `session-${index}`, title: `来源 ${index} 的标题`, revision: `revision-${index}`,
-    summary: `${'含有不确定性的长摘要 "😀" '.repeat(300)}${index}`,
-    keywords: Array.from({ length: 20 }, (_, keyword) => `关键词-${index}-${keyword}-${"x".repeat(100)}`),
+test("summary index preserves every complete short summary and exact source association", () => {
+  const candidates = Array.from({ length: 100 }, (_, index) => ({
+    sessionId: `session-${index}`, revision: `revision-${index}`,
+    summary: `${'含有不确定性的摘要 "😀" '.repeat(10)}${index}`,
   }));
-  const prompt = compactMemoryCandidates(candidates, { totalSources: 500, unreadableCandidates: 2, maxChars: 16000 });
-  assert.ok(prompt.length <= 16000, `serialized prompt was ${prompt.length} characters`);
+  const prompt = memorySummaryIndex(candidates, 103);
+  assert.ok(prompt.length > 16000, "large complete indexes must not be truncated to the old projection budget");
   const value = JSON.parse(prompt);
-  assert.equal(value.totalSources, 500); assert.equal(value.candidateCount, 24); assert.equal(value.unreadableCandidates, 2);
-  assert.equal(value.candidates.length, 24, "compaction must not silently remove selected candidates");
-  assert.deepEqual(value.candidates.map((candidate: any) => candidate.sessionId), candidates.map((candidate) => candidate.sessionId));
-  assert.match(value.coverage, /不完整|过时/);
+  assert.equal(value.totalSources, 103); assert.equal(value.summaryCount, 100); assert.equal(value.pendingSources, 3);
+  assert.deepEqual(value.sources, candidates.map((source) => ({ ...source, path: "MEMORY.md" })));
+  assert.match(value.coverage, /尚未整理或失效的来源未包含在摘要中/);
 });
 
-test("candidate projection never abbreviates read identities or revisions", () => {
-  const sessionId = `session-${"s".repeat(600)}`, revision = `revision-${"r".repeat(600)}`;
-  const prompt = compactMemoryCandidates([{ sessionId, revision, title: "t".repeat(3000), summary: "summary", keywords: ["keyword".repeat(500)] }], { maxChars: 1600 });
-  const candidate = JSON.parse(prompt).candidates[0];
-  assert.equal(candidate.sessionId, sessionId); assert.equal(candidate.revision, revision);
-  assert.ok(prompt.length <= 1600); assert.ok(candidate.title.length < 3000, "only descriptive fields may be compressed");
-});
-
-test("candidate projection rejects an identity-only payload beyond the fixed budget", () => {
-  const candidates = Array.from({ length: 24 }, (_, index) => ({
-    sessionId: `${index}-${"s".repeat(1000)}`, revision: `${index}-${"r".repeat(1000)}`,
-    title: "", summary: "", keywords: [],
-  }));
-  assert.throws(() => compactMemoryCandidates(candidates, { maxChars: 16000 }), { code: "MEMORY_LIMIT" });
+test("summary index counts Unicode code points including whitespace and punctuation", () => {
+  const source = { sessionId: "session", revision: "revision", summary: "😀".repeat(200) };
+  assert.equal(JSON.parse(memorySummaryIndex([source], 1)).sources[0].summary, source.summary);
+  for (const summary of ["", "  ", "字".repeat(201), `${"😀".repeat(200)}。`, `${"字".repeat(200)} `]) {
+    assert.throws(() => memorySummaryIndex([{ ...source, summary }], 1), { code: "MEMORY_LIMIT" });
+  }
 });

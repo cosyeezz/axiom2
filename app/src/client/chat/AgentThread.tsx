@@ -7,7 +7,7 @@ import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type Th
 import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
 import { Message } from "./Message.js";
-import { ActivityGroup } from "./ToolActivity.js";
+import { ProcessFlow } from "./ProcessFlow.js";
 import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
 import { optimisticState, pendingMessageStatus, useOptimistic } from "./optimistic.js";
@@ -15,25 +15,17 @@ import { MessageImages } from "./MessageImages.js";
 import { useReadReceipt } from "./useReadReceipt.js";
 import { reconcileInputs } from "./reconcile-inputs.js";
 import { useStickyDisclosures } from "./useStickyDisclosures.js";
+import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useOriginalConversation, useThreadMessage } from "./OriginalConversation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
-function ThreadActivityGroup({ scope, group, tail, tailReply, index }: {
-  scope: Scope; group: NonNullable<ThreadIndex["groups"]>[number]; tail: boolean; tailReply?: string; index: ThreadIndex;
+function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
+  scope: Scope; group: NonNullable<ThreadIndex["groups"]>[number]; tail: boolean; index: ThreadIndex; animateFold: boolean;
 }) {
   const last = useThreadMessage(scope, group.ids.at(-1)!);
-  const reply = useThreadMessage(scope, tailReply ?? group.id);
-  // A lone following reply can still acquire calls and merge back into this group.
-  // New segments, user input, compression and failed/stopped attempts close that window.
-  const canContinue = tail || !!tailReply && (!reply || reply.role === "assistant" &&
-    !reply.calls?.length && !reply.compression && !reply.taskNotice && !reply.error &&
-    reply.status !== "failed" && reply.status !== "cancelled");
-  const activeRunId = canContinue && activeStatus(index.runStatus) ? index.runId : undefined;
-  const awaitingMore = canContinue && activeStatus(index.runStatus) && (!last?.runId || last.runId === index.runId);
-  return <ActivityGroup scope={scope} awaitingMore={awaitingMore} activeRunId={activeRunId} messageIds={group.ids}>
-    {(open, evidence) => group.ids.map((id, activityOrder) => open || evidence.has(id)
-      ? <Message key={id} scope={scope} id={id} inActivity activityOrder={activityOrder} thinkingOnly={group.thinkingOnlyIds?.includes(id)} /> : null)}
-  </ActivityGroup>;
+  const activeRunId = tail && activeStatus(index.runStatus) ? index.runId : undefined;
+  const awaitingMore = tail && activeStatus(index.runStatus) && (!last?.runId || last.runId === index.runId);
+  return <ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} />;
 }
 
 function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: boolean }) {
@@ -55,13 +47,19 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   }, [scope?.workspaceId, scope?.sessionId]);
   const info = useScope(scope ? agentScope(scope) : null, emptyAgent);
   const scroller = useRef<HTMLElement>(null), content = useRef<HTMLDivElement>(null), bottom = useRef(true);
-  const lastScrollTop = useRef(0);
+  const smoothBottomTarget = useRef<number | null>(null), scrollPosition = useRef(0);
+  useThreadScrollIntent(scroller, bottom, scrollPosition);
+  const selectingMessages = () => {
+    const el = scroller.current, selection = getSelection();
+    return !!el && !!selection?.toString() &&
+      (el.contains(selection.anchorNode) || el.contains(selection.focusNode));
+  };
   const scrollToBottom = () => {
     const el = scroller.current;
     if (!el) return;
+    smoothBottomTarget.current = null;
     el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
-    // scroll events arrive later and may see a newer, taller layout.
-    lastScrollTop.current = el.scrollTop;
+    scrollPosition.current = el.scrollTop;
   };
   const previousOriginal = useRef(original.enabled);
   useLayoutEffect(() => {
@@ -86,11 +84,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   }, [historyReceived]);
   useEffect(() => {
     const observer = new ResizeObserver(() => {
-      const el = scroller.current;
-      const selection = getSelection();
-      const selectingMessages = !!el && !!selection?.toString() &&
-        (el.contains(selection.anchorNode) || el.contains(selection.focusNode));
-      if (bottom.current && !selectingMessages) scrollToBottom();
+      if (bottom.current && !selectingMessages()) scrollToBottom();
       measure();
     });
     if (content.current) observer.observe(content.current);
@@ -98,10 +92,20 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
     return () => observer.disconnect();
   }, []);
   const visiblePending = pending.filter((item) => !item.queued);
-  const lastPendingId = visiblePending.at(-1)?.id;
-  useEffect(() => {
-    if (lastPendingId) { bottom.current = true; scrollToBottom(); }
-  }, [lastPendingId]);
+  const previousPendingIds = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    // Queued steering is a new submission too, even before it becomes a chat bubble.
+    // Receipts/removals must not make an older pending item look like another send.
+    const submitted = pending.some((item) => !previousPendingIds.current.has(item.id));
+    previousPendingIds.current = new Set(pending.map((item) => item.id));
+    if (submitted) {
+      // Sending ends selection-based reading in this thread, including button submissions.
+      if (selectingMessages()) getSelection()?.removeAllRanges();
+      bottom.current = true;
+      scrollToBottom();
+      measure();
+    }
+  }, [pending]);
   useEffect(() => {
     if (!scope || !info.run || !["failed", "cancelled", "interrupted"].includes(info.run.status)) return;
     for (const item of pending) if (item.state === "accepted" && item.inputId === info.run.id)
@@ -109,22 +113,32 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   }, [info.run, pending, scope]);
   const groups: NonNullable<ThreadIndex["groups"]> = original.showing ? original.groups
     : index.groups ?? index.ids.map((id) => ({ id, ids: [id], activity: false }));
+  const previousGroups = useRef(groups);
+  const folding = new Set(groups.filter(group => group.folded && !previousGroups.current.some(previous => previous.id === group.id) &&
+    previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
+  useLayoutEffect(() => { previousGroups.current = groups; }, [groups]);
   const scroll = (direction: "top" | "up" | "down" | "bottom") => {
     const el = scroller.current;
     if (!el) return;
     bottom.current = direction === "bottom";
     const top = direction === "top" ? 0 : direction === "bottom" ? el.scrollHeight
       : el.scrollTop + (direction === "up" ? -1 : 1) * el.clientHeight * 0.85;
-    el.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+    smoothBottomTarget.current = direction === "bottom" && behavior === "smooth" ? el.scrollHeight - el.clientHeight : null;
+    el.scrollTo({ top, behavior });
   };
   return <FilePreviewContext.Provider value={setPreview}><div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
       onScroll={(e) => {
         const n = e.currentTarget;
-        const nearBottom = n.scrollHeight - n.scrollTop - n.clientHeight < 60;
-        // Only movement away from the tail cancels following, not growth since our last scroll.
-        bottom.current = nearBottom || bottom.current && n.scrollTop >= lastScrollTop.current - 1;
-        lastScrollTop.current = n.scrollTop;
+        const movedDown = n.scrollTop > scrollPosition.current;
+        scrollPosition.current = n.scrollTop;
+        // Reconciliation can shrink, clamp and regrow the tail before this event arrives.
+        // Scroll direction alone cannot distinguish that from a user's upward gesture.
+        // Let explicit navigation finish its smooth movement; layout changes still follow via ResizeObserver.
+        const navigating = smoothBottomTarget.current !== null && n.scrollTop < smoothBottomTarget.current - 2;
+        if (bottom.current && !selectingMessages() && !navigating) scrollToBottom();
+        else if (movedDown && n.scrollHeight - n.scrollTop - n.clientHeight < 2) bottom.current = true;
         measure();
       }}>
       <div ref={content} className="container thread-content"><div id={nested ? undefined : "messages"}>
@@ -138,9 +152,8 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
         <OriginalMessages.Provider value={original.showing ? original.messages : null}>
         {scope?.sessionId && groups.map((group, groupIndex) => <Fragment key={group.id}>
           {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
-          {group.activity ? <ThreadActivityGroup scope={scope} group={group} tail={groupIndex === groups.length - 1}
-            tailReply={groupIndex === groups.length - 2 && !groups[groupIndex + 1].activity && !groups[groupIndex + 1].selectionChange ? groups[groupIndex + 1].id : undefined} index={index} />
-            : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} activeRunId={groupIndex === groups.length - 1 && activeStatus(index.runStatus) ? index.runId : undefined} />}
+          {group.activity ? <ThreadActivityGroup scope={scope} group={group} tail={groupIndex === groups.length - 1} index={index} animateFold={folding.has(group.id)} />
+            : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
         </Fragment>)}
         </OriginalMessages.Provider>
         </DerivedContext.Provider>

@@ -29,21 +29,20 @@ export const TaskOperation = memo(function TaskOperation({ scope, call, message,
   const label = receipt ? labels[receipt.state] : taskCallLabel(name, status, output);
   const title = name === "read_result" ? "子任务结果" : name === "append" ? input?.mode === "followUp" ? "追加追问" : "补充任务" : "停止子任务";
   const content = name === "append" ? input?.text : name === "cancel_task" ? input?.reason : null;
+  const error = status === "failed" ? receipt?.error || toolPreview(result) : null;
+  const preview = error || (typeof content === "string" && content.trim() ? content : task?.description || "关联子任务");
   return <section className="task-operation" data-tool={name} data-status={status} aria-label={title}>
     <details open={groupOpen && open}>
-      <summary onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}>
+      <summary data-tooltip={label} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}>
         <span className="task-operation-icon" aria-hidden="true"><Icon name={name === "read_result" ? "tool-result" : name === "append" ? "tool-append" : "tool-cancel"} /></span>
-        <span className="task-operation-heading"><strong>{title}</strong><span className="task-operation-target" data-tooltip={task?.description}>{task ? compactText(task.description, 100) : "关联子任务"}</span></span>
-        <span className="task-operation-status" role="status">{status === "running" && <span className="execution-pulse" aria-hidden="true" />}{label}</span>
-        <span className="task-operation-action">{open ? "收起" : name === "read_result" && status === "completed" ? "查看结果" : "详情"}</span>
-        <span className="task-operation-chevron" aria-hidden="true"><Icon name="chevron" /></span>
+        <span className="task-operation-heading" data-tooltip={task?.description}><strong>{title}</strong><span className={`task-operation-target${error ? " task-operation-error" : ""}`} role={error ? "alert" : undefined} data-tooltip={preview}>{compactText(preview, 180)}</span></span>
+        <span className="task-operation-status" role="status">{label}</span>
       </summary>
       {groupOpen && open && <>
         <TaskCallDetails scope={scope} call={call} result={result} message={message} />
-        {task && <button type="button" className="task-open-link" aria-haspopup="dialog" onClick={() => openTask(task.id)}>打开子会话<Icon name="external-link" /></button>}
+        {task && <button type="button" className="task-open-link" aria-haspopup="dialog" onClick={() => openTask(task.id)}>打开子会话<Icon name="subagent-open" /></button>}
       </>}
     </details>
-    {status === "failed" && <p className="task-call-error" role="alert">{receipt?.error || toolPreview(result)}</p>}
-    {status !== "failed" && !open && typeof content === "string" && content.trim() && <p className="task-operation-preview" data-tooltip={content}>{compactText(content, 180)}</p>}
+    {error && open && <p className="task-call-error">{error}</p>}
   </section>;
 });

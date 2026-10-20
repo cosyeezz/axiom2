@@ -13,6 +13,24 @@ import { thinkingDisplay } from "./thinking-display.js";
 import { outputTruncated } from "./execution-outcome.js";
 import { modelRequestError } from "./error-message.js";
 
+function displayPhase(message: any, content: any[], streaming: boolean): ChatMessage["phase"] {
+  if (message.role !== "assistant" || content.some(c => c.type === "toolCall") ||
+    ["error", "aborted", "length"].includes(message.stopReason)) return undefined;
+  // Responses starts at pending and marks explicit final_answer at text_start,
+  // before it writes textSignature at text_end. Other APIs cannot use this hint.
+  if (streaming && message.stopReason === "stop" &&
+    ["openai-responses", "openai-codex-responses", "azure-openai-responses"].includes(message.api)) return "final_answer";
+  for (const block of [...content].reverse()) {
+    if (block.type !== "text" || typeof block.textSignature !== "string") continue;
+    try {
+      const signature = JSON.parse(block.textSignature);
+      if (signature?.v === 1 && typeof signature.id === "string" &&
+        (signature.phase === "commentary" || signature.phase === "final_answer")) return signature.phase;
+    } catch { /* Opaque signatures are not display metadata. */ }
+  }
+  return !streaming && message.stopReason === "stop" ? "final_answer" : undefined;
+}
+
 export const toolKey = (runId: string, callId: string) =>
   `${runId}-${createHash("sha256").update(callId).digest("hex").slice(0, 24)}`;
 
@@ -88,6 +106,7 @@ export function chatMessage(
     .join("\n"), assistantDisplay.thinking].filter(Boolean).join("\n\n");
   const thinkingActive = message.role === "assistant" && streaming &&
     (assistantDisplay.active || content.at(-1)?.type === "thinking");
+  const phase = displayPhase(message, content, streaming);
   return {
     id,
     ...(typeof message.axiomRunId === "string" ? { runId: message.axiomRunId } : {}),
@@ -99,6 +118,7 @@ export function chatMessage(
       ? "notice"
       : message.role,
     text: assistantDisplay.text,
+    ...(phase ? { phase } : {}),
     ...(images.length ? { images } : {}),
     ...(thinking ? { thinking } : {}),
     ...(thinkingActive ? { thinkingActive: true } : {}),

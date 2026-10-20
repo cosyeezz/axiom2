@@ -59,6 +59,7 @@ export const Message = memo(function Message({
   activityOrder = 0,
   thinkingOnly = false,
   hideThinking = false,
+  callsOnly = false,
   activeRunId,
 }: {
   scope: Scope;
@@ -67,6 +68,7 @@ export const Message = memo(function Message({
   activityOrder?: number;
   thinkingOnly?: boolean;
   hideThinking?: boolean;
+  callsOnly?: boolean;
   activeRunId?: string;
 }) {
   const source = useThreadMessage(scope, id);
@@ -83,12 +85,12 @@ export const Message = memo(function Message({
   if (!m || m.role === "toolResult") return null;
   if (!thinkingOnly && m.compression) return <CompactionCard m={m} scope={scope} id={id} />;
   if (!thinkingOnly && m.taskNotice) return <TaskNotice message={m} />;
-  // Split replies have one process owner. Live calls may arrive while an older
-  // layout still separates thinking from the body (notably in original view).
+  // Body and process slices subscribe to the same message without moving text
+  // when a later tool call or a disclosure toggle arrives.
   const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive || m.calls?.length));
-  const process = (expanded: boolean) => <>
-    {expanded && !hideThinking && (m.thinking || m.thinkingActive) && <Thinking scope={scope} message={m} text={m.thinking ?? ""} active={!!m.thinkingActive && !!m.streaming} />}
-    {!hideThinking && m.calls?.map((call, callOrder) => {
+  const process = (expanded: boolean, part: "thinking" | "calls" | "all" = "all") => <>
+    {part !== "calls" && expanded && !hideThinking && !callsOnly && (m.thinking || m.thinkingActive) && <Thinking scope={scope} message={m} text={m.thinking ?? ""} active={!!m.thinkingActive && !!m.streaming} />}
+    {part !== "thinking" && !hideThinking && !thinkingOnly && m.calls?.map((call, callOrder) => {
       const name = taskToolName(call.name);
       const key = `${scope.workspaceId}:${scope.sessionId}:${call.id}`;
       if (name) return <div key={key}>
@@ -103,26 +105,30 @@ export const Message = memo(function Message({
       aria-label={m.role === "user" ? "用户消息" : "助手回复"}
     >
       <div>
-        {!thinkingOnly && m.status === "cancelled" && (
+        {!thinkingOnly && !callsOnly && m.status === "cancelled" && (
           <p className="message-state">回复已停止</p>
         )}
-        {hasProcess && (inActivity ? process(groupOpen) : <ActivityGroup scope={scope} messageIds={[m.id]} awaitingMore={!!activeRunId && m.runId === activeRunId}>{(open) => process(open)}</ActivityGroup>)}
-        {!thinkingOnly && (!inActivity || groupOpen) && <>{m.role === "user" ? <EditableUserMessage key={`${scope.workspaceId}:${scope.sessionId}:${id}`} message={m} scope={scope} /> : <div
-          className={`message-body${m.role === "assistant" && !inActivity && m.text ? " reply-body" : ""}${m.images?.length ? " has-image-attachments" : ""}`}
+        {inActivity && !thinkingOnly && !callsOnly && m.error && <p className="execution-alert" role="alert">{m.error}</p>}
+        {hasProcess && (inActivity ? process(groupOpen, "thinking") : <ActivityGroup inline scope={scope} messageIds={[m.id]} awaitingMore={!!activeRunId && m.runId === activeRunId}>{(open) => process(open)}</ActivityGroup>)}
+        {!thinkingOnly && !callsOnly && (!inActivity || groupOpen) && <>{m.role === "user" ? <EditableUserMessage key={`${scope.workspaceId}:${scope.sessionId}:${id}`} message={m} scope={scope} /> : (m.text || m.images?.length) ? <div
+          className={`message-body${m.role === "assistant" && m.text ? " reply-body" : ""}${m.images?.length ? " has-image-attachments" : ""}`}
         >
-          {m.role === "assistant" && !m.streaming && !inActivity && !!m.text &&
-            <CopyReply key={`copy:${scope.workspaceId}:${scope.sessionId}:${id}`} message={m} scope={scope} />}
           {m.text && <div className="markdown">{m.role === "assistant" && !inActivity ?
             <AnnotatedReply scope={scope} messageId={id} text={m.text} streaming={m.streaming} /> :
             <Markdown text={m.text} images={m.role === "assistant" ? { scope, messageId: id } : undefined} />}</div>}
           <MessageImages key={`${scope.workspaceId}:${scope.sessionId}:${id}`} images={m.images} scope={scope} messageId={id} />
-        </div>}
-        {m.error && (
+        </div> : null}
+        {!inActivity && m.error && (
           <p className="execution-alert" role="alert">
             {m.error}
           </p>
         )}
-        {!full.message && (m.textLength !== undefined ? m.textLength > m.text.length : m.truncated) && <FullMessageControl {...full} />}</>}
+        {!full.message && (m.textLength !== undefined ? m.textLength > m.text.length : m.truncated) && <FullMessageControl {...full} />}
+        {/* Only a finished final delivery owns the reply copy action. */}
+        {m.role === "assistant" && !inActivity && (!activeRunId || !!m.runId && m.runId !== activeRunId) && m.phase === "final_answer" && !m.streaming &&
+          (!m.status || m.status === "completed") && !m.error && !m.calls?.length && !!m.text &&
+          <CopyReply key={`copy:${scope.workspaceId}:${scope.sessionId}:${id}`} message={m} scope={scope} />}</>}
+        {inActivity && process(groupOpen, "calls")}
       </div>
     </article>
   );

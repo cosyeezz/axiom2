@@ -11,6 +11,8 @@ import { type ChatMessage } from "../src/shared/agent.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
 async function toolColor(row: Locator, name: string) {
+  // Measure the default appearance: expanding a group can put a row under the cursor.
+  await row.page().mouse.move(0, 0);
   assert.equal(await row.getAttribute("data-tool"), name);
   assert.equal(await row.locator(".tool-name").innerText(), name);
   const labelColor = await row.locator(".tool-name").evaluate((node) => getComputedStyle(node).color);
@@ -50,12 +52,10 @@ try {
   views.flush(scope);
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
-  const loadPages = async (container: Locator) => {
+  // Sessions are never paged: an opened call reads each hidden field once and in full.
+  const waitFull = async (container: Locator) => {
     await page.waitForFunction(() => !document.querySelector('.tool-truncated[role="status"]'));
-    while (await container.getByRole("button", { name: /^继续加载/ }).count()) {
-      await container.getByRole("button", { name: /^继续加载/ }).first().click();
-      await page.waitForFunction(() => !document.querySelector('.tool-truncated[role="status"]'));
-    }
+    assert.equal(await container.getByRole("button", { name: /^继续加载/ }).count(), 0, "no load-more control");
   };
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -66,7 +66,7 @@ try {
     if (frame.op === "message.part") detailReads++;
   }));
   await page.goto(app.origin);
-  const group = page.locator(".tool-activity");
+  let group = page.locator(".tool-activity");
   await page.waitForFunction(() => document.querySelector(".tool-activity > summary")?.textContent?.includes("5 项"));
   assert.equal(await group.count(), 1, "consecutive calls share one process block");
   assert.equal(await group.getAttribute("open"), null);
@@ -76,12 +76,12 @@ try {
   assert.equal(await group.getAttribute("data-status"), "running");
   assert.ok(!header.includes("target text not found"), "older failures do not replace the latest call");
   assert.equal(await group.locator(".activity-current:not(.activity-current-out) use").getAttribute("href"), "#i-tool-tool");
-  const current = group.locator(".activity-current:not(.activity-current-out)");
+  let current = group.locator(".activity-current:not(.activity-current-out)");
   const unknownColor = await toolColor(current, "custom_tool");
   assert.equal(await group.locator(".execution-pulse").count(), 0, "tool rows only show duration, without a status indicator");
   assert.equal(detailReads, 0, "closed process sends no detail reads");
   assert.equal(await group.locator("pre").count(), 0, "closed tools do not mount heavy output");
-  assert.equal(await page.locator('.message-actions:has(button[aria-label="复制回复的 Markdown 原文"])').count(), 1, "copy chrome only belongs to the visible answer");
+  assert.equal(await page.locator('.message-actions:has(button[aria-label="复制回复的 Markdown 原文"])').count(), 0, "unconfirmed assistant bodies do not expose final-delivery copy controls");
   assert.ok(await page.getByRole("heading", { name: "检查结论" }).isVisible());
   await group.locator(":scope > summary").focus();
   await page.keyboard.press("Enter");
@@ -112,20 +112,18 @@ try {
   await page.keyboard.press("Enter");
   assert.equal(await group.locator(".tool-detail").count(), 1, "only the selected call loads records");
   assert.equal(await group.locator(".tool-header").first().evaluate(node => getComputedStyle(node, "::after").content), "none", "expanded rows have no minus sign");
-  await group.getByRole("button", { name: /^继续加载/ }).waitFor();
-  assert.ok(!(await group.locator('.tool-detail').innerText()).includes("FULL_OUTPUT_END"), "opening reads one bounded page");
-  await loadPages(group);
   await page.waitForFunction(() => document.querySelector(".tool-detail")?.textContent?.includes("FULL_OUTPUT_END"));
-  assert.equal(await group.locator(".tool-truncated").count(), 0, "all requested pages finished loading");
+  await waitFull(group);
+  assert.equal(detailReads, 1, "one full read, no follow-up pages");
+  assert.equal(await group.locator(".tool-truncated").count(), 0, "full output finished loading");
   assert.ok((await group.locator('.tool-call[data-status="failed"]').innerText()).includes("target text not found"));
   await group.locator(":scope > summary").click();
   assert.equal(await group.locator("pre").count(), 0, "collapsing the process releases expanded detail DOM");
   await group.locator(":scope > summary").click();
   assert.equal(await group.locator(".tool-detail, .tool-call[open]").count(), 0, "reopening the group resets child disclosures");
   await page.locator(".tool-call > summary").first().click();
-  await group.getByRole("button", { name: /^继续加载/ }).waitFor();
-  await loadPages(group);
   await page.waitForFunction(() => document.querySelector(".tool-detail")?.textContent?.includes("FULL_OUTPUT_END"));
+  await waitFull(group);
   assert.equal(await group.locator("img").count(), 0);
   await group.locator('.tool-call[data-status="running"] > summary').click();
   // Status-only updates retain open disclosures and refresh visible output.
@@ -161,13 +159,15 @@ try {
   await group.locator(":scope > summary").click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: join(artifacts, "collapsed-1440.png") });
-  // A new call joins the existing first-ID group without reopening it.
+  // A new call starts after the existing body without reopening the prior group.
   views.messageChanged(scope, { id: "answer", role: "assistant", text: "继续核查。", calls: [call("next", "read", { path: "README.md" })] });
   views.flush(scope);
-  await page.waitForFunction(() => document.querySelector(".tool-activity > summary")?.textContent?.includes("6 项"));
-  assert.equal(await group.count(), 1);
+  await page.waitForFunction(() => document.querySelectorAll(".tool-activity").length === 2);
+  assert.equal(await page.locator(".tool-activity").count(), 2);
+  group = page.locator(".tool-activity").nth(1);
+  current = group.locator(".activity-current:not(.activity-current-out)");
   assert.equal(await group.getAttribute("open"), null);
-  await page.waitForFunction(() => document.querySelector(".activity-current:not(.activity-current-out)")?.textContent?.includes("README.md"));
+  await current.filter({ hasText: "README.md" }).waitFor();
   assert.equal(await toolColor(current, "read"), colors.get("read"), "collapsed read matches expanded read");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.waitForTimeout(350);
@@ -183,17 +183,17 @@ try {
   await page.screenshot({ path: join(artifacts, "running-latest-1440.png") });
   views.messageChanged(scope, { id: "tool-newest", role: "toolResult", text: "Error: target not found", status: "failed" });
   views.flush(scope);
-  await page.waitForFunction(() => document.querySelector('.activity-current:not(.activity-current-out)')?.getAttribute('data-status') === 'failed');
+  await page.waitForFunction(() => document.querySelectorAll('.activity-current:not(.activity-current-out)')[1]?.getAttribute('data-status') === 'failed');
   assert.equal(await toolColor(current, "edit"), failedColor, "failed collapsed summary matches the failed row");
   assert.ok(await current.evaluate(node => [node, ...node.querySelectorAll('*')].every(child => getComputedStyle(child).color === getComputedStyle(node).color)));
   await group.screenshot({ path: join(artifacts, "failed-latest-1440.png") });
   views.messageChanged(scope, { id: "tool-newest", role: "toolResult", text: "Done", status: "completed" });
   views.flush(scope);
-  await page.waitForFunction(() => document.querySelector('.activity-current:not(.activity-current-out)')?.getAttribute('data-status') === 'completed');
+  await page.waitForFunction(() => document.querySelectorAll('.activity-current:not(.activity-current-out)')[1]?.getAttribute('data-status') === 'completed');
   assert.equal(await toolColor(current, "edit"), unknownColor, "status changes clear failure coloring");
   await page.reload();
-  await page.waitForFunction(() => document.querySelector(".tool-activity > summary")?.textContent?.includes("7 项"));
-  assert.equal(await group.count(), 1);
+  await group.locator('.activity-title').filter({ hasText: '2 项' }).waitFor();
+  assert.equal(await page.locator('.tool-activity').count(), 2);
   assert.ok((await group.locator(".activity-current:not(.activity-current-out)").innerText()).includes("latest.ts"));
   // Extend only after the original count/reload/responsive checks, preserving that fixture.
   // Shared icons and distinct names all use the same foreground.
@@ -223,14 +223,12 @@ try {
   await longCall.locator(":scope > summary").waitFor();
   assert.equal(await longCall.locator(".tool-detail").count(), 0, "new calls arrive collapsed in an open group");
   await longCall.locator(":scope > summary").click();
-  await longCall.getByRole("button", { name: /^继续加载/ }).first().waitFor();
-  await loadPages(longCall);
   await longCall.getByText(/FULL_INPUT_END/).waitFor();
+  await waitFull(longCall);
   views.messageChanged(scope, { id: "tool-long-write", role: "toolResult", text: "first\n".repeat(4000) + "FINAL_OUTPUT_END", status: "completed" });
   views.flush(scope);
-  await longCall.getByRole("button", { name: /^继续加载/ }).first().waitFor();
-  await loadPages(longCall);
   await longCall.getByText(/FINAL_OUTPUT_END/).waitFor();
+  await waitFull(longCall);
   assert.equal(await group.getAttribute("open"), "", "streaming completion keeps the group open");
   assert.equal(await longCall.locator(".tool-truncated").count(), 0);
   // A single-call example verifies the duplication shown in the reported screenshot.
@@ -264,11 +262,11 @@ try {
   await page.reload();
   await live.locator('.activity-current').filter({ hasText: 'first.ts' }).waitFor();
   assert.equal(await live.getAttribute('data-status'), 'running', 'reload retains the open run boundary');
-  const standalone = page.locator('.log-row').filter({ has: page.getByText('独立正文', { exact: true }) }).locator('.tool-activity');
+  const standalone = page.locator('.tool-activity').filter({ hasText: '独立思考' });
   assert.equal(await standalone.getAttribute('data-status'), 'completed', 'a new segment closes earlier standalone thinking in the same run');
   publishLive({ id: 'live-standalone', role: 'assistant', text: '独立正文', thinking: '独立思考', status: 'failed', error: '等待原生重试' });
   await page.getByText('等待原生重试', { exact: true }).waitFor();
-  assert.equal(await standalone.getAttribute('data-status'), 'failed', 'a failed attempt shows its own failure while the run continues');
+  assert.equal(await standalone.getAttribute('data-status'), 'completed', 'completed thinking stays settled; the body owns its later failure');
   publishLive({ id: 'live-standalone', role: 'assistant', text: '独立正文', thinking: '独立思考', status: 'completed' });
   await live.evaluate(node => {
     (window as any).activityTransitions = [];
@@ -285,10 +283,11 @@ try {
   assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), [], 'no intermediate completed/unknown frames between batches');
   publishLive({ id: 'live-answer', role: 'assistant', text: '这一段已完成', status: 'completed' });
   await page.getByText('这一段已完成', { exact: true }).waitFor();
-  assert.equal(await live.getAttribute('data-status'), 'running', 'a reply boundary does not settle a still-active run');
+  await live.locator('.activity-status-completed').waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'completed', 'a body boundary settles the preceding finished process');
   publishLive({ id: 'live-answer', role: 'assistant', text: '', streaming: true, calls: [call('live-merged', 'read', { path: 'merged.ts' })] });
   await live.locator('.activity-current:not(.activity-current-out)').filter({ hasText: 'merged.ts' }).waitFor();
-  assert.equal(await live.getAttribute('data-status'), 'running', 'merged activity stays running without a completion round trip');
+  assert.equal(await live.getAttribute('data-status'), 'running', 'new running facts reopen a process when its body boundary is removed');
   assert.equal(await live.locator('.activity-status-completed').count(), 0);
   await live.locator(':scope > summary').click();
   assert.equal(await live.locator('.tool-call').last().getAttribute('data-status'), 'running', 'merged rows still expose their true status');
@@ -301,8 +300,9 @@ try {
   views.flush(scope);
   publishLive({ id: 'live-final', role: 'assistant', text: '合并调用已结束', status: 'completed' });
   await page.getByText('合并调用已结束', { exact: true }).waitFor();
-  assert.equal(await live.getAttribute('data-status'), 'running', 'final reply still waits for run settlement');
-  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), [], 'batches, reply boundaries and merges cause no status flicker');
+  await live.locator('.activity-status-completed').waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'completed', 'final body closes the process before run settlement');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running', 'completed', 'running'], 'body boundaries settle completed work; removing one permits subsequent work');
   const liveProcess = await live.elementHandle();
   // A final process without a following reply closes only when the run settles.
   publishLive({ id: 'settle-user', role: 'user', text: '收尾' });
@@ -311,19 +311,19 @@ try {
   await live.locator('.activity-current').filter({ hasText: 'settle.ts' }).waitFor();
   assert.equal(await live.getAttribute('data-status'), 'running');
   assert.equal(await liveProcess!.getAttribute('data-status'), 'completed', 'the previous segment finishes when a new segment starts, before run settlement');
-  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running'], 'the previous segment reaches completion once without bouncing');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running', 'completed', 'running'], 'new segments do not change the closed process');
   app.store.db.prepare("UPDATE runs SET status='completed',endedAt=? WHERE id='activity-live'").run(Date.now());
   views.changed(scope);
   await live.locator('.activity-status-completed').waitFor();
   assert.equal(await standalone.getAttribute('data-status'), 'completed');
   assert.equal(await liveProcess!.getAttribute('data-status'), 'completed');
-  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running'], 'the observed process transitions to completed exactly once');
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running', 'completed', 'running'], 'run settlement does not reopen the closed process');
   app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES('activity-next',?,'running','{}',?)").run(session.id, Date.now());
   views.changed(scope);
   await page.waitForTimeout(100);
   assert.equal(await liveProcess!.getAttribute('data-status'), 'completed', 'a different run cannot reopen a settled process');
   assert.equal(await standalone.getAttribute('data-status'), 'completed', 'historical standalone thinking also remains settled');
-  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running']);
+  assert.deepEqual(await page.evaluate(() => (window as any).activityTransitions), ['running', 'completed', 'running']);
   // Reproduce the report: tools, a failed thinking request, then resumed tools in one run.
   const publishNext = (...messages: ChatMessage[]) => {
     for (const message of messages) views.messageChanged(scope, { ...message, runId: 'activity-next' });
@@ -368,7 +368,8 @@ try {
   publishNext({ id: 'tool-three-next-read', role: 'toolResult', text: 'Done', status: 'completed' });
   publishNext({ id: 'three-reply', role: 'assistant', text: '恢复后的回复', status: 'completed' });
   await page.getByText('恢复后的回复', { exact: true }).waitFor();
-  assert.equal(await live.getAttribute('data-status'), 'running', 'the merged process waits through a provisional reply boundary');
+  await live.locator('.activity-status-completed').waitFor();
+  assert.equal(await live.getAttribute('data-status'), 'completed', 'the reply boundary closes the recovered process');
   app.store.db.prepare("UPDATE runs SET status='completed',endedAt=? WHERE id='activity-next'").run(Date.now());
   views.changed(scope);
   await live.locator('.activity-status-completed').waitFor();

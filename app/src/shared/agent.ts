@@ -100,6 +100,8 @@ export interface ChatMessage {
   text: string;
   thinking?: string;
   thinkingActive?: boolean;
+  /** Safe display phase only; provider signatures never cross IPC. */
+  phase?: "commentary" | "final_answer";
   /** Display-only terminal task notice; native result payload stays in the agent context. */
   taskNotice?: "completed" | "cancelled" | "failed" | "interrupted" | "unknown";
   resultId?: string;
@@ -115,6 +117,8 @@ export interface ChatMessage {
   preview?: string;
   toolName?: string;
   toolCallId?: string;
+  /** Epoch milliseconds of the live tool start event; absent for unknown historical timing. */
+  toolStartedAt?: number;
   durationMs?: number;
   status?: "running" | "completed" | "failed" | "cancelled";
   error?: string;
@@ -126,11 +130,10 @@ export interface ChatMessage {
   selectionChange?: SelectionChange;
   runId?: string;
 }
+/** One hidden message field, always returned in full. */
 export interface MessagePart {
   text: string;
-  offset: number;
   totalLength: number;
-  nextOffset: number | null;
   revision: string;
 }
 export interface ThreadIndex {
@@ -139,9 +142,13 @@ export interface ThreadIndex {
     id: string;
     ids: string[];
     activity: boolean;
-    /** These message IDs contribute only thinking; their task cards stay outside. */
+    /** A confirmed final reply folds all preceding process content in this segment. */
+    folded?: boolean;
+    /** These messages contribute only thinking before their body. */
     thinkingOnlyIds?: string[];
-    /** Thinking is already rendered in the preceding activity group. */
+    /** These messages contribute only calls after their body. */
+    callsOnlyIds?: string[];
+    /** Process content is rendered separately from this body. */
     hideThinking?: boolean;
     selectionChange?: SelectionChange;
   }[];

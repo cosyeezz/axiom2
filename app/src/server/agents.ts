@@ -5,6 +5,7 @@ import { ExecutionProfiles, fileRevision } from "./execution-profile.js";
 import type { LeaseRef } from "./execution-protocol.js";
 import { assertRewrite, editableMessage, rewriteBranch, rewriteTarget } from "./session-rewrite.js";
 import { Memories } from "./memories.js";
+import { MemoryContinuations } from "./memory-continuations.js";
 import type { OpenMemoryFile } from "./memory-open.js";
 import { ColdMemoryRunner } from "./memory-runner.js";
 import { memoryDirectory } from "./memory-files.js";
@@ -42,7 +43,7 @@ import { Compressions } from "./compressions.js";
 import { imagesInput, imagePrompt, requireImageModel } from "./images.js";
 import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
-type PendingStart = { scope: Scope; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
+type PendingStart = { scope: Scope; automatic?: boolean; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
 export class Agents {
   readonly capabilities: Capabilities;
   readonly pool: ExecutionPool;
@@ -50,6 +51,7 @@ export class Agents {
   private starts = new Map<string, PendingStart>();
   private readonly unwatchConfiguration: () => void;
   readonly memories: Memories;
+  readonly continuations: MemoryContinuations;
   private memoryQueries = new Map<string, { scope: Scope; controller: AbortController }>();
   readonly compressions: Compressions;
   private readonly views: AgentViews;
@@ -98,6 +100,19 @@ export class Agents {
   }
   executing(scope: Scope) { return this.runs.active(scope); }
   lease(scope: Scope, runId: string): LeaseRef | undefined { return this.runs.lease(scope, runId); }
+  assertMemoryContinuation(scope: Scope, expectedRunId: string, exclude?: PendingStart, allowCompression = false, startingRunId?: string) {
+    this.owner(scope);
+    const info = this.info(scope);
+    const expectedRun = startingRunId ? info.run?.id === startingRunId && info.run.resumedFromRunId === expectedRunId && info.run.status === "starting"
+      : info.run?.id === expectedRunId && info.run.status === "completed" && !info.run.reasonCode && !info.run.error;
+    if (this.runs.closing || !this.store.workspace(scope.workspaceId).authorized || !expectedRun ||
+        !startingRunId && this.active(scope, exclude) || info.activeTaskCount || info.queue?.length ||
+        !allowCompression && this.compressions.info(scope)?.state === "running" ||
+        this.store.db.prepare("SELECT 1 FROM tasks WHERE sessionId=?").get(scope.sessionId) ||
+        this.store.db.prepare("SELECT 1 FROM task_parents WHERE sessionId=? AND frozen=1").get(scope.sessionId) ||
+        this.store.db.prepare("SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId WHERE t.parentSessionId=? AND r.delivery NOT IN ('delivered','discarded') LIMIT 1").get(scope.sessionId))
+      throw new AppError("CONTINUATION_CANCELLED", "会话状态已变化或仍有待处理工作，未自动继续");
+  }
   assertContinuation(scope: Scope, expectedRunId: unknown, queuedTask = false, exclude?: PendingStart) {
     if (expectedRunId === undefined) return;
     const info = this.info(scope);
@@ -137,6 +152,7 @@ export class Agents {
     if (notify) this.changed(scope);
   }
   async stop(scope: Scope, source: StopSource = "user") {
+    this.continuations.cancel(scope, true);
     const start = this.starts.get(scope.sessionId);
     start?.controller.abort();
     for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
@@ -153,6 +169,7 @@ export class Agents {
   async stopProviders(providers: string[], confirmed: boolean) {
     const affected = this.affected(providers);
     if (affected.length && !confirmed) throw new AppError("ACTIVE_RUNS_CONFIRMATION_REQUIRED", "需先停止受影响会话，再退出认证。");
+    this.continuations.cancelAll();
     const starts = [...this.starts.values()].filter(start => !start.provider || providers.includes(start.provider));
     for (const start of starts) start.controller.abort();
     await this.compressions.stopProviders(providers, confirmed);
@@ -162,7 +179,7 @@ export class Agents {
     this.unwatchConfiguration();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
-    await Promise.all([this.runs.close(), this.compressions.close(), this.memories.close()]);
+    await Promise.all([this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
     await Promise.all(starts.map(start => start.done));
     await this.pool.close();
   }
@@ -182,6 +199,7 @@ export class Agents {
     this.views = new AgentViews(store, publish, observed);
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
     this.compressions = new Compressions(this);
+    this.continuations = new MemoryContinuations(this);
     this.runs.onEvent = (scope, run, event) => {
       this.compressions.event(scope, run.id, event);
       if (event.type === "memory-cancel") this.memoryQueries.get(event.key)?.controller.abort();
@@ -209,6 +227,7 @@ export class Agents {
       // Agent 工具可直接写入记忆目录；结算后定向刷新而不阻塞后续 HTTP/WS 事件。
       this.memories.refresh(scope);
       this.externalSettled?.(scope, run);
+      this.continuations.settled(scope, run);
     };
     // Runtime snapshots belong to the data root protected by Store's service lock.
     // The shared pi directory may be in use by other services, including tests.
@@ -224,12 +243,14 @@ export class Agents {
       task?: WorkerInput["task"];
       prompt?: string;
       notification?: WorkerInput["notification"];
+      memoryContinuation?: { expectedRunId: string; validate: () => void };
       beforeStart?: () => void;
       onStart?: (run: Run) => void;
     } = {},
   ) {
     const requestStartedAtMonoMs = performance.now();
     let ownStart: PendingStart | undefined;
+    let continuationRunId: string | undefined;
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     this.owner(scope);
@@ -242,7 +263,7 @@ export class Agents {
     const resuming = c.op === "agent.resume";
     if (resuming && (typeof p.expectedRunId !== "string" || Object.keys(p).some((key) => key !== "expectedRunId")))
       throw new AppError("INVALID_INPUT", "重试只接受原执行标识。");
-    const epoch = this.runs.epoch(scope);
+    let epoch = this.runs.epoch(scope);
     if (c.op === "agent.inputs") {
       if (!Array.isArray(p.ids) || p.ids.length > 128 || p.ids.some((id) => typeof id !== "string" || id.length > 200))
         throw new AppError("INVALID_INPUT", "输入查询最多接受 128 个标识");
@@ -303,7 +324,10 @@ export class Agents {
       this.owner(scope);
       if (c.op === "prompt" || resuming) {
         this.runs.assertEpoch(scope, epoch);
-        this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart);
+        if (internal.memoryContinuation) {
+          this.assertMemoryContinuation(scope, internal.memoryContinuation.expectedRunId, ownStart);
+          internal.memoryContinuation.validate();
+        } else this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart);
       }
       if (this.runs.closing) throw new AppError("SHUTTING_DOWN", "服务正在退出，未接受新操作");
       if (rewrite) this.assertRewriteIdle(scope, internal.task?.inputIds, ownStart);
@@ -326,13 +350,26 @@ export class Agents {
       const draft: Draft = { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images };
       return this.runs.enqueue(scope, c.requestId, draft, imagePrompt(attachmentPrompt(body, attachments), images), mode);
     };
-    return this.store.external(c, () => this.serialCommand(scope, async () => {
+    return this.store.external(c, async () => {
+      // First-time user work takes priority before the session queue, but a replay has no side effects.
+      if (["prompt", "agent.resume"].includes(c.op) && !internal.notification && !internal.memoryContinuation) {
+        this.continuations.cancel(scope, true);
+        const pending = this.starts.get(scope.sessionId);
+        if (pending?.automatic) pending.controller.abort();
+        const stopped = this.runs.preemptAutomatic(scope);
+        if (stopped) {
+          // The shared preemption increments synchronously. A later user stop still invalidates this command.
+          epoch = this.runs.epoch(scope);
+          await stopped;
+        }
+      }
+      return this.serialCommand(scope, async () => {
       validate();
       if (c.op === "prompt" && this.runs.active(scope)) return enqueue();
       if (c.op !== "agent.model") {
         let finish!: () => void;
         const done = new Promise<void>(resolve => { finish = resolve; });
-        ownStart = { scope, controller: new AbortController(), provider: this.info(scope).selection?.provider, done, finish };
+        ownStart = { scope, automatic: !!internal.memoryContinuation, controller: new AbortController(), provider: this.info(scope).selection?.provider, done, finish };
         this.starts.set(scope.sessionId, ownStart);
       }
       try {
@@ -408,7 +445,7 @@ export class Agents {
         const images = imagesInput(p.images);
         const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
         requireImageModel(model, images);
-        const prompt = resuming ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
+        const prompt = resuming || internal.memoryContinuation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
         const content = imagePrompt(
           internal.prompt ?? attachmentPrompt(prompt, attachments), images);
         const capabilities = internal.task ? undefined : await this.capabilities.prepare(scope);
@@ -423,7 +460,7 @@ export class Agents {
             .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
             .get(scope.sessionId);
           file = row?.file as string;
-          if (!file && resuming)
+          if (!file && (resuming || internal.memoryContinuation))
             throw new AppError("NO_CONTINUATION", "没有已保存的会话记录，请输入新的要求。");
           if (!file) {
             const dir = join(this.store.root, "sessions", scope.workspaceId);
@@ -448,8 +485,7 @@ export class Agents {
               "REVISION_CONFLICT",
               "模型配置在发送前改变；未执行，请重新确认。",
             );
-          this.runs.assertEpoch(scope, epoch);
-          this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart);
+          validate();
           writeFileSync(modelsFile, raw, { flag: "wx", mode: 0o600 });
         } catch (error) {
           try { rmSync(modelsFile, { force: true }); } catch { /* Startup cleans orphaned snapshots. */ }
@@ -499,14 +535,14 @@ export class Agents {
           endedAt: null,
           error: null,
           phase: "initializing",
-          resumedFromRunId: typeof p.expectedRunId === "string" ? p.expectedRunId : null,
+          resumedFromRunId: internal.memoryContinuation?.expectedRunId ?? (typeof p.expectedRunId === "string" ? p.expectedRunId : null),
         };
         let requestTitle = false;
         this.store.db.exec("BEGIN IMMEDIATE");
         try {
         if (capabilities) this.capabilities.lock(scope, capabilities);
         requestTitle = !internal.task && this.store.requestTitle(scope,
-          internal.notification || resuming ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
+          internal.notification || resuming || internal.memoryContinuation ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
         this.store.db
           .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId) VALUES(?,?,?,?,?,?,?)")
           .run(
@@ -533,6 +569,7 @@ export class Agents {
           // Transfer synchronously: launch installs its stop/settle owner before onStart or ensureReady.
           this.starts.delete(scope.sessionId);
           ownStart!.lease = undefined;
+          if (internal.memoryContinuation) continuationRunId = run.id;
           await this.runs.launch(scope, run, {
             root: this.store.root,
             cwd,
@@ -545,6 +582,7 @@ export class Agents {
             selection: selection!,
             prompt: content,
             resume: resuming,
+            memoryContinuation: !!internal.memoryContinuation,
             rewrite: !!rewrite,
             requestTitle,
             images,
@@ -593,6 +631,10 @@ export class Agents {
         validate();
         ownStart!.provider = start.selection.provider;
         lease = await this.pool.acquire({ environment, kind: "agent", bindingGate: true, requestStartedAtMonoMs,
+          beforeExecute: internal.memoryContinuation ? () => {
+            this.assertMemoryContinuation(scope, internal.memoryContinuation!.expectedRunId, ownStart, false, continuationRunId);
+            internal.memoryContinuation!.validate();
+          } : undefined,
           affinity: { sessionId: scope.sessionId, fileRevision: revision }, signal: ownStart!.controller.signal });
         ownStart!.lease = lease;
         // Full resource checks guard binding dispatch and execution_permit. Intermediate
@@ -604,7 +646,9 @@ export class Agents {
         }
         const launched = await this.models.serial(async () => {
           validate();
-          if (fileRevision(start.file) !== revision || createHash("sha256").update(await this.models.raw()).digest("hex") !== createHash("sha256").update(readFileSync(start.modelsFile)).digest("hex"))
+          const raw = await this.models.raw();
+          validate();
+          if (fileRevision(start.file) !== revision || createHash("sha256").update(raw).digest("hex") !== createHash("sha256").update(readFileSync(start.modelsFile)).digest("hex"))
             throw new AppError("REVISION_CONFLICT", "最终提交前配置或会话已变化；消息未发送。");
           commitAttempted = true;
           return start.commit(lease!);
@@ -631,7 +675,8 @@ export class Agents {
         if (this.starts.get(scope.sessionId) === ownStart) this.starts.delete(scope.sessionId);
         ownStart?.finish();
       }
-    }));
+      });
+    });
   }
   async remove(c: Command) {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! };

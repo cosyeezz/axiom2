@@ -7,6 +7,22 @@ import { Markdown } from "../src/client/chat/Markdown.js";
 const render = (text: string) => renderToStaticMarkup(createElement(Markdown, { text }));
 const strong = (text: string) => `<strong><span>${text}</span></strong>`;
 
+test("single input newlines stay visible alongside Markdown formatting", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const html = render(`第一行${newline}**第二行**${newline}第三行`);
+    assert.equal(html, `<p><span>第一行</span><br/>${strong("第二行")}<br/><span>第三行</span></p>`);
+  }
+  assert.equal(render("第一段\n\n第二段"), "<p><span>第一段</span></p><p><span>第二段</span></p>");
+  for (const source of ["- 第一行\n  第二行\n- 下一项", "> 第一行\n> 第二行"]) {
+    assert.match(render(source), /第一行<\/span><br\/><span>第二行/);
+  }
+  const code = render("```text\n第一行\n第二行\n```");
+  assert.ok(code.includes("<pre><code>第一行\n第二行</code></pre>"));
+  assert.ok(!code.includes("<br"));
+  const compact = renderToStaticMarkup(createElement(Markdown, { text: "第一行\n第二行", compact: true }));
+  assert.ok(!compact.includes("<br"), "collapsed summaries stay on one line");
+});
+
 test("Chinese bold labels render without a space before the following text", () => {
   for (const text of ["**验证：**43 项相关测试、25 项 Steering 浏览器检查通过", "**验证：**通过", "**验证：**passed"]) {
     const html = render(text);

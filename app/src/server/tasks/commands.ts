@@ -213,7 +213,8 @@ export class TaskCommands {
       }));
     const child = this.records.child(scope);
     if (c.op === "task.result")
-      return this.delivery.result(scope, p.taskId, p.resultId, p.offset, p.limit);
+      // The session view is never paged: return the full remainder of the selected immutable result.
+      return this.delivery.result(scope, p.taskId, p.resultId, p.offset, undefined, true);
     if (c.op === "task.append" || c.op === "task.cancel") {
       const row = this.records.own(scope, p.taskId);
       return this.serial(row.id, () =>

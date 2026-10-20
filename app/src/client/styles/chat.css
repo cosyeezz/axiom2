@@ -1,15 +1,24 @@
 /* Output text stays readable against the dark conversation surface. */
 .tool-activity, .task-results, .message-body:not(.user-text) { --muted: #c7d2fe; }
 .log-row .message-body:not(.user-text) { color: #e2e8f0; }
-/* Reserve a steady right gutter during streaming and after completion. */
-.reply-body { position: relative; padding-inline-end: 52px; }
-/* Enlarge user-facing replies only, including while streaming. */
-.reply-body > .markdown { font-size: 15px; }
+/* Replies use the full content width; the copy action trails the output. */
+.reply-body { position: relative; }
+/* Conversation sections are separated by spacing instead of horizontal rules. */
+.thread-content :is(.message-result, .tool-call, .task-call-detail, .task-report-notes, .delegation-pending p + p, .subagent-card + .subagent-card, .compaction-card .compaction-body, .compaction-load) { border-top: 0; }
+.thread-content .session-init { border-bottom: 0; }
+.thread-content :is(.markdown hr, .task-notice-rule) { display: none; }
+/* Replies and process details share the mobile reading size. */
+.thread-content { --thread-text-size: 15px; --thread-line-height: 24px; }
+@media (max-width: 640px) {
+  .thread-content { --thread-text-size: 14px; --thread-line-height: 22px; }
+  .thread-content .reply-body > .markdown { line-height: var(--thread-line-height); }
+}
+.reply-body > .markdown { font-size: var(--thread-text-size, 15px); }
 .reply-body > .markdown :not(pre) > code,
 .reply-body > .markdown .code-card pre,
 .reply-body > .markdown .code-card code { font-size: 13px; }
 .reply-body > .markdown table { font-size: 14px; }
-.reply-body > .markdown :is(h4, h5, h6) { font-size: 15px; }
+.reply-body > .markdown :is(h4, h5, h6) { font-size: var(--thread-text-size, 15px); }
 .message-actions { position: absolute; top: -8px; right: 0; z-index: 1; line-height: 1; }
 .message-actions > button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; opacity: 0; pointer-events: none; transition: opacity var(--motion-fast), color var(--motion-fast), background var(--motion-fast); }
 .message-actions svg { width: 16px; height: 16px; }
@@ -21,6 +30,12 @@
 .message-copy-error { position: absolute; top: 100%; right: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font-size: 11px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
 @media (hover: none), (pointer: coarse) { .message-actions > button { opacity: 1; pointer-events: auto; } }
 @media (prefers-reduced-motion: reduce) { .message-actions > button { transition: none; } }
+/* Reply copy: compact row after the output, aligned with the text edge. */
+.message-actions.reply-actions { position: static; display: flex; align-items: center; gap: 8px; margin: 4px 0 0 -6px; }
+.reply-actions > button { width: 28px; height: 28px; }
+.reply-actions svg { width: 14px; height: 14px; }
+.reply-actions .message-copy-error { position: static; }
+@media (hover: none), (pointer: coarse) { .reply-actions > button { width: 44px; height: 44px; } .message-actions.reply-actions { margin-left: -15px; } }
 .title-heading {
   display: flex;
   align-items: center;
@@ -61,7 +76,7 @@
 .activity-overview { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .activity-title { flex-shrink: 0; white-space: nowrap; color: var(--fg-2); font-weight: 510; }
 .activity-ticker { position: relative; display: block; flex: 1; height: 24px; overflow: hidden; min-width: 0; }
-.activity-current { position: absolute; inset: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; font: 11px/24px var(--font-mono); }
+.activity-current { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; font: 11px/24px var(--font-mono); }
 .activity-current > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .activity-current-in { animation: activity-roll-in 300ms cubic-bezier(.22, 1, .36, 1) both; }
 .activity-current-out { animation: activity-roll-out 300ms cubic-bezier(.22, 1, .36, 1) both; pointer-events: none; }
@@ -76,13 +91,14 @@
 .execution-pulse { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--accent-hover); }
 .execution-pulse::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; background: color-mix(in srgb, var(--accent-hover) 30%, transparent); animation: execution-breathe 1.8s ease-in-out infinite; }
 @keyframes execution-breathe { 0%, 100% { transform: scale(.65); opacity: .35; } 50% { transform: scale(1.1); opacity: 1; } }
-.thread-tail-actions { display: flex; align-items: center; margin-top: -8px; padding-bottom: 8px; }
+.thread-tail-actions { display: flex; align-items: center; gap: 6px; margin-top: -8px; padding-bottom: 8px; color: var(--muted); font-size: 13px; line-height: 20px; }
+.retry-separator { opacity: .5; }
 .composer-actions { grid-column: 4; grid-row: 1; display: flex; align-items: center; gap: 4px; justify-self: end; }
-.thread-tail-actions .retry-action { width: 44px; height: 44px; padding: 0; color: var(--muted); border-radius: var(--radius-sm); transition: color var(--motion-fast), background var(--motion-fast); }
-.retry-action:hover:not(:disabled), .retry-action:focus-visible { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
-.retry-action:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -3px; }
-.retry-action:active:not(:disabled) { background: color-mix(in srgb, var(--fg) 12%, transparent); }
-.retry-action svg { width: 19px; height: 19px; stroke-width: 1.75; }
+.thread-tail-actions .retry-action { min-width: 44px; min-height: 32px; padding: 6px 4px; border: 0; border-radius: 0; background: transparent; color: var(--fg-2); font: inherit; transition: color var(--motion-fast); }
+.retry-action:hover:not(:disabled), .retry-action:focus-visible { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.retry-action:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 1px; }
+.retry-action:disabled { color: var(--muted); opacity: .5; cursor: not-allowed; }
+@media (hover: none), (pointer: coarse) { .thread-tail-actions .retry-action { min-height: 44px; } }
 @media (max-width: 760px) { .composer-actions { grid-row: 2; } }
 @media (prefers-reduced-motion: reduce) { .retry-action { transition: none; } }
 @media (prefers-reduced-motion: reduce) {
@@ -97,7 +113,7 @@
 .tool-call > .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; min-height: 44px; color: var(--fg-2); }
 .tool-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .tool-heading { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
-.tool-heading strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 510; }
+.tool-heading strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
 .tool-input-detail { color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tool-call small { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
 .tool-call[data-status="running"] small { color: var(--accent-hover); }
@@ -115,7 +131,7 @@
   .tool-activity .activity-content { padding-inline: 8px; }
   .activity-overview { gap: 8px; }
   .tool-call > .tool-header { gap: 6px; flex-wrap: wrap; }
-  .tool-heading { gap: 6px; }
+  .tool-heading, .activity-current { gap: 6px; }
 }
 /* Sent images stay compact; bytes are loaded only when previewing. */
 .message-images { max-width: 100%; }

@@ -12,6 +12,8 @@ import { emptyMemoryView, memoryScope, memoryCatalogScope, memoryBudgetLimits, t
 import { ModelPicker } from "../chat/ModelPicker.js";
 import { MemoryDocumentView } from "./MemoryDocumentView.js";
 import { MemoryFilter } from "./MemoryFilter.js";
+import { MemoryOrganizeControl } from "./MemoryOrganizeControl.js";
+import { publicMemoryError } from "./memory-errors.js";
 import "../styles/memory.css";
 function BudgetInput({ label, value, min, max, save }: { label: string; value: number; min: number; max: number; save: (value: number) => Promise<void> }) {
   const [draft, setDraft] = useState(String(value));
@@ -38,22 +40,12 @@ function memoryReasonText(reason?: MemoryReason) {
   }
 }
 
-function publicMemoryError(value: string) {
-  const normalized = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
-    .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{8,}\b/gi, "[凭据已隐藏]")
-    .replace(/((?:api[-_ ]?key|authorization|bearer|access[-_ ]?token|refresh[-_ ]?token|password|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;，；]+)/gi, "$1[凭据已隐藏]")
-    .replace(/(?:[A-Za-z]:\\|\\\\)[^,;，；\r\n]{20,}/g, "[本地路径]")
-    .replace(/(^|[\s(])\/(?:[^/\s,;，；]+\/){2,}[^\s,;，；)]*/g, "$1[本地路径]");
-  const chars = Array.from(normalized || "整理失败");
-  return chars.length > 500 ? `${chars.slice(0, 500).join("")}…` : chars.join("");
-}
-
 function useMemory(scope: Scope) {
   const snapshot = useScope<MemoryView | null>(memoryScope(scope), null);
   const view = snapshot?.error ? { ...emptyMemoryView(scope), reason: snapshot.reason ?? "unavailable" } : snapshot;
   return { view };
 }
-function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: () => void; context: ContextMemoryInfo }) {
+function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigger: HTMLButtonElement) => void; context: ContextMemoryInfo }) {
   const { view } = useMemory(scope), [expanded, setExpanded] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
@@ -69,7 +61,7 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: () => 
     <button ref={toggle} className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip={`${context.label}；任务进度 · ${status}`} aria-expanded={expanded} aria-controls={expanded ? detailsId : undefined} onClick={() => setExpanded(!expanded)}>
       <ContextMemoryIcon percent={context.percent} taskPercent={percent} label={`${context.label}；任务进度 · ${status}`} />
     </button>
-    {expanded && <MetricDetail trigger={toggle.current!} title="上下文与会话记忆" subtitle="当前会话 · 上下文容量与任务进展" className="memory-todo-body" onClose={() => setExpanded(false)} footer={<button className="memory-text-button" onClick={() => { setExpanded(false); toggle.current?.focus(); openMemory(); }}><MemoryIcon name="book" />查看完整记忆<MemoryIcon name="chevron" /></button>}>
+    {expanded && <MetricDetail trigger={toggle.current!} title="上下文与会话记忆" subtitle="当前会话 · 上下文容量与任务进展" className="memory-todo-body" onClose={() => setExpanded(false)} footer={<button className="memory-text-button" onClick={() => { setExpanded(false); toggle.current?.focus(); openMemory(toggle.current!); }}><MemoryIcon name="book" />查看完整记忆<MemoryIcon name="chevron" /></button>}>
       <div id={detailsId} className="memory-context-detail">{context.detail}</div>
       {!view ? <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆…</p> : !hasProgress ? <div className="memory-todo-empty"><MemoryIcon name="tasks" /><strong>{memoryReasonText(view.reason) || "还没有任务记录"}</strong><p>{view.reason ? "主任务可继续执行；可稍后重新读取。" : "记录任务后，在这里查看进展与下一步。"}</p></div> : <>
         {recorded(progress?.goal) && <h3>{progress?.goal}</h3>}
@@ -96,6 +88,18 @@ function Detail({ scope, path, navigate, dirty, dirtyChange, onReady }: { scope:
     </details>
     <MemoryDocumentView key={`${scope.sessionId}:${path}`} scope={scope} path={path} changed={view?.revision ?? ""} navigate={navigate} dirtyChange={dirtyChange} onReady={onReady} />
   </>;
+}
+function Summary({ entry, open }: { entry: MemoryCatalogEntry; open: (entry: MemoryCatalogEntry) => void }) {
+  const sourceTitle = entry.sourceTitle ?? entry.title;
+  return <details className="memory-catalog-item">
+    <summary className="memory-summary-toggle"><span className="memory-source-icon"><MemoryIcon name="book" /></span><span className="memory-source-copy">
+      <strong>{entry.title}</strong><span className="memory-source-summary">{entry.summary}</span>
+      <span className="memory-source-meta"><span>关联记忆 1</span><span data-tooltip="MEMORY.md 字符数，含标点及空白">入口 {entry.entryChars == null ? "—" : entry.entryChars.toLocaleString("zh-CN")} 字</span>{entry.deleted && <span>来源会话已移除</span>}<time>{new Date(entry.indexedAt ?? entry.updatedAt).toLocaleDateString()}</time></span>
+    </span><MemoryIcon name="chevron" /></summary>
+    <div className="memory-summary-sources"><p>关联记忆</p><button type="button" className="memory-summary-source" aria-label={`查看关联记忆：${sourceTitle}`} onClick={() => open(entry)}>
+      <MemoryIcon name="file" /><span><strong>{sourceTitle}</strong><span>查看会话记忆与引用资料</span></span><MemoryIcon name="chevron" />
+    </button></div>
+  </details>;
 }
 function Global({ workspaceId, workspaces, select, open }: { workspaceId: string; workspaces: Workspace[]; select: (id: string) => void; open: (scope: MemoryCatalogEntry) => void }) {
   const snapshot = useScope<MemoryCatalogEntry[] | null>(memoryCatalogScope(workspaceId), null);
@@ -147,11 +151,12 @@ function Global({ workspaceId, workspaces, select, open }: { workspaceId: string
     <div className="memory-filters"><MemoryFilter label="记忆工作空间" value={workspaceId} onChange={select} options={workspaces.map((w) => ({ value: w.id, label: w.name }))} />
       <MemoryFilter label="来源会话" value={session} onChange={setSession} options={[{ value: "", label: "全部来源会话" }, ...organized.map((entry) => ({ value: entry.sessionId, label: entry.sourceTitle ?? entry.title }))]} /></div>
     {error && <p role="alert">{error} <button className="btn" onClick={() => setRetry((n) => n + 1)}>重试</button></p>}
-    <div className="memory-list-heading"><span>已整理会话{entries && <span className="memory-count">{filtered.length}</span>}{catalogStatus && <small role="status">{catalogStatus}</small>}</span><button className="memory-icon-button" aria-label="记忆设置与纠正" data-tooltip="记忆设置与纠正" aria-expanded={settings} onClick={() => setSettings(!settings)}><MemoryIcon name="settings" /></button></div>
+    <div className="memory-list-heading"><span>已整理摘要{entries && <span className="memory-count">{filtered.length}</span>}{catalogStatus && <small role="status">{catalogStatus}</small>}</span><button className="memory-icon-button" aria-label="记忆设置与纠正" data-tooltip="记忆设置与纠正" aria-expanded={settings} onClick={() => setSettings(!settings)}><MemoryIcon name="settings" /></button></div>
+    <MemoryOrganizeControl key={workspaceId} scope={{ workspaceId }} label="整理工作空间" />
     {!!visibleFailures.length && <section className="memory-catalog-errors" aria-label="整理错误详情"><h3>整理出错</h3><ul>{visibleFailures.map(({ entry, detail }) => <li key={entry.id}><strong>{entry.sourceTitle ?? entry.title}</strong><span>{detail}</span></li>)}</ul></section>}
     {settings && !preferences && !error && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆设置…</p>}
     {settings && preferences && <fieldset className="memory-settings" disabled={busy} aria-busy={busy}>{busy && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在处理…</p>}<h3>查询模型</h3><ModelPicker value={preferences.queryModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(queryModel) => configure({ queryModel })} /><h3>后台整理模型</h3><ModelPicker value={preferences.organizerModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(organizerModel) => configure({ organizerModel })} />
-      <p className="meta">未单独选择时使用来源会话模型。浏览资料不调用模型；后台定时整理会产生实际用量。</p>
+      <p className="meta">未单独选择时使用来源会话模型。浏览资料不调用模型；手动和后台定时整理会产生实际用量。</p>
       <BudgetInput label="整理间隔（秒）" value={preferences.intervalMs / 1000} min={1} max={86400} save={(value) => configure({ intervalMs: value * 1000 })} />
       <h3>执行预算</h3>
       <BudgetInput label="执行时限（秒）" value={preferences.timeoutMs / 1000} min={memoryBudgetLimits.timeoutMs.min / 1000} max={memoryBudgetLimits.timeoutMs.max / 1000} save={(value) => configure({ timeoutMs: value * 1000 })} />
@@ -160,7 +165,7 @@ function Global({ workspaceId, workspaces, select, open }: { workspaceId: string
       <p className="meta">按 Enter 或离开输入框自动保存，无需重启；从下一次查询或整理执行生效，进行中的执行保持原预算。时限包含排队，每轮为一次模型交互；提高预算可能增加耗时和用量。失败来源会在后续整理周期重试。</p>
       <label>明确不再保留的条目原文<textarea value={correction} onChange={(e) => setCorrection(e.target.value)} /></label><p className="meta">仅清理当前工作空间中与原文完全匹配的记忆内容及摘要，保留原始对话。</p><button className="btn" disabled={busy || !correction.trim()} onClick={() => void correct()}>删除此条记忆及重复内容</button>
     </fieldset>}
-    <div className="memory-catalog">{filtered.map((entry) => <button key={entry.id} className="memory-catalog-item" onClick={() => open(entry)}><span className="memory-source-icon"><MemoryIcon name="file" /></span><span className="memory-source-copy"><strong>{entry.title}</strong><span className="memory-source-summary">{entry.summary}</span><span className="memory-source-meta"><span data-tooltip="MEMORY.md 字符数，含标点及空白">入口 {entry.entryChars == null ? "—" : entry.entryChars.toLocaleString("zh-CN")} 字</span><span data-status="ready">已整理</span>{entry.deleted && <span>来源会话已移除</span>}<time>{new Date(entry.updatedAt).toLocaleDateString()}</time></span></span><MemoryIcon name="chevron" /></button>)}{!entries ? !error && <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆目录…</p> : !organized.length ? <div className="memory-catalog-empty"><MemoryIcon name="book" /><strong>暂无已整理的会话</strong><p>{catalogStatus ? `${catalogStatus}；完成后会显示可用摘要。` : "整理完成后，会话摘要会显示在这里。"}</p></div> : !filtered.length ? <div className="memory-catalog-empty"><MemoryIcon name="search" /><strong>没有符合筛选条件的记忆</strong><button className="memory-text-button" onClick={() => { setQuery(""); setSession(""); }}>清除筛选</button></div> : null}</div>
+    <div className="memory-catalog">{filtered.map((entry) => <Summary key={entry.id} entry={entry} open={open} />)}{!entries ? !error && <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆目录…</p> : !organized.length ? <div className="memory-catalog-empty"><MemoryIcon name="book" /><strong>暂无已整理的摘要</strong><p>{catalogStatus ? `${catalogStatus}；完成后会显示可用摘要。` : "整理完成后，会话摘要会显示在这里。"}</p></div> : !filtered.length ? <div className="memory-catalog-empty"><MemoryIcon name="search" /><strong>没有符合筛选条件的摘要</strong><button className="memory-text-button" onClick={() => { setQuery(""); setSession(""); }}>清除筛选</button></div> : null}</div>
   </>;
 }
 type MemoryLocation = { scope: Scope; path: string; title?: string };
@@ -173,15 +178,14 @@ export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: 
     navigationGuard.current = (action) => opened ? guarded.current(action) : action();
     return () => { navigationGuard.current = (action) => action(); };
   }, [navigationGuard, opened]);
-  const open = (value: Scope | null) => {
-    const trigger = document.activeElement as HTMLButtonElement;
+  const open = (value: Scope | null, trigger: HTMLButtonElement) => {
     const next = opened?.scope === value ? null : { scope: value, trigger };
     if (opened) guarded.current(() => setOpened(next)); else setOpened(next);
   };
   return <>
     {children({
-      session: (context) => scope?.sessionId ? <Todo key={scope.sessionId} scope={scope} context={context} openMemory={() => open(scope)} /> : <button className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip="创建会话后查看上下文与记忆" disabled><ContextMemoryIcon percent={context.percent} /></button>,
-      global: <button className="memory-global action-icon" aria-label="全局记忆" data-tooltip="全局记忆" aria-expanded={!!opened && !opened.scope} aria-haspopup="dialog" disabled={!workspaces.length} onClick={() => open(null)}><MemoryIcon name="book" /></button>,
+      session: (context) => scope?.sessionId ? <Todo key={scope.sessionId} scope={scope} context={context} openMemory={(trigger) => open(scope, trigger)} /> : <button className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip="创建会话后查看上下文与记忆" disabled><ContextMemoryIcon percent={context.percent} /></button>,
+      global: <button className="memory-global action-icon" aria-label="全局记忆" data-tooltip="全局记忆" aria-expanded={!!opened && !opened.scope} aria-haspopup="dialog" disabled={!workspaces.length} onClick={(event) => open(null, event.currentTarget)}><MemoryIcon name="book" /></button>,
     })}
     {opened && <MemoryPanel key={`${opened.scope?.sessionId ?? "global"}`} opening={opened} workspace={scope?.workspaceId} workspaces={workspaces} guarded={guarded} onClose={() => setOpened(null)} />}
   </>;
@@ -243,9 +247,9 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
     <header><div className="memory-panel-title"><MemoryIcon name="book" /><div><h2 id="memory-heading">{target ? "会话记忆" : "全局记忆"}</h2><p>{target ? target.title ?? "当前会话" : "已整理的会话摘要与关联资料"}</p></div></div><button ref={close} className="icon-btn" aria-label="关闭记忆" data-tooltip="返回会话（Esc）" onClick={() => ask(onClose)}><MemoryIcon name="close" /></button></header>
     {pending && <div className="memory-unsaved" role="alert">尚有未保存编辑。<button className="btn" onClick={() => setPending(null)}>继续编辑</button><button className="btn" onClick={() => { const action = pending; setDirty(false); setPending(null); action(); }}>放弃编辑并继续</button></div>}
     <div ref={body} className="compression-body memory-dialog-body">
-      <div hidden={!!target}>{(catalogVisited || !target) && (workspaceId ? <Global key={workspaceId} workspaceId={workspaceId} workspaces={workspaces} select={setWorkspaceId} open={(scope) => navigate([{ scope, path: "MEMORY.md", title: scope.title }])} /> : <p>暂无工作空间</p>)}</div>
+      <div hidden={!!target}>{(catalogVisited || !target) && (workspaceId ? <Global key={workspaceId} workspaceId={workspaceId} workspaces={workspaces} select={setWorkspaceId} open={(scope) => navigate([{ scope, path: "MEMORY.md", title: scope.sourceTitle ?? scope.title }])} /> : <p>暂无工作空间</p>)}</div>
       {target && <Detail key={target.scope.sessionId} scope={target.scope} path={target.path} dirty={dirty} dirtyChange={setDirty} onReady={() => { if (body.current) body.current.scrollTop = positions.current.get(key) ?? 0; }} navigate={(path) => { if (path !== target.path) navigate([...history, { scope: target.scope, path, title: target.title }]); }} />}
     </div>
-    <footer className="memory-navigation"><button type="button" className="btn btn-ghost memory-return" onClick={back}><MemoryIcon name="back" />{history.length > 1 ? "返回上一级" : history.length ? "返回全局记忆" : "返回会话"}</button><small>{target ? history.length > 1 ? "会话记忆 / 关联文件" : "全局记忆 / 会话记忆" : "仅显示已整理会话"}</small></footer>
+    <footer className="memory-navigation"><button type="button" className="btn btn-ghost memory-return" onClick={back}><MemoryIcon name="back" />{history.length > 1 ? "返回上一级" : history.length ? "返回全局记忆" : "返回会话"}</button><small>{target ? history.length > 1 ? "会话记忆 / 关联文件" : "全局记忆 / 会话记忆" : "仅显示已整理摘要"}</small></footer>
   </dialog>, host);
 }

@@ -1,4 +1,4 @@
-import { markdown } from "./markdown.js";
+import { markdown, markdownTokens } from "./markdown.js";
 import type { HtmlResource } from "./html-preview.js";
 
 export interface FileReference { messageId: string; href: string }
@@ -28,6 +28,6 @@ export function localFileLink(href: string): { path: string; line?: number } | n
 }
 export function hasFileLink(text: string, href: string): boolean {
   let found = false;
-  markdown.walkTokens(markdown.lexer(text), token => { if (token.type === "link" && token.href === href) found = true; });
+  markdown.walkTokens(markdownTokens(text), token => { if (token.type === "link" && token.href === href) found = true; });
   return found;
 }
