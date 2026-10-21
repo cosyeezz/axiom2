@@ -68,10 +68,10 @@ try {
       return {
         operations: [...el.querySelectorAll(".task-operation")].map(node => {
           const heading = node.querySelector(".task-operation-heading")!, target = node.querySelector(".task-operation-target")!, summary = node.querySelector("summary")!, icon = node.querySelector(".task-operation-icon")!;
-          return { status: node.getAttribute("data-status"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(target).lineHeight), heading: heading.getBoundingClientRect().height, target: target.getBoundingClientRect().height, children: summary.children.length, color: getComputedStyle(icon).color, muted: helpers.color(icon, "--muted"), danger: helpers.color(icon, "--danger-icon"), hiddenStatus: getComputedStyle(node.querySelector('[role="status"]')!).clipPath, overflow: node.scrollWidth > node.clientWidth + 1 };
+          return { status: node.getAttribute("data-status"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(target).lineHeight), heading: heading.getBoundingClientRect().height, target: target.getBoundingClientRect().height, children: summary.children.length, color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon"), hiddenStatus: getComputedStyle(node.querySelector('[role="status"]')!).clipPath, overflow: node.scrollWidth > node.clientWidth + 1 };
         }),
         pending: [...el.querySelectorAll(".delegation-pending-item")].map(node => ({ height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("p")!).lineHeight), overflow: node.scrollWidth > node.clientWidth + 1 })),
-        members: [...el.querySelectorAll(".subagent")].map(node => { const icon = node.querySelector(".agent-state")!; return { state: icon.getAttribute("data-state"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("strong")!).lineHeight), color: getComputedStyle(icon).color, muted: helpers.color(icon, "--muted"), danger: helpers.color(icon, "--danger-icon") }; }),
+        members: [...el.querySelectorAll(".subagent")].map(node => { const icon = node.querySelector(".agent-state")!; return { state: icon.getAttribute("data-state"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("strong")!).lineHeight), color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon") }; }),
         rightSide: el.querySelectorAll(".task-batch-progress, .task-operation-action, .task-operation-chevron, .task-operation > details > summary > .task-operation-status").length,
         openIcons: [...el.querySelectorAll(".agent-open use")].map(node => node.getAttribute("href")),
       };
@@ -84,6 +84,7 @@ try {
       assert.ok(Math.abs(box.heading - box.line * 2) <= 1 && Math.abs(box.target - box.line) <= 1, `${label}: title + one preview line`);
       assert.equal(box.children, 2, `${label}: only left icon and two-line text`);
       assert.equal(box.hiddenStatus, "inset(50%)");
+      assert.equal(box.muted, "rgb(138, 143, 152)", `${label}: neutral system gray, not process text color`);
       assert.equal(box.color, ["failed", "cancelled"].includes(box.status!) ? box.danger : box.muted, `${label}: icon status color`);
       assert.equal(box.overflow, false);
     }
