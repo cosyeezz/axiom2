@@ -50,6 +50,7 @@ export interface Task {
   parentSessionId: string;
   sessionId: string;
   anchor: string;
+  title?: string | null;
   description: string;
   status: TaskStatus;
   runId: string | null;

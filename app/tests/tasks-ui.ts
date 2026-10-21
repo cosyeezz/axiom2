@@ -49,8 +49,8 @@ export async function checkTasksUI(
               arguments: JSON.stringify({
                 context: "只使用此背景",
                 tasks: [
-                  { task: "检查子任务页面，不修改文件" },
-                  { task: "独立检查第二个子任务" },
+                  { title: "检查子任务页面", task: "检查子任务页面，不修改文件" },
+                  { title: "检查第二个子任务", task: "独立检查第二个子任务" },
                 ],
               }),
             },

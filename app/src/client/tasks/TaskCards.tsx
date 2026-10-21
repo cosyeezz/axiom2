@@ -2,7 +2,7 @@ import { createContext, memo, useContext } from "react";
 import { type ChatMessage } from "../../shared/agent.js";
 import { useThreadMessage } from "../chat/OriginalConversation.js";
 import { Icon } from "../components.js";
-import { toolPreview, type ToolCall } from "../chat/tool-summary.js";
+import { taskCallPreview, toolPreview, type ToolCall } from "../chat/tool-summary.js";
 import { callObject, taskCallLabel, taskCallStatus } from "./task-call.js";
 import "../styles/task-calls.css";
 import { useAnchorTasks } from "./task-selectors.js";
@@ -42,9 +42,7 @@ export const TaskCards = memo(function TaskCards({
   const open = useContext(OpenTask);
   const result = useThreadMessage(scope, `tool-${call.id}`);
   const tasks = useAnchorTasks(scope, call.id);
-  const input = callObject(call.input);
-  const definitions = Array.isArray(input?.tasks) ? input.tasks.map((item: unknown) =>
-    item && typeof item === "object" && "task" in item && typeof item.task === "string" ? item.task : "准备子任务") : [];
+  const definitions = taskCallPreview(call)?.titles ?? [];
   const status = taskCallStatus(result, message);
   const label = taskCallLabel("delegate", status, callObject(result?.text ?? ""));
   const completed = tasks.filter(t => t.status === "completed").length;
@@ -60,9 +58,9 @@ export const TaskCards = memo(function TaskCards({
         <strong>子代理协作</strong>
       </header>
       {showFeedback && <div className="delegation-pending">
-        {(tasks.length ? ["委派回执"] : definitions.length ? definitions : ["准备子任务"]).map((description, index) => <div className="delegation-pending-item" key={index} data-tooltip={feedback ? `${description} · ${feedback}` : description}>
+        {(tasks.length ? ["委派回执"] : definitions.length ? definitions : ["准备子任务"]).map((description, index) => <div className="delegation-pending-item" key={index} aria-label={feedback ? `${description} · ${feedback}` : description} data-tooltip={feedback ? `${description} · ${feedback}` : description}>
           <p>{description}</p>
-          {feedback && <span className={status === "failed" ? "task-call-error" : "task-call-meta"} role={status === "failed" ? "alert" : "status"}>{feedback}</span>}
+          {feedback && <span className="task-operation-status" role={status === "failed" ? "alert" : "status"}>{feedback}</span>}
         </div>)}
       </div>}
       {tasks.map((t) => (
@@ -72,12 +70,12 @@ export const TaskCards = memo(function TaskCards({
             className="subagent"
             data-status={t.error || t.status === "interrupted" ? "failed" : t.status}
             aria-haspopup="dialog"
-            aria-label={`打开子会话：${t.description}`}
+            aria-label={`打开子会话：${t.title || t.description}${t.error ? ` · ${t.error}` : ""}`}
             onClick={() => open(t.id)}
           >
-            <span className="agent-identity" data-tooltip={`${t.description} · ${t.results.length} 次交付`}>
-              <strong data-tooltip={t.description}>{t.description}</strong>
-              {t.error && <span className="task-call-error" role="alert" data-tooltip={t.error}>{t.error}</span>}
+            <span className="agent-identity" data-tooltip={`${t.title || t.description} · ${t.results.length} 次交付${t.error ? ` · ${t.error}` : ""}`}>
+              <strong data-tooltip={t.error ? `${t.title || t.description} · ${t.error}` : t.title || t.description}>{t.title || t.description}</strong>
+              {t.error && <span className="task-operation-status" role="alert">{t.error}</span>}
             </span>
             <TaskState task={t} iconOnly />
             <Icon className="agent-open" name="subagent-open" />

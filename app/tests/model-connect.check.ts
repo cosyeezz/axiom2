@@ -1,3 +1,4 @@
+import { chooseSelect, assertSelectPosition } from "./select-helpers.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,6 +53,12 @@ try {
         const panelRect = await panel.boundingBox();
         const footerRect = await page.locator('.configuration-actions').boundingBox();
         assert.ok(panelRect && footerRect && footerRect.y >= panelRect.y + panelRect.height - 1, `${label}: actions below config at ${width}`);
+      }
+      if (label === "setup") {
+        const select = page.getByRole("combobox", { name: "供应商", exact: true });
+        await select.click(); await assertSelectPosition(page, select);
+        await page.screenshot({ path: join(artifacts, `supplier-open-${width}.png`) });
+        await page.keyboard.press("Escape");
       }
       await page.screenshot({ path: join(artifacts, `${label}-${width}.png`), fullPage: true });
     }
@@ -135,9 +142,11 @@ try {
   await menu.waitFor({ state: "detached" });
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  assert.deepEqual(await providerSelect.locator("option").evaluateAll((options) => options.map((option) => ({ id: (option as HTMLOptionElement).value, name: option.textContent }))), supportedProviders.map((provider) => ({ id: provider.id, name: `${provider.name} · ${provider.id}` })));
+  await providerSelect.click();
+  assert.deepEqual(await page.getByRole("listbox", { name: "供应商", exact: true }).getByRole("option").evaluateAll(options => options.map(option => ({ id: option.getAttribute("data-value"), name: option.textContent }))), supportedProviders.map((provider) => ({ id: provider.id, name: `${provider.name} · ${provider.id}` })));
+  await page.keyboard.press("Escape");
   assert.ok(supportedProviders.length > 2, "dropdown is populated from pi, not a fixed pair");
-  await providerSelect.selectOption("openai");
+  await chooseSelect(page, providerSelect, "openai");
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.equal(await page.locator("#provider-key").count(), 0);
   for (const width of [360, 1440]) {
@@ -152,7 +161,7 @@ try {
   await page.locator("#provider-id").fill("openai");
   await page.locator("#provider-url").fill(endpointUrl);
   await page.locator("#provider-key").fill("UI-FIXTURE-KEY");
-  await page.locator("#provider-protocol").selectOption(catalogModel.api);
+  await chooseSelect(page, page.locator("#provider-protocol"), catalogModel.api);
   await capture("custom");
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
@@ -230,7 +239,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "OAuth 登录", exact: true }).count(), 0, "custom interface has no OAuth login button");
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await providerSelect.selectOption("openai");
+  await chooseSelect(page, providerSelect, "openai");
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   const login = page.locator(".oauth-login-panel");
   assert.equal(await page.getByRole("dialog").count(), 0);
@@ -259,7 +268,7 @@ try {
   await page.locator("#provider-auth-status").filter({ hasText: "已通过 OAuth 登录" }).waitFor();
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await providerSelect.selectOption("openai");
+  await chooseSelect(page, providerSelect, "openai");
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   await login.locator("#auth-answer").waitFor();
   assert.deepEqual(startedProviders, ["openai", "openai"]);
@@ -268,7 +277,7 @@ try {
   failNext = true;
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
-  await providerSelect.selectOption("openai");
+  await chooseSelect(page, providerSelect, "openai");
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   await login.locator("#auth-answer").fill("http://localhost/callback?code=FIXTURE&state=fixture");
   await login.getByRole("button", { name: "提交回填" }).click();

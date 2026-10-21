@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { startServer } from "../src/server/index.js";
@@ -71,7 +71,36 @@ try {
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'))");
   await targetRow.locator("button.history-item").click();
   await page.locator('[data-result-id="retained"]').waitFor({ state: "attached" });
+  const notificationBatch = page.locator('#messages > .task-notices');
+  const assertBatch = async () => {
+    assert.equal(await notificationBatch.count(), 1);
+    assert.equal(await notificationBatch.locator('summary').count(), 0);
+    assert.deepEqual(await page.locator('#messages > .compaction-card, #messages > .task-notices').evaluateAll(nodes => nodes.map(node => node.className.includes('task-notices') ? 'notices' : 'compression')), ['compression', 'notices']);
+    assert.deepEqual(await notificationBatch.locator('[data-result-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-result-id'))), ['archived-one', 'archived-two', 'retained']);
+    assert.equal(await notificationBatch.locator('.task-notice:visible').count(), 3);
+  };
+  await assertBatch();
+  assert.equal(await page.evaluate(() => document.visibilityState), 'hidden');
+  assert.equal(app.store.session(workspace.id, target.id).readVersion, 1, 'hidden initial view must not acknowledge notices');
+  // Rebuild the view before acknowledgement; the compact entry and order survive reload.
+  await page.addInitScript("Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });");
+  await page.reload();
+  await page.locator('[data-result-id="retained"]').waitFor({ state: 'attached' });
+  await assertBatch();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await notificationBatch.locator('.task-notice:visible').count(), 3);
+    assert.equal(await notificationBatch.locator('[data-state="failed"]').innerText(), '子代理执行失败！');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await assertBatch();
+    if (process.env.AXIOM_TEST_ARTIFACTS) {
+      const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS);
+      mkdirSync(artifacts, { recursive: true });
+      await page.screenshot({ path: join(artifacts, `task-notices-${width}.png`) });
+    }
+  }
   await page.waitForTimeout(1100);
+  assert.equal(await page.evaluate(() => document.visibilityState), 'hidden');
   assert.equal(app.store.session(workspace.id, target.id).readVersion, 1);
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
   await until(() => !app.store.session(workspace.id, target.id).unread, "compacted task results permanently block the read receipt");
@@ -79,10 +108,17 @@ try {
   assert.equal(await page.locator('[data-result-id="archived-two"]').count(), 1);
   assert.equal(await page.locator('[data-result-id="already-read"]').count(), 0);
   assert.equal(await page.locator('[data-result-id="retained"]').count(), 1);
+  await page.getByRole('button', { name: '原始会话', exact: true }).click();
+  await page.getByText('正在查看原始会话', { exact: true }).waitFor();
+  assert.equal(await page.locator('#messages .compaction-card').count(), 0);
+  assert.deepEqual(await page.locator('#messages [data-result-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-result-id'))), ['already-read', 'archived-one', 'archived-two', 'retained']);
+  await page.getByRole('button', { name: '原始会话', exact: true }).click();
+  await notificationBatch.waitFor();
   assert.ok(!app.agents.messages(scope).some(m => m?.text === "private old input"));
   assert.equal(readFileSync(manager.getSessionFile()!, "utf8"), raw, "display recovery must not modify the native transcript");
   assert.deepEqual(transcriptMessages(manager).filter(m => m.taskNotice).map(m => m.resultId), ["retained"], "agent context stays compacted");
 
+  await page.setViewportSize({ width: 1440, height: 900 });
   await otherRow.locator("button.history-item").click();
   // Pointer navigation waits for double-click rename arbitration.
   await otherRow.locator("button.history-item[aria-current=true]").waitFor();
@@ -93,6 +129,7 @@ try {
 
   // A new immutable result must still light the dot. Until its real notice arrives,
   // the mere existence of a compression card or task metadata cannot mark it read.
+  await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
   result("late");
   app.agents.refresh(scope);
   await targetRow.locator(".session-state.unread").waitFor();

@@ -30,5 +30,7 @@ export function useFullMessage(scope: Scope, source: ChatMessage | null, automat
   }, [key]);
   useEffect(() => { if (automatic) void load(); }, [automatic, load]);
   const visible = state.key === key ? state : undefined;
-  return { message: visible?.message, loading: visible?.loading, error: visible?.error, load };
+  // Automatic detail reads are pending on their first render, before the effect runs.
+  const loading = visible?.loading || automatic && !!source && !visible?.message && !visible?.error;
+  return { message: visible?.message, loading, error: visible?.error, load };
 }

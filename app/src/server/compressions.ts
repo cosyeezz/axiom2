@@ -147,6 +147,7 @@ export class Compressions {
     return this.store.external(c, () => this.agents.models.serial(async () => {
       this.store.session(scope.workspaceId, scope.sessionId);
       const check = () => {
+        if (this.agents.reloads.active(scope)) throw new AppError("COMPRESSION_BUSY", "会话正在重载，请等待完成后压缩。");
         if (this.closing || epoch !== (this.epochs.get(scope.sessionId) ?? 0))
           throw new AppError("COMPRESSION_STOPPED", "启动期间会话已停止；未重新压缩");
         if (autoRunId) {

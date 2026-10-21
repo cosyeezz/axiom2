@@ -108,7 +108,9 @@ export class AgentViews {
         if (missing.size) {
           const notices = transcriptMessages(manager, true).filter((message) =>
             message.taskNotice && message.resultId && missing.delete(message.resultId));
-          list.unshift(...notices);
+          // Recovered history belongs below its summary, not above the current context.
+          const compressionIndex = list.findIndex(message => message.compression);
+          list.splice(compressionIndex + 1, 0, ...notices);
         }
       }
       messages = new Map(list.map((m) => [m.id, m]));

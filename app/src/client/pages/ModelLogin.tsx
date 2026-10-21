@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Select } from "../Select.js";
 import { Dialog } from "../components.js";
 import { command, useConnection, useScope } from "../transport.js";
 import type { AuthState } from "../../shared/models.js";
@@ -178,20 +179,8 @@ export function ModelLogin({
         >
           <label htmlFor="auth-answer">{state.prompt.message}</label>
           {state.prompt.type === "select" ? (
-            <select
-              className="input"
-              id="auth-answer"
-              value={answer}
-              required
-              onChange={(e) => setAnswer(e.target.value)}
-            >
-              <option value="">请选择</option>
-              {state.prompt.options?.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <Select id="auth-answer" label={state.prompt.message} value={answer} required disabled={busy}
+              onChange={setAnswer} options={[{ value: "", label: "请选择" }, ...(state.prompt.options ?? []).map(option => ({ value: option.id, label: option.label }))]} />
           ) : (
             <input
               autoFocus

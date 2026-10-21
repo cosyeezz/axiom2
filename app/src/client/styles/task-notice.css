@@ -1,3 +1,4 @@
+.task-notices { margin: 8px 0; min-width: 0; color: var(--muted); }
 .task-notice {
   --notice-color: var(--muted);
   display: flex;

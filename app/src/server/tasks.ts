@@ -32,6 +32,7 @@ export class Tasks {
       this.delivery,
       (scope) => this.stopParent(scope),
     );
+    agents.reloads.onReleased = scope => { this.delivery.notify(scope); this.scheduler.kick(); };
     agents.onEvent = (scope, run, event) => this.event(scope, run, event);
     agents.onSettled = (scope, run) => {
       const row = this.records.child(scope);

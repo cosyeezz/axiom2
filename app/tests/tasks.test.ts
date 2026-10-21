@@ -90,9 +90,9 @@ test(
           {
             context: "ONLY-SHARED-CONTEXT",
             tasks: [
-              { task: "child-A: inspect evidence.txt and report suggested changes" },
-              { task: "child-B: inspect only and report" },
-              { task: "child-C: inspect only and report" },
+              { title: "核对文件修改建议", task: "child-A: inspect evidence.txt and report suggested changes" },
+              { title: "独立检查任务B", task: "child-B: inspect only and report" },
+              { title: "独立检查任务C", task: "child-C: inspect only and report" },
             ],
           },
           "delegate-fixed",

@@ -32,6 +32,14 @@ test("literal file/image/folder references in restored quotes keep their origina
   assert.deepEqual(result.attachments, current.attachments);
   assert.deepEqual(result.images, current.images);
 });
+test("img collisions rebase bound references while legacy references and quoted IDs stay intact", () => {
+  const attachment = { id: "img1", name: "a.png", kind: "image" as const, path: "/a.png", text: "" };
+  const current: Draft = { ...empty, text: "[img1]", attachments: [attachment] };
+  const recalled: Draft = { ...empty, text: "[img1] [imag1] quoted [img2]", attachments: [attachment, { ...attachment, id: "imag1" }] };
+  const result = mergeRecalledDrafts(current, [recalled]);
+  assert.equal(result.text, "[img3] [imag1] quoted [img2]\n\n[img1]");
+  assert.deepEqual(result.attachments?.map((a) => a.id), ["img1", "img3", "imag1"]);
+});
 test("empty editor restores local IDs unchanged and legacy content losslessly", () => {
   const draft: Draft = { ...empty, text: "inspect [folder1]", attachment: { name: "legacy", text: "body" }, attachments: [{ id: "folder1", name: "project", kind: "folder", path: "F:/project", text: "" }] };
   const merged = mergeRecalledDrafts(empty, [draft]);

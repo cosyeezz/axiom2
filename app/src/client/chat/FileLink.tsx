@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { FileReference } from "../../shared/file-preview.js";
 import type { MarkdownImageOwner } from "./MarkdownImage.js";
 import { FileIcon } from "./FileIcon.js";
-export interface OpenFileReference extends FileReference { owner: MarkdownImageOwner; trigger: HTMLElement }
+export type OpenFileReference = FileReference & { owner: Pick<MarkdownImageOwner, "scope">; trigger: HTMLElement; edit?: boolean };
 export const FilePreviewContext = createContext<((reference: OpenFileReference) => void) | null>(null);
 export function FileLink({ href, owner, children }: { href: string; owner: MarkdownImageOwner; children: ReactNode }) {
   const open = useContext(FilePreviewContext);

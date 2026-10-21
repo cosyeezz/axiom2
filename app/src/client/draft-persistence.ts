@@ -73,7 +73,7 @@ function load(e: Entry) {
       const saved = await read(e);
       e.revision = saved.revision;
       if (!e.status.ready && !e.latest) restoreRemote(e, saved);
-      else if (e.latest && (saved.draft.text || saved.draft.attachments?.length || saved.draft.images?.length)) {
+      else if (e.latest && (saved.draft.text || saved.draft.attachments?.length || saved.draft.images?.length || saved.draft.skills?.length)) {
         status(e, { ready: true, saving: false, conflict: true, error: "已保存的草稿与当前输入不同，请选择要保留的内容。" });
         return;
       }
@@ -116,6 +116,24 @@ export function usePersistentDraft(scope: Scope) {
     }
   }, [e, connection.connected, connection.generation]);
   return current;
+}
+/** Confirm every mounted or previously edited session draft before a deliberate page reload. */
+export async function flushDraftsForPageReload() {
+  do {
+    for (const e of entries.values()) {
+      if (!e.status.ready) await load(e);
+      if (!e.status.ready || e.status.conflict)
+        throw new Error("草稿尚未确认保存，请先处理草稿提示。");
+      if (e.latest && (e.status.saving || e.status.error)) await send(e, e.latest);
+    }
+    // Typing in another composer while a save was in flight must also settle.
+  } while ([...entries.values()].some(e => !e.status.ready || e.status.conflict || e.latest && (e.status.saving || e.status.error)));
+}
+export async function retryDraftPersistence(scope: Scope) {
+  const e = entry(scope);
+  if (e.status.conflict) return;
+  if (!e.status.ready) { await load(e); return; }
+  if (e.latest) { status(e, { saving: true, error: "" }); await send(e, e.latest).catch(() => {}); }
 }
 export async function resolveDraftConflict(scope: Scope, keepLocal: boolean) {
   const e = entry(scope), sequence = e.sequence;

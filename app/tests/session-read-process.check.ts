@@ -117,6 +117,11 @@ try {
   assert.equal(current().unread, true, "an undelivered task result stays unread");
   publish(notice("late"));
   await until(() => !current().unread, "live notice in a closed process was not acknowledged");
+  const standalone = page.locator('#messages > .task-notices');
+  assert.equal(await standalone.locator('summary').count(), 0);
+  assert.equal(await standalone.locator('[data-result-id="late"]').count(), 1);
+  assert.equal(await standalone.locator('.task-notice').isVisible(), true, 'late standalone notices are immediately visible without expanding');
+  assert.equal(await page.locator('#messages > .task-notice').count(), 0, 'task notices never become loose top-level rows');
   await switchAway();
   assert.deepEqual(errors, []);
   console.log("PASS: collapsed process and final-answer folding retain real result notices; hidden and undelivered results stay unread; live delivery, switching and reload acknowledge without expanding details");

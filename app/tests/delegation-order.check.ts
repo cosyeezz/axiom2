@@ -52,7 +52,7 @@ try {
   // Simulate eventual delivery of a corrected receipt; the call's card must stay mounted.
   list.tasks = ["running", "failed"].map((status, i) => ({
     id: `task-${i}`, workspaceId: workspace.id, parentSessionId: session.id, sessionId: `child-${i}`,
-    anchor: "delegation", description: i ? "检查连接状态" : "检查消息渲染、流式输出、展开状态与全文读取，核对多个工具交错执行及子代理独立更新时的消息顺序，并验证手机和桌面布局没有溢出且阅读位置保持稳定", status: status as "running" | "failed",
+    anchor: "delegation", title: i ? null : "检查消息渲染", description: i ? "检查连接状态" : "检查消息渲染、流式输出、展开状态与全文读取，核对多个工具交错执行及子代理独立更新时的消息顺序，并验证手机和桌面布局没有溢出且阅读位置保持稳定", status: status as "running" | "failed",
     runId: `run-${i}`, createdAt: Date.now(), budgets: defaultBudgets, results: [], error: i ? "子任务执行失败：连接超时" : null,
   }));
   put(output("delegation", "completed", JSON.stringify({ taskIds: ["task-0", "task-1"], status: "queued" })));
@@ -75,7 +75,7 @@ try {
     { id: "notice", role: "notice", text: "子代理已完成", taskNotice: "completed" },
     { id: "reading", role: "assistant", text: "", calls: [call("read-result", "functions.read_result", { taskId: "task-0", resultId: "result-old" })] },
     output("read-result", "running"),
-    { id: "appending", role: "assistant", text: "", calls: [call("append", "append", { taskId: "task-0", text: "补充检查断线后的消息顺序" })] },
+    { id: "appending", role: "assistant", text: "", calls: [call("append", "append", { taskId: "task-0", summary: "补查断线重连", text: "补充检查断线后的消息顺序" })] },
     output("append", "completed", JSON.stringify({ taskId: "task-0", inputId: "input-0", status: "queued" })),
     { id: "follow-up", role: "assistant", text: "", calls: [call("follow", "functions.append", { taskId: "task-0", mode: "followUp", text: "完成后核对窄屏布局" })] },
     output("follow", "failed", "此子会话待处理输入达到 32 条"),
@@ -102,8 +102,8 @@ try {
   await reading.locator("summary").first().click();
   assert.equal(await reading.locator(".markdown, pre").count(), 0);
   const stop = page.locator('.task-operation[data-tool="cancel_task"]');
-  assert.ok((await stop.innerText()).includes("停止已受理"));
-  assert.ok((await page.locator('.task-operation[data-tool="append"]').first().innerText()).includes("已受理"));
+  assert.equal(await stop.locator('.task-operation-heading').innerText(), "检查消息渲染");
+  assert.equal(await page.locator('.task-operation[data-tool="append"]').first().locator('.task-operation-heading').innerText(), "检查消息渲染\n补查断线重连");
   await page.locator('.task-operation[data-tool="append"]').nth(1).getByRole("alert").waitFor();
   await page.locator("#prompt").focus();
   await page.locator("#messages").screenshot({ path: join(artifacts, "task-cards-desktop.png") });
@@ -118,18 +118,18 @@ try {
     for (const node of await page.locator(".task-operation, .delegation-card").all()) assert.ok(await node.evaluate(n => n.scrollWidth <= n.clientWidth + 1), `card overflow ${width}`);
     for (const row of await cards.locator('.subagent').all()) {
       const box = await row.evaluate(n => ({ height: n.getBoundingClientRect().height, line: parseFloat(getComputedStyle(n.querySelector('.agent-identity strong')!).lineHeight), descriptionHeight: n.querySelector('.agent-identity strong')!.getBoundingClientRect().height }));
-      assert.ok(Math.abs(box.height - (box.line * 2 + 12)) <= 1, `two-line child card at ${width}px: ${JSON.stringify(box)}`);
-      assert.ok(box.descriptionHeight <= box.line * 2 + 1);
+      assert.ok(Math.abs(box.height - Math.max(44, box.line + 12)) <= 1, `single-line child card at ${width}px: ${JSON.stringify(box)}`);
+      assert.ok(box.descriptionHeight <= box.line + 1);
     }
     for (const operation of await page.locator('.task-operation').all()) {
       const box = await operation.evaluate(n => {
         const heading = n.querySelector('.task-operation-heading')!;
-        const target = n.querySelector('.task-operation-target')!;
-        return { height: n.getBoundingClientRect().height, heading: heading.getBoundingClientRect().height, target: target.getBoundingClientRect().height, line: parseFloat(getComputedStyle(target).lineHeight) };
+        const target = n.querySelector('.task-operation-target');
+        return { lines: n.getAttribute('data-tool') === 'append' ? 2 : 1, height: n.getBoundingClientRect().height, heading: heading.getBoundingClientRect().height, target: target?.getBoundingClientRect().height ?? 0, line: parseFloat(getComputedStyle(heading.querySelector('strong')!).lineHeight) };
       });
-      assert.ok(Math.abs(box.height - (box.line * 2 + 14)) <= 1, `two-line operation at ${width}px: ${JSON.stringify(box)}`);
-      assert.ok(Math.abs(box.heading - box.line * 2) <= 1);
-      assert.ok(Math.abs(box.target - box.line) <= 1, 'preview/error occupies only the second line');
+      assert.ok(Math.abs(box.height - (Math.max(44, box.line * box.lines + 12) + 2)) <= 1, `operation line count at ${width}px: ${JSON.stringify(box)}`);
+      assert.ok(Math.abs(box.heading - box.line * box.lines) <= 1);
+      assert.ok(Math.abs(box.target - (box.lines === 2 ? box.line : 0)) <= 1, 'only append has a preview line');
     }
     if (width === 390) await page.locator("#messages").screenshot({ path: join(artifacts, "task-cards-mobile.png") });
   }
@@ -165,7 +165,7 @@ try {
   await aggregate.locator(':scope > summary').click();
   const timeline = async () => aggregate.locator(':scope > .activity-content > *').evaluateAll(nodes => nodes.map(n =>
     n.matches('.subagents') ? 'delegate' : n.matches('.task-operation') ? n.getAttribute('data-tool') :
-      n.matches('.process-live') ? 'process' : n.matches('.task-notice') ? 'notice' : 'body'));
+      n.matches('.process-live') ? 'process' : n.matches('.task-notice, .task-notices') ? 'notice' : 'body'));
   const expectedOrder = ['delegate', 'notice', 'read_result', 'append', 'append', 'cancel_task', 'body', 'process', 'append', 'process'];
   assert.deepEqual(await timeline(), expectedOrder);
   assert.equal(await aggregate.locator('.process-live').count(), 2, 'only segments with actual thinking or ordinary calls have completed headers');

@@ -12,22 +12,33 @@ const items: PickedAttachment[] = [
 ];
 test("mixed path references are stable, reserved text IDs are never reused", () => {
   const added = assignReferences("前[imag3]后", [{ id: "file2" }], items);
-  assert.deepEqual(added.map((a) => a.id), ["file3", "imag4", "folder1"]);
+  assert.deepEqual(added.map((a) => a.id), ["file3", "img4", "folder1"]);
   const insertion = insertImageReferences("前文后文", 2, 2, added.map((a) => a.id!));
-  assert.equal(insertion.text, "前文[file3] [imag4] [folder1]后文");
-  assert.equal(removeAttachmentReferences(insertion.text, ["imag4"]), "前文[file3]  [folder1]后文");
+  assert.equal(insertion.text, "前文[file3] [img4] [folder1]后文");
+  assert.equal(removeAttachmentReferences(insertion.text, ["img4"]), "前文[file3]  [folder1]后文");
   assert.deepEqual(attachmentsInput(added), added);
 });
 test("absolute paths are data and mappings are available to agent but hidden in user transcript", () => {
   const added = assignReferences("", [], items);
-  const prompt = attachmentPrompt("检查[file1] [imag1] [folder1]", added);
+  const prompt = attachmentPrompt("检查[file1] [img1] [folder1]", added);
   for (const item of items) assert.ok(prompt.includes(JSON.stringify(item.path)));
-  assert.equal(attachmentDisplayText(prompt), "检查[file1] [imag1] [folder1]");
-  assert.equal(chatMessage({ role: "user", content: prompt }, "test")?.text, "检查[file1] [imag1] [folder1]");
-  assert.equal(chatMessage({ role: "custom", customType: "axiom-append", display: true, content: prompt }, "test")?.text, "检查[file1] [imag1] [folder1]");
+  assert.equal(attachmentDisplayText(prompt), "检查[file1] [img1] [folder1]");
+  assert.equal(chatMessage({ role: "user", content: prompt }, "test")?.text, "检查[file1] [img1] [folder1]");
+  assert.equal(chatMessage({ role: "custom", customType: "axiom-append", display: true, content: prompt }, "test")?.text, "检查[file1] [img1] [folder1]");
   assert.equal(attachmentDisplayText("自定义附件路径映射文字"), "自定义附件路径映射文字");
   assert.equal(attachmentInput({ ...added[0], path: "/tmp/notes.txt" })?.path, "/tmp/notes.txt");
   assert.equal(attachmentInput({ ...added[0], path: "\\\\server\\share\\notes.txt" })?.path, "\\\\server\\share\\notes.txt");
+});
+test("new image references reserve legacy numbers without rebinding or removing legacy IDs", () => {
+  const old = { ...items[1], id: "imag2", text: "" };
+  const added = assignReferences("[img1] [imag4]", [old], [items[1], items[1]]);
+  assert.deepEqual(added.map((a) => a.id), ["img5", "img6"]);
+  assert.deepEqual(attachmentsInput([old, ...added]), [old, ...added]);
+  const body = "[imag2] [img2] [img5]";
+  assert.equal(removeAttachmentReferences(body, ["img2"]), "[imag2]  [img5]");
+  const view = chatMessage({ role: "user", content: attachmentPrompt(body, [old, ...added]) }, "mixed");
+  assert.equal(view?.text, body);
+  assert.deepEqual(view?.images?.map((a) => a.id), ["imag2", "img5", "img6"]);
 });
 test("path validation rejects malformed IDs, kinds, relative paths and duplicate refs", () => {
   const valid = assignReferences("", [], items)[0];

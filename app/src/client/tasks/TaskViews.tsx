@@ -1,3 +1,5 @@
+import { FilePreviewHost } from "../chat/FilePreviewHost.js";
+import { guardFileNavigation } from "../file-edit-guard.js";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
@@ -23,14 +25,14 @@ export function TaskViews({
 }) {
   const [id, open] = useState("");
   return (
-    <OpenTask.Provider value={open}>
+    <OpenTask.Provider value={(next) => guardFileNavigation(() => open(next))}>
       {children}
       {id && scope && (
         <TaskWindow
           key={id}
           scope={scope}
           id={id}
-          onClose={() => open("")}
+          onClose={() => guardFileNavigation(() => open(""))}
           composer={composer}
         />
       )}
@@ -54,6 +56,7 @@ function TaskWindow({
   const [report, setReport] = useState<TaskResult | null>(null),
     [error, setError] = useState("");
   const [detailsVisited, setDetailsVisited] = useState(false), [loadingReport, setLoadingReport] = useState(false);
+  const [readingRevision, setReadingRevision] = useState(0);
   const reportRequest = useRef(0);
   useEffect(() => () => { reportRequest.current++; }, []);
   useEffect(() => {
@@ -107,7 +110,7 @@ function TaskWindow({
       </header>
       {task && child && (
         <section className="workspace">
-          <div className="container task-results">
+          <div className="container task-results" onClickCapture={() => setReadingRevision(value => value + 1)}>
             <details onToggle={(event) => { if (event.target === event.currentTarget && event.currentTarget.open) setDetailsVisited(true); }}>
               <summary>
                 执行与交付 · {task.results.length} 次
@@ -146,10 +149,12 @@ function TaskWindow({
               {error && <p role="alert">{error}</p>}</>}
             </details>
           </div>
+          <FilePreviewHost key={`${child.workspaceId}:${child.sessionId}`}>
           <OriginalConversationProvider key={`${child.workspaceId}:${child.sessionId}`} scope={child}>
-            <AgentThread scope={child} nested />
+            <AgentThread scope={child} nested readingRevision={readingRevision} />
             {composer(child)}
           </OriginalConversationProvider>
+          </FilePreviewHost>
         </section>
       )}
     </dialog>

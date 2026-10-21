@@ -74,7 +74,7 @@ test("capabilities: private discovery, revisions, atomic startup lock, persisten
     const legacy = await service.prepare(scope);
     assert.equal(legacy.runtime.skillPaths, null);
     assert.deepEqual(legacy.runtime.mcp.servers, [], "upgrading old sessions never enables MCP");
-    assert.deepEqual((await service.get(scope)).skills, [], "current discovery is not passed off as historic loading");
+    assert.deepEqual((await service.get(scope)).sessionSkills, [], "current discovery is not passed off as historic loading");
     const before = capabilityFileDigest(skill);
     writeFileSync(skill, "---\nname: selected\ndescription: changed\n---\nChanged");
     assert.notEqual(capabilityFileDigest(skill), before);

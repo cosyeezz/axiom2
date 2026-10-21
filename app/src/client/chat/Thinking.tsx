@@ -1,6 +1,5 @@
 import { useContext, useEffect, useState } from "react";
 import { ProcessDots, ProcessOutcome } from "./ProcessStatus.js";
-import { Icon } from "../components.js";
 import { ActivityExpanded, ActivitySettled } from "./ToolActivity.js";
 import { Markdown } from "./Markdown.js";
 import { MessagePartBody } from "./MessagePartBody.js";
@@ -20,7 +19,7 @@ export function Thinking({ text, active, scope, message }: { text: string; activ
   if (!groupOpen || (!trimmed && !incomplete && !active)) return null;
   const label = status === "failed" ? "思考失败" : status === "cancelled" ? "思考已停止" : firstLine;
   const header = <>
-    <span className={`thinking-label process-status-text${active ? " is-active" : ""}`}><span className="thinking-text">{status === "completed" || active ? open ? <Icon name="chevron" className="thinking-collapse-icon" /> : <Markdown text={firstLine || (active ? "" : "思考记录")} compact /> : label}</span>{active && <ProcessDots />}</span>
+    <span className={`thinking-label process-status-text${active ? " is-active" : ""}`}><span className="thinking-text">{status === "completed" || active ? <Markdown text={firstLine || (active ? "" : "思考记录")} compact /> : label}</span>{active && <ProcessDots />}</span>
     {!active && status !== "completed" && <ProcessOutcome status={status} />}
   </>;
   return <details className="thinking-block" open={open} data-status={status}>

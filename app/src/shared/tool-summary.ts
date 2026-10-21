@@ -30,6 +30,21 @@ export function compactText(text: string, limit = 160) {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > limit ? `${line.slice(0, limit)}…` : line;
 }
+export function taskCallPreview(call: ToolCall): ToolCall["taskPreview"] {
+  if (call.taskPreview) return call.taskPreview;
+  const name = call.name.replace(/^functions\./, "");
+  if (!["delegate", "append", "cancel_task", "read_result"].includes(name)) return undefined;
+  try {
+    const input = JSON.parse(call.input);
+    if (!input || typeof input !== "object") return undefined;
+    return {
+      ...(typeof input.taskId === "string" ? { taskId: input.taskId.slice(0, 200) } : {}),
+      ...(Array.isArray(input.tasks) ? { titles: input.tasks.slice(0, 8).map((task: any) =>
+        compactText(typeof task?.title === "string" && task.title.trim() ? task.title : typeof task?.task === "string" ? task.task : "准备子任务", 180)) } : {}),
+      ...(name === "append" ? { summary: compactText(typeof input.summary === "string" && input.summary.trim() ? input.summary : typeof input.text === "string" ? input.text : "补充任务", 180) } : {}),
+    };
+  } catch { return undefined; }
+}
 export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; target: string; detail: string } {
   const name = call.name.replace(/^functions\./, "");
   const tool = Object.hasOwn(tools, name) ? tools[name] : undefined;
@@ -70,7 +85,7 @@ export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; ta
   if (name === "edit") detail = Array.isArray(input.edits) ? `${input.edits.length} 处替换` : typeof input.oldText === "string" && typeof input.newText === "string" ? "1 处替换" : "文本替换";
   if (name === "write" && typeof input.content === "string") detail = `${input.content.split("\n").length} 行`;
   if (name === "delegate" && Array.isArray(input.tasks)) {
-    target = input.tasks.map((task) => task && typeof task === "object" && typeof task.task === "string" ? task.task : "子任务").join(" · ");
+    target = input.tasks.map((task) => task && typeof task === "object" ? typeof task.title === "string" && task.title.trim() ? task.title : typeof task.task === "string" ? task.task : "子任务" : "子任务").join(" · ");
     detail = `${input.tasks.length} 个任务`;
   }
   if (!target) target = Object.keys(input).length ? compactText(call.input) : "无输入参数";

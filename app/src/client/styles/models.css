@@ -35,10 +35,6 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .input.num{font-size:12px}
 .input:hover{border-color:color-mix(in srgb,var(--fg) 28%,transparent)}
 .input::placeholder{color:var(--muted)}
-/* Keep the OS picker and keyboard behavior; only style the closed control. */
-select.input{appearance:none;-webkit-appearance:none;padding-right:32px;cursor:pointer;font-weight:510;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23aeb6b0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;text-overflow:ellipsis}
-select option{background:var(--surface);color:var(--fg);font-weight:400}
-@media(forced-colors:active){select.input{appearance:auto;background-image:none}}
 .field-help{font-size:12px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
 .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .settings-app{display:grid;grid-template-columns:160px minmax(0,1fr);height:100dvh;min-height:0}

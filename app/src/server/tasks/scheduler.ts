@@ -1,6 +1,7 @@
 import { rewriteTarget } from "../session-rewrite.js";
 import { randomUUID } from "node:crypto";
 import type { Agents } from "../agents.js";
+import { skillsInput } from "../../shared/skills.js";
 import { AppError, text, attachmentsInput, attachmentPrompt } from "../../shared/protocol.js";
 import { running, type Run } from "../../shared/agent.js";
 import {
@@ -159,7 +160,7 @@ export class TaskScheduler {
       .filter((input) => this.records.drafts.has(input.id) &&
         (input.state === "queued" || (input.state === "starting" && !this.nativePending.has(row.id)) || this.failedInputs.has(input.id) || !this.handed.has(input.id) || this.nativePending.get(row.id)?.has(input.id)))
       .map((input) => ({ id: input.id, text: this.records.drafts.get(input.id)!.text,
-        mode: input.mode as "steer" | "followUp" }));
+        mode: input.mode as "steer" | "followUp", ...(this.records.skills(input.id).length ? { skills: this.records.skills(input.id) } : {}) }));
     this.agents.setQueue?.(target(row), queue, false);
     this.pendingViews.add(`agent:${row.workspaceId}:${row.sessionId}`);
     if (kind !== "queue") this.pendingViews.add(tasksScope(parent(row)));
@@ -181,6 +182,7 @@ export class TaskScheduler {
     const stopEpoch = this.records.stopEpoch(parent(row));
     const images = imagesInput(p.images);
     const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
+    const skills = skillsInput(p.skills);
     if (images.length) {
       const config = await configuration(this.store.root);
       const info = this.agents.info(target(row));
@@ -189,7 +191,7 @@ export class TaskScheduler {
       row = this.records.rows("WHERE id=?", row.id)[0];
     }
     const body = attachmentPrompt(
-        text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "追问", 12000), attachments),
+        text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "追问", 12000), attachments),
       mode = p.mode ?? "steer";
     if (mode !== "steer")
       throw new AppError("INVALID_INPUT", "新增追问只支持 steer");
@@ -220,7 +222,7 @@ export class TaskScheduler {
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
       if (!taskActive(row.status)) this.records.enqueue(row);
-      id = this.records.queue(row.id, rewrite ? JSON.stringify({ text: p.text, attachments, rewrite }) : body, rewrite ? "rewrite" : mode, images, requestId);
+      id = this.records.queue(row.id, rewrite ? JSON.stringify({ text: p.text, attachments, skills, rewrite }) : body, rewrite ? "rewrite" : mode, images, requestId, skills);
       if (row.status === "stopping") this.store.db.prepare("UPDATE task_inputs SET state='waiting',runId=? WHERE id=?").run(row.runId, id);
       if (["starting", "running"].includes(row.status)) {
         const now = Date.now(), budgets = this.records.preferences();
@@ -229,7 +231,7 @@ export class TaskScheduler {
       }
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
-    if (editable) this.records.drafts.set(id, { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images });
+    if (editable) this.records.drafts.set(id, { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images, ...(skills.length ? { skills } : {}) });
     row = this.records.rows("WHERE id=?", row.id)[0];
     const activeRun = this.agents.info(target(row)).run;
     if (activeRun?.id === row.runId && ["starting", "running"].includes(row.status)) this.arm(row, activeRun);
@@ -297,6 +299,7 @@ export class TaskScheduler {
           id: input.id,
           text: input.body,
           images: this.records.images(input.id),
+          skills: this.records.skills(input.id),
           mode: input.mode,
           budget: this.budget(row),
         })
@@ -346,7 +349,7 @@ export class TaskScheduler {
     const queued = this.records.inputs(row, "queued");
     // Editable drafts retain independent identity; legacy delegation/tool inputs
     // keep their initial batching through the first image-bearing input.
-    const editableAt = queued.findIndex((input) => this.records.drafts.has(input.id) || input.mode === "resume" || input.mode === "rewrite");
+    const editableAt = queued.findIndex((input) => this.records.drafts.has(input.id) || this.records.skills(input.id).length || input.mode === "resume" || input.mode === "rewrite");
     const resuming = queued[0]?.mode === "resume";
     const rewriting = queued[0]?.mode === "rewrite";
     const batch = resuming || rewriting || editableAt === 0 ? queued.slice(0, 1) : editableAt < 0 ? queued : queued.slice(0, editableAt);
@@ -369,7 +372,7 @@ export class TaskScheduler {
           requestId: randomUUID(),
           op: resuming ? "agent.resume" : "prompt",
           ...target(row),
-          params: resuming ? { expectedRunId: inputs[0].body } : rewriting ? { ...JSON.parse(inputs[0].body), images } : { text: "处理明确委派／追加的子任务", images },
+          params: resuming ? { expectedRunId: inputs[0].body } : rewriting ? { ...JSON.parse(inputs[0].body), images } : { text: "处理明确委派／追加的子任务", images, skills: this.records.skills(inputs[0].id) },
         },
         {
           prompt: resuming || rewriting ? undefined : inputs.map((i) => i.body).join("\n\n"),

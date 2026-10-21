@@ -155,8 +155,8 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   pickerGate.release(); pickerGate = undefined;
   await page.getByRole("button", { name: "移除附件：second.bin", exact: true }).waitFor();
-  assert.equal(await input.inputValue(), "前文[file1] [imag1] [folder1] [file2]后文");
-  assert.deepEqual((await draft(owner)).attachments, mixed.map((item, i) => ({ ...item, id: ["file1", "imag1", "folder1", "file2"][i], text: "" })));
+  assert.equal(await input.inputValue(), "前文[file1] [img1] [folder1] [file2]后文");
+  assert.deepEqual((await draft(owner)).attachments, mixed.map((item, i) => ({ ...item, id: ["file1", "img1", "folder1", "file2"][i], text: "" })));
   assert.deepEqual(await page.locator(".attachment-chip").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-tooltip"))), mixed.map((item) => item.path));
   assert.equal(await page.locator(".attachment-chip img").count(), 0);
   assert.equal(commands.filter((c) => c.op === "files.upload").length, 0, "local paths must not upload or expand folder contents");
@@ -167,7 +167,7 @@ try {
   const overlay = page.locator(".attachment-input-overlay");
   await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "all bound references render as icons");
   assert.equal(await page.locator(".attachment-chip .attachment-symbol").count(), 4);
-  assert.deepEqual(await overlay.locator(".attachment-symbol small").allTextContents(), ["1", "1", "1", "2"]);
+  assert.deepEqual(await overlay.locator(".attachment-symbol small").allTextContents(), ["1", "img1", "1", "2"]);
   assert.equal(await page.locator('.attachment-label[aria-label^="文件夹"] .attachment-name').textContent(), "项目资料", "folder label uses this selection's name, not the workspace name");
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -180,6 +180,13 @@ try {
       return { x: Math.abs(a.x - b.x), y: Math.abs(a.y - b.y), width: Math.abs(node.clientWidth - b.width) };
     });
     assert.ok(geometry.x < 1 && geometry.y < 1 && geometry.width < 1, "mirror matches native textarea geometry");
+    const badges = await overlay.locator(".attachment-inline-reference:not([data-wrapped])").evaluateAll((nodes) => nodes.map((node) => {
+      const source = node.querySelector(".attachment-reference-source")!.getBoundingClientRect();
+      const badge = node.querySelector(".attachment-reference-icon")!.getBoundingClientRect();
+      const symbol = node.querySelector(".attachment-symbol")!.getBoundingClientRect();
+      return { within: badge.right <= source.right + 1, padding: badge.width - symbol.width };
+    }));
+    assert.ok(badges.every((badge) => badge.within && badge.padding <= 8), "content-sized backgrounds stay within native token slots without stretching");
   }
   await input.focus();
   await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(5, 5));
@@ -187,8 +194,12 @@ try {
   await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(node.value.length, node.value.length));
   await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "leaving reference restores icon");
   await input.evaluate((node) => node.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
-  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 0, "IME exposes native text");
+  await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "IME in prose keeps bound references visible");
+  await input.pressSequentially("mu");
+  assert.equal(await overlay.locator(".attachment-reference-icon").count(), 4, "composition updates keep icons visible");
   await input.evaluate((node) => node.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
+  await input.pressSequentially("中文");
+  assert.equal(await overlay.locator(".attachment-reference-icon").count(), 4, "committed prose keeps icons visible");
   await input.fill(`${"多行输入 abc\n".repeat(15)}${originalText} [file999]`);
   await input.evaluate((node) => { node.scrollTop = node.scrollHeight; node.dispatchEvent(new Event("scroll")); });
   await eventually(async () => input.evaluate((node) => Math.abs(node.scrollTop - document.querySelector(".attachment-input-overlay")!.scrollTop) < 1), "mirror tracks native scroll");
@@ -199,8 +210,8 @@ try {
 
   await input.fill(`${await input.inputValue()} 再次[file1]`);
   await page.getByRole("button", { name: "移除附件：中文 notes.txt", exact: true }).click();
-  assert.equal(await input.inputValue(), "前文 [imag1] [folder1] [file2]后文 再次");
-  assert.deepEqual((await draft(owner)).attachments?.map((a) => a.id), ["imag1", "folder1", "file2"]);
+  assert.equal(await input.inputValue(), "前文 [img1] [folder1] [file2]后文 再次");
+  assert.deepEqual((await draft(owner)).attachments?.map((a) => a.id), ["img1", "folder1", "file2"]);
   const beforeCancel = await draft(owner);
   items = [];
   await Promise.all([page.waitForResponse("**/api/attachments/pick?*"), add.click()]);
@@ -223,7 +234,7 @@ try {
   pickerGate.release(); pickerGate = undefined;
   await page.getByRole("button", { name: "移除附件：中文 notes.txt", exact: true }).waitFor();
   assert.equal(await input.inputValue(), `${typed}[file3]`);
-  assert.deepEqual((await draft(owner)).attachments?.map((a) => a.id), ["imag1", "folder1", "file2", "file3"]);
+  assert.deepEqual((await draft(owner)).attachments?.map((a) => a.id), ["img1", "folder1", "file2", "file3"]);
   passed.push("async picker preserves continued typing and existing IDs; blocks premature submission");
 
   const beforeAbort = await draft(owner);
@@ -244,9 +255,9 @@ try {
   uploadGate = gate();
   await paste("clipboard.png");
   await eventually(async () => commands.some((c) => c.op === "files.upload"), "paste must use files.upload");
-  assert.equal(await input.inputValue(), "粘贴[imag2]结束", "reserve placeholder before asynchronous upload");
+  assert.equal(await input.inputValue(), "粘贴[img2]结束", "reserve placeholder before asynchronous upload");
   await input.pressSequentially("继续输入");
-  assert.equal(await input.inputValue(), "粘贴[imag2]继续输入结束");
+  assert.equal(await input.inputValue(), "粘贴[img2]继续输入结束");
   assert.equal(await send.isDisabled(), true);
   await page.locator("#history .history-item").filter({ hasText: "附件测试 B" }).click();
   await eventually(async () => await input.inputValue() === "", "second session has a separate draft");
@@ -257,7 +268,7 @@ try {
   assert.deepEqual((await draft(other)).attachments, []);
   assert.equal(await page.locator(".attachment-chip").count(), 0);
   const uploaded = (await draft(owner)).attachments!.find((a) => a.name === "clipboard.png")!;
-  assert.equal(uploaded.id, "imag2"); assert.equal(uploaded.kind, "image"); assert.equal(uploaded.text, "");
+  assert.equal(uploaded.id, "img2"); assert.equal(uploaded.kind, "image"); assert.equal(uploaded.text, "");
   assert.ok(uploaded.path);
   const uploadDir = resolve(app.store.root, "attachments", owner.workspaceId, owner.sessionId);
   assert.equal(dirname(uploaded.path), uploadDir);
@@ -266,14 +277,14 @@ try {
   assert.equal(readdirSync(uploadDir).length, 1);
   const upload = commands.find((c) => c.op === "files.upload")!;
   assert.equal(upload.workspaceId, owner.workspaceId); assert.equal(upload.sessionId, owner.sessionId);
-  assert.equal(upload.params?.id, "imag2"); assert.equal(upload.params?.kind, "image");
+  assert.equal(upload.params?.id, "img2"); assert.equal(upload.params?.kind, "image");
   await page.locator("#history .history-item").filter({ hasText: "附件测试 A" }).click();
-  await eventually(async () => await input.inputValue() === "粘贴[imag2]继续输入结束", "returning to owner restores pending text and references");
+  await eventually(async () => await input.inputValue() === "粘贴[img2]继续输入结束", "returning to owner restores pending text and references");
   passed.push("clipboard reserves cursor reference; continued typing; late real upload stays in original session; exact scoped bytes");
 
   // Exercise the actual path-based paste flow, not a synthetic inline-image component.
-  const previewTrigger = page.getByRole("button", { name: "预览图片：imag2", exact: true });
-  const preview = page.getByRole("dialog", { name: "图片预览 · imag2", exact: true });
+  const previewTrigger = page.getByRole("button", { name: "预览图片：img2", exact: true });
+  const preview = page.getByRole("dialog", { name: "图片预览 · img2", exact: true });
   const beforePreview = await draft(owner);
   for (const [width, height] of [[390, 844], [1440, 900]]) {
     await page.setViewportSize({ width, height });

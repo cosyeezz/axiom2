@@ -35,7 +35,10 @@ try {
   await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   let mode: "success" | "fail" | "hold" = "success";
   let release: (() => void) | undefined, received: (() => void) | undefined;
-  const pendingRequest = () => new Promise<void>(resolve => { received = resolve; });
+  const pendingRequest = () => new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Expected a held message.get request within 10 seconds")), 10000);
+    received = () => { clearTimeout(timer); resolve(); };
+  });
   const full: Record<string, ChatMessage> = {
     answer: { id: "answer", role: "assistant", text: `# 完整回复\n\n3. 第三项\n4. 第四项\n\n${"LONG_TOKEN_".repeat(500)}\n\n\`\`\`js\nconst ok = true;\n\`\`\`` },
     summary: { id: "summary", role: "assistant", text: "# 完整压缩摘要\n\n这是全文。" },
@@ -131,8 +134,70 @@ try {
   await activity.locator(".thinking-body").getByText(/思考全文末尾/).waitFor();
   assert.equal(await activity.getByRole("button", { name: /^继续加载/ }).count(), 0, "thinking loads in full without paging");
   assert.match(await activity.locator(".tool-detail > pre").first().innerText(), /工具输入末尾/);
+  // A delayed full-text expansion makes limited room, without re-enabling tail following.
+  const expandedText = preview("异步展开位置") + "\n\n" + "完整文本新增段落。\n\n".repeat(100);
+  full["scroll-full"] = { id: "scroll-full", role: "assistant", text: expandedText + "\n\n异步全文末尾" };
+  views.messageChanged(scope, { id: "scroll-boundary", role: "user", text: "检查全文展开位置" });
+  views.messageChanged(scope, { id: "scroll-full", role: "assistant", text: expandedText }); views.flush(scope);
+  const fullButton = page.getByRole("button", { name: "展开完整文本", exact: true }).last();
+  await fullButton.waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "回到最下", exact: true }).click();
+  await page.waitForFunction(() => {
+    const thread = document.querySelector(".thread")!;
+    return thread.scrollHeight - thread.clientHeight - thread.scrollTop < 2;
+  });
+  const scrollBefore = await page.locator(".thread").evaluate(node => node.scrollTop);
+  mode = "hold"; const expansionRequest = pendingRequest();
+  await fullButton.click(); await expansionRequest;
+  assert.ok(release);
+  assert.equal(await page.locator(".thread").evaluate(node => node.scrollTop), scrollBefore, "loading preserves reading position");
+  (release as () => void)(); release = undefined;
+  await page.getByText("异步全文末尾", { exact: true }).waitFor({ state: "attached" });
+  await page.waitForTimeout(350);
+  const revealed = await page.locator(".thread").evaluate(node => ({ scroll: node.scrollTop, max: node.scrollHeight - node.clientHeight }));
+  assert.ok(revealed.scroll > scrollBefore && revealed.scroll - scrollBefore <= 334, "delayed full text reveals a limited beginning");
+  assert.ok(revealed.scroll < revealed.max - 100, "long full text does not jump to its end");
+  // A reader scrolling while the request is pending owns the position, even after a late response.
+  views.messageChanged(scope, { id: "cancel-boundary", role: "user", text: "等待时手动阅读" });
+  views.messageChanged(scope, { id: "cancel-full", role: "assistant", text: expandedText }); views.flush(scope);
+  full["cancel-full"] = { id: "cancel-full", role: "assistant", text: expandedText + "\n\n取消上移后的全文末尾" };
+  await page.getByRole("button", { name: "展开完整文本", exact: true }).last().waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "回到最下", exact: true }).click();
+  await page.waitForFunction(() => { const node = document.querySelector(".thread")!; return node.scrollHeight - node.clientHeight - node.scrollTop < 2; });
+  const cancelledRequest = pendingRequest();
+  await page.getByRole("button", { name: "展开完整文本", exact: true }).last().click(); await cancelledRequest;
+  const threadBounds = await page.locator(".thread").boundingBox();
+  await page.mouse.move(threadBounds!.x + 4, threadBounds!.y + threadBounds!.height / 2);
+  await page.mouse.wheel(0, -120);
+  await page.waitForTimeout(200);
+  const reading = await page.locator(".thread").evaluate(node => node.scrollTop);
+  (release as (() => void) | undefined)?.(); release = undefined;
+  await page.getByText("取消上移后的全文末尾", { exact: true }).waitFor({ state: "attached" });
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator(".thread").evaluate(node => node.scrollTop), reading, "manual scrolling cancels late expansion reveal");
+  // Task operations automatically read their truncated input after opening.
+  const taskText = "自动加载的补充内容。\n\n".repeat(2000) + "自动详情末尾";
+  full["task-auto"] = { id: "task-auto", role: "assistant", text: "", calls: [{ id: "auto-append", name: "append", input: JSON.stringify({ taskId: "fixture-task", text: taskText }) }] };
+  views.messageChanged(scope, { id: "task-boundary", role: "user", text: "检查异步子任务详情" });
+  views.messageChanged(scope, full["task-auto"]); views.flush(scope);
+  const taskDetails = page.locator('.task-operation[data-tool="append"] > details').last();
+  await taskDetails.locator("summary").waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "回到最下", exact: true }).click();
+  await page.waitForFunction(() => { const node = document.querySelector(".thread")!; return node.scrollHeight - node.clientHeight - node.scrollTop < 2; });
+  const beforeTask = await page.locator(".thread").evaluate(node => node.scrollTop);
+  const taskRequest = pendingRequest();
+  await taskDetails.locator(":scope > summary").click(); await taskRequest;
+  await taskDetails.getByText("正在加载完整记录…", { exact: true }).waitFor();
+  await page.waitForTimeout(250);
+  const waitingTask = await page.locator(".thread").evaluate(node => node.scrollTop);
+  assert.ok(release);
+  (release as () => void)(); release = undefined;
+  await taskDetails.locator(".task-call-content").getByText(/自动详情末尾/).waitFor({ state: "attached" });
+  await page.waitForTimeout(350);
+  const afterTask = await page.locator(".thread").evaluate(node => node.scrollTop);
+  assert.ok(afterTask > waitingTask && afterTask - beforeTask <= 334, `delayed automatic task details reveal a limited beginning: ${JSON.stringify({ beforeTask, waitingTask, afterTask })}`);
   assert.deepEqual(errors, []);
-  console.log("Full-message UI passed: Markdown replacement, overflow, retry, preview/history invalidation, late response/session isolation, compaction and user text.");
+  console.log("Full-message UI passed: Markdown replacement, overflow, retry, preview/history invalidation, late response/session isolation, compaction, user text, bounded reveal, manual cancellation and automatic task details.");
 } finally {
   await browser?.close(); await app?.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

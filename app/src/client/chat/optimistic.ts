@@ -15,7 +15,7 @@ function update(scope: Scope, fn: (list: PendingMessage[]) => PendingMessage[]) 
 export function optimisticStart(scope: Scope, id: string, draft: Draft, queued = false) {
   const images = (draft.attachments ?? (draft.attachment ? [draft.attachment] : []))
     .filter((a) => a.kind === "image").map((a) => ({ id: a.id!, name: a.name, path: a.path!, mimeType: "image/png" }));
-  update(scope, (list) => [...list, { id, draft, queued, state: "sending", message: { id, role: "user", text: draft.text, images } }]);
+  update(scope, (list) => [...list, { id, draft, queued, state: "sending", message: { id, role: "user", text: draft.text, images, skills: draft.skills } }]);
 }
 export function optimisticState(scope: Scope, id: string, state: PendingMessage["state"], inputId?: string, queued?: boolean) {
   const seen = observed.get(scopeKey(scope));

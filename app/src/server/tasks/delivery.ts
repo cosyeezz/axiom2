@@ -213,6 +213,7 @@ export class TaskDelivery {
   notify(scope: Scope) {
     if (
       this.closing ||
+      this.agents.reloads.active(scope) ||
       this.records.frozen(scope) ||
       this.notifying.has(scope.sessionId) ||
       // Running/delivered events arrive even when there is no notification to
@@ -264,8 +265,8 @@ export class TaskDelivery {
                 this.store.db.prepare("UPDATE task_notification_attempts SET runId=? WHERE id=?").run(receipt.runId, attemptId);
             }
           } catch (error) {
-            const known = error instanceof AppError && ["INVALID_CONFIG", "MODEL_UNAVAILABLE", "PARENT_FROZEN", "AGENT_STOPPED", "SHUTTING_DOWN", "NOTIFICATION_NOT_SENT", "AGENT_BUSY", "REVISION_CONFLICT", "PROMPT_PREPARATION_FAILED", "WORKER_START_FAILED"].includes(error.code);
-            const state = known ? "failed" : "unknown";
+            const known = error instanceof AppError && ["INVALID_CONFIG", "MODEL_UNAVAILABLE", "PARENT_FROZEN", "AGENT_STOPPED", "SHUTTING_DOWN", "NOTIFICATION_NOT_SENT", "RELOAD_BUSY", "AGENT_BUSY", "REVISION_CONFLICT", "PROMPT_PREPARATION_FAILED", "WORKER_START_FAILED"].includes(error.code);
+            const state = error instanceof AppError && error.code === "RELOAD_BUSY" ? "pending" : known ? "failed" : "unknown";
             this.reconcileNotifications(scope);
             this.store.db.prepare("UPDATE task_notification_attempts SET state=?,error=? WHERE id=? AND state NOT IN ('delivered','discarded')")
               .run(state, known ? (error as AppError).message : "投递结果未知；须先核对会话记录。", attemptId);

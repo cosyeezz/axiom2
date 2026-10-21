@@ -91,7 +91,8 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
         let mut output = String::new();
         stdout.take(65536).read_to_string(&mut output).map(|_| output)
     });
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // Pi checks may spend 20s inspecting npm and another 20s querying the registry.
+    let deadline = Instant::now() + Duration::from_secs(if action == "pi-check" { 50 } else { 30 });
     loop {
         if child.try_wait().map_err(|e| e.to_string())?.is_some() { break; }
         if Instant::now() >= deadline {
@@ -111,7 +112,7 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
 #[tauri::command]
 pub async fn axiom_update(window: Webview, action: String, version: Option<String>) -> Result<Value, String> {
     axiom_views::authorize(&window)?;
-    if !["status", "check", "service", "client", "recover", "installer"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
+    if !["status", "check", "pi-check", "pi-refresh", "pi", "service", "client", "recover", "installer"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
     if ["client", "installer"].contains(&action.as_str()) && !cfg!(windows) { return Err("本机平台尚未提供客户端安装包，请从发布页下载。".into()); }
     if action != "status" && action != "check" { crate::axiom_setup::ensure_idle()?; }
     let install = action == "installer";

@@ -26,16 +26,18 @@ test("task cards and prose split ordinary process segments in call order", () =>
     ["tool", "c2"], ["notice", "notice"], ["thinking", "d"], ["tool", "d1"],
   ]);
 });
-test("standalone task notices keep their position without an empty process header", () => {
+test("standalone task notices share a disclosure without an empty execution header", () => {
   const slices = processSlices([
     m("delegating", { calls: [call("delegate", "delegate")] }),
     m("notice", { role: "notice", text: "结果已到达", taskNotice: "completed" }),
+    m("failed", { role: "notice", text: "子代理执行失败", taskNotice: "failed" }),
     m("reading", { calls: [call("result", "read_result"), call("ordinary")] }),
     m("notice2", { role: "notice", text: "另一个结果已到达", taskNotice: "completed" }),
   ]);
   assert.deepEqual(slices.map(s => [s.kind, s.id]), [
-    ["task", "delegate"], ["notice", "notice"], ["task", "result"], ["process", "tool:ordinary"],
+    ["task", "delegate"], ["task-notices", "notice"], ["task", "result"], ["process", "tool:ordinary"],
   ]);
+  assert.deepEqual(slices[1], { kind: "task-notices", id: "notice", ids: ["notice", "failed"] });
   const last = slices.at(-1)!;
   if (last.kind === "process") assert.deepEqual(last.entries.map(e => e.kind), ["tool", "notice"]);
 });

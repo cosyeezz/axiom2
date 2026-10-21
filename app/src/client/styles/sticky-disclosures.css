@@ -1,6 +1,8 @@
 /* Keep stacking local to each message scroller, including child-session windows. */
-.thread { isolation: isolate; }
-.thread [data-sticky-disclosure], .task-results > details[open] > summary {
+.thread { isolation: isolate; overflow-anchor: none; }
+/* Leave enough scroll range to reveal a final short disclosure above the composer. */
+.thread > .thread-content { padding-bottom: 12px; }
+.thread details[open] > [data-sticky-disclosure], .task-results > details[open] > summary {
   position: sticky;
   top: calc(var(--disclosure-top, 0px) + 8px);
   z-index: var(--disclosure-layer, 1);
@@ -21,7 +23,7 @@
   background: var(--bg);
   pointer-events: none;
 }
-.thread [data-sticky-disclosure]:hover, .task-results > details[open] > summary:hover {
+.thread details[open] > [data-sticky-disclosure]:hover, .task-results > details[open] > summary:hover {
   background: color-mix(in srgb, var(--fg) 5%, var(--disclosure-surface, var(--bg)));
 }
 .thread :is(.tool-activity, .thinking-block, .task-operation) {

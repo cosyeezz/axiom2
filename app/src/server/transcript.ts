@@ -3,10 +3,11 @@ import { createHash } from "node:crypto";
 import { extname, resolve } from "node:path";
 import { SessionManager, buildSessionProjection } from "@earendil-works/pi-coding-agent";
 import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
+import { persistedSkillInput } from "../shared/skills.js";
 import { imageDisplayText, imagesInput } from "./images.js";
 import type { ChatMessage } from "../shared/agent.js";
 import { taskToolName } from "../shared/tasks.js";
-import { toolPreview, toolSummary } from "../shared/tool-summary.js";
+import { taskCallPreview, toolPreview, toolSummary } from "../shared/tool-summary.js";
 import { stripSessionTitle } from "./session-title.js";
 import { compactionDisplay } from "./compaction-display.js";
 import { thinkingDisplay } from "./thinking-display.js";
@@ -90,7 +91,8 @@ export function chatMessage(
   }));
   const isInput = message.role === "user" || (message.role === "custom" && message.customType === "axiom-append");
   // Inline mapping is the outer suffix when legacy inline and path attachments coexist.
-  const display = isInput ? attachmentDisplay(imageDisplayText(text, imageBlocks.length)) : { text, attachments: [] };
+  const skillInput = isInput ? persistedSkillInput(message) : undefined;
+  const display = isInput ? attachmentDisplay(imageDisplayText(skillInput?.text ?? text, imageBlocks.length)) : { text, attachments: [] };
   for (const attachment of display.attachments) if (attachment.kind === "image") {
     const mimeTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
     images.push({ id: attachment.id!, name: attachment.name, path: attachment.path!,
@@ -119,6 +121,7 @@ export function chatMessage(
       : message.role,
     text: assistantDisplay.text,
     ...(phase ? { phase } : {}),
+    ...(skillInput ? { skills: skillInput.skills } : {}),
     ...(images.length ? { images } : {}),
     ...(thinking ? { thinking } : {}),
     ...(thinkingActive ? { thinkingActive: true } : {}),
@@ -167,6 +170,7 @@ export function boundedMessage(message: ChatMessage): ChatMessage {
     input: call.input.slice(0, taskToolName(call.name) ? cap : 512),
     inputLength: call.input.length, inputRevision: hash(call.input),
     summary: toolSummary(call),
+    taskPreview: taskCallPreview(call),
   }));
   const truncated = message.text.length > textCap || (message.thinking?.length ?? 0) > 320 ||
     calls?.some((call) => call.input.length < call.inputLength);

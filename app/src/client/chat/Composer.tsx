@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnection, useConnectionState, useScope } from "../transport.js";
-import { useDraft, updateDraft } from "../drafts.js";
-import { usePersistentDraft, resolveDraftConflict } from "../draft-persistence.js";
+import { SkillCards } from "./SkillCards.js";
+import { getDraft, useDraft, updateDraft } from "../drafts.js";
+import { usePersistentDraft, resolveDraftConflict, retryDraftPersistence } from "../draft-persistence.js";
 import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running, type Selection } from "../../shared/agent.js";
@@ -35,8 +36,7 @@ export function Composer({
 }) {
   const info = useScope(agentScope(scope), emptyAgent),
     tasks = useScope(!nested ? tasksScope(scope) : null, emptyTasks),
-    config = useScope("configuration", noConfig),
-    connection = useConnection();
+    config = useScope("configuration", noConfig);
   const connected = useConnectionState().connected;
   const active = nested
       ? info.task
@@ -55,7 +55,7 @@ export function Composer({
   const lastEscape = useRef<number | null>(null);
   useEffect(() => { lastEscape.current = null; }, [scope.workspaceId, scope.sessionId]);
   const completion = useFileCompletion(scope, draft.text, input);
-  const hasContent = !!(draft.text.trim() || draft.attachment || draft.attachments?.length || draft.images?.length);
+  const hasContent = !!(draft.text.trim() || draft.attachment || draft.attachments?.length || draft.images?.length || draft.skills?.length);
   const lengthError = messageLengthError(draft.text);
   const imageSelection = running(info.run) ? info.run!.selection : info.selection;
   const imageModel = config.available.find(
@@ -98,7 +98,10 @@ export function Composer({
             draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items, supplement),
           })} />
 
-        <AttachmentList scope={scope} draft={draft} reading={reading} />
+        <div className="composer-resources" aria-label="技能与待发送附件">
+          <SkillCards skills={draft.skills} scope={scope} onRemove={id => updateDraft(scope, { skills: getDraft(scope).skills?.filter(skill => skill.id !== id) })} />
+          <AttachmentList scope={scope} draft={draft} reading={reading} />
+        </div>
         <form
           className="composer"
           onSubmit={(e) => {
@@ -178,7 +181,7 @@ export function Composer({
               }
               disabled={
                 busy ||
-                connection !== "已连接本地服务" ||
+                !connected ||
                 (!active &&
                   (!selected || reading || imageUnsupported || !!lengthError || !hasContent))
               }
@@ -199,6 +202,10 @@ export function Composer({
           <span>另一个窗口有不同的草稿，当前输入已保留。</span>
           <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, true)}>保存当前输入</button>
           <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, false)}>载入已保存草稿</button>
+        </div>}
+        {!persistence.conflict && persistence.error && <div className="draft-status" role="alert">
+          <span>{persistence.ready ? "草稿尚未确认保存：" : "草稿恢复失败："}{persistence.error}</span>
+          <button type="button" className="btn btn-ghost" disabled={!connected || persistence.saving} onClick={() => void retryDraftPersistence(scope)}>重试草稿保存</button>
         </div>}
         <Connection active={active} extra={lengthError || error || (imageUnsupported ? "当前模型不支持图片，请选择支持图片的模型或移除图片。" : "")} />
       </div>

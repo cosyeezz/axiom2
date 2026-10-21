@@ -58,7 +58,7 @@ export interface Run {
 }
 export interface AgentInfo {
   activeTaskCount?: number;
-  queue?: { id: string; text: string; mode: "steer" | "followUp" }[];
+  queue?: { id: string; text: string; mode: "steer" | "followUp"; skills?: import("./skills.js").SkillReference[] }[];
   task?: {
     id: string;
     parentSessionId: string;
@@ -95,6 +95,7 @@ export interface AgentInfo {
   } | null;
 }
 export interface ChatMessage {
+  skills?: import("./skills.js").SkillReference[];
   id: string;
   role: "user" | "assistant" | "toolResult" | "notice";
   text: string;
@@ -107,7 +108,7 @@ export interface ChatMessage {
   resultId?: string;
   /** Metadata only. Paths use files.preview; native blocks use message.image + this message's id. */
   images?: (Omit<import("./protocol.js").ImageAttachment, "data"> & { path?: string })[];
-  calls?: { id: string; name: string; input: string; inputLength?: number; inputRevision?: string; summary?: { label: string; icon: import("./tool-summary.js").ToolIcon; target: string; detail: string } }[];
+  calls?: { id: string; name: string; input: string; inputLength?: number; inputRevision?: string; taskPreview?: { titles?: string[]; taskId?: string; summary?: string }; summary?: { label: string; icon: import("./tool-summary.js").ToolIcon; target: string; detail: string } }[];
   /** Compact display fields; full records remain in the native transcript. */
   textLength?: number;
   textRevision?: string;

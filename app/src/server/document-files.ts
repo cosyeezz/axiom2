@@ -1,8 +1,9 @@
+import { saveTextFile, textRevision } from "./file-edit.js";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { basename, extname, isAbsolute, resolve } from "node:path";
 import { AppError, object, type Command, type Scope } from "../shared/protocol.js";
-import { hasFileLink, localFileLink, type FilePreview } from "../shared/file-preview.js";
+import { hasFileLink, localFileLink, type FilePreview, type FileSaveResult } from "../shared/file-preview.js";
 import type { ChatMessage } from "../shared/agent.js";
 import type { Store } from "./storage.js";
 import { htmlResources } from "./html-preview.js";
@@ -26,23 +27,50 @@ export function decodeFileText(bytes: Buffer): { text: string; encoding: string 
   return { text, encoding: encoding.toUpperCase() + (encoding === "gb18030" ? " · 自动识别" : "") };
 }
 export class DocumentFiles {
+  private async save(c: Command, signal: AbortSignal): Promise<FileSaveResult> {
+    const p = object(c.params ?? {});
+    if (Object.keys(p).some(key => !["messageId", "href", "skillId", "revision", "text"].includes(key)) ||
+      typeof p.revision !== "string" || !/^[a-f0-9]{64}$/.test(p.revision) || typeof p.text !== "string")
+      throw new AppError("INVALID_INPUT", "保存文件需要原始修订与文本内容。");
+    const params = p.skillId !== undefined ? { skillId: p.skillId } : { messageId: p.messageId, href: p.href };
+    if (p.skillId !== undefined && (p.messageId !== undefined || p.href !== undefined)) throw forbidden();
+    const read = () => this.command({ ...c, op: "files.document", params }, signal) as Promise<FilePreview>;
+    const file = await read();
+    const authorize = async () => {
+      const current = await read();
+      if (current.path !== file.path || !current.editable || current.revision !== p.revision)
+        throw new AppError("REVISION_CONFLICT", "文件已改变或不可编辑，请保留编辑并重新读取最新内容。");
+    };
+    try { return await saveTextFile(file.path, p.revision, p.text, p.skillId !== undefined, authorize, signal); }
+    catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("FILE_SAVE_FAILED", "文件保存失败，当前编辑已保留，请检查文件权限后重试。");
+    }
+  }
   private reading = 0;
   private revealing = false;
   constructor(private store: Store, private message?: (scope: Scope, id: string) => ChatMessage | null,
-    private reveal?: (path: string, directory: boolean, signal: AbortSignal) => Promise<void>) {}
-  async command(c: Command, signal: AbortSignal = AbortSignal.timeout(10000)): Promise<FilePreview | null> {
+    private reveal?: (path: string, directory: boolean, signal: AbortSignal) => Promise<void>,
+    private skillPath?: (scope: Scope, id: string) => Promise<string>) {}
+  async command(c: Command, signal: AbortSignal = AbortSignal.timeout(10000)): Promise<FilePreview | FileSaveResult | null> {
+    if (c.op === "files.save") return this.store.external(c, () => this.save(c, signal)) as Promise<FileSaveResult>;
     const p = object(c.params ?? {});
-    if (Object.keys(p).some(k => !["messageId", "href"].includes(k)) || typeof p.messageId !== "string" || !p.messageId || p.messageId.length > 200 || typeof p.href !== "string")
-      throw new AppError("INVALID_INPUT", "文件预览需要消息标识与文件链接");
-    const ref = localFileLink(p.href);
+    const skill = typeof p.skillId === "string" && p.skillId.length > 0 && p.skillId.length <= 200;
+    if (Object.keys(p).some(k => !(skill ? ["skillId"] : ["messageId", "href"]).includes(k)) || !skill && (typeof p.messageId !== "string" || !p.messageId || p.messageId.length > 200 || typeof p.href !== "string"))
+      throw new AppError("INVALID_INPUT", "文件预览需要消息链接或技能标识");
+    const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! }, href = p.href as string, id = p.messageId as string;
+    this.store.session(scope.workspaceId, scope.sessionId);
+    const source = skill ? await this.skillPath?.(scope, p.skillId as string) : undefined;
+    const ref = skill ? source ? { path: source } : null : localFileLink(href);
     if (!ref) throw forbidden();
-    const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! }, href = p.href, id = p.messageId;
     const authorize = () => {
       this.store.session(scope.workspaceId, scope.sessionId);
       const workspace = this.store.workspace(scope.workspaceId);
       if (!workspace.authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
-      const m = this.message?.(scope, id);
-      if (m?.role !== "assistant" || !hasFileLink(m.text, href)) throw forbidden();
+      if (!skill) {
+        const m = this.message?.(scope, id);
+        if (m?.role !== "assistant" || !hasFileLink(m.text, href)) throw forbidden();
+      }
       return workspace;
     };
     const workspace = authorize();
@@ -94,7 +122,10 @@ export class DocumentFiles {
         if (!decoded) return { ...result, reason: "无法可靠解码此文件，或文件包含二进制内容。请在本地应用中查看。" };
         const companions = ["html", "htm"].includes(ext) ? await htmlResources(path, decoded.text, authorize, signal) : {};
         signal.throwIfAborted(); authorize();
-        return { ...result, ...decoded, ...companions, kind: ["md", "markdown", "mdown"].includes(ext) ? "markdown" : languages[ext] ? "code" : "text", language: languages[ext] };
+        const editable = decoded.encoding === "UTF-8" && (!skill || bytes.length <= 128 * 1024);
+        return { ...result, ...decoded, ...companions, revision: textRevision(bytes), editable,
+          ...(!editable ? { editReason: decoded.encoding !== "UTF-8" ? "此编码仅支持预览，编辑需要 UTF-8 文本。" : "技能文件超过 128 KiB 编辑上限。" } : {}),
+          kind: ["md", "markdown", "mdown"].includes(ext) ? "markdown" : languages[ext] ? "code" : "text", language: languages[ext] };
       } finally { await handle.close(); }
     } catch (error) {
       if (error instanceof AppError) throw error;

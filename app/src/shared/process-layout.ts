@@ -7,6 +7,7 @@ export type ProcessEntry =
   | { kind: "tool"; id: string; call: CallReference };
 export type ProcessSlice =
   | { kind: "task"; id: string; call: CallReference }
+  | { kind: "task-notices"; id: string; ids: string[] }
   | { kind: "body" | "notice"; id: string }
   | { kind: "process"; id: string; calls: CallReference[]; entries: ProcessEntry[] };
 
@@ -16,9 +17,9 @@ export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[]
   let entries: ProcessEntry[] = [];
   const flush = () => {
     const calls = entries.flatMap(entry => "call" in entry ? [entry.call] : []);
-    // A result notification alone is not another execution segment.
+    // Keep standalone result batches in one disclosure, without implying an execution.
     if (entries.length && entries.every(entry => entry.kind === "notice")) {
-      slices.push(...entries.map(entry => ({ kind: "notice" as const, id: entry.id })));
+      slices.push({ kind: "task-notices", id: entries[0].id, ids: entries.map(entry => entry.id) });
     } else if (entries.length) slices.push({ kind: "process", id: `${entries[0].kind}:${entries[0].id}`, calls, entries });
     entries = [];
   };

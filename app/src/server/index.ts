@@ -1,3 +1,5 @@
+import { Resources } from "./resources.js";
+import { SkillFiles } from "./skill-files.js";
 import { OutgoingQueue } from "./outgoing.js";
 import { remoteDirectory, remoteSelection } from "./remote-files.js";
 import { RemoteAccess } from "./remote-access.js";
@@ -49,7 +51,13 @@ export async function startServer(
   const costs = new Costs(store);
   const drafts = new SessionDrafts(store);
   const files = new Files(store, (scope, id) => agents.message(scope, id, true),
-    (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal));
+    (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal),
+    async (scope, id) => {
+      const catalog = await agents.capabilities.get(scope);
+      const skill = catalog.skills.find(item => item.id === id && item.available);
+      if (!skill) throw new AppError("CAPABILITY_UNAVAILABLE", "技能已不存在或不可读取，请刷新技能列表。");
+      return skill.source;
+    });
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
@@ -91,7 +99,9 @@ export async function startServer(
     if (scope === "pinned-sessions") return store.pinnedSessions();
     if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
+    if (scope === "resources") return resources.snapshot();
     if (scope === "builtin-tools:opencli") return opencli.snapshot();
+    if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
     if (scope === "authentication") return null;
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
@@ -101,6 +111,7 @@ export async function startServer(
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
+    if (parts.length === 3 && parts[0] === "reload") return agents.reloads.state(target);
     if (parts.length === 3 && parts[0] === "capabilities") return agents.capabilities.state(target);
     if (parts.length === 3 && parts[0] === "memory") return agents.memories.snapshot(target);
     if (parts.length === 3 && parts[0] === "costs") {
@@ -203,6 +214,15 @@ export async function startServer(
   const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension);
   let agents: Agents;
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
+  const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {
+    if (opencli.installing || workspaceOperations.size) throw new AppError("AGENT_BUSY", "请等待资源安装及工作空间操作结束后重试。");
+    for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
+      if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
+        throw new AppError("AGENT_BUSY", "请先停止本机 Agent、子任务及压缩，再修改资源。");
+    }
+    await agents.pool.invalidate();
+  });
+  const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);
   const tasks = new Tasks(agents);
   attention = new SessionAttention(store, publish);
   store.beforeArchiveWorkspace = (workspaceId) => {
@@ -353,9 +373,14 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
+        if (resources.busy && (c.op === "prompt" || c.op === "agent.resume" || c.op === "task.append" || c.op === "opencli.install" || c.op.startsWith("reload.") || c.op === "compression.start"))
+          throw new AppError("RESOURCE_BUSY", "技能与 MCP 正在变更，请等待资源操作完成。");
         if (opencli.installing && ["prompt", "agent.resume", "task.append"].includes(c.op))
           throw new AppError("TOOL_INSTALLING", "OpenCLI 正在安装或更新，请完成后再开始执行。");
-        if (c.op.startsWith("opencli.")) {
+        if (c.op.startsWith("resources.")) {
+          if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "资源管理使用应用级范围。");
+          data = c.op === "resources.get" || c.op === "resources.detail" ? await resources.command(c) : await store.external(c, () => resources.command(c));
+        } else if (c.op.startsWith("opencli.")) {
           if (c.op === "opencli.install") {
             // Includes prompts admitted before their async model preparation registers a run.
             if (workspaceOperations.size) throw new AppError("AGENT_BUSY", "工作空间仍有操作处理中，请完成后再安装或更新 OpenCLI。");
@@ -365,6 +390,11 @@ export async function startServer(
             }
           }
           data = c.op === "opencli.get" ? await opencli.command(c) : await store.external(c, () => opencli.command(c));
+        } else if (c.op.startsWith("capabilities.skill.")) {
+          const controller = new AbortController(), abort = () => controller.abort();
+          ws.once("close", abort);
+          try { data = await skillFiles.command(c, controller.signal); }
+          finally { ws.off("close", abort); }
         } else if (c.op.startsWith("capabilities.")) {
           data = await agents.capabilities.command(c);
         } else if (c.op.startsWith("memory.")) {
@@ -816,6 +846,7 @@ export async function startServer(
       clearTimeout(costTimer); costWorkspaces.clear();
       await remoteAccess?.close();
       attention.close();
+      await resources.close();
       await opencli.close();
       await Promise.all([openDialog.close(), fileManager.close()]);
       for (const ws of sockets.clients) {

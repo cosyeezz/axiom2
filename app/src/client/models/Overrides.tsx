@@ -1,3 +1,4 @@
+import { Select } from "../Select.js";
 import { DeleteIcon } from "../DeleteIcon.js";
 import { samplingKeys, type OverrideRow as Row } from "../../shared/models.js";
 export function Headers({
@@ -115,22 +116,9 @@ export function BodyOverrides({
       <div className="override-rows">
         {rows.map((r, i) => (
           <div className="override-row" key={r.id}>
-            <select
-              className="input"
-              aria-label={`第 ${i + 1} 项请求体字段`}
-              value={r.key}
-              onChange={(e) =>
-                change(
-                  rows.map((row) =>
-                    row.id === r.id ? { ...row, key: e.target.value } : row,
-                  ),
-                )
-              }
-            >
-              {samplingKeys.map((key) => (
-                <option key={key}>{key}</option>
-              ))}
-            </select>
+            <Select label={`第 ${i + 1} 项请求体字段`} value={r.key}
+              onChange={key => change(rows.map(row => row.id === r.id ? { ...row, key } : row))}
+              options={samplingKeys.map(key => ({ value: key, label: key }))} />
             <input
               className="input override-value"
               type="number"

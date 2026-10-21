@@ -3,7 +3,7 @@ import { AppError, attachmentName, imageLimits, type ImageAttachment } from "../
 
 // 10 MiB image bytes become ~14 MB base64; inline text may expand under JSON escaping.
 export const imagePayloadLimit = 22 * 1024 * 1024;
-const invalid = () => new AppError("INVALID_IMAGE", "图片无效：仅支持 PNG/JPEG/GIF/WebP，id 为 imag1 等且不能重复；每张最多 5 MiB、最多 4 张、合计最多 10 MiB。");
+const invalid = () => new AppError("INVALID_IMAGE", "图片无效：仅支持 PNG/JPEG/GIF/WebP，id 为 img1 等且不能重复；每张最多 5 MiB、最多 4 张、合计最多 10 MiB。");
 export function imagesInput(value: unknown): ImageAttachment[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > imageLimits.count) throw invalid();
@@ -15,7 +15,7 @@ export function imagesInput(value: unknown): ImageAttachment[] {
     let name: string;
     try { name = attachmentName(v.name); }
     catch { throw new AppError("INVALID_IMAGE", "图片名称须为不超过 1024 字符的相对路径，不能包含绝对路径、控制字符或 .."); }
-    if (typeof id !== "string" || !/^imag[1-9]\d{0,8}$/.test(id) || ids.has(id) ||
+    if (typeof id !== "string" || !/^(?:img|imag)[1-9]\d{0,8}$/.test(id) || ids.has(id) ||
       typeof data !== "string" || !data.length || data.length > Math.ceil(imageLimits.bytes / 3) * 4 ||
       data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw invalid();
     const bytes = Buffer.from(data, "base64");
@@ -51,7 +51,7 @@ export function imageDisplayText(text: string, imageCount: number): string {
   const lines = text.slice(start + marker.length).split("\n");
   if (lines.length !== imageCount) return text;
   for (const [index, line] of lines.entries()) {
-    const match = /^第 (\d+) 张图片对应 \[(imag[1-9]\d{0,8})\]，文件名 ("(?:[^"\\\r\n]|\\.)*")，类型 (image\/(?:png|jpeg|gif|webp))$/.exec(line);
+    const match = /^第 (\d+) 张图片对应 \[((?:img|imag)[1-9]\d{0,8})\]，文件名 ("(?:[^"\\\r\n]|\\.)*")，类型 (image\/(?:png|jpeg|gif|webp))$/.exec(line);
     if (!match || Number(match[1]) !== index + 1) return text;
     try { if (typeof JSON.parse(match[3]) !== "string") return text; }
     catch { return text; }

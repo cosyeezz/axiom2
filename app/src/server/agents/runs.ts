@@ -119,7 +119,7 @@ export class AgentRuns {
   private queueChanged(live: Live) {
     if (live.task) return; // TaskScheduler owns the child's queued + native projection.
     this.views.queues.set(live.scope.sessionId, [...live.inputs].map(([id, input]) =>
-      ({ id, text: input.draft.text, mode: input.mode })));
+      ({ id, text: input.draft.text, mode: input.mode, ...(input.draft.skills?.length ? { skills: input.draft.skills } : {}) })));
     this.publish(agentScope(live.scope), this.views.info(live.scope));
   }
   async enqueue(scope: Scope, id: string, draft: Draft, body: string, mode: "steer" | "followUp") {
@@ -129,7 +129,7 @@ export class AgentRuns {
       throw new AppError("AGENT_BUSY", "执行正在结束或停止；请结束后发送新要求。");
     if (live.inputs.size >= 32) throw new AppError("TASK_LIMIT", "待处理输入达到 32 条");
     live.inputs.set(id, { draft, mode, pending: true });
-    if (!this.signal(scope, live.run.id, { type: "input", id, text: body, images: draft.images, mode })) {
+    if (!this.signal(scope, live.run.id, { type: "input", id, text: body, images: draft.images, skills: draft.skills, mode })) {
       live.inputs.delete(id);
       throw new AppError("AGENT_BUSY", "追加输入未发送；执行已经结束。");
     }

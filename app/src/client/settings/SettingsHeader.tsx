@@ -1,6 +1,6 @@
 import { Icon } from "../Icon.js";
-type Page = "overview" | "models" | "tools";
-const labels: Record<Page, string> = { overview: "概览", models: "模型服务", tools: "内置工具" };
+type Page = "overview" | "models" | "tools" | "resources";
+const labels: Record<Page, string> = { overview: "概览", models: "模型服务", tools: "内置工具", resources: "技能与 MCP" };
 
 /** The breadcrumb and mobile navigation have identical geometry on every settings page. */
 export function SettingsHeader({ page }: { page: Page }) {

@@ -32,13 +32,13 @@ try {
   const put = (target: Scope, ...messages: ChatMessage[]) => { for (const message of messages) views.messageChanged(target, message); views.flush(target); };
   const seed = (target: Scope, taskId: string) => {
     const rows: [string, string, unknown, ChatMessage["status"], string][] = [
-      ["append", "append", { taskId, text: longText }, "completed", "{}"],
+      ["append", "append", { taskId, summary: "补查手机端布局", text: longText }, "completed", "{}"],
       ["follow", "functions.append", { taskId, mode: "followUp", text: longText }, "failed", longText],
       ["read", "read_result", { taskId, resultId: "fixture" }, "completed", "{}"],
       ["stop", "functions.cancel_task", { taskId, reason: longText }, "completed", "{}"],
       ["cancelled", "append", { taskId, text: longText }, "cancelled", ""],
       ["running", "append", { taskId, text: longText }, "running", ""],
-      ["pending", "delegate", { tasks: [{ task: longText }, { task: longText }] }, "running", ""],
+      ["pending", "delegate", { context: longText.repeat(30), tasks: [{ title: "检查待创建任务", task: longText }, { title: "核对长输入标题", task: longText }] }, "running", ""],
       ["unsynced", "functions.delegate", { tasks: [{ task: longText }] }, "completed", "{}"],
       ["failed", "delegate", { tasks: [{ task: longText }] }, "failed", longText],
     ];
@@ -48,7 +48,7 @@ try {
   };
   const records = new TaskRecords(app.store);
   const descriptions = ["打开布局验证子会话", longText, "已停止任务", "等待中的任务"];
-  const { taskIds } = records.create(scope, "members", "UI fixture", descriptions.map(task => ({ task, role: "" })), { provider: "fixture", id: "fixture", thinking: "off" });
+  const { taskIds } = records.create(scope, "members", "UI fixture", descriptions.map((task, i) => ({ ...(i === 0 ? { title: "验证子任务卡片" } : {}), task, role: "" })), { provider: "fixture", id: "fixture", thinking: "off" });
   for (const [i, status] of ["completed", "failed", "cancelled", "queued"].entries()) app.store.db.prepare("UPDATE tasks SET status=?,error=? WHERE id=?").run(status, i === 1 ? longText : null, taskIds[i]);
   const childSessionId = String(app.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(taskIds[0])!.sessionId);
   const childScope = { workspaceId: workspace.id, sessionId: childSessionId };
@@ -67,8 +67,8 @@ try {
       const helpers = { color(node: Element, variable: string) { const probe = document.createElement("span"); probe.style.color = `var(${variable})`; node.appendChild(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; } };
       return {
         operations: [...el.querySelectorAll(".task-operation")].map(node => {
-          const heading = node.querySelector(".task-operation-heading")!, target = node.querySelector(".task-operation-target")!, summary = node.querySelector("summary")!, icon = node.querySelector(".task-operation-icon")!;
-          return { status: node.getAttribute("data-status"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(target).lineHeight), heading: heading.getBoundingClientRect().height, target: target.getBoundingClientRect().height, children: summary.children.length, color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon"), hiddenStatus: getComputedStyle(node.querySelector('[role="status"]')!).clipPath, overflow: node.scrollWidth > node.clientWidth + 1 };
+          const heading = node.querySelector(".task-operation-heading")!, target = node.querySelector(".task-operation-target"), summary = node.querySelector("summary")!, icon = node.querySelector(".task-operation-icon")!;
+          return { tool: node.getAttribute("data-tool"), title: heading.querySelector("strong")!.textContent, preview: target?.textContent, status: node.getAttribute("data-status"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(heading.querySelector("strong")!).lineHeight), heading: heading.getBoundingClientRect().height, target: target?.getBoundingClientRect().height ?? 0, children: summary.children.length, color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon"), hiddenStatus: getComputedStyle(node.querySelector('.task-operation-status')!).clipPath, overflow: node.scrollWidth > node.clientWidth + 1 };
         }),
         pending: [...el.querySelectorAll(".delegation-pending-item")].map(node => ({ height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("p")!).lineHeight), overflow: node.scrollWidth > node.clientWidth + 1 })),
         members: [...el.querySelectorAll(".subagent")].map(node => { const icon = node.querySelector(".agent-state")!; return { state: icon.getAttribute("data-state"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("strong")!).lineHeight), color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon") }; }),
@@ -80,17 +80,20 @@ try {
     assert.equal(metrics.pending.length, 4, `${label}: creation, unsynced and failure`);
     assert.equal(metrics.rightSide, 0, `${label}: no right-side status, counter or collapse arrow`);
     for (const box of metrics.operations) {
-      assert.ok(Math.abs(box.height - (box.line * 2 + 14)) <= 1, `${label}: operation two lines ${JSON.stringify(box)}`);
-      assert.ok(Math.abs(box.heading - box.line * 2) <= 1 && Math.abs(box.target - box.line) <= 1, `${label}: title + one preview line`);
-      assert.equal(box.children, 2, `${label}: only left icon and two-line text`);
+      const lines = box.tool === "append" ? 2 : 1;
+      assert.ok(Math.abs(box.height - (Math.max(44, box.line * lines + 12) + 2)) <= 1, `${label}: operation ${lines} lines ${JSON.stringify(box)}`);
+      assert.ok(Math.abs(box.heading - box.line * lines) <= 1 && Math.abs(box.target - (lines === 2 ? box.line : 0)) <= 1, `${label}: only append has a second line`);
+      assert.equal(box.title, label.startsWith("child") ? "关联子任务" : "验证子任务卡片");
+      assert.equal(box.children, 2, `${label}: only existing icon and text`);
       assert.equal(box.hiddenStatus, "inset(50%)");
       assert.equal(box.muted, "rgb(138, 143, 152)", `${label}: neutral system gray, not process text color`);
       assert.equal(box.color, ["failed", "cancelled"].includes(box.status!) ? box.danger : box.muted, `${label}: icon status color`);
       assert.equal(box.overflow, false);
     }
-    for (const box of metrics.pending) { assert.ok(Math.abs(box.height - box.line * 2) <= 1, `${label}: pending feedback two lines ${JSON.stringify(box)}`); assert.equal(box.overflow, false); }
+    assert.equal(metrics.operations[0].preview, "补查手机端布局");
+    for (const box of metrics.pending) { assert.ok(Math.abs(box.height - box.line) <= 1, `${label}: pending feedback stays single line ${JSON.stringify(box)}`); assert.equal(box.overflow, false); }
     for (const box of metrics.members) {
-      assert.ok(Math.abs(box.height - (box.line * 2 + 12)) <= 1, `${label}: member two lines`);
+      assert.ok(Math.abs(box.height - Math.max(44, box.line + 12)) <= 1, `${label}: member single line`);
       assert.equal(box.color, ["failed", "stopped"].includes(box.state!) ? box.danger : box.muted, `${label}: member status color`);
     }
     assert.ok(metrics.openIcons.every(href => href === "#i-subagent-open"));

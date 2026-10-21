@@ -1,3 +1,4 @@
+import { Select } from "../Select.js";
 import { Icon } from "../Icon.js";
 import { useEffect, useRef } from "react";
 import type {
@@ -129,23 +130,14 @@ export function ProviderConnection({
             <div className="grid-2 connection-endpoint">
               <div className="field">
                 <label htmlFor="provider-protocol">接口协议</label>
-                <select
-                  className="input"
-                  id="provider-protocol"
-                  value={p.api}
-                  onChange={(e) => patch({ api: e.target.value })}
-                >
-                  <option value="openai-completions">OpenAI 兼容</option>
-                  <option value="openai-responses">OpenAI Responses</option>
-                  {![
-                    "openai-completions",
-                    "openai-responses",
-                    "anthropic-messages",
-                    "google-generative-ai",
-                  ].includes(p.api) && <option value={p.api}>{p.api}</option>}
-                  <option value="anthropic-messages">Anthropic</option>
-                  <option value="google-generative-ai">Google Gemini</option>
-                </select>
+                <Select id="provider-protocol" label="接口协议" value={p.api} disabled={busy || needsReconcile}
+                  onChange={api => patch({ api })} options={[
+                    { value: "openai-completions", label: "OpenAI 兼容" },
+                    { value: "openai-responses", label: "OpenAI Responses" },
+                    ...(!["openai-completions", "openai-responses", "anthropic-messages", "google-generative-ai"].includes(p.api) ? [{ value: p.api, label: p.api }] : []),
+                    { value: "anthropic-messages", label: "Anthropic" },
+                    { value: "google-generative-ai", label: "Google Gemini" },
+                  ]} />
               </div>
               <div className="field">
                 <label htmlFor="provider-url">接口地址</label>

@@ -32,18 +32,19 @@
 .tool-activity .tool-call { border: 0; }
 .tool-activity .tool-call > .tool-header { min-height: 28px; padding-block: 2px; }
 @media (hover: none), (pointer: coarse) { .tool-activity .tool-call > .tool-header, .tool-activity.process-live > summary { min-height: 32px; } }
-.tool-heading, .tool-result-state { font-size: var(--thread-text-size, 15px); }
+.tool-heading, .tool-result-state { font-size: 13px; font-weight: 400; }
 .tool-heading .process-status-text, .thinking-label :is(strong, em, code) { font-size: inherit; }
 .tool-heading .process-status-text :is(.tool-name, .tool-target, .tool-input-detail) { color: inherit; }
 .tool-activity .activity-message .reply-body:has(.markdown) { color: var(--fg-2); font-size: var(--thread-text-size, 15px); }
 .thinking-block { border: 0; min-width: 0; max-width: 100%; }
-.thinking-block > .thinking-header { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); color: var(--process-text-color); }
+.thinking-block > .thinking-header { font-size: 13px; line-height: 20px; color: var(--process-text-color); }
 .process-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 5px; min-width: 0; color: #9ca3af; font-size: var(--thread-text-size, 15px); }
 .process-counts > span { white-space: nowrap; }
 .process-counts > span + span::before { content: "·"; margin-right: 5px; color: #9ca3af; }
 .process-counts [data-status="failed"] { color: var(--danger-text); }
-.tool-duration { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: var(--thread-text-size, 15px); }
-.thread-content .tool-activity :is(.tool-heading, .tool-name, .tool-target, .tool-input-detail, .tool-duration, .tool-detail-label, .tool-detail pre, .activity-current, .task-notice-text) { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
+.tool-duration { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 13px; }
+.thread-content .tool-activity :is(.tool-heading, .tool-name, .tool-target, .tool-input-detail, .tool-duration, .tool-detail-label, .tool-detail pre, .activity-current) { font-size: 13px; line-height: 20px; font-weight: 400; }
+.thread-content .tool-activity .task-notice-text { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
 .thread-content :is(.delegation-card, .task-operation) { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
 .thread-content :is(.delegation-card, .task-operation) :is(.subagents-head, .agent-identity strong, .agent-identity small, .agent-state-label, .task-batch-progress, .delegation-pending, .task-operation-heading strong, .task-operation-target, .task-operation-status, .task-operation-action, .task-operation-preview, .task-call-error, .task-call-meta, .task-call-content, .task-call-raw, .task-call-raw pre, .task-report .markdown, .task-open-link) { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
 .thread-content .tool-call .tool-duration[data-latency="slow"] { color: #e6a45b; }

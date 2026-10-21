@@ -1,6 +1,6 @@
 import { staticSvg } from "./svg-preview.js";
 import { DocumentFiles } from "./document-files.js";
-import type { FilePreview } from "../shared/file-preview.js";
+import type { FilePreview, FileSaveResult } from "../shared/file-preview.js";
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
@@ -40,8 +40,9 @@ export class Files {
   private previewing = 0;
   constructor(private readonly store: Store,
     private readonly message?: (scope: Scope, id: string) => ChatMessage | null,
-    reveal?: (path: string, directory: boolean, signal: AbortSignal) => Promise<void>) {
-    this.documents = new DocumentFiles(store, message, reveal);
+    reveal?: (path: string, directory: boolean, signal: AbortSignal) => Promise<void>,
+    skillPath?: (scope: Scope, id: string) => Promise<string>) {
+    this.documents = new DocumentFiles(store, message, reveal, skillPath);
     store.db.exec(`CREATE TABLE IF NOT EXISTS picked_images(
       sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       path TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(sessionId,path))`);
@@ -61,11 +62,11 @@ export class Files {
   }
 
   private async preview(scope: Scope, p: Record<string, unknown>, reference?: () => string): Promise<ImageAttachment> {
-    const id = p.id === undefined ? "imag1" : p.id;
-    if (typeof id !== "string" || !/^imag[1-9]\d{0,8}$/.test(id) ||
+    const id = p.id === undefined ? "img1" : p.id;
+    if (typeof id !== "string" || !/^(?:img|imag)[1-9]\d{0,8}$/.test(id) ||
       typeof p.path !== "string" || !isAbsolute(p.path) || p.path.length > 4096 ||
       /[\x00-\x1f\x7f]/.test(p.path) || p.path.split(/[\\/]/).includes(".."))
-      throw new AppError("INVALID_INPUT", "图片预览需要有效绝对路径与 imag1 等图片编号");
+      throw new AppError("INVALID_INPUT", "图片预览需要有效绝对路径与 img1 等图片编号");
     const path = resolve(p.path), key = pathKey(path);
     const dir = resolve(this.store.root, "attachments", scope.workspaceId, scope.sessionId);
     let name = reference ? reference() : this.store.db.prepare("SELECT name FROM picked_images WHERE sessionId=? AND path=?").get(scope.sessionId, key)?.name;
@@ -140,8 +141,8 @@ export class Files {
     } finally { this.previewing--; }
   }
 
-  async command(c: Command, signal?: AbortSignal): Promise<FileCompletion | Attachment | ImageAttachment | FilePreview | null> {
-    if (c.op === "files.document" || c.op === "files.reveal") return this.documents.command(c, signal);
+  async command(c: Command, signal?: AbortSignal): Promise<FileCompletion | Attachment | ImageAttachment | FilePreview | FileSaveResult | null> {
+    if (["files.document", "files.reveal", "files.save"].includes(c.op)) return this.documents.command(c, signal);
     const session = this.store.session(c.workspaceId, c.sessionId);
     const workspace = this.store.workspace(session.workspaceId);
     if (!workspace.authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");

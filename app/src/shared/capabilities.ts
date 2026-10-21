@@ -12,10 +12,13 @@ export type CapabilityItem = {
   name: string;
   description: string;
   source: string;
+  preferenceKey?: string;
   defaultSelected: boolean;
   available: boolean;
 };
 export type CapabilityCatalog = {
+  sessionSkills?: CapabilityItem[];
+  preferencesRevision: number;
   state: CapabilityState;
   revision: string;
   skills: CapabilityItem[];
@@ -23,4 +26,6 @@ export type CapabilityCatalog = {
   warnings: string[];
   mcpPaths: string[];
 };
+export type CapabilityPreferences = { revision: number; skills: Record<string, boolean>; mcp: Record<string, boolean> };
+export const capabilityPreferencesScope = "capability-preferences";
 export const capabilitiesScope = (scope: Scope) => `capabilities:${scope.workspaceId}:${scope.sessionId}`;

@@ -1,6 +1,5 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FilePreviewContext, type OpenFileReference } from "./FileLink.js";
-import { FilePreviewPanel } from "./FilePreview.js";
+import { FilePreviewOutlet } from "./FilePreviewHost.js";
 import { useScope, useScopeOrder } from "../transport.js";
 import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
@@ -11,10 +10,12 @@ import { ProcessFlow } from "./ProcessFlow.js";
 import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
 import { optimisticState, pendingMessageStatus, useOptimistic } from "./optimistic.js";
+import { SkillCards } from "./SkillCards.js";
 import { MessageImages } from "./MessageImages.js";
 import { useReadReceipt } from "./useReadReceipt.js";
 import { reconcileInputs } from "./reconcile-inputs.js";
 import { useStickyDisclosures } from "./useStickyDisclosures.js";
+import { useDisclosureReveal } from "./useDisclosureReveal.js";
 import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useOriginalConversation, useThreadMessage } from "./OriginalConversation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
@@ -28,9 +29,8 @@ function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
   return <ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} />;
 }
 
-function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: boolean }) {
-  const [preview, setPreview] = useState<OpenFileReference | null>(null);
-  const closePreview = () => { setPreview(null); if (preview?.trigger.isConnected) preview.trigger.focus({ preventScroll: true }); };
+type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number };
+function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
@@ -49,21 +49,38 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
   const scroller = useRef<HTMLElement>(null), content = useRef<HTMLDivElement>(null), bottom = useRef(true);
   const smoothBottomTarget = useRef<number | null>(null), scrollPosition = useRef(0);
   useThreadScrollIntent(scroller, bottom, scrollPosition);
+  const cancelReveal = useDisclosureReveal(scroller, bottom, scrollPosition);
   const selectingMessages = () => {
     const el = scroller.current, selection = getSelection();
     return !!el && !!selection?.toString() &&
       (el.contains(selection.anchorNode) || el.contains(selection.focusNode));
   };
   const scrollToBottom = () => {
+    cancelReveal();
     const el = scroller.current;
     if (!el) return;
     smoothBottomTarget.current = null;
     el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
     scrollPosition.current = el.scrollTop;
   };
+  // Includes keyboard activation and controls loading content asynchronously.
+  const pauseFollowing = () => {
+    cancelReveal();
+    bottom.current = false;
+    smoothBottomTarget.current = null;
+    const el = scroller.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollTop, behavior: "instant" });
+      scrollPosition.current = el.scrollTop;
+    }
+  };
+  // Sibling disclosures can resize the thread without a click inside its scroller.
+  useLayoutEffect(() => {
+    if (readingRevision) pauseFollowing();
+  }, [readingRevision]);
   const previousOriginal = useRef(original.enabled);
   useLayoutEffect(() => {
-    if (previousOriginal.current !== original.enabled) bottom.current = false;
+    if (previousOriginal.current !== original.enabled) { cancelReveal(); bottom.current = false; }
     previousOriginal.current = original.enabled;
   }, [original.enabled]);
   useStickyDisclosures(content, bottom);
@@ -118,6 +135,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
     previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
   useLayoutEffect(() => { previousGroups.current = groups; }, [groups]);
   const scroll = (direction: "top" | "up" | "down" | "bottom") => {
+    cancelReveal();
     const el = scroller.current;
     if (!el) return;
     bottom.current = direction === "bottom";
@@ -127,8 +145,9 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
     smoothBottomTarget.current = direction === "bottom" && behavior === "smooth" ? el.scrollHeight - el.clientHeight : null;
     el.scrollTo({ top, behavior });
   };
-  return <FilePreviewContext.Provider value={setPreview}><div className="thread-shell">
+  return <div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
+      onClickCapture={pauseFollowing}
       onScroll={(e) => {
         const n = e.currentTarget;
         const movedDown = n.scrollTop > scrollPosition.current;
@@ -160,6 +179,7 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
         {scope && visiblePending.map((item) => <article key={item.id} className="log-row message-result" aria-label="用户消息">
           <div><div className="message-body user-text"><p style={{ whiteSpace: "pre-wrap" }}>{item.draft.text}</p>
             {(item.draft.attachments ?? []).filter((a) => a.kind !== "image").map((a) => <span className="meta" key={a.id}>{a.name} </span>)}
+            <SkillCards skills={item.draft.skills} scope={scope} />
             <MessageImages images={item.message.images} scope={scope} messageId={item.id} />
           </div><small className="meta" role="status">
             {pendingMessageStatus(item)}
@@ -182,11 +202,11 @@ function ThreadView({ scope, nested = false }: { scope: Scope | null; nested?: b
           <svg className="ui-glyph" viewBox={direction === "top" ? "6 4 12 17" : direction === "bottom" ? "6 3 12 17" : "5 8 14 8"} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
         </button>)}
     </nav>
-    {preview && <FilePreviewPanel key={`${preview.messageId}:${preview.href}`} reference={preview} onClose={closePreview} />}
-  </div></FilePreviewContext.Provider>;
+    <FilePreviewOutlet />
+  </div>;
 }
 
 // Remount local viewing state on every workspace/session change, including child views.
-export const AgentThread = memo(function AgentThread(props: { scope: Scope | null; nested?: boolean }) {
+export const AgentThread = memo(function AgentThread(props: ThreadProps) {
   return <ThreadView key={`${props.scope?.workspaceId}:${props.scope?.sessionId}`} {...props} />;
 });

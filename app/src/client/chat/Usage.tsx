@@ -12,6 +12,7 @@ import { CostsPopover } from "../pages/Costs.js";
 import { CacheUsageIcon } from "./UsageIcons.js";
 import { ContextMemoryIcon, cacheRatio, validRatio } from "../DataIcons.js";
 import { Icon } from "../Icon.js";
+import { SessionReload } from "./SessionReload.js";
 import { MetricDetail } from "./MetricDetail.js";
 import "../styles/data-icons.css";
 export type ContextMemoryInfo = { percent: number | null; label: string; detail: ReactNode };
@@ -50,6 +51,7 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
         onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${label}累计预计费用（pi 定价） · ${durationTooltip(info)}：${formatDuration(elapsed)}；点击查看费用与耗时明细`}>
         <Icon name="chart-column-increasing" />
       </button>
+      <SessionReload key={scopeKey} scope={scope} />
       {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} sessionSummary={<section className="cost-session-duration" aria-label="当前会话用量"><dl className="cost-session-facts"><div><dt>当前{label}预计费用</dt><dd>{usage?.cost != null ? `$${usage.cost.toFixed(4)}` : "—"}</dd></div><div><dt>运行耗时</dt><dd data-od-id="run-duration" data-tooltip={durationTooltip(info)}>{formatDuration(elapsed)}</dd></div></dl><p>{durationTooltip(info)}；不叠加子会话耗时。</p></section>} />}
       {detail && detail.scope === scopeKey && <MetricDetail trigger={detail.trigger} className={detail.key === "cache" ? "cache-detail" : ""} title={{ context: "上下文占用", cache: "缓存读取" }[detail.key]} subtitle={`当前${label} · ${detail.key === "cache" ? "累计输入统计" : "实时容量"}`} onClose={() => setDetail(null)}>
         {detail.key === "context" ? contextDetail : <>

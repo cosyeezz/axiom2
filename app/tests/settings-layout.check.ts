@@ -1,3 +1,4 @@
+import { chooseSelect, assertSelectPosition } from "./select-helpers.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +53,7 @@ try {
   await headers.getByRole("textbox", { name: "第 1 项 key", exact: true }).fill("x-layout-fixture");
   await headers.getByRole("textbox", { name: "第 1 项 value", exact: true }).fill("layout-value");
   await body.getByRole("button", { name: "＋ 添加一项" }).click();
-  await body.getByRole("combobox").selectOption("max_completion_tokens");
+  await chooseSelect(page, body.getByRole("combobox"), "max_completion_tokens");
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
     await fits(page, `connection ${width}x${height}`);
@@ -63,6 +64,12 @@ try {
     assert.ok(keyRect && valueRect);
     assert.ok(valueRect.y >= keyRect.y + keyRect.height - 1 || valueRect.x >= keyRect.x + keyRect.width - 1, "override fields do not overlap");
     assert.ok(keyRect.width >= 200, `long request-body field remains readable at ${width}`);
+    await key.click(); await assertSelectPosition(page, key);
+    await page.screenshot({ path: join(artifacts, `body-field-open-${width}x${height}.png`) });
+    await page.keyboard.press("Escape");
+    const protocol = page.getByRole("combobox", { name: "接口协议", exact: true });
+    await protocol.click(); await assertSelectPosition(page, protocol);
+    await page.keyboard.press("Escape");
     await value.fill("2048");
     await page.locator("#save-provider").scrollIntoViewIfNeeded();
     assert.ok(await page.locator("#save-provider").evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 1 && el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), `save reachable and not covered at ${width}x${height}`);

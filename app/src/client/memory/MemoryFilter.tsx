@@ -28,12 +28,6 @@ export function MemoryFilter({ label, value, options, onChange }: {
   };
 
   useLayoutEffect(() => {
-    const node = panel.current;
-    if (!expanded || !node) return;
-    node.showPopover();
-    return () => { if (node.matches(":popover-open")) node.hidePopover(); };
-  }, [expanded, panel]);
-  useLayoutEffect(() => {
     if (expanded) panel.current?.querySelectorAll<HTMLElement>('[role="option"]')[active]?.scrollIntoView({ block: "nearest" });
   }, [expanded, active, optionKeys, panel]);
   useEffect(() => {

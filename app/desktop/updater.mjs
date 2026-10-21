@@ -3,7 +3,8 @@ import { readFile, writeFile, mkdir, rename, rm, open, access, lstat, realpath }
 import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { dirname, join, resolve, delimiter, isAbsolute } from "node:path";
+import { basename, dirname, join, resolve, delimiter, isAbsolute, sep } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -11,6 +12,10 @@ const RELEASE_API = "https://api.github.com/repos/cosyeezz/axiom2/releases/lates
 const RELEASE_BASE = "https://github.com/cosyeezz/axiom2/releases/download/";
 const script = fileURLToPath(import.meta.url);
 const versionPattern = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/;
+function basenameForModules(modules) {
+  if (basename(modules) !== "node_modules" || process.platform !== "win32" && basename(dirname(modules)) !== "lib") throw Error("npm 全局目录格式不受支持。");
+  return process.platform === "win32" ? dirname(modules) : dirname(dirname(modules));
+}
 export function newer(a, b) {
   if (!versionPattern.test(a) || !versionPattern.test(b)) return false;
   const x = a.split(".").map(Number), y = b.split(".").map(Number);
@@ -51,6 +56,68 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   const releaseFile = join(directory, "release.json");
   const journalFile = join(directory, "transaction.json");
   const log = join(directory, "update.log");
+  const piReleaseFile = join(directory, "pi-release.json");
+  const piPackage = "@earendil-works/pi-coding-agent";
+  async function piEnvironment() {
+    const installed = await installation();
+    const npm = await npmCli(installed.node);
+    const modules = await command(installed.node, [npm, "root", "--global"], { env: environment, timeoutMs: 20000 });
+    if (!isAbsolute(modules) || /[\r\n]/.test(modules)) throw Error("npm 全局目录无效。");
+    const packageRoot = join(modules, ...piPackage.split("/"));
+    const pkg = await json(join(packageRoot, "package.json"));
+    const legacy = await json(join(modules, "@mariozechner/pi-coding-agent/package.json"));
+    if (pkg && (pkg.name !== piPackage || !versionPattern.test(pkg.version))) throw Error("pi 安装信息无效，请修复 npm 全局安装。");
+    const prefix = basenameForModules(modules);
+    // Bind existing ancestors too: a fresh installation may not have node_modules yet.
+    const location = async path => {
+      if (await exists(path)) return realpath(path);
+      const parent = dirname(path);
+      if (parent === path) throw Error("无法确认 npm 安装目录。");
+      return join(await location(parent), basename(path));
+    };
+    const identity = createHash("sha256").update(JSON.stringify([await realpath(installed.node), await realpath(npm), await location(prefix), await location(modules), await location(packageRoot), pkg])).digest("hex");
+    return { installed, npm, prefix, identity, packageRoot, version: pkg?.version ?? null, legacy: !!legacy };
+  }
+  async function piStatus(refresh = false) {
+    let runtimeVersion = null;
+    const installed = await installation();
+    try {
+      // Read from Node's dependency lookup directories without requiring the SDK:
+      // pi exports only an ESM import condition, so require.resolve(piPackage) fails.
+      for (const path of createRequire(installed.cli).resolve.paths(piPackage) ?? []) {
+        const pkg = await json(join(path, piPackage, "package.json"));
+        if (pkg?.name === piPackage) { runtimeVersion = pkg.version; break; }
+      }
+    } catch { /* Unknown stays unknown, never substitute the CLI version. */ }
+    let cli;
+    try { cli = await json(join(directory, "pi-installation.json")); }
+    catch { cli = { error: "pi 安装缓存无法读取，请重新查询。" }; }
+    if (refresh) {
+      try { const info = await piEnvironment(); cli = { version: info.version, packageRoot: info.packageRoot, legacy: info.legacy, identity: info.identity }; }
+      catch { cli = { error: "无法读取此 Node.js 对应的 npm 全局 pi，请检查运行环境。" }; }
+      await mkdir(directory, { recursive: true });
+      await atomic(join(directory, "pi-installation.json"), cli);
+    }
+    let release = null;
+    try { release = await json(piReleaseFile); } catch { /* Explicit check replaces an unreadable optional cache. */ }
+    // Keep the latest version visible, but require a new confirmation after the
+    // inspected installation changes, including a partially completed install.
+    if (release && cli?.identity !== release.identity) release = { ...release, token: null };
+    return { runtimeVersion, cli, release };
+  }
+  async function piRefresh() { await piStatus(true); return status(); }
+  async function piCheck() {
+    await piStatus(true);
+    const response = await fetcher(`https://registry.npmjs.org/${piPackage}/latest`, { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw Error(`pi 版本查询失败（HTTP ${response.status}）。`);
+    const pkg = JSON.parse(await bounded(response, 1024 * 1024));
+    if (pkg.name !== piPackage || !versionPattern.test(pkg.version)) throw Error("npm 未返回有效的 pi 稳定版本。");
+    await mkdir(directory, { recursive: true });
+    const cli = await json(join(directory, "pi-installation.json"));
+    if (!cli?.identity || cli.error) throw Error("请先修复终端 pi 安装环境，再检查更新。");
+    await atomic(piReleaseFile, { version: pkg.version, checkedAt: Date.now(), token: randomBytes(24).toString("hex"), identity: cli.identity });
+    return status();
+  }
   const environment = { ...env, AXIOM_DATA_DIR: root };
   let owner;
   async function database(operation) {
@@ -147,13 +214,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
     if (current) { delete current.pid; delete current.token; delete current.installer; }
-    return { serviceVersion: installed.version, managed: installed.managed, release: release ? validateRelease(release) : null,
+    return { pi: await piStatus(), serviceVersion: installed.version, managed: installed.managed, release: release ? validateRelease(release) : null,
       job: current, recovery, log };
   }
   async function npmCli(node) {
     const candidates = [join(dirname(node), "node_modules/npm/bin/npm-cli.js"), join(dirname(node), "../lib/node_modules/npm/bin/npm-cli.js")];
-    for (const directory of (process.env.PATH || "").split(delimiter)) candidates.push(join(directory, "node_modules/npm/bin/npm-cli.js"));
-    if (process.platform !== "win32") for (const directory of (process.env.PATH || "").split(delimiter)) {
+    const paths = [...new Set([dirname(node), ...(environment.PATH || "").split(delimiter)])];
+    for (const directory of paths) candidates.push(join(directory, "node_modules/npm/bin/npm-cli.js"));
+    if (process.platform !== "win32") for (const directory of paths) {
       try { const target = await realpath(join(directory, "npm")); if (target.endsWith("npm-cli.js")) candidates.push(target); } catch {}
     }
     for (const candidate of candidates) if (await exists(candidate)) return resolve(candidate);
@@ -280,6 +348,39 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function perform(kind, version) {
     const installed = await installation();
+    if (kind === "pi") {
+      const release = await json(piReleaseFile);
+      if (!release || version !== release.token || !versionPattern.test(release.version)) throw Error("请先检查 pi 版本，再确认升级。");
+      version = release.version;
+      const info = await piEnvironment();
+      if (info.identity !== release.identity) throw Error("终端安装位置或版本已改变，请重新检查 pi 更新。");
+      if (info.legacy) throw Error("检测到旧命名空间的 pi 安装，请先用原安装方式迁移，避免覆盖同名命令。");
+      if (info.version && info.version !== version && !newer(version, info.version)) throw Error("当前 pi 高于已检查版本，未执行降级。");
+      const lock = join(dirname(info.packageRoot), ".axiom-pi-update.lock");
+      await mkdir(dirname(lock), { recursive: true });
+      let handle;
+      try { handle = await open(lock, "wx", 0o600); }
+      catch { throw Error("该 pi 安装正在被其他更新任务使用，或目录不可写。若更新进程已异常退出，请检查并移除安装目录旁的 .axiom-pi-update.lock 后重试。"); }
+      try {
+        await handle.writeFile(JSON.stringify({ pid: process.pid, root }));
+        if ((await piEnvironment()).identity !== info.identity) throw Error("终端 pi 在准备期间改变，请重新检查。");
+        await progress("installing", `正在安装终端 pi ${version}…`);
+        await command(installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], { env: environment, timeoutMs: 600000, log });
+        const actual = await piEnvironment();
+        if (actual.version !== version) throw Error("安装后的 pi 版本未通过校验，请重新读取状态。");
+        const pkg = await json(join(actual.packageRoot, "package.json"));
+        const entry = pkg?.bin?.pi;
+        const cli = typeof entry === "string" ? resolve(actual.packageRoot, entry) : "";
+        const shim = process.platform === "win32" ? join(actual.prefix, "pi.cmd") : join(actual.prefix, "bin/pi");
+        if (!cli.startsWith(`${actual.packageRoot}${sep}`) || !await exists(cli) || !await exists(shim)) throw Error("pi 命令入口不完整，请重新检查并安装。");
+        await progress("verifying", `正在验证终端 pi ${version}…`);
+        const reported = await command(installed.node, [cli, "--version"], { env: environment, timeoutMs: 20000 });
+        if (reported !== version) throw Error("终端 pi 未通过运行验证，请查看安装环境后重试。");
+        await piStatus(true);
+        await progress("complete", `终端 pi 已安装至 ${version}；重新打开终端会话后生效。应用内 pi 随后台服务更新。`, { running: false });
+      } finally { await handle.close(); await rm(lock, { force: true }); }
+      return;
+    }
     if (kind === "recover") {
       await restore(installed);
       await progress("complete", "之前的服务程序已恢复。", { running: false });
@@ -297,12 +398,12 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function runJob(kind, version, claimed) {
     owner = claimed || await claim(kind, version);
     try { await perform(kind, version); }
-    catch (error) { await progress("error", error.message, { running: false }); }
+    catch (error) { if (kind === "pi") await piStatus(true).catch(() => {}); await progress("error", error.message, { running: false }); }
     finally { await releaseService(); }
     return status();
   }
   async function start(kind, version) {
-    if (!["service", "client", "recover"].includes(kind)) throw Error("不支持的更新任务");
+    if (!["service", "client", "recover", "pi"].includes(kind)) throw Error("不支持的更新任务");
     await installation();
     const reserved = await claim(kind, version);
     const output = await open(log, "a", 0o600);
@@ -348,7 +449,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     }
     return { installer: current.installer };
   }
-  return { check, status, start, worker, runJob, installer, busy: async () => { const current = await job(); return { busy: !!(current?.running && current.kind !== "client" && isAlive(current.pid)) }; } };
+  return { check, piCheck, piRefresh, status, start, worker, runJob, installer, busy: async () => { const current = await job(); return { busy: !!(current?.running && current.kind !== "client" && isAlive(current.pid)) }; } };
 }
 if (process.argv[1] && resolve(process.argv[1]) === script) {
   try {
@@ -357,8 +458,10 @@ if (process.argv[1] && resolve(process.argv[1]) === script) {
     const updater = createUpdater({ root: process.env.AXIOM_DATA_DIR });
     const [action, argument] = process.argv.slice(2);
     let value;
-    if (["status", "check", "installer", "busy"].includes(action)) value = await updater[action]();
-    else if (["service", "client", "recover"].includes(action)) value = await updater.start(action, argument);
+    if (action === "pi-refresh") value = await updater.piRefresh();
+    else if (action === "pi-check") value = await updater.piCheck();
+    else if (["status", "check", "installer", "busy"].includes(action)) value = await updater[action]();
+    else if (["service", "client", "recover", "pi"].includes(action)) value = await updater.start(action, argument);
     else if (action === "worker") { await updater.worker(argument); process.exit(0); }
     else throw Error("不支持的更新操作");
     console.log(JSON.stringify(value));

@@ -1,3 +1,4 @@
+import type { SkillReference } from "../../shared/skills.js";
 import type { Selection } from "../../shared/agent.js";
 import { randomUUID } from "node:crypto";
 import type { Store } from "../storage.js";
@@ -44,7 +45,7 @@ export class TaskRecords {
   }
   constructor(readonly store: Store) {
     const columns = new Set((store.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map((column) => column.name));
-    for (const [name, declaration] of Object.entries({ workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
+    for (const [name, declaration] of Object.entries({ title: "TEXT", workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
       if (!columns.has(name)) store.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS task_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL)",
@@ -53,7 +54,8 @@ export class TaskRecords {
     // Migrate the last explicit per-session choice once; null is a remembered inheritance choice.
     store.db.exec(`INSERT OR IGNORE INTO task_model_preferences(id,selection)
       SELECT 1,defaultModel FROM task_parents WHERE defaultModel IS NOT NULL ORDER BY rowid DESC LIMIT 1`);
-    store.db.exec(`CREATE TABLE IF NOT EXISTS task_input_receipts(
+    store.db.exec(`CREATE TABLE IF NOT EXISTS task_input_skills(inputId TEXT PRIMARY KEY REFERENCES task_inputs(id) ON DELETE CASCADE, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_input_receipts(
       inputId TEXT PRIMARY KEY, taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       runId TEXT, state TEXT NOT NULL, error TEXT, updatedAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS task_input_receipts_task ON task_input_receipts(taskId);
@@ -161,12 +163,17 @@ export class TaskRecords {
     const row = this.store.db.prepare("SELECT body FROM task_input_images WHERE inputId=?").get(inputId);
     return row ? JSON.parse(String(row.body)) : [];
   }
-  queue(taskId: string, body: string, mode: string, images: ImageAttachment[] = [], id: string = randomUUID()) {
+  skills(inputId: string): SkillReference[] {
+    const row = this.store.db.prepare("SELECT body FROM task_input_skills WHERE inputId=?").get(inputId);
+    return row ? JSON.parse(String(row.body)) : [];
+  }
+  queue(taskId: string, body: string, mode: string, images: ImageAttachment[] = [], id: string = randomUUID(), skills: SkillReference[] = []) {
     this.store.db
       .prepare("INSERT INTO task_inputs VALUES(?,?,?,?,'queued',NULL,?)")
       .run(id, taskId, body, mode, Date.now());
     this.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'queued',NULL,?)").run(id, taskId, Date.now());
     if (images.length) this.store.db.prepare("INSERT INTO task_input_images VALUES(?,?)").run(id, JSON.stringify(images));
+    if (skills.length) this.store.db.prepare("INSERT INTO task_input_skills VALUES(?,?)").run(id, JSON.stringify(skills));
     return id;
   }
   inputs(row: TaskRow, state: string) {
@@ -221,7 +228,7 @@ export class TaskRecords {
     scope: Scope,
     anchor: string,
     context: string,
-    definitions: { task: string; role: string }[],
+    definitions: { title?: string; task: string; role: string }[],
     selection: Selection,
   ) {
     const budgets = this.preferences(),
@@ -240,7 +247,7 @@ export class TaskRecords {
           .prepare(
             "INSERT INTO sessions(id,workspaceId,title,updatedAt) VALUES(?,?,?,?)",
           )
-          .run(child, scope.workspaceId, d.task.slice(0, 120), Date.now());
+          .run(child, scope.workspaceId, d.title ?? d.task.slice(0, 120), Date.now());
         this.store.db
           .prepare(
             "INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)",
@@ -248,7 +255,7 @@ export class TaskRecords {
           .run(child, JSON.stringify(selection));
         this.store.db
           .prepare(
-            "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,'queued',?,?)",
+            "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,title,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,?,'queued',?,?)",
           )
           .run(
             id,
@@ -256,6 +263,7 @@ export class TaskRecords {
             scope.sessionId,
             child,
             anchor,
+            d.title ?? null,
             d.task,
             d.role,
             JSON.stringify(budgets),

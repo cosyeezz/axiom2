@@ -1,3 +1,4 @@
+import { assertSelectPosition } from "./select-helpers.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -75,6 +76,7 @@ try {
   await page.getByLabel("Chrome 配置档案", { exact: true }).fill("work-profile");
   const windowSelect = page.getByRole("combobox", { name: "浏览器窗口", exact: true });
   await windowSelect.click();
+  await assertSelectPosition(page, windowSelect);
   await page.getByRole("option", { name: "后台运行" }).click();
   assert.equal(await windowSelect.innerText(), "后台运行");
   await windowSelect.press("Enter");
@@ -136,6 +138,7 @@ try {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     assert.equal(overflow, false, `horizontal overflow at ${width}`);
     await windowSelect.click();
+    await assertSelectPosition(page, windowSelect);
     const popup = page.getByRole("listbox", { name: "浏览器窗口" });
     const bounds = await popup.boundingBox();
     assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= height, `popup in viewport at ${width}`);

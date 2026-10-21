@@ -1,0 +1,28 @@
+.usage[data-od-id="token-usage"] .usage-metric.session-reload-trigger>svg{width:20px;height:20px;flex-basis:20px}
+.usage-metric:has(.reload-indicator){position:relative}
+.reload-indicator{position:absolute;right:10px;top:10px;width:4px;height:4px;border-radius:50%;background:currentColor}
+dialog.toolbar-detail-panel.session-reload{width:min(480px,calc(100vw - 24px))}
+.session-reload-body{display:flex;flex-direction:column;gap:16px;font-size:13px;line-height:1.6}
+.session-reload-body p{margin:0}
+.session-reload-body h3{margin:0 0 10px;font-size:13px;font-weight:500}
+.reload-note{color:var(--muted);font-size:12px}
+.reload-status,.reload-steps li{display:flex;justify-content:space-between;gap:12px}
+.reload-status strong{font-weight:500}
+.reload-status time,.reload-steps time{font-size:11px;color:var(--muted);white-space:nowrap}
+.reload-steps{list-style:none;padding:10px 0;margin:0;font-size:12px;color:var(--fg-2)}
+.reload-steps li{padding:4px 0}
+.reload-error,.reload-warnings{color:var(--danger,#b34b43);font-size:12px;overflow-wrap:anywhere}
+.reload-warnings{padding-left:16px}
+.reload-table{font-size:12px;border-top:1px solid var(--border,#e8e6e3)}
+.reload-table-head,.reload-table summary{display:grid;grid-template-columns:1fr 90px 100px;gap:8px;align-items:center;padding:10px 0}
+.reload-table-head{color:var(--muted);font-size:11px}
+.reload-table details{border-bottom:1px solid var(--border,#e8e6e3)}
+.reload-table summary{cursor:pointer;list-style:none}
+.reload-table summary::-webkit-details-marker{display:none}
+.reload-table-head>span:nth-child(n+2),.reload-table summary>span:nth-child(n+2){text-align:right;font-variant-numeric:tabular-nums}
+.reload-table ul{margin:0;padding:0 0 12px 16px;overflow-wrap:anywhere;color:var(--fg-2)}
+.reload-table b{font-weight:500}
+.reload-submit{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;border:1px solid var(--border,#e8e6e3);border-radius:8px;background:var(--surface,#f5f4f2);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.reload-submit:disabled{cursor:default;opacity:.5}
+.reload-submit>svg{width:20px;height:20px;--icon-stroke:1.2px}
+@media(max-width:400px){.reload-table-head,.reload-table summary{grid-template-columns:1fr 75px 85px;gap:4px}}

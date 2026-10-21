@@ -57,7 +57,7 @@ export function Dialog({
     </dialog>
   );
 }
-export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools" }) {
+export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools" | "resources" }) {
   return (
     <aside className="settings-sidebar" aria-label="配置导航">
       <a className="btn btn-ghost back-link" href="/">
@@ -89,11 +89,12 @@ export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools
         >
           内置工具
         </a>
+        <a href="/resources.html" className="settings-nav" aria-current={page === "resources" ? "page" : undefined}>技能与 MCP</a>
       </nav>
       <p className="sidebar-note">
         AXIOM · 本地配置
         <br />
-        配置与工作空间独立
+        {page === "resources" ? "按全局或项目管理资源" : "模型与工具为本机应用级"}
       </p>
     </aside>
   );

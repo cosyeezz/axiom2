@@ -92,13 +92,14 @@ test(
           tool("delegate", {
             context: "Only explicit child context",
             tasks: [
-              { task: "LIVE: wait for instructions" },
-              { task: "QUEUE: never launch this" },
+              { title: "验证运行中追加", task: "LIVE: wait for instructions" },
+              { title: "验证排队取消", task: "QUEUE: never launch this" },
             ],
           });
         else if (!prior("append"))
           tool("append", {
             taskId: ids[0],
+            summary: "补充模型指令",
             text: "MODEL-APPEND",
             mode: "steer",
           });

@@ -37,13 +37,14 @@ export function draftContent(draft: DraftContent): DraftContent {
     text: draft.text,
     attachment: draft.attachment ? { ...draft.attachment } : null,
     attachments: (draft.attachments ?? []).map((attachment) => ({ ...attachment })),
+    skills: (draft.skills ?? []).map(skill => ({ ...skill })),
     images: (draft.images ?? []).map((image) => ({ ...image })),
   };
 }
 export function clearSubmittedDraft(scope: Scope, submitted: DraftContent, save = true) {
   const current = getDraft(scope);
   if (JSON.stringify(draftContent(current)) === JSON.stringify(draftContent(submitted)))
-    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [] }, save);
+    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [], skills: [] }, save);
 }
 export function useDraft(scope: Scope) {
   const key = scopeKey(scope);

@@ -3,11 +3,11 @@ import {
   autoCompressionThreshold, compressionPreferencesScope,
   type AutoCompression, type CompressionPreferences,
 } from "../../shared/compression.js";
-import { command, useConnection, useScope } from "../transport.js";
+import { command, useConnectionState, useScope } from "../transport.js";
 
 export function AutoCompressionSettings({ contextWindow }: { contextWindow?: number | null }) {
   const preferences = useScope<CompressionPreferences | null>(compressionPreferencesScope, null);
-  const connected = useConnection() === "已连接本地服务";
+  const connected = useConnectionState().connected;
   const [busy, setBusy] = useState(false);
   const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const [message, setMessage] = useState("");

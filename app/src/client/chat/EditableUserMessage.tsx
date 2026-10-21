@@ -6,6 +6,7 @@ import { agentScope, emptyAgent, running, type ChatMessage } from "../../shared/
 import { taskActive } from "../../shared/tasks.js";
 import { Icon } from "../Icon.js";
 import { Markdown } from "./Markdown.js";
+import { SkillCards } from "./SkillCards.js";
 import { MessageImages } from "./MessageImages.js";
 import { useSubmission } from "./useSubmission.js";
 import { messageLengthError, messageTextLimit } from "./message-limit.js";
@@ -21,7 +22,7 @@ function MessageEditor({ source, scope, onClose }: { source: EditableMessage; sc
     selected: !!info.selection, runId: info.run?.id, task: info.task });
   const lengthError = messageLengthError(text);
   const hasAttachments = !!(source.draft.attachment || source.draft.attachments?.length || source.draft.images?.length);
-  const disabled = busy || active || !connected || !info.selection || !!lengthError || !text.trim() && !hasAttachments;
+  const disabled = busy || active || !connected || !info.selection || !!lengthError || !text.trim() && !hasAttachments && !source.draft.skills?.length;
   useEffect(() => { input.current?.focus(); input.current?.setSelectionRange(text.length, text.length); }, []);
   const send = () => {
     if (disabled) return;
@@ -39,6 +40,7 @@ function MessageEditor({ source, scope, onClose }: { source: EditableMessage; sc
       {[...(source.draft.attachment ? [source.draft.attachment] : []), ...(source.draft.attachments ?? []), ...(source.draft.images ?? [])]
         .map((attachment, index) => <span key={index}>{attachment.id ? `[${attachment.id}] ` : ""}{attachment.name}</span>)}
     </div>}
+    <SkillCards skills={source.draft.skills} scope={scope} />
     <p className="message-edit-note">重新发送后，将忽略这条消息之后的对话。已修改的文件不会撤销。</p>
     {active && <p className="message-edit-note" role="status">请先停止此会话及活动子任务，再重新发送。</p>}
     {(error || lengthError) && <p className="execution-alert" role="alert">{lengthError || error}</p>}
@@ -80,6 +82,7 @@ export function EditableUserMessage({ message, scope }: { message: ChatMessage; 
         <Icon name="square-pen" />
       </button></div>
       {message.text && <div className="markdown"><Markdown text={message.text} /></div>}
+      <SkillCards skills={message.skills} scope={scope} />
       <MessageImages images={message.images} scope={scope} messageId={message.id} />
       {loading && <small className="meta" role="status">正在读取原消息…</small>}
     </>}

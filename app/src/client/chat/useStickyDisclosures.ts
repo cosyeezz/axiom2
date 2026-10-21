@@ -3,38 +3,17 @@ import "../styles/sticky-disclosures.css";
 
 const disclosureSelector = "details[open]";
 
-/** CSS handles sticky headings; only running process groups open at their end. */
+/** CSS handles sticky headings without moving the reader when details change. */
 export function useStickyDisclosures(container: RefObject<HTMLElement | null>, followBottom: RefObject<boolean>) {
   useLayoutEffect(() => {
     const root = container.current;
     if (!root) return;
     let frame = 0;
-    let opening: HTMLDetailsElement | null = null;
     const observed = new Set<HTMLElement>();
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(() => {
         frame = 0;
         measure();
-        const block = opening;
-        opening = null;
-        if (!block?.open || !root.contains(block)) return;
-        const heading = block.querySelector<HTMLElement>(":scope > summary");
-        const thread = root.closest<HTMLElement>(".thread");
-        if (!heading || !thread || block.parentElement?.closest("details:not([open])")) return;
-        const running = block.matches('.tool-activity[data-status="running"]');
-        // Inner details always start at the beginning, regardless of execution state.
-        for (const node of [block, ...block.querySelectorAll<HTMLElement>("*")]) {
-          if (node.scrollTop) node.scrollTop = 0;
-          if (node.scrollLeft) node.scrollLeft = 0;
-        }
-        followBottom.current = false;
-        const inset = parseFloat(getComputedStyle(heading).top) || 0;
-        const border = parseFloat(getComputedStyle(block).borderTopWidth) || 0;
-        const rect = block.getBoundingClientRect();
-        const threadRect = thread.getBoundingClientRect();
-        const start = thread.scrollTop + rect.top - threadRect.top + border - inset;
-        const end = thread.scrollTop + rect.bottom - threadRect.top - thread.clientHeight;
-        thread.scrollTo({ top: running ? Math.max(start, end) : start, behavior: "instant" });
       });
     };
     const resize = new ResizeObserver(schedule);
@@ -73,16 +52,17 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
     };
     const mutations = new MutationObserver((records) => {
       for (const record of records) {
-        if (record.type === "attributes" && record.attributeName === "open" && record.oldValue === null
+        if (record.type === "attributes" && record.attributeName === "open"
           && record.target instanceof HTMLDetailsElement && record.target.open) {
-          opening = record.target;
-          // Disable tail following before the expansion's ResizeObserver callback.
+          // Opening details pauses before resize, including asynchronous content.
+          // User clicks already pause on capture; automatic final-process folding
+          // must leave normal output following intact.
           followBottom.current = false;
         }
       }
       schedule();
     });
-    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["open"], attributeOldValue: true });
+    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["open"] });
     measure();
     return () => {
       cancelAnimationFrame(frame);

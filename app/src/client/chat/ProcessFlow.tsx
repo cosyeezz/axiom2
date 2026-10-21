@@ -75,6 +75,9 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
   const renderSlice = (slice: ProcessSlice, index: number) => {
     const key = `${slice.kind}:${slice.id}`;
     if (slice.kind === "task") return <TaskCall key={key} scope={scope} {...slice.call} />;
+    if (slice.kind === "task-notices") return <div key={key} className="task-notices">
+      {slice.ids.map(id => <Message key={id} scope={scope} id={id} inActivity />)}
+    </div>;
     if (slice.kind === "process") {
       const closed = settled || !!group.folded || index < slices.length - 1;
       return <ProcessSegment key={key} scope={scope} slice={slice} settled={closed}
@@ -94,6 +97,6 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
     {open => open ? slices.map(renderSlice) : slices.flatMap(slice => slice.kind === "process"
       ? slice.entries.filter(entry => entry.kind === "notice")
         .map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} />)
-      : slice.kind === "notice" ? [renderSlice(slice, 0)] : [])}
+      : slice.kind === "task-notices" || slice.kind === "notice" ? [renderSlice(slice, 0)] : [])}
   </ActivityGroup>;
 }

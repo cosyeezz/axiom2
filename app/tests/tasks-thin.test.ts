@@ -29,6 +29,7 @@ function fixture() {
   let releaseStop: () => void = () => {};
   const agents = {
     store,
+    reloads: { active: () => false },
     info: () => ({ selection, run }),
     assertContinuation: () => {},
     thread: () => ({ ids: [] }),

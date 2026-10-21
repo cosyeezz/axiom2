@@ -1,12 +1,13 @@
 /* Task operations share the subagent card's surface, with less visual weight. */
 .task-operation, .delegation-card.subagents { width: 100%; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--fg) 2%, transparent); overflow: hidden; min-width: 0; }
 .task-operation { color: var(--fg-2); font-size: 12px; }
-.task-operation > details > summary { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; list-style: none; }
+.task-operation > details > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; list-style: none; }
 .task-operation summary::-webkit-details-marker { display: none; }
 .task-operation > details > summary:focus-visible { outline-offset: -3px; }
 .task-operation-icon { position: relative; width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; color: var(--meta); border-radius: var(--radius-sm); background: color-mix(in srgb, currentColor 9%, transparent); }
 .task-operation-icon svg { width: 18px; height: 18px; }
-.task-operation-heading { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; gap: 0; flex: 1; min-width: 0; }
+.task-operation-heading { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--thread-line-height, 24px); height: var(--thread-line-height, 24px); overflow: hidden; gap: 0; flex: 1; min-width: 0; }
+.task-operation[data-tool="append"] .task-operation-heading { grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); }
 .task-operation-heading > * { min-width: 0; max-height: var(--thread-line-height, 24px); }
 .task-operation-heading strong { font-size: 12px; font-weight: 510; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .task-operation-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
@@ -30,19 +31,15 @@
 .task-open-link svg { width: 14px; height: 14px; }
 .delegation-card .subagents-head { min-height: 36px; padding: 4px 10px; gap: 6px; flex-wrap: nowrap; border-bottom: 0; }
 .delegation-card .subagents-head > .subagent-identity-icon { width: 18px; height: 18px; flex-shrink: 0; }
-.delegation-card .subagent { grid-template-columns: 18px minmax(0, 1fr) 16px; min-height: 0; gap: 8px; padding: 6px 10px; }
-.delegation-card .agent-identity { grid-template-columns: minmax(0, 1fr); gap: 0; height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; align-content: center; }
-.delegation-card .agent-identity:has(.task-call-error) strong { -webkit-line-clamp: 1; }
-.delegation-card .agent-identity .task-call-error { padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--thread-line-height, 24px); }
+.delegation-card .subagent { grid-template-columns: 18px minmax(0, 1fr) 16px; min-height: 44px; gap: 8px; padding: 6px 10px; }
+.delegation-card .agent-identity { grid-template-columns: minmax(0, 1fr); gap: 0; height: var(--thread-line-height, 24px); overflow: hidden; align-content: center; }
 .delegation-card .subagent .agent-state { display: inline-flex; grid-column: 1; grid-row: 1; }
 .delegation-card .subagent .agent-state svg { width: 18px; height: 18px; padding: 0; border-radius: 0; background: none; }
 .delegation-card .subagent .agent-open { grid-column: 3; }
 .delegation-pending { padding: 6px 10px; color: var(--fg-2); font-size: 13px; }
-.delegation-pending-item { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); overflow: hidden; }
-.delegation-pending-item p { margin: 0; grid-row: 1 / -1; }
-.delegation-card .agent-identity strong, .delegation-pending-item p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.delegation-pending-item:has(> span) p { grid-row: 1; -webkit-line-clamp: 1; }
-.delegation-pending-item > span { min-width: 0; padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--thread-line-height, 24px); }
+.delegation-pending-item { position: relative; height: var(--thread-line-height, 24px); overflow: hidden; }
+.delegation-pending-item p { margin: 0; }
+.delegation-card .agent-identity strong, .delegation-pending-item p { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .delegation-pending-item + .delegation-pending-item { margin-top: 12px; }
 .log-row:has(.task-operation, .delegation-card):not(:has(.message-body .markdown, .message-images)) { padding-block: 0 2px; border-top: 0; }
 /* Status belongs to the left icon; titles and card surfaces stay neutral. */

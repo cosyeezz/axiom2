@@ -1,3 +1,5 @@
+import { FilePreviewHost } from "../chat/FilePreviewHost.js";
+import { guardFileNavigation } from "../file-edit-guard.js";
 import { MemoryToolbar } from "../memory/MemoryToolbar.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { command, useConnectionState } from "../transport.js";
@@ -25,6 +27,7 @@ export default function Workbench() {
   const [reading, setReading] = useState(() => androidClient || localStorage.getItem("axiom.mobile.reading") === "true");
   const restoreReadingFocus = useRef(false);
   const navigationGuard = useRef<(action: () => void) => void>((action) => action());
+  const navigate = (action: () => void) => guardFileNavigation(() => navigationGuard.current(action));
   const toggleReading = () => {
     restoreReadingFocus.current = true;
     setReading((current) => { localStorage.setItem("axiom.mobile.reading", String(!current)); return !current; });
@@ -89,7 +92,7 @@ export default function Workbench() {
   const workspace = workspaces.find((w) => w.id === workspaceId);
   const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
   const select = (next: Scope) => {
-    navigationGuard.current(() => { selectView(next); closeMobileHistory(); });
+    navigate(() => { selectView(next); closeMobileHistory(); });
   };
   const creatingSessions = useRef(new Set<string>());
   const create = async (id = workspace?.id) => {
@@ -122,7 +125,7 @@ export default function Workbench() {
         !document.querySelector("dialog[open]")
       ) {
         e.preventDefault();
-        navigationGuard.current(() => { void create(); });
+        navigate(() => { void create(); });
       }
     };
     document.addEventListener("keydown", handler);
@@ -153,7 +156,7 @@ export default function Workbench() {
             className="new-chat"
             id="new-chat"
             data-view-navigation
-            onClick={() => navigationGuard.current(() => { void create(); })}
+            onClick={() => navigate(() => { void create(); })}
           >
             <Icon name="new-chat" />
             <span>新建会话</span>
@@ -185,7 +188,7 @@ export default function Workbench() {
           workspace={workspace}
           workspaces={workspaces}
           selected={view}
-          select={(next) => navigationGuard.current(() => { selectSession(next); closeMobileHistory(); })}
+          select={(next) => navigate(() => { selectSession(next); closeMobileHistory(); })}
           onError={setError}
         />
         <a
@@ -242,6 +245,7 @@ export default function Workbench() {
             <button className="mobile-reading-toggle icon-btn" aria-label="收起工作台，只看对话" onClick={toggleReading}><Icon name="scan" /></button>
           </header>
           {isMobile && !connection.connected && <div className="mobile-connection" role="status">正在恢复连接，已有对话和草稿已保留<a href="/">重新连接</a></div>}
+          <FilePreviewHost key={view ? scopeKey(view) : "empty"}>
           <OriginalConversationProvider key={view ? scopeKey(view) : "empty"} scope={view}>
           <Thread
             key={view ? "thread:" + scopeKey(view) : "thread:empty"}
@@ -271,6 +275,7 @@ export default function Workbench() {
             />
           )}</MemoryToolbar>
           </OriginalConversationProvider>
+          </FilePreviewHost>
           {error && (
             <p className="execution-alert" role="alert">
               {error}

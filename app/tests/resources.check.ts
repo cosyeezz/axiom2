@@ -1,0 +1,107 @@
+import { chooseSelect, assertSelectPosition } from "./select-helpers.js";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright";
+import { startServer } from "../src/server/index.js";
+import { Store } from "../src/server/storage.js";
+const root = mkdtempSync(join(tmpdir(), "axiom-resource-ui-")), pi = join(root, "shared");
+const previous = process.env.PI_CODING_AGENT_DIR, previousShared = process.env.AXIOM_PI_DIR;
+process.env.PI_CODING_AGENT_DIR = pi; process.env.AXIOM_PI_DIR = pi;
+const source = join(root, "source"), projectA = join(root, "project-a"), projectB = join(root, "project-b");
+for (const path of [source, pi, join(projectA, ".pi"), join(projectB, ".pi")]) mkdirSync(path, { recursive: true });
+writeFileSync(join(source, "SKILL.md"), "---\nname: ui-fixture-skill\ndescription: 项目工作流程说明与检查清单\n---\n# 工作流程\n\n先阅读项目约定，再核对修改影响。\n\n- 检查配置来源\n- 验证实际执行结果\n");
+writeFileSync(join(source, "attached.txt"), "attachment");
+for (const [path, description] of [[pi, "全局文档服务"], [join(projectA, ".pi"), "项目 A 文档服务"], [join(projectB, ".pi"), "项目 B 文档服务"]]) {
+  writeFileSync(join(path, "mcp.json"), JSON.stringify({ mcpServers: { "shared-docs": { url: "https://docs.example.com/mcp", description, headers: { Authorization: "fixture-secret" }, enabled: true } } }));
+}
+const fixtureStore = new Store(root);
+for (const [id, path, name] of [["project-a", projectA, "项目 A"], ["project-b", projectB, "项目 B"]]) fixtureStore.db.prepare("INSERT INTO workspaces(id,path,pathKey,name,authorized) VALUES(?,?,?,?,1)").run(id, path, path, name);
+fixtureStore.close();
+const app = await startServer({ root, port: 0 });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.AXIOM_TEST_BROWSER });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+const artifacts = process.env.AXIOM_RESOURCE_ARTIFACTS ?? "/tmp/axiom-resource-ui-review"; mkdirSync(artifacts, { recursive: true });
+const tab = (name: string) => page.getByRole("tab", { name: new RegExp(`^${name}`) });
+const config = () => page.getByLabel("MCP 连接配置（JSON）", { exact: true });
+async function waitConfig(text: string) { await page.waitForFunction(value => (document.querySelector<HTMLTextAreaElement>("#resource-config")?.value ?? "").includes(value), text); }
+async function discard() { await page.getByRole("button", { name: "放弃修改", exact: true }).click(); }
+try {
+  await page.goto(app.origin + "/settings.html");
+  await page.getByRole("link", { name: "技能与 MCP", exact: true }).click();
+  await page.locator("aside.supplier-panel").getByRole("button", { name: "安装技能", exact: true }).click();
+  await page.getByLabel("资源来源", { exact: true }).fill(source);
+  await page.locator("footer").getByRole("button", { name: "安装技能", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#resource-content")?.value.includes("工作流程"));
+  const paths = JSON.parse(readFileSync(join(root, "pi/settings.json"), "utf8")).skills;
+  assert.ok(existsSync(join(paths[0], "attached.txt")));
+  const guide = page.locator("#resource-content"), original = await guide.inputValue();
+  await guide.fill(original + "\n已验证技能正文编辑。\n"); await page.getByRole("button", { name: "保存技能内容", exact: true }).click();
+  await page.getByText("配置已保存。", { exact: true }).waitFor();
+  assert.match(readFileSync(join(paths[0], "SKILL.md"), "utf8"), /已验证技能正文编辑/);
+  await page.screenshot({ path: join(artifacts, "skills-desktop.png"), fullPage: true });
+  await guide.fill(original + "\n未保存草稿"); await tab("MCP").click();
+  await page.getByRole("button", { name: "继续编辑", exact: true }).click(); assert.match(await guide.inputValue(), /未保存草稿/);
+  await tab("MCP").click(); await discard(); await waitConfig("全局文档服务");
+  assert.ok(!(await config().inputValue()).includes("fixture-secret")); assert.match(await config().inputValue(), /已保存/);
+  await chooseSelect(page, page.getByLabel("作用范围", { exact: true }), "project-a"); await waitConfig("项目 A 文档服务");
+  assert.equal(await page.locator(".supplier-option").filter({ hasText: "shared-docs" }).count(), 1);
+  const edited = JSON.parse(await config().inputValue()); edited.enabled = false;
+  await config().fill(JSON.stringify(edited, null, 2)); await page.getByRole("button", { name: "保存配置", exact: true }).click();
+  await page.getByText("配置已保存。", { exact: true }).waitFor();
+  const projectConfig = JSON.parse(readFileSync(join(projectA, ".pi/mcp.json"), "utf8")).mcpServers["shared-docs"];
+  assert.equal(projectConfig.enabled, false); assert.equal(projectConfig.headers.Authorization, "fixture-secret");
+  assert.equal(JSON.parse(readFileSync(join(pi, "mcp.json"), "utf8")).mcpServers["shared-docs"].enabled, true);
+  assert.equal(JSON.parse(readFileSync(join(projectB, ".pi/mcp.json"), "utf8")).mcpServers["shared-docs"].enabled, true);
+  await page.screenshot({ path: join(artifacts, "mcp-project-desktop.png"), fullPage: true });
+  for (const [width, height] of [[360,800],[390,844],[430,932],[600,960],[820,1180],[1024,768],[1366,768],[1440,900],[1920,1080],[1024,480]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `overflow at ${width}x${height}`);
+    const scopeTrigger = page.getByRole("combobox", { name: "作用范围", exact: true });
+    await scopeTrigger.click(); await assertSelectPosition(page, scopeTrigger);
+    if ([390,820,1440].includes(width)) await page.screenshot({ path: join(artifacts, `scope-open-${width}.png`) });
+    await page.keyboard.press("Escape");
+    assert.equal(await scopeTrigger.getAttribute("aria-expanded"), "false");
+    assert.ok(await scopeTrigger.evaluate(node => node === document.activeElement));
+    await page.getByRole("button", { name: "保存配置", exact: true }).scrollIntoViewIfNeeded();
+    const box = await page.getByRole("button", { name: "保存配置", exact: true }).boundingBox(); assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y < height, `save action unreachable at ${width}x${height}`);
+    if ([390,820,1440].includes(width)) { await page.locator("#resource-config").scrollIntoViewIfNeeded(); await page.screenshot({ path: join(artifacts, `mcp-project-${width}.png`), fullPage: true }); }
+  }
+  await page.setViewportSize({ width:1440, height:900 });
+  const savedConfig = await config().inputValue();
+  await config().fill(savedConfig + " ");
+  await chooseSelect(page, page.getByRole("combobox", { name: "作用范围", exact: true }), "project-b");
+  await page.getByRole("button", { name: "继续编辑", exact: true }).click();
+  assert.equal(await page.getByRole("combobox", { name: "作用范围", exact: true }).innerText(), "项目 A");
+  assert.equal(await config().inputValue(), savedConfig + " ");
+  await config().fill(savedConfig);
+  await page.getByRole("combobox", { name: "作用范围", exact: true }).focus();
+  await page.keyboard.press("ArrowDown"); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+  await waitConfig("项目 B 文档服务");
+  await chooseSelect(page, page.getByRole("combobox", { name: "作用范围", exact: true }), "project-a"); await waitConfig("项目 A 文档服务");
+  await config().fill('{"url":'); await page.getByRole("button", { name: "保存配置", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "配置 JSON" }).waitFor(); assert.equal(await config().inputValue(), '{"url":');
+  await page.getByRole("button", { name: "重新读取", exact: true }).click(); await discard(); await waitConfig("项目 A 文档服务");
+  await page.getByRole("button", { name: "卸载连接", exact: true }).click();
+  await page.getByRole("button", { name: "取消", exact: true }).click(); assert.ok(JSON.parse(readFileSync(join(projectA, ".pi/mcp.json"), "utf8")).mcpServers["shared-docs"]);
+  await page.getByRole("button", { name: "卸载连接", exact: true }).click(); await page.getByRole("button", { name: "确认卸载", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector(".supplier-option[aria-current=true]"));
+  assert.equal(JSON.parse(readFileSync(join(projectA, ".pi/mcp.json"), "utf8")).mcpServers["shared-docs"], undefined);
+  await chooseSelect(page, page.getByLabel("作用范围", { exact: true }), "global"); await waitConfig("全局文档服务");
+  await page.getByLabel("搜索资源", { exact: true }).fill("non-existent-resource"); await page.locator("aside").getByRole("button", { name: "清除搜索", exact: true }).click(); await waitConfig("全局文档服务");
+  await tab("技能").click(); await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#resource-content")?.value.includes("已验证技能正文编辑"));
+  await page.getByRole("button", { name: "卸载资源", exact: true }).click(); await page.getByRole("button", { name: "确认卸载", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector(".supplier-option[aria-current=true]"));
+  assert.equal(existsSync(paths[0]), false); assert.ok(existsSync(source));
+  await tab("技能").focus(); await page.keyboard.press("ArrowRight"); await waitConfig("全局文档服务"); assert.equal(await tab("MCP").getAttribute("aria-selected"), "true");
+  await page.reload(); await tab("MCP").click(); await waitConfig("全局文档服务");
+  assert.ok(!(await config().inputValue()).includes("fixture-secret")); assert.deepEqual(errors, []);
+  console.log(`resources UI: scope isolation, real content/save, masked credential retention, dirty guards, invalid JSON recovery, removal/cancel, keyboard tabs and 10 viewport sizes passed; screenshots: ${artifacts}`);
+} finally {
+  await browser.close(); await app.close();
+  if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+  if (previousShared === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousShared;
+  rmSync(root, { recursive: true, force: true });
+}

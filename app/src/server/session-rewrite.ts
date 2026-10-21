@@ -4,6 +4,7 @@ import { AppError, attachmentDisplay, attachmentPrompt, attachmentsInput, object
 import { taskBudgetIntro } from "./task-budget.js";
 import type { EditableMessage, RewriteTarget } from "../shared/rewrite.js";
 import { chatMessage, transcriptInput, transcriptImage } from "./transcript.js";
+import { persistedSkillInput } from "../shared/skills.js";
 import { imageDisplayText } from "./images.js";
 
 const markerType = "axiom-rewrite";
@@ -20,7 +21,8 @@ function revision(manager: SessionManager) {
 export function editableMessage(manager: SessionManager, messageId: string): EditableMessage {
   const { message, id, entryId } = transcriptInput(manager, messageId);
   const blocks = typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
-  let raw = blocks.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
+  const skillInput = persistedSkillInput(message);
+  let raw = skillInput?.text ?? blocks.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
   const parentId = manager.getEntry(entryId)?.parentId;
   const parent = parentId ? manager.getEntry(parentId) : undefined;
   // Older native task inputs included the host budget in the same text block.
@@ -48,7 +50,7 @@ export function editableMessage(manager: SessionManager, messageId: string): Edi
   } catch { /* Preserve unrecognized content in full. */ }
   const view = chatMessage(message, id)!;
   const images = (view.images ?? []).filter((image) => !image.path).map((image) => transcriptImage(manager, id, image.id, true));
-  const draft: Draft = { text: display.text, attachment: null, attachments: display.attachments, images };
+  const draft: Draft = { text: display.text, attachment: null, attachments: display.attachments, images, ...(skillInput ? { skills: skillInput.skills } : {}) };
   return { messageId, revision: revision(manager), draft };
 }
 export function assertRewrite(manager: SessionManager, target: RewriteTarget) {

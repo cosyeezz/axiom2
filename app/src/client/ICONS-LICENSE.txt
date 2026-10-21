@@ -18,6 +18,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+Skill references: user-selected Lucide book-open-check (S01), shared original paths in icons.svg (ISC notice below).
+Source: https://lucide.dev/icons/book-open-check
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/book-open-check.svg
 Subagent settings entry: user-selected Lucide git-branch (A01), original geometry in icons.svg; ISC notice below.
 Source: https://icon-sets.iconify.design/lucide/git-branch/
 Subagent identity: Lucide bot (A04), original path in icons.svg (ISC notice below).
@@ -66,12 +69,13 @@ Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold
 Completed process status: user-provided Tabler progress-check SVG, inline in chat/ToolActivity.tsx; original paths preserved with one-shot left-dash reveal, right-arc drawing and check drawing.
 Tabler icon: https://tabler.io/icons/icon/progress-check
 Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
+Session configuration reload: custom settings-reload outline in icons.svg, combining the application's gear silhouette with a separate lower-right clockwise reload arrow. Redrawn as open rounded strokes on a native 20-unit canvas with a larger gear body and closely placed arrow, matching the adjacent data icons' optical size and the existing 1.2px toolbar stroke; not the filled MDI candidate artwork.
 Model configuration reload: shared Lucide rotate-cw (ISC).
 Tabler fold is also used as the shared static compression symbol in icons.svg.
 Workspace folder: restored from the original ui design, including its horizontal divider.
 Open workspace: adapted from that folder silhouette with a tilted front inspired by Tabler folder-open (option 04), in icons.svg as i-workspace-open.
 Reference: https://icon-sets.iconify.design/tabler/folder-open/ (Tabler MIT notice below).
-Session capabilities: Tabler hand-click, original paths in icons.svg, shared 16px composer styling.
+Tabler hand-click is used by the skill/MCP picker and skill use buttons.
 Source: https://icon-sets.iconify.design/tabler/hand-click/
 Default tool glyph: Tabler automation (T013), original paths in chat/ProcessIcon.tsx, with a fitted viewBox and 1em size / 0.1em non-scaling rounded stroke following the row font. Tool rows and collapsed summaries share this renderer; the outer process heading has no running glyph.
 Source: https://icon-sets.iconify.design/tabler/automation/

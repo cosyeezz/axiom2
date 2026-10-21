@@ -8,6 +8,8 @@ import { tmpdir } from "./temporary.js";
 import { Store } from "../src/server/storage.js";
 import { SessionDrafts } from "../src/server/session-drafts.js";
 import { startServer } from "../src/server/index.js";
+import { skillsInput } from "../src/shared/skills.js";
+import { mergeRecalledDrafts } from "../src/client/chat/recall-drafts.js";
 import type { DraftWrite } from "../src/shared/drafts.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -42,6 +44,21 @@ test("SQLite drafts survive Store reopen without starting pi; selected main sess
     store.db.prepare("DELETE FROM sessions WHERE id=?").run(owner.sessionId);
     assert.equal(store.db.prepare("SELECT count(*) AS count FROM session_drafts").get()!.count, 0);
     assert.equal(store.lastSession(), null);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("recalled skills above the message limit remain durable until the user removes references", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-recalled-skills-")); let store = new Store(root);
+  try {
+    const owner = scope(store, join(root, "project"));
+    const skills = Array.from({ length: 33 }, (_, i) => ({ id: i.toString(16).padStart(64, "0"), name: `skill-${i}`, description: `Guide ${i}` }));
+    const draft = mergeRecalledDrafts({ text: "current", attachment: null, skills: skills.slice(0, 17) }, [{ text: "recalled", attachment: null, skills: skills.slice(17) }]);
+    assert.equal(draft.skills?.length, 33);
+    new SessionDrafts(store).save(owner, { ...write(""), draft });
+    store.close(); store = new Store(root);
+    assert.deepEqual(new SessionDrafts(store).read(owner).draft.skills, draft.skills);
+    assert.throws(() => skillsInput(draft.skills), { code: "INVALID_INPUT" });
+    assert.equal(skillsInput(draft.skills!.slice(1)).length, 32);
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -1,6 +1,6 @@
 import type { Draft } from "../../shared/protocol.js";
 
-const references = (text: string) => Array.from(text.matchAll(/\[((?:file|imag|folder)[1-9]\d*)\]/g), (m) => m[1]);
+const references = (text: string) => Array.from(text.matchAll(/\[((?:file|img|imag|folder)[1-9]\d*)\]/g), (m) => m[1]);
 const attachments = (draft: Draft) => [...(draft.attachment ? [draft.attachment] : []), ...(draft.attachments ?? [])];
 
 /** Restore only server-confirmed unconsumed inputs. Keep concurrent typing and
@@ -28,7 +28,7 @@ export function mergeRecalledDrafts(current: Draft, recalled: readonly Draft[]):
     }
     for (const id of references(draft.text)) used.add(mapping.get(id) ?? id);
     return {
-      text: draft.text.replace(/\[((?:file|imag|folder)[1-9]\d*)\]/g, (token, id) => mapping.has(id) ? `[${mapping.get(id)}]` : token),
+      text: draft.text.replace(/\[((?:file|img|imag|folder)[1-9]\d*)\]/g, (token, id) => mapping.has(id) ? `[${mapping.get(id)}]` : token),
       attachments: attachments(draft).map((a) => ({ ...a, ...(a.id ? { id: mapping.get(a.id)! } : {}) })),
       images: (draft.images ?? []).map((image) => ({ ...image, id: mapping.get(image.id)! })),
     };
@@ -37,6 +37,7 @@ export function mergeRecalledDrafts(current: Draft, recalled: readonly Draft[]):
     text: [...restored.map((d) => d.text), current.text].filter(Boolean).join("\n\n"),
     attachment: current.attachment,
     attachments: [...(current.attachments ?? []), ...restored.flatMap((d) => d.attachments)],
+    skills: [...new Map([...current.skills ?? [], ...recalled.flatMap(draft => draft.skills ?? [])].map(skill => [skill.id, skill])).values()],
     images: [...(current.images ?? []), ...restored.flatMap((d) => d.images)],
   };
 }

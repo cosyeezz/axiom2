@@ -25,12 +25,6 @@ export function ConnectionAddressSelect({ value, options, onChange }: {
     setOpen(false); trigger.current?.focus({ preventScroll: true });
   };
   useLayoutEffect(() => {
-    const node = panel.current;
-    if (!open || !node) return;
-    node.showPopover();
-    return () => { if (node.matches(":popover-open")) node.hidePopover(); };
-  }, [open, panel]);
-  useLayoutEffect(() => {
     if (open) panel.current?.querySelectorAll<HTMLElement>('[role="option"]')[active]?.scrollIntoView({ block: "nearest" });
   }, [open, active, options, panel]);
   useEffect(() => {

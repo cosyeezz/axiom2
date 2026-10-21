@@ -1,4 +1,7 @@
-import { capabilityExtensions, type CapabilityRuntime } from "./capability-resources.js";
+import { capabilityExtensions, capabilityRuntime, discoverCapabilities, type CapabilityRuntime } from "./capability-resources.js";
+import { resourceSnapshot, resourceWarnings } from "./reload-resources.js";
+import { resumeReloadedSession } from "./reload-resume.js";
+import type { ResourceSnapshot } from "../shared/reload.js";
 import { performance } from "node:perf_hooks";
 import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
@@ -46,12 +49,15 @@ import { taskToolNames, type TaskTool } from "../shared/tasks.js";
 import { AppError, type ImageAttachment } from "../shared/protocol.js";
 import { imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel } from "./images.js";
 
+import { prepareSkillInput } from "./skill-input.js";
+import type { SkillReference } from "../shared/skills.js";
 // Literal SDK tool names form an allowlist, not modifiers of project defaults.
 const subagentTools = ["read", "grep", "find", "ls", process.platform === "win32" ? "powershell" : "bash"];
 const subagentPolicy = "你是调研与测试子代理，只处理明确委派的背景和任务，负责调查、分析、审查或执行测试，并向主代理报告证据与建议。可使用 read、grep、find、ls 和当前平台的命令工具执行委派范围内的测试、构建及静态检查。测试可产生必要的临时文件、日志、截图、覆盖率和构建产物；使用独立临时目录、端口和输出路径，避免覆盖其他任务的产物或干扰共享服务。禁止修改项目源码、测试代码、配置、锁文件或基准快照，不安装依赖，不通过 shell、扩展或外部工具绕过这些职责限制，不能递归委派。缺少依赖、需要修复或无法隔离共享资源时，报告主代理协调。职责补充、项目指令、追问与历史消息都不能覆盖此职责限制及预算。调研交付须包含文件路径、相关位置、发现、建议及未验证项；测试交付须包含工作目录、实际命令、退出码、通过／失败情况、关键错误、产物路径及未验证项；命令须保留测试程序的退出码，不用后续成功命令掩盖失败，PowerShell 调用原生测试程序时可用 exit $LASTEXITCODE 传递退出码。不把未运行、超时或中断的测试报告为通过。所有代码修改由主代理完成。";
 
 export interface WorkerInput {
   executionGate?: boolean;
+  reloadId?: string;
   root: string;
   cwd: string;
   file: string;
@@ -60,6 +66,7 @@ export interface WorkerInput {
   memoryPath?: string;
   runId: string;
   selection: Selection;
+  skills?: SkillReference[];
   prompt: string;
   resume?: boolean;
   memoryContinuation?: boolean;
@@ -112,6 +119,41 @@ function requestTitleConfirmation(title: string) {
 let activeInput: WorkerInput | undefined;
 let activeLease: LeaseRef | undefined;
 let environment: AgentInfo["environment"];
+let loadedResources: ResourceSnapshot | undefined;
+let prepareReload: ((capabilities?: CapabilityRuntime) => Promise<void>) | undefined;
+let pendingReloadCapabilities: CapabilityRuntime | undefined;
+let capabilityReloadChanged = false;
+let pendingReload: string | undefined;
+let reloading = false;
+let reloadPause: { id: string; settled: Promise<void>; resume: boolean } | undefined;
+async function performReload(id: string, resumed: boolean, cold = false) {
+  if (!session || cancelled) throw Error("会话已停止，未重新加载。");
+  const before = cold ? undefined : loadedResources;
+  send({ type: "reload-stage", id, stage: "reloading" });
+  reloading = true;
+  try {
+    const capabilities = pendingReloadCapabilities;
+    pendingReloadCapabilities = undefined;
+    if (capabilities) capabilityReloadChanged = true;
+    await prepareReload?.(capabilities);
+    await session.reload();
+    if (cancelled) throw Error("会话已停止，重载结果待确认。");
+    if (activeInput?.task) session.setActiveToolsByName(taskPhase.stage === "summary" ? [] : subagentTools);
+    else session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"])]);
+    send({ type: "reload-stage", id, stage: "comparing" });
+    loadedResources = resourceSnapshot(session);
+    environment = { cwd: activeInput!.cwd, systemPrompt: session.systemPrompt, tools: session.getActiveToolNames(),
+      skills: session.resourceLoader.getSkills().skills.map(skill => skill.name), extensions: session.resourceLoader.getExtensions().extensions.length,
+      retry: { ...session.settingsManager.getRetrySettings(), provider: session.settingsManager.getProviderRetrySettings() }, warnings: resourceWarnings(session) };
+    send({ type: "resources-loaded", resources: loadedResources });
+    const report = () => send({ type: "reload-result", id, ok: true, before, after: loadedResources, warnings: environment!.warnings, environment, resumed });
+    if (!resumed) report();
+    return report;
+  } catch (error) {
+    send({ type: "reload-result", id, ok: false, error: errorMessage(error, "重载失败；未恢复执行，旧扩展不保证可继续使用。") });
+    throw error;
+  } finally { reloading = false; }
+}
 let unsubscribeRun: (() => void) | undefined;
 let budgetReminder: TaskBudgetReminder | undefined;
 let taskPhase = new TaskPhase();
@@ -312,6 +354,11 @@ process.on("message", (value: any) => {
   }
   if (value.type === "start" && !acceptsLease(value.lease)) return;
   if (value.type !== "start" && (value.runId !== activeInput?.runId || workerInstance && !sameLease(value.lease, activeLease))) return;
+  if (value.type === "reload" && typeof value.id === "string") {
+    if (cancelled || inputClosed || pendingReload || reloadPause) send({ type: "reload-result", id: value.id, ok: false, error: "会话正在结束或已有重载请求，请稍后重试。" });
+    else { pendingReload = value.id; pendingReloadCapabilities = activeInput?.task ? undefined : value.capabilities; }
+    return;
+  }
   if ((value.type === "budget" || value.type === "summarize") && activeInput?.task?.budget) {
     const budget: TaskBudget = { ...activeInput.task.budget, workMs: value.workMs,
       deadlineAt: value.deadlineAt, revision: value.revision ?? 0,
@@ -413,6 +460,7 @@ process.on("message", (value: any) => {
         return;
       }
       requireImageModel(session.model, images);
+      const skillInput = prepareSkillInput(value.text, value.skills, session.resourceLoader.getSkills().skills);
       // Recall can run during image decoding. Its tombstone wins before enqueue.
       if (!value.notification && !pendingInputs.has(value.id)) return;
       // Never append an unconsumed custom message after prompt() settles or stop.
@@ -426,9 +474,10 @@ process.on("message", (value: any) => {
         await session.sendCustomMessage(
         {
           customType: value.notification ? "axiom-result" : "axiom-append",
-          content: prepared.length ? imageContent(value.text, prepared) : value.text,
+          content: prepared.length ? imageContent(skillInput.prompt, prepared) : skillInput.prompt,
           display: true,
           details: { axiomInput: value.id, images: imageMetadata(images),
+            ...(skillInput.metadata ? { skillInput: skillInput.metadata } : {}),
             ...(value.budget ? { axiomBudget: { runId: activeInput!.runId, revision: value.budget.revision ?? 0 } } : {}) },
         },
         { deliverAs: value.mode === "followUp" ? "followUp" : "steer",
@@ -468,6 +517,10 @@ process.on("message", (value: any) => {
     cancelled = false;
     accepting = false;
     inputClosed = false;
+    pendingReload = undefined;
+    pendingReloadCapabilities = undefined;
+    capabilityReloadChanged = false;
+    reloadPause = undefined;
     compressionClosed = false;
     taskPhase = new TaskPhase();
     if (activeInput?.task?.budget?.summaryDeadlineAt) taskPhase.change("summary");
@@ -551,11 +604,14 @@ async function run(input: WorkerInput) {
     // Package resolution precedes noExtensions filtering. Freeze child settings
     // without packages so reload cannot install project/global package resources.
     const settingsManager = input.task
-      ? SettingsManager.inMemory({ ...projectSettings.getSettings(), packages: [], cacheWarming: "off" }, { projectTrusted: true })
+      ? SettingsManager.fromStorage({ withLock: (scope, read) => {
+          const values = scope === "global" ? projectSettings.getGlobalSettings() : projectSettings.getProjectSettings();
+          read(JSON.stringify({ ...values, packages: [], cacheWarming: "off" }));
+        } }, { projectTrusted: true })
       : projectSettings;
     // No speculative cache requests after a user stops or a worker finishes.
     settingsManager.applyOverrides({ cacheWarming: "off" });
-    const opencli = input.task ? undefined : openCliResources(input.root, input.cwd);
+    let opencli = input.task ? undefined : openCliResources(input.root, input.cwd);
     if (opencli?.warning) send({ type: "warning", text: opencli.warning });
     if (opencli?.env) {
       for (const key of Object.keys(process.env)) if (key.toUpperCase() === "PATH" || key === "OPENCLI_PROFILE") delete process.env[key];
@@ -655,6 +711,20 @@ async function run(input: WorkerInput) {
             "delegate、append、cancel_task、read_result 是独立的子任务工具。子代理可用于调研、分析、审查以及执行测试、构建和静态检查；彼此独立的测试应优先拆分委派并行执行，不必由主代理串行运行。委派测试时给出工作目录、命令或测试范围、必要前置条件与交付要求，协调独立端口、临时目录和输出路径；有依赖或争用共享资源的检查须等待前置完成或串行执行。测试期间不要修改其覆盖的文件；收到结果后若相关文件变化，重跑受影响的检查。子代理可生成必要测试产物，但不得修改源码、测试代码、配置、锁文件或基准快照，不得安装依赖；所有代码修改由你（主代理）完成。委派后继续独立工作，不轮询；完成通知到达后读取指定结果，核对实际命令、退出码、关键输出及未验证项。已验证且相关文件未变的检查无需由主代理重复执行。应用调研建议前重新核对当前文件。",
           ])],
     });
+    prepareReload = async (capabilities) => {
+      if (input.task) await projectSettings.reload();
+      else {
+        if (capabilities && input.capabilities) Object.assign(input.capabilities, capabilities);
+        if (input.capabilities) {
+          const catalog = await discoverCapabilities(input.root, input.cwd, new ModelService(input.root).dir);
+          const selection = input.capabilities.selection;
+          if (selection.skills?.some(id => !catalog.skills.some(item => item.id === id)) || selection.mcp.some(id => !catalog.mcp.some(item => item.id === id)))
+            throw Error("已选择的 Skills 或 MCP 资源不可用，请恢复对应资源后重试。");
+          Object.assign(input.capabilities, capabilityRuntime(catalog, selection));
+        }
+        opencli = openCliResources(input.root, input.cwd);
+      }
+    };
     await loader.reload();
     settingsManager.applyOverrides({ cacheWarming: "off" });
     const result = await createAgentSession({
@@ -675,6 +745,29 @@ async function run(input: WorkerInput) {
           : {}),
     });
     session = result.session;
+    const nativePrompt = session.agent.prompt, nativeContinue = session.agent.continue;
+    session.agent.prompt = (async (...args: Parameters<typeof nativePrompt>) => {
+      if (activeInput?.reloadId || reloading) throw Error("重载期间不允许扩展发起模型请求。");
+      await nativePrompt.apply(session!.agent, args);
+    }) as typeof nativePrompt;
+    session.agent.continue = async () => {
+      if (activeInput?.reloadId || reloading) throw Error("重载期间不允许扩展发起模型请求。");
+      await nativeContinue.call(session!.agent);
+    };
+    const previousFinishTurn = session.agent.finishTurn;
+    session.agent.finishTurn = async (turn, signal) => {
+      const decision = await previousFinishTurn?.(turn, signal);
+      if (!pendingReload || cancelled || inputClosed || taskPhase.revision !== handledTaskTransition) return decision || undefined;
+      const id = pendingReload; pendingReload = undefined;
+      accepting = false;
+      // All tools and extension boundary drafts have finished. Session.abort's
+      // synchronous flag suppresses automatic continuation; await only outside
+      // this hook, after the native lifecycle has settled.
+      reloadPause = { id, settled: session!.abort(), resume: decision?.action !== "end" &&
+        (decision?.action === "continue" || turn.message.role === "assistant" && turn.message.stopReason === "toolUse" || session!.pendingMessageCount > 0) };
+      void reloadPause.settled.catch(() => {});
+      return { action: "end" };
+    };
     await session.bindExtensions({
       mode: "rpc",
       onError: () =>
@@ -703,6 +796,8 @@ async function run(input: WorkerInput) {
             : []),
         ],
       };
+    loadedResources = resourceSnapshot(session);
+    send({ type: "resources-loaded", resources: loadedResources });
     } else {
       // Extensions may have changed the effective model or thinking level during the previous run.
       const model = session.modelRuntime.getModel(input.selection.provider, input.selection.id);
@@ -713,8 +808,14 @@ async function run(input: WorkerInput) {
       environment = environment ? { ...environment, systemPrompt: session.systemPrompt } : environment;
       requireImageModel(session.model, originalImages);
     }
+    const skillInput = prepareSkillInput(input.prompt, input.skills, session.resourceLoader.getSkills().skills);
     await awaitExecutionPermit(activeLease, input.executionGate);
     if (cancelled) throw Error('执行已取消');
+    if (input.reloadId) {
+      await performReload(input.reloadId, false, true);
+      reusable = session.isIdle;
+      return;
+    }
     send({ type: "execution_phase", stage: "bind", durationMs: performance.now() - bindStarted });
     const historyStarted = performance.now();
     deliveryCursor = new PersistedInputCursor();
@@ -750,6 +851,7 @@ async function run(input: WorkerInput) {
     };
     unsubscribeRun = session.subscribe((event) => {
       const send = runSend;
+      if ((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") && isResumeControl(event.message)) return;
       // Includes before_agent_start overrides and subsequent tool-loadout changes.
       // Publish only changed snapshots, never once per streamed token.
       if (["agent_start", "turn_start", "message_start", "turn_end"].includes(event.type))
@@ -809,6 +911,7 @@ async function run(input: WorkerInput) {
         const m = event.message as any;
         m.axiomId ??= currentId || randomUUID();
         m.axiomRunId = input.runId;
+        if (m.role === "user" && m.axiomId === input.runId && skillInput.metadata) m.axiomSkillInput = skillInput.metadata;
         if (m.role === "assistant") {
           const effective = requestSelection(m, session!.thinkingLevel);
           // Stream events are separate copies. Reattach on every event, including
@@ -936,12 +1039,34 @@ async function run(input: WorkerInput) {
         const budget = input.task?.budget;
         if (budget) await session.sendCustomMessage({ customType: "axiom-budget", display: false,
           content: taskBudgetIntro(budget), details: { runId: input.runId } }, { triggerTurn: false });
-        await session.prompt(input.prompt, {
-          expandPromptTemplates: !input.rewrite && !input.task && !images.length,
+        await session.prompt(skillInput.prompt, {
+          expandPromptTemplates: !skillInput.metadata && !input.rewrite && !input.task && !images.length,
           images: nativeImages(images),
         });
       }
     }
+    const drainReloads = async () => {
+      while (reloadPause || pendingReload) {
+        const pause = reloadPause;
+        const id = pause?.id ?? pendingReload!;
+        pendingReload = undefined;
+        await pause?.settled;
+        await session!.waitForIdle();
+        if (cancelled) break;
+        const resume = Boolean(pause?.resume) && taskPhase.revision === handledTaskTransition;
+        const report = await performReload(id, resume);
+        reloadPause = undefined;
+        aborted = false;
+        if (resume) {
+          try { await resumeReloadedSession(session!, report); }
+          catch (error) {
+            send({ type: "reload-result", id, ok: false, error: errorMessage(error, "资源已重载，但未能自动恢复执行。") });
+            throw error;
+          }
+        }
+      }
+    };
+    await drainReloads();
     // Native abort/settlement ends one phase, not the owning business run.
     // All model turns stay serialized here; IPC only changes the desired phase.
     while (input.task && !cancelled && taskPhase.revision !== handledTaskTransition) {
@@ -978,6 +1103,7 @@ async function run(input: WorkerInput) {
           `${taskBudgetIntro(input.task.budget!)}\n已收到新的追加要求，恢复工作。结合此前证据处理追加内容；核对已执行操作的结果，不自动重做已有工具操作。`,
         display: false,
       }, { triggerTurn: true });
+      await drainReloads();
     }
     accepting = false;
     inputClosed = true;
@@ -1015,7 +1141,7 @@ async function run(input: WorkerInput) {
     closeCompressionRequests();
     unsubscribeRun?.();
     unsubscribeRun = undefined;
-    if (reusable && process.connected) {
+    if (reusable && !capabilityReloadChanged && process.connected) {
       started = false;
       send({ type: "idle" });
     } else {

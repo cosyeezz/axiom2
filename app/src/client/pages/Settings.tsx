@@ -23,7 +23,7 @@ export default function Settings() {
         <div className="container">
           <div className="overview-intro">
             <h1>配置</h1>
-            <p>集中管理模型与工具，设置不随工作空间切换。</p>
+            <p>集中管理模型与工具，技能和 MCP 可按全局或项目分别配置。</p>
           </div>
           <section
             className="overview-section"
@@ -43,6 +43,10 @@ export default function Settings() {
                     : "正在读取配置…"}
               </span>
               <Icon name="chevron-right" />
+            </a>
+            <a className="log-row module-row" href="/resources.html">
+              <div><h3>技能与 MCP</h3><p>按全局或项目管理技能内容、MCP 配置与安装来源</p></div>
+              <span className="meta">资源与连接</span><Icon name="chevron-right" />
             </a>
             <a className="log-row module-row" href="/tools.html">
               <div>
@@ -65,7 +69,7 @@ export default function Settings() {
             <dl className="scope-list">
               <div className="scope-row">
                 <dt>配置作用域</dt>
-                <dd>本机应用 · 不随工作空间切换</dd>
+                <dd>模型与内置工具为本机应用级；技能和 MCP 支持全局及项目范围</dd>
               </div>
               <div className="scope-row">
                 <dt>供应商与模型</dt>

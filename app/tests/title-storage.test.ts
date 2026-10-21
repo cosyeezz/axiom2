@@ -30,7 +30,7 @@ test("title state: fallback, validation, manual CAS, restart and scope isolation
     const a = f.create(), b = f.create();
     assert.equal(f.store.requestTitle(a, "  修复\n登录问题 [imag1]  "), true);
     assert.equal(f.store.session(a.workspaceId, a.sessionId).title, "修复 登录问题");
-    assert.equal(f.store.requestTitle(b, "[imag1]"), true);
+    assert.equal(f.store.requestTitle(b, "[img1]"), true);
     assert.equal(f.store.session(b.workspaceId, b.sessionId).title, "[图片]");
     assert.equal(f.store.generatedTitle(a, "超过十个字符的标题应拒绝保存"), false);
     assert.equal(f.store.requestTitle(a), true);

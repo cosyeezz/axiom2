@@ -19,7 +19,7 @@ svg.data-icon{display:block;width:20px;height:20px;flex:0 0 20px;overflow:visibl
 .cost-session-duration h2{font-size:14px;margin:0}.cost-session-duration h2 strong{margin-left:8px;font-variant-numeric:tabular-nums}.cost-session-duration p{font-size:12px;line-height:1.6;color:var(--fg-2)}
 .memory-progress-bars .memory-progress-pending{color:inherit}
 .usage [data-od-id="context-capacity"] svg,.usage [data-od-id="cache-tokens"]>svg,.usage [data-od-id="estimated-cost"]>svg{color:inherit}
-:root .usage[data-od-id="token-usage"]>.usage-row{display:grid;grid-template-columns:repeat(3,44px);gap:0;flex:0 0 auto;width:max-content;max-width:none}
+:root .usage[data-od-id="token-usage"]>.usage-row{display:grid;grid-template-columns:repeat(4,44px);gap:0;flex:0 0 auto;width:max-content;max-width:none}
 :root .usage[data-od-id="token-usage"]>.usage-row :is(.usage-metric,.memory-todo-toggle){display:flex;justify-content:center;align-items:center;gap:0;width:44px;min-width:44px;padding:0!important}
 :root .usage[data-od-id="token-usage"]>.usage-row :is(.usage-metric,.memory-todo-toggle)>svg{justify-self:center}
 .usage button.usage-metric{appearance:none;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:inherit;padding:0 4px;cursor:pointer;font:inherit;min-width:44px;min-height:44px}

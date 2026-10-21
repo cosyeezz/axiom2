@@ -48,9 +48,10 @@ test("path preview: WS uploaded/picked images, scoped registration and no persis
       };
       ws.on("message", receive); ws.send(JSON.stringify(c));
     });
-    const attachment = await call(command(scope, "files.upload", { id: "imag1", kind: "image", name: "截图.png", data: png.toString("base64") }));
+    const attachment = await call(command(scope, "files.upload", { id: "img1", kind: "image", name: "截图.png", data: png.toString("base64") }));
     const c = command(scope, "files.preview", { path: attachment.path, id: "imag7" });
     assert.deepEqual(await call(c), { id: "imag7", name: "截图.png", mimeType: "image/png", data: png.toString("base64") });
+    assert.deepEqual(await call(command(scope, "files.preview", { path: attachment.path, id: "img12" })), { id: "img12", name: "截图.png", mimeType: "image/png", data: png.toString("base64") });
     assert.equal(app.store.receipt(c.requestId).status, "not_found");
     await assert.rejects(call(command(other, "files.preview", { path: attachment.path })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
     await assert.rejects(call(command(scope, "files.preview", { path: selected })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
@@ -58,7 +59,7 @@ test("path preview: WS uploaded/picked images, scoped registration and no persis
     assert.equal(response.status, 200);
     const { items } = await response.json() as { items: { path: string }[] };
     const picked = command(scope, "files.preview", { path: items[0].path });
-    assert.deepEqual(await call(picked), { id: "imag1", name: "selected.png", mimeType: "image/png", data: png.toString("base64") });
+    assert.deepEqual(await call(picked), { id: "img1", name: "selected.png", mimeType: "image/png", data: png.toString("base64") });
     assert.equal(app.store.receipt(picked.requestId).status, "not_found");
     await assert.rejects(call(command(other, "files.preview", { path: items[0].path })), { code: "IMAGE_PREVIEW_FORBIDDEN" });
     await assert.rejects(call(command(scope, "files.registerPicked", { items })), { code: "UNKNOWN_OPERATION" });

@@ -141,7 +141,7 @@ export function AttachmentList({ scope, draft, reading }: { scope: Scope; draft:
   function openPreview(source: Attachment | ImageAttachment) {
     const inline = "data" in source;
     const captured = { owner, source, image: inline ? source : {
-      id: source.id ?? "imag1", name: source.name, mimeType: "",
+      id: source.id ?? "img1", name: source.name, mimeType: "",
     }, loading: !inline, error: "" };
     setPreview(captured);
     if (!inline) void command<ImageAttachment>("files.preview", { path: source.path, id: source.id }, scope).then(

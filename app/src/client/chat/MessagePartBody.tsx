@@ -18,7 +18,7 @@ export function MessagePartBody({ scope, message, callId, field = "text", fallba
   const key = JSON.stringify(["part", scope.workspaceId, scope.sessionId, message?.id, field, callId, fieldRevision ?? message?.detailsRevision, preview, history]);
   const current = useRef(key); current.current = key;
   const pending = useRef<{ release(): void } | null>(null);
-  const [full, setFull] = useState({ key, text: preview });
+  const [full, setFull] = useState({ key, text: preview, loaded: false });
   const [status, setStatus] = useState({ key, loading: false, error: "" });
   const text = full.key === key ? full.text : preview;
   const load = useCallback(async () => {
@@ -30,7 +30,7 @@ export function MessagePartBody({ scope, message, callId, field = "text", fallba
     try {
       const result = await read.promise;
       if (current.current !== key || pending.current !== read) return;
-      setFull({ key, text: result.text });
+      setFull({ key, text: result.text, loaded: true });
       setStatus({ key, loading: false, error: "" });
     } catch (cause) {
       if (current.current === key && pending.current === read) setStatus({ key, loading: false, error: (cause as Error).message });
@@ -40,7 +40,9 @@ export function MessagePartBody({ scope, message, callId, field = "text", fallba
     if (needed) void load();
     return () => { pending.current?.release(); pending.current = null; };
   }, [key, needed, load]);
-  const loading = status.key === key && status.loading, error = status.key === key ? status.error : "";
+  const error = status.key === key ? status.error : "";
+  // Expose the initial read before its effect starts, so a disclosure never looks ready too early.
+  const loading = status.key === key && status.loading || needed && !error && !(full.key === key && full.loaded);
   return <>
     {field === "thinking" ? <Markdown text={text || fallback} /> : <pre>{text || fallback}</pre>}
     {loading && <p className="tool-truncated" role="status">正在加载记录…</p>}

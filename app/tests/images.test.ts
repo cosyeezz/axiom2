@@ -48,6 +48,17 @@ test("image boundaries, MIME signatures, base64, ordering, and metadata-only vie
   assert.ok(!JSON.stringify(view).includes(png));
 });
 
+test("img and legacy native-image mappings keep exact identities", () => {
+  const photos = [image("img1"), image("imag1")];
+  assert.deepEqual(imagesInput(photos), photos);
+  for (const id of ["img0", "img01", "img1000000000", "img1 extra"]) assert.throws(() => imagesInput([image(id)]));
+  const text = "compare [img1] [imag1]";
+  assert.equal(imageDisplayText(imagePrompt(text, photos), 2), text);
+  const view = chatMessage({ role: "user", content: imageContent(text, photos), axiomImages: photos }, "mixed");
+  assert.equal(view?.text, text);
+  assert.deepEqual(view?.images?.map((a) => a.id), ["img1", "imag1"]);
+});
+
 test("image mapping stays in model context but not live, pending or restored display", () => {
   const photos = [{ ...image(), name: 'quoted "image".png' }, image("imag3")];
   const original = "[imag3] compare [imag1]\n保留正文";

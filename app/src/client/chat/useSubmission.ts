@@ -12,6 +12,7 @@ import { prepareDraftSubmission, completeDraftSubmission } from "../draft-persis
 import type { DraftStamp } from "../../shared/drafts.js";
 import { optimisticStart, optimisticState } from "./optimistic.js";
 import { beginRecall, finishRecall, pendingRecall, reconcileInputs, beginResume, finishResume, pendingResume } from "./reconcile-inputs.js";
+import { skillsInput } from "../../shared/skills.js";
 import { messageLengthError } from "./message-limit.js";
 import { resumeAttempt } from "./resume-state.js";
 import { rejectSubmission, setSubmissionError, useSubmissionError } from "./submission-feedback.js";
@@ -53,8 +54,10 @@ export function useSubmission(
     if (!stopping && !continuing) {
       const lengthError = messageLengthError(current.text);
       if (lengthError) { setError(lengthError); return; }
+      try { skillsInput(current.skills); }
+      catch (error) { setError((error as Error).message); return; }
     }
-    if (!stopping && !continuing && !current.text.trim() && !current.attachment && !current.attachments?.length && !current.images?.length) return;
+    if (!stopping && !continuing && !current.text.trim() && !current.attachment && !current.attachments?.length && !current.images?.length && !current.skills?.length) return;
     const requestId = crypto.randomUUID();
     if (continuing) {
       if (state.active || !state.runId) return;

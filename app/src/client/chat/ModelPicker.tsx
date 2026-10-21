@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAnchoredPopup } from "../useAnchoredPopup.js";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
@@ -55,9 +55,6 @@ export function ModelPicker({
   const [expanded, setExpanded] = useState(false);
   const floating = expanded && !details.current?.closest(".compression-settings,.memory-dialog");
   const { panel } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 320, maxHeight: 440, fillMobile: true });
-  useLayoutEffect(() => {
-    if (floating && panel.current && !panel.current.matches(":popover-open")) panel.current.showPopover();
-  }, [floating]);
   useEffect(() => {
     if (!floating) return;
     const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node)) close(false); };

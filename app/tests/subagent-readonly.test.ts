@@ -129,7 +129,7 @@ export default function(pi) {
     { name: "write", args: { path: "forbidden.txt", content: "bad" } },
     { name: "edit", args: { path: "evidence.txt", oldText: "ORIGINAL", newText: "CHANGED" } },
     { name: process.platform === "win32" ? "bash" : "powershell", args: { command: "echo bad > shell-write" } },
-    { name: "delegate", args: { context: "recursive", tasks: [{ task: "write" }] } },
+    { name: "delegate", args: { context: "recursive", tasks: [{ title: "递归权限检查", task: "write" }] } },
   ];
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await run(true, [...forbidden, { name: "read", args: { path: "evidence.txt" } }, { name: "ls", args: { path: "." } },

@@ -1,3 +1,4 @@
+import { SessionReloads } from "./session-reloads.js";
 import { Capabilities } from "./capabilities.js";
 import { performance } from "node:perf_hooks";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
@@ -40,11 +41,13 @@ import { AgentViews } from "./agents/views.js";
 import { AgentRuns } from "./agents/runs.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { Compressions } from "./compressions.js";
+import { skillsInput } from "../shared/skills.js";
 import { imagesInput, imagePrompt, requireImageModel } from "./images.js";
 import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
 type PendingStart = { scope: Scope; automatic?: boolean; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
 export class Agents {
+  readonly reloads: SessionReloads;
   readonly capabilities: Capabilities;
   readonly pool: ExecutionPool;
   readonly profiles: ExecutionProfiles;
@@ -96,7 +99,7 @@ export class Agents {
     this.views.refresh(scope);
   }
   active(scope: Scope, exclude?: PendingStart) {
-    return this.runs.active(scope) || Boolean(this.starts.get(scope.sessionId) && this.starts.get(scope.sessionId) !== exclude);
+    return this.reloads.active(scope) || this.runs.active(scope) || Boolean(this.starts.get(scope.sessionId) && this.starts.get(scope.sessionId) !== exclude);
   }
   executing(scope: Scope) { return this.runs.active(scope); }
   lease(scope: Scope, runId: string): LeaseRef | undefined { return this.runs.lease(scope, runId); }
@@ -157,6 +160,7 @@ export class Agents {
     start?.controller.abort();
     for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
     await Promise.all([
+      this.reloads.stop(scope),
       this.runs.stop(scope, source),
       this.compressions.stop(scope),
       start?.done,
@@ -179,7 +183,7 @@ export class Agents {
     this.unwatchConfiguration();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
-    await Promise.all([this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
+    await Promise.all([this.reloads.close(), this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
     await Promise.all(starts.map(start => start.done));
     await this.pool.close();
   }
@@ -200,7 +204,9 @@ export class Agents {
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
     this.compressions = new Compressions(this);
     this.continuations = new MemoryContinuations(this);
+    this.reloads = new SessionReloads(this);
     this.runs.onEvent = (scope, run, event) => {
+      this.reloads.event(scope, run.id, event);
       this.compressions.event(scope, run.id, event);
       if (event.type === "memory-cancel") this.memoryQueries.get(event.key)?.controller.abort();
       if (event.type === "memory-call") {
@@ -222,6 +228,7 @@ export class Agents {
       this.externalEvent?.(scope, run, event);
     };
     this.runs.onSettled = (scope, run) => {
+      this.reloads.settled(scope, run.id);
       for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
       this.compressions.settled(scope, run.id);
       // Agent 工具可直接写入记忆目录；结算后定向刷新而不阻塞后续 HTTP/WS 事件。
@@ -254,6 +261,9 @@ export class Agents {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     this.owner(scope);
+    if (c.op === "agent.reload") return this.reloads.command(c);
+    if (["prompt", "agent.resume", "agent.model"].includes(c.op) && this.reloads.active(scope))
+      throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
     const rewrite = p.rewrite === undefined ? undefined : rewriteTarget(p.rewrite);
     if (rewrite && c.op !== "prompt") throw new AppError("INVALID_INPUT", "仅消息重发可以回滚对话。");
     if (c.op === "agent.editable") {
@@ -300,7 +310,7 @@ export class Agents {
       return this.message(scope, text(p.id, "消息标识"), true);
     if (c.op === "message.image") {
       if (Object.keys(p).some((key) => !["messageId", "imageId"].includes(key)) ||
-        typeof p.imageId !== "string" || !/^imag[1-9]\d{0,8}$/.test(p.imageId))
+        typeof p.imageId !== "string" || !/^(?:img|imag)[1-9]\d{0,8}$/.test(p.imageId))
         throw new AppError("INVALID_INPUT", "图片预览仅接受消息标识与图片编号");
       return this.views.image(scope, text(p.messageId, "消息标识"), p.imageId);
     }
@@ -322,6 +332,7 @@ export class Agents {
       });
     const validate = () => {
       this.owner(scope);
+      if (this.reloads.active(scope)) throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
       if (c.op === "prompt" || resuming) {
         this.runs.assertEpoch(scope, epoch);
         if (internal.memoryContinuation) {
@@ -344,10 +355,11 @@ export class Agents {
       }
       const images = imagesInput(p.images);
       const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
-      const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
+      const skills = skillsInput(p.skills);
+      const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "消息", 12000);
       const mode = p.mode ?? "steer";
       if (mode !== "steer" && mode !== "followUp") throw new AppError("INVALID_INPUT", "追问方式无效");
-      const draft: Draft = { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images };
+      const draft: Draft = { text: typeof p.text === "string" ? p.text : "", attachment: null, attachments, images, skills };
       return this.runs.enqueue(scope, c.requestId, draft, imagePrompt(attachmentPrompt(body, attachments), images), mode);
     };
     return this.store.external(c, async () => {
@@ -445,7 +457,8 @@ export class Agents {
         const images = imagesInput(p.images);
         const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
         requireImageModel(model, images);
-        const prompt = resuming || internal.memoryContinuation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "消息", 12000);
+        const skills = skillsInput(p.skills);
+        const prompt = resuming || internal.memoryContinuation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "消息", 12000);
         const content = imagePrompt(
           internal.prompt ?? attachmentPrompt(prompt, attachments), images);
         const capabilities = internal.task ? undefined : await this.capabilities.prepare(scope);
@@ -586,6 +599,7 @@ export class Agents {
             rewrite: !!rewrite,
             requestTitle,
             images,
+            skills,
             task: internal.task ? { ...internal.task, budget: internal.task.budget ? { ...internal.task.budget,
               deadlineAt: run.startedAt + internal.task.budget.workMs } : undefined } : undefined,
             notification: internal.notification,

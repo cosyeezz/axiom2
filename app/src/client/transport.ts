@@ -23,7 +23,7 @@ const sessionSubscriptions = new Map<string, number>();
 const pinned = (key: string) => sessionSubscriptions.has(key);
 function sessionKey(scope: string) {
   const parts = scope.split(":");
-  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs", "memory"].includes(parts[0]) && parts.length >= 3
+  return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs", "memory", "reload"].includes(parts[0]) && parts.length >= 3
     ? `${parts[1]}:${parts[2]}` : null;
 }
 function touchSession(scope: string) {
@@ -127,14 +127,14 @@ export function command<T>(
     return Promise.reject(new AppError("DISCONNECTED", "尚未连接，操作未发送"));
   const value: Command = { requestId, op, ...target, params };
   const payload = JSON.stringify(value);
-  // Attachment-bearing commands match the bounded server frame budget; configuration stays small.
+  // File edits allow a 1 MiB UTF-8 file plus worst-case JSON escaping; configuration stays small.
   const attachmentCommand = ["prompt", "files.upload"].includes(op);
-  const limit = attachmentCommand ? 22 * 1024 * 1024 : 200_000;
+  const limit = attachmentCommand ? 22 * 1024 * 1024 : op === "files.save" ? 7 * 1024 * 1024 : 200_000;
   if (new TextEncoder().encode(payload).byteLength > limit)
     return Promise.reject(
       new AppError(
         "PAYLOAD_TOO_LARGE",
-        `请求超过 ${attachmentCommand ? "22 MiB" : "200 KB"}；操作未发送，请减少条目或附件。`,
+        `请求超过 ${attachmentCommand ? "22 MiB" : op === "files.save" ? "7 MiB" : "200 KB"}；操作未发送，请减少条目或附件。`,
       ),
     );
   const sendingSocket = socket;

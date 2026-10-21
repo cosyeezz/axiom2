@@ -65,6 +65,7 @@ export const imageLimits = {
   totalBytes: 10 * 1024 * 1024,
 } as const;
 export interface Draft {
+  skills?: import("./skills.js").SkillReference[];
   text: string;
   attachment: Attachment | null;
   attachments?: Attachment[];
@@ -142,7 +143,7 @@ export function attachmentInput(value: unknown): Attachment | null {
   if (value == null) return null;
   const a = object(value), name = attachmentName(a.name);
   if (a.path !== undefined || a.id !== undefined || a.kind !== undefined) {
-    const prefixes = { file: "file", image: "imag", folder: "folder" } as const;
+    const prefixes = { file: "file", image: "(?:img|imag)", folder: "folder" } as const;
     if (typeof a.kind !== "string" || !Object.hasOwn(prefixes, a.kind) ||
       typeof a.id !== "string" || !new RegExp(`^${prefixes[a.kind as keyof typeof prefixes]}[1-9]\\d{0,8}$`).test(a.id) ||
       typeof a.path !== "string" || a.path.length > 4096 || /[\x00-\x1f\x7f]/.test(a.path) ||

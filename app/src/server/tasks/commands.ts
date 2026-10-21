@@ -15,7 +15,14 @@ import { tasksScope, taskPreferencesScope, taskActive, type TaskTool } from "../
 import { TaskRecords, parent } from "./records.js";
 import { TaskDelivery } from "./delivery.js";
 import { TaskScheduler } from "./scheduler.js";
+import { skillsInput } from "../../shared/skills.js";
 import { imagesInput } from "../images.js";
+// Short display copy is separate from the complete instructions sent to the child.
+function brief(value: unknown, name: string): string {
+  if (typeof value !== "string" || !value.trim() || Array.from(value).length > 30 || /[\r\n\0]/.test(value))
+    throw new AppError("INVALID_INPUT", `${name} 须为1–30字符的单行描述`);
+  return value.trim();
+}
 // User commands and model tools share validation, receipts and per-task serialization.
 export class TaskCommands {
   private locks = new Map<string, Promise<unknown>>();
@@ -55,7 +62,7 @@ export class TaskCommands {
       );
     const allowed: Record<TaskTool, string[]> = {
       delegate: ["context", "tasks"],
-      append: ["taskId", "text", "mode"],
+      append: ["taskId", "summary", "text", "mode"],
       cancel_task: ["taskId", "reason"],
       read_result: ["taskId", "resultId", "offset", "limit"],
     };
@@ -87,7 +94,10 @@ export class TaskCommands {
         if (name === "delegate")
           return this.delegate(scope, run, callId, c.params!);
         const row = this.records.own(scope, c.params!.taskId);
-        if (name === "append") return this.scheduler.append(row, c.params!);
+        if (name === "append") {
+          brief(c.params!.summary, "追加简述");
+          return this.scheduler.append(row, c.params!);
+        }
         if (name === "cancel_task")
           return this.scheduler.cancel(row, c.params!, "agent");
         return this.delivery.result(scope, row.id, c.params!.resultId, c.params!.offset, c.params!.limit);
@@ -107,9 +117,10 @@ export class TaskCommands {
       throw new AppError("INVALID_INPUT", "一次委派需要 1–8 个子任务");
     const definitions = p.tasks.map((value) => {
       const t = object(value);
-      if (Object.keys(t).some((k) => !["task", "systemPrompt"].includes(k)))
+      if (Object.keys(t).some((k) => !["title", "task", "systemPrompt"].includes(k)))
         throw new AppError("INVALID_INPUT", "子任务定义包含未支持的参数");
       return {
+        title: brief(t.title, "任务标题"),
         task: text(t.task, "任务", 12000),
         role:
           t.systemPrompt === undefined
@@ -253,13 +264,15 @@ export class TaskCommands {
     if (child && c.op === "prompt") {
       const images = imagesInput(p.images);
       const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
-      const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : ""), "追问", 12000);
+      const skills = skillsInput(p.skills);
+      const body = text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "追问", 12000);
       return this.serial(child.id, () =>
         this.store.external(c, async () =>
           this.scheduler.append(this.records.own(parent(child), child.id), {
             text: typeof p.text === "string" ? p.text : body,
             attachments,
             images,
+            skills,
             mode: p.mode ?? "steer",
             expectedRunId: p.expectedRunId,
             ...(p.rewrite === undefined ? {} : { rewrite: p.rewrite }),

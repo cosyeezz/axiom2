@@ -1,6 +1,6 @@
 /* Model configuration feedback stays visible beside the save controls. */
 .provider-add-control{position:relative;flex-shrink:0}
-.provider-add-menu{position:absolute;left:0;top:calc(100% + 4px);z-index:30;width:168px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 8px 24px #0004}
+.provider-add-menu{position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;padding:4px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 8px 24px #0004}
 .provider-add-menu button{display:block;width:100%;min-height:40px;padding:8px 12px;text-align:left;border-radius:var(--radius-sm);font-size:13px}
 .provider-add-menu button:focus-visible{background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .oauth-provider-setup,.oauth-login-panel{min-width:0;overflow:auto;padding-bottom:16px}
@@ -23,7 +23,7 @@
 .auth-browser-step{display:grid;gap:6px}
 .auth-browser-step .input{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
 .auth-input-step{padding:12px;border:1px solid var(--border-soft);border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 2%,transparent)}
-@media(max-width:800px){.oauth-provider-setup,.oauth-login-panel{overflow:visible}.provider-add-menu{left:auto;right:0}}
+@media(max-width:800px){.oauth-provider-setup,.oauth-login-panel{overflow:visible}}
 @media(pointer:coarse){.provider-add-menu button,.credential-details summary{min-height:44px}}
 .model-catalog-panel{padding:12px;margin:0 0 12px;border:1px solid var(--border);border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 1.5%,transparent)}
 .model-catalog-heading{margin-bottom:8px;align-items:flex-start}

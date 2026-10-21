@@ -78,7 +78,7 @@ export function remoteFileDialog(options: OpenFileDialogRequest, signal: AbortSi
             report(`等待 ${file.name} 的上传回执`);
             const image = file.type.startsWith("image/");
             awaitingReceipt = true;
-            const item = await command<PickedAttachment>("files.upload", { name: file.name, data, id: image ? `imag${index + 1}` : `file${index + 1}`, kind: image ? "image" : "file" }, options.scope);
+            const item = await command<PickedAttachment>("files.upload", { name: file.name, data, id: image ? `img${index + 1}` : `file${index + 1}`, kind: image ? "image" : "file" }, options.scope);
             awaitingReceipt = false;
             if (finished || signal.aborted) return;
             items.push({ name: item.name, path: item.path, kind: item.kind });

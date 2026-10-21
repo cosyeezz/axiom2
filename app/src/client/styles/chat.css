@@ -298,7 +298,13 @@
 .attachment-input-overlay[hidden] { display: none; }
 .attachment-inline-reference { position: relative; }
 .attachment-reference-source { color: transparent; }
-.attachment-reference-icon { position: absolute; inset: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.attachment-reference-icon { position: absolute; left: 0; top: 50%; transform: translateY(-50%) scale(var(--reference-scale, 1)); transform-origin: left center; display: inline-flex; align-items: center; width: max-content; padding: 2px 3px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in srgb, var(--fg) 6%, var(--surface)); white-space: nowrap; }
+.attachment-inline-reference[data-wrapped] .attachment-reference-source { color: var(--fg); }
+.attachment-inline-reference[data-wrapped] .attachment-reference-icon { display: none; }
+.attachment-reference-icon:has(.attachment-symbol-image) { --image-tint: #93c5fd; padding: 2px 1px; border-color: color-mix(in srgb, var(--image-tint) 35%, var(--surface)); background: color-mix(in srgb, var(--image-tint) 12%, var(--surface)); }
+.attachment-reference-icon .attachment-symbol-image { gap: 2px; }
+.attachment-reference-icon .attachment-symbol-image svg { width: 12px; height: 12px; }
+.attachment-reference-icon .attachment-symbol-image small { font-size: 10px; color: inherit; }
 @media (forced-colors: active) {
   .composer textarea.has-attachment-overlay { color: CanvasText; }
   .attachment-input-overlay { display: none; }

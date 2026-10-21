@@ -19,7 +19,7 @@ const hash = (value: string | Buffer) => createHash("sha256").update(value).dige
 export const skillId = (path: string) => hash(process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path));
 export function capabilityFileDigest(path: string) {
   try { return hash(readFileSync(path)); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing"; throw error; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable"; }
 }
 export type CapabilityRuntime = {
   selection: CapabilitySelection;
@@ -31,6 +31,7 @@ export async function discoverCapabilities(root: string, cwd: string, sharedPiDi
   const agentDir = join(root, "pi");
   const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
   const warnings: string[] = [];
+  if (settingsManager.drainErrors().length) warnings.push("部分技能设置无法读取或格式无效，请检查 settings.json。");
   const packages = new DefaultPackageManager({ cwd, agentDir, settingsManager });
   // Never install packages or execute extensions just to display the catalog.
   const paths = await packages.resolve(async () => { warnings.push("部分资源包尚未安装，未列出其中的技能。"); return "skip"; });
@@ -76,13 +77,19 @@ export async function discoverCapabilities(root: string, cwd: string, sharedPiDi
   // Parser diagnostics can contain JSON excerpts, URLs or credentials. Never return them.
   if (mcp.errors.length) warnings.push("部分 MCP 配置无法读取或格式无效，请检查配置文件。");
   const skillItems: CapabilityItem[] = skills.map(skill => ({ id: skillId(skill.filePath), name: skill.name,
+    preferenceKey: (() => { try { return skillId(realpathSync(skill.filePath)); } catch { return skillId(skill.filePath); } })(),
     description: skill.description, source: skill.filePath, defaultSelected: true, available: true }));
   const mcpItems: CapabilityItem[] = mcp.servers.map(server => ({ id: server.name, name: server.name,
+    preferenceKey: hash(JSON.stringify([resolve(server.source), server.name])),
     description: server.config.description ?? ("command" in server.config ? "本地 MCP 服务" : "远程 MCP 服务"),
     source: server.override ?? server.source, defaultSelected: server.config.enabled !== false, available: true }));
   const mcpPaths = [join(sharedPiDir, "mcp.json"), join(cwd, ".pi", "mcp.json")];
   const files = [...new Set([...skills.map(skill => skill.filePath), ...mcpPaths,
-    join(agentDir, "settings.json"), join(cwd, ".pi", "settings.json")])].map(path => ({ path, digest: capabilityFileDigest(path) }));
+    join(agentDir, "settings.json"), join(cwd, ".pi", "settings.json")])].map(path => {
+      const digest = capabilityFileDigest(path);
+      if (digest === "unreadable") warnings.push("部分能力文件无法读取，已保留其他可用资源；请检查文件类型与权限。");
+      return { path, digest };
+    });
   return { skills: skillItems, mcp: mcpItems, warnings: [...new Set(warnings)], mcpPaths,
     revision: hash(JSON.stringify({ skillItems, mcpItems, files })), config: mcp, files };
 }
@@ -97,11 +104,14 @@ export function capabilityRuntime(catalog: DiscoveredCapabilities, selection: Ca
   };
 }
 export function capabilityExtensions(runtime: CapabilityRuntime, root: string): ExtensionFactory[] {
-  if (!runtime.mcp.servers.length) return [];
-  const mcp = createMcpExtension({ loadConfig: () => structuredClone(runtime.mcp), logPath: join(root, "pi", "mcp.log"),
-    updateConfig: () => { throw Error("会话能力已锁定。"); } });
-  return [createCodemodeExtension({ mode: "on" }), createToolSearchExtension(),
-    // Extension registrations and /mcp must not expand the frozen selection or
-    // mutate shared files. User extensions otherwise retain their existing trust.
-    pi => mcp({ ...pi, getMcpServers: () => [], registerCommand: () => {} })];
+  // Factories run again on native reload. Read the mutable runtime at invocation
+  // so even a session starting without MCP can explicitly enable it later.
+  return [async pi => {
+    if (!runtime.mcp.servers.length) return;
+    await createCodemodeExtension({ mode: "on" })(pi);
+    await createToolSearchExtension()(pi);
+    const mcp = createMcpExtension({ loadConfig: () => structuredClone(runtime.mcp), logPath: join(root, "pi", "mcp.log"),
+      updateConfig: () => { throw Error("请在技能与 MCP 面板修改选择，再重新加载会话。"); } });
+    await mcp({ ...pi, getMcpServers: () => [], registerCommand: () => {} });
+  }];
 }

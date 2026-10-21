@@ -268,7 +268,7 @@ export class Store {
     this.session(scope.workspaceId, scope.sessionId);
     const pending = !!this.db.prepare("SELECT 1 FROM sessions WHERE id=? AND titleState='pending' AND NOT EXISTS(SELECT 1 FROM tasks WHERE sessionId=sessions.id)").get(scope.sessionId);
     if (pending && fallback !== undefined) {
-      const title = [...fallback.replace(/\[(?:image|imag)\d+\]/gi, "").replace(/\s+/g, " ").trim()].slice(0, 60).join("") || "[图片]";
+      const title = [...fallback.replace(/\[(?:image|img|imag)\d+\]/gi, "").replace(/\s+/g, " ").trim()].slice(0, 60).join("") || "[图片]";
       this.db.prepare("UPDATE sessions SET title=? WHERE id=? AND titleState='pending' AND NOT EXISTS(SELECT 1 FROM runs WHERE sessionId=sessions.id)").run(title, scope.sessionId);
     }
     return pending;

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { AppError, attachmentsInput, object, text, type Draft, type Scope } from "../shared/protocol.js";
+import { skillsInput, maxDraftSkills } from "../shared/skills.js";
 import { imagesInput } from "./images.js";
 import type { Store } from "./storage.js";
 import type { DraftRecord, DraftStamp } from "../shared/drafts.js";
@@ -37,7 +38,8 @@ export class SessionDrafts {
       throw new AppError("INVALID_INPUT", "草稿文本最多 200,000 字符，且不能包含空字符");
     const images = imagesInput(value.images);
     const attachments = attachmentsInput(value.attachments, value.attachment, images.length);
-    const draft: Draft = { text: value.text, attachment: null, attachments, images };
+    const skills = skillsInput(value.skills, maxDraftSkills);
+    const draft: Draft = { text: value.text, attachment: null, attachments, images, ...(skills.length ? { skills } : {}) };
     const submissionId = p.submissionId === undefined ? null : text(p.submissionId, "发送请求标识");
     if (submissionId) this.store.receipt(submissionId, scope);
     const hash = createHash("sha256").update(JSON.stringify({ draft, submissionId })).digest("hex");
