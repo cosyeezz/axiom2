@@ -32,6 +32,11 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
         "snapshot" => {},
         "sample" => { app.get_webview("axiom-workbench").ok_or("Workbench missing")?.eval("window.__axiomProbeSample()").map_err(|e| e.to_string())?; },
         "resize" => { window.set_size(tauri::LogicalSize::new(900.0, 650.0)).map_err(|e| e.to_string())?; },
+        "resize-large" => { window.set_size(tauri::LogicalSize::new(1480.0, 900.0)).map_err(|e| e.to_string())?; },
+        "maximize" => { window.maximize().map_err(|e| e.to_string())?; },
+        "unmaximize" => { window.unmaximize().map_err(|e| e.to_string())?; },
+        "fullscreen" => { window.set_fullscreen(true).map_err(|e| e.to_string())?; },
+        "leave-fullscreen" => { window.set_fullscreen(false).map_err(|e| e.to_string())?; },
         "checkpoint" | "dock-hidden" | "finished" | "failed" => {},
         "hide" => { window.hide().map_err(|e| e.to_string())?; },
         #[cfg(target_os = "macos")]
@@ -61,8 +66,11 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
         let position = child.position().map_err(|e| e.to_string())?;
         views.push(json!({"label": child.label(), "x": position.x, "y": position.y, "width": size.width, "height": size.height}));
     }
-    let size = window.inner_size().map_err(|e| e.to_string())?;
+    let reported = window.inner_size().map_err(|e| e.to_string())?;
+    let size = crate::axiom_views::content_size(&window).map_err(|e| e.to_string())?;
     let snapshot = json!({"windows": app.windows().keys().collect::<Vec<_>>(), "views": views,
+        "reportedWidth": reported.width, "reportedHeight": reported.height,
+        "maximized": window.is_maximized().map_err(|e| e.to_string())?, "fullscreen": window.is_fullscreen().map_err(|e| e.to_string())?,
         "width": size.width, "height": size.height, "scale": window.scale_factor().map_err(|e| e.to_string())?,
         "current": crate::axiom_views::current(), "visible": window.is_visible().map_err(|e| e.to_string())?, "observation": OBSERVATION.lock().map_err(|_| "Probe unavailable")?.clone(),
         "acknowledged": report.with_extension("ack").exists()});

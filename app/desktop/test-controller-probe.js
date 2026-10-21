@@ -38,7 +38,38 @@
     check(Math.abs(control.width - state.width) <= 2 && Math.abs(workbench.width - state.width) <= 2, "Views must follow native width");
     check(Math.abs(control.height + workbench.height - state.height) <= 2, "Views must cover native height");
   };
+  const controlBounds = async (expectedWidth) => wait(async () => {
+    const state = await invoke("snapshot");
+    const control = state.views.find((view) => view.label === "pake");
+    return state.current === "control" && control && control.x === 0 && control.y === 0
+      && (!expectedWidth || Math.abs(state.width / state.scale - expectedWidth) <= 2)
+      && Math.abs(control.width - state.width) <= 2 && Math.abs(control.height - state.height) <= 2
+      && Math.abs(innerWidth * state.scale - state.width) <= 2
+      && Math.abs(innerHeight * state.scale - state.height) <= 2;
+  });
   void (async () => {
+    // Exercise the controller before the first workbench exists, including expansion.
+    await invoke("resize");
+    await controlBounds(900);
+    await invoke("resize-large");
+    await controlBounds(1480);
+    await invoke("maximize");
+    await wait(async () => (await invoke("snapshot")).maximized);
+    await controlBounds();
+    await invoke("unmaximize");
+    await wait(async () => !(await invoke("snapshot")).maximized);
+    if (/Mac/.test(navigator.platform)) {
+      await invoke("fullscreen");
+      await wait(async () => (await invoke("snapshot")).fullscreen);
+      await new Promise((done) => setTimeout(done, 1000));
+      await controlBounds();
+      await invoke("leave-fullscreen");
+      await wait(async () => !(await invoke("snapshot")).fullscreen);
+      await new Promise((done) => setTimeout(done, 1000));
+      await controlBounds();
+    }
+    await invoke("resize");
+    await controlBounds(900);
     await preparation();
     if (window.__axiomProbeMode === "reopen") {
       await heading("服务运行中");
@@ -117,7 +148,7 @@
     (await button("打开工作台")).click();
     await observation((value) => value.token !== before.token);
     bounds(await invoke("snapshot"));
-    await invoke("finished", { header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "native-resize", "native-close-with-running-service"] });
+    await invoke("finished", { header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
     void invoke("close");
   })().catch((error) => { console.error(error); void invoke("failed", { error: String(error), stack: error.stack }); });
 })();

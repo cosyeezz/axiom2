@@ -130,7 +130,11 @@ if (!cargo.includes(featureMarker)) throw Error("Pake template changed: Tauri fe
 cargo = cargo.replace(featureMarker, featureMarker + '\n  "unstable",');
 await writeFile(cargoPath, cargo.replace(/^version = "[^"]+"/m, `version = "${version}"`));
 const extra = process.argv.slice(2).filter((arg) => arg !== "--test-instance");
-if (testInstance) extra.push("--identifier", "local.axiom2.desktop.test", "--name", "Axiom2-ServiceTest");
+if (testInstance) {
+  const identifier = process.env.AXIOM_DESKTOP_TEST_IDENTIFIER || "local.axiom2.desktop.test";
+  if (!/^local\.axiom2\.desktop\.test(?:\.[a-z0-9]+)*$/.test(identifier)) throw Error("Invalid isolated test identifier");
+  extra.push("--identifier", identifier, "--name", "Axiom2-ServiceTest");
+}
 const child = spawn(process.execPath, [join(template, "dist/cli.js"), "--config", "desktop/pake.json", ...extra, "--app-version", version], {
   cwd: join(repo, "app"), env: process.env, stdio: "inherit",
 });

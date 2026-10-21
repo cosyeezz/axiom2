@@ -65,9 +65,34 @@ pub fn focus(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+// Tauri 2.10 reports the first WKWebView's frame as inner_size until a second
+// view is added. Read AppKit's content view instead, so the initial controller
+// follows resizing and restored/maximized window sizes as well.
+pub fn content_size(window: &tauri::Window) -> tauri::Result<PhysicalSize<u32>> {
+    #[cfg(target_os = "macos")]
+    {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let main = window.clone();
+        window.run_on_main_thread(move || {
+            let result = (|| {
+                let pointer = main.ns_window()?;
+                let native = unsafe { pointer.cast::<objc2_app_kit::NSWindow>().as_ref() }
+                    .ok_or(tauri::Error::InvalidWindowHandle)?;
+                let content = native.contentView().ok_or(tauri::Error::InvalidWindowHandle)?;
+                let size = content.bounds().size;
+                Ok(tauri::LogicalSize::new(size.width, size.height).to_physical(native.backingScaleFactor()))
+            })();
+            let _ = send.send(result);
+        })?;
+        receive.recv_timeout(std::time::Duration::from_secs(5)).map_err(|_| tauri::Error::FailedToReceiveMessage)?
+    }
+    #[cfg(not(target_os = "macos"))]
+    { window.inner_size() }
+}
+
 pub fn layout(app: &AppHandle) -> tauri::Result<()> {
     let Some(window) = app.get_window("pake") else { return Ok(()); };
-    let size = window.inner_size()?;
+    let size = content_size(&window)?;
     if size.width == 0 || size.height == 0 { return Ok(()); }
     let bar = ((BAR_HEIGHT * window.scale_factor()?).round() as u32).min(size.height.saturating_sub(1));
     let active = WORKBENCH.load(Ordering::Acquire);
@@ -145,7 +170,7 @@ pub async fn open(app: &AppHandle, target: tauri::Url, observed: u64, managed: b
     }
     if app.get_webview("axiom-workbench").is_none() {
         let window = app.get_window("pake").ok_or("客户端窗口不可用")?;
-        let size = window.inner_size().map_err(|e| e.to_string())?;
+        let size = content_size(&window).map_err(|e| e.to_string())?;
         let origin = target.origin();
         let external = app.clone();
         let page_generation = PAGE_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
@@ -222,7 +247,10 @@ pub fn axiom_page_ready(webview: Webview, generation: u64) -> Result<(), String>
 
 pub fn watch_control(view: &Webview) {
     static WATCHING: AtomicBool = AtomicBool::new(false);
-    if view.label() == "pake" && !WATCHING.swap(true, Ordering::AcqRel) { watch_renderer(view); }
+    if view.label() == "pake" && !WATCHING.swap(true, Ordering::AcqRel) {
+        watch_renderer(view);
+        let _ = layout(view.app_handle());
+    }
 }
 fn watch_renderer(view: &Webview) {
     #[cfg(windows)] {

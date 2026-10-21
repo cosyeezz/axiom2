@@ -46,7 +46,15 @@ try {
   });
   await page.clock.install();
   await page.goto(server.resolvedUrls!.local[0]);
-  await page.locator(".startup-maintenance > summary").click();
+  const maintenance = page.locator(".startup-maintenance > summary");
+  assert.match(await maintenance.innerText(), /Pi 引擎/);
+  await page.locator(".startup-preparation > summary").click();
+  const entry = await maintenance.boundingBox();
+  const preparation = await page.locator(".startup-preparation").boundingBox();
+  assert.ok(entry && preparation && entry.y + entry.height <= preparation.y && entry.y + entry.height <= 1000, "Pi entry remains above expanded setup and inside the viewport");
+  await page.screenshot({ path: resolve(output, "pi-entry-with-setup.png"), fullPage: true });
+  await page.locator(".startup-preparation > summary").click();
+  await maintenance.click();
   const pi = page.getByRole("region", { name: "Pi 引擎" });
   await pi.getByText("未安装", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi-refresh").length), 1);
