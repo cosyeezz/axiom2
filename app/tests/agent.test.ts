@@ -18,6 +18,7 @@ import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 import { running } from "../src/shared/agent.js";
 import { parseMemory } from "../src/shared/memory.js";
 const wait = async (check: () => boolean, message: string, timeout = 20000) => {
+  console.log('[agent-probe] wait', message);
   const end = Date.now() + timeout;
   while (!check()) {
     if (Date.now() > end) throw Error(message);
@@ -58,6 +59,7 @@ test(
       const body = JSON.parse(raw);
       requests.push(body);
       count++;
+      console.log('[agent-probe] fixture request', count, { stall, providerFailure });
       if (count === 3 || count === 4) observedProgress.push(parseMemory(readFileSync(memoryPath, "utf8")).percent);
       if (providerFailure) {
         res.writeHead(400, { "Content-Type": "application/json" });
@@ -195,7 +197,10 @@ test(
           await import(new URL("../dist/server/index.js", import.meta.url).href)
         ).startServer as typeof startServer)
       : startServer;
+    console.log('[agent-probe] starting app');
     let app = await start({ root, port: 0 });
+    console.log('[agent-probe] app started');
+    t.signal.addEventListener('abort', () => console.error('[agent-probe] test aborted', process.getActiveResourcesInfo()), { once: true });
     try {
       const w = app.store.execute({
         requestId: randomUUID(),
@@ -478,7 +483,9 @@ test(
       assert.ok(!("cleanup" in app.agents.info(otherScope).run!));
       assert.equal(count, 9, "crash recovery cannot resend");
     } finally {
+      console.log('[agent-probe] final app.close start');
       await app.close();
+      console.log('[agent-probe] final app.close done');
       fixture.closeAllConnections();
       await new Promise<void>((r) => fixture.close(() => r()));
       rmSync(root, { recursive: true, force: true });

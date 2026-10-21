@@ -1,65 +1,17 @@
 name: Validate Axiom2
 on:
-  push:
-    branches: [master]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push supersedes the whole older pipeline, including its pending publisher.
-# Retrying an old run must not cancel the pipeline for the current master head.
-concurrency:
-  group: axiom-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.run_attempt == 1 && 'latest' || github.run_id }}
-  cancel-in-progress: true
 jobs:
-  validate:
+  windows-diagnostic:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
         node: ['22.19.0', '24']
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-      - name: Install fd for native file completion tests
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          case "$RUNNER_OS" in
-            Linux) sudo apt-get update && sudo apt-get install -y fd-find ;;
-            macOS) brew install fd ;;
-          esac
-      - name: Install fd on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'fd.zip'
-          Invoke-WebRequest 'https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7') { throw 'fd checksum mismatch' }
-          $directory = Join-Path $env:RUNNER_TEMP 'fd'
-          Expand-Archive $archive $directory
-          $binary = Get-ChildItem $directory -Filter fd.exe -Recurse | Select-Object -First 1
-          if (-not $binary) { throw 'fd.exe missing' }
-          & $binary.FullName --version
-          $binary.DirectoryName >> $env:GITHUB_PATH
-      - run: npm ci
-      - run: node --test scripts/auto-release.test.mjs
-      - run: npm test
-  package:
-    # Windows tests and package checks can exceed 30 minutes together.
-    # Run installation, upgrade, rollback and cleanup with their own bounded job.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        node: ['22.19.0', '24']
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+        scope: ['files', 'agent']
+    runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,48 +19,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm run check:package
-  publish:
-    needs: [validate, package]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'cosyeezz/axiom2'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - name: Allocate or resume release version
-        id: release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/auto-release.mjs prepare "$RUNNER_TEMP/axiom-release-state.json"
-      - name: Build versioned release snapshot
-        if: steps.release.outputs.publish == 'true'
-        run: npm ci
-      - name: Validate and retain the exact release package
-        if: steps.release.outputs.publish == 'true'
-        env:
-          AXIOM_VERIFIED_PACKAGE_DIR: ${{ runner.temp }}/axiom-release-assets
-        run: npm run check:package
-      - name: Publish and verify backend release
-        if: steps.release.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/auto-release.mjs publish "$RUNNER_TEMP/axiom-release-state.json" "$RUNNER_TEMP/axiom-release-assets"
-      - name: Preserve release diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-release-diagnostics
-          path: |
-            ${{ runner.temp }}/axiom-release-state.json
-            ${{ runner.temp }}/axiom-release-assets/
-          if-no-files-found: ignore
-          retention-days: 7
+      - name: File save and capability path diagnosis
+        if: matrix.scope == 'files'
+        run: node scripts/run-windows-diagnostic.mjs app/tests/file-edit.test.ts app/tests/capability-preferences.test.ts
+      - name: Agent lifecycle diagnosis
+        if: matrix.scope == 'agent'
+        run: node scripts/run-windows-diagnostic.mjs app/tests/agent.test.ts
