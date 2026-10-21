@@ -17,10 +17,10 @@ import { startServer } from "../src/server/index.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 import { running } from "../src/shared/agent.js";
 import { parseMemory } from "../src/shared/memory.js";
-const wait = async (check: () => boolean, message: string, timeout = 20000) => {
-  console.log('[agent-probe] wait', message);
+const waitFor = async (check: () => boolean, message: string, timeout = 20000, signal?: AbortSignal) => {
   const end = Date.now() + timeout;
   while (!check()) {
+    signal?.throwIfAborted();
     if (Date.now() > end) throw Error(message);
     await new Promise((r) => setTimeout(r, 30));
   }
@@ -29,6 +29,7 @@ test(
   "Product main agent: isolated workers, real pi write/read tools, cancellation, selections, durable recovery and no replay (loopback)",
   { timeout: 90000 },
   async (t) => {
+    const wait = (check: () => boolean, message: string, timeout?: number) => waitFor(check, message, timeout, t.signal);
     const root = mkdtempSync(join(tmpdir(), "axiom-agent-")),
       project = join(root, "project");
     const previousPi = process.env.AXIOM_PI_DIR;
@@ -59,7 +60,6 @@ test(
       const body = JSON.parse(raw);
       requests.push(body);
       count++;
-      console.log('[agent-probe] fixture request', count, { stall, providerFailure });
       if (count === 3 || count === 4) observedProgress.push(parseMemory(readFileSync(memoryPath, "utf8")).percent);
       if (providerFailure) {
         res.writeHead(400, { "Content-Type": "application/json" });
@@ -157,6 +157,22 @@ test(
       );
       res.end("data: [DONE]\n\n");
     });
+    type Application = Awaited<ReturnType<typeof startServer>>;
+    const applications = new Set<Application>(), starting = new Set<Promise<Application>>();
+    let cleanupTask: Promise<void> | undefined;
+    const cleanup = () => cleanupTask ??= (async () => {
+      // After-hooks run on timeout even if the test's await never settles.
+      // Close the stalled provider independently of application shutdown.
+      fixture.closeAllConnections();
+      const fixtureClosed = new Promise<void>(resolve => fixture.close(() => resolve()));
+      const closing = Promise.allSettled([...applications].map(app => app.close()));
+      await Promise.allSettled(starting);
+      const results = [...await closing, ...await Promise.allSettled([fixtureClosed, ...[...applications].map(app => app.close())])];
+      const failed = results.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      rmSync(root, { recursive: true, force: true });
+    })();
+    t.after(cleanup);
     await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
     const config = {
       providers: {
@@ -192,15 +208,24 @@ test(
         compaction: { enabled: false },
       }),
     );
-    const start = process.env.AXIOM_TEST_COMPILED
+    const loadServer = process.env.AXIOM_TEST_COMPILED
       ? ((
           await import(new URL("../dist/server/index.js", import.meta.url).href)
         ).startServer as typeof startServer)
       : startServer;
-    console.log('[agent-probe] starting app');
+    const start = async (options: Parameters<typeof startServer>[0]) => {
+      t.signal.throwIfAborted();
+      const pending = loadServer(options); starting.add(pending);
+      try {
+        const application = await pending, close = application.close;
+        let closing: Promise<void> | undefined;
+        application.close = () => closing ??= close();
+        applications.add(application);
+        if (t.signal.aborted) { await application.close(); t.signal.throwIfAborted(); }
+        return application;
+      } finally { starting.delete(pending); }
+    };
     let app = await start({ root, port: 0 });
-    console.log('[agent-probe] app started');
-    t.signal.addEventListener('abort', () => console.error('[agent-probe] test aborted', process.getActiveResourcesInfo()), { once: true });
     try {
       const w = app.store.execute({
         requestId: randomUUID(),
@@ -222,7 +247,10 @@ test(
         params = {},
         target = scope,
         requestId = randomUUID(),
-      ) => app.agents.command({ op, params, ...target, requestId });
+      ) => {
+        t.signal.throwIfAborted();
+        return app.agents.command({ op, params, ...target, requestId });
+      };
       await assert.rejects(call("prompt", { text: "no model" }), {
         code: "MODEL_UNAVAILABLE",
       });
@@ -483,12 +511,7 @@ test(
       assert.ok(!("cleanup" in app.agents.info(otherScope).run!));
       assert.equal(count, 9, "crash recovery cannot resend");
     } finally {
-      console.log('[agent-probe] final app.close start');
-      await app.close();
-      console.log('[agent-probe] final app.close done');
-      fixture.closeAllConnections();
-      await new Promise<void>((r) => fixture.close(() => r()));
-      rmSync(root, { recursive: true, force: true });
+      await cleanup();
     }
   },
 );
