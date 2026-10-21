@@ -33,29 +33,37 @@
     const control = state.views.find((view) => view.label === "pake");
     const workbench = state.views.find((view) => view.label === "axiom-workbench");
     check(control && workbench, "Expected local and remote views");
-    check(control.x === 0 && control.y === 0 && workbench.x === 0, "Unexpected view positions");
-    check(Math.abs(control.height - 48 * state.scale) <= 2 && Math.abs(workbench.y - control.height) <= 2, "Navigation bar overlaps workbench");
+    check(control.x === state.contentX && control.y === state.contentY && workbench.x === state.contentX, "Unexpected view positions");
+    check(Math.abs(control.height - 48 * state.scale) <= 2 && Math.abs(workbench.y - control.y - control.height) <= 2, "Navigation bar overlaps workbench");
+    check(Math.abs(innerHeight - 48) <= 2, "Native title bar obscures the navigation bar");
     check(Math.abs(control.width - state.width) <= 2 && Math.abs(workbench.width - state.width) <= 2, "Views must follow native width");
     check(Math.abs(control.height + workbench.height - state.height) <= 2, "Views must cover native height");
   };
   const controllerLayouts = [];
+  const viewport = () => ({ width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio,
+    clientWidth: document.documentElement.clientWidth, clientHeight: document.documentElement.clientHeight,
+    visualWidth: visualViewport?.width, visualHeight: visualViewport?.height, visualScale: visualViewport?.scale });
+  let lastControlLayout;
   let stage = "initial-controller-layout";
   const controlBounds = async (expectedWidth) => {
     const state = await wait(async () => {
       const state = await invoke("snapshot");
       const control = state.views.find((view) => view.label === "pake");
-      return state.current === "control" && control && control.x === 0 && control.y === 0
+      lastControlLayout = { state, viewport: viewport() };
+      return state.current === "control" && control && control.x === state.contentX && control.y === state.contentY
+        && (!state.nativeGeometry || (Math.abs(state.nativeGeometry.layoutWidth * state.scale - state.width) <= 2
+          && Math.abs(state.nativeGeometry.layoutHeight * state.scale - state.height) <= 2))
         && (!expectedWidth || Math.abs(state.width / state.scale - expectedWidth) <= 2)
         && Math.abs(control.width - state.width) <= 2 && Math.abs(control.height - state.height) <= 2
         && Math.abs(innerWidth * state.scale - state.width) <= 2
         && Math.abs(innerHeight * state.scale - state.height) <= 2 ? state : null;
     });
-    controllerLayouts.push({ stage, state, viewport: { width: innerWidth, height: innerHeight } });
+    controllerLayouts.push({ stage, state, viewport: viewport() });
     await invoke("progress", { stage, controllerLayouts });
   };
   void (async () => {
     // Exercise the controller before the first workbench exists, including expansion.
-    await invoke("progress", { stage });
+    await invoke("progress", { stage, viewport: viewport() });
     await invoke("resize");
     await controlBounds(900);
     stage = "controller-large";
@@ -169,6 +177,6 @@
     console.error(error);
     await invoke("inspect-workbench").catch(() => {});
     await new Promise((done) => setTimeout(done, 300));
-    await invoke("failed", { error: String(error), stack: error.stack, stage, controllerLayouts });
+    await invoke("failed", { error: String(error), stack: error.stack, stage, controllerLayouts, lastControlLayout, viewport: viewport() });
   });
 })();

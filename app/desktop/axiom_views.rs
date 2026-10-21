@@ -66,9 +66,9 @@ pub fn focus(app: &AppHandle) -> tauri::Result<()> {
 }
 
 // Tauri 2.10 reports the first WKWebView's frame as inner_size until a second
-// view is added. Read AppKit's content view instead, so the initial controller
-// follows resizing and restored/maximized window sizes as well.
-pub fn content_size(window: &tauri::Window) -> tauri::Result<PhysicalSize<u32>> {
+// view is added. AppKit's unobscured content layout also excludes the native
+// title bar when the content view extends behind it.
+pub fn content_bounds(window: &tauri::Window) -> tauri::Result<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
     #[cfg(target_os = "macos")]
     {
         let (send, receive) = std::sync::mpsc::sync_channel(1);
@@ -79,30 +79,35 @@ pub fn content_size(window: &tauri::Window) -> tauri::Result<PhysicalSize<u32>> 
                 let native = unsafe { pointer.cast::<objc2_app_kit::NSWindow>().as_ref() }
                     .ok_or(tauri::Error::InvalidWindowHandle)?;
                 let content = native.contentView().ok_or(tauri::Error::InvalidWindowHandle)?;
-                let size = content.bounds().size;
-                Ok(tauri::LogicalSize::new(size.width, size.height).to_physical(native.backingScaleFactor()))
+                let bounds = content.bounds();
+                let layout = content.convertRect_fromView(native.contentLayoutRect(), None);
+                let top = if content.isFlipped() { layout.origin.y - bounds.origin.y }
+                    else { bounds.origin.y + bounds.size.height - layout.origin.y - layout.size.height };
+                let scale = native.backingScaleFactor();
+                Ok((tauri::LogicalPosition::new(layout.origin.x - bounds.origin.x, top).to_physical(scale),
+                    tauri::LogicalSize::new(layout.size.width, layout.size.height).to_physical(scale)))
             })();
             let _ = send.send(result);
         })?;
         receive.recv_timeout(std::time::Duration::from_secs(5)).map_err(|_| tauri::Error::FailedToReceiveMessage)?
     }
     #[cfg(not(target_os = "macos"))]
-    { window.inner_size() }
+    { Ok((PhysicalPosition::new(0, 0), window.inner_size()?)) }
 }
 
 pub fn layout(app: &AppHandle) -> tauri::Result<()> {
     let Some(window) = app.get_window("pake") else { return Ok(()); };
-    let size = content_size(&window)?;
+    let (origin, size) = content_bounds(&window)?;
     if size.width == 0 || size.height == 0 { return Ok(()); }
     let bar = ((BAR_HEIGHT * window.scale_factor()?).round() as u32).min(size.height.saturating_sub(1));
     let active = WORKBENCH.load(Ordering::Acquire);
     if let Some(control) = app.get_webview("pake") {
         control.set_auto_resize(false)?;
-        control.set_bounds(Rect { position: PhysicalPosition::new(0, 0).into(),
+        control.set_bounds(Rect { position: origin.into(),
             size: PhysicalSize::new(size.width, if active { bar } else { size.height }).into() })?;
     }
     if let Some(workbench) = app.get_webview("axiom-workbench") {
-        workbench.set_bounds(Rect { position: PhysicalPosition::new(0, bar as i32).into(),
+        workbench.set_bounds(Rect { position: PhysicalPosition::new(origin.x, origin.y + bar as i32).into(),
             size: PhysicalSize::new(size.width, size.height - bar).into() })?;
     }
     Ok(())
@@ -170,7 +175,7 @@ pub async fn open(app: &AppHandle, target: tauri::Url, observed: u64, managed: b
     }
     if app.get_webview("axiom-workbench").is_none() {
         let window = app.get_window("pake").ok_or("客户端窗口不可用")?;
-        let size = content_size(&window).map_err(|e| e.to_string())?;
+        let (content_origin, size) = content_bounds(&window).map_err(|e| e.to_string())?;
         let origin = target.origin();
         let external = app.clone();
         let page_generation = PAGE_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
@@ -199,7 +204,7 @@ pub async fn open(app: &AppHandle, target: tauri::Url, observed: u64, managed: b
         #[cfg(windows)]
         let builder = builder.additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-blink-features=AutomationControlled");
         // Start outside the visible content area to avoid flashing over the control page.
-        let workbench = window.add_child(builder, PhysicalPosition::new(0, size.height as i32), size).map_err(|e| e.to_string())?;
+        let workbench = window.add_child(builder, PhysicalPosition::new(content_origin.x, content_origin.y + size.height as i32), size).map_err(|e| e.to_string())?;
         workbench.set_auto_resize(false).map_err(|e| e.to_string())?;
         workbench.hide().map_err(|e| e.to_string())?;
         watch_renderer(&workbench);

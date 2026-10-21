@@ -74,9 +74,31 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
         views.push(json!({"label": child.label(), "url": child.url().map_err(|e| e.to_string())?.as_str(), "x": position.x, "y": position.y, "width": size.width, "height": size.height}));
     }
     let reported = window.inner_size().map_err(|e| e.to_string())?;
-    let size = crate::axiom_views::content_size(&window).map_err(|e| e.to_string())?;
+    let (origin, size) = crate::axiom_views::content_bounds(&window).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let native_geometry = {
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    let native_window = window.clone();
+    window.run_on_main_thread(move || {
+        let geometry = (|| {
+            let pointer = native_window.ns_window().ok()?;
+            let native = unsafe { pointer.cast::<objc2_app_kit::NSWindow>().as_ref() }?;
+            let content = native.contentView()?;
+            let frame = content.bounds();
+            let layout = native.contentLayoutRect();
+            Some(json!({"contentWidth": frame.size.width, "contentHeight": frame.size.height,
+                "layoutX": layout.origin.x, "layoutY": layout.origin.y,
+                "layoutWidth": layout.size.width, "layoutHeight": layout.size.height}))
+        })();
+        let _ = send.send(geometry);
+    }).map_err(|e| e.to_string())?;
+    receive.recv_timeout(std::time::Duration::from_secs(5)).map_err(|e| e.to_string())?
+    };
+    #[cfg(not(target_os = "macos"))]
+    let native_geometry = Option::<Value>::None;
     let snapshot = json!({"windows": app.windows().keys().collect::<Vec<_>>(), "views": views,
         "reportedWidth": reported.width, "reportedHeight": reported.height,
+        "contentX": origin.x, "contentY": origin.y, "nativeGeometry": native_geometry,
         "maximized": window.is_maximized().map_err(|e| e.to_string())?, "fullscreen": window.is_fullscreen().map_err(|e| e.to_string())?,
         "width": size.width, "height": size.height, "scale": window.scale_factor().map_err(|e| e.to_string())?,
         "current": crate::axiom_views::current(), "visible": window.is_visible().map_err(|e| e.to_string())?, "observation": OBSERVATION.lock().map_err(|_| "Probe unavailable")?.clone(),
