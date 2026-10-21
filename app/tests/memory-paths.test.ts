@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, mkdirSync, realpathSync, readdirSync, rmSync, symlinkSync, linkSync, writeFileSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, parse } from "node:path";
 import { tmpdir } from "./temporary.js";
 import { Store } from "../src/server/storage.js";
+import { ensureMemoryDirectory } from "../src/server/memory-storage.js";
 import { digest, initializeMemory, memoryFiles, memoryPath, replaceMemoryFile, textFile } from "../src/server/memory-files.js";
 
 const directoryLink = (target: string, path: string) => symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+
+test("memory directory initialization accepts an existing filesystem root", () => {
+  const root = realpathSync(parse(tmpdir()).root);
+  assert.doesNotThrow(() => ensureMemoryDirectory(root));
+});
 
 test("trusted data-root aliases preserve memory IO and the exclusive store lock", () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-memory-root-alias-"));

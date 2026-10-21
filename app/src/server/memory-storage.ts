@@ -40,8 +40,11 @@ export const memoryRulesPath = (root: string) => join(memoryRoot(root), "RULES.m
 export function ensureMemoryDirectory(path: string) {
   const parent = resolve(path, "..");
   if (parent !== path) ensureMemoryDirectory(parent);
-  try { mkdirSync(path, { mode: 0o700 }); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  // Windows rejects mkdir on an existing drive root with EPERM, not EEXIST.
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
+    try { mkdirSync(path, { mode: 0o700 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  }
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(path) !== path) throw new AppError("MEMORY_PATH", "记忆目录不能使用符号链接");
 }
