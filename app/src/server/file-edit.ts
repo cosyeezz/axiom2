@@ -57,7 +57,11 @@ export async function saveTextFile(path: string, revision: string, text: string,
       const target = await open(temporary, "wx", info.mode & 0o777);
       try { await target.chmod(info.mode & 0o777); await target.writeFile(output); await target.sync(); } finally { await target.close(); }
       await authorize(); signal.throwIfAborted();
-      const current = await inspect(), final = await handle.stat();
+      const final = await handle.stat();
+      // Windows can reject replacing a destination while its read handle is open.
+      // Close it before the final path identity check and atomic replacement.
+      await handle.close();
+      const current = await inspect();
       if (current.dev !== info.dev || current.ino !== info.ino || current.size !== info.size ||
         current.mtimeMs !== info.mtimeMs || current.ctimeMs !== info.ctimeMs || final.mtimeMs !== info.mtimeMs || final.ctimeMs !== info.ctimeMs) throw conflict();
       await rename(temporary, path); temporary = undefined;

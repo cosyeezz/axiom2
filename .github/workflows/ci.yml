@@ -21,7 +21,9 @@ jobs:
       - run: npm ci
       - name: File save and capability path diagnosis
         if: matrix.scope == 'files'
-        run: node scripts/run-windows-diagnostic.mjs app/tests/file-edit.test.ts app/tests/capability-preferences.test.ts
+        run: |
+          node scripts/diagnose-rename.mjs
+          node scripts/run-windows-diagnostic.mjs app/tests/file-edit.test.ts app/tests/capability-preferences.test.ts
       - name: Agent lifecycle diagnosis
         if: matrix.scope == 'agent'
         run: node scripts/run-windows-diagnostic.mjs app/tests/agent.test.ts
