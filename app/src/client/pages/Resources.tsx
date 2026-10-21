@@ -19,7 +19,7 @@ export default function Resources() {
   const [loading, setLoading] = useState(false), [sending, setSending] = useState(false), [error, setError] = useState("");
   const [operation, setOperation] = useState<{ id: string; op: string; target?: string; before: string[] }>();
   const [notice, setNotice] = useState("");
-  const [modal, setModal] = useState<{ kind: "remove"; item: ResourceItem; revision: string } | { kind: "discard"; run: () => void }>();
+  const [modal, setModal] = useState<{ kind: "remove"; item: ResourceItem; revision: string } | { kind: "discard" | "template"; run: () => void; template?: string }>();
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLElement | null>(null), request = useRef(0);
   const item = state.items.find(row => row.id === selected);
   const scope = state.scopes.find(row => row.id === scopeId);
@@ -35,6 +35,12 @@ export default function Resources() {
     if (busy) return;
     if (dirty) { trigger.current = document.activeElement as HTMLElement; setModal({ kind: "discard", run }); }
     else run();
+  }
+  function applyTemplate(template: string, value: string) {
+    if (busy) return;
+    if (!config) { setConfig(value); return; }
+    trigger.current = document.activeElement as HTMLElement;
+    setModal({ kind: "template", template, run: () => setConfig(value) });
   }
   function choose(id?: string) { clear(); setSelected(id); setCreating(!id); if (id && id === selected) void load(id); }
   async function load(id: string) {
@@ -120,7 +126,7 @@ export default function Resources() {
               {view === "skill" && <div className="field"><label htmlFor="resource-kind">安装方式</label><Select id="resource-kind" label="安装方式" value={kind} disabled={busy} onChange={value => setKind(value as "skill" | "package")} options={[{ value: "skill", label: "本机目录 / npm 技能" }, { value: "package", label: "pi 资源包" }]} /></div>}
               {view === "mcp" && <div className="field"><label htmlFor="resource-name">MCP 名称</label><input className="input" id="resource-name" value={name} maxLength={128} onChange={e => setName(e.target.value)} placeholder="例如 docs" /><p className="field-help">名称在当前作用范围内唯一；项目同名配置会覆盖全局定义。</p></div>}
               <div className="field"><label htmlFor="resource-source">{view === "mcp" ? "npm 包（可选）" : "资源来源"}</label><input className="input" id="resource-source" value={source} onChange={e => setSource(e.target.value)} placeholder={view === "mcp" ? "@scope/mcp-server@latest" : kind === "package" ? "npm:包名 或 git:仓库地址" : "包含 SKILL.md 的绝对目录，或 npm:包名"} /><p className="field-help">{view === "mcp" ? "已安装的命令或远程服务可留空；填写包名则独立安装依赖。" : kind === "package" ? "整个包统一管理，包内技能、扩展和提示词会一起安装。" : "完整导入技能及附属文件，原始来源保留。"}</p></div>
-              {view === "mcp" && <><div className="field"><label htmlFor="resource-bin">npm 入口名称（可选）</label><input className="input" id="resource-bin" value={bin} onChange={e => setBin(e.target.value)} placeholder="只有一个可执行入口时自动选择" /></div><div className="field"><div className="resources-field-heading"><label htmlFor="resource-config">MCP 连接配置（JSON）</label><span className="resources-templates"><button className="btn btn-ghost" type="button" onClick={() => { if (!config || window.confirm("用远程配置模板替换当前输入？")) setConfig('{\n  "url": "https://example.com/mcp",\n  "enabled": true\n}'); }}>远程模板</button><button className="btn btn-ghost" type="button" onClick={() => { if (!config || window.confirm("用本地配置模板替换当前输入？")) setConfig('{\n  "command": "npx",\n  "args": ["-y", "包名"],\n  "env": {}\n}'); }}>本地模板</button></span></div><textarea className="input resources-json" id="resource-config" value={config} onChange={e => setConfig(e.target.value)} spellCheck={false} placeholder={'{\n  "url": "https://example.com/mcp"\n}'} /><p className="field-help">填写单个服务器对象。保存只登记配置，不表示已连接成功。</p></div></>}
+              {view === "mcp" && <><div className="field"><label htmlFor="resource-bin">npm 入口名称（可选）</label><input className="input" id="resource-bin" value={bin} onChange={e => setBin(e.target.value)} placeholder="只有一个可执行入口时自动选择" /></div><div className="field"><div className="resources-field-heading"><label htmlFor="resource-config">MCP 连接配置（JSON）</label><span className="resources-templates"><button className="btn btn-ghost" type="button" onClick={() => applyTemplate("远程", '{\n  "url": "https://example.com/mcp",\n  "enabled": true\n}')}>远程模板</button><button className="btn btn-ghost" type="button" onClick={() => applyTemplate("本地", '{\n  "command": "npx",\n  "args": ["-y", "包名"],\n  "env": {}\n}')}>本地模板</button></span></div><textarea className="input resources-json" id="resource-config" value={config} onChange={e => setConfig(e.target.value)} spellCheck={false} placeholder={'{\n  "url": "https://example.com/mcp"\n}'} /><p className="field-help">填写单个服务器对象。保存只登记配置，不表示已连接成功。</p></div></>}
             </fieldset><p className="resources-scope-note">{scope?.path ? <>仅写入此项目配置：<code>{scope.path}</code></> : "全局技能由应用管理；全局 MCP 写入共享 pi 配置。"}</p></section> : item ? <>
               <section className="section tools-section resources-content-section"><div className="section-heading"><h3>{item.kind === "mcp" ? "连接配置" : "技能内容"}</h3><button className="btn btn-ghost" disabled={busy || loading} onClick={() => navigate(() => void load(item.id))}>重新读取</button></div>
                 {loading ? <p className="meta" role="status">正在读取实际内容…</p> : !detail ? <p className="meta">配置尚未加载，请重新读取。</p> : <>
@@ -144,9 +150,9 @@ export default function Resources() {
       </div>
     </main>
     <dialog ref={dialog} className="resources-dialog" aria-labelledby="resource-dialog-title" onCancel={() => setModal(undefined)} onClose={() => setModal(undefined)}>
-      <h2 id="resource-dialog-title">{modal?.kind === "remove" ? `卸载 ${modal.item.name}？` : "放弃未保存的修改？"}</h2>
-      {modal?.kind === "remove" ? <><p>作用范围：{scopeName(modal.item.scopeId)}。将执行以下清理：</p><ul>{modal.item.cleanup.map((line, i) => <li key={i}>{line}</li>)}</ul><p>{modal.item.note}</p><p>历史会话内容保留。请先结束本机或终端中使用此资源的任务。</p></> : <p>当前编辑尚未保存。继续操作将放弃这些修改。</p>}
-      <div className="resources-dialog-actions"><button className="btn" autoFocus onClick={() => setModal(undefined)}>{modal?.kind === "remove" ? "取消" : "继续编辑"}</button><button className="btn resources-danger" disabled={busy} onClick={() => { const action = modal; setModal(undefined); if (action?.kind === "remove") void act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision }); else action?.run(); }}>{modal?.kind === "remove" ? "确认卸载" : "放弃修改"}</button></div>
+      <h2 id="resource-dialog-title">{modal?.kind === "remove" ? `卸载 ${modal.item.name}？` : modal?.kind === "template" ? `使用${modal.template}配置模板？` : "放弃未保存的修改？"}</h2>
+      {modal?.kind === "remove" ? <><p>作用范围：{scopeName(modal.item.scopeId)}。将执行以下清理：</p><ul>{modal.item.cleanup.map((line, i) => <li key={i}>{line}</li>)}</ul><p>{modal.item.note}</p><p>历史会话内容保留。请先结束本机或终端中使用此资源的任务。</p></> : <p>{modal?.kind === "template" ? "当前 MCP 连接配置将被模板替换，其他输入保留。" : "当前编辑尚未保存。继续操作将放弃这些修改。"}</p>}
+      <div className="resources-dialog-actions"><button className="btn" autoFocus onClick={() => setModal(undefined)}>{modal?.kind === "remove" ? "取消" : "继续编辑"}</button><button className="btn resources-danger" disabled={busy} onClick={() => { const action = modal; setModal(undefined); if (action?.kind === "remove") void act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision }); else action?.run(); }}>{modal?.kind === "remove" ? "确认卸载" : modal?.kind === "template" ? "替换配置" : "放弃修改"}</button></div>
     </dialog>
   </div>;
 }

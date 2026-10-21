@@ -35,6 +35,6 @@ test("successful submission clears only unchanged content in the captured scope"
   clearSubmittedDraft(owner, submitted);
   assert.equal(getDraft(owner).text, "typed while awaiting response");
   clearSubmittedDraft(owner, draftContent(getDraft(owner)));
-  assert.deepEqual(draftContent(getDraft(owner)), { text: "", attachment: null, attachments: [], images: [] });
+  assert.deepEqual(draftContent(getDraft(owner)), { text: "", attachment: null, attachments: [], images: [], skills: [] });
   assert.equal(getDraft(other).text, "another session");
 });

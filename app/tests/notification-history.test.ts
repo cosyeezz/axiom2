@@ -29,7 +29,7 @@ function fixture() {
   store.db.prepare("INSERT INTO agent_sessions(sessionId,file) VALUES(?,?)").run(session.id, manager.getSessionFile()!);
   const parentRun = { id: randomUUID(), sessionId: session.id, status: "running", selection, startedAt: 1 } as Run;
   let signals = 0;
-  const agents = { store, active: () => true, info: () => ({ run: parentRun }), signal: () => { signals++; return true; } } as unknown as Agents;
+  const agents = { store, reloads: { active: () => false }, active: () => true, info: () => ({ run: parentRun }), signal: () => { signals++; return true; } } as unknown as Agents;
   const delivery = new TaskDelivery(agents, records);
   return { store, scope, manager, delivery, resultId, parentRun, signals: () => signals,
     state: (value: string) => store.db.prepare("UPDATE task_results SET delivery=? WHERE id=?").run(value, resultId),

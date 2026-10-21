@@ -97,7 +97,21 @@ try {
   assert.equal(existsSync(paths[0]), false); assert.ok(existsSync(source));
   await tab("技能").focus(); await page.keyboard.press("ArrowRight"); await waitConfig("全局文档服务"); assert.equal(await tab("MCP").getAttribute("aria-selected"), "true");
   await page.reload(); await tab("MCP").click(); await waitConfig("全局文档服务");
-  assert.ok(!(await config().inputValue()).includes("fixture-secret")); assert.deepEqual(errors, []);
+  assert.ok(!(await config().inputValue()).includes("fixture-secret"));
+  await page.getByRole("button", { name: "添加 MCP", exact: true }).click();
+  await page.getByLabel("MCP 名称", { exact: true }).fill("template-draft");
+  await page.getByRole("button", { name: "远程模板", exact: true }).click();
+  const remoteTemplate = await config().inputValue();
+  assert.equal(JSON.parse(remoteTemplate).url, "https://example.com/mcp");
+  await page.getByRole("button", { name: "本地模板", exact: true }).click();
+  const templateDialog = page.getByRole("dialog", { name: "使用本地配置模板？", exact: true });
+  await templateDialog.getByRole("button", { name: "继续编辑", exact: true }).click();
+  assert.equal(await config().inputValue(), remoteTemplate);
+  await page.getByRole("button", { name: "本地模板", exact: true }).click();
+  await templateDialog.getByRole("button", { name: "替换配置", exact: true }).click();
+  assert.equal(JSON.parse(await config().inputValue()).command, "npx");
+  assert.equal(await page.getByLabel("MCP 名称", { exact: true }).inputValue(), "template-draft");
+  assert.deepEqual(errors, []);
   console.log(`resources UI: scope isolation, real content/save, masked credential retention, dirty guards, invalid JSON recovery, removal/cancel, keyboard tabs and 10 viewport sizes passed; screenshots: ${artifacts}`);
 } finally {
   await browser.close(); await app.close();
