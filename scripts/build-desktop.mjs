@@ -73,7 +73,7 @@ if (!lib.includes(pageLoadMarker)) throw Error("Pake template changed: page load
 lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            axiom_views::watch_control(webview);\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); }');
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
-lib = lib.replace(closeMarker, closeMarker + `
+lib = lib.replace(closeMarker, closeMarker + (testInstance ? '\n            if matches!(_event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) { eprintln!("[Axiom native probe] window {} {:?}", _window.label(), _event); }\n' : '') + `
             // The controller owns the desktop lifetime, never the detached service.
             if _window.label() == "pake" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = _event {

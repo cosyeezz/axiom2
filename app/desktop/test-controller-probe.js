@@ -51,9 +51,11 @@
         && Math.abs(innerHeight * state.scale - state.height) <= 2 ? state : null;
     });
     controllerLayouts.push({ stage, state, viewport: { width: innerWidth, height: innerHeight } });
+    await invoke("progress", { stage, controllerLayouts });
   };
   void (async () => {
     // Exercise the controller before the first workbench exists, including expansion.
+    await invoke("progress", { stage });
     await invoke("resize");
     await controlBounds(900);
     stage = "controller-large";

@@ -7,6 +7,7 @@ static OBSERVATION: Mutex<Option<Value>> = Mutex::new(None);
 
 pub fn loaded(view: &Webview) {
     if std::env::var_os("AXIOM_DESKTOP_PROBE_REPORT").is_none() || std::env::var("AXIOM_DESKTOP_PROBE_MODE").as_deref() == Ok("inspect") { return; }
+    eprintln!("[Axiom native probe] loaded {}", view.label());
     if view.label() == "pake" {
         let mode = if std::env::var("AXIOM_DESKTOP_PROBE_MODE").as_deref() == Ok("reopen") { "reopen" } else { "full" };
         let _ = view.eval(&format!("window.__axiomProbeMode = '{}';\n{}", mode, include_str!("axiom_controller_probe.js")));
@@ -28,6 +29,7 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
     crate::axiom_views::authorize(&view)?;
     let app = view.app_handle();
     let window = app.get_window("pake").ok_or("Window missing")?;
+    if action != "snapshot" { eprintln!("[Axiom native probe] action {}", action); }
     match action.as_str() {
         "snapshot" => {},
         "inspect-workbench" => {
@@ -42,7 +44,7 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
         "unmaximize" => { window.unmaximize().map_err(|e| e.to_string())?; },
         "fullscreen" => { window.set_fullscreen(true).map_err(|e| e.to_string())?; },
         "leave-fullscreen" => { window.set_fullscreen(false).map_err(|e| e.to_string())?; },
-        "checkpoint" | "dock-hidden" | "finished" | "failed" => {},
+        "checkpoint" | "dock-hidden" | "finished" | "failed" | "progress" => {},
         "hide" => { window.hide().map_err(|e| e.to_string())?; },
         #[cfg(target_os = "macos")]
         "menu-home" => {
@@ -79,7 +81,7 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
         "width": size.width, "height": size.height, "scale": window.scale_factor().map_err(|e| e.to_string())?,
         "current": crate::axiom_views::current(), "visible": window.is_visible().map_err(|e| e.to_string())?, "observation": OBSERVATION.lock().map_err(|_| "Probe unavailable")?.clone(),
         "acknowledged": report.with_extension("ack").exists()});
-    if ["checkpoint", "dock-hidden", "finished", "failed"].contains(&action.as_str()) {
+    if ["checkpoint", "dock-hidden", "finished", "failed", "progress"].contains(&action.as_str()) {
         std::fs::write(&report, serde_json::to_vec_pretty(&json!({"phase": action, "snapshot": snapshot, "detail": observation})).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     }
     Ok(snapshot)
