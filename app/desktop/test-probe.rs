@@ -30,6 +30,11 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
     let window = app.get_window("pake").ok_or("Window missing")?;
     match action.as_str() {
         "snapshot" => {},
+        "inspect-workbench" => {
+            if let Some(workbench) = app.get_webview("axiom-workbench") {
+                workbench.eval(r#"window.__TAURI_INTERNALS__.invoke('axiom_test_probe', {action: 'record', observation: {diagnostic: true, url: location.href, readyState: document.readyState, started: !!window.__axiomWorkbenchProbeStarted, sampleReady: !!window.__axiomProbeSample, appPresent: !!document.querySelector('.app'), sessionPresent: !!document.querySelector('[data-session-id="desktop-probe-session"]'), inputPresent: !!document.querySelector('textarea[data-od-id="message-input"]')}})"#).map_err(|e| e.to_string())?;
+            }
+        },
         "sample" => { app.get_webview("axiom-workbench").ok_or("Workbench missing")?.eval("window.__axiomProbeSample()").map_err(|e| e.to_string())?; },
         "resize" => { window.set_size(tauri::LogicalSize::new(900.0, 650.0)).map_err(|e| e.to_string())?; },
         "resize-large" => { window.set_size(tauri::LogicalSize::new(1480.0, 900.0)).map_err(|e| e.to_string())?; },
@@ -64,7 +69,7 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
     for child in window.webviews() {
         let size = child.size().map_err(|e| e.to_string())?;
         let position = child.position().map_err(|e| e.to_string())?;
-        views.push(json!({"label": child.label(), "x": position.x, "y": position.y, "width": size.width, "height": size.height}));
+        views.push(json!({"label": child.label(), "url": child.url().map_err(|e| e.to_string())?.as_str(), "x": position.x, "y": position.y, "width": size.width, "height": size.height}));
     }
     let reported = window.inner_size().map_err(|e| e.to_string())?;
     let size = crate::axiom_views::content_size(&window).map_err(|e| e.to_string())?;

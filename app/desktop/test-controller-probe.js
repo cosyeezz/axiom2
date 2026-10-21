@@ -38,50 +38,62 @@
     check(Math.abs(control.width - state.width) <= 2 && Math.abs(workbench.width - state.width) <= 2, "Views must follow native width");
     check(Math.abs(control.height + workbench.height - state.height) <= 2, "Views must cover native height");
   };
-  const controlBounds = async (expectedWidth) => wait(async () => {
-    const state = await invoke("snapshot");
-    const control = state.views.find((view) => view.label === "pake");
-    return state.current === "control" && control && control.x === 0 && control.y === 0
-      && (!expectedWidth || Math.abs(state.width / state.scale - expectedWidth) <= 2)
-      && Math.abs(control.width - state.width) <= 2 && Math.abs(control.height - state.height) <= 2
-      && Math.abs(innerWidth * state.scale - state.width) <= 2
-      && Math.abs(innerHeight * state.scale - state.height) <= 2;
-  });
+  const controllerLayouts = [];
+  let stage = "initial-controller-layout";
+  const controlBounds = async (expectedWidth) => {
+    const state = await wait(async () => {
+      const state = await invoke("snapshot");
+      const control = state.views.find((view) => view.label === "pake");
+      return state.current === "control" && control && control.x === 0 && control.y === 0
+        && (!expectedWidth || Math.abs(state.width / state.scale - expectedWidth) <= 2)
+        && Math.abs(control.width - state.width) <= 2 && Math.abs(control.height - state.height) <= 2
+        && Math.abs(innerWidth * state.scale - state.width) <= 2
+        && Math.abs(innerHeight * state.scale - state.height) <= 2 ? state : null;
+    });
+    controllerLayouts.push({ stage, state, viewport: { width: innerWidth, height: innerHeight } });
+  };
   void (async () => {
     // Exercise the controller before the first workbench exists, including expansion.
     await invoke("resize");
     await controlBounds(900);
+    stage = "controller-large";
     await invoke("resize-large");
     await controlBounds(1480);
+    stage = "controller-maximized";
     await invoke("maximize");
     await wait(async () => (await invoke("snapshot")).maximized);
     await controlBounds();
     await invoke("unmaximize");
     await wait(async () => !(await invoke("snapshot")).maximized);
     if (/Mac/.test(navigator.platform)) {
+      stage = "controller-fullscreen";
       await invoke("fullscreen");
       await wait(async () => (await invoke("snapshot")).fullscreen);
       await new Promise((done) => setTimeout(done, 1000));
       await controlBounds();
+      stage = "controller-leave-fullscreen";
       await invoke("leave-fullscreen");
       await wait(async () => !(await invoke("snapshot")).fullscreen);
       await new Promise((done) => setTimeout(done, 1000));
       await controlBounds();
     }
+    stage = "controller-restored";
     await invoke("resize");
     await controlBounds(900);
+    stage = "service-preparation";
     await preparation();
     if (window.__axiomProbeMode === "reopen") {
       await heading("服务运行中");
       const state = await invoke("snapshot");
       check(state.current === "control" && state.views.length === 1 && state.windows.length === 1, "Reopening must restore only the controller");
-      await invoke("finished", { checks: ["reopen-running-service-without-starting-another"] });
+      await invoke("finished", { controllerLayouts, checks: ["reopen-running-service-without-starting-another"] });
       void invoke("close"); return;
     }
     await heading("服务已停止");
     (await button("启动后台服务")).click();
     await heading("服务运行中");
     (await button("打开工作台")).click();
+    stage = "workbench-initial-observation";
     const before = await observation((value) => value.sample === 1);
     check(before.denied.length === 4 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
     check(before.titleIconCount === 0, "The old title connection icon must be removed");
@@ -101,8 +113,9 @@
     headerStatus.dataset.state = "connected";
     const header = { bridgeStates, colors, titleIconCount: before.titleIconCount };
     check(before.scroll > 0 && before.draft === "Mac 单窗口切换保留草稿", "Real composer/scroll fixture missing");
+    stage = "workbench-lifecycle";
     bounds(await invoke("snapshot"));
-    await invoke("checkpoint");
+    await invoke("checkpoint", { controllerLayouts });
     await wait(async () => (await invoke("snapshot")).acknowledged);
     (await button("服务与更新")).click();
     await heading("服务运行中");
@@ -148,7 +161,12 @@
     (await button("打开工作台")).click();
     await observation((value) => value.token !== before.token);
     bounds(await invoke("snapshot"));
-    await invoke("finished", { header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
+    await invoke("finished", { controllerLayouts, header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
     void invoke("close");
-  })().catch((error) => { console.error(error); void invoke("failed", { error: String(error), stack: error.stack }); });
+  })().catch(async (error) => {
+    console.error(error);
+    await invoke("inspect-workbench").catch(() => {});
+    await new Promise((done) => setTimeout(done, 300));
+    await invoke("failed", { error: String(error), stack: error.stack, stage, controllerLayouts });
+  });
 })();
