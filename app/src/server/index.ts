@@ -47,6 +47,7 @@ export async function startServer(
   options: { root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
+  console.log('[startup-probe] store');
   const store = new Store(options.root ?? dataRoot());
   const costs = new Costs(store);
   const drafts = new SessionDrafts(store);
@@ -67,7 +68,9 @@ export async function startServer(
     origin = "";
   const models = new ModelService(store.root);
   const preferences = new Preferences(store);
+  console.log('[startup-probe] configuration begin');
   let config: Configuration = await configuration(store.root);
+  console.log('[startup-probe] configuration done');
   let configurationRead = 0,
     shuttingDown = false;
   const inFlight = new Set<Promise<void>>();
@@ -818,7 +821,9 @@ export async function startServer(
   try {
     // Preparation never opens a window; keep compilation/CLR/COM startup out of the first click.
     // A missing desktop component must not prevent the rest of the service from starting.
-    await Promise.all([openDialog.prepare().catch(() => {}), fileManager.prepare().catch(() => {})]);
+    console.log('[startup-probe] native prepare begin');
+    await Promise.all([openDialog.prepare().then(() => console.log('[startup-probe] dialog prepared')).catch(error => console.log('[startup-probe] dialog failed', error)), fileManager.prepare().then(() => console.log('[startup-probe] explorer prepared')).catch(error => console.log('[startup-probe] explorer failed', error))]);
+    console.log('[startup-probe] native prepare done');
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
@@ -833,7 +838,9 @@ export async function startServer(
   }
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   remoteAccess = new RemoteAccess(origin);
+  console.log('[startup-probe] remote initialize begin');
   await remoteAccess.initialize();
+  console.log('[startup-probe] remote initialize done');
   return {
     origin,
     accessUrl: `${origin}/`,

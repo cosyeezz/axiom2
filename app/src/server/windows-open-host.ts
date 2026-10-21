@@ -91,7 +91,10 @@ export class WindowsOpenHost {
   }
 
   private warm(executable: string) {
+    console.log('[native-probe] warm begin', this.mode);
     const child = this.launch(executable);
+    child.once('exit', (code, signal) => console.log('[native-probe] warm exit', this.mode, child.pid, {code, signal}));
+    child.once('close', (code, signal) => console.log('[native-probe] warm close', this.mode, child.pid, {code, signal}));
     let warmed = false;
     const terminate = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
     process.once("exit", terminate);
@@ -135,7 +138,7 @@ export class WindowsOpenHost {
         errors(chunk); output += chunk.toString("utf8");
         if (failure || !output.includes("\n")) return;
         if (output !== "ready\r\n" && output !== "ready\n") { fail(Error("Invalid native host readiness")); return; }
-        warmed = settled = true; cleanup(); resolve();
+        warmed = settled = true; cleanup(); console.log('[native-probe] ready', this.mode, child.pid); resolve();
       };
       child.stdout!.on("data", collect); child.stderr!.on("data", errors);
       child.on("error", (error) => { if (!settled) fail(error); });
@@ -176,10 +179,12 @@ export class WindowsOpenHost {
         const child = spawn(compiler, ["/nologo", "/target:winexe", "/optimize+", "/utf8output", ...references, `/main:${this.mode === "explorer" ? "AxiomExplorer" : "AxiomOpen"}.Host`, `/out:${executable}`, source], {
           windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"],
         });
+        console.log('[native-probe] compiler started', this.mode, child.pid);
+        child.once('exit', (code, signal) => console.log('[native-probe] compiler exit', this.mode, child.pid, {code, signal, stdoutDestroyed: child.stdout.destroyed, stderrDestroyed: child.stderr.destroyed}));
         let failure: unknown, bytes = 0;
         const terminate = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
         const abort = () => { failure = signal.reason; terminate(); };
-        const timer = setTimeout(() => { failure = Error("Native host compilation timed out"); terminate(); }, 30_000);
+        const timer = setTimeout(() => { console.log('[native-probe] compiler timeout', this.mode, child.pid, {exitCode:child.exitCode, signalCode:child.signalCode}); failure = Error("Native host compilation timed out"); terminate(); }, 30_000);
         timer.unref();
         const collect = (chunk: Buffer) => {
           bytes += chunk.length;
@@ -191,6 +196,7 @@ export class WindowsOpenHost {
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
         child.once("close", (code) => {
+          console.log('[native-probe] compiler close', this.mode, child.pid, {code});
           clearTimeout(timer);
           process.removeListener("exit", terminate);
           signal.removeEventListener("abort", abort);

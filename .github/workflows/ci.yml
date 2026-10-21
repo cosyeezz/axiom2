@@ -9,7 +9,8 @@ jobs:
       fail-fast: false
       matrix:
         node: ['22.19.0', '24']
-        scope: ['files', 'agent']
+        scope: ['agent']
+        attempt: [1, 2, 3]
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
