@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { Store } from "../src/server/storage.js";
 import { Capabilities } from "../src/server/capabilities.js";
@@ -61,7 +61,7 @@ test("global per-resource preferences synchronize, preserve locked snapshots, pe
     const files = new SkillFiles(caps, async directory => { revealed.push(directory); }, async path => { opened.push(path); });
     const call = (op: string, id: string, workspaceId = scope.workspaceId) => files.command({ op, requestId: randomUUID(), ...scope, workspaceId, params: { id } }, new AbortController().signal);
     await call("capabilities.skill.open", skill.id); await call("capabilities.skill.reveal", skill.id);
-    assert.deepEqual(opened, [realpathSync(file)]); assert.deepEqual(revealed, [realpathSync(join(root, "pi", "skills", "shared"))]);
+    assert.deepEqual(opened, [realpathSync.native(file)]); assert.deepEqual(revealed, [realpathSync.native(join(root, "pi", "skills", "shared"))]);
     await assert.rejects(call("capabilities.skill.open", "/etc/passwd"), { code: "CAPABILITY_UNAVAILABLE" });
     await assert.rejects(call("capabilities.skill.open", skill.id, "foreign"));
     rmSync(file);

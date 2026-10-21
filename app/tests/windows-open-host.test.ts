@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import childProcess, { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { once } from "node:events";
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -12,6 +13,66 @@ import { nativeOpenDialog, OpenDialog, OpenDialogError, type PickPaths } from ".
 const windows = { skip: process.platform !== "win32", timeout: 15_000 };
 function closed(child: ChildProcess) {
   return new Promise<number | null>((resolve) => child.once("close", resolve));
+}
+
+for (const stop of ["complete", "cancel-running", "cancel-exited", "shutdown-running"] as const) {
+  test(`compiler ${stop} releases inherited pipes after physical exit and waits for close`, windows, async (t) => {
+    const originalSpawn = childProcess.spawn, controller = new AbortController();
+    let compiler: ChildProcess | undefined, holderPid: number | undefined, executable: string | undefined;
+    let holderReady!: () => void;
+    const holderStarted = new Promise<void>(resolve => { holderReady = resolve; });
+    const reason = Error("cancel compiler with retained pipes");
+    t.mock.method(childProcess, "spawn", (file: string, args: string[], options: any) => {
+      if (!/[\\/]csc\.exe$/i.test(file)) return originalSpawn(file, args, options);
+      executable = args.find(arg => arg.startsWith("/out:"))!.slice(5);
+      const child = originalSpawn(process.execPath, ["-e", String.raw`
+        const { spawn } = require('node:child_process');
+        require('node:fs').writeFileSync(process.argv[1], 'fixture executable');
+        const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'],
+          { stdio: ['ignore', 1, 2], windowsHide: true, detached: true });
+        holder.once('spawn', () => process.send({ holder: holder.pid }, () => {
+          if (process.argv[2] === 'exit') process.exit(0);
+          else setInterval(() => {}, 1000);
+        }));
+      `, executable, stop === "complete" || stop === "cancel-exited" ? "exit" : "wait"],
+      { stdio: ["ignore", "pipe", "pipe", "ipc"], windowsHide: true });
+      compiler = child;
+      child.on("message", message => { holderPid = (message as { holder: number }).holder; holderReady(); });
+      if (stop === "cancel-exited") child.once("exit", () => controller.abort(reason));
+      return child;
+    });
+    syncBuiltinESMExports();
+    const host = new WindowsOpenHost("dialog", () => originalSpawn(process.execPath,
+      ["-e", "process.stdout.write('ready\\n'); process.stdin.resume(); process.stdin.once('end', () => process.exit(0));"],
+      { stdio: ["pipe", "pipe", "pipe"], windowsHide: true }));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const pending = host.take(false, controller.signal);
+      const expected = stop === "complete" ? pending : assert.rejects(pending,
+        stop === "shutdown-running" ? { name: "AbortError" } : { message: reason.message });
+      const exercise = (async () => {
+        await holderStarted;
+        if (stop === "cancel-running") controller.abort(reason);
+        if (stop === "shutdown-running") await host.close();
+        await expected;
+      })();
+      await Promise.race([exercise, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(Error("compiler close is waiting for inherited output pipes")), 5000);
+      })]);
+      assert.ok(compiler && (compiler.exitCode !== null || compiler.signalCode !== null));
+      process.kill(holderPid!, 0);
+      assert.equal(compiler.stdout!.destroyed, true);
+      assert.equal(compiler.stderr!.destroyed, true);
+      await host.close();
+      assert.equal(existsSync(executable!), false);
+    } finally {
+      clearTimeout(timer);
+      try {
+        if (holderPid) { try { process.kill(holderPid, "SIGKILL"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; } }
+        await host.close();
+      } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    }
+  });
 }
 
 for (const stop of ["shutdown", "cancel", "already-exited"] as const) {

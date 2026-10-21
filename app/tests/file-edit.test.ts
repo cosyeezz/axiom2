@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "./temporary.js";
 import { Store } from "../src/server/storage.js";
 import { DocumentFiles } from "../src/server/document-files.js";
+import { saveTextFile, textRevision } from "../src/server/file-edit.js";
 import type { FilePreview, FileSaveResult } from "../src/shared/file-preview.js";
 import type { ChatMessage } from "../src/shared/agent.js";
 import { AppError, type Session, type Workspace } from "../src/shared/protocol.js";
@@ -28,11 +29,12 @@ test("shared file editing preserves UTF8 BOM/CRLF and permissions, rejects stale
   const f = fixture(), path = join(f.project, "note.md"), ref = { messageId: "reply", href: "note.md" };
   try {
     writeFileSync(path, "\ufeff# Original\r\nline\r\n", { mode: 0o640 });
+    const originalMode = statSync(path).mode & 0o777;
     const before = await f.call("files.document", ref) as FilePreview;
     assert.equal(before.editable, true); assert.equal(before.revision?.length, 64);
     const saved = await f.call("files.save", { ...ref, revision: before.revision, text: "# Saved\nline\n" }) as FileSaveResult;
     assert.equal(readFileSync(path, "utf8"), "\ufeff# Saved\r\nline\r\n");
-    assert.equal(statSync(path).mode & 0o777, 0o640); assert.notEqual(saved.revision, before.revision);
+    assert.equal(statSync(path).mode & 0o777, originalMode); assert.notEqual(saved.revision, before.revision);
     await assert.rejects(f.call("files.save", { ...ref, revision: before.revision, text: "stale" }), { code: "REVISION_CONFLICT" });
     const other = f.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: f.scope.workspaceId }) as Session;
     await assert.rejects(f.call("files.save", { ...ref, revision: saved.revision, text: "foreign" }, { sessionId: other.id }), { code: "FILE_PREVIEW_FORBIDDEN" });
@@ -57,6 +59,26 @@ test("shared file editing preserves UTF8 BOM/CRLF and permissions, rejects stale
     const receipts = JSON.stringify(f.store.db.prepare("SELECT response FROM external_requests").all());
     assert.ok(!receipts.includes("# Saved"), "saved contents must not be persisted in operation receipts");
   } finally { f.close(); }
+});
+
+test("file saving rechecks external changes and cancellation before replacing the original", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-file-edit-recheck-")), path = join(root, "note.md");
+  try {
+    const original = Buffer.from("original"), external = "external change preserved";
+    writeFileSync(path, original);
+    let checks = 0;
+    await assert.rejects(saveTextFile(path, textRevision(original), "edited", false, async () => {
+      if (++checks === 2) writeFileSync(path, external);
+    }, new AbortController().signal), { code: "REVISION_CONFLICT" });
+    assert.equal(readFileSync(path, "utf8"), external);
+    assert.deepEqual(readdirSync(root), ["note.md"]);
+    const controller = new AbortController(); checks = 0;
+    await assert.rejects(saveTextFile(path, textRevision(Buffer.from(external)), "edited", false, async () => {
+      if (++checks === 2) controller.abort();
+    }, controller.signal), { name: "AbortError" });
+    assert.equal(readFileSync(path, "utf8"), external);
+    assert.deepEqual(readdirSync(root), ["note.md"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("skill previews use discovered identity and reject invalid or oversized edits without changing the file", async () => {

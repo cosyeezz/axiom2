@@ -177,7 +177,13 @@ export class WindowsOpenHost {
           windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"],
         });
         let failure: unknown, bytes = 0;
-        const terminate = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
+        const terminate = () => {
+          if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+          else this.closeExitedPipes(child);
+        };
+        // Compilation returns an executable and exit status, not a stdout protocol.
+        // Inherited pipes must not keep a physically exited compiler pending forever.
+        child.once("exit", () => this.closeExitedPipes(child));
         const abort = () => { failure = signal.reason; terminate(); };
         const timer = setTimeout(() => { failure = Error("Native host compilation timed out"); terminate(); }, 30_000);
         timer.unref();
