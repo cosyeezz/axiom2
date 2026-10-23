@@ -19,7 +19,8 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
         node: ['22.19.0', '24']
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Node 22 on Windows was still advancing through test 822 at the old 30-minute limit.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 30 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
