@@ -58,7 +58,7 @@ test("fallback is Unicode bounded, stable after first run, and child sessions ne
     f.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'completed','{}',?)").run(randomUUID(), a.sessionId, Date.now());
     f.store.requestTitle(a, "second message");
     assert.equal(f.store.session(a.workspaceId, a.sessionId).title, "😀".repeat(60));
-    f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,'anchor','task','','completed','{}',?)").run(randomUUID(), a.workspaceId, a.sessionId, b.sessionId, Date.now());
+    f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,'anchor','task','completed','{}',?)").run(randomUUID(), a.workspaceId, a.sessionId, b.sessionId, Date.now());
     assert.equal(f.store.requestTitle(b, "child input"), false);
     assert.equal(f.store.generatedTitle(b, "子任务标题"), false);
     assert.equal(f.store.session(b.workspaceId, b.sessionId).title, "新对话");

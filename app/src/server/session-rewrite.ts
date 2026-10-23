@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import { AppError, attachmentDisplay, attachmentPrompt, attachmentsInput, object, text, type Draft } from "../shared/protocol.js";
-import { taskBudgetIntro } from "./task-budget.js";
 import type { EditableMessage, RewriteTarget } from "../shared/rewrite.js";
 import { chatMessage, transcriptInput, transcriptImage } from "./transcript.js";
 import { persistedSkillInput } from "../shared/skills.js";
@@ -22,7 +21,9 @@ export function editableMessage(manager: SessionManager, messageId: string): Edi
   const { message, id, entryId } = transcriptInput(manager, messageId);
   const blocks = typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
   const skillInput = persistedSkillInput(message);
-  let raw = skillInput?.text ?? blocks.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
+  const taskInputText = message.role === "custom" && message.customType === "axiom-append" && typeof message.details?.taskInputText === "string"
+    ? message.details.taskInputText : undefined;
+  let raw = skillInput?.text ?? taskInputText ?? blocks.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
   const parentId = manager.getEntry(entryId)?.parentId;
   const parent = parentId ? manager.getEntry(parentId) : undefined;
   // Older native task inputs included the host budget in the same text block.
@@ -31,7 +32,9 @@ export function editableMessage(manager: SessionManager, messageId: string): Edi
   if (message.axiomRunId && message.axiomInputIds && !(parent?.type === "custom_message" && parent.customType === "axiom-budget")) {
     const budget = /^本次执行预算：(\d+)ms；截止时间：([^；]+)；此前任务链累计执行：(\d+)ms。/.exec(raw);
     if (budget && Number.isFinite(Date.parse(budget[2]))) {
-      const prefix = taskBudgetIntro({ workMs: Number(budget[1]), deadlineAt: Date.parse(budget[2]), elapsedMs: Number(budget[3]) }) + "\n\n";
+      // Freeze the historical format: current budget copy must not change
+      // which already-persisted input bytes are recognized as host metadata.
+      const prefix = `本次执行预算：${Number(budget[1])}ms；截止时间：${new Date(budget[2]).toISOString()}；此前任务链累计执行：${Number(budget[3])}ms。有效追加会刷新工作时限。服务端会在剩余总预算的 20%（最多提前 60 秒）时提醒；工作到期进入无工具总结，总结最多 3 分钟，超时强制停止。\n\n`;
       if (raw.startsWith(prefix)) raw = raw.slice(prefix.length);
     }
   }

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { test } from "node:test";
-import { memorySummaryIndex, digest, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, replaceMemoryFile, textFile } from "../src/server/memory-files.js";
+import { memoryTitleIndex, digest, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, replaceMemoryFile, textFile } from "../src/server/memory-files.js";
 
 test("memory files retain a UTF-8 BOM while revisions are derived from the raw bytes", () => {
   const directory = mkdtempSync(join(tmpdir(), "axiom-memory-files-"));
@@ -57,23 +57,14 @@ test("page evidence only completes after a contiguous same-revision read from of
   assert.equal(evidence.record("doc", { revision: "b", offset: 3, content: "DEF", nextOffset: null }), true);
 });
 
-test("summary index preserves every complete short summary and exact source association", () => {
-  const candidates = Array.from({ length: 100 }, (_, index) => ({
-    sessionId: `session-${index}`, revision: `revision-${index}`,
-    summary: `${'含有不确定性的摘要 "😀" '.repeat(10)}${index}`,
+test("title index exposes all titles and identities without loading summaries", () => {
+  const candidates = Array.from({ length: 500 }, (_, index) => ({
+    sessionId: `session-${index}`, title: `工作标题 ${index}`,
+    summary: `只应按需读取的摘要 ${index}`, excerpt: `原文 ${index}`,
   }));
-  const prompt = memorySummaryIndex(candidates, 103);
-  assert.ok(prompt.length > 16000, "large complete indexes must not be truncated to the old projection budget");
-  const value = JSON.parse(prompt);
-  assert.equal(value.totalSources, 103); assert.equal(value.summaryCount, 100); assert.equal(value.pendingSources, 3);
-  assert.deepEqual(value.sources, candidates.map((source) => ({ ...source, path: "MEMORY.md" })));
-  assert.match(value.coverage, /尚未整理或失效的来源未包含在摘要中/);
-});
-
-test("summary index counts Unicode code points including whitespace and punctuation", () => {
-  const source = { sessionId: "session", revision: "revision", summary: "😀".repeat(200) };
-  assert.equal(JSON.parse(memorySummaryIndex([source], 1)).sources[0].summary, source.summary);
-  for (const summary of ["", "  ", "字".repeat(201), `${"😀".repeat(200)}。`, `${"字".repeat(200)} `]) {
-    assert.throws(() => memorySummaryIndex([{ ...source, summary }], 1), { code: "MEMORY_LIMIT" });
-  }
+  const prompt = memoryTitleIndex(candidates);
+  assert.ok(prompt.length > 16000, "all titles remain available even when the old prompt budget is exceeded");
+  assert.deepEqual(JSON.parse(prompt), candidates.map(({ sessionId, title }) => ({ sessionId, title })));
+  assert.ok(!prompt.includes("只应按需读取") && !prompt.includes("原文"));
+  assert.deepEqual(JSON.parse(memoryTitleIndex([])), []);
 });

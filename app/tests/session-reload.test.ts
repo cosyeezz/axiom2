@@ -74,23 +74,27 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
         params: { revision: catalog.preferencesRevision, catalogRevision: catalog.revision, kind: "skills", id: item.id, checked } });
       return item.id;
     };
-    const toggleMcp = async (checked: boolean) => {
+    const batch = async (target: "session" | "defaults", skills: string[], mcp: string[]) => {
       const catalog = await agents.capabilities.get(scope);
-      await agents.capabilities.command({ requestId: randomUUID(), op: "capabilities.defaults.save", ...scope,
-        params: { revision: catalog.preferencesRevision, catalogRevision: catalog.revision, kind: "mcp", id: "reload-mcp", checked } });
+      return { capabilities: { target, revision: target === "session" ? catalog.state.revision : catalog.preferencesRevision,
+        catalogRevision: catalog.revision, skills, mcp } };
     };
     const betaId = await toggleSkill("beta", false);
     await command("prompt", { text: "Run both checkpoint tools and finish." });
     await wait(() => existsSync(entered), "first tool never started");
     const runId = agents.info(scope).run!.id;
     const requestId = randomUUID();
-    await toggleSkill("beta", true); await toggleMcp(true);
-    assert.ok(!agents.capabilities.state(scope).selection?.skills?.includes(betaId), "checkbox stays pending before reload");
-    await command("agent.reload", {}, requestId);
+    const beforeBatch = agents.capabilities.state(scope), defaultsBeforeBatch = agents.capabilities.preferences();
+    const selection = await batch("session", (await agents.capabilities.get(scope)).skills.map(item => item.id), ["reload-mcp"]);
+    assert.ok(!beforeBatch.selection?.skills?.includes(betaId));
+    await command("agent.reload", selection, requestId);
     assert.equal(agents.reloads.state(scope)?.stage, "waiting");
-    await command("agent.reload", {}, requestId);
+    await command("agent.reload", selection, requestId);
+    await assert.rejects(command("agent.reload", selection), { code: "RELOAD_BUSY" });
     await command("agent.reload");
     assert.equal(agents.reloads.state(scope)?.id, requestId, "duplicates coalesce while running");
+    assert.deepEqual(agents.capabilities.state(scope), beforeBatch);
+    assert.deepEqual(agents.capabilities.preferences(), defaultsBeforeBatch);
     assert.equal(requests.length, 1);
     assert.equal(existsSync(finished), false, "reload must not interrupt a tool");
     resources("V2"); writeFileSync(release, "go");
@@ -107,8 +111,11 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     assert.match(JSON.stringify(requests[1].messages), /BetaReloadMarker/);
     assert.ok(agents.capabilities.state(scope).selection?.skills?.includes(betaId));
     assert.deepEqual(agents.capabilities.state(scope).selection?.mcp, ["reload-mcp"]);
+    assert.deepEqual(agents.capabilities.preferences(), defaultsBeforeBatch, "session batch does not save global defaults");
     await wait(() => existsSync(mcpLog) && readFileSync(mcpLog, "utf8").includes("listed"), "first MCP was not connected by native reload");
     assert.match(JSON.stringify(requests[1].tools), /ToolMarkerV2/);
+    assert.match(JSON.stringify(requests[1].tools), /mcp__reload_mcp__reload_probe/);
+    assert.ok(state.after!.settings.some(item => item.name === "MCP · reload-mcp"));
     assert.doesNotMatch(JSON.stringify(requests[1].messages), /axiom-resume/);
     assert.deepEqual(readFileSync(finished, "utf8").trim().split("\n").sort(), ["call-0", "call-1"]);
     assert.deepEqual(requests[1].messages.filter((m: any) => m.role === "user"), requests[0].messages.filter((m: any) => m.role === "user"), "no invented user turn");
@@ -117,16 +124,20 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     assert.ok(resourceChanges(state.before!.settings, state.after!.settings).changed.includes("quietStartup"));
     const count = store.db.prepare("SELECT COUNT(*) AS count FROM runs").get()!.count;
     resources("V3");
-    for (const item of (await agents.capabilities.get(scope)).skills.filter(item => item.defaultSelected)) await toggleSkill(item.name, false);
-    await toggleMcp(false);
-    await command("agent.reload");
+    await command("agent.reload", await batch("defaults", [], []));
     await wait(() => !agents.reloads.active(scope), "cold reload did not settle");
     assert.equal(agents.reloads.state(scope)?.status, "completed", JSON.stringify(agents.reloads.state(scope)));
     assert.equal(requests.length, 2); assert.equal(store.db.prepare("SELECT COUNT(*) AS count FROM runs").get()!.count, count);
     assert.match(agents.info(scope).environment!.systemPrompt!, /InstructionMarkerV3/);
-    assert.deepEqual(agents.info(scope).environment!.skills, [], "explicit empty selection removes every skill");
+    assert.ok(["demo", "beta"].every(name => agents.info(scope).environment!.skills!.includes(name)), "empty automatic selection keeps manual skills loaded");
+    assert.ok(resourceChanges(agents.reloads.state(scope)!.before!.skills, agents.reloads.state(scope)!.after!.skills).changed.some(name => name.includes("beta")), "selection-only changes are reported");
+    assert.deepEqual(resourceChanges(agents.reloads.state(scope)!.before!.skills, agents.reloads.state(scope)!.after!.skills).removed, []);
     assert.deepEqual(agents.capabilities.state(scope).selection?.skills, []);
     assert.deepEqual(agents.capabilities.state(scope).selection?.mcp, []);
+    const savedDefaults = await agents.capabilities.get(scope);
+    assert.ok(savedDefaults.skills.every(item => !item.defaultSelected));
+    assert.ok(savedDefaults.mcp.every(item => !item.defaultSelected));
+    assert.equal(savedDefaults.preferencesRevision, defaultsBeforeBatch.revision + 1, "one atomic default save for the batch");
     assert.ok(!agents.info(scope).environment!.tools?.some(name => name.includes("reload_probe")));
     await command("prompt", { text: "One more response." });
     await wait(() => !agents.active(scope), "prompt after cold reload did not settle");
@@ -140,20 +151,28 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     // A hanging reload can be stopped without waiting for its 120s deadline.
     const blocked = join(root, "reload-blocked");
     const appliedBeforeFailure = agents.capabilities.state(scope);
-    await toggleSkill("beta", true);
+    const resourcesBeforeFailure = store.db.prepare("SELECT resources FROM session_reloads WHERE sessionId=?").get(session.id)!.resources;
+    const defaultsBeforeFailure = agents.capabilities.preferences();
     writeFileSync(join(cwd, ".pi/extensions/reload-fixture.ts"), `import { writeFileSync } from 'node:fs'; export default function(pi) { pi.on('session_start', async e => { if(e.reason==='reload') { writeFileSync(${JSON.stringify(blocked)}, 'blocked'); await new Promise(()=>{}); } }); }`);
-    await command("agent.reload");
+    await command("agent.reload", await batch("defaults", [betaId], ["reload-mcp"]));
     await wait(() => existsSync(blocked), "reload hook not entered");
     const stopping = Date.now(); await agents.stop(scope);
     assert.ok(Date.now() - stopping < 5000, "stop must cancel the cold lease promptly");
     assert.equal(agents.reloads.state(scope)?.status, "failed");
     assert.deepEqual(agents.capabilities.state(scope), appliedBeforeFailure, "failed reload cannot publish desired members as applied");
+    assert.deepEqual(agents.capabilities.preferences(), defaultsBeforeFailure, "failed reload does not save global defaults");
+    assert.equal(store.db.prepare("SELECT resources FROM session_reloads WHERE sessionId=?").get(session.id)!.resources, resourcesBeforeFailure, "failed reload cannot replace the successful resource baseline");
     assert.equal(agents.reloads.active(scope), false); assert.equal(requests.length, 3);
     const child = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
-    store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,'reload child','research','completed','{}',?)")
+    store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,?,'reload child','completed','{}',?)")
       .run(randomUUID(), workspace.id, session.id, child.id, "reload-fixture", Date.now());
     store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(child.id, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     const childScope = { workspaceId: workspace.id, sessionId: child.id };
+    for (const target of ["session", "defaults"] as const) await assert.rejects(agents.command({ requestId: randomUUID(), op: "agent.reload", ...childScope,
+      params: await batch(target, [], []) }), { code: "CAPABILITIES_READONLY" });
+    for (const capabilities of [{ ...(await batch("session", [], [])).capabilities, extra: true },
+      { ...(await batch("session", [], [])).capabilities, skills: [betaId, betaId] }])
+      await assert.rejects(command("agent.reload", { capabilities }), { code: "INVALID_INPUT" });
     await agents.command({ requestId: randomUUID(), op: "agent.reload", ...childScope, params: {} });
     await wait(() => !agents.reloads.active(childScope), "child cold reload did not settle");
     assert.equal(agents.reloads.state(childScope)?.status, "completed", JSON.stringify(agents.reloads.state(childScope)));

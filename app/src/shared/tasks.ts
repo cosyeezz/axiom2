@@ -51,6 +51,8 @@ export interface Task {
   sessionId: string;
   anchor: string;
   title?: string | null;
+  context?: string | null;
+  initialInputId?: string | null;
   description: string;
   status: TaskStatus;
   runId: string | null;
@@ -80,10 +82,15 @@ export interface TaskResult {
   budgetSummary?: boolean;
   stop?: TaskStop;
   elapsedMs?: number;
-  totalLength?: number;
-  offset?: number;
-  truncated?: boolean;
-  nextOffset?: number | null;
+}
+/** Remove legacy generated boilerplate without changing the recorded report or outcome. */
+export function cleanTaskResult(result: TaskResult): TaskResult {
+  const legacyToolLog = /^(?:未记录工具返回|[^；\n]+：(?:失败|已记录返回)(?:；[^；\n]+：(?:失败|已记录返回))*)。文件及外部副作用未回滚。$/;
+  return {
+    ...result,
+    unfinished: result.unfinished.filter((item) => item !== "模型报告不等于全部验收通过；请核对交付中的未验证项。"),
+    sideEffects: legacyToolLog.test(result.sideEffects) ? "" : result.sideEffects,
+  };
 }
 export interface TaskList {
   tasks: Task[];

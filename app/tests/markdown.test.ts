@@ -6,6 +6,8 @@ import { Markdown } from "../src/client/chat/Markdown.js";
 
 const render = (text: string) => renderToStaticMarkup(createElement(Markdown, { text }));
 const strong = (text: string) => `<strong><span>${text}</span></strong>`;
+// Compare the literal code independently of its controls and wrapping spans.
+const codeText = (html: string) => html.match(/<code\b[^>]*>([\s\S]*?)<\/code>/)?.[1].replace(/<[^>]*>/g, "");
 
 test("single input newlines stay visible alongside Markdown formatting", () => {
   for (const newline of ["\n", "\r\n"]) {
@@ -17,7 +19,7 @@ test("single input newlines stay visible alongside Markdown formatting", () => {
     assert.match(render(source), /第一行<\/span><br\/><span>第二行/);
   }
   const code = render("```text\n第一行\n第二行\n```");
-  assert.ok(code.includes("<pre><code>第一行\n第二行</code></pre>"));
+  assert.match(code, /<pre\b[^>]*><code>第一行\n第二行<\/code><\/pre>/);
   assert.ok(!code.includes("<br"));
   const compact = renderToStaticMarkup(createElement(Markdown, { text: "第一行\n第二行", compact: true }));
   assert.ok(!compact.includes("<br"), "collapsed summaries stay on one line");
@@ -39,7 +41,8 @@ test("Chinese bold works inside lists, quotes, tables, links and nested emphasis
     assert.ok(render(text).includes(strong("验证：")), text);
   }
   const html = render("**检查 *嵌套* 和 `code`：**通过");
-  assert.match(html, /<strong>.*<em>.*嵌套.*<\/em>.*<code>code<\/code>.*：.*<\/strong>/);
+  assert.match(html, /<strong>.*<em>.*嵌套.*<\/em>.*<code>.*<\/code>.*：.*<\/strong>/);
+  assert.equal(codeText(html), "code");
 });
 
 test("Chinese quoted bold renders next to prose on both sides", () => {
@@ -53,8 +56,9 @@ test("Chinese quoted bold renders next to prose on both sides", () => {
   }
   assert.equal(render("先**“检查”**再**“删除”**完成"),
     `<p><span>先</span>${strong("“检查”")}<span>再</span>${strong("“删除”")}<span>完成</span></p>`);
-  assert.match(render("改为**“检查 *嵌套* 和 `code`”**继续"),
-    /<strong>.*“检查.*<em>.*嵌套.*<\/em>.*<code>code<\/code>.*”.*<\/strong>/);
+  const nested = render("改为**“检查 *嵌套* 和 `code`”**继续");
+  assert.match(nested, /<strong>.*“检查.*<em>.*嵌套.*<\/em>.*<code>.*<\/code>.*”.*<\/strong>/);
+  assert.equal(codeText(nested), "code");
   for (const text of ["- 改为**“完成”**继续", "> 改为**“完成”**继续", "| 结果 |\n| --- |\n| 改为**“完成”**继续 |", "[改为**“完成”**继续](https://example.com)"]) {
     assert.ok(render(text).includes(strong("“完成”")), text);
   }
@@ -73,9 +77,12 @@ test("normal Markdown emphasis and ASCII punctuation retain their rules", () => 
 
 test("code, escaped delimiters and unmatched streaming prefixes stay literal", () => {
   const source = "**验证：**43";
-  assert.equal(render(`\`${source}\``), `<p><code>${source}</code></p>`);
+  const inline = render(`\`${source}\``);
+  assert.equal(codeText(inline), source);
+  assert.ok(!inline.includes("<strong>"));
   const code = render(`\`\`\`text\n${source}\n\`\`\``);
-  assert.ok(code.includes(`<pre><code>${source}</code></pre>`));
+  assert.match(code, /<pre\b[^>]*><code>/);
+  assert.equal(codeText(code), source);
   assert.ok(!code.includes("<strong>"));
   for (const text of ["\\*\\*验证：\\*\\*43", "**验证：", "**验证：\\**43"]) {
     assert.ok(!render(text).includes("<strong>"), text);
@@ -85,8 +92,13 @@ test("code, escaped delimiters and unmatched streaming prefixes stay literal", (
 
 test("quoted bold keeps code, escaped delimiters and streaming prefixes literal", () => {
   const source = "改为**“完成”**继续";
-  assert.equal(render(`\`${source}\``), `<p><code>${source}</code></p>`);
-  assert.ok(render(`\`\`\`text\n${source}\n\`\`\``).includes(`<pre><code>${source}</code></pre>`));
+  const inline = render(`\`${source}\``);
+  assert.equal(codeText(inline), source);
+  assert.ok(!inline.includes("<strong>"));
+  const code = render(`\`\`\`text\n${source}\n\`\`\``);
+  assert.match(code, /<pre\b[^>]*><code>/);
+  assert.equal(codeText(code), source);
+  assert.ok(!code.includes("<strong>"));
   for (const text of ["改为\\*\\*“完成”\\*\\*继续", "改为**“完成", "改为**“完成”*", "改为**“完成”\\**继续"]) {
     assert.ok(!render(text).includes("<strong>"), text);
   }
@@ -96,7 +108,7 @@ test("quoted bold keeps code, escaped delimiters and streaming prefixes literal"
 test("mask preserves punctuation, whitespace, escapes and adjacent bold spans", () => {
   const html = render("**验证：**43 **结果：**通过");
   assert.equal(html, `<p>${strong("验证：")}<span>43 </span>${strong("结果：")}<span>通过</span></p>`);
-  assert.ok(render("**检查 `：**` 内容：**继续").includes("<code>：**</code>"));
+  assert.equal(codeText(render("**检查 `：**` 内容：**继续")), "：**");
 });
 
 test("HTML stays literal and unsafe links/images remain inert", () => {

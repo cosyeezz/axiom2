@@ -184,6 +184,7 @@ export class Tasks {
         "CONFIRMATION_REQUIRED",
         "删除需要确认；停止所属执行并从列表移除，保留对话、子任务结果和记忆，不删除项目文件",
       );
+    const position = this.store.session(scope.workspaceId, scope.sessionId);
     await this.stopParent(scope);
     for (const row of this.records.rows(
       "WHERE parentSessionId=?",
@@ -195,7 +196,7 @@ export class Tasks {
         ...target(row),
         params: { confirmed: true },
       });
-    return this.agents.remove(c);
+    return this.agents.remove(c, position);
   }
   async close() {
     this.delivery.pause();

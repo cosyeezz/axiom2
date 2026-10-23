@@ -61,7 +61,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
       <p role={error ? "alert" : "status"} className={error ? "auth-error" : "field-help"}>
         {error || (busy ? "正在读取供应商模型目录…" : catalog?.message)}
       </p>
-      <div className="row-between">
+      <div className="row-between model-catalog-selection">
         <span className="meta">{catalog ? `${rows.length} 个模型 · 已选 ${picked.length} 个` : error ? "模型列表读取失败" : "等待读取模型列表"}</span>
         <button type="button" className="btn btn-ghost" disabled={busy || blocked || !choices.length} onClick={() => {
           const allSelected = choices.every((model) => selected.has(model.id));
@@ -88,11 +88,11 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
       </div>
       {overflow && <p role="alert" className="auth-error">每个供应商最多配置 1,000 个模型，请减少选择。</p>}
       <div className="model-catalog-actions">
-        <span className="meta">已选 {picked.length} 个 · 加入后保存</span>
         <button type="button" className="btn btn-primary" disabled={busy || blocked || !!error || !picked.length || overflow} onClick={() => {
           add(picked.map((model) => ({ key: crypto.randomUUID(), id: model.id, name: model.name, levels: [...(model.levels ?? ["none"])], input: [...(model.input ?? ["text"])], headers: [], body: [] })));
           close();
         }}>加入配置{picked.length ? `（${picked.length}）` : ""}</button>
+        <span className="meta">已选 {picked.length} 个 · 加入后保存</span>
       </div>
     </section>
   );

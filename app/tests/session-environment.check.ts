@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
+import { memoryDirectory } from "../src/server/memory-files.js";
 import type { AgentInfo } from "../src/shared/agent.js";
 import type { Command, Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -41,7 +42,17 @@ try {
   assert.equal(app.agents.info(scope(a)).environment?.systemPrompt, promptA);
   assert.equal(Object.hasOwn(app.agents.info(scope(legacy)).environment!, "systemPrompt"), false);
   assert.equal(app.agents.info(scope(fresh)).environment, null);
+  for (const session of [a, b, legacy, fresh, empty]) {
+    assert.equal(app.agents.info(scope(session)).memoryDirectory, memoryDirectory(app.store.root, session.id));
+  }
 
+  // A running older backend lacks the new projection field but supports memory.resolve.
+  const originalInfo = app.agents.info.bind(app.agents);
+  app.agents.info = (target) => {
+    const info = originalInfo(target);
+    if (target.sessionId === legacy.id) delete info.memoryDirectory;
+    return info;
+  };
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   const errors: string[] = [], nativeDialogs: string[] = [], commands: Command[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -62,10 +73,20 @@ try {
     assert.equal(await panel.getByRole("button", { name: /授权/ }).count(), 0, "environment has no project authorization action");
     assert.equal(await panel.getByText("授权项目资源", { exact: true }).count(), 0);
   };
+  const expectMemoryDirectory = async (session: Session) => {
+    const directory = memoryDirectory(app.store.root, session.id);
+    const row = panel.locator("p").filter({ hasText: "记忆目录：" });
+    await page.waitForFunction((value) => [...document.querySelectorAll(".session-init-body p")]
+      .some((el) => el.textContent?.includes(`记忆目录：${value}`)), directory);
+    assert.equal(await row.locator(".local-path-text").textContent(), directory);
+    assert.equal(await row.getByRole("button", { name: "复制路径", exact: true }).count(), 1);
+    assert.equal(await row.getByRole("button", { name: "打开所在文件夹", exact: true }).count(), 1);
+  };
   const select = async (session: Session) => {
     await page.locator(".history-row").filter({ has: page.getByRole("button", { name: `删除会话：${session.title}`, exact: true }) }).locator("button.history-item").click();
     await page.waitForFunction((title) => document.querySelector("#chat-title")?.textContent === title, session.title);
     await open();
+    await expectMemoryDirectory(session);
   };
   const expectPrompt = async (expected: string) => {
     await page.waitForFunction((value) => document.querySelector('pre[aria-label="系统提示词"]')?.textContent === value, expected);
@@ -74,18 +95,29 @@ try {
   };
   await open();
   await expectPrompt(promptA);
-  assert.ok((await panel.innerText()).includes(`工作目录：${project}`));
+  await expectMemoryDirectory(a);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const memoryPath = panel.locator("p").filter({ hasText: "记忆目录：" }).locator(".local-path");
+  await memoryPath.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await memoryPath.hover();
+  await memoryPath.getByRole("button", { name: "复制路径", exact: true }).click();
+  await page.waitForFunction(async (value) => await navigator.clipboard.readText() === value, memoryDirectory(app.store.root, a.id));
+  assert.equal(await panel.locator("p").filter({ hasText: "工作目录：" }).locator(".local-path-text").textContent(), project);
   assert.match(await panel.innerText(), /工具：read、write、powershell/);
   assert.match(await panel.innerText(), /技能：fixture-skill/);
   assert.match(await panel.innerText(), /已加载扩展：2/);
   assert.match(await panel.innerText(), /测试环境警告/);
-  for (const [width, height] of [[360, 800], [390, 844], [820, 1180], [1440, 900]]) {
+  for (const [width, height] of [[320, 800], [360, 800], [390, 480], [390, 844], [430, 900], [820, 1180], [1440, 900]]) {
     await page.setViewportSize({ width, height });
     const box = await prompt.boundingBox();
     assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1, `long prompt fits ${width}px viewport`);
     assert.equal(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), true, "long prompt does not overflow environment panel");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, "no document horizontal overflow");
     await expectPrompt(promptA);
+    if (process.env.AXIOM_ENVIRONMENT_ARTIFACTS && (width === 1440 || width === 390 && height === 844)) {
+      mkdirSync(process.env.AXIOM_ENVIRONMENT_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: join(process.env.AXIOM_ENVIRONMENT_ARTIFACTS, `environment-${width}.png`) });
+    }
   }
 
   await select(b);
@@ -113,10 +145,11 @@ try {
   await select(empty);
   await expectPrompt("（空）");
   assert.equal(await panel.getByText(/尚未记录系统提示词|尚未初始化/).count(), 0, "empty prompt is distinct from an unavailable snapshot");
+  assert.equal(commands.some((command) => command.op === "memory.resolve" && command.sessionId === legacy.id), true, "older backends resolve the real memory entry path");
   assert.equal(commands.some((command) => command.op === "agent.trust" || command.op === "prompt"), false, "viewing environments neither authorizes nor starts an execution");
   assert.deepEqual(errors, []);
   assert.deepEqual(nativeDialogs, []);
-  console.log("PASS: real store environment snapshots, no authorization action, exact literal system prompt, legacy/uninitialized/empty states, responsive long text, session isolation and retained draft");
+  console.log("PASS: real store environment snapshots, session memory directories and copy action, no authorization action, exact literal system prompt, legacy/uninitialized/empty states, responsive long text, session isolation and retained draft");
 } finally {
   await browser.close();
   await app.close();

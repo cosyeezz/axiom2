@@ -7,6 +7,8 @@ export type OpenCliJob = {
   id: string;
   kind: "refresh" | "check" | "install" | "doctor";
   running: boolean;
+  queued?: boolean;
+  version?: string;
   message: string;
   error?: string;
 };

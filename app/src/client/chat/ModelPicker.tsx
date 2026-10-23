@@ -1,5 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useAnchoredPopup } from "../useAnchoredPopup.js";
+import { closePopover } from "../popover.js";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
@@ -18,6 +20,11 @@ const emptyConfig: Configuration = {
   dataRoot: "",
 };
 const noFavorites: { provider: string; id: string }[] = [];
+// Preserve the menu's scoped styling while escaping the composer's clipping and
+// layout containment. The portal stays inside an enclosing modal when present.
+function ModelMenu({ host, children }: { host: Element | null; children: ReactNode }) {
+  return host ? createPortal(<div className="model-picker" style={{ display: "contents" }}>{children}</div>, host) : children;
+}
 export function ModelPicker({
   scope,
   nested = false,
@@ -54,10 +61,10 @@ export function ModelPicker({
   const details = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
   const floating = expanded && !details.current?.closest(".compression-settings,.memory-dialog");
-  const { panel } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 320, maxHeight: 440, fillMobile: true });
+  const { panel, host } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 320, maxHeight: 440, fillMobile: true });
   useEffect(() => {
     if (!floating) return;
-    const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node)) close(false); };
+    const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) close(false); };
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [floating]);
@@ -76,7 +83,7 @@ export function ModelPicker({
   };
   const close = (restoreFocus = true) => {
     if (!details.current) return;
-    if (panel.current?.matches(":popover-open")) panel.current.hidePopover();
+    if (panel.current) closePopover(panel.current);
     details.current.open = false;
     setExpanded(false);
     if (restoreFocus) details.current.querySelector("summary")?.focus();
@@ -137,7 +144,7 @@ export function ModelPicker({
         </span>
         <Icon name="chevron" />
       </summary>
-      {expanded && <div ref={panel} className="model-popover" aria-label="模型选择" popover={floating ? "manual" : undefined} data-floating={floating || undefined}>
+      {expanded && <ModelMenu host={floating ? host : null}><div ref={panel} className="model-popover" aria-label="模型选择" popover={floating ? "manual" : undefined} data-floating={floating || undefined}>
         <label className="model-search">
           <Icon name="search" />
           <input
@@ -290,7 +297,7 @@ export function ModelPicker({
           </p>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}
-      </div>}
+      </div></ModelMenu>}
     </details>
   );
 }

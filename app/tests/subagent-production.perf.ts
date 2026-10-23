@@ -69,7 +69,7 @@ try {
       const request = (op: string, params: object = {}) => new Promise<any>(r => { const requestId = randomUUID(); pending.set(requestId, r); ws!.send(JSON.stringify({ op, params, requestId, ...scope })); });
       for (const key of [`messages:${workspace.id}:${parent.id}`, `thread:${workspace.id}:${parent.id}`, "pinned-sessions", `costs:${workspace.id}:${parent.id}`]) assert.equal((await request("subscribe", { scope: key })).ok, true);
       const ids: string[] = [];
-      while (ids.length < size) ids.push(...records.create(scope, randomUUID(), "local benchmark", Array.from({ length: Math.min(8, size - ids.length) }, (_, i) => ({ task: `perf-child-${ids.length + i}`, role: "Read the fixture then report." })), { provider: "fixture", id: "fixture", thinking: "off" }).taskIds);
+      while (ids.length < size) ids.push(...records.create(scope, randomUUID(), "local benchmark", Array.from({ length: Math.min(8, size - ids.length) }, (_, i) => ({ task: `perf-child-${ids.length + i}` })), { provider: "fixture", id: "fixture", thinking: "off" }).taskIds);
       const rows = ids.map(id => records.rows("WHERE id=?", id)[0]);
       scheduler.preferencesChanged();
       await wait(() => !!providerError || held.size === size, "workers did not reach streaming after their read tool");

@@ -10,11 +10,12 @@ import { fileRevision } from "./execution-profile.js";
 import { configuration } from "./models.js";
 import { memoryDirectory } from "./memory-files.js";
 import { errorMessage } from "./error-message.js";
-import { AppError, type Command, type Scope } from "../shared/protocol.js";
+import { AppError, object, type Command, type Scope } from "../shared/protocol.js";
+import type { CapabilityReloadSelection, SkillSelectionChange } from "../shared/capabilities.js";
 import { agentScope } from "../shared/agent.js";
 import { reloadScope, type ReloadState, type ResourceSnapshot, type ReloadStage } from "../shared/reload.js";
 
-type Job = { capabilities?: CapabilityPlan; scope: Scope; state: ReloadState; controller: AbortController; done?: Promise<void>; timer?: ReturnType<typeof setTimeout> };
+type Job = { selection?: CapabilityReloadSelection; skillChange?: SkillSelectionChange; capabilities?: CapabilityPlan; scope: Scope; state: ReloadState; controller: AbortController; done?: Promise<void>; timer?: ReturnType<typeof setTimeout> };
 /** One independently subscribed operation per session; no synthetic chat Run or model request. */
 export class SessionReloads {
   onReleased?: (scope: Scope) => void;
@@ -59,6 +60,9 @@ export class SessionReloads {
   }
   event(scope: Scope, runId: string, event: any) {
     if (event.type === "resources-loaded") {
+      // Cold initialization can already contain the desired configuration.
+      // Do not replace the last successful baseline before reload succeeds.
+      if (this.jobs.has(scope.sessionId)) return;
       this.agents.store.db.prepare("INSERT INTO session_reloads(sessionId,resources) VALUES(?,?) ON CONFLICT(sessionId) DO UPDATE SET resources=excluded.resources")
         .run(scope.sessionId, JSON.stringify(event.resources));
       return;
@@ -74,7 +78,18 @@ export class SessionReloads {
     }
     if (event.type !== "reload-result") return;
     if (!event.ok) { this.fail(job, event.error); return; }
-    if (job.capabilities) this.agents.capabilities.appliedReload(scope, job.capabilities);
+    if (job.capabilities) {
+      try {
+        if (job.skillChange) this.agents.capabilities.appliedSkills(scope, job.capabilities);
+        else this.agents.capabilities.appliedReload(scope, job.capabilities, job.selection);
+      } catch (error) {
+        this.fail(job, error);
+        void this.agents.stop(scope).catch(() => {});
+        return;
+      }
+    }
+    this.agents.store.db.prepare("UPDATE session_reloads SET resources=? WHERE sessionId=?")
+      .run(JSON.stringify(event.after), scope.sessionId);
     job.state.before = event.before ?? job.state.before;
     job.state.after = event.after; job.state.warnings = event.warnings ?? [];
     job.state.resumed = event.resumed === true;
@@ -97,11 +112,33 @@ export class SessionReloads {
   command(c: Command) {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! };
     this.agents.store.session(scope.workspaceId, scope.sessionId);
-    if (Object.keys(c.params ?? {}).length) throw new AppError("INVALID_INPUT", "重载不接受额外参数");
+    const params = object(c.params ?? {});
+    let skillChange: SkillSelectionChange | undefined, selection: CapabilityReloadSelection | undefined;
+    if (c.op === "agent.skills") {
+      if (Object.keys(params).some(key => !["revision", "catalogRevision", "id", "checked"].includes(key)) ||
+        !Number.isSafeInteger(params.revision) || Number(params.revision) < 0 || typeof params.catalogRevision !== "string" ||
+        typeof params.id !== "string" || !params.id || typeof params.checked !== "boolean")
+        throw new AppError("INVALID_INPUT", "技能选择参数无效。");
+      skillChange = params as SkillSelectionChange;
+    } else if (Object.keys(params).length) {
+      if (Object.keys(params).some(key => key !== "capabilities")) throw new AppError("INVALID_INPUT", "重载参数无效。");
+      const value = object(params.capabilities);
+      const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.length <= 2000 &&
+        ids.every(id => typeof id === "string" && id.length > 0 && id.length <= 1024) && new Set(ids).size === ids.length;
+      if (Object.keys(value).some(key => !["target", "revision", "catalogRevision", "skills", "mcp"].includes(key)) ||
+        !["session", "defaults"].includes(String(value.target)) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 ||
+        typeof value.catalogRevision !== "string" || !validIds(value.skills) || !validIds(value.mcp))
+        throw new AppError("INVALID_INPUT", "能力选择参数无效。");
+      selection = value as CapabilityReloadSelection;
+    }
     return this.agents.store.external(c, async () => {
-      if (this.active(scope)) return this.state(scope);
+      if (this.active(scope)) {
+        if (selection || skillChange || this.state(scope)?.kind === "skills") throw new AppError("RELOAD_BUSY", "会话正在应用资源变化，请等待完成后调整技能。");
+        return this.state(scope);
+      }
       if (!this.agents.store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
       const info = this.agents.info(scope);
+      if ((skillChange || selection) && info.task) throw new AppError("CAPABILITIES_READONLY", "子任务沿用受限能力范围，不能单独调整选择。");
       if (this.agents.compressions.info(scope)?.state === "running") throw new AppError("COMPRESSION_BUSY", "请等待当前压缩结束后重新加载。");
       if (info.run?.status === "stopping" || info.task && ["queued", "starting", "stopping"].includes(info.task.status))
         throw new AppError("AGENT_BUSY", "会话正在排队、启动或停止，请稍后重试。");
@@ -109,16 +146,24 @@ export class SessionReloads {
       if (this.agents.active(scope) && (!executing || info.run?.status !== "running")) throw new AppError("AGENT_BUSY", "会话正在准备，请稍后重试。");
       const row = this.agents.store.db.prepare("SELECT resources FROM session_reloads WHERE sessionId=?").get(scope.sessionId);
       const stage = executing ? "waiting" : "preparing", at = Date.now();
-      const job: Job = { scope, controller: new AbortController(), state: { id: c.requestId, status: "running", stage,
+      const job: Job = { scope, selection, skillChange, controller: new AbortController(), state: { ...(skillChange ? { kind: "skills" } : {}), id: c.requestId, status: "running", stage,
         startedAt: at, steps: [{ stage, at }], before: row?.resources ? JSON.parse(String(row.resources)) as ResourceSnapshot : undefined,
         ...(executing ? { runId: info.run!.id } : {}) } };
       this.agents.continuations.cancel(scope, true);
       this.jobs.set(scope.sessionId, job); this.save(job);
-      if (executing) {
+      if (skillChange && !executing) {
         job.done = (async () => {
-          if (!info.task) job.capabilities = await this.agents.capabilities.prepare(scope, true);
+          const plan = await this.agents.capabilities.prepare(scope, false, skillChange);
           if (this.jobs.get(scope.sessionId) !== job || job.controller.signal.aborted) return;
-          if (!this.agents.signal(scope, info.run!.id, { type: "reload", id: job.state.id, capabilities: job.capabilities?.runtime }))
+          this.agents.capabilities.appliedSkills(scope, plan);
+          job.state.status = "completed"; job.state.endedAt = Date.now();
+          this.stage(job, "completed");
+        })().catch(error => this.fail(job, error)).finally(() => this.release(job));
+      } else if (executing) {
+        job.done = (async () => {
+          if (!info.task) job.capabilities = await this.agents.capabilities.prepare(scope, !skillChange, skillChange, selection);
+          if (this.jobs.get(scope.sessionId) !== job || job.controller.signal.aborted) return;
+          if (!this.agents.signal(scope, info.run!.id, { type: "reload", id: job.state.id, kind: job.state.kind, capabilities: job.capabilities?.runtime }))
             throw Error("执行已进入结束阶段，未发起重载，请稍后重试。");
         })().catch(error => { this.fail(job, error); this.release(job); });
       } else {
@@ -149,9 +194,9 @@ export class SessionReloads {
       if (config.error) throw Error(config.error);
       if (!selection || !config.available.some(model => model.provider === selection.provider && model.id === selection.id && model.levels.includes(selection.thinking)))
         throw Error("请先选择已配置、已认证的模型；重载不会发起模型请求。");
-      const child = agents.store.db.prepare("SELECT id,role FROM tasks WHERE sessionId=?").get(scope.sessionId);
-      const task = child ? { id: String(child.id), role: String(child.role), inputIds: [] } : undefined;
-      const capabilities = task ? undefined : await agents.capabilities.prepare(scope, true);
+      const child = agents.store.db.prepare("SELECT id FROM tasks WHERE sessionId=?").get(scope.sessionId);
+      const task = child ? { id: String(child.id), inputIds: [] } : undefined;
+      const capabilities = task ? undefined : await agents.capabilities.prepare(scope, true, undefined, job.selection);
       job.capabilities = capabilities;
       let file = agents.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)?.file as string | undefined;
       if (!file) {
@@ -165,7 +210,7 @@ export class SessionReloads {
       return { selection, task, capabilities, file, raw };
     }, controller.signal);
     const environment = await agents.profiles.prepareAsync({ entry: "agent", cwd, modelDir: agents.models.dir, modelsRaw: prepared.raw,
-      selection: prepared.selection, capabilities: prepared.capabilities?.runtime, taskRole: prepared.task?.role, mode: agents.pool.mode }, controller.signal);
+      selection: prepared.selection, capabilities: prepared.capabilities?.runtime, mode: agents.pool.mode }, controller.signal);
     let lease: Awaited<ReturnType<typeof agents.pool.acquire>> | undefined;
     try {
       check();
@@ -176,6 +221,7 @@ export class SessionReloads {
       const input: WorkerInput = { root: agents.store.root, cwd, file: prepared.file, modelsFile: lease.environment.modelsFile,
         runId: job.state.id, selection: prepared.selection, prompt: "", reloadId: job.state.id, executionGate: true,
         capabilities: prepared.capabilities?.runtime, task: prepared.task,
+        memoryTopics: prepared.task ? undefined : agents.memories.topicSnapshot(scope.workspaceId),
         memoryPath: prepared.task ? undefined : join(memoryDirectory(agents.store.root, scope.sessionId), "MEMORY.md") };
       await new Promise<void>((resolve, reject) => {
         const finish = (error?: Error) => { clearTimeout(timer); controller.signal.removeEventListener("abort", aborted); child.off("message", message); child.off("close", closed); error ? reject(error) : resolve(); };

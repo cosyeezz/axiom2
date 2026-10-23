@@ -29,7 +29,7 @@
 }
 .confirm-dialog .confirm-description { margin: 12px 0 0; color: var(--muted); font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
 .confirm-dialog .confirm-error { margin: 12px 0 0; color: color-mix(in srgb, var(--danger) 55%, var(--fg)); font-size: 13px; overflow-wrap: anywhere; }
-.confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.confirm-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .confirm-actions .btn { min-height: 44px; min-width: 80px; }
 .confirm-actions .confirm-danger { background: var(--danger); border-color: transparent; color: var(--fg); }
 .confirm-actions .confirm-danger:hover:not([aria-disabled=true]) { background: var(--danger-hover); }

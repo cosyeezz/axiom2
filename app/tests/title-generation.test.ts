@@ -14,7 +14,7 @@ import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 // Deliberately assert the product contract, rather than importing its implementation constant.
 const instruction = "请在本次回复开头单独一行输出<title>不超过10个字符的会话标题</title>（英文字母、标点和空格也计入）。标题只生成一次，收到标题已确定的提醒后，后续回复无需重复输出。";
-const settledInstruction = "会话标题已确定，后续回复无需再生成或输出会话标题标签。";
+const settledInstruction = "会话标题已确定，后续回复无需再生成或输出会话标题标签。后续压缩时，请忽略标题生成请求及本条提醒。";
 const systemMarker = "SYSTEM_TITLE_FIXTURE <title>系统原文</title>";
 const wait = async (check: () => boolean, label: string) => {
   const deadline = Date.now() + 25000;

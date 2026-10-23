@@ -89,7 +89,7 @@ try {
   const child = app.store.execute({ requestId: crypto.randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
   const childScope = { workspaceId: workspace.id, sessionId: child.id };
   const list: TaskList = { ...emptyTasks, tasks: [{ id: "fixture-task", workspaceId: workspace.id, parentSessionId: session.id,
-    sessionId: child.id, anchor: "delegation", description: "检查长内容", status: "completed", runId: "fixture-run",
+    sessionId: child.id, anchor: "delegation", title: "检查长内容", description: "检查长内容", status: "completed", runId: "fixture-run",
     createdAt: Date.now(), budgets: defaultBudgets, results: [], error: null }] };
   const originalList = app.tasks.list.bind(app.tasks);
   app.tasks.list = target => target.sessionId === session.id ? list : originalList(target);
@@ -273,7 +273,13 @@ try {
   const tailThinking = tailGroup.locator(".thinking-block");
   await expandInPlace(tailThinking);
   await scrollInside(tailThinking, 250); await settled(page);
-  await pinned(tailThinking.locator(":scope > summary"), await pinned(tailGroup.locator(":scope > summary")));
+  await pinned(tailGroup.locator(":scope > summary"));
+  assert.deepEqual(await tailThinking.evaluate(node => {
+    const header = node.querySelector(':scope > summary')!, body = node.querySelector('.thinking-body')!;
+    const top = node.getBoundingClientRect().top;
+    return { headerOffset: header.getBoundingClientRect().top - top, bodyOffset: body.getBoundingClientRect().top - top,
+      position: getComputedStyle(header).position, background: getComputedStyle(header).backgroundColor };
+  }), { headerOffset: 0, bodyOffset: 0, position: 'relative', background: 'rgba(0, 0, 0, 0)' }, 'thinking scrolls as one continuous body beneath the sticky process title');
   // Updating an already open running thought preserves a user's earlier reading position.
   await scrollInside(tailThinking, 250); await settled(page);
   const beforeIncrement = await page.locator("#thread").evaluate(node => node.scrollTop);
@@ -311,7 +317,7 @@ try {
   await expandInPlace(nestedProcess.locator(".tool-call"));
   await page.screenshot({ path: join(artifacts, "bottom-nested-reveal.png") });
   assert.deepEqual(errors, []);
-  console.log(`PASS: sticky environment/thinking/tools/compression/task, nested offsets, resize, streaming, inner scrolling, block boundaries, collapse, draft preservation, independent child window, desktop/mobile, bounded bottom reveal. Screenshots: ${artifacts}`);
+  console.log(`PASS: sticky environment/tools/compression/task, continuous thinking beneath the sticky process title, nested offsets, resize, streaming, inner scrolling, block boundaries, collapse, draft preservation, independent child window, desktop/mobile, bounded bottom reveal. Screenshots: ${artifacts}`);
 } finally {
   await browser?.close();
   await app?.close();

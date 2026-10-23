@@ -261,7 +261,8 @@ export class ExecutionPool {
     i.processReady.reject(Error('工作进程已停止'));i.environmentReady.reject(Error('执行环境已停止'));
     if(!i.child){this.closed(i);return i.closed.promise;}
     const child=i.child;i.state='exiting';
-    i.killTimer=setTimeout(()=>this.kill(child),i.environment.entry==='memory'?1500:2000);
+    // OAuth refresh may finish credential persistence under its own 15s deadline after cancellation.
+    i.killTimer=setTimeout(()=>this.kill(child),i.environment.entry==='memory'?20000:2000);
     if(sendShutdown)try {if(child.connected)child.send({type:'shutdown',instance:{instanceId:i.id,generation:i.generation,profileHash:i.environment.profileHash},lease:i.lease?.ref},error=>{if(error)this.kill(child);});else this.kill(child);}catch{this.kill(child);}
     return i.closed.promise;
   }

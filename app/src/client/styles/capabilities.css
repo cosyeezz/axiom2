@@ -1,3 +1,5 @@
+.capability-apply-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 8px; width: 100%; }
+.capability-apply-actions .btn { min-height: 44px; }
 .capability-trigger { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
 .capability-settings .capability-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .capability-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -13,6 +15,7 @@
 .capability-item > span { min-width: 0; overflow-wrap: anywhere; }
 .capability-item strong { color: var(--fg); font-size: 13px; font-weight: 550; }
 .capability-description { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.capability-list .capability-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .capability-source { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .capability-unavailable { margin-left: 8px; color: var(--danger-text); }
 .capability-empty { padding: 24px 0; text-align: center; color: var(--muted); }

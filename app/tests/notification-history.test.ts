@@ -18,7 +18,7 @@ function fixture() {
   const session = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as Session;
   const scope = { workspaceId: workspace.id, sessionId: session.id };
   const records = new TaskRecords(store), selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-  const [taskId] = records.create(scope, "anchor", "context", [{ task: "child", role: "" }], selection).taskIds;
+  const [taskId] = records.create(scope, "anchor", "context", [{ task: "child" }], selection).taskIds;
   const child = records.rows("WHERE id=?", taskId)[0], runId = randomUUID(), resultId = randomUUID();
   store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES(?,?,'completed',?,1,2)").run(runId, child.sessionId, JSON.stringify(selection));
   store.db.prepare("INSERT INTO task_results(id,taskId,runId,body,delivery) VALUES(?,?,?,?,'delivered')")

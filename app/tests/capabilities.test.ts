@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents } from "../src/server/agents.js";
@@ -50,7 +50,8 @@ test("capabilities: private discovery, revisions, atomic startup lock, persisten
     assert.throws(() => service.lock(scope, firstPlan), { code: "REVISION_CONFLICT" });
     assert.equal(service.state(scope).locked, false, "preparation does not lock");
     const emptyPlan = await service.prepare(scope);
-    assert.deepEqual(emptyPlan.runtime.skillPaths, []);
+    assert.ok(emptyPlan.runtime.skillPaths?.some(path => realpathSync(path) === realpathSync(skill)), "manual skills remain loaded with automatic discovery disabled");
+    assert.deepEqual(emptyPlan.runtime.selection.skills, []);
     assert.deepEqual(emptyPlan.runtime.mcp.servers, []);
     store.db.exec("BEGIN IMMEDIATE");
     service.lock(scope, emptyPlan);
@@ -137,9 +138,17 @@ test("capabilities: removed selections remain visible and stale resource catalog
     rmSync(file);
     const unavailable = await service.get(scope);
     assert.equal(unavailable.skills.find(item => item.id === id)?.available, false);
-    await assert.rejects(service.prepare(scope), { code: "CAPABILITY_UNAVAILABLE" });
+    await assert.rejects(service.prepare(scope), { code: "CAPABILITY_UNAVAILABLE", message: /drift.*技能与 MCP.*应用并重新加载/ });
+    const replacement = join(root, ".pi", "skills", "replacement", "SKILL.md");
+    mkdirSync(join(root, ".pi", "skills", "replacement"), { recursive: true });
+    writeFileSync(replacement, "---\nname: drift\ndescription: Different resource with the same name\n---\n");
+    const replaced = await service.prepare(scope);
+    assert.deepEqual(replaced.runtime.selection.skills, ["drift"]);
+    assert.ok(replaced.runtime.skillPaths?.some(path => realpathSync(path) === realpathSync(replacement)));
+    assert.equal((await service.get(scope)).skills.filter(item => item.name === "drift").length, 1);
+    rmSync(join(root, ".pi", "skills", "replacement"), { recursive: true });
     await assert.rejects(service.command({ requestId: randomUUID(), op: "capabilities.save", ...scope, params: { ...params, revision: 1, skills: [] } }), { code: "REVISION_CONFLICT" });
     await service.command({ requestId: randomUUID(), op: "capabilities.save", ...scope, params: { revision: 1, catalogRevision: unavailable.revision, skills: [], mcp: [] } });
-    assert.deepEqual((await service.prepare(scope)).runtime.skillPaths, []);
+    assert.ok(!(await service.prepare(scope)).runtime.skillPaths?.includes(file));
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });

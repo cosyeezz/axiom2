@@ -29,7 +29,7 @@ test("budget warning uses server time, caps lead at 60s, and does not repeat for
   assert.deepEqual(notices, []);
   t.mock.timers.tick(1);
   assert.deepEqual(notices, [600_000]);
-  assert.match(taskBudgetWarning(600_000), /剩余约 60 秒/);
+  assert.match(taskBudgetWarning(600_000), /剩余约60秒/);
   reminder.flush();
   reminder.update({ workMs: 600_000, elapsedMs: 0, deadlineAt: 600_000 });
   t.mock.timers.tick(60_000);

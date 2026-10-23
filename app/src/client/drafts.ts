@@ -37,7 +37,7 @@ export function draftContent(draft: DraftContent): DraftContent {
     text: draft.text,
     attachment: draft.attachment ? { ...draft.attachment } : null,
     attachments: (draft.attachments ?? []).map((attachment) => ({ ...attachment })),
-    skills: (draft.skills ?? []).map(skill => ({ ...skill })),
+    skills: (draft.skills ?? []).map(skill => ({ ...skill, id: skill.name })),
     images: (draft.images ?? []).map((image) => ({ ...image })),
   };
 }

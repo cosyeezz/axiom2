@@ -62,9 +62,9 @@ export class TaskCommands {
       );
     const allowed: Record<TaskTool, string[]> = {
       delegate: ["context", "tasks"],
-      append: ["taskId", "summary", "text", "mode"],
+      append: ["taskId", "summary", "text"],
       cancel_task: ["taskId", "reason"],
-      read_result: ["taskId", "resultId", "offset", "limit"],
+      read_result: ["taskId", "resultId"],
     };
     if (Object.keys(object(params)).some((k) => !allowed[name].includes(k)))
       throw new AppError("INVALID_INPUT", "子任务工具包含未支持的参数");
@@ -100,7 +100,7 @@ export class TaskCommands {
         }
         if (name === "cancel_task")
           return this.scheduler.cancel(row, c.params!, "agent");
-        return this.delivery.result(scope, row.id, c.params!.resultId, c.params!.offset, c.params!.limit);
+        return this.delivery.result(scope, row.id, c.params!.resultId);
       });
     return name === "append" || name === "cancel_task"
       ? this.serial(text(c.params!.taskId, "子任务标识"), invoke)
@@ -117,15 +117,11 @@ export class TaskCommands {
       throw new AppError("INVALID_INPUT", "一次委派需要 1–8 个子任务");
     const definitions = p.tasks.map((value) => {
       const t = object(value);
-      if (Object.keys(t).some((k) => !["title", "task", "systemPrompt"].includes(k)))
+      if (Object.keys(t).some((k) => !["title", "task"].includes(k)))
         throw new AppError("INVALID_INPUT", "子任务定义包含未支持的参数");
       return {
         title: brief(t.title, "任务标题"),
         task: text(t.task, "任务", 12000),
-        role:
-          t.systemPrompt === undefined
-            ? ""
-            : text(t.systemPrompt, "职责补充", 4000),
       };
     });
     const config = await configuration(this.store.root);
@@ -224,8 +220,7 @@ export class TaskCommands {
       }));
     const child = this.records.child(scope);
     if (c.op === "task.result")
-      // The session view is never paged: return the full remainder of the selected immutable result.
-      return this.delivery.result(scope, p.taskId, p.resultId, p.offset, undefined, true);
+      return this.delivery.result(scope, p.taskId, p.resultId);
     if (c.op === "task.append" || c.op === "task.cancel") {
       const row = this.records.own(scope, p.taskId);
       return this.serial(row.id, () =>

@@ -101,7 +101,7 @@ try {
 
   const description = "检查跨平台布局，保持长任务描述可读和消息区域可用。".repeat(15);
   const records = new TaskRecords(app.store);
-  const { taskIds: [taskId] } = records.create(scope, "layout-child", "UI fixture", [{ task: description, role: "" }], { ...selection, thinking: "off" });
+  const { taskIds: [taskId] } = records.create(scope, "layout-child", "UI fixture", [{ task: description }], { ...selection, thinking: "off" });
   app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(taskId);
   views.messageChanged(scope, { id: "child-call", role: "assistant", text: "", calls: [{ id: "layout-child", name: "delegate", input: "{}" }] }); views.flush(scope);
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));

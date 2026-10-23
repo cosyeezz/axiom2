@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+import { openPopover, popoverHost } from "./popover.js";
 
 /** Position a portalled layer in the visible viewport while retaining a modal's ownership.
  * Popovers are opened before measuring so the first frame uses their actual height. */
@@ -6,7 +7,7 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
   maxWidth = 400, maxHeight = 520, matchWidth = false, fillMobile = false, preferBelow = false,
 }: { maxWidth?: number; maxHeight?: number; matchWidth?: boolean; fillMobile?: boolean; preferBelow?: boolean } = {}) {
   const panel = useRef<HTMLDivElement>(null);
-  const host = anchor?.closest("dialog") ?? document.body;
+  const host = anchor ? popoverHost(anchor) : document.body;
   useLayoutEffect(() => {
     const node = panel.current;
     if (!anchor || !node) return;
@@ -29,7 +30,7 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
       const panelHeight = node.getBoundingClientRect().height;
       node.style.top = `${Math.max(top + gutter, Math.min(above ? rect.top - gap - panelHeight : rect.bottom + gap, top + height - gutter - panelHeight))}px`;
     };
-    if (node.hasAttribute("popover") && !node.matches(":popover-open")) node.showPopover();
+    const disposePopover = node.hasAttribute("popover") ? openPopover(node, { source: anchor }) : undefined;
     position();
     const observer = new ResizeObserver(position);
     observer.observe(anchor);
@@ -46,7 +47,7 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
       window.removeEventListener("scroll", position, true);
       window.visualViewport?.removeEventListener("resize", position);
       window.visualViewport?.removeEventListener("scroll", position);
-      if (node.matches(":popover-open")) node.hidePopover();
+      disposePopover?.();
     };
   }, [anchor, maxWidth, maxHeight, matchWidth, fillMobile, preferBelow]);
   return { panel, host };

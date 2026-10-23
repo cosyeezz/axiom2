@@ -35,6 +35,15 @@ export interface OverrideRow {
   keep?: boolean;
 }
 export type ModelInput = "text" | "image";
+export const modelCostKeys = ["input", "output", "cacheRead", "cacheWrite"] as const;
+/** USD per million tokens, as used by the model runtime. */
+export type ModelPricing = Record<(typeof modelCostKeys)[number], number>;
+export const emptyModelPricing = (): ModelPricing => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+export function validModelPricing(value: unknown): value is ModelPricing {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prices = value as Record<string, unknown>;
+  return modelCostKeys.every(key => typeof prices[key] === "number" && Number.isFinite(prices[key]) && prices[key] >= 0);
+}
 export interface ModelDraft {
   key: string;
   originalId?: string;
@@ -43,9 +52,13 @@ export interface ModelDraft {
   levels: ReasoningLevel[];
   // Omitted by older clients: preserve the model's native input capabilities.
   input?: ModelInput[];
+  // Effective base rates; omitted by older clients to preserve existing pricing.
+  cost?: ModelPricing;
+  costTiered?: boolean;
   headers: OverrideRow[];
   body: OverrideRow[];
 }
+export type ProviderProxy = { mode: "direct" } | { mode: "external"; url: string; keepUrl?: boolean } | { mode: "builtin"; profileId: string };
 export interface ProviderDraft {
   id: string;
   originalId?: string;
@@ -56,6 +69,7 @@ export interface ProviderDraft {
   api: string;
   url: string;
   keepUrl?: boolean;
+  proxy?: ProviderProxy;
   key: string;
   clearKey?: boolean;
   headers: OverrideRow[];

@@ -1,5 +1,7 @@
+import { browserLatency, receiveDelivery } from "./latency.js";
 import { useCallback, useSyncExternalStore } from "react";
 import { emptyMemoryView } from "../shared/memory.js";
+import { proxySourceLimit } from "../shared/model-proxy.js";
 import { clearOptimistic, reconcileOptimistic } from "./chat/optimistic.js";
 import type { ChatMessage } from "../shared/agent.js";
 import {
@@ -69,6 +71,9 @@ function probeConnection() {
   void command("ping").catch(() => {}).finally(() => { if (probing === current) probing = undefined; });
 }
 if (typeof window !== "undefined") {
+  window.axiomLatency = async (runId) => ({
+    server: await command("diagnostics.latency", runId ? { runId } : {}), browser: browserLatency.snapshot(runId),
+  });
   window.addEventListener("axiom-connection-request", (event) => {
     const probe: unknown = (event as CustomEvent).detail;
     const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (name: string, args: object) => Promise<unknown> } }).__TAURI_INTERNALS__;
@@ -125,16 +130,20 @@ export function command<T>(
   if (signal?.aborted) return Promise.reject(new AppError("CANCELLED", "读取已取消"));
   if (socket?.readyState !== WebSocket.OPEN)
     return Promise.reject(new AppError("DISCONNECTED", "尚未连接，操作未发送"));
+  const proxyCommand = op === "modelProxy.inspect" || op === "modelProxy.save";
+  if (proxyCommand && typeof params.source === "string" && new TextEncoder().encode(params.source.trim()).byteLength > proxySourceLimit)
+    return Promise.reject(new AppError("PAYLOAD_TOO_LARGE", "线路配置最多 2 MB（UTF-8），操作未发送。"));
   const value: Command = { requestId, op, ...target, params };
   const payload = JSON.stringify(value);
-  // File edits allow a 1 MiB UTF-8 file plus worst-case JSON escaping; configuration stays small.
+  // Source text can expand sixfold when JSON escapes control characters; allow envelope overhead too.
   const attachmentCommand = ["prompt", "files.upload"].includes(op);
-  const limit = attachmentCommand ? 22 * 1024 * 1024 : op === "files.save" ? 7 * 1024 * 1024 : 200_000;
+  const limit = attachmentCommand ? 22 * 1024 * 1024 : op === "files.save" ? 7 * 1024 * 1024 : proxyCommand ? 6 * proxySourceLimit + 200_000 : 200_000;
   if (new TextEncoder().encode(payload).byteLength > limit)
     return Promise.reject(
       new AppError(
         "PAYLOAD_TOO_LARGE",
-        `请求超过 ${attachmentCommand ? "22 MiB" : op === "files.save" ? "7 MiB" : "200 KB"}；操作未发送，请减少条目或附件。`,
+        proxyCommand ? "线路配置请求过大，操作未发送，请减少附加内容。"
+          : `请求超过 ${attachmentCommand ? "22 MiB" : op === "files.save" ? "7 MiB" : "200 KB"}；操作未发送，请减少条目或附件。`,
       ),
     );
   const sendingSocket = socket;
@@ -184,8 +193,8 @@ export function command<T>(
     }
   });
 }
-export function acceptSnapshot(event: Snapshot) {
-  if ((sessionKey(event.scope) || /^(memory-catalog|memory-organization):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
+export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), parseMs = 0) {
+  if ((sessionKey(event.scope) || /^(memory-tree|memory-catalog|memory-organization):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
   if (event.scope.startsWith("message:")) {
     const collection = cache.get(event.scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:"));
     if (collection?.streamId === event.streamId && event.seq <= collection.seq) return;
@@ -229,19 +238,23 @@ export function acceptSnapshot(event: Snapshot) {
       clearOptimistic({ workspaceId, sessionId });
     }
   }
+  if (event.latency && event.scope.startsWith("message:")) {
+    const stored = cache.get(event.scope);
+    if (stored?.data === event.data) receiveDelivery(event.data, event.latency, event.streamId, event.seq, receivedAt, parseMs);
+  }
   const notify = new Set<() => void>();
   for (const name of changed) for (const fn of listeners.get(name) ?? []) notify.add(fn);
   notify.forEach((fn) => fn());
 }
 function optionalMemorySubscription(scope: string) {
   const [kind, workspaceId, sessionId] = scope.split(":");
-  if (kind !== "memory" && kind !== "memory-catalog" && kind !== "memory-organization") return false;
+  if (kind !== "memory" && kind !== "memory-tree" && kind !== "memory-catalog" && kind !== "memory-organization") return false;
   const previous = cache.get(scope);
   cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
     generation: connection.generation, received: ++received,
     // Optional memory subscription failures must not affect the connection, but
     // callers still need to distinguish an unavailable source from a missing one.
-    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-organization" ? null : [] });
+    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-tree" ? { topics: [], nameChars: 0, unavailable: true } : kind === "memory-organization" ? null : [] });
   listeners.get(scope)?.forEach((fn) => fn());
   return true;
 }
@@ -349,6 +362,7 @@ export async function connect() {
     };
     current.onmessage = (e) => {
       if (!owns() || current.readyState !== WebSocket.OPEN) return;
+      const receivedAt = performance.now();
       let value: Snapshot | Reply | { type: "hello"; streamId: string };
       try { value = JSON.parse(e.data); } catch { return; }
       if (!value || typeof value !== "object") return;
@@ -357,7 +371,7 @@ export async function connect() {
           value.type === "receipt" && typeof value.requestId === "string" && typeof value.ok === "boolean") {
         lastResponse = Date.now(); phase = "connected";
       } else return;
-      if (value.type === "snapshot") acceptSnapshot(value);
+      if (value.type === "snapshot") acceptSnapshot(value, receivedAt, performance.now() - receivedAt);
       if (value.type === "receipt") {
         const waiting = pending.get(value.requestId);
         if (!waiting) return;

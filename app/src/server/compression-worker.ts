@@ -1,3 +1,5 @@
+import { configureModelNetwork } from "./integrations/model-proxy-env.js";
+import { randomUUID } from "node:crypto";
 import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { join } from "node:path";
 import {
@@ -46,6 +48,7 @@ async function run(input: CompressionInput) {
   const send = leaseSender(activeLease);
   const accounting: Promise<unknown>[] = [];
   try {
+    configureModelNetwork(input.root, input.modelsFile, input.selection.provider);
     const runtime = await new ModelService(input.root).runtime(
       input.modelsFile,
     );
@@ -102,15 +105,18 @@ async function run(input: CompressionInput) {
     session.agent.streamFunction = async (model, context, options) => {
       const index = charges.push(usageCost(null)) - 1;
       publishBilling(); // Persist an unknown charge before a request can be interrupted.
-      const response = await stream(model, {
-        ...context,
-        messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }],
-      }, options);
+      const callId = randomUUID();
+      const request = { ...context, messages: [...context.messages, { role: "user" as const, content: compactionInstructions, timestamp: Date.now() }] };
+      send({ type: "model_call", id: callId, input: request });
+      let response: Awaited<ReturnType<typeof stream>>;
+      try { response = await stream(model, request, options); }
+      catch (error) { send({ type: "model_result", id: callId, error: compressionError(error) }); throw error; }
       // result() observes the same stream without consuming/replaying its events.
       accounting.push(response.result().then((message) => {
+        send({ type: "model_result", id: callId, output: message, usage: message.usage, error: message.stopReason === "error" || message.stopReason === "aborted" ? message.errorMessage || "模型请求失败" : undefined });
         charges[index] = usageCost(message.usage);
         publishBilling();
-      }).catch(() => { /* The unknown request remains accounted for. */ }));
+      }).catch((error) => { send({ type: "model_result", id: callId, error: compressionError(error) }); }));
       return response;
     };
     const result = await session.compact(compactionInstructions);

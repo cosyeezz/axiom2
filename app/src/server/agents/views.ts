@@ -12,6 +12,8 @@ import {
 import { threadGroups } from "../../shared/thread-layout.js";
 import type { Store } from "../storage.js";
 import { contextUsage } from "../context-usage.js";
+import { lastRequestUsage } from "../request-usage.js";
+import { memoryDirectory } from "../memory-files.js";
 import { Lru } from "../../shared/lru.js";
 import {
   boundedMessage,
@@ -53,12 +55,13 @@ export class AgentViews {
       .prepare("SELECT id,parentSessionId,status FROM tasks WHERE sessionId=?")
       .get(scope.sessionId);
     const usage: AgentInfo["usage"] = row?.usage ? JSON.parse(String(row.usage)) : null;
-    // Repair older saved unknown readings on read, without a model request or
-    // another compaction. A missing/unreadable transcript must stay unknown.
-    if (usage?.context && usage.context.tokens == null && row?.file) {
+    // Recover older snapshots from native history, never from cumulative totals.
+    // Missing/unreadable history stays unknown and this read does not write it.
+    if (usage && row?.file && (usage.lastRequest === undefined || (usage.context && usage.context.tokens == null))) {
       try {
-        usage.context = contextUsage(openTranscript(String(row.file),
-          this.store.workspace(scope.workspaceId).path), usage.context);
+        const manager = openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path, { readOnly: true });
+        if (usage.lastRequest === undefined) usage.lastRequest = lastRequestUsage(manager);
+        if (usage.context && usage.context.tokens == null) usage.context = contextUsage(manager, usage.context);
       } catch { /* Keep the original unknown reading. */ }
     }
     return {
@@ -68,6 +71,7 @@ export class AgentViews {
       activeTaskCount: Number(this.store.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE parentSessionId=? AND status IN ('queued','starting','running','stopping')").get(scope.sessionId)?.n ?? 0),
       queue: this.queues.get(scope.sessionId) ?? [],
       selection: row?.selection ? JSON.parse(String(row.selection)) : null,
+      memoryDirectory: task ? null : memoryDirectory(this.store.root, scope.sessionId),
       environment: row?.environment
         ? JSON.parse(String(row.environment))
         : null,
@@ -129,11 +133,12 @@ export class AgentViews {
         layout = { ids: messages.map((message) => message.id), groups: threadGroups(messages) };
         this.layouts.set(projection, layout);
       }
-      const run = this.store.db.prepare("SELECT id,status FROM runs WHERE sessionId=? ORDER BY startedAt DESC,rowid DESC LIMIT 1").get(scope.sessionId);
+      const run = this.store.db.prepare("SELECT id,status,phase FROM runs WHERE sessionId=? ORDER BY startedAt DESC,rowid DESC LIMIT 1").get(scope.sessionId);
       return {
         contextRevision: this.contextRevision.get(scope.sessionId) ?? 0,
         runId: run ? String(run.id) : undefined,
         runStatus: run?.status as Run["status"] | undefined,
+        runPhase: run?.phase as Run["phase"],
         resultVersion: owner.resultVersion,
         readVersion: owner.readVersion,
         resultTasks: this.store.db.prepare("SELECT t.taskId,t.id AS resultId FROM session_results e JOIN task_results t ON t.id=e.sourceId WHERE e.sessionId=? AND e.kind='task' AND e.version>? AND t.delivery!='discarded'").all(scope.sessionId, owner.readVersion ?? 0) as unknown as NonNullable<ThreadIndex["resultTasks"]>,
@@ -230,7 +235,9 @@ export class AgentViews {
     clearTimeout(this.timers.get(scope.sessionId));
     this.timers.delete(scope.sessionId);
     for (const [id, message] of this.changedMessages.get(scope.sessionId) ?? [])
-      if (this.observed(messageScope(scope, id))) this.publish(messageScope(scope, id), boundedMessage(message));
+      if (this.observed(messageScope(scope, id))) this.publish(messageScope(scope, id), {
+        ...boundedMessage(message), ...(message.deliveryTiming ? { deliveryTiming: message.deliveryTiming } : {}),
+      });
     this.changedMessages.delete(scope.sessionId);
   }
   publishMessages(scope: Scope) {
@@ -253,6 +260,21 @@ export class AgentViews {
     this.timers.delete(scope.sessionId); this.changedMessages.delete(scope.sessionId);
     this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId);
     this.contextRevision.delete(scope.sessionId); this.messages.delete(scope.sessionId); this.queues.delete(scope.sessionId);
+  }
+  recoverRequestUsage(scope: Scope) {
+    this.owner(scope);
+    const row = this.store.db.prepare("SELECT file,usage FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
+    const usage: AgentInfo["usage"] = row?.usage ? JSON.parse(String(row.usage)) : null;
+    if (!usage) return;
+    // A terminated worker can persist message_end before its usage IPC arrives.
+    // Reconcile once after exit; never infer a new request from the run status.
+    usage.lastRequest = null;
+    if (row?.file) {
+      try {
+        usage.lastRequest = lastRequestUsage(openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path, { readOnly: true }));
+      } catch { /* Unreadable native history cannot confirm the latest reading. */ }
+    }
+    this.store.db.prepare("UPDATE agent_sessions SET usage=? WHERE sessionId=?").run(JSON.stringify(usage), scope.sessionId);
   }
   settled(scope: Scope) { this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId); }
   refresh(scope: Scope) {

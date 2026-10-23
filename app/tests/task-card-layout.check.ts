@@ -36,6 +36,7 @@ try {
       ["follow", "functions.append", { taskId, mode: "followUp", text: longText }, "failed", longText],
       ["read", "read_result", { taskId, resultId: "fixture" }, "completed", "{}"],
       ["stop", "functions.cancel_task", { taskId, reason: longText }, "completed", "{}"],
+      ["stop-empty", "cancel_task", { taskId }, "completed", "{}"],
       ["cancelled", "append", { taskId, text: longText }, "cancelled", ""],
       ["running", "append", { taskId, text: longText }, "running", ""],
       ["pending", "delegate", { context: longText.repeat(30), tasks: [{ title: "检查待创建任务", task: longText }, { title: "核对长输入标题", task: longText }] }, "running", ""],
@@ -47,11 +48,18 @@ try {
       { id: `tool-${id}`, role: "toolResult", toolCallId: id, status, text });
   };
   const records = new TaskRecords(app.store);
-  const descriptions = ["打开布局验证子会话", longText, "已停止任务", "等待中的任务"];
-  const { taskIds } = records.create(scope, "members", "UI fixture", descriptions.map((task, i) => ({ ...(i === 0 ? { title: "验证子任务卡片" } : {}), task, role: "" })), { provider: "fixture", id: "fixture", thinking: "off" });
+  const descriptions = ["打开布局验证子会话\n" + longText.repeat(2), longText, "已停止任务", "等待中的任务"];
+  const background = "UI fixture\n当前任务:\n这仍然属于背景原文。";
+  const { taskIds } = records.create(scope, "members", background, descriptions.map((task, i) => ({ ...(i === 0 ? { title: "验证子任务卡片" } : {}), task })), { provider: "fixture", id: "fixture", thinking: "off" });
   for (const [i, status] of ["completed", "failed", "cancelled", "queued"].entries()) app.store.db.prepare("UPDATE tasks SET status=?,error=? WHERE id=?").run(status, i === 1 ? longText : null, taskIds[i]);
   const childSessionId = String(app.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(taskIds[0])!.sessionId);
   const childScope = { workspaceId: workspace.id, sessionId: childSessionId };
+  const initial = records.inputs(records.rows("WHERE id=?", taskIds[0])[0], "queued")[0];
+  put(childScope, { id: "initial-task", role: "user", text: initial.body, inputIds: [initial.id] },
+    { id: "later-append", role: "user", text: "后续追加要求保持在时间线", inputIds: ["later-input"] });
+  const legacy = records.rows("WHERE id=?", taskIds[1])[0];
+  app.store.db.prepare("UPDATE tasks SET context=NULL,initialInputId=NULL WHERE id=?").run(legacy.id);
+  put({ workspaceId: scope.workspaceId, sessionId: legacy.sessionId }, { id: "legacy-input", role: "user", text: "历史背景和任务正文保留，不猜测分隔边界" });
   put(scope, { id: "members-message", role: "assistant", text: "", calls: [{ id: "members", name: "delegate", input: "{}" }] },
     { id: "tool-members", role: "toolResult", toolCallId: "members", status: "completed", text: JSON.stringify({ taskIds }) });
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));
@@ -70,19 +78,19 @@ try {
           const heading = node.querySelector(".task-operation-heading")!, target = node.querySelector(".task-operation-target"), summary = node.querySelector("summary")!, icon = node.querySelector(".task-operation-icon")!;
           return { tool: node.getAttribute("data-tool"), title: heading.querySelector("strong")!.textContent, preview: target?.textContent, status: node.getAttribute("data-status"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(heading.querySelector("strong")!).lineHeight), heading: heading.getBoundingClientRect().height, target: target?.getBoundingClientRect().height ?? 0, children: summary.children.length, color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon"), hiddenStatus: getComputedStyle(node.querySelector('.task-operation-status')!).clipPath, overflow: node.scrollWidth > node.clientWidth + 1 };
         }),
-        pending: [...el.querySelectorAll(".delegation-pending-item")].map(node => ({ height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("p")!).lineHeight), overflow: node.scrollWidth > node.clientWidth + 1 })),
-        members: [...el.querySelectorAll(".subagent")].map(node => { const icon = node.querySelector(".agent-state")!; return { state: icon.getAttribute("data-state"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("strong")!).lineHeight), color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon") }; }),
+        pending: [...el.querySelectorAll(".delegation-pending-item")].map(node => ({ title: node.querySelector("p")!.textContent, height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("p")!).lineHeight), overflow: node.scrollWidth > node.clientWidth + 1 })),
+        members: [...el.querySelectorAll(".subagent")].map(node => { const icon = node.querySelector(".agent-state")!; return { title: node.querySelector("strong")!.textContent, state: icon.getAttribute("data-state"), height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node.querySelector("strong")!).lineHeight), color: getComputedStyle(icon.querySelector("svg")!).color, muted: helpers.color(icon, "--meta"), danger: helpers.color(icon, "--danger-icon") }; }),
         rightSide: el.querySelectorAll(".task-batch-progress, .task-operation-action, .task-operation-chevron, .task-operation > details > summary > .task-operation-status").length,
         openIcons: [...el.querySelectorAll(".agent-open use")].map(node => node.getAttribute("href")),
       };
     });
-    assert.equal(metrics.operations.length, 6, `${label}: all operation states`);
+    assert.equal(metrics.operations.length, 7, `${label}: all operation states`);
     assert.equal(metrics.pending.length, 4, `${label}: creation, unsynced and failure`);
     assert.equal(metrics.rightSide, 0, `${label}: no right-side status, counter or collapse arrow`);
     for (const box of metrics.operations) {
-      const lines = box.tool === "append" ? 2 : 1;
+      const lines = box.preview ? 2 : 1;
       assert.ok(Math.abs(box.height - (Math.max(44, box.line * lines + 12) + 2)) <= 1, `${label}: operation ${lines} lines ${JSON.stringify(box)}`);
-      assert.ok(Math.abs(box.heading - box.line * lines) <= 1 && Math.abs(box.target - (lines === 2 ? box.line : 0)) <= 1, `${label}: only append has a second line`);
+      assert.ok(Math.abs(box.heading - box.line * lines) <= 1 && Math.abs(box.target - (lines === 2 ? box.line : 0)) <= 1, `${label}: second line appears only with a preview`);
       assert.equal(box.title, label.startsWith("child") ? "关联子任务" : "验证子任务卡片");
       assert.equal(box.children, 2, `${label}: only existing icon and text`);
       assert.equal(box.hiddenStatus, "inset(50%)");
@@ -91,6 +99,10 @@ try {
       assert.equal(box.overflow, false);
     }
     assert.equal(metrics.operations[0].preview, "补查手机端布局");
+    assert.deepEqual(metrics.operations.filter(box => box.tool === "cancel_task").map(box => box.preview), [longText, undefined]);
+    assert.ok(metrics.operations.filter(box => box.tool === "append").slice(1).every(box => box.preview === "补充任务"), "missing summaries never use the append body");
+    assert.deepEqual(metrics.pending.map(box => box.title), ["检查待创建任务", "核对长输入标题", "子任务", "子任务"]);
+    if (metrics.members.length) assert.deepEqual(metrics.members.map(box => box.title), ["验证子任务卡片", "子任务", "子任务", "子任务"]);
     for (const box of metrics.pending) { assert.ok(Math.abs(box.height - box.line) <= 1, `${label}: pending feedback stays single line ${JSON.stringify(box)}`); assert.equal(box.overflow, false); }
     for (const box of metrics.members) {
       assert.ok(Math.abs(box.height - Math.max(44, box.line + 12)) <= 1, `${label}: member single line`);
@@ -112,12 +124,36 @@ try {
   await original.click();
   await page.locator(`[data-task-id="${taskIds[0]}"] > button`).click();
   const child = page.getByRole("dialog", { name: "子代理会话", exact: true });
+  assert.equal(await child.locator(".subagent-dialog-heading strong").innerText(), "验证子任务卡片");
+  assert.equal(await child.locator(".task-brief").count(), 1);
+  const brief = child.getByRole("article", { name: "任务说明", exact: true });
+  assert.deepEqual(await brief.locator("h3").allTextContents(), ["任务背景", "任务目标"]);
+  assert.deepEqual(await brief.locator("p").allTextContents(), [background, descriptions[0]]);
+  assert.equal(await brief.getAttribute("data-collapsed"), "true");
+  assert.equal(await child.getByRole("article", { name: "用户消息", exact: true }).count(), 1, "initial input is represented once; appends remain visible");
+  await child.getByText("后续追加要求保持在时间线", { exact: true }).waitFor();
   for (const width of [320, 360, 390, 430, 820, 1440]) { await page.setViewportSize({ width, height: 1000 }); await check(child, `child-touch-${width}`); }
   await page.setViewportSize({ width: 390, height: 844 });
   await child.locator(".thread-content").screenshot({ path: join(artifacts, "child-mobile.png") });
+  await child.getByRole("button", { name: "任务说明", exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.matches("[data-task-brief]"));
+  assert.equal(await brief.getAttribute("data-collapsed"), "false");
+  const position = await child.locator(".thread").evaluate(el => el.scrollTop);
+  put(childScope, { id: "late-progress", role: "assistant", text: "说明查看期间新增消息" });
+  await child.getByText("说明查看期间新增消息", { exact: true }).waitFor();
+  assert.ok(Math.abs(await child.locator(".thread").evaluate(el => el.scrollTop) - position) < 2, "new messages do not pull brief navigation to the bottom");
+  await page.screenshot({ path: join(artifacts, "child-brief-mobile.png") });
+  await brief.getByRole("button", { name: "收起任务说明", exact: true }).click();
+  assert.equal(await brief.getAttribute("data-collapsed"), "true");
   await child.getByRole("button", { name: "原始会话", exact: true }).click();
   await child.getByText("正在查看原始会话", { exact: true }).waitFor();
   await check(child, "child-original-touch");
+  assert.equal(await child.locator(".task-brief").count(), 1);
+  await child.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
+  await page.locator(`[data-task-id="${legacy.id}"] > button`).click();
+  await child.getByText("历史背景和任务正文保留，不猜测分隔边界", { exact: true }).waitFor();
+  assert.equal(await child.locator(".task-brief").count(), 1);
+  assert.deepEqual(await child.locator(".task-brief h3").allTextContents(), ["任务目标"]);
   await child.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
   put(scope, { id: "final", role: "assistant", text: "布局检查结束", status: "completed", phase: "final_answer" });
   const aggregate = main.locator(":scope > .tool-activity:not(.process-live)");

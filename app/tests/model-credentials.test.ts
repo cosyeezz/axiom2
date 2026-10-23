@@ -7,12 +7,12 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ModelService } from "../src/server/model-service.js";
 
-async function fixture(run: (service: ModelService) => Promise<void>) {
+async function fixture(run: (service: ModelService) => Promise<void>, local = false) {
   const root = mkdtempSync(join(tmpdir(), "axiom-key-migration-"));
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
   try {
-    const service = new ModelService(root);
+    const service = local ? new ModelService(root, null) : new ModelService(root);
     await service.raw();
     await run(service);
   } finally {
@@ -81,7 +81,7 @@ test("failed credential persistence or a concurrent models edit never removes th
     service.runtime = createRuntime;
     await service.read();
     assert.equal(JSON.parse(await service.raw()).providers.legacy.apiKey, undefined);
-  });
+  }, true);
 });
 
 test("missing canonical credentials remain editable, block discovery, and can be repaired by saving", async () => {

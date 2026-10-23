@@ -106,8 +106,12 @@ try {
   release();
   await page.getByRole("status").filter({ hasText: "发送未完成" }).waitFor();
   assert.equal(await page.locator("#prompt").inputValue(), "");
-  assert.equal(await page.getByRole("button", { name: "恢复到输入框" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "恢复编辑", exact: true }).count(), 1);
   assert.equal(await page.locator(".user-text").filter({ hasText: "立即出现的乐观消息" }).count(), 1, "confirmed rejection retains the original message");
+  await page.getByRole("button", { name: "恢复编辑", exact: true }).click();
+  assert.equal(await page.locator("#prompt").inputValue(), "立即出现的乐观消息");
+  assert.equal(await page.locator("#prompt").evaluate(el => el === document.activeElement), true);
+  assert.equal(await page.locator(".user-text").filter({ hasText: "立即出现的乐观消息" }).count(), 0);
   let acceptedRequest = "";
   app.agents.command = (async (c: any, internal?: any) => {
     if (c.op !== "prompt") return original(c, internal);
@@ -130,7 +134,7 @@ try {
     fixtureReceipts.set(c.requestId, "pending");
     await steeringGate;
     fixtureReceipts.delete(c.requestId);
-    throw new AppError("INPUT_REJECTED", "测试追加输入被拒绝");
+    throw new AppError("INPUT_REJECTED", "测试追加输入被拒绝：选中的资源已不可用。请在“技能与 MCP”的“当前会话”中取消失效项或选择可用资源，点击“应用并重新加载”后重试。");
   }) as typeof app.agents.command;
   const selectedInfo = views.info(scope);
   views.publish(agentScope(scope), { ...selectedInfo, run: { id: "active-run", sessionId: scope.sessionId, status: "running", selection: selectedInfo.selection!, startedAt: Date.now(), endedAt: null, error: null } });
@@ -142,9 +146,20 @@ try {
   rejectSteering();
   await page.getByRole("status").filter({ hasText: "测试追加输入被拒绝" }).waitFor();
   assert.equal(await page.locator("#prompt").inputValue(), "继续输入的内容");
-  assert.equal(await page.getByRole("button", { name: "恢复编辑", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "恢复编辑", exact: true }).count(), 1);
   assert.equal(await page.locator(".steering-queue-item").count(), 1);
   assert.match(await page.locator(".steering-queue-item").innerText(), /追加内容/);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.waitForFunction(() => {
+    const queue = document.querySelector(".steering-queue")!;
+    const button = queue.querySelector("button")!.getBoundingClientRect();
+    return queue.scrollWidth <= queue.clientWidth + 1 && button.left >= 0 && button.right <= innerWidth;
+  });
+  await page.screenshot({ path: join(artifacts, "failed-recovery-mobile.png") });
+  await page.getByRole("button", { name: "恢复编辑", exact: true }).click();
+  assert.equal(await page.locator("#prompt").inputValue(), "追加内容\n\n继续输入的内容");
+  assert.equal(await page.locator(".steering-queue-item").count(), 0);
+  await page.setViewportSize({ width: 1440, height: 900 });
   // An input present in both the server queue and local placeholders must still
   // expose uncertainty/query errors, without rendering duplicate rows or replaying.
   let uncertainId = "", queryPhase = "unknown", sends = 0;
@@ -170,6 +185,7 @@ try {
   const pendingStatus = pendingRow.getByRole("status");
   await pendingStatus.filter({ hasText: "发送结果未确认" }).waitFor();
   assert.equal(await pendingRow.count(), 1);
+  assert.equal(await pendingRow.getByRole("button", { name: "恢复编辑", exact: true }).count(), 0);
   queryPhase = "error";
   await pendingStatus.filter({ hasText: "发送结果核实失败：测试核实读取失败" }).waitFor();
   queryPhase = "unknown";
@@ -180,7 +196,7 @@ try {
   views.publish(agentScope(scope), selectedInfo);
   await pendingRow.waitFor({ state: "detached" });
   assert.equal(sends, 1, "read-only reconciliation never resends");
-  // A saved failed submission restores as its own message after reload, never as editable input.
+  // A saved failed submission can be explicitly recovered and remains editable after reload.
   const reloadSession = app.store.execute({ requestId: crypto.randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
   const reloadScope = { ...scope, sessionId: reloadSession.id }, failedId = crypto.randomUUID();
   await assert.rejects(app.store.external({ requestId: failedId, op: "prompt", ...reloadScope, params: { text: "刷新后仍保留的失败消息" } },
@@ -195,9 +211,19 @@ try {
   await reloadPage.reload();
   await reloadPage.locator(".user-text").filter({ hasText: "刷新后仍保留的失败消息" }).waitFor();
   assert.equal(await reloadPage.locator("#prompt").inputValue(), "");
+  await reloadPage.getByRole("button", { name: "恢复编辑", exact: true }).click();
+  assert.equal(await reloadPage.locator("#prompt").inputValue(), "刷新后仍保留的失败消息");
+  await reloadPage.waitForFunction(async () => {
+    const scope = JSON.parse(sessionStorage.getItem("view")!);
+    const record = await fetch(`/api/draft?${new URLSearchParams(scope)}`).then(response => response.json());
+    return !record.submissionId && record.draft.text === "刷新后仍保留的失败消息";
+  });
+  await reloadPage.reload();
+  await reloadPage.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "刷新后仍保留的失败消息");
+  assert.equal(await reloadPage.locator(".user-text").filter({ hasText: "刷新后仍保留的失败消息" }).count(), 0);
   await reloadPage.close();
   assert.deepEqual(errors, []);
-  console.log("PASS: immediate bubble, failed messages stay separate from drafts, queued uncertainty/error feedback, no replay, compaction and responsive layout");
+  console.log("PASS: failed messages recover for editing and resend, preserve newer drafts, persist across reload, uncertain sends never replay, compaction and responsive layout");
 } catch (error) {
   console.error((error as Error).stack); throw error;
 } finally {

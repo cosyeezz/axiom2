@@ -1,3 +1,6 @@
+import { latencyFor } from "./latency.js";
+import type { DeliveryTiming } from "../shared/latency.js";
+import { PathActions } from "./path-actions.js";
 import { Resources } from "./resources.js";
 import { SkillFiles } from "./skill-files.js";
 import { OutgoingQueue } from "./outgoing.js";
@@ -18,7 +21,7 @@ import type { DraftStamp } from "../shared/drafts.js";
 import { SessionAttention } from "./session-attention.js";
 import { Files } from "./files.js";
 import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
-import { OpenDialog } from "./open-dialog.js";
+import { OpenDialog, OpenDialogError, type PickPaths } from "./open-dialog.js";
 import { FileManager, FileManagerError } from "./file-manager.js";
 import { AttachmentPicker, AttachmentPickerError, type PickAttachments } from "./attachment-picker.js";
 import { imagePayloadLimit } from "./images.js";
@@ -30,6 +33,10 @@ import type { OpenMemoryFile } from "./memory-open.js";
 import { Costs } from "./costs.js";
 import { Tasks } from "./tasks.js";
 import { Preferences } from "./preferences.js";
+import { ModelProxyService } from "./integrations/model-proxy.js";
+import { closeModelNetworks } from "./model-network.js";
+import { ReaService, type ReaDependencies } from "./integrations/rea.js";
+import { RtkService, type RtkDependencies } from "./integrations/rtk.js";
 import { OpenCliService, type OpenCliExecute } from "./integrations/opencli.js";
 import { compressionPreferencesScope } from "../shared/compression.js";
 import { taskPreferencesScope } from "../shared/tasks.js";
@@ -44,14 +51,16 @@ import {
 } from "../shared/protocol.js";
 
 export async function startServer(
-  options: { root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
+  options: { rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
+  const latency = latencyFor(store);
+  const deliverySamples = new Map<string, number>();
   const costs = new Costs(store);
   const drafts = new SessionDrafts(store);
   const files = new Files(store, (scope, id) => agents.message(scope, id, true),
-    (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal),
+    (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal, directory ? undefined : path),
     async (scope, id) => {
       const catalog = await agents.capabilities.get(scope);
       const skill = catalog.skills.find(item => item.id === id && item.available);
@@ -60,6 +69,7 @@ export async function startServer(
     });
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
+  const pathActions = new PathActions(store, fileManager);
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
   const attachmentPicker = new AttachmentPicker(options.pickAttachments, undefined, openDialog);
   const streamId = randomUUID();
@@ -67,7 +77,7 @@ export async function startServer(
     origin = "";
   const models = new ModelService(store.root);
   const preferences = new Preferences(store);
-  let config: Configuration = await configuration(store.root);
+  let config: Configuration = { revision: "", providerCount: 0, modelCount: 0, available: [], dataRoot: store.root };
   let configurationRead = 0,
     shuttingDown = false;
   const inFlight = new Set<Promise<void>>();
@@ -97,13 +107,19 @@ export async function startServer(
     if (scope === compressionPreferencesScope) return store.compressionPreferences();
     if (scope === taskPreferencesScope) return tasks.settings();
     if (scope === "pinned-sessions") return store.pinnedSessions();
+    // Invalidation only: deleted summaries are fetched in bounded, searchable pages.
+    if (scope === "deleted-sessions") return { revision: seq };
     if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
     if (scope === "resources") return resources.snapshot();
     if (scope === "builtin-tools:opencli") return opencli.snapshot();
+    if (scope === "builtin-tools:rea") return rea.snapshot();
+    if (scope === "builtin-tools:rtk") return rtk.snapshot();
+    if (scope === "builtin-tools:model-proxy") return modelProxy.snapshot();
     if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
     if (scope === "authentication") return null;
     const parts = scope.split(":");
+    if (parts.length === 2 && parts[0] === "memory-tree") return agents.memories.tree(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-organization") return agents.memories.organization(parts[1]);
     if (parts.length === 2 && parts[0] === "sessions")
@@ -133,6 +149,7 @@ export async function startServer(
     throw new AppError("INVALID_SCOPE", "订阅范围无效");
   };
   const outgoing = new WeakMap<WebSocket, OutgoingQueue>();
+  const connectionIds = new WeakMap<WebSocket, string>();
   const channel = (ws: WebSocket) => {
     let queue = outgoing.get(ws);
     if (!queue) {
@@ -148,7 +165,19 @@ export async function startServer(
     if (ws.readyState !== WebSocket.OPEN) { done?.(); return; }
     const event = value as Partial<Snapshot>;
     const data = event.data as { streaming?: boolean } | undefined;
-    channel(ws).send(value, event.type === "snapshot" && event.scope?.startsWith("message:") && data?.streaming ? event.scope : undefined, done, admittedRead);
+    const trace = event.latency;
+    let connectionId: string | undefined;
+    if (trace) {
+      connectionId = connectionIds.get(ws) ?? randomUUID();
+      connectionIds.set(ws, connectionId);
+      // Only sampled frames need a per-connection envelope; ordinary frames still share encoding.
+      value = { ...event, latency: { ...trace, connectionId } };
+    }
+    const correlation = trace ? { runId: trace.runId, requestId: trace.requestId, updateId: trace.updateId, streamId: event.streamId, seq: event.seq, connectionId } : undefined;
+    if (correlation) latency.add({ ...correlation, stage: "ws.enqueue", at: Date.now() });
+    channel(ws).send(value, event.type === "snapshot" && event.scope?.startsWith("message:") && data?.streaming ? event.scope : undefined, done, admittedRead,
+      correlation ? timing => latency.add({ ...correlation, stage: `ws.${timing.stage}`, at: Date.now(),
+        durationMs: timing.stage === "start" ? timing.queuedMs : timing.writeMs, bytes: timing.bytes }) : undefined);
   };
   const receivers = (scope: string) => {
     const collection = scope.startsWith("message:") ? scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:") : null;
@@ -202,7 +231,21 @@ export async function startServer(
         });
       }
     } else if (targets.length) {
-      const event: Snapshot = { type: "snapshot", scope, streamId, seq: version, data: data === undefined ? snapshots(scope) : data };
+      let timing: DeliveryTiming | undefined;
+      if (scope.startsWith("message:") && data && typeof data === "object" && "deliveryTiming" in data) {
+        const { deliveryTiming, ...body } = data as { deliveryTiming?: DeliveryTiming; streaming?: boolean };
+        data = body;
+        const now = Date.now();
+        if (deliveryTiming && (!body.streaming || now - (deliverySamples.get(deliveryTiming.requestId) ?? 0) >= 1000)) {
+          timing = deliveryTiming;
+          deliverySamples.delete(timing.requestId); deliverySamples.set(timing.requestId, now);
+          if (deliverySamples.size > 256) deliverySamples.delete(deliverySamples.keys().next().value!);
+          const correlation = { runId: timing.runId, requestId: timing.requestId, updateId: timing.updateId, streamId, seq: version };
+          latency.add({ ...correlation, stage: "ipc.receive", at: timing.receivedAt ?? now, durationMs: timing.receivedAt === undefined ? undefined : timing.receivedAt - timing.workerAt });
+          latency.add({ ...correlation, stage: "view.publish", at: now, durationMs: timing.receivedAt === undefined ? undefined : now - timing.receivedAt });
+        }
+      }
+      const event: Snapshot = { type: "snapshot", scope, streamId, seq: version, data: data === undefined ? snapshots(scope) : data, ...(timing ? { latency: timing } : {}) };
       for (const ws of targets) send(ws, event);
     }
     // All session summary changes (including background runs/tasks) refresh pins.
@@ -211,7 +254,36 @@ export async function startServer(
     // neither queries costs nor scans transcripts; siblings share one source check.
     if (/^(agent|compression|tasks|sessions|session):/.test(scope)) scheduleCosts(scope.split(":")[1]);
   };
-  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension);
+  // RTK installs into immutable private directories; it does not mutate global tools or active workers.
+  let proxyReady = false, proxyRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const modelProxy = new ModelProxyService(store.root, () => {
+    publish("builtin-tools:model-proxy");
+    if (!proxyReady || shuttingDown) return;
+    clearTimeout(proxyRefreshTimer);
+    proxyRefreshTimer = setTimeout(() => {
+      proxyRefreshTimer = undefined;
+      if (shuttingDown) return;
+      const update = refreshConfiguration().catch(() => {}).finally(() => inFlight.delete(update));
+      inFlight.add(update);
+    }, 150);
+  });
+  const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), options.rea);
+  const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), options.rtk);
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, () => {
+    if (shuttingDown) return "后台服务正在退出";
+    if (resources.busy) return "正在等待技能与 MCP 资源操作完成";
+    // Includes prompts admitted before async model preparation registers a run.
+    if (workspaceOperations.size) return "正在等待工作空间操作完成";
+    if (agents.maintenancePending) return "正在等待后台执行及压缩结束";
+    if (store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get() ||
+        store.db.prepare("SELECT 1 FROM task_results WHERE delivery='inflight' LIMIT 1").get())
+      return "正在等待子任务及结果处理完成";
+    for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
+      if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
+        return "正在等待本机 Agent、子任务及压缩结束";
+    }
+    return undefined;
+  });
   let agents: Agents;
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
   const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {
@@ -242,6 +314,7 @@ export async function startServer(
       return;
     }
     publish("workspaces");
+    publish("deleted-sessions");
     if (c.op !== "workspace.delete" && c.op !== "workspace.open") return;
     publish("workspace-preferences");
     publish("pinned-sessions");
@@ -308,6 +381,11 @@ export async function startServer(
           c.workspaceId = text(value.workspaceId, "工作空间标识");
         if (value.sessionId !== undefined)
           c.sessionId = text(value.sessionId, "会话标识");
+        if (c.op === "diagnostics.latency") {
+          const runId = c.params!.runId === undefined ? undefined : text(c.params!.runId, "运行标识");
+          send(ws, { type: "receipt", requestId, ok: true, data: { records: latency.snapshot(runId), capacity: latency.capacity } });
+          return;
+        }
         if (c.op === "ping") {
           // A read-only round trip on this exact socket; no stored receipt or model work.
           send(ws, { type: "receipt", requestId, ok: true, data: { streamId } });
@@ -373,22 +451,20 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
-        if (resources.busy && (c.op === "prompt" || c.op === "agent.resume" || c.op === "task.append" || c.op === "opencli.install" || c.op.startsWith("reload.") || c.op === "compression.start"))
+        if (resources.busy && (c.op === "prompt" || c.op === "agent.resume" || c.op === "agent.skills" || c.op === "task.append" || c.op.startsWith("reload.") || c.op === "compression.start"))
           throw new AppError("RESOURCE_BUSY", "技能与 MCP 正在变更，请等待资源操作完成。");
-        if (opencli.installing && ["prompt", "agent.resume", "task.append"].includes(c.op))
+        if (opencli.installing && (["prompt", "agent.resume", "agent.reload", "agent.skills", "task.append", "compression.start"].includes(c.op) || c.op.startsWith("reload.")))
           throw new AppError("TOOL_INSTALLING", "OpenCLI 正在安装或更新，请完成后再开始执行。");
         if (c.op.startsWith("resources.")) {
           if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "资源管理使用应用级范围。");
           data = c.op === "resources.get" || c.op === "resources.detail" ? await resources.command(c) : await store.external(c, () => resources.command(c));
+        } else if (c.op.startsWith("rea.")) {
+          data = ["rea.get", "rea.refresh"].includes(c.op) ? await rea.command(c) : await store.external(c, () => rea.command(c));
+        } else if (c.op.startsWith("rtk.")) {
+          data = ["rtk.get", "rtk.stats", "rtk.refresh"].includes(c.op) ? await rtk.command(c) : await store.external(c, () => rtk.command(c));
+        } else if (c.op.startsWith("modelProxy.")) {
+          data = c.op === "modelProxy.get" ? await modelProxy.command(c) : await store.external(c, () => modelProxy.command(c));
         } else if (c.op.startsWith("opencli.")) {
-          if (c.op === "opencli.install") {
-            // Includes prompts admitted before their async model preparation registers a run.
-            if (workspaceOperations.size) throw new AppError("AGENT_BUSY", "工作空间仍有操作处理中，请完成后再安装或更新 OpenCLI。");
-            for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
-              if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
-                throw new AppError("AGENT_BUSY", "请等待本机 Agent 任务结束后再安装或更新 OpenCLI。");
-            }
-          }
           data = c.op === "opencli.get" ? await opencli.command(c) : await store.external(c, () => opencli.command(c));
         } else if (c.op.startsWith("capabilities.skill.")) {
           const controller = new AbortController(), abort = () => controller.abort();
@@ -397,6 +473,8 @@ export async function startServer(
           finally { ws.off("close", abort); }
         } else if (c.op.startsWith("capabilities.")) {
           data = await agents.capabilities.command(c);
+        } else if (c.op.startsWith("processing.")) {
+          data = agents.memories.records.command(c);
         } else if (c.op.startsWith("memory.")) {
           const controller = new AbortController();
           const abort = () => controller.abort();
@@ -405,6 +483,11 @@ export async function startServer(
           finally { ws.off("close", abort); }
         } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
+        } else if (c.op.startsWith("paths.")) {
+          const controller = new AbortController(), abort = () => controller.abort();
+          ws.once("close", abort);
+          try { data = await pathActions.command(c, controller.signal); }
+          finally { ws.off("close", abort); }
         } else if (c.op.startsWith("files.")) {
           const controller = new AbortController();
           const abort = () => controller.abort();
@@ -415,7 +498,10 @@ export async function startServer(
           data = await models.read();
           await refreshConfiguration();
         } else if (c.op === "configuration.catalog") {
-          data = await models.catalog(c.params!.providerId, c.params!.revision);
+          const controller = new AbortController(), abort = () => controller.abort();
+          ws.once("close", abort);
+          try { data = await models.catalog(c.params!.providerId, c.params!.revision, controller.signal); }
+          finally { ws.off("close", abort); }
         } else if (c.op === "auth.start")
           data = await store.external(c, () =>
             logins.start(
@@ -461,7 +547,9 @@ export async function startServer(
               throw new AppError("INVALID_INPUT", "草稿发送标识无效");
           }
           data = await tasks.command(c);
-        } else if (c.op === "session.delete")
+        } else if (c.op === "deleted-sessions.list")
+          data = store.deletedSessions(object(c.params ?? {}));
+        else if (c.op === "session.delete")
           data = await models.serial(() => tasks.remove(c));
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId, c);
@@ -478,7 +566,11 @@ export async function startServer(
         if (c.op.startsWith("session.")) {
           const scope = c.sessionId ? { workspaceId: c.workspaceId!, sessionId: c.sessionId } : undefined;
           // 已读和置顶只影响会话列表。删除需投影 retained memory，改名只改 catalog 标题。
-          if (c.op === "session.delete" && scope) agents.memories.refresh(scope);
+          if ((c.op === "session.delete" || c.op === "session.restore") && scope) {
+            agents.memories.refresh(scope);
+            publish("deleted-sessions");
+            if (c.op === "session.restore") publish("workspaces");
+          }
           if (c.op === "session.rename" && scope) agents.memories.rename(scope);
           if (c.op === "session.read")
             publish(`thread:${c.workspaceId}:${c.sessionId}`);
@@ -557,7 +649,7 @@ export async function startServer(
         req.url === "/";
       const url = new URL(req.url!, origin);
       if (!local(req) && !landingNavigation) {
-        if (url.pathname === "/api/workspace/pick-folder" || url.pathname === "/api/attachments/pick") {
+        if (url.pathname === "/api/workspace/pick-folder" || url.pathname === "/api/attachments/pick" || url.pathname === "/api/resources/pick" || url.pathname === "/api/files/pick") {
           res.writeHead(403, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ error: "来源校验失败" }));
         } else {
@@ -579,7 +671,11 @@ export async function startServer(
           for await (const chunk of req) { size += chunk.length; if (size > 220000) throw Error("选择内容过大"); chunks.push(Buffer.from(chunk)); }
           const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!Array.isArray(value.paths) || !value.paths.length || value.paths.length > 50 || value.paths.some((path: unknown) => typeof path !== "string" || path.length > 4096)) throw Error("请选择 1–50 个文件或文件夹");
+          const kind = value.kind ?? "mixed", multiple = value.multiple ?? true;
+          if (!["file", "folder", "mixed"].includes(kind) || typeof multiple !== "boolean") throw Error("打开窗口的选择模式无效");
+          if (!multiple && value.paths.length > 1) throw Error("只能选择一项，请重新选择");
           const items = await remoteSelection(value.paths);
+          if (items.some(item => kind === "file" && item.kind === "folder" || kind === "folder" && item.kind !== "folder")) throw Error("所选项目不符合文件或文件夹选择要求");
           if (value.scope) files.registerPicked(value.scope, items);
           res.end(JSON.stringify({ items }));
         } catch (error) { res.writeHead(400); res.end(JSON.stringify({ error: (error as Error).message })); }
@@ -649,6 +745,27 @@ export async function startServer(
           req.removeListener("aborted", disconnect);
           res.removeListener("close", disconnect);
         }
+        return;
+      }
+      if (url.pathname === "/api/resources/pick" || url.pathname === "/api/files/pick") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (req.headers.origin !== origin) { res.writeHead(403); res.end(JSON.stringify({ error: "来源校验失败" })); return; }
+        if (req.method !== "POST") { res.writeHead(405, { Allow: "POST" }); res.end(JSON.stringify({ error: "请使用 POST 请求选择路径" })); return; }
+        const controller = new AbortController(), disconnect = () => controller.abort();
+        req.once("aborted", disconnect); res.once("close", disconnect);
+        try {
+          if (shuttingDown) throw new OpenDialogError("服务正在退出", 503);
+          const resource = url.pathname === "/api/resources/pick";
+          const kind = resource ? "mixed" : url.searchParams.get("kind") ?? "mixed";
+          if (kind !== "file" && kind !== "folder" && kind !== "mixed") throw new OpenDialogError("打开窗口的选择模式无效", 400);
+          const title = resource ? "打开技能文件夹或 Markdown 文件" : kind === "folder" ? "打开文件夹" : kind === "file" ? "打开文件" : "打开文件或文件夹";
+          const paths = await openDialog.select({ kind, multiple: false, title }, controller.signal, resource ? options.pickResources : options.pickPaths);
+          const items = await remoteSelection(paths);
+          controller.signal.throwIfAborted();
+          if (!res.destroyed) res.end(JSON.stringify({ items }));
+        } catch (error) {
+          if (!res.destroyed) { res.writeHead(error instanceof OpenDialogError ? error.status : 500); res.end(JSON.stringify({ error: error instanceof OpenDialogError ? error.message : "无法打开路径选择窗口" })); }
+        } finally { req.removeListener("aborted", disconnect); res.removeListener("close", disconnect); }
         return;
       }
       if (url.pathname === "/api/attachments/pick") {
@@ -816,6 +933,9 @@ export async function startServer(
     );
   });
   try {
+    await modelProxy.initialize();
+    config = await configuration(store.root);
+    proxyReady = true;
     // Preparation never opens a window; keep compilation/CLR/COM startup out of the first click.
     // A missing desktop component must not prevent the rest of the service from starting.
     await Promise.all([openDialog.prepare().catch(() => {}), fileManager.prepare().catch(() => {})]);
@@ -824,7 +944,7 @@ export async function startServer(
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
     });
   } catch (error) {
-    await Promise.all([openDialog.close(), fileManager.close()]);
+    await Promise.all([openDialog.close(), fileManager.close(), modelProxy.close(), closeModelNetworks(store.root)]);
     sockets.close();
     await vite?.close();
     attention.close();
@@ -843,11 +963,14 @@ export async function startServer(
     tasks,
     close: async () => {
       shuttingDown = true;
+      clearTimeout(proxyRefreshTimer);
       clearTimeout(costTimer); costWorkspaces.clear();
       await remoteAccess?.close();
       attention.close();
       await resources.close();
       await opencli.close();
+      await rea.close();
+      await rtk.close();
       await Promise.all([openDialog.close(), fileManager.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);
@@ -857,6 +980,8 @@ export async function startServer(
       await Promise.allSettled(inFlight);
       await logins.close();
       await tasks.close();
+      await closeModelNetworks(store.root);
+      await modelProxy.close();
       await vite?.close();
       await new Promise<void>((r) => {
         server.close(() => r());

@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { PathActions } from "../LocalPath.js";
 import { Icon } from "../Icon.js";
 import { ContextMemoryIcon } from "../DataIcons.js";
 import { BubbleLoadingIcon } from "../StatusIcons.js";
@@ -10,6 +11,8 @@ import { command, useScope } from "../transport.js";
 import type { Scope, Workspace } from "../../shared/protocol.js";
 import { emptyMemoryView, memoryScope, memoryCatalogScope, memoryBudgetLimits, type MemoryPreferences as Preferences, type MemoryView, type MemoryCatalogEntry, type MemoryReason } from "../../shared/memory.js";
 import { ModelPicker } from "../chat/ModelPicker.js";
+import { MemoryTreePage } from "./MemoryTreePage.js";
+import { ProcessingPage, type ProcessingOpening } from "../pages/ProcessingPage.js";
 import { MemoryDocumentView } from "./MemoryDocumentView.js";
 import { MemoryFilter } from "./MemoryFilter.js";
 import { MemoryOrganizeControl } from "./MemoryOrganizeControl.js";
@@ -40,6 +43,31 @@ function memoryReasonText(reason?: MemoryReason) {
   }
 }
 
+const stateTones: Record<string, string> = { 进行中: "active", 已完成: "done", 阻塞: "blocked" };
+/** The parser keeps the raw status line when it carries a reason, e.g. 阻塞（等待用户提供节点）. */
+function stateReason(state: string, detail?: string) {
+  if (!detail || !detail.startsWith(state)) return "";
+  const rest = detail.slice(state.length).trim();
+  return (/^[（(](.+)[）)]$/s.exec(rest)?.[1] ?? rest.replace(/^[：:，,；;。、\s—-]+/, "")).trim();
+}
+/** Goals grow one line per round ("第一轮：…"); each line becomes its own paragraph with the short lead label set apart. */
+function goalParagraphs(text: string) {
+  return text.split(/\r?\n/).map((line) => line.trim().replace(/^[-*+]\s+/, "")).filter(Boolean).map((line) => {
+    // Full-width colon only, so URLs and code such as `a:b` never turn into labels.
+    const match = /^([^，。；：:,;]{1,12})：\s*(.+)$/s.exec(line);
+    return match ? { label: match[1], body: match[2] } : { label: "", body: line };
+  });
+}
+/** Goals stay short, so every paragraph is shown in full. */
+function GoalText({ text }: { text: string }) {
+  return <section className="memory-goal">
+    <h3>目标与范围</h3>
+    <div className="memory-goal-text">
+      {goalParagraphs(text).map((paragraph, index) => <p key={index}>{paragraph.label && <strong className="memory-goal-label">{paragraph.label}：</strong>}{paragraph.body}</p>)}
+    </div>
+  </section>;
+}
+
 function useMemory(scope: Scope) {
   const snapshot = useScope<MemoryView | null>(memoryScope(scope), null);
   const view = snapshot?.error ? { ...emptyMemoryView(scope), reason: snapshot.reason ?? "unavailable" } : snapshot;
@@ -55,6 +83,8 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigg
   const percent = hasProgress && progress?.progressState === "valid" ? progress.percent : null;
   const estimate = percent == null ? "进度待评估" : `${percent < 100 ? "约 " : ""}${percent}%`;
   const inProgress = progress?.state === "进行中";
+  const state = recorded(progress?.state) ? progress!.state : "", reason = stateReason(state, progress?.stateDetail);
+  const tone = stateTones[state] ?? "idle", done = progress?.tasks.filter((t) => t.state === "已完成").length ?? 0;
   const availability = memoryReasonText(view?.reason);
   const status = !view ? "读取中…" : availability || (!hasProgress ? "暂无记录" : progress?.progressState === "conflict" ? "进度待核对" : estimate);
   return <section className="memory-todo" aria-label="本会话任务进度">
@@ -64,10 +94,13 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigg
     {expanded && <MetricDetail trigger={toggle.current!} title="上下文与会话记忆" subtitle="当前会话 · 上下文容量与任务进展" className="memory-todo-body" onClose={() => setExpanded(false)} footer={<button className="memory-text-button" onClick={() => { setExpanded(false); toggle.current?.focus(); openMemory(toggle.current!); }}><MemoryIcon name="book" />查看完整记忆<MemoryIcon name="chevron" /></button>}>
       <div id={detailsId} className="memory-context-detail">{context.detail}</div>
       {!view ? <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆…</p> : !hasProgress ? <div className="memory-todo-empty"><MemoryIcon name="tasks" /><strong>{memoryReasonText(view.reason) || "还没有任务记录"}</strong><p>{view.reason ? "主任务可继续执行；可稍后重新读取。" : "记录任务后，在这里查看进展与下一步。"}</p></div> : <>
-        {recorded(progress?.goal) && <h3>{progress?.goal}</h3>}
-        <div className="memory-progress-summary"><span>{inProgress && <BubbleLoadingIcon />}{progress?.state}</span><span>{status}</span></div>
-        {percent != null && <><progress value={percent} max={100} aria-label="任务整体进度" /><p className="meta">整体进度为模型估计，与下方已完成事项数量分别统计。</p></>}
-        {progress?.tasks.length ? <><p className="memory-task-count">已完成 {progress.tasks.filter((t) => t.state === "已完成").length} / {progress.tasks.length} 项</p><ul>{progress.tasks.map((t, i) => <li key={i} data-state={t.state}><span className="memory-task-marker" aria-hidden="true">{t.state === "已完成" ? <Icon name="check" /> : t.state === "进行中" ? <BubbleLoadingIcon /> : null}</span><span className="memory-task-title">{t.title}</span><span className="memory-task-state">{t.state}</span></li>)}</ul></> : <p className="memory-task-empty">尚未记录任务清单</p>}
+        {recorded(progress?.goal) && <GoalText text={progress!.goal} />}
+        <section className="memory-status" data-tone={tone}>
+          <div className="memory-progress-summary"><span className="memory-state-badge">{inProgress ? <BubbleLoadingIcon /> : <i aria-hidden="true" />}{state || "状态未记录"}</span><span className="memory-progress-value">{percent == null ? status : <>{percent < 100 && "约 "}<span>{percent}%</span></>}</span></div>
+          {reason && <p className="memory-state-reason">{reason}</p>}
+          {percent != null && <><progress value={percent} max={100} aria-label="任务整体进度" /><p className="memory-progress-note">整体进度为模型估计，与已完成事项数分别统计。</p></>}
+        </section>
+        {progress?.tasks.length ? <section className="memory-tasks"><div className="memory-section-head"><h3>任务清单</h3><p className="memory-task-count">已完成 {done} / {progress.tasks.length} 项</p></div><ul>{progress.tasks.map((t, i) => <li key={i} data-state={t.state}><span className="memory-task-marker" aria-hidden="true">{t.state === "已完成" ? <Icon name="check" /> : t.state === "进行中" ? <BubbleLoadingIcon /> : null}</span><span className="memory-task-title">{t.title}</span><span className="memory-task-state">{t.state}</span></li>)}</ul></section> : <p className="memory-task-empty">尚未记录任务清单</p>}
         <dl className="memory-next">{recorded(progress?.current) && <><dt>当前进展</dt><dd>{progress?.current}</dd></>}{recorded(progress?.next) && <><dt>下一步</dt><dd>{progress?.next}</dd></>}</dl>
         {progress?.overLimit && <p className="meta" role="status">入口超过 2,000 字，请将详情移入分类资料。</p>}
       </>}
@@ -83,7 +116,7 @@ function Detail({ scope, path, navigate, dirty, dirtyChange, onReady }: { scope:
       <summary>关联文件 <span>{related.length}</span></summary>
       {related.length ? ["references", "scripts", "artifacts"].map((category) => {
         const files = related.filter((file) => file.path.startsWith(`${category}/`));
-        return files.length ? <nav key={category} aria-label={category}><h3>{{ references: "详细资料", scripts: "脚本 · 只读查看", artifacts: "产物" }[category]}</h3>{files.map((file) => <button disabled={dirty} key={file.path} onClick={() => navigate(file.path)}><MemoryIcon name="file" />{file.path}<MemoryIcon name="chevron" /></button>)}</nav> : null;
+        return files.length ? <nav key={category} aria-label={category}><h3>{{ references: "详细资料", scripts: "脚本 · 只读查看", artifacts: "产物" }[category]}</h3>{files.map((file) => <div className="memory-path-row" key={file.path}><button disabled={dirty} onClick={() => navigate(file.path)}><MemoryIcon name="file" />{file.path}<MemoryIcon name="chevron" /></button><PathActions path={file.path} scope={scope} base="memory" /></div>)}</nav> : null;
       }) : <p className="meta">尚未添加详细资料、脚本或产物。</p>}
     </details>
     <MemoryDocumentView key={`${scope.sessionId}:${path}`} scope={scope} path={path} changed={view?.revision ?? ""} navigate={navigate} dirtyChange={dirtyChange} onReady={onReady} />
@@ -158,11 +191,11 @@ function Global({ workspaceId, workspaces, select, open }: { workspaceId: string
     {settings && preferences && <fieldset className="memory-settings" disabled={busy} aria-busy={busy}>{busy && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在处理…</p>}<h3>查询模型</h3><ModelPicker value={preferences.queryModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(queryModel) => configure({ queryModel })} /><h3>后台整理模型</h3><ModelPicker value={preferences.organizerModel} inheritLabel="使用来源会话模型" disabled={busy} onDefaultSelect={(organizerModel) => configure({ organizerModel })} />
       <p className="meta">未单独选择时使用来源会话模型。浏览资料不调用模型；手动和后台定时整理会产生实际用量。</p>
       <BudgetInput label="整理间隔（秒）" value={preferences.intervalMs / 1000} min={1} max={86400} save={(value) => configure({ intervalMs: value * 1000 })} />
-      <h3>执行预算</h3>
+      <h3>执行设置</h3>
       <BudgetInput label="执行时限（秒）" value={preferences.timeoutMs / 1000} min={memoryBudgetLimits.timeoutMs.min / 1000} max={memoryBudgetLimits.timeoutMs.max / 1000} save={(value) => configure({ timeoutMs: value * 1000 })} />
-      <BudgetInput label="读取上限（字符）" value={preferences.readChars} min={memoryBudgetLimits.readChars.min} max={memoryBudgetLimits.readChars.max} save={(readChars) => configure({ readChars })} />
-      <BudgetInput label="模型交互轮数" value={preferences.maxTurns} min={memoryBudgetLimits.maxTurns.min} max={memoryBudgetLimits.maxTurns.max} save={(maxTurns) => configure({ maxTurns })} />
-      <p className="meta">按 Enter 或离开输入框自动保存，无需重启；从下一次查询或整理执行生效，进行中的执行保持原预算。时限包含排队，每轮为一次模型交互；提高预算可能增加耗时和用量。失败来源会在后续整理周期重试。</p>
+      <BudgetInput label="整理读取上限（字符）" value={preferences.readChars} min={memoryBudgetLimits.readChars.min} max={memoryBudgetLimits.readChars.max} save={(readChars) => configure({ readChars })} />
+      <BudgetInput label="整理交互轮数" value={preferences.maxTurns} min={memoryBudgetLimits.maxTurns.min} max={memoryBudgetLimits.maxTurns.max} save={(maxTurns) => configure({ maxTurns })} />
+      <p className="meta">按 Enter 或离开输入框自动保存，从下一次执行生效。时限包含排队，适用于查询和整理；读取上限与交互轮数仅用于整理。查询按标题、摘要、正文和详情逐级读取。</p>
       <label>明确不再保留的条目原文<textarea value={correction} onChange={(e) => setCorrection(e.target.value)} /></label><p className="meta">仅清理当前工作空间中与原文完全匹配的记忆内容及摘要，保留原始对话。</p><button className="btn" disabled={busy || !correction.trim()} onClick={() => void correct()}>删除此条记忆及重复内容</button>
     </fieldset>}
     <div className="memory-catalog">{filtered.map((entry) => <Summary key={entry.id} entry={entry} open={open} />)}{!entries ? !error && <p className="memory-empty-copy memory-loading" role="status"><BubbleLoadingIcon />正在读取记忆目录…</p> : !organized.length ? <div className="memory-catalog-empty"><MemoryIcon name="book" /><strong>暂无已整理的摘要</strong><p>{catalogStatus ? `${catalogStatus}；完成后会显示可用摘要。` : "整理完成后，会话摘要会显示在这里。"}</p></div> : !filtered.length ? <div className="memory-catalog-empty"><MemoryIcon name="search" /><strong>没有符合筛选条件的摘要</strong><button className="memory-text-button" onClick={() => { setQuery(""); setSession(""); }}>清除筛选</button></div> : null}</div>
@@ -194,6 +227,7 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
   const { panel, close, host } = useSettingsPopover(opening.trigger, onClose);
   const [history, setHistory] = useState<MemoryLocation[]>(opening.scope ? [{ scope: opening.scope, path: "MEMORY.md" }] : []);
   const [workspaceId, setWorkspaceId] = useState(opening.scope?.workspaceId || workspace || workspaces[0]?.id || "");
+  const [records, setRecords] = useState<ProcessingOpening | null>(null);
   const [dirty, setDirty] = useState(false), [pending, setPending] = useState<(() => void) | null>(null);
   const body = useRef<HTMLDivElement>(null), positions = useRef(new Map<string, number>());
   const previousWorkspace = useRef(workspaceId);
@@ -203,7 +237,7 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
       panel.current?.querySelector<HTMLButtonElement>('[aria-label="记忆工作空间"]')?.focus({ preventScroll: true });
     }
   }, [workspaceId, panel]);
-  const target = history.at(-1), key = target ? `${target.scope.sessionId}:${target.path}` : "catalog";
+  const target = history.at(-1), key = records ? "records" : target ? `${target.scope.sessionId}:${target.path}` : "catalog";
   // Retain filters and scroll after the first visit, without loading a hidden catalog on entry.
   const [catalogVisited, setCatalogVisited] = useState(!opening.scope);
   useEffect(() => { if (!target) setCatalogVisited(true); }, [target]);
@@ -214,7 +248,8 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
     positions.current.set(key, body.current?.scrollTop ?? 0);
     setHistory(next);
   });
-  const back = () => history.length ? navigate(history.slice(0, -1)) : ask(onClose);
+  const openRecords = (initial: ProcessingOpening) => ask(() => { positions.current.set(key, body.current?.scrollTop ?? 0); setRecords(initial); });
+  const back = () => records ? setRecords(null) : history.length ? navigate(history.slice(0, -1)) : ask(onClose);
   useLayoutEffect(() => { if (body.current) body.current.scrollTop = positions.current.get(key) ?? 0; }, [key]);
   useEffect(() => {
     let outsideStart = false;
@@ -243,13 +278,14 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
     document.addEventListener("click", toolbarClick, true); document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", down, true); document.removeEventListener("pointerup", up, true); document.removeEventListener("pointercancel", cancel, true); document.removeEventListener("click", toolbarClick, true); document.removeEventListener("keydown", escape); };
   }, [opening.trigger, panel, dirty, onClose]);
-  return createPortal(<dialog ref={panel} open popover="manual" className="compression-page memory-dialog" aria-labelledby="memory-heading" onCancel={(event) => { event.preventDefault(); ask(onClose); }}>
-    <header><div className="memory-panel-title"><MemoryIcon name="book" /><div><h2 id="memory-heading">{target ? "会话记忆" : "全局记忆"}</h2><p>{target ? target.title ?? "当前会话" : "已整理的会话摘要与关联资料"}</p></div></div><button ref={close} className="icon-btn" aria-label="关闭记忆" data-tooltip="返回会话（Esc）" onClick={() => ask(onClose)}><MemoryIcon name="close" /></button></header>
+  return createPortal(<dialog ref={panel} open popover="manual" className={`compression-page memory-dialog${opening.scope ? "" : " memory-tree-dialog"}`} aria-labelledby="memory-heading" onCancel={(event) => { event.preventDefault(); ask(onClose); }}>
+    <header><div className="memory-panel-title"><MemoryIcon name="book" /><div><h2 id="memory-heading">{target ? "会话记忆" : "全局记忆"}</h2><p>{target ? target.title ?? "当前会话" : "主题、事项与关联来源文件"}</p></div></div><button ref={close} className="icon-btn" aria-label="关闭记忆" data-tooltip="返回会话（Esc）" onClick={() => ask(onClose)}><MemoryIcon name="close" /></button></header>
     {pending && <div className="memory-unsaved" role="alert">尚有未保存编辑。<button className="btn" onClick={() => setPending(null)}>继续编辑</button><button className="btn" onClick={() => { const action = pending; setDirty(false); setPending(null); action(); }}>放弃编辑并继续</button></div>}
     <div ref={body} className="compression-body memory-dialog-body">
-      <div hidden={!!target}>{(catalogVisited || !target) && (workspaceId ? <Global key={workspaceId} workspaceId={workspaceId} workspaces={workspaces} select={setWorkspaceId} open={(scope) => navigate([{ scope, path: "MEMORY.md", title: scope.sourceTitle ?? scope.title }])} /> : <p>暂无工作空间</p>)}</div>
-      {target && <Detail key={target.scope.sessionId} scope={target.scope} path={target.path} dirty={dirty} dirtyChange={setDirty} onReady={() => { if (body.current) body.current.scrollTop = positions.current.get(key) ?? 0; }} navigate={(path) => { if (path !== target.path) navigate([...history, { scope: target.scope, path, title: target.title }]); }} />}
+      <div hidden={!!target || !!records}>{(catalogVisited || !target) && (workspaceId ? <MemoryTreePage key={workspaceId} workspaceId={workspaceId} workspaces={workspaces} select={setWorkspaceId} openRecords={openRecords} open={(scope, path) => navigate([{ scope, path }])} /> : <p>暂无工作空间</p>)}</div>
+      {records && <ProcessingPage key={workspaceId} workspaceId={workspaceId} initial={records} onBack={() => setRecords(null)} />}
+      <div hidden={!!records}>{target && <><button className="btn" disabled={dirty} onClick={() => openRecords({ sessionId: target.scope.sessionId })}>处理记录</button><Detail key={target.scope.sessionId} scope={target.scope} path={target.path} dirty={dirty} dirtyChange={setDirty} onReady={() => { if (body.current) body.current.scrollTop = positions.current.get(key) ?? 0; }} navigate={(path) => { if (path !== target.path) navigate([...history, { scope: target.scope, path, title: target.title }]); }} /></>}</div>
     </div>
-    <footer className="memory-navigation"><button type="button" className="btn btn-ghost memory-return" onClick={back}><MemoryIcon name="back" />{history.length > 1 ? "返回上一级" : history.length ? "返回全局记忆" : "返回会话"}</button><small>{target ? history.length > 1 ? "会话记忆 / 关联文件" : "全局记忆 / 会话记忆" : "仅显示已整理摘要"}</small></footer>
+    <footer className="memory-navigation"><button type="button" className="btn btn-ghost memory-return" onClick={back}><MemoryIcon name="back" />{records ? "返回记忆" : history.length > 1 ? "返回上一级" : history.length ? "返回全局记忆" : "返回会话"}</button><small>{target ? history.length > 1 ? "会话记忆 / 关联文件" : "全局记忆 / 会话记忆" : "Topic / Section / Item / Content"}</small></footer>
   </dialog>, host);
 }

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { PathActions } from "../LocalPath.js";
 import { command } from "../transport.js";
 import { updateDraft } from "../drafts.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -73,10 +74,10 @@ export function useFileCompletion(scope: Scope, text: string, input: RefObject<H
     popup: open ? <FileCompletionPopup input={input}>
       <div className="file-picker-heading"><strong>引用文件 · pi</strong><span>↑↓ 选择 · Enter / Tab 插入 · Esc 关闭</span></div>
       <div id={id} role="listbox" aria-label="pi 文件选择" aria-busy={loading}>
-        {result?.items.map((item, i) => <button type="button" role="option" id={`${id}-${i}`} key={item.value}
-          aria-selected={i === index} data-tooltip={item.value} onPointerDown={(e) => e.preventDefault()} onClick={() => choose(item)}>
+        {result?.items.map((item, i) => <div className="file-completion-row" key={item.value} onPointerDown={event => event.preventDefault()}><button type="button" role="option" id={`${id}-${i}`}
+          aria-selected={i === index} data-tooltip={item.value} onClick={() => choose(item)}>
           <span>{item.label}</span>{item.description && <small>{item.description}</small>}
-        </button>)}
+        </button><PathActions path={item.value.replace(/^@/, "").replace(/^"|"$/g, "")} scope={scope} /></div>)}
       </div>
       {(loading || error || !result?.items.length) && <p role="status">{loading ? "正在搜索工作空间文件…" : error || "没有匹配文件，继续输入路径或按 Esc 返回编辑"}</p>}
     </FileCompletionPopup> : null,

@@ -101,7 +101,7 @@ for (const boundary of ["revision", "new-input", "freeze", "queued-task", "notif
       if (boundary === "freeze") f.app.store.db.prepare("UPDATE task_parents SET frozen=1 WHERE sessionId=?").run(f.scope.sessionId);
       if (boundary === "queued-task" || boundary === "notification") {
         const { records, delivery } = f.app.tasks as unknown as { records: TaskRecords; delivery: TaskDelivery };
-        const { taskIds: [id] } = records.create(f.scope, "fixture", "原授权工作", [{ task: "验证已有任务", role: "只读验证" }], f.selection);
+        const { taskIds: [id] } = records.create(f.scope, "fixture", "原授权工作", [{ task: "验证已有任务" }], f.selection);
         if (boundary === "notification") {
           const child = records.rows("WHERE id=?", id)[0];
           const run: Run = { id: crypto.randomUUID(), sessionId: child.sessionId, status: "completed", selection: f.selection,

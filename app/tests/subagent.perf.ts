@@ -76,7 +76,7 @@ try {
       const timer = setTimeout(() => { released = true; release(); }, 150);
       try {
         await isolated.command({ op: "prompt", requestId: randomUUID(), ...b, params: { text: "independent" } },
-          { task: { id: "benchmark", role: "", inputIds: [] }, onStart: () => { admittedAt = performance.now(); admittedBeforeRelease = !released; } });
+          { task: { id: "benchmark", inputIds: [] }, onStart: () => { admittedAt = performance.now(); admittedBeforeRelease = !released; } });
         await slow;
       } finally { release(); clearTimeout(timer); await slow; }
       if (i >= 2) ack.push({ admissionMs: admittedAt - started, admittedBeforeRelease, configLockMs: held });
@@ -87,7 +87,7 @@ try {
   agents = new Agents(store, models, () => {}, undefined, () => false); tasks = new Tasks(agents);
   const records = tasks.records, scheduler = tasks.scheduler; records.freeze(scope);
   const row = (id: string) => records.rows("WHERE id=?", id)[0];
-  const create = (count: number) => records.create(scope, randomUUID(), "benchmark", Array.from({ length: count }, () => ({ task: "fixed loopback work", role: "" })), selection).taskIds as string[];
+  const create = (count: number) => records.create(scope, randomUUID(), "benchmark", Array.from({ length: count }, () => ({ task: "fixed loopback work" })), selection).taskIds as string[];
   const times = new Map<string, any>();
   const originalEvent = agents.externalEvent;
   agents.onEvent = (scope: any, run: any, event: any) => {
@@ -147,7 +147,7 @@ try {
   const structural: any[] = [];
   for (const size of [6, 16]) {
     const eventScope = session(); records.freeze(eventScope);
-    const createEvents = (count: number) => records.create(eventScope, randomUUID(), "queue benchmark", Array.from({ length: count }, () => ({ task: "fixed queue events", role: "" })), selection).taskIds as string[];
+    const createEvents = (count: number) => records.create(eventScope, randomUUID(), "queue benchmark", Array.from({ length: count }, () => ({ task: "fixed queue events" })), selection).taskIds as string[];
     const ids = [...createEvents(Math.min(8, size)), ...(size > 8 ? createEvents(size - 8) : [])];
     const parentTasks = records.rows("WHERE parentSessionId=?", eventScope.sessionId).length;
     assert.equal(parentTasks, size, "queue fixture must not inherit startup history");
@@ -193,7 +193,7 @@ try {
   const lists: any = {};
   for (const count of (smoke ? [0, 32] : [0, 32, 500, 2000])) {
     while (historyIds.length < count) {
-      const ids = records.create(history, "history", "fixed", Array.from({ length: Math.min(8, count - historyIds.length) }, () => ({ task: "history", role: "" })), selection).taskIds;
+      const ids = records.create(history, "history", "fixed", Array.from({ length: Math.min(8, count - historyIds.length) }, () => ({ task: "history" })), selection).taskIds;
       store.db.exec("BEGIN IMMEDIATE");
       try {
         for (const id of ids) {

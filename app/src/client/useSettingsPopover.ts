@@ -1,4 +1,5 @@
 import { useEffectEvent, useLayoutEffect, useRef } from "react";
+import { openPopover, popoverHost } from "./popover.js";
 import "./styles/toolbar-details.css";
 
 /** A non-modal settings sheet keeps its toolbar reachable, including inside a child dialog. */
@@ -6,7 +7,7 @@ export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => vo
   const panel = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   const dismiss = useEffectEvent(onClose);
-  const host = trigger.closest("dialog") ?? document.body;
+  const host = popoverHost(trigger);
 
   useLayoutEffect(() => {
     const node = panel.current!;
@@ -30,20 +31,13 @@ export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => vo
         trigger.focus({ preventScroll: true });
       }
     };
-    const toggle = (event: ToggleEvent) => {
-      if (event.target === node && event.newState === "closed") {
-        restoreFocus();
-        dismiss();
-      }
-    };
     let positionFrame = 0;
     const schedulePosition = (event?: Event) => {
       if (event?.target instanceof Node && node.contains(event.target)) return;
       if (!positionFrame) positionFrame = requestAnimationFrame(() => { positionFrame = 0; position(); });
     };
     position();
-    node.addEventListener("toggle", toggle);
-    node.showPopover({ source: trigger });
+    const disposePopover = openPopover(node, { source: trigger, onClose: () => { restoreFocus(); dismiss(); } });
     close.current!.focus({ preventScroll: true });
     const observer = new ResizeObserver(() => schedulePosition());
     observer.observe(toolbar);
@@ -60,8 +54,7 @@ export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => vo
       window.visualViewport?.removeEventListener("resize", position);
       window.visualViewport?.removeEventListener("scroll", schedulePosition);
       window.removeEventListener("scroll", schedulePosition, true);
-      node.removeEventListener("toggle", toggle);
-      if (node.matches(":popover-open")) node.hidePopover();
+      disposePopover();
       restoreFocus();
     };
   }, [trigger, host, placement]);

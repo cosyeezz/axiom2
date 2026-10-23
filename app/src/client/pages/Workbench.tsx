@@ -15,6 +15,7 @@ import { Composer, EmptyComposer } from "../chat/Composer.js";
 import { OriginalConversationProvider } from "../chat/OriginalConversation.js";
 import { TaskViews } from "../tasks/TaskViews.js";
 import { History } from "../workspaces/SessionHistory.js";
+import { DeletedSessions } from "../workspaces/DeletedSessions.js";
 import { WorkspacePicker } from "../workspaces/WorkspacePicker.js";
 import { useWorkspaceView } from "../workspaces/useWorkspaceView.js";
 import { pickWorkspaceFolder, Title } from "../workspaces/WorkspaceControls.js";
@@ -191,6 +192,7 @@ export default function Workbench() {
           select={(next) => navigate(() => { selectSession(next); closeMobileHistory(); })}
           onError={setError}
         />
+        <DeletedSessions />
         <a
           className="sidebar-foot config-entry"
           href="/settings.html"
@@ -257,6 +259,7 @@ export default function Workbench() {
             <EmptyComposer
               tools={tools}
               openWorkspace={() => void chooseFolder()}
+              picking={pickingFolder}
               onSelect={workspace ? async (selection) => {
                 const startedAt = navigation.current;
                 const session = await command<Session>(

@@ -1,5 +1,6 @@
 import { EditableUserMessage } from "./EditableUserMessage.js";
-import { memo, useContext, useState } from "react";
+import { commitDelivery } from "../latency.js";
+import { memo, useContext, useLayoutEffect, useState } from "react";
 import { useFullMessage } from "./useFullMessage.js";
 import { useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
@@ -61,6 +62,7 @@ export const Message = memo(function Message({
   hideThinking = false,
   callsOnly = false,
   activeRunId,
+  initialTaskInputId,
 }: {
   scope: Scope;
   id: string;
@@ -70,6 +72,7 @@ export const Message = memo(function Message({
   hideThinking?: boolean;
   callsOnly?: boolean;
   activeRunId?: string;
+  initialTaskInputId?: string | null;
 }) {
   const source = useThreadMessage(scope, id);
   const full = useFullMessage(scope, source);
@@ -82,7 +85,13 @@ export const Message = memo(function Message({
     truncated: false,
   } : source;
   const groupOpen = useContext(ActivityExpanded);
+  useLayoutEffect(() => {
+    if (source?.role === "assistant" && (!inActivity || groupOpen)) commitDelivery(source);
+  }, [source, inActivity, groupOpen]);
   if (!m || m.role === "toolResult") return null;
+  // The structured brief at the beginning of this child thread owns the
+  // initial delegation. Never suppress legacy or batched input messages.
+  if (m.role === "user" && initialTaskInputId && m.inputIds?.length === 1 && m.inputIds[0] === initialTaskInputId) return null;
   if (!thinkingOnly && m.compression) return <CompactionCard m={m} scope={scope} id={id} />;
   if (!thinkingOnly && m.taskNotice) return <TaskNotice message={m} />;
   // Body and process slices subscribe to the same message without moving text

@@ -59,7 +59,7 @@ async function fixture(inject = false, partial = false) {
     runId = randomUUID();
     send({ type: "start", input: { root, cwd, modelsFile, file: manager.getSessionFile(), runId,
       selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: "Inspect evidence.",
-      task: { id: "isolated", role: "", inputIds: [], budget: budget(0) } } });
+      task: { id: "isolated", inputIds: [], budget: budget(0) } } });
     await wait(() => bodies.length > 0, () => stderr);
   };
   const summarize = async (revision = 1) => {
@@ -138,7 +138,7 @@ test("summary image preparation can be recalled without treating its acknowledge
     const workspace = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: f.cwd, authorized: true } }) as any;
     const session = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as any;
     const records = new TaskRecords(store), selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-    const taskId = records.create({ workspaceId: workspace.id, sessionId: session.id }, "image-recall", "context", [{ task: "inspect", role: "" }], selection).taskIds[0];
+    const taskId = records.create({ workspaceId: workspace.id, sessionId: session.id }, "image-recall", "context", [{ task: "inspect" }], selection).taskIds[0];
     const row = () => records.rows("WHERE id=?", taskId)[0];
     records.deliver(row(), records.inputs(row(), "queued").map(input => input.id));
     store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'running',?,?)").run(f.runId, row().sessionId, JSON.stringify(selection), Date.now());
@@ -249,7 +249,7 @@ test("all rejected resume inputs preserve real partial output in exactly one imm
     const parent = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as any;
     const scope = { workspaceId: workspace.id, sessionId: parent.id }, records = new TaskRecords(store);
     const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-    const taskId = records.create(scope, "fixture", "fixture", [{ task: "verify partial", role: "" }], selection).taskIds[0];
+    const taskId = records.create(scope, "fixture", "fixture", [{ task: "verify partial" }], selection).taskIds[0];
     const child = records.rows("WHERE id=?", taskId)[0], endedAt = Date.now();
     const run = { id: f.done()[0].runId, sessionId: child.sessionId, status: "failed" as const, selection, startedAt: endedAt - 1000, endedAt, error: f.done()[0].error, reasonCode: "TASK_RESUME_FAILED" };
     store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES(?,?,'failed',?,?,?)").run(run.id, run.sessionId, JSON.stringify(selection), run.startedAt, endedAt);

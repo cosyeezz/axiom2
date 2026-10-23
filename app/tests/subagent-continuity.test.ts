@@ -61,7 +61,7 @@ test("one child retains permissions and bound context across reuse, eviction, ha
       const child = runtime.live.get(args[0].sessionId)?.child;
       if (child && !watched.has(child.pid)) { watched.add(child.pid); child.on("message", (event: any) => { if (event.type === "queue") queues.push(event); }); }
     };
-    const ids = ["a", "b"].map(letter => records.create(scope, randomUUID(), `SHARED_${letter}`, [{ task: `CHILD_${letter}_ONLY`, role: `ROLE_${letter}_ONLY` }], { provider: "fixture", id: `model-${letter}`, thinking: "off" }).taskIds[0]);
+    const ids = ["a", "b"].map(letter => records.create(scope, randomUUID(), `SHARED_${letter}`, [{ task: `CHILD_${letter}_ONLY` }], { provider: "fixture", id: `model-${letter}`, thinking: "off" }).taskIds[0]);
     const row = (id = ids[0]) => records.rows("WHERE id=?", id)[0], child = target(row());
     const idle = (id = ids[0]) => until(() => ["completed", "interrupted", "failed"].includes(row(id).status) && !app!.agents.active(target(row(id))), "child did not settle", 60000);
     const file = () => String(app!.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(child.sessionId)!.file);
@@ -69,7 +69,7 @@ test("one child retains permissions and bound context across reuse, eviction, ha
       const bodies = requests.slice(from).filter(body => body.model === "model-a"); assert.ok(bodies.length);
       for (const body of bodies) {
         assert.deepEqual(body.tools.map((tool: any) => tool.function.name).sort(), ["find", "grep", "ls", "read", process.platform === "win32" ? "powershell" : "bash"].sort());
-        assert.match(JSON.stringify(body.messages), /CHILD_a_ONLY/); assert.doesNotMatch(JSON.stringify(body.messages), /PARENT_PRIVATE_CONTEXT|CHILD_b_ONLY|ROLE_b_ONLY/);
+        assert.match(JSON.stringify(body.messages), /CHILD_a_ONLY/); assert.doesNotMatch(JSON.stringify(body.messages), /PARENT_PRIVATE_CONTEXT|CHILD_b_ONLY/);
       }
       assert.ok(events.some(e => e.runId === runId && e.event.type === "tool" && e.event.name === "write" && e.event.status === "failed"));
       const systemPrompt = app!.agents.info(child).environment!.systemPrompt;

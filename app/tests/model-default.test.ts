@@ -169,9 +169,9 @@ test("model default: legacy sessions without receipts restore a main model, neve
   await f.select(parent, first);
   const child = f.create();
   f.store.db.prepare(
-    "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,'completed',?,?)",
+    "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,?,?,'completed',?,?)",
   ).run(randomUUID(), parent.workspaceId, parent.sessionId, child.sessionId,
-    "legacy", "legacy child", "assistant", "{}", Date.now());
+    "legacy", "legacy child", "{}", Date.now());
   await f.select(child, second);
   f.store.db.exec("DELETE FROM agent_preferences; DELETE FROM external_requests");
   await f.restart();
@@ -251,7 +251,7 @@ test("model default: child session confirmations do not change the application d
   // Establish real task ownership without launching a child worker.
   f.store.db
     .prepare(
-      "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,'completed',?,?)",
+      "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,?,?,'completed',?,?)",
     )
     .run(
       randomUUID(),
@@ -260,7 +260,6 @@ test("model default: child session confirmations do not change the application d
       child.sessionId,
       "fixture-anchor",
       "Model default isolation fixture",
-      "assistant",
       JSON.stringify({ work: 600, wrap: 180, summary: 60, cleanup: 10 }),
       Date.now(),
     );

@@ -3,13 +3,20 @@ import { createRoot } from "react-dom/client";
 import { Icons } from "./components.js";
 import { connect } from "./transport.js";
 import { TooltipLayer } from "./TooltipLayer.js";
+import { PageBoundary } from "./PageBoundary.js";
+import { initializeTheme } from "./theme.js";
+import { initializeDisplaySettings } from "./display-settings.js";
+import { FontScaleFeedback } from "./settings/DisplaySettings.js";
 import "./styles/tokens.css";
 import "./styles/scrollbars.css";
 
-// Full-page navigation keeps the three supplied global stylesheets isolated.
+initializeTheme();
+// Full-page navigation keeps page styles isolated.
 const Page = (
   await (location.pathname === "/connect.html"
     ? import("./pages/Connect.js")
+    : location.pathname === "/display.html"
+    ? import("./pages/Display.js")
     : location.pathname === "/settings.html"
     ? import("./pages/Settings.js")
     : location.pathname === "/resources.html"
@@ -26,11 +33,14 @@ const Page = (
 await import("./styles/action-icons.css");
 await import("./styles/icon-geometry.css");
 await import("./styles/mobile.css");
+initializeDisplaySettings();
+await import("./styles/theme.css");
 createRoot(document.getElementById("root")!).render(
-  <>
+  <PageBoundary>
     <Icons />
     <Page />
     <TooltipLayer />
-  </>,
+    <FontScaleFeedback />
+  </PageBoundary>,
 );
 if (location.pathname !== "/connect.html") void connect();

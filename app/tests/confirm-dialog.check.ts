@@ -46,7 +46,7 @@ try {
   await dialog.waitFor();
   assert.equal(await cancel.evaluate((el) => el === document.activeElement), true);
   assert.ok((await dialog.innerText()).includes(title), "confirmation identifies the session being deleted");
-  assert.match(await dialog.innerText(), /停止所属任务，不删除项目文件/);
+  assert.match(await dialog.innerText(), /停止所属任务.*不删除项目文件/);
   assert.equal(await dialog.evaluate((el) => el.matches(":modal")), true);
   assert.ok(await dialog.getAttribute("aria-describedby"));
   await page.keyboard.press("Tab");

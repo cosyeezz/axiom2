@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { modelNetwork } from "./model-network.js";
 import { join } from "node:path";
 import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import { CredentialSynchronizationError } from "@earendil-works/pi-coding-agent";
+import { ensureModelProvider } from "./model-runtime.js";
 import { ModelService } from "./model-service.js";
 import { AppError, text } from "../shared/protocol.js";
 import type { AuthState } from "../shared/models.js";
@@ -41,6 +42,7 @@ export class Logins {
     private publish: (owner: object, state: AuthState) => void,
     private changed: () => Promise<void>,
     private openBrowser = openAuthBrowser,
+    private network = modelNetwork,
   ) {}
   get(owner: object, id: string) {
     const flow = this.flows.get(id);
@@ -76,6 +78,7 @@ export class Logins {
         throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后认证");
       if (!Object.hasOwn(config.providers, providerId) && type !== "oauth")
         throw new AppError("NOT_FOUND", "请先发布自定义供应商配置");
+      await ensureModelProvider(runtime, providerId);
       const method =
         type === "oauth"
           ? runtime.getProvider(providerId)?.auth.oauth
@@ -157,27 +160,8 @@ export class Logins {
           "按 pi 认证提示完成登录；关闭或取消会终止当前流程。";
         send();
       };
-      const devicePath = join(this.models.root, "installation-id");
-      const operation = runtime
-        .login(
-          providerId,
-          type,
-          { signal: controller.signal, prompt, notify },
-          {
-            agentName: "Axiom2",
-            getDeviceId: () => {
-              try {
-                return readFileSync(devicePath, "utf8");
-              } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-                  throw error;
-                const value = randomUUID();
-                writeFileSync(devicePath, value, { flag: "wx", mode: 0o600 });
-                return value;
-              }
-            },
-          },
-        )
+      const operation = this.network(this.models.root, this.models.dir, providerId, join(this.models.dir, "models.json"), "login", { type },
+        { signal: controller.signal, prompt, notify })
         .then(async () => {
           const persisted = await this.models.runtime();
           if (!(await persisted.listCredentials()).some((c) => c.providerId === providerId && c.type === type))

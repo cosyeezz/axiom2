@@ -70,11 +70,11 @@ export const TaskCards = memo(function TaskCards({
             className="subagent"
             data-status={t.error || t.status === "interrupted" ? "failed" : t.status}
             aria-haspopup="dialog"
-            aria-label={`打开子会话：${t.title || t.description}${t.error ? ` · ${t.error}` : ""}`}
+            aria-label={`打开子会话：${t.title || "子任务"}${t.error ? ` · ${t.error}` : ""}`}
             onClick={() => open(t.id)}
           >
-            <span className="agent-identity" data-tooltip={`${t.title || t.description} · ${t.results.length} 次交付${t.error ? ` · ${t.error}` : ""}`}>
-              <strong data-tooltip={t.error ? `${t.title || t.description} · ${t.error}` : t.title || t.description}>{t.title || t.description}</strong>
+            <span className="agent-identity" data-tooltip={`${t.title || "子任务"} · ${t.results.length} 次交付${t.error ? ` · ${t.error}` : ""}`}>
+              <strong data-tooltip={t.error ? `${t.title || "子任务"} · ${t.error}` : t.title || "子任务"}>{t.title || "子任务"}</strong>
               {t.error && <span className="task-operation-status" role="alert">{t.error}</span>}
             </span>
             <TaskState task={t} iconOnly />

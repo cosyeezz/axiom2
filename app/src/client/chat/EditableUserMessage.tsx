@@ -81,7 +81,7 @@ export function EditableUserMessage({ message, scope }: { message: ChatMessage; 
       <div className="message-actions"><button ref={editButton} type="button" disabled={loading} aria-label="修改并重新发送" data-tooltip="修改并重新发送" onClick={() => void edit()}>
         <Icon name="square-pen" />
       </button></div>
-      {message.text && <div className="markdown"><Markdown text={message.text} /></div>}
+      {message.text && <div className="markdown"><Markdown text={message.text} attachments={[...(message.attachments ?? []), ...(message.images ?? []).map(image => ({ ...image, kind: "image" }))]} /></div>}
       <SkillCards skills={message.skills} scope={scope} />
       <MessageImages images={message.images} scope={scope} messageId={message.id} />
       {loading && <small className="meta" role="status">正在读取原消息…</small>}

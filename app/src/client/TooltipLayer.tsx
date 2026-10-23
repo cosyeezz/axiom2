@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { openPopover, popoverHost } from "./popover.js";
 import "./styles/tooltip.css";
 
 type Tip = { anchor: Element; text: string };
@@ -131,7 +132,7 @@ export function TooltipLayer() {
     const node = ref.current;
     if (!tip || !node) return;
     // Native popover puts the hint above modal dialogs without changing focus.
-    node.showPopover?.();
+    const disposePopover = openPopover(node);
     const position = () => {
       const rect = tip.anchor.getBoundingClientRect();
       const { width, height } = node.getBoundingClientRect();
@@ -151,6 +152,7 @@ export function TooltipLayer() {
     tip.anchor.setAttribute("aria-describedby", [...new Set([...previous, id])].join(" "));
     return () => {
       resize.disconnect();
+      disposePopover();
       const remaining = tip.anchor.getAttribute("aria-describedby")?.split(/\s+/).filter(value => value && value !== id);
       if (remaining?.length) tip.anchor.setAttribute("aria-describedby", remaining.join(" "));
       else tip.anchor.removeAttribute("aria-describedby");
@@ -160,6 +162,6 @@ export function TooltipLayer() {
   // Mount within a modal when necessary so the hint remains hoverable there.
   return tip ? createPortal(
     <div ref={ref} id={id} role="tooltip" className="axiom-tooltip" popover="manual">{tip.text}</div>,
-    tip.anchor.closest("dialog[open], [popover]:popover-open") ?? document.body,
+    popoverHost(tip.anchor),
   ) : null;
 }

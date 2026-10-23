@@ -3,20 +3,36 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { emptyCostTotals, type CostReport } from "../src/shared/costs.js";
 const fixture = `
 import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
-import {Usage} from '/chat/Usage.tsx';import {MemoryToolbar} from '/memory/MemoryToolbar.tsx';import {parseMemory} from '/@fs/${resolve('src/shared/memory.ts').replaceAll('\\', '/')}';import {Icons} from '/components.tsx';import {acceptSnapshot} from '/transport.ts';
+import {Usage} from '/chat/Usage.tsx';import {MemoryToolbar} from '/memory/MemoryToolbar.tsx';import {parseMemory} from '/@fs/${resolve('src/shared/memory.ts').replaceAll('\\', '/')}';import {Icons} from '/components.tsx';import {acceptSnapshot,connect} from '/transport.ts';
 import '/styles/tokens.css';import '/styles/workbench.css';import '/styles/icon-geometry.css';import '/styles/mobile.css';import '/styles/data-icons.css';import '/styles/action-icons.css';
 const root=createRoot(document.getElementById('root'));let seq=0;
 window.show=(options={})=>{const sessionId=options.sessionId??'parent';const scope={workspaceId:'fixture',sessionId};
 flushSync(()=>root.render(<><Icons/><main style={{height:'100dvh',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'flex-end',padding:'20px 12px'}}>{options.memory === undefined ? <Usage scope={scope}/> : <MemoryToolbar scope={scope} workspaces={[]}>{tools=><Usage scope={scope} tools={tools}/>}</MemoryToolbar>}</main></>));
-acceptSnapshot({scope:'agent:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{selection:null,environment:null,run:options.active?{id:'fixture-run',status:'running',startedAt:Date.now()}:null,usage:options.usage??{input:56250,output:123,cacheRead:25000,cacheWrite:18750,total:100123,cost:0.1234,context:{tokens:32000,window:128000,estimated:true}}}});if(options.memory!==undefined)acceptSnapshot({scope:'memory:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{...scope,revision:String(seq),entry:options.memory,progress:parseMemory(options.memory),files:[],deleted:false}});};window.show();`;
+acceptSnapshot({scope:'agent:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{task:sessionId==='child'?{id:'fixture-task',parentSessionId:'parent',status:'completed'}:undefined,selection:null,environment:null,run:options.active?{id:'fixture-run',status:'running',startedAt:Date.now()}:null,usage:options.usage??{input:90000,output:123,cacheRead:9000,cacheWrite:1000,total:100123,cost:0.1234,lastRequest:{input:56250,cacheRead:25000,cacheWrite:18750},context:{tokens:32000,window:128000,estimated:true}}}});if(options.memory!==undefined)acceptSnapshot({scope:'memory:fixture:'+sessionId,streamId:'fixture',seq:++seq,data:{...scope,revision:String(seq),entry:options.memory,progress:parseMemory(options.memory),files:[],deleted:false}});};window.show();connect();`;
 const server = await createServer({ configFile: false, root: resolve('src/client'), cacheDir: resolve('test-results/data-icons/vite-cache'), plugins: [{ name: 'data-fixture', resolveId(id) { if(id==='virtual:data-icons') return id; }, load(id) { if(id==='virtual:data-icons') return {code:fixture,loader:'tsx'}; }, transform(code,id){ if(id==='virtual:data-icons') return import('esbuild').then(e=>e.transform(code,{loader:'tsx',jsx:'automatic'})); } }], server: { host:'127.0.0.1',port:0,fs:{allow:[resolve('.')]}} });
 await server.listen();const browser=await chromium.launch({executablePath:process.env.AXIOM_TEST_BROWSER});
 const output=resolve('test-results/data-icons');mkdirSync(output,{recursive:true});
 try {
   const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'}),errors:string[]=[];
   page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/api/status', route => route.fulfill({json:{ok:true}}));
+  await page.routeWebSocket('**/ws', socket => socket.onMessage(raw => {
+    const command = JSON.parse(String(raw));
+    let data: CostReport | object = {};
+    if (command.op === 'costs.get') {
+      const totals = {...emptyCostTotals(),records:1,knownCost:12.9876};
+      totals.tokens.input = 100;
+      totals.parts.input = totals.knownCost;
+      data = {scope:{workspaceId:'fixture',sessionId:command.sessionId},requestedSessionId:command.sessionId,
+        title:'图标测试',updatedAt:Date.now(),sessions:[{id:command.sessionId,title:'图标测试',taskId:null,status:null}],
+        rows:[{...totals,id:'fixture-cost',category:'main',sessionId:command.sessionId,source:'fixture',provider:'fixture',model:'fixture'}],
+        total:totals,warnings:[]} satisfies CostReport;
+    }
+    socket.send(JSON.stringify({type:'receipt',requestId:command.requestId,ok:true,data}));
+  }));
   await page.route('**/data-icons-check',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@id/virtual:data-icons"></script></body></html>'}));
   await page.goto(server.resolvedUrls!.local[0]+'data-icons-check');await page.locator('[data-od-id="context-capacity"] svg[data-value="25"]').waitFor();
   const escape = async () => { await page.keyboard.press('Escape'); await page.waitForFunction(()=>!document.querySelector('.metric-detail,.cost-popover')); };
@@ -28,12 +44,12 @@ try {
   assert.equal(await context.locator('.memory-progress-bars .memory-progress-pending').count(),3);
   await context.click();assert.match(await page.locator('.metric-detail').innerText(),/32,000 \/ 128,000/);assert.match(await page.locator('.metric-detail').innerText(),/待模型用量校准/);
   await escape();assert.ok(await context.evaluate(n=>n===document.activeElement));
-  await cache.click();const text=await page.locator('.metric-detail').innerText();for(const value of ['25.0%','25,000','56,250','18,750','累计输入'])assert.ok(text.includes(value));
+  await cache.click();const text=await page.locator('.metric-detail').innerText();for(const value of ['25.0%','25,000','56,250','18,750','最近一次请求'])assert.ok(text.includes(value));
   const method = page.locator('.cache-detail .metric-method');
   assert.equal(await method.locator('summary use').getAttribute('href'), '#i-chevron-down');
   await method.locator('summary').focus(); await page.keyboard.press('Enter');
   assert.equal(await method.getAttribute('open'), '');
-  assert.match(await method.innerText(), /不是请求命中概率/);
+  assert.match(await method.innerText(), /本次请求的 Token 命中比例/);
   await page.keyboard.press('Enter');
   assert.equal(await method.getAttribute('open'), null);
   await escape(); await cache.click();
@@ -52,7 +68,22 @@ try {
   await page.setViewportSize({width:390,height:844});
   await escape();await page.screenshot({path:resolve(output,'mobile.png')});
   const show=async(usage:unknown,sessionId='parent',active=false)=>{await page.evaluate(({usage,sessionId,active})=>(window as any).show({usage,sessionId,active}),{usage,sessionId,active});};
-  const base={input:0,cacheRead:0,cacheWrite:0,output:0,total:0,cost:null,context:{tokens:0,window:128000,estimated:false}};
+  const base={input:5000,cacheRead:5000,cacheWrite:0,output:0,total:10000,cost:null,lastRequest:null,context:{tokens:0,window:128000,estimated:false}};
+  const request=(ratio:number)=>({...base,lastRequest:{input:100-ratio,cacheRead:ratio,cacheWrite:0}});
+  for(const lastRequest of [undefined,null,{input:0,cacheRead:0,cacheWrite:0},{input:10,cacheWrite:0},{input:-1,cacheRead:1,cacheWrite:0}]) {
+    await show({...base,lastRequest});
+    await page.waitForFunction(()=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')==='unknown');
+    await cache.click();assert.equal(await page.locator('.cache-summary strong').innerText(),'—');await escape();
+  }
+  await show(request(80));await cache.click();
+  assert.equal(await page.locator('.cache-summary strong').innerText(),'80.0%');
+  await show(request(20));await page.waitForFunction(()=>document.querySelector('.cache-summary strong')?.textContent==='20.0%');
+  assert.deepEqual(await page.locator('.cache-ledger dd').allTextContents(),['20','80','0']);
+  await show(request(90),'child');await page.locator('.metric-detail').waitFor({state:'detached'});
+  await cache.click();assert.match(await page.locator('.metric-detail').innerText(),/当前子会话 · 最近一次请求/);
+  assert.equal(await page.locator('.cache-summary strong').innerText(),'90.0%');
+  await show(request(20),'parent');await page.locator('.metric-detail').waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')==='20');
   await show(base);await page.waitForFunction(()=>document.querySelector('[data-od-id="context-capacity"] svg')?.getAttribute('data-value')==='0');
   assert.equal(await cache.locator('svg.data-icon').getAttribute('data-value'),'unknown');
   await show({...base,input:100,context:{tokens:160000,window:128000,estimated:false}});
@@ -75,8 +106,9 @@ try {
   assert.equal(await color('[data-od-id="estimated-cost"] svg'),'rgb(138, 143, 152)');
   assert.equal(await cost.locator('use').getAttribute('href'),'#i-chart-column-increasing');
   assert.equal(await cost.locator('[data-od-id="run-duration"]').count(),0);
-  assert.equal(await page.locator('.usage-row > button').count(),3);
+  assert.equal(await page.locator('.usage-row > button').count(),4);
   await cost.click();
+  await page.waitForFunction(()=>document.querySelector('.cost-session-facts dd')?.textContent==='$12.9876');
   assert.match(await page.locator('.cost-session-duration').innerText(),/当前主会话预计费用/);
   assert.match(await page.locator('.cost-session-duration').innerText(),/\$12\.9876/);
   await escape();
@@ -94,7 +126,7 @@ try {
   await page.waitForFunction(()=>getComputedStyle(document.querySelector('.context-ring.data-track')!).stroke==='rgb(247, 248, 248)');
   await page.mouse.move(0,0);
   for(const ratio of [0,49.99,50,70,70.01,90,90.01,100]) {
-    await show({...base,input:100-ratio,cacheRead:ratio});
+    await show(request(ratio));
     await page.waitForFunction(value=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')===String(value),ratio);
     assert.equal(await color('[data-od-id="cache-tokens"] svg'),'rgb(138, 143, 152)');
     const lightning=cache.locator('.cache-lightning');
@@ -111,7 +143,7 @@ try {
   for(const reducedMotion of ['no-preference','reduce'] as const) {
     await page.emulateMedia({reducedMotion});
     for(const [ratio,active,breathing] of [[70,true,true],[70.01,true,true],[90,true,true],[90.01,true,false],[100,true,false],[90,true,true],[null,true,true],[70,false,false],[100,false,false]] as const) {
-      await show(ratio===null?base:{...base,input:100-ratio,cacheRead:ratio},'parent',active);
+      await show(ratio===null?base:request(ratio),'parent',active);
       await page.waitForFunction(value=>document.querySelector('[data-od-id="cache-tokens"] svg')?.getAttribute('data-value')===value,ratio===null?'unknown':String(ratio));
       assert.equal(await cache.locator('animate').count(),breathing?1:0,`${ratio}% active=${active}`);
       const samples=[];
@@ -143,7 +175,7 @@ try {
     }
   }
   for(const [estimate,state,bars,valid] of [['约 30%','进行中',0,'30'],['约 40%','进行中',1,'40'],['约 70%','进行中',2,'70'],['约 90%','进行中',2,'90'],['100%','已完成',3,'100'],['100%','进行中',0,'unknown'],['待评估','尚未记录',0,'unknown']] as const) {
-    const memory=`# 会话记忆\n\n## 目标与范围\n三等分验证\n\n## 任务进度\n整体状态：${state}\n整体进度：${estimate}\n`;
+    const memory=`# 会话记忆\n\n## 目标与范围\n三等分验证\n\n## 任务进度\n整体状态：${state}\n整体进度：${estimate}\n${state==='已完成'?'- [已完成] 验证进度图标\n':''}`;
     await page.evaluate(memory=>(window as any).show({memory}),memory);
     await page.waitForFunction(value=>document.querySelector('.memory-progress-bars')?.getAttribute('data-progress')===value,valid);
     assert.equal(await context.locator('.memory-progress-lit').count(),bars,estimate+' '+state);

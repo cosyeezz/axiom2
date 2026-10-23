@@ -112,7 +112,8 @@ try {
   assert.ok((await page.locator(".file-source-code pre").innerText()).includes("# 文件预览"));
   await page.getByRole("button", { name:"自动换行", exact:true }).click();
   assert.equal(await page.getByRole("button", { name:"自动换行", exact:true }).getAttribute("aria-pressed"), "true");
-  await page.getByRole("button", { name:"打开所在文件夹", exact:true }).click();
+  await page.locator(".file-path").hover();
+  await page.locator(".file-title").getByRole("button", { name:"打开所在文件夹", exact:true }).click();
   await page.getByText("测试：桌面暂不可用", { exact:true }).waitFor(); assert.equal(revealRequest.sessionId, scope.sessionId); assert.equal(revealRequest.params.messageId, "file-reply"); assert.equal(revealRequest.params.path, undefined);
   await page.getByRole("button", { name:"重新加载文件", exact:true }).click(); await page.locator('.file-preview-body[aria-busy="false"]').waitFor();
   await page.locator("#prompt").fill("输入框在预览期间依然可用。");
@@ -176,6 +177,7 @@ try {
   await page.getByRole("button", { name: "HTML 预览", exact: true }).click();
   await html.getByRole("button", { name: "点击 1", exact: true }).waitFor();
   const copy = page.getByRole("button", { name: "复制文件路径", exact: true });
+  await page.locator(".file-path").hover();
   await copy.click();
   await page.locator('.file-title [role="status"]').filter({ hasText: "已复制路径" }).waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), join(root, "unsafe.html"));

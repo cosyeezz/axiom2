@@ -23,8 +23,12 @@ test("absolute paths are data and mappings are available to agent but hidden in 
   const prompt = attachmentPrompt("检查[file1] [img1] [folder1]", added);
   for (const item of items) assert.ok(prompt.includes(JSON.stringify(item.path)));
   assert.equal(attachmentDisplayText(prompt), "检查[file1] [img1] [folder1]");
-  assert.equal(chatMessage({ role: "user", content: prompt }, "test")?.text, "检查[file1] [img1] [folder1]");
-  assert.equal(chatMessage({ role: "custom", customType: "axiom-append", display: true, content: prompt }, "test")?.text, "检查[file1] [img1] [folder1]");
+  const metadata = added.map(({ id, name, kind, path }) => ({ id, name, kind, path }));
+  for (const message of [{ role: "user", content: prompt }, { role: "custom", customType: "axiom-append", display: true, content: prompt }]) {
+    const view = chatMessage(message, "test");
+    assert.equal(view?.text, "检查[file1] [img1] [folder1]");
+    assert.deepEqual(view?.attachments, metadata, "all attachment kinds retain metadata without file contents");
+  }
   assert.equal(attachmentDisplayText("自定义附件路径映射文字"), "自定义附件路径映射文字");
   assert.equal(attachmentInput({ ...added[0], path: "/tmp/notes.txt" })?.path, "/tmp/notes.txt");
   assert.equal(attachmentInput({ ...added[0], path: "\\\\server\\share\\notes.txt" })?.path, "\\\\server\\share\\notes.txt");

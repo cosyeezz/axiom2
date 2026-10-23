@@ -113,7 +113,7 @@ test("target presence uses indexed queries and batched task lists preserve recei
   const f = fixture(); t.after(f.close); const { scope } = f.create();
   const records = new TaskRecords(f.store);
   const ids: string[] = [];
-  for (let i = 0; i < 10; i++) ids.push(...records.create(scope, `anchor${i}`, "context", [{ task: `task${i}`, role: "" }], { provider: "fixture", id: "fixture", thinking: "off" }).taskIds);
+  for (let i = 0; i < 10; i++) ids.push(...records.create(scope, `anchor${i}`, "context", [{ task: `task${i}` }], { provider: "fixture", id: "fixture", thinking: "off" }).taskIds);
   for (const [i, id] of ids.entries()) {
     f.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'delivered',NULL,?)").run(`a${i}`, id, 1);
     f.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'failed','failure',?)").run(`b${i}`, id, 1);

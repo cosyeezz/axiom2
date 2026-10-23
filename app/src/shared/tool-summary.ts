@@ -39,9 +39,11 @@ export function taskCallPreview(call: ToolCall): ToolCall["taskPreview"] {
     if (!input || typeof input !== "object") return undefined;
     return {
       ...(typeof input.taskId === "string" ? { taskId: input.taskId.slice(0, 200) } : {}),
+      // Display only the caller's explicit fields; legacy inputs get static labels.
       ...(Array.isArray(input.tasks) ? { titles: input.tasks.slice(0, 8).map((task: any) =>
-        compactText(typeof task?.title === "string" && task.title.trim() ? task.title : typeof task?.task === "string" ? task.task : "准备子任务", 180)) } : {}),
-      ...(name === "append" ? { summary: compactText(typeof input.summary === "string" && input.summary.trim() ? input.summary : typeof input.text === "string" ? input.text : "补充任务", 180) } : {}),
+        typeof task?.title === "string" && task.title.trim() ? task.title : "子任务") } : {}),
+      ...(name === "cancel_task" && typeof input.reason === "string" && input.reason.trim() ? { reason: input.reason } : {}),
+      ...(name === "append" ? { summary: typeof input.summary === "string" && input.summary.trim() ? input.summary : "补充任务" } : {}),
     };
   } catch { return undefined; }
 }
@@ -85,7 +87,7 @@ export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; ta
   if (name === "edit") detail = Array.isArray(input.edits) ? `${input.edits.length} 处替换` : typeof input.oldText === "string" && typeof input.newText === "string" ? "1 处替换" : "文本替换";
   if (name === "write" && typeof input.content === "string") detail = `${input.content.split("\n").length} 行`;
   if (name === "delegate" && Array.isArray(input.tasks)) {
-    target = input.tasks.map((task) => task && typeof task === "object" ? typeof task.title === "string" && task.title.trim() ? task.title : typeof task.task === "string" ? task.task : "子任务" : "子任务").join(" · ");
+    target = taskCallPreview(call)?.titles?.join(" · ") ?? "";
     detail = `${input.tasks.length} 个任务`;
   }
   if (!target) target = Object.keys(input).length ? compactText(call.input) : "无输入参数";

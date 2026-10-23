@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Workspace } from "../../shared/protocol.js";
+import { PathActions } from "../LocalPath.js";
 import { Icon } from "../components.js";
+import { FilePickerButton } from "../FilePicker.js";
 import { DeleteButton } from "../DeleteButton.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { command } from "../transport.js";
@@ -79,10 +81,9 @@ export function WorkspacePicker({ workspaces, workspace, select, picking, choose
               navigate={navigate} cancelSelection={cancelSelection} onError={onError} />
           ))}
         </div>
-        <button type="button" id="add-workspace" data-view-navigation disabled={picking} aria-busy={picking}
-          onClick={() => { close(); choose(); }}>
-          <Icon name="workspace-open" />{picking ? "正在选择文件夹…" : "打开文件夹…"}
-        </button>
+        <FilePickerButton id="add-workspace" data-view-navigation picking={picking} className=""
+          label="打开文件夹…" busyLabel="正在选择文件夹…" icon="workspace-open"
+          onClick={() => { close(); choose(); }} />
       </div>
     </details>
   );
@@ -214,6 +215,7 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
           }}>{content}</button>
       )}
       <div className="workspace-actions">
+        <PathActions path={w.path} copyLabel="复制工作空间路径" openLabel="打开工作空间文件夹" />
         <button type="button" className="icon-btn workspace-pin" disabled={busy}
           aria-label={`${w.pinned ? "取消置顶工作空间" : "置顶工作空间"}：${w.name}`}
           data-tooltip={w.pinned ? "取消置顶" : "置顶工作空间"} aria-pressed={w.pinned}

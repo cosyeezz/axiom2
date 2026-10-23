@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { LocalPath } from "../LocalPath.js";
 import { command } from "../transport.js";
 import { guardFileNavigation, registerFileEditor } from "../file-edit-guard.js";
 import type { FilePreview, FileSaveResult } from "../../shared/file-preview.js";
@@ -78,13 +79,8 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   useEffect(() => {
     if (file) setVisited((old) => ({ source: old.source || !rendered || mode !== "reading", reading: old.reading || mode !== "source" }));
   }, [file, mode, rendered]);
-  const [copied, setCopied] = useState("");
-  useEffect(() => {
-    if (copied !== "已复制路径") return;
-    const timer = setTimeout(() => setCopied(""), 1500);
-    return () => clearTimeout(timer);
-  }, [copied]);
   const [revealing, setRevealing] = useState(false), [notice, setNotice] = useState("");
+  const [maximized, setMaximized] = useState(false);
   const [zoom, setZoom] = useState<number | null>(null);
   const panel = useRef<HTMLElement>(null), panes = useRef<HTMLDivElement>(null), alive = useRef(true);
   const url = useMedia(file);
@@ -92,7 +88,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   useEffect(() => {
     let current = true;
     const controller = new AbortController();
-    setLoading(true); setError(""); setNotice(""); setCopied("");
+    setLoading(true); setError(""); setNotice("");
     void command<FilePreview>("files.document", parameters(), reference.owner.scope, crypto.randomUUID(), controller.signal)
       .then(result => { if (current) { setFile(result); setDraft((result.text ?? "").replace(/\r\n/g, "\n")); setEditing(!!reference.edit && !!result.editable); if (result.line || reference.edit && result.editable) setMode("source"); } })
       .catch(e => { if (current) setError(e.message); })
@@ -106,14 +102,6 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
       if (alive.current) setNotice("已打开所在文件夹");
     } catch (e) { if (alive.current) setNotice((e as Error).message); }
     finally { if (alive.current) setRevealing(false); }
-  };
-  const copyPath = async () => {
-    if (!file || loading || error) return;
-    setCopied("");
-    try {
-      await navigator.clipboard.writeText(file.path);
-      if (alive.current) setCopied("已复制路径");
-    } catch { if (alive.current) setCopied("复制失败，点击重试"); }
   };
   const save = async () => {
     if (!file?.editable || !file.revision || saving) return;
@@ -154,7 +142,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
       <section className="file-reading-pane" hidden={mode === "source"} aria-label="渲染预览">
         <div className="file-pane-label"><span>预览</span><span>{html ? "HTML · 内嵌资源预览" : "MARKDOWN"}</span></div>
         {html ? (mode !== "source" || visited.reading) && <HtmlFile text={displayFile?.text ?? ""} name={file.name} resources={file.resources} /> : <div className="file-reading-scroll" tabIndex={0}>
-          {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={displayFile?.text ?? ""} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
+          {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={displayFile?.text ?? ""} pathScope={reference.owner.scope} sourceFile={displayFile?.path} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
         </div>}
       </section>
     </>}
@@ -162,14 +150,17 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
   else if (file.kind === "image") body = <ImageFile url={url} name={file.name} zoom={zoom} />;
   else if (file.kind === "pdf") body = <div className="file-pdf"><p>PDF 阅读器不可用时，可通过右上角打开所在文件夹。</p>{url && <object data={url} type="application/pdf" aria-label={`PDF 预览：${file.name}`}><div className="file-empty"><strong>此环境无法内嵌显示 PDF</strong><p>请打开所在文件夹，使用本地 PDF 阅读器查看。</p></div></object>}</div>;
   else body = <div className="file-empty"><FileIcon name="file" /><strong>{file.name}</strong><p>{file.reason}</p><button type="button" className="btn" disabled={revealing} onClick={() => void reveal()}><FileIcon name="folder" />打开所在文件夹</button></div>;
-  return <aside className="file-preview-panel" ref={panel} role="dialog" aria-modal="false" aria-label={`文件预览：${title}`} tabIndex={-1}
+  return <aside className={`file-preview-panel${maximized ? " is-maximized" : ""}`} ref={panel} role="dialog" aria-modal="false" aria-label={`文件预览：${title}`} tabIndex={-1}
     onKeyDown={event => {
       if (editing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); event.stopPropagation(); void save(); }
-      if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); if (maximized) setMaximized(false); else onClose(); }
     }}>
     <header className="file-preview-header">
-      <div className="file-title"><span className="file-type-icon"><FileIcon name={file?.kind === "image" ? "image" : "text"} /></span><div><strong data-tooltip={title}>{title}</strong><button type="button" className="file-path-copy" aria-label={copied.startsWith("复制失败") ? copied : "复制文件路径"} data-tooltip={`${copied || "复制路径"} · ${file?.path ?? reference.href}`} disabled={!file || loading || !!error} onClick={() => void copyPath()}><span>{file?.path ?? reference.href}</span><Icon name={copied === "已复制路径" ? "check" : copied ? "close" : "copy"} /></button><span className="screen-reader" role="status" aria-live="polite">{copied}</span></div></div>
-      <div className="file-header-actions"><Action icon="folder" label={revealing ? "正在打开所在文件夹" : "打开所在文件夹"} onClick={() => void reveal()} disabled={revealing || loading || !!error} /><Action icon="close" label="关闭文件预览" onClick={onClose} /></div>
+      <div className="file-title"><span className="file-type-icon"><FileIcon name={file?.kind === "image" ? "image" : "text"} /></span><div><strong data-tooltip={title}>{title}</strong><LocalPath className="file-path" path={file?.path ?? reference.href ?? ""} disabled={!file || loading || !!error || revealing} copyLabel="复制文件路径" onOpen={reveal} /></div></div>
+      <div className="file-header-actions">
+        <Action icon={maximized ? "restore" : "maximize"} label={maximized ? "还原文件预览" : "最大化文件预览"} pressed={maximized} onClick={() => setMaximized(value => !value)} />
+        <Action icon="close" label="关闭文件预览" onClick={onClose} />
+      </div>
     </header>
     <div className="file-preview-toolbar">
       <div className="file-mode-group" role="group" aria-label="预览模式">

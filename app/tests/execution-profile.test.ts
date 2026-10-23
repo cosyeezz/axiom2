@@ -103,7 +103,9 @@ test('profiles use effective content and owned snapshot references, never reques
   const profiles=new ExecutionProfiles(root),input={entry:'memory' as const,cwd,modelDir,modelsRaw:raw,mode:'D' as const};
   try {
     const a=profiles.prepare({...input,selection:{provider:'one',id:'one',thinking:'off'}}),b=profiles.prepare({...input,selection:{provider:'two',id:'two',thinking:'off'}});
-    assert.equal(a.profileHash,b.profileHash,'model selection is binding-only for fixed memory');assert.equal(a.modelsFile,b.modelsFile);assert.equal(a.current(),true);
+    assert.notEqual(a.profileHash,b.profileHash,'workers own a single provider network for their lifetime');assert.equal(a.modelsFile,b.modelsFile);assert.equal(a.current(),true);
+    const sameProvider=profiles.prepare({...input,selection:{provider:'one',id:'different-model',thinking:'high'}});
+    assert.equal(a.profileHash,sameProvider.profileHash,'model changes within one provider remain binding-only');sameProvider.release();
     a.retain();a.release();b.release();assert.equal(existsSync(a.modelsFile),true,'instance retains its environment after requests release');
     a.release();assert.equal(profiles.size,0);assert.equal(existsSync(a.modelsFile),false);
     const c=profiles.prepare(input);writeFileSync(join(cwd,'unrelated.ts'),'business source');assert.equal(c.current(),true);

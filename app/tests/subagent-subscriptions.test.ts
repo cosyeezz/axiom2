@@ -62,7 +62,7 @@ test("six real background children preserve lazy histories, summaries, reconnect
     app.store.db.prepare("INSERT INTO agent_sessions(sessionId,file) VALUES(?,?) ON CONFLICT(sessionId) DO UPDATE SET file=excluded.file").run(parent.id, manager.getSessionFile()!);
     for (const key of [`messages:${w.id}:${parent.id}`, `thread:${w.id}:${parent.id}`, "pinned-sessions", `costs:${w.id}:${parent.id}`])
       assert.equal((await client.request("subscribe", { scope: key })).ok, true);
-    const { taskIds } = records.create(scope, "real-backgrounds", "local evidence only", Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}`, role: "Report loopback evidence." })), { provider: "fixture", id: "fixture", thinking: "off" });
+    const { taskIds } = records.create(scope, "real-backgrounds", "local evidence only", Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}` })), { provider: "fixture", id: "fixture", thinking: "off" });
     scheduler.preferencesChanged();
     await until(() => responses.length === 6 && records.rows("WHERE status='running'").length === 6, "six real workers did not stream", 60000);
     const children = taskIds.map(id => target(records.rows("WHERE id=?", id)[0]));

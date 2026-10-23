@@ -11,7 +11,7 @@ import { memoryOrganizationScope, memorySummaryVersion, type MemoryOrganization 
 import type { Command, Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-const answer = { answer: JSON.stringify({ title: "任务成果", summary: "已完成记忆浏览改进，资料查找更加清晰，验证已通过。" }), incomplete: false };
+const answer = { answer: JSON.stringify([{ topic: "会话记忆浏览", section: "关联资料", item: "浏览验证", content: "已完成记忆浏览改进，资料查找更加清晰，验证已通过。" }]), incomplete: false };
 const until = async (condition: () => boolean) => {
   const end = Date.now() + 10_000;
   while (!condition()) { assert.ok(Date.now() < end, "condition timed out"); await new Promise((resolve) => setTimeout(resolve, 10)); }
@@ -20,7 +20,7 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "axiom-manual-memory-")), project = join(root, "project"); mkdirSync(project);
   const store = new Store(root);
   const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
-  const create = (workspaceId = workspace.id, content = "## 目标与范围\n完成记忆浏览改进\n") => {
+  const create = (workspaceId = workspace.id, content = "## 目标与范围\n完成记忆浏览改进\n\n## 任务进度\n整体状态：已完成\n整体进度：100%\n- [已完成] 浏览改进\n") => {
     const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId }) as Session;
     const scope = { workspaceId, sessionId: session.id };
     writeFileSync(join(memoryDirectory(root, session.id), "MEMORY.md"), content);
@@ -37,7 +37,7 @@ function fixture() {
   const entry = (target = scope) => JSON.parse(String(store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(target.sessionId)!.body));
   const seed = (target: Scope, patch: Record<string, unknown>) => store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...entry(target), ...patch }), target.sessionId);
   const calls: MemoryExecution[] = [];
-  memories.runner = { close: async () => {}, execute: async (input) => { calls.push(input); input.read(input.scope.sessionId, "MEMORY.md"); return answer; } };
+  memories.runner = { close: async () => {}, execute: async (input) => { calls.push(input); assert.ok(JSON.parse(input.prompt).currentFile.content); return answer; } };
   const ready = async () => { await command("memory.configure", scope, { organizerModel: selection }); await memories.scanAsync(); };
   const done = async (workspaceId = workspace.id) => { await until(() => memories.organization(workspaceId)?.status !== "running"); return memories.organization(workspaceId)!; };
   return { root, store, workspace, scope, create, memories, published, command, entry, seed, calls, ready, done,
@@ -56,7 +56,7 @@ test("manual source organization bypasses quiet time and preserves the backgroun
     assert.equal(accepted.status, "running"); assert.equal(accepted.processed, 0);
     const done = await f.done(); assert.equal(done.status, "completed"); assert.equal(done.succeeded, 1);
     assert.equal(f.calls.length, 1); assert.deepEqual(f.calls[0]!.selection, selection);
-    assert.equal(f.entry().summaryVersion, memorySummaryVersion); assert.equal(f.entry().updatedAt, original.updatedAt);
+    assert.equal(f.entry().treeVersion, 1); assert.equal(f.entry().updatedAt, original.updatedAt);
     assert.deepEqual(readFileSync(path), bytes); assert.ok((f.memories as any).lastOrganized >= cadence);
     assert.equal(f.memories.preferences().intervalMs, 300_000);
     assert.ok(f.published.some((event) => event.scope === memoryOrganizationScope(f.workspace.id) && (event.data as MemoryOrganization).status === "completed"));
@@ -69,7 +69,7 @@ test("manual acceptance is idempotent and shares the single background slot", as
   const gate = new Promise<void>((resolve) => { release = resolve; });
   try {
     await f.ready(); let calls = 0;
-    f.memories.runner = { close: async () => release(), execute: async (input) => { calls++; input.read(f.scope.sessionId, "MEMORY.md"); await gate; return answer; } };
+    f.memories.runner = { close: async () => release(), execute: async (input) => { calls++; await gate; return answer; } };
     const c: Command = { requestId: randomUUID(), op: "memory.organize", ...f.scope, params: {} };
     const accepted = await f.memories.command(c); await until(() => calls === 1);
     assert.deepEqual(await f.memories.command(c), accepted);
@@ -88,10 +88,10 @@ test("workspace request covers all pending sources beyond four, skips ready and 
     const project = join(f.root, "other"); mkdirSync(project);
     const other = f.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
     const foreign = f.create(other.id);
-    await f.ready(); f.seed(ready, { status: "ready", summary: "现有有效摘要", summaryVersion: memorySummaryVersion, indexedAt: Date.now() });
+    await f.ready(); f.seed(ready, { status: "ready", treeVersion: 1, summary: "现有有效摘要", summaryVersion: memorySummaryVersion, indexedAt: Date.now() });
     const calls: string[] = [];
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      calls.push(input.scope.sessionId); input.read(input.scope.sessionId, "MEMORY.md");
+      calls.push(input.scope.sessionId);
       if (input.scope.sessionId === pending[1]!.sessionId) throw Error("模型暂不可用");
       return answer;
     } };
@@ -152,7 +152,7 @@ for (const lateFailure of [false, true]) test(`clearing an in-flight organizatio
   try {
     await f.ready(); const original = f.entry(); let entered = false;
     f.memories.runner = { close: async () => release(), execute: async (input) => {
-      input.read(f.scope.sessionId, "MEMORY.md"); entered = true; await gate;
+      entered = true; await gate;
       if (lateFailure) throw Error("晚到的旧失败"); return answer;
     } };
     await f.command("memory.organize"); await until(() => entered);
@@ -169,17 +169,17 @@ test("source changes reject obsolete results while concurrent renames survive su
   try {
     await f.ready();
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      input.read(f.scope.sessionId, "MEMORY.md");
+      assert.ok(JSON.parse(input.prompt).currentFile.content);
       writeFileSync(join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"), "来源中的新事实");
       return answer;
     } };
     await f.command("memory.organize"); assert.equal((await f.done()).status, "failed"); assert.equal(f.entry().summary, "");
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      input.read(f.scope.sessionId, "MEMORY.md");
+      assert.ok(JSON.parse(input.prompt).currentFile.content);
       f.store.execute({ requestId: randomUUID(), op: "session.rename", ...f.scope, params: { title: "整理期间的新名称" } }); f.memories.rename(f.scope);
       return answer;
     } };
-    await f.command("memory.organize"); assert.equal((await f.done()).status, "completed"); assert.equal(f.entry().sourceTitle, "整理期间的新名称"); assert.equal(f.entry().title, "任务成果");
+    await f.command("memory.organize"); assert.equal((await f.done()).status, "completed"); assert.equal(f.entry().sourceTitle, "整理期间的新名称"); assert.equal(f.entry().title, "整理期间的新名称");
   } finally { await f.close(); }
 });
 
@@ -188,7 +188,7 @@ test("accepted work survives the request socket signal and explicit cancel clear
   const gate = new Promise<void>((resolve) => { release = resolve; });
   try {
     await f.ready(); let input: MemoryExecution | undefined;
-    f.memories.runner = { close: async () => release(), execute: async (value) => { input = value; value.read(f.scope.sessionId, "MEMORY.md"); await gate; return answer; } };
+    f.memories.runner = { close: async () => release(), execute: async (value) => { input = value; await gate; return answer; } };
     const socket = new AbortController();
     const accepted = await f.memories.command({ requestId: randomUUID(), op: "memory.organize", ...f.scope }, socket.signal) as MemoryOrganization;
     socket.abort(); await until(() => !!input); assert.equal(input!.signal!.aborted, false);
@@ -205,7 +205,7 @@ test("cancelled manual work waits a full background interval before a stable sou
     await f.ready(); f.seed(f.scope, { updatedAt: Date.now() - 31 * 60_000 });
     let calls = 0;
     f.memories.runner = { close: async () => release(), execute: async (input) => {
-      calls++; input.read(f.scope.sessionId, "MEMORY.md"); await gate; return answer;
+      calls++; await gate; return answer;
     } };
     const job = await f.command("memory.organize") as MemoryOrganization; await until(() => calls === 1);
     await f.command("memory.organize.cancel", f.scope, { id: job.id }); release(); await f.done();
@@ -236,7 +236,7 @@ test("closing waits for accepted work and records interrupted status, restart ne
   try {
     await f.ready();
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      input.read(f.scope.sessionId, "MEMORY.md"); entered = true;
+      entered = true;
       await new Promise((_, reject) => input.signal!.addEventListener("abort", () => reject(Error("closed")), { once: true })); return answer;
     } };
     await f.command("memory.organize"); await until(() => entered); await f.memories.close();

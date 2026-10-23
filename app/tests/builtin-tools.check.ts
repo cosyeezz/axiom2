@@ -66,10 +66,25 @@ try {
   assert.ok(page.url().endsWith("/tools.html"));
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "安装 OpenCLI" && !b.disabled));
+  const workspace = app.store.execute({ requestId: "tools-workspace", op: "workspace.open", params: { path: root, authorized: true } }) as { id: string };
+  app.store.execute({ requestId: "tools-session", op: "session.create", workspaceId: workspace.id });
+  let waitingForIdle = true;
+  const active = app.agents.active.bind(app.agents);
+  app.agents.active = (scope, exclude) => waitingForIdle || active(scope, exclude);
   await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).click();
-  await page.getByRole("button", { name: "正在安装…", exact: true }).waitFor();
+  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
+  assert.equal(installs, 0);
+  await page.getByRole("button", { name: "取消排队", exact: true }).click();
+  await page.getByText("已取消排队安装。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).click();
+  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
   await page.reload();
+  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
+  assert.equal(installs, 0, "page reload must preserve the queue without starting npm");
+  await page.screenshot({ path: join(root, "queued-install.png"), fullPage: true });
+  waitingForIdle = false;
   await page.getByRole("button", { name: "正在安装…", exact: true }).waitFor();
+  await page.waitForFunction(() => document.body.innerText.includes("正在安装 OpenCLI 1.8.8"));
   assert.equal(installs, 1);
   release();
   await page.waitForFunction(() => document.body.innerText.includes("安装与技能接入已完成"));
@@ -110,7 +125,7 @@ try {
   await page.getByRole("button", { name: "检测连接", exact: true }).click();
   await page.getByText("[OK] Daemon: running", { exact: false }).waitFor();
   assert.ok((await page.locator(".tools-diagnostic").innerText()).includes("[MISSING]"));
-  assert.ok(!(await page.locator(".tools-feedback").innerText()).includes("连接成功"));
+  assert.ok(!(await page.locator("#opencli .tools-feedback").innerText()).includes("连接成功"));
   const other = await browser.newPage();
   await other.goto(app.origin + "/tools.html");
   await other.waitForFunction(() => !(document.getElementById("opencli-profile") as HTMLInputElement)?.disabled && document.body.innerText.includes("检查已完成"));
@@ -153,5 +168,5 @@ try {
     if ([360, 1440].includes(width)) await page.screenshot({ path: resolve(`test-results/builtin-tools-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
-  console.log("Built-in tools UI passed: install/reload, persisted settings, drafts/conflicts, remote errors, failed diagnostic recovery, nine responsive widths.");
+  console.log("Built-in tools UI passed: queue/cancel/reload/automatic install, persisted settings, drafts/conflicts, remote errors, failed diagnostic recovery, nine responsive widths.");
 } finally { release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }

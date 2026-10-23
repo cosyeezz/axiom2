@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ThemeToggle } from "../theme.js";
 import { Icon } from "../Icon.js";
 import DesktopUpdates from "./DesktopUpdates.js";
 import { BrandMark } from "../BrandMark.js";
@@ -167,13 +168,16 @@ export default function Connect() {
         </span>
       </div>
       {error && <span role="alert" className="desktop-workbench-error" title={error}>{error}</span>}
+      <div className="desktop-workbench-actions">
+      <ThemeToggle />
       <button onClick={() => void showControls()} disabled={returning} aria-label={showDot ? "服务与更新，有待查看的变化" : "服务与更新"}>
         <Icon name="sliders-horizontal" />
         <span>服务与更新</span>{showDot && <i className="desktop-update-dot" aria-hidden="true" />}
       </button>
+      </div>
     </nav>
     <main className="connect-page" hidden={view === "workbench"}>
-      <header className="connect-header"><span className="connect-brand"><BrandMark size={31} /><span>AXIOM<span className="startup-brand-version">2</span></span></span><span className="connect-local">你的私有工作台</span></header>
+      <header className="connect-header"><span className="connect-brand"><BrandMark size={31} /><span>AXIOM<span className="startup-brand-version">2</span></span></span><span className="connect-header-actions"><span className="connect-local">你的私有工作台</span><ThemeToggle /></span></header>
       <div className="startup-title"><h1><span>就绪之后，</span><span>专注创造。</span></h1><p>连接你的设备，继续项目、会话与任务。</p></div>
       <section className="startup-panel" aria-label="连接与准备">
         <div className="startup-device">

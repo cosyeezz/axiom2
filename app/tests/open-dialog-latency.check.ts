@@ -66,7 +66,7 @@ try {
   const scope = { workspaceId: workspace.id, sessionId: session.id };
   app.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(session.id, JSON.stringify(selection));
   const records = new TaskRecords(app.store);
-  const taskId = records.create(scope, "picker-delegate", "picker fixture", [{ task: "选择器子会话", role: "" }], selection).taskIds[0];
+  const taskId = records.create(scope, "picker-delegate", "picker fixture", [{ task: "选择器子会话" }], selection).taskIds[0];
   app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(taskId);
   app.store.db.prepare("DELETE FROM task_inputs WHERE taskId=?").run(taskId);
   const task = records.list(scope).tasks[0];

@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "nod
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { Store } from "./storage.js";
+import { Store, type SessionRestorePosition } from "./storage.js";
 import { ModelService } from "./model-service.js";
 import { configuration } from "./models.js";
 import { boundedMessage, openTranscript } from "./transcript.js";
@@ -98,6 +98,8 @@ export class Agents {
   refresh(scope: Scope) {
     this.views.refresh(scope);
   }
+  // Global maintenance must also wait for background commands before a run exists.
+  get maintenancePending() { return this.commands.size > 0 || this.starts.size > 0 || this.continuations.busy || this.compressions.busy; }
   active(scope: Scope, exclude?: PendingStart) {
     return this.reloads.active(scope) || this.runs.active(scope) || Boolean(this.starts.get(scope.sessionId) && this.starts.get(scope.sessionId) !== exclude);
   }
@@ -199,6 +201,7 @@ export class Agents {
     this.profiles = new ExecutionProfiles(store.root);
     this.unwatchConfiguration = models.watchConfiguration(() => { void this.pool.invalidate().catch(() => {}); });
     this.memories = new Memories(store, publish, openMemoryFile, undefined, undefined, observed);
+    this.memories.isActive = (scope) => this.active(scope) || this.starts.has(scope.sessionId) || this.store.db.prepare("SELECT 1 FROM tasks WHERE parentSessionId=? AND status IN ('queued','starting','running','stopping','summarizing')").get(scope.sessionId) !== undefined;
     this.memories.runner = new ColdMemoryRunner(this.memories, models, this.pool, this.profiles);
     this.views = new AgentViews(store, publish, observed);
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
@@ -208,6 +211,7 @@ export class Agents {
     this.runs.onEvent = (scope, run, event) => {
       this.reloads.event(scope, run.id, event);
       this.compressions.event(scope, run.id, event);
+      if (["input-accepted", "input-persisted", "queue", "provider_request"].includes(event.type)) this.memories.touch(scope);
       if (event.type === "memory-cancel") this.memoryQueries.get(event.key)?.controller.abort();
       if (event.type === "memory-call") {
         const controller = new AbortController();
@@ -215,10 +219,12 @@ export class Agents {
         void (async () => {
           try {
             this.store.session(scope.workspaceId, scope.sessionId);
-            const question = text(object(event.params).question, "查询问题", 8000);
+            const params = object(event.params);
+            const question = text(params.question, "查询问题", Number.MAX_SAFE_INTEGER);
+            const topic = text(params.topic, "Topic标识", 256);
             const parentLease = this.runs.lease(scope, run.id);
             if (!parentLease) throw new AppError("AGENT_STOPPED", "父执行已经结束");
-            const data = await this.memories.query(scope, question, controller.signal, parentLease);
+            const data = await this.memories.query(scope, question, controller.signal, parentLease, topic);
             if (!controller.signal.aborted) this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: true, data });
           } catch (error) {
             this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: false, error: errorMessage(error, "记忆查询失败") });
@@ -232,6 +238,7 @@ export class Agents {
       for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
       this.compressions.settled(scope, run.id);
       // Agent 工具可直接写入记忆目录；结算后定向刷新而不阻塞后续 HTTP/WS 事件。
+      this.memories.touch(scope);
       this.memories.refresh(scope);
       this.externalSettled?.(scope, run);
       this.continuations.settled(scope, run);
@@ -251,6 +258,7 @@ export class Agents {
       prompt?: string;
       notification?: WorkerInput["notification"];
       memoryContinuation?: { expectedRunId: string; validate: () => void };
+      compressionPreparation?: { id: string; validate: () => void; signal: AbortSignal };
       beforeStart?: () => void;
       onStart?: (run: Run) => void;
     } = {},
@@ -258,10 +266,11 @@ export class Agents {
     const requestStartedAtMonoMs = performance.now();
     let ownStart: PendingStart | undefined;
     let continuationRunId: string | undefined;
+    let cancelPreparation: (() => void) | undefined;
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     this.owner(scope);
-    if (c.op === "agent.reload") return this.reloads.command(c);
+    if (c.op === "agent.reload" || c.op === "agent.skills") return this.reloads.command(c);
     if (["prompt", "agent.resume", "agent.model"].includes(c.op) && this.reloads.active(scope))
       throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
     const rewrite = p.rewrite === undefined ? undefined : rewriteTarget(p.rewrite);
@@ -339,6 +348,7 @@ export class Agents {
           this.assertMemoryContinuation(scope, internal.memoryContinuation.expectedRunId, ownStart);
           internal.memoryContinuation.validate();
         } else this.assertContinuation(scope, p.expectedRunId, resuming && !!internal.task, ownStart);
+        internal.compressionPreparation?.validate();
       }
       if (this.runs.closing) throw new AppError("SHUTTING_DOWN", "服务正在退出，未接受新操作");
       if (rewrite) this.assertRewriteIdle(scope, internal.task?.inputIds, ownStart);
@@ -364,7 +374,7 @@ export class Agents {
     };
     return this.store.external(c, async () => {
       // First-time user work takes priority before the session queue, but a replay has no side effects.
-      if (["prompt", "agent.resume"].includes(c.op) && !internal.notification && !internal.memoryContinuation) {
+      if (["prompt", "agent.resume"].includes(c.op) && !internal.notification && !internal.memoryContinuation && !internal.compressionPreparation) {
         this.continuations.cancel(scope, true);
         const pending = this.starts.get(scope.sessionId);
         if (pending?.automatic) pending.controller.abort();
@@ -377,12 +387,20 @@ export class Agents {
       }
       return this.serialCommand(scope, async () => {
       validate();
-      if (c.op === "prompt" && this.runs.active(scope)) return enqueue();
+      if (c.op === "prompt" && this.runs.active(scope)) {
+        if (internal.compressionPreparation) throw new AppError("AGENT_BUSY", "会话已开始执行，由活动会话维护记忆。");
+        return enqueue();
+      }
       if (c.op !== "agent.model") {
         let finish!: () => void;
         const done = new Promise<void>(resolve => { finish = resolve; });
-        ownStart = { scope, automatic: !!internal.memoryContinuation, controller: new AbortController(), provider: this.info(scope).selection?.provider, done, finish };
+        ownStart = { scope, automatic: !!(internal.memoryContinuation || internal.compressionPreparation), controller: new AbortController(), provider: this.info(scope).selection?.provider, done, finish };
         this.starts.set(scope.sessionId, ownStart);
+        if (internal.compressionPreparation) {
+          const controller = ownStart.controller;
+          cancelPreparation = () => controller.abort();
+          internal.compressionPreparation.signal.addEventListener("abort", cancelPreparation, { once: true });
+        }
       }
       try {
       if (rewrite) {
@@ -393,7 +411,10 @@ export class Agents {
       const prepared = await this.models.serial(async () => {
         validate();
         // A cold command may become an append while waiting for configuration.
-        if (c.op === "prompt" && this.runs.active(scope)) return { completion: enqueue() };
+        if (c.op === "prompt" && this.runs.active(scope)) {
+          if (internal.compressionPreparation) throw new AppError("AGENT_BUSY", "会话已开始执行，由活动会话维护记忆。");
+          return { completion: enqueue() };
+        }
         const config = await configuration(this.store.root);
         if (config.error) throw new AppError("INVALID_CONFIG", config.error);
         const selection =
@@ -458,7 +479,7 @@ export class Agents {
         const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
         requireImageModel(model, images);
         const skills = skillsInput(p.skills);
-        const prompt = resuming || internal.memoryContinuation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "消息", 12000);
+        const prompt = resuming || internal.memoryContinuation || internal.compressionPreparation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "消息", 12000);
         const content = imagePrompt(
           internal.prompt ?? attachmentPrompt(prompt, attachments), images);
         const capabilities = internal.task ? undefined : await this.capabilities.prepare(scope);
@@ -473,7 +494,7 @@ export class Agents {
             .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
             .get(scope.sessionId);
           file = row?.file as string;
-          if (!file && (resuming || internal.memoryContinuation))
+          if (!file && (resuming || internal.memoryContinuation || internal.compressionPreparation))
             throw new AppError("NO_CONTINUATION", "没有已保存的会话记录，请输入新的要求。");
           if (!file) {
             const dir = join(this.store.root, "sessions", scope.workspaceId);
@@ -555,7 +576,7 @@ export class Agents {
         try {
         if (capabilities) this.capabilities.lock(scope, capabilities);
         requestTitle = !internal.task && this.store.requestTitle(scope,
-          internal.notification || resuming || internal.memoryContinuation ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
+          internal.notification || resuming || internal.memoryContinuation || internal.compressionPreparation ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
         this.store.db
           .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId) VALUES(?,?,?,?,?,?,?)")
           .run(
@@ -572,6 +593,7 @@ export class Agents {
           .run(run.startedAt, scope.sessionId);
         this.store.db.exec("COMMIT");
         } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+        if (!internal.task) this.memories.touch(scope);
         if (capabilities) this.capabilities.changed(scope);
         this.publish(threadScope(scope), this.thread(scope));
         // Invoke now: launch installs pending synchronously before its first await.
@@ -589,6 +611,7 @@ export class Agents {
             file,
             modelsFile,
             capabilities: capabilities?.runtime,
+            memoryTopics: internal.task ? undefined : this.memories.topicSnapshot(scope.workspaceId),
             memoryPath: internal.task ? undefined : join(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md"),
             runId: id,
             requestId: c.requestId,
@@ -596,6 +619,7 @@ export class Agents {
             prompt: content,
             resume: resuming,
             memoryContinuation: !!internal.memoryContinuation,
+            compressionPreparation: internal.compressionPreparation?.id,
             rewrite: !!rewrite,
             requestTitle,
             images,
@@ -640,7 +664,7 @@ export class Agents {
       try {
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
           modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
-          taskRole: internal.task?.role, mode: this.pool.mode }, ownStart!.controller.signal);
+          mode: this.pool.mode }, ownStart!.controller.signal);
         const revision = fileRevision(start.file);
         validate();
         ownStart!.provider = start.selection.provider;
@@ -648,7 +672,7 @@ export class Agents {
           beforeExecute: internal.memoryContinuation ? () => {
             this.assertMemoryContinuation(scope, internal.memoryContinuation!.expectedRunId, ownStart, false, continuationRunId);
             internal.memoryContinuation!.validate();
-          } : undefined,
+          } : internal.compressionPreparation?.validate,
           affinity: { sessionId: scope.sessionId, fileRevision: revision }, signal: ownStart!.controller.signal });
         ownStart!.lease = lease;
         // Full resource checks guard binding dispatch and execution_permit. Intermediate
@@ -686,13 +710,14 @@ export class Agents {
       }
       }
       } finally {
+        if (cancelPreparation) internal.compressionPreparation?.signal.removeEventListener("abort", cancelPreparation);
         if (this.starts.get(scope.sessionId) === ownStart) this.starts.delete(scope.sessionId);
         ownStart?.finish();
       }
       });
     });
   }
-  async remove(c: Command) {
+  async remove(c: Command, deletionPosition?: SessionRestorePosition) {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! };
     if (c.params?.confirmed !== true)
       throw new AppError(
@@ -701,8 +726,9 @@ export class Agents {
       );
     if (this.store.receipt(c.requestId).status === "committed")
       return this.store.execute(c);
+    const position = deletionPosition ?? this.store.session(scope.workspaceId, scope.sessionId);
     await this.stop(scope);
-    const result = this.store.execute(c);
+    const result = this.store.execute(c, position);
     this.views.forget(scope);
     return result;
   }

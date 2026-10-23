@@ -142,7 +142,7 @@ try {
       parameters: Type.Object({
         context: text,
         tasks: Type.Array(
-          Type.Object({ task: text, systemPrompt: Type.Optional(text) }),
+          Type.Object({ task: text }),
           { minItems: 1, maxItems: 4 },
         ),
       }),

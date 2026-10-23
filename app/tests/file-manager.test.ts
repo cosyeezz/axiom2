@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { spawn } from "node:child_process";
+import childProcess, { spawn } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { pathToFileURL } from "node:url";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +29,59 @@ test("file manager validates the directory before dispatch and preserves exact U
     assert.deepEqual(calls, [f.directory]);
   } finally { await manager.close(); f.remove(); }
 });
+
+test("file selection preserves the filename and rejects missing or unrelated targets before opening", async () => {
+  const f = fixture(), calls: { directory: string; selection?: string }[] = [];
+  const manager = new FileManager(async (directory, _signal, selection) => { calls.push({ directory, selection }); });
+  try {
+    const signal = new AbortController().signal, file = join(f.directory, "文档 # % & ' +.txt");
+    writeFileSync(file, "select me");
+    for (const selection of ["relative.txt", join(f.directory, "missing"), f.directory, join(f.root, "outside.txt"), file + "\n"])
+      await assert.rejects(manager.open(f.directory, signal, selection), { status: 400 });
+    assert.deepEqual(calls, []);
+    await manager.open(f.directory, signal, file);
+    assert.deepEqual(calls, [{ directory: f.directory, selection: file }]);
+  } finally { await manager.close(); f.remove(); }
+});
+
+for (const platform of ["darwin", "linux"] as const) {
+  test(`${platform} reveals files without launching their handler and reports opener failure`, async t => {
+    const f = fixture(), descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
+    const originalSpawn = childProcess.spawn, calls: { executable: string; args: string[]; options: any }[] = [];
+    let exitCode = 0;
+    Object.defineProperty(process, "platform", { ...descriptor, value: platform });
+    t.mock.method(childProcess, "spawn", (executable: string, args: string[], options: any) => {
+      calls.push({ executable, args, options });
+      return originalSpawn(process.execPath, ["-e", `process.exitCode = ${exitCode}`], options);
+    });
+    syncBuiltinESMExports();
+    const manager = new FileManager();
+    try {
+      const signal = new AbortController().signal, file = join(f.directory, "文档, # % & ' +.txt");
+      writeFileSync(file, "never execute me");
+      await manager.open(f.directory, signal, file);
+      assert.equal(calls[0].options.shell, false);
+      if (platform === "darwin") {
+        assert.equal(calls[0].executable, "/usr/bin/open");
+        assert.deepEqual(calls[0].args, ["-R", file]);
+      } else {
+        assert.equal(calls[0].executable, "dbus-send");
+        assert.ok(calls[0].args.includes("org.freedesktop.FileManager1.ShowItems"));
+        assert.ok(calls[0].args.includes(`array:string:${pathToFileURL(file).href.replace(/,/g, "%2C")}`));
+      }
+      await manager.open(f.directory, signal);
+      assert.deepEqual(calls[1].args, [f.directory]);
+      assert.equal(calls[1].executable, platform === "darwin" ? "/usr/bin/open" : "xdg-open");
+      exitCode = 1;
+      await assert.rejects(manager.open(f.directory, signal, file), { status: 503 });
+      exitCode = 0;
+      await manager.open(f.directory, signal, file);
+    } finally {
+      await manager.close(); t.mock.restoreAll(); syncBuiltinESMExports();
+      Object.defineProperty(process, "platform", descriptor); f.remove();
+    }
+  });
+}
 
 test("disconnect retains the active slot until the owned helper settles, then allows retry", async () => {
   const f = fixture();

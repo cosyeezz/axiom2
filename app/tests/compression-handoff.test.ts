@@ -6,13 +6,15 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 function fixture() {
   const scope = { workspaceId: "workspace", sessionId: "session" };
   const coordinator: any = Object.create(Compressions.prototype);
-  const live: any = { scope, job: { id: "new-job", state: "running", phase: "snapshot" }, cancel: false };
+  const live: any = { scope, job: { id: "new-job", state: "running", phase: "snapshot" }, cancel: false, controller: new AbortController() };
   coordinator.live = new Map([[scope.sessionId, live]]);
+  coordinator.automatic = new Map();
   coordinator.applied = () => false;
   coordinator.save = () => {};
   coordinator.finish = (_live: unknown, state: string, error?: string) => {
     live.job.state = state;
     live.job.error = error;
+    coordinator.live.delete(scope.sessionId);
   };
   return { scope, coordinator, live };
 }
@@ -58,7 +60,7 @@ test("fresh compression ignores receipts from previous failed/cancelled jobs and
   assert.doesNotMatch(live.job.error, /可能已停止|正在退出/);
 });
 
-test("idle snapshot waits for shutdown hooks and rechecks ownership after release", async () => {
+test("idle child snapshot waits for shutdown hooks and rechecks ownership after release", async () => {
   const { scope, coordinator, live } = fixture();
   const manager = SessionManager.inMemory();
   manager.appendMessage({ role: "user", content: "original", timestamp: Date.now() });
@@ -72,7 +74,7 @@ test("idle snapshot waits for shutdown hooks and rechecks ownership after releas
     active: () => active,
     hasIdle: () => idle,
     releaseIdle: () => released,
-    info: () => ({ run: { id: "successor" } }),
+    info: () => ({ run: { id: "successor" }, task: { id: "child-without-memory" } }),
     signal: (...args: unknown[]) => { signals.push(args); return true; },
   };
   coordinator.advance(live);
@@ -93,11 +95,46 @@ test("cancelling during idle release cannot revive snapshot work", async () => {
   const { coordinator, live } = fixture();
   let release!: () => void;
   const released = new Promise<void>((resolve) => { release = resolve; });
-  coordinator.agents = { active: () => false, hasIdle: () => true, releaseIdle: () => released };
+  coordinator.agents = { active: () => false, info: () => ({ task: { id: "child" } }), hasIdle: () => true, releaseIdle: () => released };
   coordinator.snapshot = () => assert.fail("cancelled job must not capture or launch");
   coordinator.advance(live);
   live.cancel = true;
   release();
   await released;
   assert.equal(live.entry, undefined);
+});
+
+test("idle main preparation launches once through normal admission and hands off to its worker", async () => {
+  const { coordinator, live } = fixture();
+  let launches = 0, active = false;
+  const signals: unknown[] = [];
+  coordinator.agents = {
+    active: () => active, info: () => ({ run: { id: "maintenance" } }),
+    command: async (_command: unknown, internal: any) => {
+      launches++;
+      assert.equal(internal.compressionPreparation.signal, live.controller.signal);
+      internal.compressionPreparation.validate();
+      active = true;
+      internal.onStart({ id: "maintenance" });
+    },
+    signal: (...args: unknown[]) => { signals.push(args); return true; },
+  };
+  coordinator.snapshot = () => assert.fail("idle main must not capture before maintenance");
+  coordinator.advance(live); coordinator.advance(live);
+  await live.preparing;
+  assert.equal(launches, 1);
+  assert.equal(signals.length, 1);
+  active = false;
+  coordinator.settled(live.scope, "maintenance");
+  assert.equal(live.job.state, "failed", "missing maintenance snapshot is not retried");
+  assert.equal(launches, 1);
+});
+
+test("cancel before idle preparation dispatch cannot start a model run", async () => {
+  const { coordinator, live } = fixture();
+  coordinator.agents = { active: () => false, info: () => ({}), command: () => assert.fail("cancelled preparation must not launch") };
+  coordinator.advance(live);
+  live.cancel = true; live.controller.abort();
+  await live.preparing;
+  assert.equal(live.preparationRun, undefined);
 });

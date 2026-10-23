@@ -92,7 +92,7 @@ test("archive guards include child runs/tasks, compression and pending async adm
       store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'running','{}',1)").run(s.id, s.id);
       denied(); store.db.prepare("UPDATE runs SET status='completed' WHERE id=?").run(s.id);
     }
-    store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','','queued','{}',1)").run(w.id, parent.id, child.id);
+    store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','queued','{}',1)").run(w.id, parent.id, child.id);
     denied(); store.db.exec("UPDATE tasks SET status='completed'");
     store.db.exec("CREATE TABLE compressions(id TEXT PRIMARY KEY,sessionId TEXT,body TEXT)");
     store.db.prepare("INSERT INTO compressions VALUES('c',?,?)").run(child.id, JSON.stringify({ state: "running" }));
@@ -203,7 +203,7 @@ test("HTTP/WS workspace broadcasts, view-only preference, removed preview comman
     // Archived child history remains on disk but must be excluded from lifecycle scans.
     const child = app.store.execute(command("session.create", w.id)) as Session;
     app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES('archived-run',?,'completed','{}',1,2)").run(child.id);
-    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,runId,budgets,createdAt) VALUES('archived-task',?,?,?,'anchor','history','','completed','archived-run','{}',1)").run(w.id, s.id, child.id);
+    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,runId,budgets,createdAt) VALUES('archived-task',?,?,?,'anchor','history','completed','archived-run','{}',1)").run(w.id, s.id, child.id);
     app.store.db.exec("INSERT INTO task_results(id,taskId,runId,body,delivery) VALUES('archived-result','archived-task','archived-run','{}','pending')");
     assert.equal((await restored.call(command("workspace.delete", w.id, { confirmed: true }))).ok, true);
     await app.tasks.stopProviders([], false);

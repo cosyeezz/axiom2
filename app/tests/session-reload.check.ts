@@ -81,19 +81,30 @@ try {
   await dialog.getByRole("alert").filter({ hasText: "授权" }).waitFor();
   assert.equal(navigations, 3, "rejected reload must not refresh");
   app.store.db.prepare("UPDATE workspaces SET authorized=1 WHERE id=?").run(w.id);
-  await page.route("**/api/draft?*", route => route.request().method() === "POST" ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "draft fixture unavailable" }) }) : route.continue());
-  await page.locator("#prompt").fill("保存失败时不要丢掉草稿");
-  await dialog.getByRole("button", { name: "重新加载会话", exact: true }).click();
-  await dialog.getByRole("alert").filter({ hasText: "页面尚未刷新" }).waitFor();
-  assert.equal(navigations, 3, "draft save failure must retain the page");
-  assert.equal(await page.locator("#prompt").inputValue(), "保存失败时不要丢掉草稿");
+  for (const status of [503, 409]) {
+    await page.route("**/api/draft?*", route => route.request().method() === "POST" ? route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ code: status === 409 ? "DRAFT_CONFLICT" : "DRAFT_UNAVAILABLE", error: "draft fixture unavailable" }) }) : route.continue());
+    const text = `保存异常 ${status} 时不要丢掉草稿`;
+    const failedSave = page.waitForResponse(response => response.url().includes("/api/draft?") && response.status() === status);
+    await page.locator("#prompt").fill(text);
+    await (await failedSave).finished();
+    await dialog.getByRole("button", { name: "重新加载会话", exact: true }).click();
+    await page.waitForFunction(() => {
+      const button = document.querySelector<HTMLButtonElement>(".reload-submit");
+      return button && !button.disabled && document.querySelector(".reload-status")?.textContent?.includes("重载完成");
+    });
+    assert.equal(await dialog.getByRole("alert").count(), 0, "draft errors must remain silent after reload");
+    assert.equal(await page.locator(".draft-status").count(), 0);
+    assert.equal(navigations, 3, "draft save failure or conflict must retain the page");
+    assert.equal(await page.locator("#prompt").inputValue(), text);
+    await page.unroute("**/api/draft?*");
+  }
   assert.equal(otherNavigations, 0); assert.equal(requests, 0); assert.deepEqual(errors, []);
   const gallery = await browser.newPage();
   await gallery.goto(`file://${resolve("design-previews/reload-icons/gallery.html")}`);
   assert.equal(await gallery.locator(".glyph svg").count(), 50);
   assert.ok(await gallery.locator(".glyph svg").evaluateAll(icons => icons.every(icon => { const bounds = (icon as SVGSVGElement).getBBox(); return bounds.width > 0 && bounds.height > 0; })));
   await gallery.screenshot({ path: join(artifacts, "icon-gallery.png"), fullPage: true });
-  console.log("PASS: native cold reload then exactly one page refresh in requesting window, delayed draft flush and save-failure protection, closed-dialog refresh, no refresh on rejection/history, multiwindow status, keyboard focus, responsive dialog, persisted result and 50 icons; no model requests or chat runs.");
+  console.log("PASS: native cold reload then exactly one page refresh in requesting window, delayed draft flush and silent save-failure/conflict protection, closed-dialog refresh, no refresh on rejection/history, multiwindow status, keyboard focus, responsive dialog, persisted result and 50 icons; no model requests or chat runs.");
 } finally {
   await browser.close(); await app.close(); http.closeAllConnections(); await new Promise<void>(r => http.close(() => r()));
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

@@ -214,7 +214,7 @@ try {
   // Seed a completed child without launching a model; use the real child window and toolbar.
   const scope = { workspaceId: workspace.id, sessionId: session.id };
   const records = new TaskRecords(app.store);
-  const { taskIds: [taskId] } = records.create(scope, "settings-child", "UI fixture", [{ task: "设置面板子会话", role: "" }], app.tasks.settings().selection!);
+  const { taskIds: [taskId] } = records.create(scope, "settings-child", "UI fixture", [{ task: "设置面板子会话" }], app.tasks.settings().selection!);
   app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(taskId);
   const views = (app.agents as unknown as { views: AgentViews }).views;
   views.messageChanged(scope, { id: "settings-child-message", role: "assistant", text: "子会话设置验证", calls: [{ id: "settings-child", name: "delegate", input: "{}" }] });

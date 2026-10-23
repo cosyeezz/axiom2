@@ -1,0 +1,2 @@
+/* Fallback layers stay inside their owning dialog so modal focus/inertness still works. */
+[data-popover-fallback]{position:fixed;z-index:1000}

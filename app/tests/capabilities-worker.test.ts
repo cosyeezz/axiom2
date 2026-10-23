@@ -12,14 +12,14 @@ const wait = async (check: () => boolean) => {
   const end = Date.now() + 25000;
   while (!check()) { if (Date.now() > end) throw Error("fixture timed out"); await new Promise(resolve => setTimeout(resolve, 25)); }
 };
-test("selected Skill and native MCP reach the real worker; unselected resources do not; locks survive idle/restart", { timeout: 120000 }, async () => {
+test("all catalog skills stay manually usable, automatic selection controls the prompt, and MCP locks survive restart", { timeout: 120000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-capabilities-worker-")), cwd = join(root, "项目 workspace"), modelDir = join(root, "共享 Pi agent");
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = relative(process.cwd(), modelDir);
   mkdirSync(modelDir, { recursive: true });
   for (const name of ["chosen-skill", "unused-skill"]) {
     mkdirSync(join(cwd, ".pi", "skills", name), { recursive: true });
-    writeFileSync(join(cwd, ".pi", "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} marker\n---\nInstructions`);
+    writeFileSync(join(cwd, ".pi", "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} marker\n${name === "unused-skill" ? "disable-model-invocation: true\n" : ""}---\n${name === "unused-skill" ? "MANUAL_ONLY_BODY" : "Instructions"}`);
   }
   mkdirSync(join(modelDir, "skills", "shared-chosen"), { recursive: true });
   writeFileSync(join(modelDir, "skills", "shared-chosen", "SKILL.md"), "---\nname: shared-chosen\ndescription: shared-chosen marker\n---\nInstructions");
@@ -109,6 +109,10 @@ test("selected Skill and native MCP reach the real worker; unselected resources 
     const sharedSkill = catalog.skills.find(item => item.name === "shared-chosen")!;
     assert.equal(sharedSkill?.source, join(modelDir, "skills", "shared-chosen", "SKILL.md"));
     const selectedIds = [selectedSkill.id, sharedSkill.id].sort();
+    const allSkillNames = catalog.skills.map(item => item.name).sort();
+    const manualSkill = catalog.skills.find(item => item.name === "unused-skill")!;
+    assert.equal(manualSkill.defaultSelected, false, "frontmatter defines the initial automatic preference");
+    const manualSource = readFileSync(manualSkill.source, "utf8");
     assert.ok(catalog.skills.some(item => item.name === "shared-unused"));
     assert.ok(catalog.skills.some(item => item.name === "global-unused"));
     assert.ok(catalog.skills.some(item => item.name === "agents-unused"));
@@ -129,14 +133,14 @@ test("selected Skill and native MCP reach the real worker; unselected resources 
     assert.ok(!first.tools.some((tool: any) => /unused|registered|late/.test(tool.function.name)));
     assert.ok(JSON.stringify(first.messages).includes("chosen-skill marker"));
     assert.ok(!JSON.stringify(first.messages).includes("unused-skill marker"));
-    assert.deepEqual(app.agents.info(scope).environment?.skills, ["chosen-skill", "shared-chosen"]);
+    assert.deepEqual([...app.agents.info(scope).environment!.skills].sort(), allSkillNames);
     await assert.rejects(app.agents.capabilities.command({ op: "capabilities.save", requestId: randomUUID(), ...scope,
       params: { revision: app.agents.capabilities.state(scope).revision, catalogRevision: catalog.revision, skills: [], mcp: [] } }), { code: "CAPABILITIES_LOCKED" });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "Continue" } });
     await wait(() => !running(app!.agents.info(scope).run));
     assert.equal(app.agents.info(scope).run?.status, "completed");
     assertRequestSelection(requests.at(-1), true);
-    assert.deepEqual(app.agents.info(scope).environment?.skills, ["chosen-skill", "shared-chosen"]);
+    assert.deepEqual([...app.agents.info(scope).environment!.skills].sort(), allSkillNames);
     assert.equal(blockedConnections, 0);
     const empty = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: w.id }) as Session;
     const emptyScope = { workspaceId: w.id, sessionId: empty.id }, emptyCatalog = await app.agents.capabilities.get(emptyScope);
@@ -146,7 +150,7 @@ test("selected Skill and native MCP reach the real worker; unselected resources 
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params: { text: "No optional capabilities" } });
     await wait(() => !running(app!.agents.info(emptyScope).run));
     assert.equal(app.agents.info(emptyScope).run?.status, "completed");
-    assert.deepEqual(app.agents.info(emptyScope).environment?.skills, []);
+    assert.deepEqual([...app.agents.info(emptyScope).environment!.skills].sort(), allSkillNames);
     assert.equal(connections, before); assert.equal(blockedConnections, 0);
     assert.ok(discoveryCount() > discoveryBeforeEmpty, "empty selection also rejects actual extension discovery");
     assertRequestSelection(requests.at(-1), false);
@@ -157,18 +161,32 @@ test("selected Skill and native MCP reach the real worker; unselected resources 
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "Continue after restart" } });
     await wait(() => !running(app!.agents.info(scope).run));
     assert.equal(app.agents.info(scope).run?.status, "completed");
-    assert.deepEqual(app.agents.info(scope).environment?.skills, ["chosen-skill", "shared-chosen"]);
+    assert.deepEqual([...app.agents.info(scope).environment!.skills].sort(), allSkillNames);
     assertRequestSelection(requests.at(-1), true);
     const connectionsBeforeEmptyRestart = connections;
     assert.deepEqual(app.agents.capabilities.state(emptyScope).selection, { skills: [], mcp: [] });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params: { text: "Remain empty after restart" } });
     await wait(() => !running(app!.agents.info(emptyScope).run));
     assert.equal(app.agents.info(emptyScope).run?.status, "completed");
-    assert.deepEqual(app.agents.info(emptyScope).environment?.skills, []);
+    assert.deepEqual([...app.agents.info(emptyScope).environment!.skills].sort(), allSkillNames);
     assertRequestSelection(requests.at(-1), false);
     assert.equal(connections, connectionsBeforeEmptyRestart);
     assert.ok(discoveryCount() >= discoveryBeforeRestart + 2, "both restarted workers handled extension resource discovery");
     assert.equal(blockedConnections, 0);
+    for (const params of [
+      { text: "Use manual skill", skills: [{ id: manualSkill.id, name: manualSkill.name, description: manualSkill.description }] },
+      { text: "/skill:unused-skill Use the explicit command" },
+    ]) {
+      const beforeRequests = requests.length;
+      await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params });
+      await wait(() => !running(app!.agents.info(emptyScope).run));
+      assert.equal(app.agents.info(emptyScope).run?.status, "completed");
+      assert.ok(requests.length > beforeRequests);
+      const request = requests.at(-1);
+      assert.match(JSON.stringify(request.messages.filter((message: any) => message.role === "user").at(-1)), /MANUAL_ONLY_BODY/);
+      assert.ok(!JSON.stringify(request.messages.filter((message: any) => message.role === "system")).includes("unused-skill marker"));
+    }
+    assert.equal(readFileSync(manualSkill.source, "utf8"), manualSource, "runtime selection never edits shared frontmatter");
   } finally {
     await app?.close(); fixture.closeAllConnections(); await new Promise<void>(resolve => fixture.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

@@ -68,6 +68,8 @@ export interface AgentInfo {
   run: Run | null;
   /** Sum of this session's persisted runs with an end time; excludes the active run. */
   completedRunDurationMs?: number;
+  /** Main-session memory location; null for child sessions. Independent of initialization. */
+  memoryDirectory?: string | null;
   environment: {
     cwd: string;
     /** Absent only in environment snapshots saved before prompt inspection. */
@@ -85,6 +87,8 @@ export interface AgentInfo {
     cacheWrite: number;
     total: number;
     cost: number | null;
+    /** Native input usage of the latest model response on this branch; never cumulative. */
+    lastRequest?: { input: number; cacheRead: number; cacheWrite: number } | null;
     context: {
       tokens: number | null;
       window: number;
@@ -95,6 +99,8 @@ export interface AgentInfo {
   } | null;
 }
 export interface ChatMessage {
+  /** Ephemeral worker-to-view timing; never written into native model history. */
+  deliveryTiming?: import("./latency.js").DeliveryTiming;
   skills?: import("./skills.js").SkillReference[];
   id: string;
   role: "user" | "assistant" | "toolResult" | "notice";
@@ -107,8 +113,10 @@ export interface ChatMessage {
   taskNotice?: "completed" | "cancelled" | "failed" | "interrupted" | "unknown";
   resultId?: string;
   /** Metadata only. Paths use files.preview; native blocks use message.image + this message's id. */
+  /** Path attachment metadata for shared inline reference rendering; no file contents. */
+  attachments?: Pick<import("./protocol.js").Attachment, "id" | "kind" | "name" | "path">[];
   images?: (Omit<import("./protocol.js").ImageAttachment, "data"> & { path?: string })[];
-  calls?: { id: string; name: string; input: string; inputLength?: number; inputRevision?: string; taskPreview?: { titles?: string[]; taskId?: string; summary?: string }; summary?: { label: string; icon: import("./tool-summary.js").ToolIcon; target: string; detail: string } }[];
+  calls?: { id: string; name: string; input: string; inputLength?: number; inputRevision?: string; taskPreview?: { titles?: string[]; taskId?: string; summary?: string; reason?: string }; summary?: { label: string; icon: import("./tool-summary.js").ToolIcon; target: string; detail: string } }[];
   /** Compact display fields; full records remain in the native transcript. */
   textLength?: number;
   textRevision?: string;
@@ -162,6 +170,7 @@ export interface ThreadIndex {
   resultTasks?: { taskId: string; resultId: string }[];
   runId?: string;
   runStatus?: Run["status"];
+  runPhase?: RunPhase | null;
 }
 export const agentScope = (s: Scope) => `agent:${s.workspaceId}:${s.sessionId}`;
 export const threadScope = (s: Scope) =>

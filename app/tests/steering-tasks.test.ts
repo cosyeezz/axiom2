@@ -18,7 +18,7 @@ for (const state of ["queued", "starting", "inflight"]) test(`child recall ${sta
     const s = store.execute({ op: "session.create", workspaceId: w.id, requestId: randomUUID() }) as Session;
     const scope = { workspaceId: w.id, sessionId: s.id }, records = new TaskRecords(store);
     const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-    const task = records.create(scope, "anchor", "context", [{ task: "task", role: "" }], selection).taskIds[0];
+    const task = records.create(scope, "anchor", "context", [{ task: "task" }], selection).taskIds[0];
     const row = () => records.rows("WHERE id=?", task)[0];
     // Delegation is not an editable user draft and must survive recall.
     const delegation = records.inputs(row(), "queued")[0].id;
@@ -49,7 +49,7 @@ test("child mixed recall failure does not delete locally queued drafts", async (
     const w = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: root, authorized: true } }) as Workspace;
     const s = store.execute({ op: "session.create", workspaceId: w.id, requestId: randomUUID() }) as Session;
     const records = new TaskRecords(store), selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-    const task = records.create({ workspaceId: w.id, sessionId: s.id }, "anchor", "context", [{ task: "task", role: "" }], selection).taskIds[0];
+    const task = records.create({ workspaceId: w.id, sessionId: s.id }, "anchor", "context", [{ task: "task" }], selection).taskIds[0];
     const row = records.rows("WHERE id=?", task)[0];
     const sent = records.queue(task, "sent", "steer"), queued = records.queue(task, "queued", "steer");
     for (const id of [sent, queued]) records.drafts.set(id, { text: id, attachment: null });

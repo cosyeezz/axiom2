@@ -22,7 +22,7 @@ function fixture() {
   const s = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: w.id }) as Session;
   const scope = { workspaceId: w.id, sessionId: s.id }, records = new TaskRecords(store);
   const selection: Selection = { provider: "fixture", id: "fixture", thinking: "off" };
-  const taskId = records.create(scope, "anchor", "context", [{ task: "first", role: "" }], selection).taskIds[0];
+  const taskId = records.create(scope, "anchor", "context", [{ task: "first" }], selection).taskIds[0];
   let live: Run | null = null;
   const agents = { store, reloads: { active: () => false }, info: () => ({ selection, run: live }), active: () => !!live && ["starting", "running", "stopping"].includes(live.status),
     executing: () => !!live && ["starting", "running", "stopping"].includes(live.status),
@@ -60,7 +60,7 @@ test("stopping appends survive old settlement, keep frozen parent and join FIFO 
     const two = await f.scheduler.append(f.row(), { text: "second new requirement" });
     assert.equal(f.row().status, "stopping");
     assert.equal(f.records.inputs(f.row(), "waiting").length, 2);
-    const second = f.records.create(f.scope, "next", "context", [{ task: "older queue entry", role: "" }], run.selection).taskIds[0];
+    const second = f.records.create(f.scope, "next", "context", [{ task: "older queue entry" }], run.selection).taskIds[0];
     run.status = "cancelled"; run.endedAt = Date.now();
     f.scheduler.settle(f.row(), run);
     assert.equal(f.row().status, "queued");
@@ -138,7 +138,7 @@ test("all admissions share the 32-task capacity and failed admission leaves no n
   try {
     const run = f.activate(); run.status = "completed"; run.endedAt = Date.now();
     f.scheduler.settle(f.row(), run);
-    for (let i = 0; i < 4; i++) f.records.create(f.scope, String(i), "context", Array.from({ length: 8 }, (_, j) => ({ task: `${i}-${j}`, role: "" })), run.selection);
+    for (let i = 0; i < 4; i++) f.records.create(f.scope, String(i), "context", Array.from({ length: 8 }, (_, j) => ({ task: `${i}-${j}` })), run.selection);
     await assert.rejects(f.scheduler.append(f.row(), { text: "no capacity" }), { code: "TASK_LIMIT" });
     assert.throws(() => f.scheduler.resume(f.row(), run.id, randomUUID()), { code: "TASK_LIMIT" });
     assert.equal(f.records.inputs(f.row(), "queued").length, 0);
@@ -174,7 +174,7 @@ test("input receipts distinguish send failure, worker acceptance, persistence an
   } finally { await f.dispose(); }
 });
 
-test("immutable full result pages reconstruct the tail; cancellation keeps persisted partial output", async () => {
+test("immutable results return long reports in full; cancellation keeps persisted partial output", async () => {
   const f = fixture();
   try {
     const run = f.activate(), manager = f.transcript(run.sessionId);
@@ -184,11 +184,12 @@ test("immutable full result pages reconstruct the tail; cancellation keeps persi
     f.scheduler.settle(f.row(), run);
     const id = f.records.list(f.scope).tasks[0].results[0].id;
     const first = f.delivery.result(f.scope, f.taskId, id);
-    assert.equal(first.report.length, 16000); assert.equal(first.totalLength, report.length);
-    let combined = first.report, next = first.nextOffset;
-    while (next != null) { const page = f.delivery.result(f.scope, f.taskId, id, next); combined += page.report; next = page.nextOffset; }
-    assert.equal(combined, report); assert.equal(first.reportKind, "final");
-    assert.throws(() => f.delivery.result(f.scope, f.taskId, id, -1), { code: "INVALID_INPUT" });
+    assert.equal(first.report, report);
+    assert.equal(first.reportKind, "final");
+    assert.equal("nextOffset" in first, false);
+    assert.equal("truncated" in first, false);
+    const other = f.records.create(f.scope, "other", "context", [{ task: "another task" }], run.selection).taskIds[0];
+    assert.throws(() => f.delivery.result(f.scope, other, id), { code: "RESULT_SCOPE_MISMATCH" });
     await f.scheduler.append(f.row(), { text: "new work" });
     const second = f.activate();
     manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "已落盘发现" }], stopReason: "toolUse", axiomRunId: second.id, timestamp: Date.now() } as any);

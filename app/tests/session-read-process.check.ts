@@ -40,7 +40,7 @@ try {
       .run(`run-${id}`, child.id);
     // The original delegation can be outside the displayed context. Its actual
     // delivered notice must still acknowledge the result without opening details.
-    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,'fixture','','completed','{}',1)")
+    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,?,'fixture','completed','{}',1)")
       .run(`task-${id}`, workspace.id, target.id, child.id, `archived-anchor-${id}`);
     app.store.db.prepare("INSERT INTO task_results(id,taskId,runId,body) VALUES(?,?,?,'{}')")
       .run(id, `task-${id}`, `run-${id}`);
@@ -59,7 +59,7 @@ try {
   await page.goto(app.origin);
   const targetRow = page.locator(`[data-session-id="${target.id}"]`);
   const otherRow = page.locator(`[data-session-id="${other.id}"]`);
-  const process = page.locator("#messages > .tool-activity");
+  const process = page.locator("#messages > .tool-activity").first();
   const current = () => app.store.session(workspace.id, target.id);
   const switchAway = async () => {
     await otherRow.locator("button.history-item").click();
@@ -80,12 +80,23 @@ try {
   await visibility("visible");
   await until(() => !current().unread, "closed process dropped the delivered result notification and blocked reading");
   assert.equal(await page.locator('[data-result-id="first"]').count(), 1);
+  const liveNotice = page.locator('#messages > .task-notices [data-result-id="first"]');
+  assert.equal(await liveNotice.isVisible(), true, "a result following thinking stays visible outside the closed execution");
+  publish({ id: "continued", role: "assistant", text: "", thinking: "Continue working.", thinkingActive: true, streaming: true, status: "running" });
+  await page.locator('#messages > .tool-activity').nth(1).waitFor();
+  assert.equal(await liveNotice.isVisible(), true, "continued execution must not absorb an earlier notification");
+  assert.deepEqual(await page.locator('#messages > .tool-activity, #messages > .task-notices').evaluateAll(nodes =>
+    nodes.map(node => node.matches('.task-notices') ? 'notice' : 'process')), ['process', 'notice', 'process']);
+  await process.locator(':scope > summary').click();
+  assert.equal(await liveNotice.isVisible(), true, "expanding execution leaves the notification in its own row");
+  await process.locator(':scope > summary').click();
   assert.equal(await page.locator(".thinking-block, .tool-call").count(), 0, "read evidence must not eagerly mount process details");
   await switchAway();
 
   // A final answer adds an outer collapsed process around the existing segments.
   result("second");
-  publish(notice("second"), { id: "final", role: "assistant", text: "The work is complete.", phase: "final_answer", status: "completed" });
+  publish({ id: "continued", role: "assistant", text: "", thinking: "Continue working.", status: "completed" },
+    notice("second"), { id: "final", role: "assistant", text: "The work is complete.", phase: "final_answer", status: "completed" });
   await targetRow.locator(".session-state.unread").waitFor();
   await visibility("hidden");
   await targetRow.locator("button.history-item").click();
@@ -124,7 +135,7 @@ try {
   assert.equal(await page.locator('#messages > .task-notice').count(), 0, 'task notices never become loose top-level rows');
   await switchAway();
   assert.deepEqual(errors, []);
-  console.log("PASS: collapsed process and final-answer folding retain real result notices; hidden and undelivered results stay unread; live delivery, switching and reload acknowledge without expanding details");
+  console.log("PASS: live task notices remain visible between closed execution segments; final-answer folding retains real result notices; hidden and undelivered results stay unread; switching and reload preserve read state");
 } finally {
   await browser.close();
   await app.close();

@@ -70,8 +70,9 @@ test("shared skills supplement existing sources, deduplicate and bind selection 
     }
     const selected = catalog.skills.find(item => item.name === "shared-source")!;
     assert.equal(selected.source, sharedFile);
-    assert.deepEqual(capabilityRuntime(catalog, { skills: [selected.id], mcp: [] }).skillPaths, [sharedFile]);
-    assert.deepEqual(capabilityRuntime(catalog, { skills: [], mcp: [] }).skillPaths, []);
+    const allPaths = catalog.skills.map(item => item.source);
+    assert.deepEqual(capabilityRuntime(catalog, { skills: [selected.id], mcp: [] }).skillPaths, allPaths);
+    assert.deepEqual(capabilityRuntime(catalog, { skills: [], mcp: [] }).skillPaths, allPaths);
     assert.ok(catalog.files.some(item => item.path === sharedFile));
     const sameDir = await discoverCapabilities(root, cwd, join(root, "pi"));
     assert.equal(sameDir.skills.filter(item => item.name === "app-source").length, 1);

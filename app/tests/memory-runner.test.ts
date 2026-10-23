@@ -11,12 +11,12 @@ import { ColdMemoryRunner } from "../src/server/memory-runner.js";
 import { ModelService } from "../src/server/model-service.js";
 import type { Scope, Workspace, Session } from "../src/shared/protocol.js";
 
-test("pooled pi memory tasks isolate bindings, require cleaned leases, record usage and cancel bounded queues", { timeout: 60000 }, async () => {
+test("pooled direct memory requests isolate bindings, record usage and cancel bounded queues", { timeout: 60000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-memory-runner-")), project = join(root, "project");
   const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
   mkdirSync(project); mkdirSync(join(root, "pi"));
   const requests: any[] = [];
-  let mode: "normal" | "repeat" | "output" | "length" = "normal";
+  let mode: "normal" | "repeat" | "pages" | "output" | "length" = "normal";
   let hanging = false, entered!: () => void;
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
@@ -25,10 +25,9 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     const message = value.messages.find((m: any) => m.role === "user");
     const content = typeof message.content === "string" ? message.content : message.content.map((c: any) => c.text ?? "").join("");
     const scope = JSON.parse(content) as Scope;
-    const toolRead = value.messages.some((m: any) => m.role === "tool") && mode !== "repeat";
-    const delta = mode === "output" || mode === "length" ? { role: "assistant", content: mode === "output" ? "x".repeat(32001) : "部分回答" } : toolRead ? { role: "assistant", content: `来源 ${scope.sessionId} 已读取，仅当前查询事实。` } : { role: "assistant", tool_calls: [{ index: 0, id: randomUUID(), type: "function", function: { name: "memory_read", arguments: JSON.stringify({ sessionId: scope.sessionId, path: "MEMORY.md" }) } }] };
+    const delta = { role: "assistant", content: mode === "output" ? "x".repeat(32001) : mode === "length" ? "部分回答" : `来源 ${scope.sessionId} 已读取，仅当前查询事实。` };
     res.writeHead(200, { "Content-Type": "text/event-stream" });
-    res.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta, finish_reason: mode === "length" ? "length" : mode === "output" || toolRead ? "stop" : "tool_calls" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
+    res.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta, finish_reason: mode === "length" ? "length" : "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
   });
   await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
   const provider = { api: "openai-completions", baseUrl: `http://127.0.0.1:${(fixture.address() as any).port}/v1`, models: [{ id: "fixture", cost: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }] };
@@ -65,16 +64,16 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     const alternateStart = requests.length;
     assert.ok((await execute(b, undefined, "query", "alternate")).answer.includes(b.sessionId));
     const alternateLease = metrics.filter(event => event.phase === "acquired").at(-1);
-    assert.equal(alternateLease.instanceId, leases[0].instanceId, "provider selection remains a per-binding input");
-    assert.equal(alternateLease.profileHash, leases[0].profileHash);
+    assert.notEqual(alternateLease.instanceId, leases[0].instanceId, "different providers use isolated process networks");
+    assert.notEqual(alternateLease.profileHash, leases[0].profileHash);
     assert.ok(requests.slice(alternateStart).every(r => r.observedAuthorization === "Bearer alternate-key"));
-    assert.ok(Number(store.db.prepare("SELECT COUNT(*) AS n FROM memory_usage WHERE sessionId=? AND provider=? AND usage IS NOT NULL").get(b.sessionId, "alternate")?.n) > 0, "reused runtime charges the current provider and session");
+    assert.ok(Number(store.db.prepare("SELECT COUNT(*) AS n FROM memory_usage WHERE sessionId=? AND provider=? AND usage IS NOT NULL").get(b.sessionId, "alternate")?.n) > 0, "current provider runtime charges the correct provider and session");
     assert.ok(!JSON.stringify(requests.slice(alternateStart)).includes("ONLY_ALPHA_PRIVATE"));
     const originalStart = requests.length;
     await execute(a);
     assert.ok(requests.slice(originalStart).every(r => r.observedAuthorization === "Bearer fixture"));
-    assert.ok(requests.some((r) => r.tools?.length === 1));
-    assert.ok(requests.every((r) => !r.tools || r.tools.length === 1 && r.tools[0].function.name === "memory_read"));
+    assert.ok(requests.every((r) => !r.tools?.length));
+    assert.ok(requests.every((r) => r.messages.filter((message: any) => message.role === "user").length === 1 && !r.messages.some((message: any) => ["assistant", "tool"].includes(message.role))));
     assert.ok(Number(store.db.prepare("SELECT COUNT(*) AS n FROM memory_usage WHERE usage IS NOT NULL").get()?.n) >= 4);
     await memories.command({ requestId: randomUUID(), op: "memory.configure", workspaceId: workspace.id, params: { concurrency: 1, queue: 1 } });
     hanging = true;
@@ -89,21 +88,12 @@ test("pooled pi memory tasks isolate bindings, require cleaned leases, record us
     await assert.rejects(execute(b), { code: "MEMORY_BUSY" });
     waiting.abort(); active.abort(); await Promise.all([oneDone, twoDone]);
     hanging = false; assert.ok((await execute(b)).answer.includes(b.sessionId));
-    const partial = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), read: () => { throw Error("引用资料读取失败"); } });
-    assert.equal(partial.incomplete, true, "tool read failure must not become a complete answer");
-    assert.equal(partial.incompleteReason, "read_failed", "read errors are not budget exhaustion");
     const configure = (params: Record<string, unknown>) => memories.command({ requestId: randomUUID(), op: "memory.configure", workspaceId: workspace.id, params });
-    await configure({ maxTurns: 1 });
-    assert.equal((await execute(a)).incompleteReason, "turn_limit", "turn budget applies to the next binding, including empty aborted answers");
-    await configure({ maxTurns: 8, readChars: 16000 });
-    mode = "repeat";
-    writeFileSync(join(root, "memory", "sessions", a.sessionId, "MEMORY.md"), "x".repeat(20000));
-    assert.equal((await execute(a)).incompleteReason, "read_limit");
-    const limits: number[] = [];
-    const remaining = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), readChars: 2,
-      read: (id, path, offset, limit) => { assert.equal(id, a.sessionId); limits.push(limit!); return memories.read(a, path, offset, limit); } });
-    assert.equal(remaining.incompleteReason, "read_limit");
-    assert.deepEqual(limits, [2], "主进程和 worker 都使用扣除摘要提示后的剩余预算");
+    const noTools = await runner.execute({ scope: a, kind: "query", selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: JSON.stringify(a), read: () => { throw Error("独立API不能调用读取工具"); } });
+    assert.equal(noTools.incomplete, false);
+    await configure({ maxTurns: 1, readChars: 16000 });
+    assert.equal((await execute(a)).incomplete, false);
+    assert.equal((await execute(a, undefined, "organize")).incomplete, false, "one direct request does not inherit legacy agent turn budgets");
     mode = "output";
     assert.equal((await execute(a)).incompleteReason, "output_limit");
     mode = "length";

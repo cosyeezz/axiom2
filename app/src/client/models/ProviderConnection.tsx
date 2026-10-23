@@ -1,3 +1,5 @@
+import { ProviderProxyFields } from "./ProviderProxyFields.js";
+import { LocalPath } from "../LocalPath.js";
 import { Select } from "../Select.js";
 import { Icon } from "../Icon.js";
 import { useEffect, useRef } from "react";
@@ -52,12 +54,13 @@ export function ProviderConnection({
           <p className="meta">供应商：{p.providerId}</p>
           <p id="provider-auth-status" className="connection-status" data-configured={p.auth?.configured || false} role="status">{p.auth?.configured ? "已通过 OAuth 登录" : "尚未登录，请完成账号授权。"}</p>
           {p.hasConnectionOverrides && <p className="field-help">此连接保留已有自定义接口覆盖，登录不会修改原配置。协议：{p.api}；地址：{p.keepUrl ? "已保存敏感地址" : p.url}</p>}
+          <ProviderProxyFields value={p.proxy} onChange={proxy => patch({ proxy })} disabled={busy || needsReconcile} error={p.auth?.error} />
           <div className="row">
             <button type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>OAuth 登录</button>
             <button type="button" className="btn btn-ghost" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => removeProvider(p)}>退出登录并移除</button>
           </div>
           {dirty && <p className="field-help">请先保存或放弃当前草稿，再重新登录或移除账号。</p>}
-          {storage && <p className="meta credential-path">凭据保存位置：<code>{storage.authPath}</code></p>}
+          {storage && <p className="meta credential-path">凭据保存位置：<LocalPath path={storage.authPath} /></p>}
         </div>
       </section>
       <p className="prototype-note">账号凭据仅保存在服务端。登录成功后可到「模型配置」拉取和选择模型，调用权限以供应商账号为准。</p>
@@ -163,6 +166,7 @@ export function ProviderConnection({
                 </span>
               </div>
             </div>
+            <ProviderProxyFields value={p.proxy} onChange={proxy => patch({ proxy })} disabled={busy || needsReconcile} error={p.auth?.error} />
             <div className="connection-credentials">
               <div className="field">
                 <div className="row-between credential-heading">
@@ -228,7 +232,7 @@ export function ProviderConnection({
                   <div className="credential-details-content">
                 {storage && (
                   <span className="field-help credential-path">
-                    密钥保存位置：<code>{storage.authPath}</code>
+                    密钥保存位置：<LocalPath path={storage.authPath} />
                   </span>
                 )}
                 <span className="field-help">
@@ -256,7 +260,7 @@ export function ProviderConnection({
           <div>
             {storage && (
               <p className="meta credential-path">
-                模型配置位置：<code>{storage.modelsPath}</code>
+                模型配置位置：<LocalPath path={storage.modelsPath} />
               </p>
             )}
             <p className="feedback" role="status">

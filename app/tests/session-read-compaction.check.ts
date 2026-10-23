@@ -39,7 +39,7 @@ try {
     const child = run("session.create", {}, workspace.id) as Session;
     app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES(?,?,?,'{}',1,2)")
       .run(`run-${id}`, child.id, status);
-    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,'fixture','',?,'{}',1)")
+    app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,?,'fixture',?,'{}',1)")
       .run(`task-${id}`, workspace.id, target.id, child.id, `anchor-${id}`, status);
     app.store.db.prepare("INSERT INTO task_results(id,taskId,runId,body) VALUES(?,?,?,?)")
       .run(id, `task-${id}`, `run-${id}`, JSON.stringify({ status }));

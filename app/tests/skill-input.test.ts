@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import { startServer } from "../src/server/index.js";
 import { TaskRecords, target } from "../src/server/tasks/records.js";
 import { prepareSkillInput } from "../src/server/skill-input.js";
@@ -15,21 +16,43 @@ import type { Session, Workspace } from "../src/shared/protocol.js";
 import type { EditableMessage } from "../src/shared/rewrite.js";
 const wait = async (check: () => boolean) => { const until = Date.now() + 25000; while (!check()) { if (Date.now() > until) throw Error("fixture timed out"); await new Promise(resolve => setTimeout(resolve, 20)); } };
 
-test("skill input rejects forged identity, malformed YAML, invalid bytes and oversized guides", () => {
-  const root = mkdtempSync(join(tmpdir(), "axiom-skill-input-")), filePath = join(root, "SKILL.md");
-  const skill = { filePath, name: "guide", description: "Guide" }, ref = { id: skillId(filePath), name: "forged-name", description: "forged description" };
+test("skill references delegate loading to pi's native slash command and preserve one input", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-skill-input-")), filePath = join(root, "skills/guide/SKILL.md"), secondPath = join(root, "skills/second/SKILL.md");
+  mkdirSync(join(root, "skills/guide"), { recursive: true }); mkdirSync(join(root, "skills/second"), { recursive: true });
+  writeFileSync(filePath, "---\nname: guide\ndescription: Loaded description\ndisable-model-invocation: true\n---\nACTUAL_GUIDE");
+  writeFileSync(secondPath, "---\nname: second\ndescription: Second description\n---\nSECOND_GUIDE");
+  const loader = new DefaultResourceLoader({ cwd: root, agentDir: root, noExtensions: true, noPromptTemplates: true, noThemes: true });
+  await loader.reload();
+  const { session } = await createAgentSession({ cwd: root, agentDir: root, resourceLoader: loader, sessionManager: SessionManager.inMemory() });
+  const ref = { id: skillId(filePath), name: "guide", description: "forged description" };
   try {
-    writeFileSync(filePath, "---\nname: actual\ndescription: Current description\n---\nACTUAL_GUIDE");
-    const input = prepareSkillInput("hello", [ref], [skill]);
-    assert.match(input.prompt, /ACTUAL_GUIDE/); assert.equal(input.metadata?.skills[0].name, "actual");
-    assert.throws(() => prepareSkillInput("hello", [{ ...ref, id: "0".repeat(64) }], [skill]), { code: "SKILL_UNAVAILABLE" });
+    const native = Reflect.get(session, "_expandSkillCommand").bind(session);
+    const input = prepareSkillInput("hello", [ref], session);
+    assert.equal(input.prompt, native("/skill:guide hello"));
+    assert.match(input.prompt, /<skill name="guide" location=".*SKILL.md">/);
+    assert.match(input.prompt, /References are relative to/);
+    assert.match(input.prompt, /ACTUAL_GUIDE/);
+    assert.equal(input.metadata?.skills[0].name, "guide");
+    assert.equal(input.metadata?.skills[0].description, "Loaded description");
+    const multi = prepareSkillInput("hello", [ref, { id: skillId(secondPath), name: "second", description: "" }], session);
+    assert.equal(multi.prompt, native(`/skill:guide ${native("/skill:second hello")}`));
+    assert.ok(multi.prompt.indexOf("ACTUAL_GUIDE") < multi.prompt.indexOf("SECOND_GUIDE"));
+    assert.equal(session.messages.length, 0, "expansion does not create messages, queues or a model run");
+    assert.throws(() => prepareSkillInput("hello", [{ ...ref, name: "missing" }], session), { code: "SKILL_UNAVAILABLE" });
+    assert.equal(input.metadata?.skills[0].id, "guide");
+    assert.throws(() => skillsInput([{ ...ref, id: "different-name" }]), { code: "INVALID_INPUT" });
     assert.throws(() => skillsInput([ref, ref]), { code: "INVALID_INPUT" });
     assert.throws(() => skillsInput([{ ...ref, path: filePath }]), { code: "INVALID_INPUT" });
-    writeFileSync(filePath, "---\nname: [SECRET_PARSE_EXCERPT\ndescription: test\n---\nBody");
-    assert.throws(() => prepareSkillInput("hello", [ref], [skill]), error => (error as any).code === "SKILL_INVALID" && !(error as Error).message.includes("SECRET_PARSE_EXCERPT"));
-    writeFileSync(filePath, Buffer.from([0xff])); assert.throws(() => prepareSkillInput("hello", [ref], [skill]), { code: "SKILL_READ_FAILED" });
-    writeFileSync(filePath, "a".repeat(128 * 1024 + 1)); assert.throws(() => prepareSkillInput("hello", [ref], [skill]), { code: "SKILL_READ_FAILED" });
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    writeFileSync(filePath, "---\nname: guide\ndescription: Changed after discovery\n---\nNEW_NATIVE_BODY");
+    assert.match(prepareSkillInput("hello", [ref], session).prompt, /NEW_NATIVE_BODY/);
+    assert.equal(prepareSkillInput("hello", [ref], session).metadata?.skills[0].description, "Loaded description", "display metadata follows the native loaded catalog until reload");
+    rmSync(filePath);
+    assert.throws(() => prepareSkillInput("hello", [ref], session), { code: "SKILL_READ_FAILED" });
+    Object.defineProperty(session, "_expandSkillCommand", { value: undefined, configurable: true });
+    assert.throws(() => prepareSkillInput("hello", [ref], session), { code: "SKILL_NATIVE_UNSUPPORTED" });
+    Object.defineProperty(session, "_expandSkillCommand", { value: () => "changed SDK shape", configurable: true });
+    assert.throws(() => prepareSkillInput("hello", [ref], session), { code: "SKILL_NATIVE_UNSUPPORTED" });
+  } finally { session.dispose(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("real Skill prompt, Steering, recall, rewrite and restarted history preserve immutable display metadata", { timeout: 120000 }, async () => {
@@ -59,10 +82,14 @@ test("real Skill prompt, Steering, recall, rewrite and restarted history preserv
     const scope = { workspaceId: w.id, sessionId: s.id };
     const call = (op: string, params: Record<string, unknown> = {}) => app!.tasks.command({ op, params, ...scope, requestId: randomUUID() });
     const catalog = await app.agents.capabilities.get(scope), skill = catalog.skills.find(item => item.name === "guide")!;
-    const skills = [{ id: skill.id, name: "client label", description: "client description" }];
+    await app.agents.capabilities.command({ op: "capabilities.defaults.save", requestId: randomUUID(), ...scope,
+      params: { revision: catalog.preferencesRevision, catalogRevision: catalog.revision, kind: "skills", id: skill.id, checked: false } });
+    const skills = [{ id: skill.id, name: skill.name, description: "client description" }];
     await call("agent.model", { selection: { provider: "fixture", id: "fixture", thinking: "off" } });
     await call("prompt", { text: "FIRST", skills }); await wait(() => bodies.length === 1);
     assert.match(JSON.stringify(bodies[0].messages), /GUIDE_BODY_ONE/);
+    assert.match(JSON.stringify(bodies[0].messages), /<skill name=\\"guide\\"/);
+    assert.doesNotMatch(JSON.stringify(bodies[0].messages.filter((m: any) => m.role === "system")), /Description ONE/);
     await wait(() => !!app!.agents.messages(scope).find(m => m?.text === "FIRST"));
     assert.equal(app.agents.messages(scope).find(m => m?.text === "FIRST")?.skills?.[0].description, "Description ONE");
     await call("prompt", { text: "RECALL", skills });
@@ -73,12 +100,12 @@ test("real Skill prompt, Steering, recall, rewrite and restarted history preserv
     await wait(() => bodies.length === 2); assert.match(JSON.stringify(bodies[1].messages), /GUIDE_BODY_TWO/);
     assert.doesNotMatch(JSON.stringify(bodies[1].messages), /RECALL/);
     await wait(() => !!app!.agents.messages(scope).find(m => m?.text === "APPENDED"));
-    assert.equal(app.agents.messages(scope).find(m => m?.text === "APPENDED")?.skills?.[0].description, "Description TWO");
+    assert.equal(app.agents.messages(scope).find(m => m?.text === "APPENDED")?.skills?.[0].description, "Description ONE");
     assert.equal(app.agents.messages(scope).find(m => m?.text === "FIRST")?.skills?.[0].description, "Description ONE");
     releases[1](); await wait(() => !running(app!.agents.info(scope).run));
     await app.close(); app = await startServer({ root, port: 0 });
     const history = app.agents.messages(scope), first = history.find(m => m?.text === "FIRST")!, appended = history.find(m => m?.text === "APPENDED")!;
-    assert.equal(first.skills?.[0].description, "Description ONE"); assert.equal(appended.skills?.[0].description, "Description TWO");
+    assert.equal(first.skills?.[0].description, "Description ONE"); assert.equal(appended.skills?.[0].description, "Description ONE");
     const editable = await call("agent.editable", { messageId: appended.id }) as EditableMessage;
     assert.equal(editable.draft.text, "APPENDED"); assert.deepEqual(editable.draft.skills, appended.skills);
     writeGuide("THREE");
@@ -88,7 +115,7 @@ test("real Skill prompt, Steering, recall, rewrite and restarted history preserv
     assert.equal(app.agents.messages(scope).find(m => m?.text === "REWRITTEN")?.skills?.[0].description, "Description THREE");
     assert.ok(!app.agents.messages(scope).some(m => m?.text === "APPENDED"));
     const records = new TaskRecords(app.store);
-    const childId = records.create(scope, "skill-fixture", "Research", [{ task: "Child initial", role: "" }], { provider: "fixture", id: "fixture", thinking: "off" }).taskIds[0];
+    const childId = records.create(scope, "skill-fixture", "Research", [{ task: "Child initial" }], { provider: "fixture", id: "fixture", thinking: "off" }).taskIds[0];
     const child = target(records.rows("WHERE id=?", childId)[0]);
     await app.tasks.command({ op: "prompt", requestId: randomUUID(), ...child, params: { text: "", skills } });
     await wait(() => bodies.length === 4);

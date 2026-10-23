@@ -77,6 +77,7 @@ export default function Models() {
           <strong className="configuration-error-label">配置错误 · </strong>
           {feedback || config.error}
         </p>}
+        {!hasError && config.warning && <p className="configuration-feedback" role="status">{config.warning}</p>}
         <div className="container" inert={busy} aria-busy={busy}>
           <div className="configuration-layout">
             <section

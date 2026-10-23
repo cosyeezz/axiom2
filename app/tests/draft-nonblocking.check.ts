@@ -69,13 +69,15 @@ try {
       if (["slow-write", "failed-write", "conflict"].includes(mode)) {
         await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "previous remote draft");
       }
+      const conflict = mode === "conflict" ? page.waitForResponse(response => response.url().includes("/api/draft?") && response.status() === 409) : undefined;
       await input.click();
       await input.fill(`send despite ${mode}`);
       assert.equal(await input.evaluate(node => document.activeElement === node), true);
       const attachment = page.getByRole("button", { name: "添加附件", exact: true });
       assert.equal(await attachment.isEnabled(), true);
       assert.equal(await attachment.evaluate(node => !!node.closest("[inert]")), false);
-      if (mode === "conflict") await page.getByRole("button", { name: "载入已保存草稿", exact: true }).waitFor();
+      if (conflict) await (await conflict).finished();
+      assert.equal(await page.locator(".draft-status").count(), 0, `${mode}: draft status stays silent`);
       // Enter reaches the real command path while optional requests are still held/failing.
       await input.press("Enter");
       await Promise.race([observed, page.waitForTimeout(3000).then(() => { throw Error(`${mode}: prompt blocked by draft persistence`); })]);
@@ -84,14 +86,16 @@ try {
       assert.equal(sent[0].params!.text, `send despite ${mode}`);
       const savedTyping = mode === "slow-write" ? page.waitForResponse(response => response.url().includes("/api/draft?") && response.request().postDataJSON()?.draft.text === "typing after send") : undefined;
       await input.fill("typing after send");
+      const recovered = mode === "slow-read" ? page.waitForResponse(response => response.url().includes("/api/draft?") && response.request().method() === "GET") : undefined;
       release();
-      if (mode === "slow-read") await page.getByRole("button", { name: "载入已保存草稿", exact: true }).waitFor();
+      if (recovered) await (await recovered).finished();
       if (mode === "slow-write") {
         await savedTyping;
         assert.equal(drafts.read(scope).draft.text, "typing after send", "late writes preserve newer text");
       }
       assert.equal(await input.inputValue(), "typing after send", "late recovery never replaces local input");
-      assert.equal(await page.getByText(/无法读取草稿|正在恢复草稿|正在保存草稿|草稿已保存|请连接服务后重试/).count(), 0);
+      assert.equal(await page.locator(".draft-status").count(), 0);
+      assert.equal(await page.getByText(/无法读取草稿|正在恢复草稿|正在保存草稿|草稿已保存|请连接服务后重试|另一个窗口有不同的草稿|保存当前输入|载入已保存草稿|草稿尚未确认保存|草稿恢复失败|重试草稿保存/).count(), 0);
       assert.deepEqual(errors, []);
       console.log(`PASS ${mode}: editable input, attachments, immediate send, newer typing retained, no draft failure banner`);
     } finally {

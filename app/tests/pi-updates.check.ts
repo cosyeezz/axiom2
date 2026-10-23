@@ -33,6 +33,7 @@ try {
       if (name === "axiom_service") return { desktopView: "control", state: "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
       if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" } : { job: null };
       if (name === "axiom_peers") return { peers: [] };
+      if (name === "axiom_reveal_path") return null;
       if (name !== "axiom_update") throw Error("Unexpected IPC: " + name);
       if (args.action === "status" && state.holdStatus) await new Promise<void>(resolve => { state.held = resolve; });
       if (args.action === "pi-check") {
@@ -64,6 +65,18 @@ try {
   await install.waitFor();
   assert.ok(await install.isEnabled());
   assert.equal(await pi.locator(".connect-pi-location").getAttribute("open"), null);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await pi.locator(".connect-pi-location > summary").click();
+  const location = pi.locator(".connect-pi-location .local-path");
+  await location.hover();
+  await location.getByRole("button", { name: "复制路径", exact: true }).click();
+  await location.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
+  const packageRoot = "/example/node/lib/node_modules/@earendil-works/pi-coding-agent";
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), packageRoot);
+  await location.getByRole("button", { name: "打开所在文件夹", exact: true }).click();
+  assert.deepEqual(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.name === "axiom_reveal_path")), [{ name: "axiom_reveal_path", path: packageRoot }]);
+  assert.equal(await location.locator("button").first().evaluate(node => getComputedStyle(node).borderTopWidth), "0px", "standalone page loads shared action styles");
+  await pi.locator(".connect-pi-location > summary").click();
   const widths = [1100, 760, 600, 430, 390, 360];
   for (const width of widths) {
     await page.setViewportSize({ width, height: 1000 });

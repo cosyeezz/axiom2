@@ -1,3 +1,4 @@
+import { compressionMemoryRead, afterCompressionMemoryRead } from "./compression-memory-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type ServerResponse } from "node:http";
@@ -40,13 +41,13 @@ test(
     mkdirSync(join(root, "pi"));
     const requests: any[] = [],
       summaries: ServerResponse[] = [];
-    const reply = (res: ServerResponse, content: string) => {
+    const reply = (res: ServerResponse, content: string | object) => {
       const chunk = (delta: unknown, finish_reason: string | null = null) =>
         res.write(
           `data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta, finish_reason }] })}\n\n`,
         );
-      chunk({ role: "assistant", content });
-      chunk({}, "stop");
+      chunk(typeof content === "string" ? { role: "assistant", content } : content);
+      chunk({}, typeof content === "string" ? "stop" : "tool_calls");
       res.write(
         `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } })}\n\n`,
       );
@@ -60,7 +61,7 @@ test(
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
       if (!body.tools?.length) summaries.push(res);
-      else reply(res, "<title>压缩测试</title>\n真实会话回复");
+      else reply(res, compressionMemoryRead(body) ?? "<title>压缩测试</title>\n真实会话回复");
     });
     await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
     writeFileSync(
@@ -224,11 +225,10 @@ test(
         app.agents.compressions.info({ ...scope, workspaceId: "foreign" }),
       );
       assert.equal(app.agents.compressions.info(other), null);
-      assert.equal(
-        readFileSync(file, "utf8"),
-        original,
-        "snapshot worker cannot modify original JSONL",
-      );
+      assert.ok(readFileSync(file, "utf8").startsWith(original), "memory preparation appends without rewriting history");
+      const preparedHistory = readFileSync(file, "utf8");
+      assert.match(preparedHistory.slice(original.length), /axiom-compression-memory/);
+      assert.match(preparedHistory.slice(original.length), /check-compression-memory/);
       await agent("prompt", { text: "快照之后的新消息" });
       await idle();
       const afterNewPrompt = readFileSync(file, "utf8"),
@@ -320,16 +320,18 @@ test(
       assert.match(JSON.stringify(nextRequest.messages), /快照之后的新消息/);
       assert.equal(app.agents.info(scope).usage!.context!.tokens, 120, "next provider response restores native usage");
       assert.notEqual(app.agents.info(scope).usage!.context!.estimated, true);
-      const beforeCancelled = readFileSync(file, "utf8");
+      let beforeCancelled = readFileSync(file, "utf8");
 
       // No project-local resources or tools run during summarization, even beside an authorized project.
       mkdirSync(join(project, ".pi/extensions"), { recursive: true });
       writeFileSync(
         join(project, ".pi/extensions/unwanted.ts"),
-        'import { writeFileSync } from "node:fs"; export default () => writeFileSync("unwanted.txt", "ran");',
+        'import { writeFileSync } from "node:fs"; export default (pi) => { pi.on("session_before_compact", () => { writeFileSync("unwanted.txt", "ran"); }); };',
       );
       await call("compression.start");
       await wait(() => summaries.length === initialSummaryCount + 1, "cancel target did not start");
+      await idle();
+      beforeCancelled = readFileSync(file, "utf8");
       assert.notEqual(app.agents.compressions.info(scope)!.id, completed!.id, "completed job can be started again");
       assert.deepEqual(app.agents.compressions.info(scope)!.selection, summarySelection, "start uses saved global selection");
       assert.equal(requests.filter((r) => !r.tools?.length).at(-1).model, "summarizer");
@@ -344,6 +346,8 @@ test(
       await app.agents.compressions.command({ op: "compression.preferences.save", requestId: randomUUID(), params: { selection: null } });
       await call("compression.start");
       await wait(() => summaries.length === initialSummaryCount + 2, "stop target did not start");
+      await idle();
+      beforeCancelled = readFileSync(file, "utf8");
       assert.notEqual(app.agents.compressions.info(scope)!.id, cancelId, "cancelled job can be started again");
       assert.deepEqual(app.agents.compressions.info(scope)!.selection, mainSelection, "cleared preference falls back to the chat model");
       assert.equal(requests.filter((r) => !r.tools?.length).at(-1).model, "fixture");
@@ -375,6 +379,8 @@ test(
         () => summaries.length === initialSummaryCount + 3,
         "revocation target did not start",
       );
+      await idle();
+      beforeCancelled = readFileSync(file, "utf8");
       const draft = await app.agents.models.read();
       await assert.rejects(
         app.agents.models.save({
@@ -565,6 +571,9 @@ test("running compression snapshots and applies only at paired-tool safe points 
         if (releaseSummaries) stream(res, { role: "assistant", content: "## Goal\nSAFE_BOUNDARY_SUMMARY" });
         return;
       }
+      const memoryRead = compressionMemoryRead(body);
+      if (memoryRead) { stream(res, memoryRead, "tool_calls"); return; }
+      if (afterCompressionMemoryRead(body)) { stream(res, { role: "assistant", content: "memory checked" }); return; }
       mainCount++;
       if (mainCount === 2 || mainCount === 3) {
         const gate = mainCount - 1;
@@ -622,13 +631,17 @@ test("running compression snapshots and applies only at paired-tool safe points 
         assert.equal(entries().filter((entry) => entry.type === "compaction").length, 0);
         gates[0].end("first paired tool result");
         await starting;
-        await wait(() => summaries.length >= 1 && gates.length === 2, "snapshot summary or second tool gate did not start");
+        await wait(() => summaries.length >= 1, "summary did not start after memory preparation");
+        await wait(() => !app.agents.active(scope), "memory preparation did not settle");
+        await agent("prompt", { text: "tail after the prepared snapshot" });
+        await wait(() => gates.length === 2, "post-snapshot tool gate did not start");
         const summaryRequest = requests.find((request) => !request.tools?.length);
         assert.match(JSON.stringify(summaryRequest.messages), /seed history before active tools/);
         const snapshotFile = join(root, "compression-snapshots", `${app.agents.compressions.info(scope)!.id}.jsonl`);
         const snapshotEntries = readFileSync(snapshotFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
         assert.ok(snapshotEntries.some((entry) => entry.message?.role === "toolResult" && entry.message.toolCallId === "gate-1"),
-          "snapshot is captured after the first completed tool, even if native compact retains it instead of summarizing it");
+          "snapshot includes the paired tool and subsequent completed memory preparation");
+        assert.ok(snapshotEntries.some((entry) => entry.message?.role === "toolResult" && entry.message.toolCallId === "check-compression-memory"));
         assert.ok(!snapshotEntries.some((entry) => entry.message?.content?.some?.((part: any) => part.type === "toolCall" && part.id === "gate-2")),
           "snapshot must not include the next unfinished turn");
         assert.doesNotMatch(JSON.stringify(summaryRequest.messages), /second paired tool result/);

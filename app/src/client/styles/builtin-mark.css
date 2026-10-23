@@ -1,0 +1,12 @@
+/* Built-in integration mark: replaces a trailing "内置" tag next to resource
+   names. The glyph stays at text color weight so names keep leading the line. */
+.builtin-mark { display: inline-flex; align-items: center; vertical-align: -2px; margin-left: 6px; color: var(--muted); }
+.builtin-mark > .ui-glyph { width: 13px; height: 13px; --icon-stroke: 1.2px; }
+.builtin-mark.is-fallback { color: var(--warn); }
+.resources-facts .builtin-mark { margin-left: 0; margin-right: 4px; }
+.resources-facts .builtin-mark > .ui-glyph { width: 14px; height: 14px; }
+.supplier-option strong .builtin-mark { vertical-align: -1px; }
+.detail-heading h2 .builtin-mark { margin-left: 8px; }
+.detail-heading h2 .builtin-mark > .ui-glyph { width: 15px; height: 15px; }
+/* Names keep their natural width; the mark trails the text instead of the row edge. */
+.resources-app .supplier-option strong { justify-content: flex-start; gap: 0; }

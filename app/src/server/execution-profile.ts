@@ -1,3 +1,4 @@
+import { modelProxyRevision, providerProxyUrl, parseProviderProxy } from "./integrations/model-proxy-env.js";
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -34,7 +35,7 @@ const sdkVersions = Object.fromEntries(['pi-coding-agent', 'pi-agent-core', 'pi-
 }));
 export interface EnvironmentInput {
   entry: WorkerEntry; cwd: string; modelDir: string; modelsRaw: string; selection?: Selection;
-  taskRole?: string; capabilities?: CapabilityRuntime; mode: ExecutionMode;
+  capabilities?: CapabilityRuntime; mode: ExecutionMode;
 }
 export interface PreparedEnvironment {
   readonly profileHash: string;
@@ -98,13 +99,17 @@ export class ExecutionProfiles {
     let resourceVersion: string, verifiable = true;
     try { localResources(); resourceVersion = captured?.version ?? resources(); verifiable = captured?.verifiable ?? true; }
     catch { resourceVersion = randomUUID(); verifiable = false; }
-    const env = { ...process.env, AXIOM_PI_DIR: input.modelDir };
+    const provider = input.selection?.provider;
+    // Resolve before admission so a stopped built-in entry fails without sending a model request.
+    if (provider) providerProxyUrl(this.root, parseProviderProxy(JSON.parse(input.modelsRaw).providers?.[provider]?.axiomProxy));
+    const proxyRevision = digest(modelProxyRevision(this.root));
+    const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "" };
     const execArgv = source ? ["--import", import.meta.resolve("tsx")] : [];
     const reuse: ReuseMode = input.entry === "agent" ? (verifiable ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,
       entry: input.entry, reuse, cwd: canonicalPath(input.cwd), agentDir: resolve(this.root, "pi"),
       modelDir: canonicalPath(input.modelDir), env, execArgv, modelDigest, configRevision, settings, resourceVersion,
-      selection: input.entry === "agent" ? input.selection : null, capabilities: input.capabilities ?? null, taskRole: input.taskRole ?? null }));
+      selection: input.entry === "agent" ? input.selection : null, provider, proxyRevision, capabilities: input.capabilities ?? null }));
     let snapshot = this.snapshots.get(modelDigest);
     if (snapshot) {
       try { snapshot.valid = snapshot.valid && jsonRevision(snapshot.path) === modelDigest; }
@@ -122,13 +127,13 @@ export class ExecutionProfiles {
       try { const revisions = modelFiles.map(jsonRevision), currentModels = revisions[0];
         return (input.capabilities?.files.every(file => capabilityFileDigest(file.path) === file.digest) ?? true) &&
         (currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) === modelDigest &&
-        configRevision === digest(stable(revisions)) &&
+        configRevision === digest(stable(revisions)) && proxyRevision === digest(modelProxyRevision(this.root)) &&
         (input.entry !== "agent" || stable(settingsFiles.map(jsonRevision)) === stable(settings) && (!checkResources || !verifiable || resources() === resourceVersion)); }
       catch { return false; }
     };
     return Object.freeze({ profileHash, entry: input.entry, reuse, cwd: input.cwd, root: this.root, modelDir: input.modelDir,
       modelsFile: snapshot.path, workerPath, execArgv, env, environmentWarm: input.entry === "memory" && input.mode === "D",
-      provider: input.entry === 'agent' ? input.selection?.provider : undefined, configRevision, prewarmAllowed: verifiable,
+      provider, configRevision, prewarmAllowed: verifiable,
       current,
       currentAsync: async (signal?: AbortSignal) => {
         if (signal?.aborted || !current(false)) return false;

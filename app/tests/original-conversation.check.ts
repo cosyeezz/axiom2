@@ -181,7 +181,7 @@ try {
   assert.equal(await toggle.getAttribute("aria-pressed"), "false");
   // Parent and child viewing instances share their own toolbar state, never each other's.
   const records = new TaskRecords(app.store);
-  const { taskIds: [taskId] } = records.create(scope, "raw-child", "UI fixture", [{ task: "原始视图子会话", role: "" }], { provider: "fixture", id: "fixture", thinking: "off" });
+  const { taskIds: [taskId] } = records.create(scope, "raw-child", "UI fixture", [{ task: "原始视图子会话" }], { provider: "fixture", id: "fixture", thinking: "off" });
   app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(taskId);
   views.messageChanged(scope, { id: "child-call", role: "assistant", text: "", calls: [{ id: "raw-child", name: "delegate", input: "{}" }] });
   views.flush(scope); app.agents.publish(tasksScope(scope), app.tasks.list(scope));

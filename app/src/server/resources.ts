@@ -1,14 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DefaultPackageManager, SettingsManager, getAgentDir, loadSkills, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { AppError, object, text, type Command } from "../shared/protocol.js";
+import { skillImportName } from "../shared/skill-import.js";
+import { importSkillName, nameImportedSkill } from "./skill-import.js";
 import { configProjection, restoreConfig } from "./resource-config.js";
 import type { ResourceDetail, ResourceItem, ResourceScope, ResourceState } from "../shared/resources.js";
 import type { Store } from "./storage.js";
 import { capabilityFileDigest, discoverCapabilities, skillId } from "./capability-resources.js";
 import { executeOpenCli, findNpmCli, type OpenCliExecute } from "./integrations/opencli.js";
+import { reaConfigPath } from "./integrations/rea-runtime.js";
 
 type McpConfig = ReturnType<NonNullable<McpExtensionOptions["loadConfig"]>>["servers"][number]["config"];
 // Version-bound Pi 1.1.0 bridge, matching capability discovery. No extension is executed here.
@@ -22,6 +26,7 @@ function fileIdentity(path: string) {
   try { const stat = lstatSync(path); return digest([capabilityFileDigest(path), realpathSync(path), stat.isSymbolicLink(), stat.isDirectory()]); }
   catch { return capabilityFileDigest(path); }
 }
+const mcpOverride = (raw: any) => raw && typeof raw === "object" && !Array.isArray(raw) && !["command", "url", "type"].some(key => key in raw);
 const inside = (parent: string, child: string) => { const p = relative(resolve(parent), resolve(child)); return p !== "" && !p.startsWith(`..${sep}`) && p !== ".." && !isAbsolute(p); };
 function json(path: string): Record<string, any> {
   try { const value = JSON.parse(readFileSync(path, "utf8")); if (!value || Array.isArray(value) || typeof value !== "object") throw Error(); return value; }
@@ -40,7 +45,7 @@ function npmSpec(value: unknown) {
   return { spec, name: match[1] };
 }
 type Managed = { scopeId?: string; id: string; kind: "skill" | "mcp"; name: string; source: string; directory: string; paths?: string[]; version?: string; bin?: string };
-type Target = { sharedOwned?: boolean; referenceOnly?: boolean; item: ResourceItem; skillPaths?: string[]; path?: string; managed?: Managed; package?: { source: string; cwd: string; local: boolean }; mcp?: { path: string; raw: any }[] };
+type Target = { builtin?: boolean; sharedOwned?: boolean; referenceOnly?: boolean; item: ResourceItem; skillPaths?: string[]; path?: string; managed?: Managed; package?: { source: string; cwd: string; local: boolean }; mcp?: { path: string; raw: any }[] };
 export class Resources {
   private state: ResourceState = { revision: "", items: [], scopes: [], warnings: [] };
   private targets = new Map<string, Target>();
@@ -68,6 +73,8 @@ export class Resources {
     return scope;
   }
   private settings(scopeId = "global") { const scope = this.scope(scopeId); return scope.path ? join(scope.path, ".pi", "settings.json") : join(this.store.root, "pi", "settings.json"); }
+  private mcpPath(scope: ResourceScope) { return scope.path ? join(scope.path, ".pi", "mcp.json") : join(this.sharedPiDir, "mcp.json"); }
+  private mcpId(path: string, name: string) { return path === join(this.sharedPiDir, "mcp.json") ? `mcp:${name}` : `mcp:${digest(path)}:${name}`; }
   private contexts() { return [this.store.root, ...this.store.workspaces().filter(w => w.authorized).map(w => w.path)]; }
   private manager(cwd: string) {
     const settingsManager = SettingsManager.create(cwd, join(this.store.root, "pi"), { projectTrusted: true });
@@ -117,9 +124,18 @@ export class Resources {
       const catalog = await discoverCapabilities(this.store.root, cwd, this.sharedPiDir);
       catalog.warnings.forEach(w => warnings.add(w));
       catalog.files.forEach(file => track(file.path));
+      for (const server of catalog.config.servers.filter(server => server.source === reaConfigPath(this.store.root))) {
+        add({ builtin: true, item: { id: "builtin:rea:mcp", kind: "mcp", name: server.name, description: "REA 内置 MCP 服务", source: server.source, builtin: "rea",
+          managed: true, removable: false, cleanup: [], note: "由内置工具 REA 管理；安装、卸载、更新和默认启用请到内置工具设置。" } });
+      }
       for (const skill of catalog.skills) {
         const scopeId = skillScopes.get(cwd)?.get(identity(skill.source)) ?? "global";
         if (scopeId === "unregistered") continue;
+        if (skill.builtin && !skill.fallback) {
+          add({ builtin: true, skillPaths: [skill.source], item: { id: `skill:${skillId(skill.source)}`, kind: "skill", name: skill.name, description: skill.description, builtin: skill.builtin,
+            source: skill.source, managed: true, removable: false, cleanup: [], note: `随内置 ${skill.builtin === "rea" ? "REA" : "OpenCLI"} 安装包提供；安装、卸载及更新请到内置工具设置。` } });
+          continue;
+        }
         if (records.some(record => (record.scopeId ?? "global") === scopeId && record.paths?.some(path => skill.source === path || inside(path, skill.source)))) continue;
         const owner = packages.find(pkg => inside(pkg.root, skill.source) && targets.get(pkg.id)?.item.scopeId === scopeId);
         if (owner) { const target = targets.get(owner.id)!; (target.skillPaths ??= []).push(skill.source); continue; }
@@ -138,7 +154,7 @@ export class Resources {
         const externalPackage = path.split(sep).includes("node_modules") || !linked && realpathSync(path).split(sep).includes("node_modules");
         const removable = !protectedPath && !externalPackage && !linkedParent;
         track(path);
-        add({ item: { scopeId, id: scopeId === "global" ? `skill:${skill.id}` : `skill:${scopeId}:${skill.id}`, kind: "skill", name: skill.name, description: skill.description, source: skill.source, managed: false, removable,
+        add({ item: { scopeId, id: scopeId === "global" ? `skill:${skillId(skill.source)}` : `skill:${scopeId}:${skillId(skill.source)}`, kind: "skill", name: skill.name, description: skill.description, source: skill.source, managed: false, removable,
           cleanup: [linked ? `移除技能链接：${path}（链接目标及同目录其他文件保留）` : `删除技能及目录内附属文件：${path}`, "移除直接路径引用和默认选择"], note: linkedParent ? "技能位于父目录链接中，请通过链接来源或原安装管理器处理，应用不删除其目标内的文件。" : externalPackage ? "由外部工具包提供，请通过其安装管理器卸载。" : "本机技能；修改会影响共享此路径的其他程序。" }, path, skillPaths: [skill.source] });
       }
     }
@@ -147,7 +163,7 @@ export class Resources {
       const config = json(path);
       if (config.mcpServers !== undefined && (!config.mcpServers || typeof config.mcpServers !== "object" || Array.isArray(config.mcpServers))) throw Error("MCP 配置格式无效。");
       for (const [name, raw] of Object.entries(config.mcpServers ?? {})) {
-        const scopeId = path === join(this.sharedPiDir, "mcp.json") ? "global" : scopes.find(s => s.path && join(s.path, ".pi", "mcp.json") === path)?.id ?? "global", id = path === join(this.sharedPiDir, "mcp.json") ? `mcp:${name}` : `mcp:${digest(path)}:${name}`;
+        const scopeId = path === join(this.sharedPiDir, "mcp.json") ? "global" : scopes.find(s => s.path && join(s.path, ".pi", "mcp.json") === path)?.id ?? "global", id = this.mcpId(path, name);
         const record = records.find(r => r.kind === "mcp" && r.name === name && (r.scopeId ?? "global") === scopeId && (scopeId !== "global" || path === join(this.sharedPiDir, "mcp.json")));
         const globalNames = Object.keys(json(join(this.sharedPiDir, "mcp.json")).mcpServers ?? {});
         const target: Target = { item: { id, scopeId, kind: "mcp", name, description: scopeId !== "global" && !(raw as any)?.command && !(raw as any)?.url ? "项目覆盖 · 继承全局连接" : typeof (raw as any)?.url === "string" ? "远程 MCP 服务" : "本地 MCP 服务", source: path, version: record?.version, managed: !!record, removable: true,
@@ -159,7 +175,7 @@ export class Resources {
     for (const record of records.filter(r => r.kind === "mcp")) if (scopes.some(s => s.id === (record.scopeId ?? "global")) && ![...targets.values()].some(t => t.managed?.id === record.id)) add({ item: { id: `orphan:${record.id}`, scopeId: record.scopeId ?? "global", kind: "mcp", name: record.name, description: "安装目录待清理", source: record.directory, managed: true, removable: true, cleanup: [`删除遗留安装目录及依赖：${record.directory}`, "移除安装记录"] }, managed: record, mcp: [] });
     // A discovery scope is not file ownership: detach shared/ancestor guides
     // from this scope, never delete a file still used by another scope.
-    for (const target of targets.values()) if (target.skillPaths?.length) {
+    for (const target of targets.values()) if (!target.builtin && target.skillPaths?.length) {
       const scope = scopes.find(s => s.id === target.item.scopeId)!;
       const shared = [...targets.values()].some(other => other !== target && other.item.scopeId !== target.item.scopeId && other.skillPaths?.some(path => target.skillPaths!.some(own => identity(path) === identity(own))));
       if (shared && (target.managed || target.package)) {
@@ -173,6 +189,22 @@ export class Resources {
         target.item.note = "此技能文件由其他项目或全局共享；此处仅管理引用，文件内容需到原来源编辑。";
       }
     }
+    for (const target of targets.values()) if (target.item.kind === "skill") {
+      const protectedRoot = target.path && [join(this.store.root, "pi", "skills"), ...scopes.flatMap(s => s.path ? [join(s.path, ".pi", "skills")] : [])].some(path => resolve(path) === resolve(target.path!));
+      target.item.movable = !!(!protectedRoot && target.item.removable && !target.referenceOnly && !target.sharedOwned && (target.managed || target.path && !lstatSync(target.path).isSymbolicLink()));
+      if (!target.item.movable) target.item.moveBlockedReason = "此技能由其他范围、链接或外部安装器共享，请先在原来源解除共享后移动。";
+    }
+    for (const target of targets.values()) if (target.item.kind === "mcp") {
+      const entry = target.mcp?.[0], scope = scopes.find(s => s.id === target.item.scopeId)!;
+      const reason = target.builtin ? "此 MCP 由内置工具管理，作用范围固定为全局，无需移动。"
+        : !entry ? "连接配置已不存在，请先恢复配置或清理遗留安装。"
+        : target.mcp!.length !== 1 || entry.path !== this.mcpPath(scope) ? "此配置不属于独立的全局或项目来源，请先整理配置文件。"
+        : mcpOverride(entry.raw) ? "此项目配置继承全局连接，请先保存完整连接配置后再移动。"
+        : scope.kind === "global" && entry.raw?.auth ? "此 MCP 使用仅限全局的认证供应商，不能移入项目。"
+        : scope.kind === "global" && [...targets.values()].some(other => other !== target && other.item.name === target.item.name && other.mcp?.some(e => mcpOverride(e.raw))) ? "其他项目仍通过局部覆盖继承此全局连接，请先处理这些覆盖配置再移动。" : undefined;
+      target.item.movable = !reason;
+      target.item.moveBlockedReason = reason;
+    }
     // A refresh begun while idle must not replace the admitted operation's snapshot.
     if (this.busy && !finishing) return this.snapshot();
     this.targets = targets; this.files = files;
@@ -184,7 +216,7 @@ export class Resources {
   async command(c: Command) {
     if (c.op === "resources.get") return this.busy ? this.snapshot() : this.refresh();
     if (c.op === "resources.detail") return this.detail(object(c.params ?? {}));
-    if (!["resources.install", "resources.update", "resources.remove", "resources.save"].includes(c.op)) throw new AppError("UNKNOWN_OPERATION", "不支持的资源操作。");
+    if (!["resources.install", "resources.update", "resources.remove", "resources.save", "resources.move"].includes(c.op)) throw new AppError("UNKNOWN_OPERATION", "不支持的资源操作。");
     if (this.closed || this.busy) throw new AppError("RESOURCE_BUSY", "资源操作进行中，请等待完成。");
     const p = object(c.params ?? {});
     const previous = this.state.revision;
@@ -194,7 +226,13 @@ export class Resources {
     const target = p.id ? this.targets.get(text(p.id, "资源标识")) : undefined;
     if (c.op !== "resources.install" && !target) throw new AppError("RESOURCE_MISSING", "资源不存在，请刷新。");
     const scope = this.scope(target?.item.scopeId ?? p.scopeId);
+    if (target?.builtin) throw new AppError("BUILTIN_RESOURCE", "此资源由内置工具管理，请到内置工具设置更新或重新安装。");
     if (target?.sharedOwned) throw new AppError("RESOURCE_SHARED", "其他作用范围仍引用此资源，请先移除这些引用再编辑、更新或卸载。");
+    if (c.op === "resources.move") {
+      const destination = this.scope(p.destinationScopeId);
+      if (!target!.item.movable || destination.id === scope.id || (destination.kind !== "global" && scope.kind !== "global"))
+        throw new AppError("INVALID_INPUT", target!.item.moveBlockedReason ?? "请选择可独立管理的技能或 MCP，在项目与全局之间移动。");
+    }
     if (c.op === "resources.remove" && (!target!.item.removable || p.confirm !== true)) throw new AppError("INVALID_INPUT", "请确认此资源的清理范围。");
     this.state.job = { id: randomUUID(), running: true, message: "正在准备资源操作…" };
     try { this.notify(); }
@@ -205,7 +243,11 @@ export class Resources {
     // Persist admission before queuing any side effect; reserve before yielding.
     this.pending = Promise.resolve().then(async () => {
       await this.idle(); this.scope(scope.id); this.assertFiles();
-      if (c.op === "resources.save") await this.saveContent(p, target!);
+      if (c.op === "resources.move") {
+        const destination = this.scope(p.destinationScopeId);
+        this.state.job!.resourceId = target!.item.kind === "mcp" ? await this.moveMcp(target!, destination) : await this.moveSkill(target!, destination);
+      }
+      else if (c.op === "resources.save") await this.saveContent(p, target!);
       else if (c.op === "resources.remove") await this.remove(target!);
       else if (target?.package) await this.updatePackage(target);
       else if ((target?.item.kind ?? p.kind) === "skill") await this.installSkill({ ...p, scopeId: scope.id }, target);
@@ -310,6 +352,175 @@ export class Resources {
     settings.skills = [...(settings.skills ?? []).filter((v: unknown) => typeof v !== "string" || !remove.some(r => v === r)), ...add];
     atomic(path, settings);
   }
+  private async moveMcp(target: Target, destination: ResourceScope) {
+    const entry = target.mcp![0], name = target.item.name, destinationPath = this.mcpPath(destination);
+    const validate = (await validation).validateMcpServerConfig;
+    const parsed = validate(name, entry.raw);
+    if (typeof parsed === "string") throw new AppError("INVALID_INPUT", "MCP 配置无效，请修复连接配置后再移动。");
+    if (destination.kind === "project" && "auth" in parsed && parsed.auth)
+      throw new AppError("INVALID_INPUT", "此 MCP 使用仅限全局的认证供应商，不能移入项目。");
+    this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles();
+    const sourceConfig = json(entry.path), destinationConfig = json(destinationPath);
+    const names = Object.keys(destinationConfig.mcpServers ?? {});
+    if (names.some(other => other.replace(/-/g, "_") === name.replace(/-/g, "_")) || [...this.targets.values()].some(other => other !== target && other.item.kind === "mcp" && (other.item.scopeId === destination.id || other.item.name !== name) && other.item.name.replace(/-/g, "_") === name.replace(/-/g, "_")))
+      throw new AppError("RESOURCE_CONFLICT", "目标范围已有同名 MCP 或工具名称空间冲突，请先处理后再移动；未覆盖任何配置。");
+    // A linked configuration may still be used by a different scope.
+    for (const path of [entry.path, destinationPath]) {
+      if (!existsSync(path)) continue;
+      const actual = realpathSync(path);
+      if (statSync(path).nlink > 1 || lstatSync(path).isSymbolicLink() || [...this.files.keys()].some(other => other !== path && basename(other) === "mcp.json" && existsSync(other) && realpathSync(other) === actual))
+        throw new AppError("RESOURCE_SHARED", "此 MCP 配置文件通过链接共享，请先解除文件链接再移动。");
+    }
+    delete sourceConfig.mcpServers[name];
+    destinationConfig.mcpServers = { ...destinationConfig.mcpServers, [name]: entry.raw };
+    const records = target.managed ? this.records().map(record => record.id === target.managed!.id ? { ...record, scopeId: destination.id } : record) : undefined;
+    const snapshots = [entry.path, destinationPath, ...(records ? [this.recordsPath] : [])].map(path => ({ path, content: existsSync(path) ? readFileSync(path) : undefined }));
+    const written: typeof snapshots = [];
+    this.store.db.exec("BEGIN");
+    try {
+      for (const [saved, config] of [[snapshots[1], destinationConfig], [snapshots[0], sourceConfig]] as const) {
+        atomic(saved.path, config); written.push(saved);
+      }
+      if (records) { this.save(records); written.push(snapshots[2]); }
+      const row = this.store.db.prepare("SELECT body FROM capability_preferences WHERE id=1").get();
+      if (row) {
+        const body = JSON.parse(String(row.body)), before = digest([resolve(entry.path), name]), after = digest([resolve(destinationPath), name]);
+        delete body.mcp[after];
+        if (before in body.mcp) { body.mcp[after] = body.mcp[before]; delete body.mcp[before]; }
+        this.store.db.prepare("UPDATE capability_preferences SET revision=revision+1,body=? WHERE id=1").run(JSON.stringify(body));
+      }
+      this.store.db.prepare("UPDATE session_capabilities SET selection=NULL,revision=revision+1 WHERE lockedAt IS NULL").run();
+      this.store.db.exec("COMMIT");
+    } catch {
+      let failed = false;
+      try { if (this.store.db.isTransaction) this.store.db.exec("ROLLBACK"); }
+      catch { failed = true; }
+      for (const saved of written.reverse()) {
+        try {
+          if (saved.content === undefined) rmSync(saved.path, { force: true });
+          else writeFileSync(saved.path, saved.content);
+        } catch { failed = true; }
+      }
+      if (failed) throw new AppError("RESOURCE_ROLLBACK_FAILED", "MCP 移动失败且部分状态未能恢复，请检查配置文件及数据库权限后刷新核实。");
+      throw new AppError("RESOURCE_MOVE_FAILED", "MCP 移动失败，已恢复原配置；请检查文件及数据库权限后重试。");
+    }
+    return this.mcpId(destinationPath, name);
+  }
+  private async moveSkill(target: Target, destination: ResourceScope) {
+    const guides = this.guides(target), names = new Set(loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: guides, includeDefaults: false }).skills.map(s => s.name));
+    if (!names.size) throw new AppError("INVALID_INPUT", "技能内容无法读取，请修复后再移动。");
+    const { manager } = this.manager(destination.path ?? this.store.root);
+    const resolved = await manager.resolve(async () => "skip");
+    const candidates = resolved.skills.filter(entry => entry.metadata.scope === (destination.kind === "project" ? "project" : "user")).map(entry => entry.path);
+    // Include explicitly scoped resources and shared global guides, even when a
+    // same-name guide was hidden by discovery precedence.
+    candidates.push(...[...this.targets.values()].filter(t => t !== target && t.item.scopeId === destination.id).flatMap(t => t.skillPaths ?? []));
+    if (destination.kind === "global") candidates.push(join(this.sharedPiDir, "skills"));
+    for (const path of candidates) {
+      const loaded = loadSkills({ cwd: destination.path ?? this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [path], includeDefaults: false });
+      if (loaded.skills.some(s => names.has(s.name) && !guides.some(g => realpathSync(g) === realpathSync(s.filePath))))
+        throw new AppError("RESOURCE_CONFLICT", "目标范围已有同名技能，请先处理重名后再移动；未覆盖任何文件。");
+    }
+    const sourceSettings = this.settings(target.item.scopeId), destinationSettings = this.settings(destination.id);
+    const sourceConfig = json(sourceSettings), destinationConfig = json(destinationSettings);
+    for (const config of [sourceConfig, destinationConfig]) if (config.skills !== undefined && !Array.isArray(config.skills)) throw new AppError("INVALID_INPUT", "技能路径配置无效，请修复后再移动。");
+    for (const scope of this.scopes().filter(s => s.id !== target.item.scopeId)) {
+      const settingsPath = this.settings(scope.id);
+      const entries = json(settingsPath).skills;
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (typeof entry !== "string" || /^[!-]/.test(entry)) continue;
+        const value = entry.replace(/^\+/, "");
+        const path = value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settingsPath), value);
+        if (!existsSync(path)) continue;
+        const actual = realpathSync(path);
+        if (guides.some(guide => { const own = realpathSync(guide); return own === actual || inside(actual, own); }))
+          throw new AppError("RESOURCE_SHARED", "其他作用范围仍声明了此技能路径，请先移除共享引用再移动。");
+      }
+    }
+    const oldPaths = target.managed?.paths ?? [target.path!];
+    const destinationPath = target.path ? join(dirname(destinationSettings), "skills", basename(target.path)) : undefined;
+    const newPaths = target.managed?.paths ?? [destinationPath!];
+    const matches = (entry: unknown, settings: string, paths: string[]) => {
+      if (typeof entry !== "string") return false;
+      const value = entry.replace(/^[+!-]/, ""), absolute = value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settings), value);
+      return paths.some(path => absolute === resolve(path));
+    };
+    sourceConfig.skills = (sourceConfig.skills ?? []).filter((entry: unknown) => !matches(entry, sourceSettings, [...oldPaths, ...guides]));
+    destinationConfig.skills = [...(destinationConfig.skills ?? []).filter((entry: unknown) => typeof entry === "string" && /^[!-]/.test(entry) || !matches(entry, destinationSettings, newPaths)), ...newPaths];
+    const records = target.managed ? this.records().map(record => record.id === target.managed!.id ? { ...record, scopeId: destination.id } : record) : undefined;
+    const snapshots = [sourceSettings, destinationSettings, ...(records ? [this.recordsPath] : [])].map(path => ({ path, content: existsSync(path) ? readFileSync(path) : undefined }));
+    const stage = destinationPath ? `${destinationPath}.${randomUUID()}.staging` : undefined;
+    const backup = target.path ? `${target.path}.${randomUUID()}.backup` : undefined;
+    let backedUp = false, placed = false, writing = false, committed = false;
+    const assertDestination = () => {
+      if (!destinationPath) return;
+      try { lstatSync(destinationPath); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+      throw new AppError("RESOURCE_CONFLICT", "目标位置已存在同名文件或目录，请先处理后再移动；未覆盖任何文件。");
+    };
+    try {
+      assertDestination();
+      if (stage) {
+        let count = 0, bytes = 0;
+        await cp(target.path!, stage, { recursive: true, errorOnExist: true, force: false, filter: path => {
+          const stat = lstatSync(path); count++; bytes += stat.size;
+          if (stat.isSymbolicLink() || count > 10000 || bytes > 50 * 1024 * 1024) throw new AppError("INVALID_INPUT", "技能目录包含符号链接或超过移动大小限制（50 MB / 10000 项）。");
+          return true;
+        } });
+      }
+      this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles(); assertDestination();
+      if (backup) { renameSync(target.path!, backup); backedUp = true; renameSync(stage!, destinationPath!); placed = true; }
+      writing = true;
+      atomic(sourceSettings, sourceConfig); atomic(destinationSettings, destinationConfig);
+      if (records) this.save(records);
+      const catalog = await discoverCapabilities(this.store.root, destination.path ?? this.store.root, this.sharedPiDir);
+      const movedGuides = target.path ? guides.map(guide => guide === target.path ? destinationPath! : join(destinationPath!, relative(target.path!, guide))) : guides;
+      if (movedGuides.some(guide => !catalog.skills.some(s => resolve(s.source) === resolve(guide))))
+        throw new AppError("RESOURCE_CONFLICT", "目标范围的排除规则或同名技能阻止加载，已撤销移动；请调整配置后重试。");
+      if (target.managed) {
+        const sourceScope = this.scope(target.item.scopeId);
+        const sourceResources = await this.manager(sourceScope.path ?? this.store.root).manager.resolve(async () => "skip");
+        const retained = sourceResources.skills.filter(entry => entry.enabled && entry.metadata.scope === (sourceScope.kind === "project" ? "project" : "user"));
+        if (retained.some(entry => loadSkills({ cwd: sourceScope.path ?? this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [entry.path], includeDefaults: false }).skills.some(s => guides.some(g => realpathSync(g) === realpathSync(s.filePath)))))
+          throw new AppError("RESOURCE_CONFLICT", "原范围仍通过父目录或其他声明加载此技能，已撤销移动；请先整理技能路径引用。");
+      }
+      // The file identity changes only for local files. Keep the user's default
+      // selection while invalidating unlocked session catalogs for both scopes.
+      this.store.db.exec("BEGIN");
+      try {
+        const row = this.store.db.prepare("SELECT body FROM capability_preferences WHERE id=1").get();
+        if (row && target.path) {
+          const body = JSON.parse(String(row.body));
+          for (const guide of guides) {
+            const before = skillId(guide), after = skillId(guide === target.path ? destinationPath! : join(destinationPath!, relative(target.path, guide)));
+            if (before in body.skills) { body.skills[after] = body.skills[before]; delete body.skills[before]; }
+          }
+          this.store.db.prepare("UPDATE capability_preferences SET revision=revision+1,body=? WHERE id=1").run(JSON.stringify(body));
+        }
+        this.store.db.prepare("UPDATE session_capabilities SET selection=NULL,revision=revision+1 WHERE lockedAt IS NULL").run();
+        this.store.db.exec("COMMIT");
+      } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+      committed = true;
+    } catch (error) {
+      const failures: unknown[] = [];
+      const restore = (run: () => void) => { try { run(); } catch (failure) { failures.push(failure); } };
+      if (writing) for (const saved of snapshots.reverse()) restore(() => {
+        if (saved.content === undefined) rmSync(saved.path, { force: true });
+        else writeFileSync(saved.path, saved.content);
+      });
+      if (placed) restore(() => rmSync(destinationPath!, { recursive: true, force: true }));
+      if (backedUp) restore(() => renameSync(backup!, target.path!));
+      if (failures.length) throw new AppError("RESOURCE_ROLLBACK_FAILED", `移动失败且部分配置未能恢复，请检查文件权限并刷新核实。${backedUp ? `原技能备份位置：${backup}` : "技能文件仍保留在原安装目录。"}`);
+      throw error;
+    } finally {
+      if (stage) rmSync(stage, { recursive: true, force: true });
+      if (committed && backup) rmSync(backup, { recursive: true, force: true });
+    }
+    if (target.managed) return target.item.id;
+    const guide = guides[0] === target.path ? destinationPath! : join(destinationPath!, relative(target.path!, guides[0]));
+    return destination.id === "global" ? `skill:${skillId(guide)}` : `skill:${destination.id}:${skillId(guide)}`;
+  }
   private async installSkill(p: Record<string, unknown>, target?: Target) {
     if (target && !target.managed) return this.updateLocalSkill(p, target);
     const source = text(p.source ?? target?.managed?.source, "技能来源", 2000), id = randomUUID();
@@ -323,20 +534,34 @@ export class Resources {
         if (!Array.isArray(declared) || declared.some((v: unknown) => typeof v !== "string" || v.includes("*") || !inside(installed.root, resolve(installed.root, v)))) throw new AppError("INVALID_INPUT", "此 npm 包的技能目录声明不受支持，请使用 pi 资源包方式安装。");
         paths = declared.map((v: string) => resolve(installed.root, v));
       } else {
-        if (!isAbsolute(source) || !existsSync(join(source, "SKILL.md"))) throw new AppError("INVALID_INPUT", "请填写包含 SKILL.md 的本机绝对目录，或 npm:包名。");
-        if (inside(source, directory)) throw new AppError("INVALID_INPUT", "不能把包含安装目录的父目录导入为技能。");
+        if (!isAbsolute(source) || !existsSync(source)) throw new AppError("INVALID_INPUT", "请选择包含 SKILL.md 的本机文件夹或技能 Markdown 文件，也可填写 npm:包名。");
+        const sourceStat = lstatSync(source), folder = sourceStat.isDirectory();
+        if (sourceStat.isSymbolicLink() || !folder && (!sourceStat.isFile() || !/\.md$/i.test(source)) || folder && !existsSync(join(source, "SKILL.md")))
+          throw new AppError("INVALID_INPUT", "请选择包含 SKILL.md 的普通文件夹或 .md 技能文件，不能导入符号链接。");
+        if (inside(realpathSync(source), join(realpathSync(dirname(directory)), basename(directory)))) throw new AppError("INVALID_INPUT", "不能把包含安装目录的父目录导入为技能。");
+        const name = importSkillName(typeof p.name === "string" && p.name.trim() ? p.name : target?.item.name ?? skillImportName(source, folder ? "folder" : "file"));
+        const skillDirectory = join(directory, name);
+        mkdirSync(skillDirectory, { recursive: true, mode: 0o700 });
         let count = 0, bytes = 0;
-        await cp(source, join(directory, "skill"), { recursive: true, filter: path => {
+        await cp(source, folder ? skillDirectory : join(skillDirectory, "SKILL.md"), { recursive: folder, filter: path => {
           const stat = lstatSync(path); count++; bytes += stat.size;
-          if (stat.isSymbolicLink() || count > 10000 || bytes > 50 * 1024 * 1024) throw new AppError("INVALID_INPUT", "技能目录包含符号链接或超过导入大小限制（50 MB / 10000 项）。");
+          if (stat.isSymbolicLink() || !stat.isFile() && !stat.isDirectory() || count > 10000 || bytes > 50 * 1024 * 1024) throw new AppError("INVALID_INPUT", "技能来源包含链接、特殊文件或超过导入大小限制（50 MB / 10000 项）。");
           return true;
         } });
-        paths = [join(directory, "skill")];
+        const guide = join(skillDirectory, "SKILL.md");
+        if (!lstatSync(guide).isFile()) throw new AppError("INVALID_INPUT", "SKILL.md 必须是普通 Markdown 文件。");
+        writeFileSync(guide, nameImportedSkill(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(guide)), name));
+        paths = [skillDirectory];
       }
       const loaded = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: paths, includeDefaults: false });
       if (!loaded.skills.length || loaded.diagnostics.some(d => d.type === "error")) throw new AppError("INVALID_INPUT", "来源中没有有效技能，请检查 SKILL.md。");
       this.assertFiles();
       const record: Managed = { scopeId: this.scope(target?.item.scopeId ?? p.scopeId).id, id: target?.managed?.id ?? id, kind: "skill", name: loaded.skills.map(s => s.name).join("、"), source, directory, paths, version };
+      for (const other of this.targets.values()) {
+        if (other === target || other.item.scopeId !== record.scopeId) continue;
+        const names = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: other.skillPaths ?? [], includeDefaults: false }).skills.map(s => s.name);
+        if (loaded.skills.some(s => names.includes(s.name))) throw new AppError("RESOURCE_CONFLICT", "此作用范围已有同名技能，请修改安装名称或更新已有技能；未覆盖任何文件。");
+      }
       // Persist ownership before publishing load paths so interrupted operations remain removable.
       const previous = this.records();
       this.save([...previous.filter(r => r.id !== record.id), record]);
@@ -384,7 +609,7 @@ export class Resources {
         record = { scopeId: scope.id, id: target?.managed?.id ?? id, kind: "mcp", name, source, directory, version: installed.pkg.version, bin: binName };
       }
       const validate = (await validation).validateMcpServerConfig;
-      const override = scope.kind === "project" && raw && typeof raw === "object" && !Array.isArray(raw) && !["command", "url", "type"].some(key => key in raw) ? raw as Record<string, unknown> : undefined;
+      const override = scope.kind === "project" && mcpOverride(raw) ? raw as Record<string, unknown> : undefined;
       let parsed: McpConfig | string;
       if (override) {
         const base = validate(name, json(join(this.sharedPiDir, "mcp.json")).mcpServers?.[name]);

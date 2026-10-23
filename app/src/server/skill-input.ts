@@ -1,43 +1,39 @@
-import { closeSync, fstatSync, openSync, readSync, realpathSync } from "node:fs";
-import { dirname } from "node:path";
-import { parseFrontmatter, type Skill } from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { AppError } from "../shared/protocol.js";
 import { skillsInput, type SkillInput } from "../shared/skills.js";
-import { skillId } from "./capability-resources.js";
 
-/** Both prompt and native Steering use the worker's actual allowed skill set. */
-export function prepareSkillInput(text: string, requested: unknown, available: readonly Pick<Skill, "name" | "description" | "filePath">[]) {
+/** pi 1.1.0 has no public expansion-only API. Reuse the exact synchronous
+ * /skill:name loader used by prompt()/steer(), without queueing extra turns or
+ * replacing their receipt metadata. Keep this version-bound adapter isolated;
+ * never fall back to a host implementation of skill file parsing/loading.
+ */
+export function prepareSkillInput(text: string, requested: unknown, session: AgentSession) {
   const references = skillsInput(requested);
   if (!references.length) return { prompt: text, metadata: undefined };
-  const metadata: SkillInput = { text, skills: [] }, blocks: string[] = [];
-  let total = 0;
-  for (const reference of references) {
-    const skill = available.find(item => skillId(item.filePath) === reference.id);
-    if (!skill) throw new AppError("SKILL_UNAVAILABLE", `技能 ${reference.name} 未在当前会话加载，请勾选该技能并重新加载当前会话。`);
-    let content: string;
-    try {
-      const path = realpathSync(skill.filePath), fd = openSync(path, "r");
-      try {
-        const before = fstatSync(fd);
-        if (!before.isFile() || before.size > 128 * 1024 || total + before.size > 512 * 1024) throw Error();
-        const bytes = Buffer.alloc(before.size + 1); let count = 0;
-        while (count < bytes.length) { const n = readSync(fd, bytes, count, bytes.length - count, count); if (!n) break; count += n; }
-        const after = fstatSync(fd);
-        if (count !== before.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || realpathSync(skill.filePath) !== path) throw Error();
-        content = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, count));
-        if (content.includes("\0")) throw Error();
-        total += count;
-      } finally { closeSync(fd); }
-    } catch { throw new AppError("SKILL_READ_FAILED", `无法完整读取技能 ${reference.name}；请检查文件权限、内容与大小（单个最多 128 KiB，合计 512 KiB）。`); }
-    let parsed: ReturnType<typeof parseFrontmatter>;
-    try { parsed = parseFrontmatter(content); }
-    catch { throw new AppError("SKILL_INVALID", `技能 ${reference.name} 的 YAML 元数据无效，请修复文件后重试。`); }
-    const name = typeof parsed.frontmatter.name === "string" ? parsed.frontmatter.name : skill.name;
-    const description = parsed.frontmatter.description;
-    if (!name || name.length > 200 || typeof description !== "string" || !description.trim() || description.length > 4096)
-      throw new AppError("SKILL_INVALID", `技能 ${reference.name} 的名称或描述无效，请修复文件后重试。`);
-    metadata.skills.push({ id: reference.id, name, description });
-    blocks.push(`用户指定使用技能 ${JSON.stringify(name)}。文件位置：${JSON.stringify(skill.filePath)}；相对资源路径以 ${JSON.stringify(dirname(skill.filePath))} 为基准。\n\n${parsed.body}`);
+  const available = session.resourceLoader.getSkills().skills;
+  const skills = references.map(reference => {
+    const skill = available.find(item => item.name === reference.name);
+    if (!skill) throw new AppError("SKILL_UNAVAILABLE", `技能 ${reference.name} 当前不可用，请刷新技能列表；运行中的会话新增技能后需重新加载。`);
+    // Match the same exact name used by Pi's native command expansion.
+    if (/\s/.test(skill.name) || available.filter(item => item.name === skill.name).length !== 1)
+      throw new AppError("SKILL_UNAVAILABLE", `技能 ${skill.name} 无法唯一匹配原生命令，请刷新技能列表。`);
+    return skill;
+  });
+  const expand: unknown = Reflect.get(session, "_expandSkillCommand");
+  if (typeof expand !== "function")
+    throw new AppError("SKILL_NATIVE_UNSUPPORTED", "pi 原生技能命令接口已变化，未发送本次输入；请更新适配后重试。");
+  const metadata: SkillInput = { text, skills: skills.map(skill => ({ id: skill.name, name: skill.name, description: skill.description })) };
+  let prompt = text;
+  // Repeated native expansion preserves the selected order and one input/turn.
+  // Each native invocation owns file reading, frontmatter stripping and paths.
+  for (const skill of [...skills].reverse()) {
+    const command = `/skill:${skill.name}${prompt ? ` ${prompt}` : ""}`;
+    const expanded: unknown = expand.call(session, command);
+    if (typeof expanded !== "string" || expanded === command)
+      throw new AppError("SKILL_READ_FAILED", `pi 未能加载技能 ${skill.name}，未发送本次输入；请检查技能文件并重新加载会话。`);
+    if (!expanded.startsWith(`<skill name="${skill.name}" location="`))
+      throw new AppError("SKILL_NATIVE_UNSUPPORTED", "pi 原生技能命令结果格式已变化，未发送本次输入；请更新适配后重试。");
+    prompt = expanded;
   }
-  return { prompt: `${blocks.join("\n\n")}\n\n用户请求：\n${text}`, metadata };
+  return { prompt, metadata };
 }

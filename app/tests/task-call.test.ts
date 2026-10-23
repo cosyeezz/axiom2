@@ -30,6 +30,20 @@ test("report parsing binds the immutable delivery to both requested IDs and pres
   assert.equal(readTaskReport(JSON.stringify({ ...report, unfinished: [12] }), { taskId: "task", resultId: "old-result" }), null);
   assert.equal(taskCallLabel("read_result", "completed", report), "已读取", "reading a failed delivery is still a successful read");
 });
+test("historical result cards omit generated tool logs and warnings while preserving actual findings", () => {
+  const report = { id: "result", taskId: "task", runId: "run", status: "completed", report: "已定位并修复配置问题。", reason: null,
+    unfinished: ["模型报告不等于全部验收通过；请核对交付中的未验证项。", "工作预算已到，集成验证尚未运行。"],
+    sideEffects: "read：已记录返回；bash：失败。文件及外部副作用未回滚。" };
+  const input = { taskId: report.taskId, resultId: report.id };
+  for (const sideEffects of [report.sideEffects, "未记录工具返回。文件及外部副作用未回滚。", ""]) {
+    const parsed = readTaskReport(JSON.stringify({ ...report, sideEffects }), input)!;
+    assert.equal(parsed.report, report.report);
+    assert.deepEqual(parsed.unfinished, [report.unfinished[1]]);
+    assert.equal(parsed.sideEffects, "");
+  }
+  const actual = { ...report, status: "failed", reason: "集成环境不可用", unfinished: ["集成验证尚未运行"], sideEffects: "已修改 config.json；尚未发布。" };
+  assert.deepEqual(readTaskReport(JSON.stringify(actual), input), actual);
+});
 test("namespaced tools and malformed streaming parameters have safe presentation fallbacks", () => {
   assert.equal(taskToolName("functions.append"), "append");
   assert.equal(taskToolName("other.append"), null);

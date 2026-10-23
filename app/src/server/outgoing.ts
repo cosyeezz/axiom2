@@ -10,7 +10,9 @@ export function encode(value: unknown): Payload {
   if (value && typeof value === "object") encoded.set(value, result);
   return result;
 }
-type Entry = { frame?: Payload; factory?: () => unknown; key?: string; done?: () => void };
+export type WriteTiming = { stage: "start" | "sent"; queuedMs: number; writeMs?: number; bytes: number };
+type Entry = { frame?: Payload; factory?: () => unknown; key?: string; done?: () => void;
+  enqueuedAt?: number; measured?: (timing: WriteTiming) => void };
 
 /** Payload budget B plus one legal large frame H; this is not a fixed process RSS limit. */
 export class OutgoingQueue {
@@ -23,6 +25,7 @@ export class OutgoingQueue {
   private closed = false;
   private writing = false;
   private readBusy = false;
+  private preferLazy = false;
   private readers: { resolve: (release: () => void) => void; reject: (error: Error) => void; signal: AbortSignal; abort: () => void }[] = [];
   constructor(private write: (payload: string, done: (error?: Error) => void) => void,
     private overflow: () => void, readonly budget = 4 * 1024 * 1024) {}
@@ -34,7 +37,7 @@ export class OutgoingQueue {
     return frame.bytes > this.budget ? !this.largeFrames : this.ordinaryBytes + frame.bytes <= this.budget;
   }
   private fail() { this.close(); this.overflow(); }
-  send(value: unknown, key?: string, done?: () => void, admittedRead = false) {
+  send(value: unknown, key?: string, done?: () => void, _admittedRead = false, measured?: (timing: WriteTiming) => void) {
     if (this.closed) { done?.(); return; }
     // Only intermediate deltas in the trailing segment can merge across no reliable barrier.
     if (key) for (let i = this.queue.length - 1; i >= 0; i--) {
@@ -47,11 +50,9 @@ export class OutgoingQueue {
     }
     const frame = encode(value);
     if (!this.fits(frame)) { done?.(); this.fail(); return; }
-    const entry = { frame, key, done };
-    // A reserved read already owns the materialization slot. Its response completes
-    // before a later lazy current-state snapshot; the snapshot captures after release.
-    const barrier = admittedRead ? this.queue.findIndex((item) => item.factory) : -1;
-    if (barrier < 0) this.queue.push(entry); else this.queue.splice(barrier, 0, entry);
+    // Materialized frames remain FIFO. A blocked lazy current-state refresh may
+    // be deferred, including behind a read response; it captures fresh state later.
+    this.queue.push({ frame, key, done, measured, enqueuedAt: measured ? performance.now() : undefined });
     this.account(frame, 1); this.queuedBytes += frame.bytes; this.drain();
   }
   /** Bounded descriptors only; factory runs synchronously at the actual delivery boundary. */
@@ -61,10 +62,16 @@ export class OutgoingQueue {
     this.queue.push({ factory }); this.lazyCount++; this.drain();
   }
   private drain() {
-    if (this.closed || this.writing || this.readBusy && this.queue[0]?.factory) return;
-    const next = this.queue.shift();
-    if (!next) { this.admit(); return; }
+    if (this.closed || this.writing) return;
+    // Give queued reads a turn between writes, even during continuous small deltas.
+    this.admit();
+    const index = this.queue[0]?.factory && (this.readBusy || this.largeFrames > 0)
+      ? this.queue.findIndex(item => !!item.frame) : 0;
+    if (index < 0) return;
+    const next = this.queue.splice(index, 1)[0];
+    if (!next) return;
     if (next.factory) {
+      this.preferLazy = false;
       this.lazyCount--;
       try {
         const value = next.factory();
@@ -75,13 +82,15 @@ export class OutgoingQueue {
       } catch { this.fail(); return; }
       next.factory = undefined;
     }
-    const frame = next.frame!;
+    const frame = next.frame!, startedAt = next.measured ? performance.now() : 0;
     this.queuedBytes -= frame.bytes; this.inFlightBytes = frame.bytes; this.writing = true;
+    try { next.measured?.({ stage: "start", queuedMs: startedAt - next.enqueuedAt!, bytes: frame.bytes }); } catch { /* Diagnostics cannot interrupt delivery. */ }
     try {
       this.write(frame.payload, (error) => {
         if (this.closed) return;
         this.account(frame, -1); this.inFlightBytes = 0; this.writing = false;
         if (error) { this.fail(); return; }
+        try { next.measured?.({ stage: "sent", queuedMs: startedAt - next.enqueuedAt!, writeMs: performance.now() - startedAt, bytes: frame.bytes }); } catch { /* Diagnostics cannot interrupt delivery. */ }
         next.done?.(); this.drain();
       });
     } catch { this.fail(); }
@@ -100,11 +109,13 @@ export class OutgoingQueue {
     });
   }
   private admit() {
-    if (this.closed || this.readBusy || this.writing || this.queue.length) return;
+    if (this.closed || this.readBusy || this.writing || this.largeFrames || this.preferLazy && this.lazyCount > 0) return;
     const next = this.readers.shift();
     if (!next) return;
     next.signal.removeEventListener("abort", next.abort);
     this.readBusy = true;
+    // Alternate materialization turns when both reads and lazy refreshes wait.
+    this.preferLazy = true;
     let active = true;
     next.resolve(() => { if (!active) return; active = false; this.readBusy = false; this.drain(); });
   }

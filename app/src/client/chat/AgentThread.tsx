@@ -1,3 +1,5 @@
+import { TaskBrief } from "../tasks/TaskBrief.js";
+import type { Task } from "../../shared/tasks.js";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FilePreviewOutlet } from "./FilePreviewHost.js";
 import { useScope, useScopeOrder } from "../transport.js";
@@ -7,10 +9,13 @@ import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
 import { Message } from "./Message.js";
 import { ProcessFlow } from "./ProcessFlow.js";
+import { ModelRequestStatus } from "./ProcessStatus.js";
 import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
+import { RestoreSubmission } from "./RestoreSubmission.js";
 import { optimisticState, pendingMessageStatus, useOptimistic } from "./optimistic.js";
 import { SkillCards } from "./SkillCards.js";
+import { Markdown } from "./Markdown.js";
 import { MessageImages } from "./MessageImages.js";
 import { useReadReceipt } from "./useReadReceipt.js";
 import { reconcileInputs } from "./reconcile-inputs.js";
@@ -20,17 +25,23 @@ import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useOriginalConversation, useThreadMessage } from "./OriginalConversation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
+function requestingModel(index: ThreadIndex) {
+  return activeStatus(index.runStatus) && index.runStatus !== "stopping" && index.runPhase === "requesting";
+}
 function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
   scope: Scope; group: NonNullable<ThreadIndex["groups"]>[number]; tail: boolean; index: ThreadIndex; animateFold: boolean;
 }) {
   const last = useThreadMessage(scope, group.ids.at(-1)!);
   const activeRunId = tail && activeStatus(index.runStatus) ? index.runId : undefined;
   const awaitingMore = tail && activeStatus(index.runStatus) && (!last?.runId || last.runId === index.runId);
-  return <ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} />;
+  const requesting = tail && requestingModel(index);
+  const requestInGroup = requesting && !group.folded && !!last?.runId && last.runId === index.runId;
+  return <><ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} requesting={requestInGroup} />
+    {requesting && !requestInGroup && <ModelRequestStatus />}</>;
 }
 
-type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number };
-function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps) {
+type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number };
+function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0 }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
@@ -78,6 +89,17 @@ function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps)
   useLayoutEffect(() => {
     if (readingRevision) pauseFollowing();
   }, [readingRevision]);
+  useLayoutEffect(() => {
+    if (!briefRevision || !historyReceived || !original.ready) return;
+    pauseFollowing();
+    const frame = requestAnimationFrame(() => {
+      const brief = content.current?.querySelector<HTMLElement>("[data-task-brief]");
+      brief?.scrollIntoView({ block: "start", behavior: "instant" });
+      brief?.focus({ preventScroll: true });
+      if (scroller.current) scrollPosition.current = scroller.current.scrollTop;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [briefRevision, historyReceived, original.ready]);
   const previousOriginal = useRef(original.enabled);
   useLayoutEffect(() => {
     if (previousOriginal.current !== original.enabled) { cancelReveal(); bottom.current = false; }
@@ -147,7 +169,12 @@ function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps)
   };
   return <div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
-      onClickCapture={pauseFollowing}
+      onClickCapture={(event) => {
+        // Plain text/background clicks do not express an intent to stop following.
+        // Pause before controls expand or asynchronously load content for reading.
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("summary, button, a, input, textarea, select, [role=button]")) pauseFollowing();
+      }}
       onScroll={(e) => {
         const n = e.currentTarget;
         const movedDown = n.scrollTop > scrollPosition.current;
@@ -161,6 +188,7 @@ function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps)
         measure();
       }}>
       <div ref={content} className="container thread-content"><div id={nested ? undefined : "messages"}>
+        {task && <TaskBrief task={task} reveal={briefRevision} />}
         {scope?.sessionId && <Environment scope={scope} />}
         {index.error && <p className="execution-alert">{index.error}</p>}
         {original.enabled && <div className="original-conversation-status" role="status">
@@ -172,20 +200,22 @@ function ThreadView({ scope, nested = false, readingRevision = 0 }: ThreadProps)
         {scope?.sessionId && groups.map((group, groupIndex) => <Fragment key={group.id}>
           {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
           {group.activity ? <ThreadActivityGroup scope={scope} group={group} tail={groupIndex === groups.length - 1} index={index} animateFold={folding.has(group.id)} />
-            : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
+            : <Message scope={scope} id={group.id} initialTaskInputId={task?.initialInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
         </Fragment>)}
         </OriginalMessages.Provider>
         </DerivedContext.Provider>
         {scope && visiblePending.map((item) => <article key={item.id} className="log-row message-result" aria-label="用户消息">
-          <div><div className="message-body user-text"><p style={{ whiteSpace: "pre-wrap" }}>{item.draft.text}</p>
+          <div><div className="message-body user-text"><div className="markdown"><Markdown text={item.draft.text} attachments={[...(item.draft.attachments ?? []), ...(item.draft.images ?? []).map(image => ({ ...image, kind: "image" }))]} /></div>
             {(item.draft.attachments ?? []).filter((a) => a.kind !== "image").map((a) => <span className="meta" key={a.id}>{a.name} </span>)}
             <SkillCards skills={item.draft.skills} scope={scope} />
             <MessageImages images={item.message.images} scope={scope} messageId={item.id} />
           </div><small className="meta" role="status">
             {pendingMessageStatus(item)}
-          </small></div>
+          </small>
+          {item.state === "failed" && <RestoreSubmission scope={scope} id={item.id} nested={nested} />}</div>
         </article>)}
-        {historyReceived && !groups.length && !pending.length && !index.error && !original.loading && !original.error && <div className="empty-state">
+        {scope?.sessionId && requestingModel(index) && !groups.at(-1)?.activity && <ModelRequestStatus />}
+        {historyReceived && !task && !groups.length && !pending.length && !index.error && !original.loading && !original.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>
             <button className="btn" key={label} disabled={!scope?.sessionId} onClick={() => {

@@ -73,7 +73,7 @@ try {
   } }));
   writeFileSync(join(root, "pi/auth.json"), JSON.stringify({ "compression-page-fixture": { type: "api_key", key: "loopback-only" } }));
   writeFileSync(join(root, "pi/settings.json"), JSON.stringify({ compaction: { enabled: false }, retry: { enabled: false } }));
-  app = await startServer({ root, port: 0, dev: true });
+  app = await startServer({ root, port: 0, dev: !process.env.AXIOM_TEST_PRODUCTION });
   const server = app;
   const workspace = server.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const chat: Selection = { provider: "compression-page-fixture", id: "chat-model", thinking: "off" };
@@ -157,6 +157,8 @@ try {
     assert.ok(await trigger.evaluate((el) => document.activeElement === el), "closing restores trigger focus");
   };
   const closeOutside = async () => {
+    // Changing reduced motion can restart the drawer animation; measure its settled edge.
+    await dialog.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))));
     const box = await dialog.boundingBox();
     assert.ok(box && box.x > 20, "desktop sheet has space to its left");
     const x = box.x - 20, y = box.y + 40;
@@ -420,7 +422,9 @@ try {
   await dialog.getByRole("button", { name: "开始压缩", exact: true }).click();
   await state("failed");
   await dialog.getByRole("alert").getByText(/quota_exhausted/).waitFor();
-  await expectTriggerColor("--danger");
+  // Toolbar icons keep a neutral color; the error glyph and detail convey failure.
+  await trigger.locator(".data-icon-error").waitFor();
+  await expectTriggerColor("--action-icon-fg");
   assert.match(await dialog.getByRole("alert").innerText(), /失败原因/);
   assert.doesNotMatch(await dialog.innerText(), /sk-fixture-secret/);
   await page.screenshot({ path: "test-results/compression-page-failed.png" });

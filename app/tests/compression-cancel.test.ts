@@ -17,6 +17,7 @@ test("cancellation confirmation belongs to the worker run, not the whole compres
   coordinator.live = new Map([[scope.sessionId, live]]);
   coordinator.epochs = new Map();
   coordinator.automatic = new Map();
+  coordinator.records = { cancelling: () => {} };
   coordinator.store = { session: () => ({}) };
   coordinator.agents = {
     info: () => ({ run: { id: "run-B" } }),

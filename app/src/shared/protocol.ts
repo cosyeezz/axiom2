@@ -27,6 +27,22 @@ export interface Session {
   runStatus?: import("./agent.js").Run["status"];
   activeTasks?: boolean;
 }
+export interface DeletedSession {
+  id: string;
+  workspaceId: string;
+  title: string;
+  workspaceName: string;
+  workspacePath: string;
+  deletedAt: number;
+}
+export interface DeletedSessionCursor {
+  deletedAt: number;
+  id: string;
+}
+export interface DeletedSessionPage {
+  items: DeletedSession[];
+  next: DeletedSessionCursor | null;
+}
 export interface Scope {
   workspaceId: string;
   sessionId: string;
@@ -85,6 +101,7 @@ export interface Configuration {
   available: ModelSummary[];
   dataRoot: string;
   error?: string;
+  warning?: string;
 }
 export type Command = {
   requestId: string;
@@ -107,6 +124,8 @@ export interface Snapshot {
   streamId: string;
   seq: number;
   data: unknown;
+  /** Sampled live delivery correlation; absent on historical snapshots. */
+  latency?: import("./latency.js").DeliveryTiming;
   /** Optional same-boundary thread paired with an authoritative messages collection. */
   thread?: unknown;
 }

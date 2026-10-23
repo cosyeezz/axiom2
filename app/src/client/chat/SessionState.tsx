@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useScope } from "../transport.js";
+import { useEffect, useState } from "react";
+import { LocalPath } from "../LocalPath.js";
+import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import {
   agentScope,
@@ -7,6 +8,23 @@ import {
   runLabels,
 } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
+function MemoryDirectory({ scope, path, child }: { scope: Scope; path?: string | null; child: boolean }) {
+  const [resolved, setResolved] = useState<{ key: string; path: string } | null>(null);
+  const key = `${scope.workspaceId}:${scope.sessionId}`;
+  useEffect(() => {
+    if (child || path !== undefined) return;
+    const controller = new AbortController();
+    // Older running services already resolve memory files without a restart.
+    void command<string>("memory.resolve", { path: "MEMORY.md" }, scope, crypto.randomUUID(), controller.signal)
+      .then((file) => {
+        if (!controller.signal.aborted) setResolved({ key, path: file.replace(/[\\/]MEMORY\.md$/, "") });
+      }).catch(() => { /* Optional memory can be unavailable. */ });
+    return () => controller.abort();
+  }, [scope.workspaceId, scope.sessionId, key, path, child]);
+  const directory = path ?? (resolved?.key === key ? resolved.path : undefined);
+  return <p>记忆目录：{child ? "子会话无独立记忆目录" : directory
+    ? <LocalPath path={directory} scope={scope} /> : "暂不可用"}</p>;
+}
 export function Environment({ scope }: { scope: Scope }) {
   const info = useScope(agentScope(scope), emptyAgent);
   const [open, setOpen] = useState(false);
@@ -32,9 +50,10 @@ export function Environment({ scope }: { scope: Scope }) {
         <div className="session-init-body">
           <p>
             {info.environment
-              ? `工作目录：${info.environment.cwd}`
+              ? <>工作目录：<LocalPath path={info.environment.cwd} scope={scope} /></>
               : "首次发送时加载模型、项目资源与工具。"}
           </p>
+          <MemoryDirectory scope={scope} path={info.memoryDirectory} child={!!info.task} />
           {info.environment && (
             <>
               <p>工具：{info.environment.tools.join("、") || "无"}</p>

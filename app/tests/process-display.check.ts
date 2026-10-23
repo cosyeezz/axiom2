@@ -27,7 +27,13 @@ try {
   const call = { id: "c", name: "bash", input: '{"command":"printf ready"}' };
   const tool: ChatMessage = { id: "tool", role: "assistant", runId: "run", text: "", calls: [call], streaming: true, status: "running" };
   const thought: ChatMessage = { id: "thought", role: "assistant", runId: "run", text: "", thinking: "继续检查。", thinkingActive: true, streaming: true, status: "running" };
-  publish({ id: "user", role: "user", text: "检查环境", runId: "run" }, first);
+  const setRequest = (runId = 'run', status = 'running') => {
+    app!.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase) VALUES(?,?,?,'{}',1,'requesting') ON CONFLICT(id) DO UPDATE SET status=excluded.status,phase=excluded.phase").run(runId, session.id, status);
+    views.changed(scope);
+  };
+  const clearRequest = () => { app!.store.db.prepare('DELETE FROM runs WHERE sessionId=?').run(session.id); views.changed(scope); };
+  publish({ id: "user", role: "user", text: "检查环境", runId: "run" });
+  setRequest();
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true });
   page.setDefaultTimeout(10000);
@@ -37,6 +43,27 @@ try {
   const groups = page.locator('#messages > .tool-activity');
   const group = groups.first();
   const title = group.locator(':scope > summary .activity-title');
+  const request = page.locator('.process-requesting');
+  await request.getByText('调用工具', { exact: true }).waitFor();
+  assert.equal(await groups.count(), 0, 'initial request needs no fabricated activity or message');
+  assert.equal(await request.locator('.process-ellipsis').count(), 1);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await request.locator('.activity-title').evaluate(n => getComputedStyle(n).fontSize), width === 390 ? '14px' : '15px');
+    assert.equal(await request.locator('.activity-title').evaluate(n => getComputedStyle(n).animationDuration), '3s');
+    await page.screenshot({ path: join(artifacts, `${width}-requesting.png`) });
+  }
+  await page.reload();
+  await request.getByText('调用工具', { exact: true }).waitFor();
+  for (const status of ['stopping', 'completed', 'failed', 'cancelled']) {
+    setRequest('run', status);
+    await request.waitFor({ state: 'detached' });
+    setRequest();
+    await request.waitFor();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  clearRequest(); publish(first);
+  await request.waitFor({ state: 'detached' });
   await title.filter({ hasText: '正在思考' }).waitFor();
   assert.equal(await title.evaluate(n => getComputedStyle(n).fontWeight), '400');
   assert.equal(await groups.count(), 1);
@@ -140,7 +167,13 @@ try {
   await group.locator('.tool-header').click();
   await group.locator('.tool-detail').waitFor();
   publish({ ...tool, streaming: false, status: 'completed' },
-    { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: 'ready', status: 'completed', durationMs: 1500 }, thought);
+    { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: 'ready', status: 'completed', durationMs: 1500 });
+  setRequest();
+  await title.filter({ hasText: '调用工具' }).waitFor();
+  assert.equal(await request.count(), 0, 'tool continuation reuses the existing process title');
+  assert.equal(await group.locator('.tool-call[open]').count(), 1, 'requesting preserves expanded tool details');
+  assert.equal(await title.getAttribute('data-thinking'), null);
+  clearRequest(); publish(thought);
   await title.filter({ hasText: '正在思考' }).waitFor();
   assert.equal(await group.locator('.tool-result-state .process-outcome').count(), 0, 'successful tool rows have no checkmark or icon placeholder');
   assert.equal(await group.locator('.tool-duration').count(), 0, 'fast completed calls retain their tool row without duration');
@@ -173,6 +206,12 @@ try {
   await title.filter({ hasText: '执行完成' }).waitFor();
   assert.equal(await group.locator('.process-counts').count(), 0, 'successful calls do not show counters');
   await page.locator('#messages > .task-operation').waitFor();
+  setRequest();
+  await request.waitFor();
+  assert.equal(await title.innerText(), '执行完成', 'request after a task card leaves the preceding segment settled');
+  assert.equal(await request.count(), 1);
+  clearRequest();
+  await request.waitFor({ state: 'detached' });
   const singleThought = group.locator('.thinking-block').last();
   await singleThought.locator('summary').focus(); await page.keyboard.press('Enter');
   await singleThought.locator('.thinking-body').getByText('继续检查。', { exact: true }).waitFor();
@@ -265,6 +304,12 @@ try {
   publish({ ...final, streaming: false, status: 'completed' });
   await page.getByRole('button', { name: '复制回复的 Markdown 原文' }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('.reply-actions').count(), 1, 'only the finished final delivery can be copied');
+  setRequest('next-run');
+  await request.waitFor();
+  assert.equal(await title.innerText(), '执行完成', 'a later request never reactivates folded history');
+  assert.equal(await request.count(), 1);
+  clearRequest();
+  await request.waitFor({ state: 'detached' });
   await group.locator(':scope > summary').click();
   assert.equal(await group.locator('.tool-detail, .thinking-body').count(), 0);
   assert.equal(await group.getByText(final.text, { exact: true }).count(), 0);
@@ -282,13 +327,23 @@ try {
   assert.equal(await segments.locator('.process-status-text.is-active').count(), 0);
   await page.screenshot({ path: join(artifacts, '390-final-segments.png') });
   await segments.first().locator(':scope > summary').click();
-  const thinkingPreview = await group.locator('.thinking-label').first().innerText();
+  const thinkingPreview = await group.locator('.thinking-label').first().textContent();
+  const firstLinePosition = await group.locator('.thinking-text strong').first().evaluate(node => {
+    const text = node.getBoundingClientRect(), block = node.closest('.thinking-block')!.getBoundingClientRect();
+    return { x: text.x - block.x, y: text.y - block.y };
+  });
   await group.locator('.thinking-block').first().locator('summary').click();
   await group.locator('.thinking-body').first().getByText('读取配置并确认依赖。', { exact: true }).waitFor();
   const typography = await group.locator('.thinking-body').first().evaluate(n => ({ font: getComputedStyle(n).fontSize, line: getComputedStyle(n).lineHeight, paragraphs: [...n.querySelectorAll('p')].map(p => parseFloat(getComputedStyle(p).marginBottom)) }));
   assert.deepEqual(await group.locator('.thinking-body').first().evaluate(n => ({ color: getComputedStyle(n).color, style: getComputedStyle(n).fontStyle })), { color: 'rgb(230, 216, 163)', style: 'italic' });
   assert.equal(await group.locator('.thinking-body strong').first().evaluate(n => getComputedStyle(n).fontWeight), '400', 'Markdown emphasis in thinking stays regular weight');
-  assert.equal(await group.locator('.thinking-label').first().innerText(), thinkingPreview, 'expansion preserves the first-line preview');
+  assert.equal(await group.locator('.thinking-label').first().textContent(), thinkingPreview, 'expansion retains the preview for collapse');
+  assert.equal(await group.locator('.thinking-text').first().evaluate(n => getComputedStyle(n).visibility), 'hidden', 'expanded thinking does not repeat its first line above the body');
+  assert.equal(await group.locator('.thinking-text').first().getAttribute('aria-hidden'), 'true', 'the duplicate preview is also hidden from assistive technology');
+  assert.deepEqual(await group.locator('.thinking-body strong').first().evaluate(node => {
+    const text = node.getBoundingClientRect(), block = node.closest('.thinking-block')!.getBoundingClientRect();
+    return { x: text.x - block.x, y: text.y - block.y };
+  }), firstLinePosition, 'expanded text begins at the original first-line position');
   assert.equal(await group.locator('.thinking-header svg').count(), 0, 'completed thinking has no extra disclosure icon');
   assert.equal(await group.locator('.thinking-header').first().getAttribute('aria-label'), '收起思考');
   assert.equal(await group.locator('.thinking-label').first().evaluate(n => getComputedStyle(n).fontWeight), '400');
@@ -300,6 +355,43 @@ try {
   assert.equal(await page.locator('#prompt').inputValue(), '保留草稿');
   await page.reload(); await group.waitFor();
   assert.equal(await group.getAttribute('open'), null); assert.equal(await title.innerText(), '执行完成');
+
+  const pathCalls = [
+    { id: 'path-short', name: 'read', input: JSON.stringify({ path: '/tmp/a.ts', offset: 1, limit: 20 }) },
+    { id: 'path-long', name: 'read', input: JSON.stringify({ path: '/Volumes/D_Work/axiom2/app/src/client/chat/components/very-long-directory-name/FilePreviewHost.tsx', offset: 1, limit: 2000 }) },
+    { id: 'path-write', name: 'write', input: JSON.stringify({ path: '/Users/dane/.axiom/memory/12345678-1234-1234-1234-123456789abc/MEMORY.md', content: 'first\nsecond' }) },
+    { id: 'path-image', name: 'read', input: JSON.stringify({ path: '/Users/dane/Library/Application Support/Axiom2/attachments/12345678-1234-1234-1234-123456789abc/image.png' }) },
+  ];
+  publish({ id: 'path-user', role: 'user', runId: 'path-run', text: '检查工具路径显示' },
+    { id: 'path-tools', role: 'assistant', runId: 'path-run', text: '', calls: pathCalls, status: 'completed' },
+    ...pathCalls.map(call => ({ id: `tool-${call.id}`, role: 'toolResult' as const, toolCallId: call.id, text: 'done', status: 'completed' as const, durationMs: 1500 })));
+  const pathGroup = page.locator('#messages > .tool-activity[data-call-count="4"]');
+  await pathGroup.waitFor();
+  await pathGroup.locator(':scope > summary').click();
+  const pathRows = pathGroup.locator('.tool-call');
+  await pathRows.nth(3).waitFor();
+  for (const width of [1440, 650, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    const measurements = await pathRows.evaluateAll(rows => rows.map(row => {
+      const container = row.querySelector('.process-status-text')!.getBoundingClientRect();
+      const path = row.querySelector('.local-path')!.getBoundingClientRect();
+      const text = row.querySelector('.local-path-text')!;
+      const detail = row.querySelector('.tool-input-detail')?.getBoundingClientRect();
+      return { contained: path.left >= container.left && path.right <= container.right + 1,
+        textWidth: text.getBoundingClientRect().width, clipped: text.scrollWidth > text.clientWidth + 1,
+        detailVisible: !detail || detail.right <= container.right + 1 && detail.left >= path.right - 1 };
+    }));
+    for (const measurement of measurements) {
+      assert.ok(measurement.contained, `path widget must fit beside its label at ${width}px, not be replaced wholesale by an ellipsis`);
+      assert.ok(measurement.textWidth > 30, `available row space must show path text at ${width}px`);
+      assert.ok(measurement.detailVisible, `line range stays visible beside the path at ${width}px`);
+    }
+    if (width === 1440) assert.equal(measurements[0].clipped, false, 'short paths remain fully readable');
+    if (width === 390) assert.equal(measurements[1].clipped, true, 'long path text truncates within its own bounds');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.screenshot({ path: join(artifacts, `${width}-tool-paths.png`) });
+  }
   assert.deepEqual(errors, []);
   console.log(`PASS: unified thinking/tool entry, upright process label and pale-yellow italic clickable Think, phase changes and stable expansion, chronological details, red failure counts, frozen process above prose even after stale deltas, active process below prose, final folding, full thinking, mobile density, reload and draft retention. Artifacts: ${artifacts}`);
 } finally {

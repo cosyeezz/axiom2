@@ -23,7 +23,7 @@ for (const failure of ['configuration', 'snapshot', 'cancel'] as const) {
     const raw=JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${(http.address() as any).port}/v1`,models:[{id:'fixture',contextWindow:32000,maxTokens:256}]}}});
     writeFileSync(join(pi,'models.json'),raw);writeFileSync(join(pi,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'loopback-only'}}));
     const pool=new ExecutionPool({targetReadyTotal:0},'D'),profiles=new ExecutionProfiles(root);
-    const environment=profiles.prepare({entry:'memory',cwd,modelDir:pi,modelsRaw:raw,mode:'D'}),controller=new AbortController();
+    const environment=profiles.prepare({entry:'memory',cwd,modelDir:pi,modelsRaw:raw,mode:'D',selection:{provider:'fixture',id:'fixture',thinking:'off'}}),controller=new AbortController();
     try {
       const lease=await pool.acquire({environment,kind:'memory-query',signal:controller.signal,requestStartedAtMonoMs:performance.now()});
       const child=await lease.ensureReady();let bound=false;

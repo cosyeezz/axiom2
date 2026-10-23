@@ -5,4 +5,7 @@ import "../src/client/styles/scrollbars.css";
 import { Icons } from "../src/client/components.js";
 import "../src/client/styles/icon-geometry.css";
 import StartupBoundary from "./StartupBoundary.js";
+import { initializeTheme } from "../src/client/theme.js";
+import "../src/client/styles/theme.css";
+initializeTheme(true);
 createRoot(document.getElementById("root")!).render(<StartupBoundary><div className="desktop-icon-definitions" aria-hidden="true"><Icons /></div><Connect /></StartupBoundary>);

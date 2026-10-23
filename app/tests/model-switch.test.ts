@@ -187,16 +187,27 @@ test("real worker applies model/effort to the next run, retains active steering 
 
     writeFileSync(join(root, "pi", "settings.json"), JSON.stringify({ retry: { enabled: false },
       compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } }));
+    const beforeTruncation = notices();
     truncateNext = true;
     await call("agent.model", { selection: second });
     await call("prompt", { text: "recover a truncated switched response" });
     await wait(() => releases.length === 8, "truncated response starts");
     releases[7]();
-    await wait(() => releases.length === 9, "native compaction retries the truncated response");
-    assert.ok(summaries > 0, "real native summary request ran");
-    await finish(8);
-    assert.deepEqual(notices().at(-1)?.selectionChange, change, "retained response keeps the switch after length recovery");
-    assert.ok(!app.agents.messages(scope).some((m) => m?.status === "failed"), "failed attempt is outside the compacted projection");
+    await wait(() => !running(app.agents.info(scope).run), "truncated execution settles through the host compression flow");
+    assert.equal(releases.length, 8, "native overflow cannot start an automatic retry");
+    assert.equal(summaries, 0, "native overflow cannot bypass host compression preparation");
+    assert.deepEqual(notices(), beforeTruncation, "native recovery omits the truncated response from the visible projection");
+    await app.agents.compressions.command({ op: "compression.start", ...scope, requestId: randomUUID() });
+    await wait(() => releases.length === 9, "platform compression prepares session memory");
+    releases[8]();
+    await wait(() => app.agents.compressions.info(scope)?.state !== "running" && !running(app.agents.info(scope).run), "platform compression settles");
+    assert.equal(app.agents.compressions.info(scope)?.state, "completed", app.agents.compressions.info(scope)?.error ?? undefined);
+    assert.ok(summaries > 0, "platform compression sends the summary request");
+    await call("agent.model", { selection: first });
+    await call("prompt", { text: "request after platform compression" });
+    await wait(() => releases.length === 10, "request after compression starts");
+    await finish(9);
+    assert.deepEqual(notices().at(-1)?.selectionChange, { from: second, to: first }, "compaction preserves the last effective selection");
     assert.doesNotMatch(JSON.stringify(bodies.map((b) => b.messages)), /axiomSelectionChange|后续请求生效/);
     const before = notices(), requestCount = bodies.length;
     await app.close(); app = await startServer({ root, port: 0 });

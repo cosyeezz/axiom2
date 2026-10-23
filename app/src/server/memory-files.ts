@@ -4,7 +4,7 @@ import { dirname, join, resolve, relative, isAbsolute, extname, sep } from "node
 import { markdownLocalLinks } from "../shared/markdown.js";
 import { AppError } from "../shared/protocol.js";
 import { memoryRoot, memoryRulesPath, ensureMemoryDirectory } from "./memory-storage.js";
-import { memoryRules, memoryTemplate, memorySummaryMaxChars, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
+import { memoryRules, memoryTemplate, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
 
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 export const within = (root: string, path: string) => { const rel = relative(root, path); return rel === "" || !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`); };
@@ -49,17 +49,9 @@ export class MemoryLinkCache {
   }
   clear() { this.entries.clear(); }
 }
-/** The complete short-summary index: never rank, drop or truncate source summaries. */
-export function memorySummaryIndex(candidates: readonly Pick<MemoryCatalogEntry, "sessionId" | "revision" | "summary">[], totalSources: number) {
-  if (candidates.some(({ summary }) => !summary.trim() || Array.from(summary).length > memorySummaryMaxChars))
-    throw new AppError("MEMORY_LIMIT", "摘要必须为非空且不超过200字");
-  return JSON.stringify({
-    totalSources,
-    summaryCount: candidates.length,
-    pendingSources: totalSources - candidates.length,
-    coverage: "以下为当前工作空间全部有效摘要，仅用于定位。尚未整理或失效的来源未包含在摘要中；选中后读取原记忆及必要详情，不凭摘要断言事实。",
-    sources: candidates.map(({ sessionId, revision, summary }) => ({ sessionId, revision, path: "MEMORY.md", summary })),
-  });
+/** The first level contains every generated title, with no summaries or source bodies. */
+export function memoryTitleIndex(candidates: readonly Pick<MemoryCatalogEntry, "sessionId" | "title">[]) {
+  return JSON.stringify(candidates.map(({ sessionId, title }) => ({ sessionId, title })));
 }
 /**
  * Organizer input has no automatic compaction. Keep immutable identities

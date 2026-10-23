@@ -45,7 +45,7 @@ if (testInstance) {
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
 await cp(join(repo, "app/desktop/axiom_connection.rs"), join(template, "src-tauri/src/axiom_connection.rs"));
-for (const name of ["axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
+for (const name of ["axiom_theme.js", "axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
 for (const [input, output] of [["test-probe.rs", "axiom_probe.rs"], ["test-controller-probe.js", "axiom_controller_probe.js"], ["test-workbench-probe.js", "axiom_workbench_probe.js"]]) {
   const destination = join(template, "src-tauri/src", output);
   if (testInstance) await cp(join(repo, "app/desktop", input), destination);
@@ -61,7 +61,7 @@ const libPath = join(template, "src-tauri/src/lib.rs");
 let lib = await readFile(libPath, "utf8");
 const marker = ".invoke_handler(tauri::generate_handler![";
 if (!lib.includes(marker)) throw Error("Pake template changed: invoke handler not found");
-lib = "mod axiom_service;\nmod axiom_views;\nmod axiom_connection;\nmod axiom_remote;\nmod axiom_setup;\n" + lib.replace(marker, marker + "\n            axiom_setup::axiom_setup, axiom_remote::axiom_peers, axiom_remote::axiom_remote, axiom_remote::axiom_local, axiom_service::axiom_service, axiom_service::axiom_update, axiom_views::axiom_controls, axiom_views::axiom_page_ready, axiom_connection::axiom_connection, axiom_connection::axiom_connection_report,");
+lib = "mod axiom_service;\nmod axiom_views;\nmod axiom_connection;\nmod axiom_remote;\nmod axiom_setup;\n" + lib.replace(marker, marker + "\n            axiom_setup::axiom_setup, axiom_remote::axiom_peers, axiom_remote::axiom_remote, axiom_remote::axiom_local, axiom_service::axiom_service, axiom_service::axiom_reveal_path, axiom_service::axiom_update, axiom_views::axiom_controls, axiom_views::axiom_theme, axiom_views::axiom_page_ready, axiom_connection::axiom_connection, axiom_connection::axiom_connection_report,");
 if (testInstance) {
   const loadedMarker = "let label = webview.label();";
   if (!lib.includes(loadedMarker)) throw Error("Pake template changed: page-load hook not found");
@@ -70,7 +70,7 @@ if (testInstance) {
 }
 const pageLoadMarker = '.on_page_load(move |webview, payload| {';
 if (!lib.includes(pageLoadMarker)) throw Error("Pake template changed: page load callback not found");
-lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            axiom_views::watch_control(webview);\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); }');
+lib = lib.replace(pageLoadMarker, pageLoadMarker + '\n            axiom_views::watch_control(webview);\n            if webview.label() == "axiom-workbench" { axiom_connection::invalidate(); axiom_views::apply_workbench_theme(webview); }');
 const closeMarker = '.on_window_event(move |_window, _event| {';
 if (!lib.includes(closeMarker)) throw Error("Pake template changed: window event handler not found");
 lib = lib.replace(closeMarker, closeMarker + (testInstance ? '\n            if matches!(_event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) { eprintln!("[Axiom native probe] window {} {:?}", _window.label(), _event); }\n' : '') + `

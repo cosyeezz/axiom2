@@ -8,6 +8,7 @@ import { TaskCards } from "../tasks/TaskCards.js";
 import { TaskOperation } from "../tasks/TaskOperation.js";
 import { Message } from "./Message.js";
 import { OriginalMessages, useThreadMessage } from "./OriginalConversation.js";
+import { ModelRequestStatus } from "./ProcessStatus.js";
 import { ActivityGroup, ToolReference } from "./ToolActivity.js";
 
 type Group = NonNullable<ThreadIndex["groups"]>[number];
@@ -52,8 +53,8 @@ function ProcessItem({ scope, entry }: { scope: Scope; entry: ProcessEntry }) {
   if (entry.kind === "tool") return <ToolReference scope={scope} reference={entry.call} />;
   return <Message scope={scope} id={entry.id} inActivity thinkingOnly={entry.kind === "thinking"} />;
 }
-function ProcessSegment({ scope, slice, settled, awaitingMore, activeRunId }: {
-  scope: Scope; slice: Extract<ProcessSlice, { kind: "process" }>; settled: boolean; awaitingMore?: boolean; activeRunId?: string;
+function ProcessSegment({ scope, slice, settled, awaitingMore, activeRunId, requesting }: {
+  scope: Scope; slice: Extract<ProcessSlice, { kind: "process" }>; settled: boolean; awaitingMore?: boolean; activeRunId?: string; requesting?: boolean;
 }) {
   const thinkingIds = slice.entries.flatMap(entry => entry.kind === "thinking" ? [entry.id] : []);
   const callMessageIds = [...new Set(slice.calls.map(call => call.messageId))];
@@ -61,15 +62,13 @@ function ProcessSegment({ scope, slice, settled, awaitingMore, activeRunId }: {
   const callsOnlyIds = callMessageIds.filter(id => !thinkingIds.includes(id));
   const messageIds = [...new Set(slice.entries.map(entry => entry.kind === "tool" ? entry.call.messageId : entry.id))];
   return <ActivityGroup scope={scope} messageIds={messageIds} thinkingOnlyIds={thinkingOnlyIds} callsOnlyIds={callsOnlyIds}
-    callIds={slice.calls.map(call => call.callId)} inline settled={settled} awaitingMore={awaitingMore} activeRunId={activeRunId}>
-    {/* Keep actual result notices mounted as read evidence while details stay lazy. */}
-    {open => slice.entries.filter(entry => open || entry.kind === "notice")
-      .map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} />)}
+    callIds={slice.calls.map(call => call.callId)} inline settled={settled} awaitingMore={awaitingMore} activeRunId={activeRunId} requesting={requesting}>
+    {open => open ? slice.entries.map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} />) : null}
   </ActivityGroup>;
 }
 
-export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, animateFold }: {
-  scope: Scope; group: Group; settled: boolean; awaitingMore?: boolean; activeRunId?: string; animateFold?: boolean;
+export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, animateFold, requesting = false }: {
+  scope: Scope; group: Group; settled: boolean; awaitingMore?: boolean; activeRunId?: string; animateFold?: boolean; requesting?: boolean;
 }) {
   const slices = useProcessSlices(scope, group);
   const renderSlice = (slice: ProcessSlice, index: number) => {
@@ -81,7 +80,7 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
     if (slice.kind === "process") {
       const closed = settled || !!group.folded || index < slices.length - 1;
       return <ProcessSegment key={key} scope={scope} slice={slice} settled={closed}
-        awaitingMore={!closed && awaitingMore} activeRunId={closed ? undefined : activeRunId} />;
+        awaitingMore={!closed && awaitingMore} activeRunId={closed ? undefined : activeRunId} requesting={!closed && requesting} />;
     }
     const body = <Message scope={scope} id={slice.id} inActivity hideThinking={slice.kind === "body"} />;
     // Live activity groups contain only error/cancellation bodies: ordinary prose
@@ -90,13 +89,12 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
       ? <ActivityGroup key={key} scope={scope} messageIds={[slice.id]} inline settled={settled}>{body}</ActivityGroup>
       : <Message key={key} scope={scope} id={slice.id} inActivity hideThinking={slice.kind === "body"} />;
   };
-  if (!group.folded) return <>{slices.map(renderSlice)}</>;
+  if (!group.folded) return <>{slices.map(renderSlice)}{requesting && !settled && slices.at(-1)?.kind !== "process" && <ModelRequestStatus />}</>;
   return <ActivityGroup scope={scope} messageIds={group.ids} thinkingOnlyIds={group.thinkingOnlyIds}
     callsOnlyIds={group.callsOnlyIds} callIds={slices.flatMap(slice => slice.kind === "process" ? slice.calls.map(call => call.callId) : [])}
     settled animateFold={animateFold}>
-    {open => open ? slices.map(renderSlice) : slices.flatMap(slice => slice.kind === "process"
-      ? slice.entries.filter(entry => entry.kind === "notice")
-        .map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} />)
-      : slice.kind === "task-notices" || slice.kind === "notice" ? [renderSlice(slice, 0)] : [])}
+    {/* Keep delivered notices mounted as read evidence when the final history is folded. */}
+    {open => open ? slices.map(renderSlice) : slices.flatMap(slice =>
+      slice.kind === "task-notices" || slice.kind === "notice" ? [renderSlice(slice, 0)] : [])}
   </ActivityGroup>;
 }

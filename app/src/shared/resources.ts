@@ -9,8 +9,12 @@ export type ResourceItem = {
   version?: string;
   managed: boolean;
   removable: boolean;
+  movable?: boolean;
+  moveBlockedReason?: string;
   cleanup: string[];
   note?: string;
+  /** Built-ins ship inside the REA or OpenCLI package and stay read-only here. */
+  builtin?: "rea" | "opencli";
 };
 export type ResourceDetail = {
   id: string;
@@ -28,5 +32,5 @@ export type ResourceState = {
   items: ResourceItem[];
   scopes: ResourceScope[];
   warnings: string[];
-  job?: { id: string; running: boolean; message: string; error?: string };
+  job?: { id: string; running: boolean; message: string; error?: string; resourceId?: string };
 };

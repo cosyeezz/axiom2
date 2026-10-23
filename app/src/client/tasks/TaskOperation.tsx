@@ -29,14 +29,14 @@ export const TaskOperation = memo(function TaskOperation({ scope, call, message,
   const labels = { queued: "排队中", unknown: "待核实", accepted: "已接收", delivered: "已送达", failed: "追加失败", cancelled: "已撤销" };
   const label = receipt ? labels[receipt.state] : taskCallLabel(name, status, output);
   const action = name === "read_result" ? "子任务结果" : name === "append" ? input?.mode === "followUp" ? "追加追问" : "补充任务" : "停止子任务";
-  const title = task?.title || task?.description || "关联子任务";
+  const title = task?.title || "关联子任务";
   const error = status === "failed" ? receipt?.error || toolPreview(result) : null;
-  const preview = compact?.summary ?? "补充任务";
-  return <section className="task-operation" data-tool={name} data-status={status} aria-label={`${action}：${title}`}>
+  const preview = name === "append" ? compact?.summary ?? "补充任务" : name === "cancel_task" ? compact?.reason : undefined;
+  return <section className="task-operation" data-tool={name} data-preview={!!preview} data-status={status} aria-label={`${action}：${title}`}>
     <details open={groupOpen && open}>
       <summary data-tooltip={error ? `${label} · ${error}` : label} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}>
         <span className="task-operation-icon"><Icon name={name === "read_result" ? "tool-result" : name === "append" ? "tool-append" : "tool-cancel"} /><span className="task-operation-status" role={error ? "alert" : "status"}>{error ? `${label} · ${error}` : label}</span></span>
-        <span className="task-operation-heading" data-tooltip={error ? `${title} · ${error}` : title}><strong>{title}</strong>{name === "append" && <span className="task-operation-target" data-tooltip={preview}>{preview}</span>}</span>
+        <span className="task-operation-heading" data-tooltip={error ? `${title} · ${error}` : title}><strong>{title}</strong>{preview && <span className="task-operation-target" data-tooltip={preview}>{preview}</span>}</span>
       </summary>
       {groupOpen && open && <>
         {error && <p className="task-call-error">{error}</p>}

@@ -137,7 +137,8 @@ test("OAuth without a custom endpoint keeps native discovery but never falls bac
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
   try {
-    const service = new ModelService(root);
+    // This unit fixture registers callbacks in the local runtime.
+    const service = new ModelService(root, null);
     await service.raw();
     writeFileSync(join(service.dir, "models.json"), JSON.stringify({ providers: { openai: {
       headers: {}, models: [{ id: "local-only", api: "openai-responses", baseUrl: "https://example.invalid" }],

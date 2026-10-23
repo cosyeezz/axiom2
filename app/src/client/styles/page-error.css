@@ -1,0 +1,4 @@
+.app.page-error{display:block;box-sizing:border-box;height:100dvh;min-height:100dvh;overflow:auto;padding:clamp(24px,8vw,96px);background:var(--bg);color:var(--fg);font:14px/1.7 var(--font-body)}
+.page-error h1{margin:0 0 12px;font-size:22px;font-weight:550}.page-error p{margin:0 0 24px;color:var(--fg-2)}
+.page-error button{min-height:44px;padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;cursor:pointer}
+.page-error button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.page-error details{margin-top:24px;max-width:800px;color:var(--muted)}.page-error summary{cursor:pointer}.page-error pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 var(--font-mono)}

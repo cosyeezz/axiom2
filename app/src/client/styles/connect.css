@@ -197,7 +197,7 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .connect-dialog h2 { margin: 0 0 16px; font-size: 22px; }
 .connect-dialog p, .connect-dialog li { color: #bfc2c8; font-size: 13px; line-height: 1.9; overflow-wrap: anywhere; }
 .connect-dialog ul { max-height: 200px; overflow: auto; padding-left: 20px; }
-.connect-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.connect-dialog-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .connect-updates { padding: 10px 0 20px; }
 .connect-pi { border-top: 1px solid #30363b; margin-top: 24px; padding-top: 16px; }
 .connect-pi h3 { margin: 0; font-size: 15px; font-weight: 500; }

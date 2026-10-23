@@ -5,7 +5,7 @@ import type { Agents } from "../agents.js";
 import { openTranscript } from "../transcript.js";
 import { AppError, text, type Scope } from "../../shared/protocol.js";
 import { running, type Run } from "../../shared/agent.js";
-import type { TaskResult } from "../../shared/tasks.js";
+import { cleanTaskResult, type TaskResult } from "../../shared/tasks.js";
 import { TaskRecords, target, type TaskRow as Row } from "./records.js";
 // Owns immutable reports and durable notification reconciliation, never task scheduling.
 export class TaskDelivery {
@@ -97,8 +97,7 @@ export class TaskDelivery {
   save(row: Row, run: Run) {
     if (row.runId !== run.id || this.records.rows("WHERE id=?", row.id)[0]?.runId !== run.id ||
         this.store.db.prepare("SELECT 1 FROM task_results WHERE runId=?").get(run.id)) return;
-    let report = "未取得可靠的最终回复。",
-      known: string[] = [];
+    let report = "未取得可靠的最终回复。";
     let reportKind: TaskResult["reportKind"] = "system";
     try {
       const entries = this.manager(target(row))?.getEntries() ?? [];
@@ -114,9 +113,6 @@ export class TaskDelivery {
       const final = complete?.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
       if (final && run.status === "completed") { report = final; reportKind = "final"; }
       else if (partial) { report = partial; reportKind = "partial"; }
-      known = messages
-        .filter((m) => m.role === "toolResult")
-        .map((m) => `${m.toolName}：${m.isError ? "失败" : "已记录返回"}`);
     } catch {
       report = "会话文件无法读取，不能宣称结果完整；原文件保留。";
     }
@@ -152,9 +148,11 @@ export class TaskDelivery {
         endedAt: run.endedAt ?? Date.now(),
         unfinished:
           status === "completed"
-            ? [row.summaryDeadlineAt || run.reasonCode === "BUDGET_SUMMARY" ? "工作预算已到，本次交付为无工具总结；请核对实际完成情况和未验证项。" : "模型报告不等于全部验收通过；请核对交付中的未验证项。"]
+            ? row.summaryDeadlineAt || run.reasonCode === "BUDGET_SUMMARY"
+              ? ["工作预算已到，本次交付为无工具总结；请核对实际完成情况和未验证项。"]
+              : []
             : ["任务未正常完成；只保留已记录产出，未自动重做。"],
-        sideEffects: `${known.length ? known.slice(-30).join("；") : "未记录工具返回"}。文件及外部副作用未回滚。`,
+        sideEffects: "",
       };
       const inserted = this.store.db
         .prepare(
@@ -174,10 +172,8 @@ export class TaskDelivery {
       throw e;
     }
   }
-  /** Model `read_result` pages by `limit` (≤16000); the session UI passes `whole` and reads the remainder at once. */
-  result(scope: Scope, taskId: unknown, resultId: unknown, offset: unknown = 0, limit: unknown = 16000, whole = false): TaskResult {
-    if (!Number.isSafeInteger(offset) || Number(offset) < 0 || !whole && (!Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 16000))
-      throw new AppError("INVALID_INPUT", "offset 必须为非负整数，limit 必须为 1–16000");
+  /** Results remain complete regardless of the model's suggested delivery length. */
+  result(scope: Scope, taskId: unknown, resultId: unknown): TaskResult {
     const task = this.records.own(scope, taskId),
       id = text(resultId, "结果标识");
     const result = this.store.db
@@ -188,10 +184,7 @@ export class TaskDelivery {
         "RESULT_SCOPE_MISMATCH",
         "结果不存在或不属于此任务；读取结果不是进度查询",
       );
-    const saved: TaskResult = JSON.parse(String(result.body));
-    const start = Number(offset), end = whole ? saved.report.length : Math.min(saved.report.length, start + Number(limit));
-    return { ...saved, report: saved.report.slice(start, end), offset: start, totalLength: saved.report.length,
-      truncated: end < saved.report.length, nextOffset: end < saved.report.length ? end : null };
+    return cleanTaskResult(JSON.parse(String(result.body)));
   }
   reconcileNotifications(scope: Scope) {
     try {

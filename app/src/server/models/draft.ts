@@ -1,3 +1,4 @@
+import { parseProviderProxy } from "../integrations/model-proxy-env.js";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { AppError, object, text } from "../../shared/protocol.js";
@@ -5,6 +6,8 @@ import {
   modelApis,
   reasoningLevels,
   samplingKeys,
+  modelCostKeys,
+  validModelPricing,
   type ReasoningLevel,
 } from "../../shared/models.js";
 type Json = Record<string, any>;
@@ -56,6 +59,7 @@ export function entries(provider: Json): Map<string, Json> {
             name: override.name ?? m.name,
             reasoning: override.reasoning ?? m.reasoning,
             input: override.input ?? m.input,
+            ...(m.cost || override.cost ? { cost: { ...m.cost, ...override.cost } } : {}),
             thinkingLevelMap: {
               ...m.thinkingLevelMap,
               ...override.thinkingLevelMap,
@@ -190,6 +194,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
       if (oauth && (p.key || p.clearKey))
         invalid("OAuth 连接不接受 API 密钥；退出登录请删除该供应商");
       next.name = text(p.name, "供应商名称", 80);
+      next.axiomProxy = parseProviderProxy(p.proxy, original.axiomProxy);
       if (!oauth) {
         next.api = text(p.api, "接口协议", 100);
         if (
@@ -282,6 +287,13 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
           // A newly imported endpoint model can share an ID with a native model
           // while using a different protocol. Save its own definition and capabilities.
           const existing = !oldId && !oauth && native?.api !== next.api ? undefined : native;
+          if (m.cost !== undefined) {
+            const pricing = m.cost;
+            if (!validModelPricing(pricing)) return invalid("计费设置：四项单价必须为大于或等于 0 的有限数值（美元 / 百万 Token）");
+            // Preserve catalog inheritance and existing tiers when base rates are unchanged.
+            if (modelCostKeys.some(key => pricing[key] !== existing?.cost[key]))
+              model.cost = { ...old.cost, ...Object.fromEntries(modelCostKeys.map(key => [key, pricing[key]])) };
+          }
           if (m.input !== undefined) {
             if (!Array.isArray(m.input) || !m.input.includes("text") ||
                 m.input.length > 2 || new Set(m.input).size !== m.input.length ||
@@ -335,8 +347,11 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
           } else {
             model.id = modelId;
             // A renamed native override becomes a custom definition, whose default is text-only.
-            if (oldId && oldId !== modelId && model.input === undefined)
-              model.input = [...(existing?.input ?? ["text"])];
+            if (oldId && oldId !== modelId) {
+              if (model.input === undefined) model.input = [...(existing?.input ?? ["text"])];
+              if (existing) model.cost = { ...existing.cost, ...model.cost };
+            }
+            if (existing && model.cost) model.cost = { ...existing.cost, ...model.cost };
             next.models.push(model);
             if (oldId && Object.hasOwn(original.modelOverrides ?? {}, oldId)) {
               const remaining = structuredClone(original.modelOverrides[oldId]);
@@ -345,6 +360,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
                 "name",
                 "reasoning",
                 "input",
+                "cost",
                 "thinkingLevelMap",
                 "samplingParams",
                 "headers",
@@ -453,6 +469,8 @@ export function validateDraft(
               (actual.input.length !== inputModel.input.length ||
                actual.input.some((value) => !inputModel.input.includes(value))))
             invalid("输入能力：所选能力与模型加载后的能力不一致，请重新读取并调整模型配置");
+          if (inputModel.cost !== undefined && modelCostKeys.some(key => actual.cost[key] !== inputModel.cost[key]))
+            invalid("计费设置：所填单价与模型加载后的价格不一致，请重新读取并调整模型配置");
           const expected = inputModel.levels;
           if (
             levelsOf(actual).join() !==

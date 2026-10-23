@@ -83,7 +83,7 @@ for (const boundary of ["frozen", "discarded", "persisted"] as const)
     const f = await rewriteFixture(), barrier = gate();
     const records = new TaskRecords(f.app.store), delivery = new TaskDelivery(f.app.agents, records);
     try {
-      const [id] = records.create(f.scope, "notification-boundary", "context", [{ task: "completed child", role: "" }], f.selection).taskIds;
+      const [id] = records.create(f.scope, "notification-boundary", "context", [{ task: "completed child" }], f.selection).taskIds;
       let row = records.rows("WHERE id=?", id)[0];
       const run: Run = { id: randomUUID(), sessionId: row.sessionId, selection: f.selection, status: "completed", startedAt: 10, endedAt: 20, error: null };
       f.app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,endedAt) VALUES(?,?,'completed',?,10,20)").run(run.id, run.sessionId, JSON.stringify(f.selection));

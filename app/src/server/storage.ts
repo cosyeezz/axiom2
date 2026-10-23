@@ -13,11 +13,15 @@ import {
   object,
   text,
   type Command,
+  type DeletedSession,
+  type DeletedSessionPage,
   type Session,
   type Scope,
   type Workspace,
   type WorkspacePreferences,
 } from "../shared/protocol.js";
+
+export type SessionRestorePosition = Pick<Session, "updatedAt" | "pinned" | "unread" | "autoPinUntil">;
 
 export class Store {
   readonly db: DatabaseSync;
@@ -64,7 +68,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS compression_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,status TEXT NOT NULL,selection TEXT NOT NULL,startedAt INTEGER NOT NULL,endedAt INTEGER,error TEXT);
       CREATE TABLE IF NOT EXISTS task_parents(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,frozen INTEGER NOT NULL DEFAULT 0,defaultModel TEXT);
-      CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL,parentSessionId TEXT NOT NULL,sessionId TEXT NOT NULL UNIQUE,anchor TEXT NOT NULL,description TEXT NOT NULL,role TEXT NOT NULL,status TEXT NOT NULL,runId TEXT REFERENCES runs(id),budgets TEXT NOT NULL,createdAt INTEGER NOT NULL,error TEXT,FOREIGN KEY(workspaceId,parentSessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE,FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL,parentSessionId TEXT NOT NULL,sessionId TEXT NOT NULL UNIQUE,anchor TEXT NOT NULL,description TEXT NOT NULL,status TEXT NOT NULL,runId TEXT REFERENCES runs(id),budgets TEXT NOT NULL,createdAt INTEGER NOT NULL,error TEXT,FOREIGN KEY(workspaceId,parentSessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE,FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS task_inputs(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,body TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,runId TEXT REFERENCES runs(id),createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS task_input_images(inputId TEXT PRIMARY KEY REFERENCES task_inputs(id) ON DELETE CASCADE,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_results(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,runId TEXT NOT NULL UNIQUE REFERENCES runs(id) ON DELETE CASCADE,body TEXT NOT NULL,delivery TEXT NOT NULL DEFAULT 'pending');
@@ -77,6 +81,14 @@ export class Store {
     `);
     if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "deletedAt"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN deletedAt INTEGER");
+    this.db.exec(`CREATE TABLE IF NOT EXISTS session_restore_positions(
+      sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+      updatedAt INTEGER NOT NULL,pinned INTEGER NOT NULL,unread INTEGER NOT NULL DEFAULT 0,autoPinUntil INTEGER)`);
+    const restoreColumns = this.db.prepare("PRAGMA table_info(session_restore_positions)").all();
+    if (!restoreColumns.some((column) => column.name === "unread"))
+      this.db.exec("ALTER TABLE session_restore_positions ADD COLUMN unread INTEGER NOT NULL DEFAULT 0");
+    if (!restoreColumns.some((column) => column.name === "autoPinUntil"))
+      this.db.exec("ALTER TABLE session_restore_positions ADD COLUMN autoPinUntil INTEGER");
     if (!this.db.prepare("PRAGMA table_info(compression_preferences)").all().some((c) => c.name === "auto"))
       this.db.exec("ALTER TABLE compression_preferences ADD COLUMN auto TEXT");
     // Read versions migrate once; the boolean remains a derived compatibility column.
@@ -197,6 +209,24 @@ export class Store {
   }
   pinnedSessions(): Session[] {
     return this.sessionSummaries();
+  }
+  deletedSessions(params: Record<string, unknown> = {}): DeletedSessionPage {
+    const query = params.query ?? "";
+    if (typeof query !== "string" || query.length > 200 || query.includes("\0"))
+      throw new AppError("INVALID_INPUT", "搜索内容无效（最多 200 字符）");
+    const cursor = params.cursor == null ? null : object(params.cursor);
+    if (cursor && (typeof cursor.deletedAt !== "number" || !Number.isSafeInteger(cursor.deletedAt) || cursor.deletedAt < 0 || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 200))
+      throw new AppError("INVALID_INPUT", "已删除会话加载位置无效");
+    const needle = query.trim();
+    const rows = this.prepare(`SELECT s.id,s.workspaceId,s.title,s.deletedAt,w.name AS workspaceName,w.path AS workspacePath
+      FROM sessions s JOIN workspaces w ON w.id=s.workspaceId
+      WHERE s.deletedAt IS NOT NULL AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id)
+        AND (?='' OR instr(lower(s.title),lower(?))>0 OR instr(lower(w.name),lower(?))>0 OR instr(lower(w.path),lower(?))>0)
+        ${cursor ? "AND (s.deletedAt<? OR (s.deletedAt=? AND s.id>?))" : ""}
+      ORDER BY s.deletedAt DESC,s.id LIMIT 31`)
+      .all(needle, needle, needle, needle, ...(cursor ? [cursor.deletedAt as number, cursor.deletedAt as number, cursor.id as string] : [])) as unknown as DeletedSession[];
+    const items = rows.slice(0, 30), last = items.at(-1);
+    return { items, next: rows.length > 30 && last ? { deletedAt: last.deletedAt, id: last.id } : null };
   }
   private sessionSummaries(workspaceId?: string, sessionId?: string): Session[] {
     return (
@@ -374,7 +404,7 @@ export class Store {
     }
   }
   // Synchronous SQLite transaction: mutation and receipt commit together before acknowledgement.
-  execute(command: Command): unknown {
+  execute(command: Command, deletionPosition?: SessionRestorePosition): unknown {
     const id = text(command.requestId, "请求标识");
     if (this.db.prepare("SELECT 1 FROM external_requests WHERE id=?").get(id))
       throw new AppError("REQUEST_CONFLICT", "请求标识已用于其他操作");
@@ -391,7 +421,7 @@ export class Store {
     }
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const result = this.mutate(command);
+      const result = this.mutate(command, deletionPosition);
       this.db
         .prepare("INSERT INTO requests(id,hash,response,scope) VALUES(?,?,?,?)")
         .run(id, hash, JSON.stringify(result), this.requestScope(command));
@@ -402,7 +432,7 @@ export class Store {
       throw error;
     }
   }
-  private mutate(c: Command): unknown {
+  private mutate(c: Command, deletionPosition?: SessionRestorePosition): unknown {
     const p = object(c.params ?? {});
     if (c.op === "workspace.open") {
       if (p.authorized !== true)
@@ -494,6 +524,23 @@ export class Store {
         .run(id);
       return this.session(w.id, id);
     }
+    if (c.op === "session.restore") {
+      const workspaceId = text(c.workspaceId, "工作空间标识"), sessionId = text(c.sessionId, "会话标识");
+      const deleted = this.db.prepare(`SELECT s.id FROM sessions s WHERE s.workspaceId=? AND s.id=?
+        AND s.deletedAt IS NOT NULL AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id)`).get(workspaceId, sessionId);
+      if (!deleted) throw new AppError("SCOPE_MISMATCH", "已删除会话不存在或不属于该工作空间");
+      // Reuse the original workspace and ordering keys; never rewrite conversation files.
+      this.db.prepare("UPDATE workspaces SET archived=0 WHERE id=?").run(workspaceId);
+      this.db.prepare(`UPDATE sessions SET deletedAt=NULL,
+        updatedAt=COALESCE((SELECT updatedAt FROM session_restore_positions p WHERE p.sessionId=sessions.id),updatedAt),
+        pinned=COALESCE((SELECT pinned FROM session_restore_positions p WHERE p.sessionId=sessions.id),pinned),
+        unread=COALESCE((SELECT unread FROM session_restore_positions p WHERE p.sessionId=sessions.id),unread) AND resultVersion>readVersion,
+        autoPinUntil=CASE WHEN (SELECT autoPinUntil FROM session_restore_positions p WHERE p.sessionId=sessions.id)>?
+          THEN (SELECT autoPinUntil FROM session_restore_positions p WHERE p.sessionId=sessions.id) ELSE 0 END
+        WHERE id=? OR id IN (SELECT sessionId FROM tasks WHERE parentSessionId=?)`).run(Date.now(), sessionId, sessionId);
+      this.db.prepare("DELETE FROM session_restore_positions WHERE sessionId=? OR sessionId IN (SELECT sessionId FROM tasks WHERE parentSessionId=?)").run(sessionId, sessionId);
+      return this.session(workspaceId, sessionId);
+    }
     const s = this.session(c.workspaceId, c.sessionId);
     if (c.op === "session.rename")
       this.db
@@ -510,6 +557,9 @@ export class Store {
     } else if (c.op === "session.delete") {
       if (p.confirmed !== true)
         throw new AppError("CONFIRMATION_REQUIRED", "删除会话需要确认");
+      const position = deletionPosition ?? s;
+      this.db.prepare("INSERT OR REPLACE INTO session_restore_positions(sessionId,updatedAt,pinned,unread,autoPinUntil) VALUES(?,?,?,?,?)")
+        .run(s.id, position.updatedAt, Number(position.pinned), Number(position.unread), position.autoPinUntil ?? null);
       this.db.prepare("UPDATE sessions SET deletedAt=?,pinned=0,unread=0,autoPinUntil=0 WHERE id=? OR id IN (SELECT sessionId FROM tasks WHERE parentSessionId=?)").run(Date.now(), s.id, s.id);
       this.db.prepare("DELETE FROM session_preferences WHERE sessionId=?").run(s.id);
       return { deleted: s.id };

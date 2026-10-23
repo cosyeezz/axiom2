@@ -3,7 +3,7 @@ import { AppError, attachmentsInput, object, text, type Draft, type Scope } from
 import { skillsInput, maxDraftSkills } from "../shared/skills.js";
 import { imagesInput } from "./images.js";
 import type { Store } from "./storage.js";
-import type { DraftRecord, DraftStamp } from "../shared/drafts.js";
+import { maxDraftTextLength, type DraftRecord, type DraftStamp } from "../shared/drafts.js";
 
 const empty = (): Draft => ({ text: "", attachment: null, attachments: [], images: [] });
 export class SessionDrafts {
@@ -34,7 +34,7 @@ export class SessionDrafts {
     if (!Number.isSafeInteger(p.sequence) || Number(p.sequence) < 1 || !Number.isSafeInteger(p.revision) || Number(p.revision) < 0)
       throw new AppError("INVALID_INPUT", "草稿修订无效");
     // Recovery can merge several inputs beyond the send limit. Preserve whitespace exactly.
-    if (typeof value.text !== "string" || value.text.length > 200_000 || value.text.includes("\0"))
+    if (typeof value.text !== "string" || value.text.length > maxDraftTextLength || value.text.includes("\0"))
       throw new AppError("INVALID_INPUT", "草稿文本最多 200,000 字符，且不能包含空字符");
     const images = imagesInput(value.images);
     const attachments = attachmentsInput(value.attachments, value.attachment, images.length);

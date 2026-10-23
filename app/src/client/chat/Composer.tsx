@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { subscribeDisplaySettings } from "../display-settings.js";
+import { FilePickerButton } from "../FilePicker.js";
 import { useConnection, useConnectionState, useScope } from "../transport.js";
 import { SkillCards } from "./SkillCards.js";
 import { getDraft, useDraft, updateDraft } from "../drafts.js";
-import { usePersistentDraft, resolveDraftConflict, retryDraftPersistence } from "../draft-persistence.js";
+import { usePersistentDraft } from "../draft-persistence.js";
 import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running, type Selection } from "../../shared/agent.js";
@@ -17,7 +19,6 @@ import { AnnotationTray } from "./ReplyAnnotations.js";
 import { clearSentAnnotations } from "./reply-annotations.js";
 import { messageLengthError, messageTextLimit } from "./message-limit.js";
 import { SteeringQueue } from "./SteeringQueue.js";
-import "../styles/draft-status.css";
 const noConfig: Configuration = {
   revision: "",
   providerCount: 0,
@@ -48,7 +49,7 @@ export function Composer({
       (m) =>
         m.provider === info.selection?.provider && m.id === info.selection.id,
     );
-  const persistence = usePersistentDraft(scope);
+  usePersistentDraft(scope);
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null);
   const [reading, setReading] = useState(false);
@@ -76,8 +77,12 @@ export function Composer({
   useEffect(() => {
     const node = input.current!;
     const resize = () => {
-      node.style.height = "44px";
-      node.style.height = `${Math.min(180, Math.max(44, node.scrollHeight))}px`;
+      const style = getComputedStyle(node);
+      const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--display-font-scale")) || 1;
+      const minimum = parseFloat(style.minHeight) || 44 * scale;
+      const maximum = parseFloat(style.maxHeight) || 180 * scale;
+      node.style.setProperty("height", `${minimum}px`, "important");
+      node.style.setProperty("height", `${Math.min(maximum, Math.max(minimum, node.scrollHeight))}px`, "important");
     };
     resize();
     let width = node.clientWidth;
@@ -87,12 +92,13 @@ export function Composer({
       resize();
     });
     observer.observe(node);
-    return () => observer.disconnect();
+    const unsubscribeDisplay = subscribeDisplaySettings(resize);
+    return () => { observer.disconnect(); unsubscribeDisplay(); };
   }, [draft.text]);
   return (
     <section className="composer-area">
       <div className="container">
-        <SteeringQueue scope={scope} />
+        <SteeringQueue scope={scope} nested={nested} />
         <AnnotationTray scope={scope} disabled={busy || !connected || (!active && !selected)}
           send={(items, text, supplement) => void submit(active ? "append" : "prompt", {
             draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items, supplement),
@@ -198,22 +204,14 @@ export function Composer({
           </div>
         </form>
         <Usage scope={scope} tools={tools} />
-        {persistence.conflict && <div className="draft-status" role="status" aria-live="polite">
-          <span>另一个窗口有不同的草稿，当前输入已保留。</span>
-          <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, true)}>保存当前输入</button>
-          <button type="button" className="btn btn-ghost" onClick={() => void resolveDraftConflict(scope, false)}>载入已保存草稿</button>
-        </div>}
-        {!persistence.conflict && persistence.error && <div className="draft-status" role="alert">
-          <span>{persistence.ready ? "草稿尚未确认保存：" : "草稿恢复失败："}{persistence.error}</span>
-          <button type="button" className="btn btn-ghost" disabled={!connected || persistence.saving} onClick={() => void retryDraftPersistence(scope)}>重试草稿保存</button>
-        </div>}
         <Connection active={active} extra={lengthError || error || (imageUnsupported ? "当前模型不支持图片，请选择支持图片的模型或移除图片。" : "")} />
       </div>
     </section>
   );
 }
-export function EmptyComposer({ onSelect, openWorkspace, tools }: {
+export function EmptyComposer({ onSelect, openWorkspace, picking = false, tools }: {
   tools?: UsageTools;
+  picking?: boolean;
   onSelect?: (selection: Selection) => Promise<void>;
   openWorkspace: () => void;
 }) {
@@ -232,18 +230,9 @@ export function EmptyComposer({ onSelect, openWorkspace, tools }: {
           />
           <div className="composer-tools">
             <div className="row">
-              <button
-                className="icon-btn"
-                id="attach"
-                aria-label="添加附件"
-                disabled
-              >
-                <Icon name="plus" />
-              </button>
+              <FilePickerButton className="icon-btn" id="attach" label="添加附件" icon="plus" iconOnly disabled />
               {onSelect ? <ModelPicker onSelect={onSelect} /> : (
-                <button type="button" className="btn btn-ghost" onClick={openWorkspace}>
-                  打开工作空间以选择模型
-                </button>
+                <FilePickerButton className="btn btn-ghost" label="打开工作空间以选择模型" picking={picking} onClick={openWorkspace} />
               )}
             </div>
             <button

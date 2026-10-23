@@ -63,6 +63,12 @@ export function sumCosts(rows: readonly CostTotals[]): CostTotals {
   }
   return total;
 }
+export function costTokens(total: CostTotals): string {
+  if (!total.records) return "—";
+  const known = costParts.reduce((sum, part) => sum + total.tokens[part], 0);
+  if (total.unknownTokens && !known) return "未知";
+  return `${known.toLocaleString("zh-CN")}${total.unknownTokens ? " + 未知" : ""}`;
+}
 export function costAmount(total: CostTotals): string {
   if (!total.records) return "—";
   if (total.unknownCost && !total.knownCost) return "未知";

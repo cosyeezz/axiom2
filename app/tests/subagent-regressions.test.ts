@@ -35,7 +35,7 @@ function fixture(real = false, count = 1) {
   const s = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: w.id }) as Session;
   const scope = { workspaceId: w.id, sessionId: s.id }, models = new ModelService(root);
   const records = new TaskRecords(store), published: string[] = [];
-  const ids = records.create(scope, "anchor", "context", Array.from({ length: count }, (_, i) => ({ task: `task${i}`, role: "" })), selection).taskIds;
+  const ids = records.create(scope, "anchor", "context", Array.from({ length: count }, (_, i) => ({ task: `task${i}` })), selection).taskIds;
   let live: Run | null = null;
   const agents = real ? new Agents(store, models, scope => published.push(scope)) : {
     store, info: () => ({ selection, run: live }), active: () => !!live && ["starting", "running", "stopping"].includes(live.status),
@@ -196,7 +196,7 @@ for (const action of ["capacity", "cancel", "parent-stop", "recall"] as const)
     pool.limits.targetReadyTotal = 0;
     const environment = (f.agents as any).profiles.prepare({ entry: "agent", cwd: f.root,
       modelDir: join(f.root, "pi"), modelsRaw: readFileSync(join(f.root, "pi", "models.json"), "utf8"),
-      selection: f.selection, taskRole: "resource blocker", mode: "managed" });
+      selection: f.selection, mode: "managed" });
     const blocker = await pool.acquire({ environment, kind: "agent", signal: new AbortController().signal,
       requestStartedAtMonoMs: performance.now() });
     const launches: string[] = [];
@@ -277,7 +277,7 @@ test("a slow append ACK does not hold the configuration lock; duplicate commands
     const pending = f.agents.command(command); await until(() => enqueues === 1);
     assert.equal(f.store.receipt(command.requestId).status, "pending");
     await assert.rejects(f.agents.command(command), { code: "UNCERTAIN" });
-    const next = f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "independent" } }, { task: { id: f.ids[1], role: "", inputIds: [] } });
+    const next = f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "independent" } }, { task: { id: f.ids[1], inputIds: [] } });
     await until(() => launches === 1); await next;
     assert.equal(enqueues, 1); barrier.release(); await pending;
     await f.agents.command(command); assert.equal(enqueues, 1);
@@ -294,11 +294,11 @@ test("pending startup is visible outside the configuration lock and stop prevent
     else secondStarted = true;
   };
   try {
-    const pending = f.agents.command({ op: "prompt", requestId: randomUUID(), ...first, params: { text: "first" } }, { task: { id: f.ids[0], role: "", inputIds: [] } });
+    const pending = f.agents.command({ op: "prompt", requestId: randomUUID(), ...first, params: { text: "first" } }, { task: { id: f.ids[0], inputIds: [] } });
     const rejected = assert.rejects(pending, { code: "AGENT_STOPPED" });
     await until(() => entered);
     assert.equal(runtime.pending.size, 1);
-    await f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "second" } }, { task: { id: f.ids[1], role: "", inputIds: [] } });
+    await f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "second" } }, { task: { id: f.ids[1], inputIds: [] } });
     assert.equal(secondStarted, true);
     const stopped = f.agents.stop(first); barrier.release(); await stopped; await rejected;
     assert.equal(runtime.pending.size, 0);
@@ -378,13 +378,13 @@ for (const stop of ["stop", "shutdown", "provider"] as const)
     let firstDone = false;
     try {
       const firstCommand = { op: "prompt", requestId: randomUUID(), ...first, params: { text: "pending behind retirement" } };
-      const pending = f.agents.command(firstCommand, { task: { id: f.ids[0], role: "", inputIds: [] } }).finally(() => { firstDone = true; });
+      const pending = f.agents.command(firstCommand, { task: { id: f.ids[0], inputIds: [] } }).finally(() => { firstDone = true; });
       const rejected = assert.rejects(pending, { code: "AGENT_STOPPED" });
       await until(() => (f.agents as any).starts.has(first.sessionId));
       const pendingStart = (f.agents as any).starts.get(first.sessionId);
       assert.equal(f.agents.info(first).run, null, "resource wait has no activated Run");
       assert.ok(f.agents.affected([f.selection.provider]).some(item => item.sessionId === first.sessionId));
-      await f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "independent startup" } }, { task: { id: f.ids[1], role: "", inputIds: [] } });
+      await f.agents.command({ op: "prompt", requestId: randomUUID(), ...second, params: { text: "independent startup" } }, { task: { id: f.ids[1], inputIds: [] } });
       assert.ok(runtime.live.get(second.sessionId)?.child.pid, "independent session really forks before retirement releases");
       assert.equal(firstDone, false); assert.equal(runtime.live.has(first.sessionId), false);
       let stopCompleted = false;
@@ -408,7 +408,7 @@ test("provider stop cancels queued preparation without waiting for the configura
   try {
     await until(() => writerEntered);
     const command = { op: "prompt", requestId: randomUUID(), ...scope, params: { text: "queued behind logout writer" } };
-    rejected = assert.rejects(f.agents.command(command, { task: { id: f.ids[0], role: "", inputIds: [] } }), { code: "AGENT_STOPPED" });
+    rejected = assert.rejects(f.agents.command(command, { task: { id: f.ids[0], inputIds: [] } }), { code: "AGENT_STOPPED" });
     await until(() => (f.agents as any).starts.has(scope.sessionId));
     let stopped = false;
     const stopping = f.agents.stopProviders([f.selection.provider], true).then(() => { stopped = true; });
@@ -430,7 +430,7 @@ test("configuration changes during snapshot preparation reject without a run or 
   f.models.raw = async () => { entered = true; await barrier.promise; return raw(); };
   (f.agents as any).runs.launchWorker = async () => { launches++; };
   try {
-    const pending = f.agents.command({ op: "prompt", requestId: randomUUID(), ...target(f.row()), params: { text: "configuration consistency" } }, { task: { id: f.ids[0], role: "", inputIds: [] } });
+    const pending = f.agents.command({ op: "prompt", requestId: randomUUID(), ...target(f.row()), params: { text: "configuration consistency" } }, { task: { id: f.ids[0], inputIds: [] } });
     const rejected = assert.rejects(pending, { code: "REVISION_CONFLICT" });
     await until(() => entered);
     const path = join(f.root, "pi", "models.json"), config = JSON.parse(readFileSync(path, "utf8"));

@@ -8,6 +8,7 @@ export interface ReloadResource { name: string; revision: string }
 export type ResourceSnapshot = Record<ResourceKind, ReloadResource[]>;
 export type ReloadStage = "waiting" | "preparing" | "reloading" | "comparing" | "completed" | "failed";
 export interface ReloadState {
+  kind?: "skills";
   id: string;
   status: "running" | "completed" | "failed";
   stage: ReloadStage;

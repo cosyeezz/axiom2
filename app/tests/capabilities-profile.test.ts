@@ -21,6 +21,8 @@ test("capability selection and MCP/Skill contents bind worker identity through e
     const selected = profiles.prepare({ ...base, capabilities: capabilityRuntime(catalog, { skills: [id], mcp: ["fixture"] }) }); environments.push(selected);
     const empty = profiles.prepare({ ...base, capabilities: capabilityRuntime(catalog, { skills: [], mcp: [] }) }); environments.push(empty);
     assert.notEqual(selected.profileHash, empty.profileHash);
+    const manualOnly = profiles.prepare({ ...base, capabilities: capabilityRuntime(catalog, { skills: [], mcp: ["fixture"] }) }); environments.push(manualOnly);
+    assert.notEqual(selected.profileHash, manualOnly.profileHash, "automatic discovery changes worker identity even with identical loaded paths");
     assert.equal(selected.current(false), true);
     writeFileSync(mcp, JSON.stringify({ mcpServers: { fixture: { command: "different-no-start", exposure: "direct" } } }));
     assert.equal(selected.current(false), false, "MCP changes are checked even when full resource traversal is skipped");

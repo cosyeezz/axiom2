@@ -1,3 +1,4 @@
+import { latencyFor } from "../latency.js";
 import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { ExecutionPool, type ExecutionLease } from "../execution-pool.js";
@@ -65,7 +66,7 @@ export class AgentRuns {
     const stopping = this.automaticStops.get(scope.sessionId);
     if (stopping) return stopping;
     const pending = this.pending.get(scope.sessionId), live = this.live.get(scope.sessionId);
-    if (!(pending?.input.memoryContinuation && pending.run.status === "starting" || live?.automatic && live.run.status === "starting")) return;
+    if (!((pending?.input.memoryContinuation || pending?.input.compressionPreparation) && pending.run.status === "starting" || live?.automatic && live.run.status === "starting")) return;
     // Concurrent user inputs share one preemption. Explicit stops still advance the epoch independently.
     const stopped = this.stop(scope);
     this.automaticStops.set(scope.sessionId, stopped);
@@ -222,7 +223,7 @@ export class AgentRuns {
     const live: Live = {
       scope,
       task: !!input.task,
-      automatic: !!input.memoryContinuation,
+      automatic: !!(input.memoryContinuation || input.compressionPreparation),
       run,
       child,
       lease,
@@ -306,8 +307,14 @@ export class AgentRuns {
         }
         if (event.type === "context-rebuilt") this.views.refresh(scope);
         if (event.type === "messages-persisted") this.views.persisted(scope, event.ids);
-        if (event.type === "message")
+        if (event.type === "latency") {
+          latencyFor(this.store).add(event.record);
+          return;
+        }
+        if (event.type === "message") {
+          if (event.message.deliveryTiming) event.message.deliveryTiming.receivedAt = Date.now();
           this.views.messageChanged(scope, event.message);
+        }
         if (event.type === "tool") {
           const id = `tool-${event.id}`,
             old = this.views.current(scope, id);
@@ -393,6 +400,7 @@ export class AgentRuns {
         const reasonCode = live.finish?.reasonCode ?? (live.finish ? null : "WORKER_INTERRUPTED");
         const retry = live.run.retry && ["waiting", "retrying"].includes(live.run.retry.state)
           ? { ...live.run.retry, state: "cancelled" as const, nextRetryAt: undefined } : live.run.retry;
+        if (!keepAlive) this.views.recoverRequestUsage(scope);
         this.store.finishRun(run.id, status, error, reasonCode, retry);
         this.views.settled(scope);
         this.views.queues.delete(scope.sessionId);

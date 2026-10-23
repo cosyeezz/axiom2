@@ -40,7 +40,7 @@ try {
   const records = new TaskRecords(app.store), scheduler = (app.tasks as any).scheduler, views = (app.agents as any).views;
   records.freeze(scope);
   app.store.db.prepare("INSERT OR REPLACE INTO task_settings VALUES(1,?)").run(JSON.stringify({ concurrency: 6, workMs: 600000 }));
-  const { taskIds } = records.create(scope, "ui-backgrounds", "local only", Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}`, role: "Report evidence" })), { provider: "fixture", id: "fixture", thinking: "off" });
+  const { taskIds } = records.create(scope, "ui-backgrounds", "local only", Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}` })), { provider: "fixture", id: "fixture", thinking: "off" });
   manager.appendMessage({ role: "assistant", content: [{ type: "toolCall", id: "ui-backgrounds", name: "delegate", arguments: { context: "local only", tasks: Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}` })) } }], timestamp: 3, stopReason: "toolUse" } as any);
   manager.appendMessage({ role: "toolResult", toolCallId: "ui-backgrounds", toolName: "delegate", content: [{ type: "text", text: JSON.stringify({ taskIds, status: "queued" }) }], timestamp: 4, isError: false } as any);
   scheduler.preferencesChanged();

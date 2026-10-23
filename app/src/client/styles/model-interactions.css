@@ -29,7 +29,7 @@
 .model-catalog-heading{margin-bottom:8px;align-items:flex-start}
 .model-catalog-heading h3{font-size:13px;line-height:1.6;min-width:0;overflow-wrap:anywhere;padding-top:5px}
 .model-catalog-heading .btn{flex-shrink:0}
-.model-catalog-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-top:12px}
+.model-catalog-actions{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;padding-top:12px}
 .model-catalog-actions .meta{font-size:11px}
 .model-catalog-tools{display:flex;gap:8px;align-items:center}
 .model-catalog-tools .input{flex:1;min-width:0}
@@ -44,6 +44,7 @@
 .model-catalog-name{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px;overflow-wrap:anywhere}
 .model-catalog-name code{font-size:12px;white-space:normal}
 .model-catalog-item>.meta{max-width:30%;overflow-wrap:anywhere}
+.model-catalog-panel .model-catalog-selection,.credential-heading{justify-content:flex-start;flex-wrap:wrap}
 .model-catalog-panel .row-between{flex-wrap:wrap;gap:8px}
 
 /* Remain in the accessibility tree while the editable workspace is inert. */

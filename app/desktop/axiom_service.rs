@@ -3,6 +3,7 @@
 use serde_json::{json, Value};
 use std::{env, fs, io::Read, path::PathBuf, process::{Command, Stdio}, sync::Mutex, time::{Duration, Instant}};
 use tauri::{Manager, Webview};
+use tauri_plugin_opener::OpenerExt;
 use crate::axiom_views;
 
 pub(crate) static CONTROL: Mutex<()> = Mutex::new(());
@@ -107,6 +108,22 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     result["clientVersion"] = json!(env!("CARGO_PKG_VERSION"));
     result["clientSupported"] = json!(cfg!(windows));
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn axiom_reveal_path(window: Webview, path: String) -> Result<(), String> {
+    axiom_views::authorize(&window)?;
+    if path.is_empty() || path.len() > 4096 || path.chars().any(char::is_control) { return Err("本地路径无效".into()); }
+    let path = PathBuf::from(path);
+    if !path.is_absolute() { return Err("需要完整的本地路径".into()); }
+    if path.is_file() {
+        return window.app_handle().opener().reveal_item_in_dir(&path).map_err(|e| format!("无法定位文件：{e}"));
+    }
+    let directory = if path.is_dir() { path.as_path() } else { path.parent().ok_or("找不到所在文件夹")? };
+    let directory = fs::canonicalize(directory).map_err(|_| "所在文件夹不存在或无法访问")?;
+    if !directory.is_dir() { return Err("所在位置不是文件夹".into()); }
+    // Folders and not-yet-created files retain directory navigation.
+    window.app_handle().opener().open_path(directory.to_string_lossy(), None::<&str>).map_err(|e| format!("无法打开所在文件夹：{e}"))
 }
 
 #[tauri::command]

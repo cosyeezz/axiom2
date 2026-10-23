@@ -29,7 +29,7 @@ try {
   const recent = create("Recent", 100);
   const remote = create("Remote", 3, false, foreign);
   const child = create("Child", 1);
-  app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','','completed','{}',1)")
+  app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','completed','{}',1)")
     .run(workspace.id, old.id, child.id);
   for (const s of [old, remote, child])
     app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'completed','{}',1)").run(s.id, s.id);

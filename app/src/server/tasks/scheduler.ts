@@ -347,12 +347,13 @@ export class TaskScheduler {
   }
   private async start(row: Row) {
     const queued = this.records.inputs(row, "queued");
-    // Editable drafts retain independent identity; legacy delegation/tool inputs
-    // keep their initial batching through the first image-bearing input.
+    // Keep the initial delegation distinct from queued appends so its durable
+    // input identity can display the original brief without hiding later work.
+    // Editable drafts and legacy inputs retain their existing batching rules.
     const editableAt = queued.findIndex((input) => this.records.drafts.has(input.id) || this.records.skills(input.id).length || input.mode === "resume" || input.mode === "rewrite");
     const resuming = queued[0]?.mode === "resume";
     const rewriting = queued[0]?.mode === "rewrite";
-    const batch = resuming || rewriting || editableAt === 0 ? queued.slice(0, 1) : editableAt < 0 ? queued : queued.slice(0, editableAt);
+    const batch = queued[0]?.id === row.initialInputId || resuming || rewriting || editableAt === 0 ? queued.slice(0, 1) : editableAt < 0 ? queued : queued.slice(0, editableAt);
     const firstImage = batch.findIndex((input) => this.records.images(input.id).length > 0);
     const inputs = firstImage < 0 ? batch : batch.slice(0, firstImage + 1);
     const images = firstImage < 0 ? [] : this.records.images(inputs.at(-1)!.id);
@@ -378,7 +379,6 @@ export class TaskScheduler {
           prompt: resuming || rewriting ? undefined : inputs.map((i) => i.body).join("\n\n"),
           task: {
             id: row.id,
-            role: row.role,
             inputIds: inputs.map((i) => i.id),
             editable: inputs.every((i) => this.records.drafts.has(i.id)),
             budget: budgetContext,

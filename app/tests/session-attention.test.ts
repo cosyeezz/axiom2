@@ -34,7 +34,7 @@ test("unviewed running/unread/child activity has no deadline; idle history never
   try {
     const active = f.create(), unread = f.create(), parent = f.create(), child = f.create(), idle = f.create();
     f.running(active); f.unread(unread);
-    f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','','running','{}',1)")
+    f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES('task',?,?,?,'a','d','running','{}',1)")
       .run(f.workspace.id, parent.id, child.id);
     f.attention.expire(Date.now() + 100 * sessionPinCooldownMs);
     assert.deepEqual(new Set(f.store.pinnedSessions().map((s) => s.id)), new Set([active.id, unread.id, parent.id]));
@@ -118,7 +118,7 @@ test("all active states override legacy deadlines and child activity cancels an 
       const s = f.create();
       if (status === "child") {
         const child = f.create();
-        f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,'a','d','','queued','{}',1)")
+        f.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,'a','d','queued','{}',1)")
           .run(s.id, s.workspaceId, s.id, child.id);
       } else {
         f.running(s);

@@ -169,7 +169,7 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     await wait(() => !running(app.agents.info(scope).run), "history restore unfinished");
     assert.ok(JSON.stringify(requests.at(-1).messages).includes("image_url"));
     const records = new TaskRecords(app.store);
-    const { taskIds } = records.create(scope, "image-test", "image test context", [{ task: "child image task", role: "" }], { provider: "images-fixture", id: "vision", thinking: "off" });
+    const { taskIds } = records.create(scope, "image-test", "image test context", [{ task: "child image task" }], { provider: "images-fixture", id: "vision", thinking: "off" });
     records.freeze(scope); // Do not wake parent while testing child transport.
     const taskId = taskIds[0], child = records.rows("WHERE id=?", taskId)[0], to = { workspaceId: w.id, sessionId: child.sessionId };
     holdNext = true;
@@ -177,7 +177,8 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     const queuedSecond = await call("task.append", { taskId, text: "queued second [imag1]", images: [{ ...image(), name: "queued-second.png" }] }) as any;
     await wait(() => !!held, "child initial request missing");
     const initial = requests.at(-1);
-    assert.equal(JSON.stringify(initial.messages).match(/image_url/g)?.length, 2); // key and type
+    assert.ok(!JSON.stringify(initial.messages).includes("image_url"), "the initial delegation stays separate from queued image appends");
+    assert.match(JSON.stringify(initial.messages.at(-1)), /任务背景:.*image test context.*当前任务:.*child image task/);
     const live = await call("task.append", { taskId, text: "steer [imag1]", attachments: files, images: [{ ...image(), name: "live.png" }], mode: "steer" }) as any;
     const afterImage = await call("task.append", { taskId, text: "text after live image", mode: "steer" }) as any;
     const follow = await call("task.append", { taskId, text: "follow [imag1]", images: [{ ...image(), name: "follow.png" }], mode: "steer" }) as any;

@@ -23,7 +23,7 @@ function fixture() {
   const scope = { workspaceId: workspace.id, sessionId: session.id };
   const selection: Selection = { provider: "fixture", id: "fixture", thinking: "off" };
   const records = new TaskRecords(store);
-  const taskId = records.create(scope, "anchor", "context", [{ task: "task", role: "" }], selection).taskIds[0];
+  const taskId = records.create(scope, "anchor", "context", [{ task: "task" }], selection).taskIds[0];
   let run: Run | null = null;
   const stops: unknown[][] = [], signals: any[] = [];
   let releaseStop: () => void = () => {};
@@ -82,7 +82,39 @@ test("queued cancellation creates one result without a worker or cleanup state",
     assert.equal(body.reason, "stop");
     assert.equal("cleanup" in body, false);
     assert.equal("pending" in f.records.list(f.scope).tasks[0], false);
-    assert.match(body.sideEffects, /未回滚/);
+    assert.equal(body.sideEffects, "");
+  } finally { await f.dispose(); }
+});
+
+test("deliveries contain findings without tool logs and clean legacy results without rewriting them", async () => {
+  const f = fixture();
+  try {
+    const run = f.activate();
+    const report = "调查结果：配置已修复。验证：2项通过，集成验证尚未运行。";
+    const messages = [
+      { role: "toolResult", toolName: "read", isError: false },
+      { role: "toolResult", toolName: "bash", isError: true },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: report }] },
+    ].map((message) => ({ type: "message", message: { ...message, axiomRunId: run.id } }));
+    (f.delivery as any).manager = () => ({ getEntries: () => messages });
+    f.delivery.save(f.row(), { ...run, status: "completed", endedAt: Date.now() });
+    const stored = f.store.db.prepare("SELECT id,body FROM task_results WHERE taskId=?").get(f.taskId)!;
+    const body = JSON.parse(String(stored.body));
+    assert.equal(body.report, report);
+    assert.equal(body.status, "completed");
+    assert.deepEqual(body.unfinished, []);
+    assert.equal(body.sideEffects, "");
+
+    const legacy = { ...body,
+      unfinished: ["模型报告不等于全部验收通过；请核对交付中的未验证项。", "集成验证尚未运行"],
+      sideEffects: "read：已记录返回；bash：失败。文件及外部副作用未回滚。",
+    };
+    const saved = JSON.stringify(legacy);
+    f.store.db.prepare("UPDATE task_results SET body=? WHERE id=?").run(saved, stored.id);
+    assert.deepEqual(f.delivery.result(f.scope, f.taskId, stored.id), {
+      ...body, unfinished: ["集成验证尚未运行"], sideEffects: "",
+    });
+    assert.equal(f.store.db.prepare("SELECT body FROM task_results WHERE id=?").get(stored.id)!.body, saved);
   } finally { await f.dispose(); }
 });
 
@@ -196,7 +228,7 @@ test("live concurrency changes fill existing FIFO slots and never stop active ta
   const f = fixture();
   try {
     const selection: Selection = { provider: "fixture", id: "fixture", thinking: "off" };
-    f.records.create(f.scope, "more", "context", [{ task: "second", role: "" }, { task: "third", role: "" }], selection);
+    f.records.create(f.scope, "more", "context", [{ task: "second" }, { task: "third" }], selection);
     const launched: string[] = [];
     (f.scheduler as any).start = async (row: { id: string }) => {
       launched.push(row.id);
@@ -210,7 +242,7 @@ test("live concurrency changes fill existing FIFO slots and never stop active ta
     f.scheduler.preferencesChanged(); await tick(); await tick();
     assert.equal(launched.length, 3);
     f.store.db.prepare("UPDATE task_settings SET body=?").run(JSON.stringify({ concurrency: 1, workMs: 600000 }));
-    f.records.create(f.scope, "last", "context", [{ task: "fourth", role: "" }], selection);
+    f.records.create(f.scope, "last", "context", [{ task: "fourth" }], selection);
     f.scheduler.preferencesChanged(); await tick(); await tick();
     assert.equal(launched.length, 3);
     assert.equal(f.stops.length, 0);

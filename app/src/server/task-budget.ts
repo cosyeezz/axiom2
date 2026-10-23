@@ -30,15 +30,19 @@ export class TaskPhase {
 }
 
 export const taskSummaryMs = 180_000;
-export const taskSummaryInstruction = "工作预算已到。现在只基于已有上下文生成最终总结，不得调用任何工具，不得继续调查、测试或修改文件。请交代已有发现与证据、实际执行的测试及结果、未完成／未验证项和已知副作用；没有证据的内容明确标为未知，不把总结完成当作任务全部验收通过。本次总结最多 3 分钟，超时将强制停止。";
+export const taskSummaryInstruction = "工作预算已到。停止调用工具，只根据已有上下文给出不超过2000字的最终总结：先给结论，再交代必要证据、实际测试结果、未完成／未验证项及已知副作用。未知内容如实说明，不把总结完成当作验收通过。总结最多3分钟，超时强制停止。";
 
 export function taskBudgetIntro(budget: TaskBudget) {
-  return `本次执行预算：${budget.workMs}ms；截止时间：${new Date(budget.deadlineAt ?? Date.now() + budget.workMs).toISOString()}；此前任务链累计执行：${budget.elapsedMs}ms。有效追加会刷新工作时限。服务端会在剩余总预算的 20%（最多提前 60 秒）时提醒；工作到期进入无工具总结，总结最多 3 分钟，超时强制停止。`;
+  return `本次工作预算：${budget.workMs}ms；截止时间：${new Date(budget.deadlineAt ?? Date.now() + budget.workMs).toISOString()}；此前任务链累计执行：${budget.elapsedMs}ms。工作到期后进入最多3分钟的总结阶段，只总结已有内容，不调用工具。`;
+}
+
+export function taskBudgetUpdate(budget: TaskBudget) {
+  return `工作预算已更新，当前截止时间为${new Date(budget.deadlineAt ?? Date.now() + budget.workMs).toISOString()}，以此为准。工作到期后进入最多3分钟的总结阶段。`;
 }
 
 export function taskBudgetWarning(deadlineAt: number) {
   const remaining = Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
-  return `子任务预算即将用尽：截至本条提示生成时，剩余约 ${remaining} 秒。请尽快交付已有发现、实际测试结果及未完成／未验证项，避免启动无法在剩余时间内完成的新工作。此提醒不延长预算，工作到期后将进入最多 3 分钟的无工具总结。`;
+  return `截至本条提醒生成时，剩余约${remaining}秒。请收尾并准备交付已有成果与未完成／未验证项，避免开始无法按时完成的新工作。`;
 }
 
 /** Server worker clock; delivery only queues Steering inside an active run. */

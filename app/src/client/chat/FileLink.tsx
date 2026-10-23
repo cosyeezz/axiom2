@@ -7,7 +7,7 @@ export const FilePreviewContext = createContext<((reference: OpenFileReference) 
 export function FileLink({ href, owner, children }: { href: string; owner: MarkdownImageOwner; children: ReactNode }) {
   const open = useContext(FilePreviewContext);
   if (!open) return <span>{children}</span>;
-  return <button type="button" className="file-reference" data-tooltip={href} onClick={event => open({ href, messageId: owner.messageId, owner, trigger: event.currentTarget })}>
+  return <span className="local-path file-link-path"><button type="button" className="file-reference" data-tooltip={href} onClick={event => open({ href, messageId: owner.messageId, owner, trigger: event.currentTarget })}>
     <FileIcon name="file" /><span>{children}</span>
-  </button>;
+  </button></span>;
 }

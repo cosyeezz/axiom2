@@ -9,6 +9,8 @@
   --fg-2: #d0d6e0;                      /* silver-gray body / secondary text */
   --muted: #8a8f98;                     /* tertiary — placeholders, metadata */
   --meta:  #8a8f98;                     /* readable metadata and placeholders */
+  --process-text-color: #9ca3af;        /* original dark running-label base beneath the white sweep */
+  --process-highlight-color: #ffffff;
 
   /* ─── Border ───────────────────────────────────────────────────── */
   --border:      rgba(255, 255, 255, 0.08);   /* standard semi-transparent white */

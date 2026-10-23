@@ -101,7 +101,6 @@ test(
             taskId: ids[0],
             summary: "补充模型指令",
             text: "MODEL-APPEND",
-            mode: "steer",
           });
         else if (!prior("cancel_task"))
           tool("cancel_task", {

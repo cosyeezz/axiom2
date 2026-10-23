@@ -3,7 +3,7 @@ import { taskToolName } from "./tasks.js";
 
 export type CallReference = { messageId: string; callId: string };
 export type ProcessEntry =
-  | { kind: "thinking" | "notice"; id: string }
+  | { kind: "thinking"; id: string }
   | { kind: "tool"; id: string; call: CallReference };
 export type ProcessSlice =
   | { kind: "task"; id: string; call: CallReference }
@@ -11,22 +11,22 @@ export type ProcessSlice =
   | { kind: "body" | "notice"; id: string }
   | { kind: "process"; id: string; calls: CallReference[]; entries: ProcessEntry[] };
 
-/** Prose separates segments; a segment keeps its identity as thoughts and calls arrive. */
+/** Prose and notices separate segments; thoughts and calls keep their segment identity. */
 export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[] = [], callsOnlyIds: string[] = []): ProcessSlice[] {
   const slices: ProcessSlice[] = [];
   let entries: ProcessEntry[] = [];
   const flush = () => {
     const calls = entries.flatMap(entry => "call" in entry ? [entry.call] : []);
-    // Keep standalone result batches in one disclosure, without implying an execution.
-    if (entries.length && entries.every(entry => entry.kind === "notice")) {
-      slices.push({ kind: "task-notices", id: entries[0].id, ids: entries.map(entry => entry.id) });
-    } else if (entries.length) slices.push({ kind: "process", id: `${entries[0].kind}:${entries[0].id}`, calls, entries });
+    if (entries.length) slices.push({ kind: "process", id: `${entries[0].kind}:${entries[0].id}`, calls, entries });
     entries = [];
   };
   for (const message of messages) {
     if (message.role === "toolResult") continue;
     if (message.taskNotice) {
-      entries.push({ kind: "notice", id: message.id });
+      flush();
+      const previous = slices.at(-1);
+      if (previous?.kind === "task-notices") previous.ids.push(message.id);
+      else slices.push({ kind: "task-notices", id: message.id, ids: [message.id] });
       continue;
     }
     if (message.compression || message.role !== "assistant") {

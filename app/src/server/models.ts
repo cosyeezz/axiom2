@@ -1,8 +1,9 @@
+import { providerProxyUrl, readProviderProxy } from "./integrations/model-proxy-env.js";
 import { readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createModelRuntime } from "./model-runtime.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { Configuration } from "../shared/protocol.js";
 
@@ -47,14 +48,16 @@ export async function configuration(root: string): Promise<Configuration> {
         allowed.add(`${id}/${modelId}`);
     }
     result.modelCount = allowed.size;
-    const runtime = await ModelRuntime.create({
+    const runtime = await createModelRuntime({
+      providerIds: Object.keys(config.providers),
       authPath: join(dir, "auth.json"),
       modelsPath: join(dir, "models.json"),
       modelsStorePath: join(dir, "models-store.json"),
       allowModelNetwork: false,
     });
     if (runtime.getError()) throw Error();
-    for (const credential of await runtime.listCredentials()) {
+    const credentials = await runtime.listCredentials();
+    for (const credential of credentials) {
       if (Object.hasOwn(config.providers, credential.providerId)) continue;
       result.providerCount++;
       for (const model of runtime.getModels(credential.providerId))
@@ -65,11 +68,20 @@ export async function configuration(root: string): Promise<Configuration> {
       if (!(definition.models?.length || Object.keys(definition.modelOverrides ?? {}).length))
         for (const model of runtime.getModels(provider)) allowed.add(`${provider}/${model.id}`);
     result.modelCount = allowed.size;
-    result.available = (
-      await runtime.getAvailable(undefined, {
-        signal: AbortSignal.timeout(5000),
-      })
-    )
+    const configuredProviders = [...new Set([...Object.keys(config.providers), ...[...allowed].map(key => key.slice(0, key.indexOf("/")))])];
+    // Available models come from local credential/provider metadata, not the network.
+    // Compute them on the runtime above instead of forking one worker per provider;
+    // the routes are still resolved so a stopped proxy stays an explicit warning.
+    const available = await Promise.all(configuredProviders.map(async provider => {
+      try {
+        providerProxyUrl(root, readProviderProxy(join(dir, "models.json"), provider));
+        return await runtime.getAvailable(provider, { signal: AbortSignal.timeout(10000) });
+      } catch {
+        result.warning = "部分供应商的连接检查未完成，已保留其配置模型；请检查供应商代理、线路与认证设置。";
+        return credentials.some(item => item.providerId === provider) ? runtime.getModels(provider) : [];
+      }
+    }));
+    result.available = available.flat()
       .filter((m) => allowed.has(`${m.provider}/${m.id}`))
       .map((m) => ({
         provider: m.provider,

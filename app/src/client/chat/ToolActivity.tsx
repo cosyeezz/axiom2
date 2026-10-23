@@ -1,4 +1,5 @@
 import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { LocalPath, isLocalPath } from "../LocalPath.js";
 import { MessagePartBody } from "./MessagePartBody.js";
 import { useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
@@ -9,7 +10,7 @@ import { ThinkingDots } from "./ThinkingDots.js";
 import { Markdown } from "./Markdown.js";
 import "../styles/activity-status.css";
 import { useActivityFacts } from "./ActivityFacts.js";
-import { ProcessDots, ProcessOutcome } from "./ProcessStatus.js";
+import { ProcessTitle, ProcessOutcome } from "./ProcessStatus.js";
 import type { CallReference } from "../../shared/process-layout.js";
 import { toolPreview, toolStatusLabels, toolSummary, ordinaryToolStatus, type ToolCall, type ToolStatus } from "./tool-summary.js";
 
@@ -51,9 +52,9 @@ function ActivitySummary({ fact, settled = false }: { fact: ActivityFact; settle
   return <>{fact.kind ? <span className="tool-icon" data-tool-icon={fact.icon}><Icon name={`tool-${fact.icon}`} /></span> : <ProcessIcon kind={toolGlyphKind(fact.icon)} />}<span><span className="tool-name">{fact.name}</span> · {fact.target}</span></>;
 }
 
-export function ActivityGroup({ scope, children, awaitingMore = false, activeRunId, messageIds = [], thinkingOnlyIds = [], callsOnlyIds = [], callIds, inline = false, settled = false, animateFold = false }: {
+export function ActivityGroup({ scope, children, requesting = false, awaitingMore = false, activeRunId, messageIds = [], thinkingOnlyIds = [], callsOnlyIds = [], callIds, inline = false, settled = false, animateFold = false }: {
   scope: Scope; children: React.ReactNode | ((open: boolean, evidence: Set<string>) => React.ReactNode);
-  inline?: boolean; settled?: boolean; animateFold?: boolean;
+  inline?: boolean; settled?: boolean; animateFold?: boolean; requesting?: boolean;
   awaitingMore?: boolean; activeRunId?: string; messageIds?: string[]; thinkingOnlyIds?: string[]; callsOnlyIds?: string[]; callIds?: string[];
 }) {
   const [open, setOpen] = useState(animateFold);
@@ -93,7 +94,7 @@ export function ActivityGroup({ scope, children, awaitingMore = false, activeRun
   // the last assistant outcome without erasing earlier errors from its details.
   const status = settled ? failed ? "failed" : cancelled ? "cancelled" : "completed" : running || awaitingMore || awaitingRun ? "running" : failed ? "failed" : cancelled ? "cancelled" : unknown || !items.length || !ready ? "unknown" : "completed";
   const currentOperation = entries.filter(([, fact]) => fact.name && fact.status === "running").at(-1)?.[1] ?? entries.filter(([, fact]) => fact.name).at(-1)?.[1];
-  const thinking = !currentOperation || currentOperation.kind === "message" && currentOperation.icon === "thinking";
+  const thinking = !requesting && (!currentOperation || currentOperation.kind === "message" && currentOperation.icon === "thinking");
   const label = status === "running" ? thinking ? "正在思考" : "调用工具" : status === "completed" ? "执行完成" : status === "failed" ? "执行失败" : status === "cancelled" ? "执行已停止" : "结果待确认";
   const showStatusIcon = status !== "running" && (!inline || status !== "completed");
   const succeeded = calls.filter(([, fact]) => fact.status === "completed").length;
@@ -131,7 +132,7 @@ export function ActivityGroup({ scope, children, awaitingMore = false, activeRun
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" />{status === "failed" ? <path d="m9 9 6 6m0-6-6 6" /> : status === "cancelled" ? <path d="M9 8v8m6-8v8" /> : <path d="M12 7v6m0 4h.01" />}</svg>}
         </span>}
         <span className="activity-overview">
-          <span data-thinking={status === "running" && thinking || undefined} className={`activity-title process-status-text${status === "running" ? " is-active" : ""}`}>{label}{status === "running" && <ProcessDots />}</span>
+          <ProcessTitle label={label} active={status === "running"} thinking={thinking} />
         </span>
         {failedCalls > 0 && <span className="process-counts"><span>成功 {succeeded}</span><span data-status={failedCalls ? "failed" : undefined}>失败 {failedCalls}</span></span>}
         {!inline && <Icon name="chevron" />}
@@ -182,6 +183,15 @@ export const Tool = memo(function Tool({ scope, call, message, messageOrder = 0,
   const [open, setOpen] = useState(false);
   useEffect(() => { if (!groupOpen) setOpen(false); }, [groupOpen]);
   const summary = useMemo(() => toolSummary(call), [call.name, call.input, call.summary]);
+  const toolPath = useMemo(() => {
+    try {
+      const input = JSON.parse(call.input), path = input.path ?? input.file_path;
+      if (typeof path === "string" && ["read", "edit", "write", "search"].includes(summary.icon)) return path;
+    } catch { /* Compact transcript inputs may be incomplete. Never open a truncated path. */ }
+    return call.summary && ["read", "edit", "write"].includes(summary.icon) && !summary.target.endsWith("…") ? summary.target : undefined;
+  }, [call.input, summary]);
+  const detailPath = summary.icon === "search" && summary.detail ? toolPath : undefined;
+  const targetPath = detailPath ? undefined : toolPath;
   const settled = useContext(ActivitySettled);
   const status = ordinaryToolStatus(message, result);
   const active = status === "running" && !settled;
@@ -191,8 +201,8 @@ export const Tool = memo(function Tool({ scope, call, message, messageOrder = 0,
       <span className="tool-heading" data-tool={call.name.replace(/^functions\./, "")} data-tooltip={call.name}>
         <ProcessIcon kind={toolGlyphKind(summary.icon)} active={active} />
         <span className={`process-status-text${active ? " is-active" : ""}`}>
-          <strong className="tool-name">{summary.label}</strong>{!open && <> · <code className="tool-target" data-tooltip={summary.target}>{summary.target}</code></>}
-          {summary.detail && <span className="tool-input-detail"> · {summary.detail}</span>}
+          <span className="tool-action-label"><strong className="tool-name">{summary.label}</strong>{!open && " · "}</span>{!open && (targetPath ? <LocalPath path={targetPath} scope={scope}><code className="tool-target">{summary.target}</code></LocalPath> : <code className="tool-target" data-tooltip={summary.target}>{summary.target}</code>)}
+          {summary.detail && <span className="tool-input-detail"> · {detailPath || isLocalPath(summary.detail) && !summary.detail.endsWith("…") ? <LocalPath path={detailPath ?? summary.detail} scope={scope}>{summary.detail}</LocalPath> : summary.detail}</span>}
         </span>
         {status === "failed" && !open && <span className="tool-input-detail" data-tooltip={preview}>{preview}</span>}
       </span>

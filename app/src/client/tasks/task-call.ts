@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../../shared/agent.js";
-import type { TaskResult, TaskTool } from "../../shared/tasks.js";
+import { cleanTaskResult, type TaskResult, type TaskTool } from "../../shared/tasks.js";
 import type { ToolStatus } from "../chat/tool-summary.js";
 
 export function callObject(text: string): Record<string, unknown> | null {
@@ -36,5 +36,5 @@ export function readTaskReport(text: string, input: Record<string, unknown> | nu
     !["completed", "failed", "cancelled", "interrupted"].includes(String(value.status)) ||
     !Array.isArray(value.unfinished) || !value.unfinished.every((item) => typeof item === "string") ||
     typeof value.sideEffects !== "string" || (value.reason !== null && typeof value.reason !== "string")) return null;
-  return value as unknown as TaskResult;
+  return cleanTaskResult(value as unknown as TaskResult);
 }

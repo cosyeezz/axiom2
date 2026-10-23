@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LocalPath } from "../LocalPath.js";
 import { desktopInvoke } from "./desktop-bridge.js";
 import { IconButton } from "./StartupControls.js";
 
@@ -120,13 +121,13 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
           <button className="connect-secondary" disabled={disabled} onClick={() => void act("pi-check")}>{busy === "pi-check" ? "正在检查…" : "检查 Pi 更新"}</button>
           <button className="connect-secondary" disabled={disabled || !pi?.release?.token || !piReady || (!!pi.cli?.version && !piNewer && !piRetry)} onClick={() => ask("pi")}>{busy === "pi" || (running && update?.job?.kind === "pi") ? "正在安装…" : piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"}{pi?.release && (!pi.cli?.version || piNewer) ? ` · ${pi.release.version}` : ""}</button>
         </div>
-        {pi?.cli?.packageRoot && <details className="connect-pi-location"><summary>终端安装位置</summary><p className="connect-log"><code>{pi.cli.packageRoot}</code></p><p className="connect-update-detail">使用本地后台 Node.js 对应的 npm 全局目录。</p></details>}
+        {pi?.cli?.packageRoot && <details className="connect-pi-location"><summary>终端安装位置</summary><p className="connect-log"><LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p><p className="connect-update-detail">使用本地后台 Node.js 对应的 npm 全局目录。</p></details>}
       </section>
-      {update?.log && <p className="connect-log">更新日志：<code>{update.log}</code></p>}
+      {update?.log && <p className="connect-log">更新日志：<LocalPath path={update.log} onOpen={() => desktopInvoke("axiom_reveal_path", { path: update.log })} /></p>}
       <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(null)} onClose={() => setConfirm(null)} aria-labelledby="update-title">
         <h2 id="update-title">{confirm === "pi" ? `${confirmedPi.current?.installed ? "更新" : "安装"}终端 Pi ${confirmedPi.current?.version}？` : confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : `更新后台至 ${latest}？`}</h2>
         <p>{confirm === "pi" ? "将安装所选版本的终端 Pi，保留模型、认证、技能和 MCP 配置。请先结束正在使用此安装的终端 Pi 会话，完成后重新打开。应用内 Pi 随后台服务更新。" : confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "受管理后台正在运行的任务将结束，其工作台视图会关闭；直接连接的开发或远程工作台保留。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
-        {confirm === "pi" && confirmedPi.current?.packageRoot && <p className="connect-log">安装位置：<code>{confirmedPi.current.packageRoot}</code></p>}
+        {confirm === "pi" && confirmedPi.current?.packageRoot && <p className="connect-log">安装位置：<LocalPath path={confirmedPi.current.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: confirmedPi.current!.packageRoot })} /></p>}
         {confirm !== "installer" && confirm !== "pi" && <p>应用内更新与恢复要求此安装仅用于当前数据目录。多个数据目录共用安装时，请停止所有相关服务并使用原安装方式更新；各数据目录使用独立安装目录后才能使用此功能。</p>}
         {confirm !== "installer" && confirm !== "pi" && !!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
         <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(null)}>{confirm === "pi" ? "取消" : "暂不更新"}</button><button className="connect-primary" onClick={() => { const action = confirm; setConfirm(null); if (action) void act(action); }}>{confirm === "pi" ? confirmedPi.current?.installed ? "确认更新 Pi" : "确认安装 Pi" : confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : "确认更新服务"}</button></div>

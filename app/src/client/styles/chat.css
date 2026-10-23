@@ -1,6 +1,6 @@
-/* Output text stays readable against the dark conversation surface. */
+/* Reply and tool output follow the primary foreground in either theme. */
 .tool-activity, .task-results, .message-body:not(.user-text) { --muted: #c7d2fe; }
-.log-row .message-body:not(.user-text) { color: #e2e8f0; }
+.log-row .message-body:not(.user-text) { color: var(--fg); }
 /* Replies use the full content width; the copy action trails the output. */
 .reply-body { position: relative; }
 /* Conversation sections are separated by spacing instead of horizontal rules. */
@@ -41,6 +41,10 @@
   align-items: center;
   gap: 8px;
 }
+.title-heading > h1 { min-width: 0; overflow-wrap: anywhere; }
+.title-heading > .title-copy { flex-shrink: 0; width: 24px; min-width: 24px; height: 24px; padding: 0; color: var(--muted); }
+.title-heading > .title-copy svg { width: 13px; height: 13px; }
+@media (hover: none), (pointer: coarse) { .title-heading > .title-copy { width: 44px; min-width: 44px; height: 44px; } }
 .compression-feedback {
   flex-basis: 100%;
   white-space: normal;
@@ -52,6 +56,10 @@
 .steering-queue-item > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .steering-queue-item > small { flex-shrink: 0; font-size: 11px; }
 .steering-queue-item > .btn { flex-shrink: 0; font-size: 12px; }
+.steering-queue-item[data-failed] { flex-wrap: wrap; align-items: center; }
+.steering-queue-item[data-failed] > small { flex: 1 0 100%; min-width: 0; overflow-wrap: anywhere; }
+.steering-queue-item[data-failed] > .btn { order: -1; }
+.steering-queue-item[data-failed] > span { order: -2; }
 .draft-recovery {
   position: relative;
   font-size: 11px;
@@ -112,7 +120,12 @@
 .tool-activity .activity-message .activity { margin: 4px 0; border: 0; }
 .tool-call > .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; min-height: 44px; color: var(--fg-2); }
 .tool-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
-.tool-heading { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.tool-heading { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+/* Shrink the path inside the row; inline layout can elide the entire path widget. */
+.tool-heading > .process-status-text { display: flex; align-items: center; flex: 1; }
+.tool-action-label { flex-shrink: 0; white-space: pre; }
+.tool-heading .process-status-text > .local-path { flex: 0 1 auto; }
+.tool-heading .process-status-text > .tool-input-detail { flex-shrink: 0; max-width: 40%; white-space: pre; }
 .tool-heading strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
 .tool-input-detail { color: var(--muted); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tool-call small { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
@@ -124,7 +137,7 @@
 .activity-current[data-status="failed"] * { color: var(--danger-text); --tool-color: var(--danger-icon); }
 .tool-detail { padding-bottom: 8px; }
 .tool-detail-label { color: var(--muted); font-size: 11px; margin-top: 8px; }
-.tool-detail pre { max-height: 360px; overflow: auto; color: #e2e8f0; }
+.tool-detail pre { max-height: 360px; overflow: auto; color: var(--fg); }
 .tool-truncated { margin: 4px 0; font-size: 11px; color: var(--muted); }
 @media (max-width: 640px) {
   .tool-activity > summary { padding: 8px; }
@@ -143,7 +156,8 @@
 .message-image-icon:active { background: color-mix(in srgb, var(--image-tint) 28%, var(--surface)); }
 .message-image-icon:focus-visible { outline: 2px solid var(--image-tint); outline-offset: 3px; }
 .message-image-icon svg { width: 18px; height: 18px; }
-.message-image-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.4 var(--font-mono); }
+.message-image-icon .attachment-symbol { color: inherit; }
+.message-image-icon .attachment-symbol small { color: inherit; }
 @media (prefers-reduced-motion: reduce) { .message-image-icon { transition: none; } }
 .markdown-image { display: inline-block; max-width: 100%; vertical-align: top; }
 .markdown-image-open { display: block; max-width: 100%; min-width: 44px; min-height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: transparent; cursor: zoom-in; }
@@ -283,28 +297,20 @@
 .image-preview-body img { display: block; max-width: 100%; max-height: calc(100dvh - 160px); object-fit: contain; }
 .image-preview-body p { margin: 0; color: var(--muted); font-size: 13px; }
 .attachment-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding-left: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
-.attachment-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.attachment-chip > span:not(.path-actions) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
 .attachment-chip .icon-btn { flex-shrink: 0; }
 .attachment-loading { color: var(--muted); }
 .attachment-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 280px; }
 .attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.attachment-symbol { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; color: var(--fg-2); vertical-align: middle; }
-.attachment-symbol svg { width: 17px; height: 17px; }
-.attachment-symbol small { font: 11px/1 var(--font-mono); color: var(--muted); }
-.attachment-symbol-image { color: #93c5fd; }
 .attachment-chip .image-label { padding: 8px 0; font-family: var(--font-body); text-align: left; }
 .composer textarea.has-attachment-overlay { color: transparent; caret-color: var(--fg); }
 .attachment-input-overlay { position: absolute; pointer-events: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; color: var(--fg); border: 0; }
 .attachment-input-overlay[hidden] { display: none; }
 .attachment-inline-reference { position: relative; }
 .attachment-reference-source { color: transparent; }
-.attachment-reference-icon { position: absolute; left: 0; top: 50%; transform: translateY(-50%) scale(var(--reference-scale, 1)); transform-origin: left center; display: inline-flex; align-items: center; width: max-content; padding: 2px 3px; border: 1px solid var(--border); border-radius: 5px; background: color-mix(in srgb, var(--fg) 6%, var(--surface)); white-space: nowrap; }
+.attachment-reference-icon { position: absolute; left: 0; top: 50%; transform: translateY(-50%) scale(var(--reference-scale, 1)); transform-origin: left center; display: inline-flex; width: max-content; }
 .attachment-inline-reference[data-wrapped] .attachment-reference-source { color: var(--fg); }
 .attachment-inline-reference[data-wrapped] .attachment-reference-icon { display: none; }
-.attachment-reference-icon:has(.attachment-symbol-image) { --image-tint: #93c5fd; padding: 2px 1px; border-color: color-mix(in srgb, var(--image-tint) 35%, var(--surface)); background: color-mix(in srgb, var(--image-tint) 12%, var(--surface)); }
-.attachment-reference-icon .attachment-symbol-image { gap: 2px; }
-.attachment-reference-icon .attachment-symbol-image svg { width: 12px; height: 12px; }
-.attachment-reference-icon .attachment-symbol-image small { font-size: 10px; color: inherit; }
 @media (forced-colors: active) {
   .composer textarea.has-attachment-overlay { color: CanvasText; }
   .attachment-input-overlay { display: none; }
@@ -320,5 +326,5 @@
 .file-completion p { padding: 8px; margin: 0; }
 @media (max-width: 760px) {
   .composer-area .attachment { max-height: 120px; padding-inline: 2px; }
-  .attachment-chip > span { max-width: min(200px, 48vw); }
+  .attachment-chip > span:not(.path-actions) { max-width: min(200px, 48vw); }
 }

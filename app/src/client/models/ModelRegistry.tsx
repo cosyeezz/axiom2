@@ -3,6 +3,7 @@ import type {
   ModelDraft as Model,
   ProviderDraft as Provider,
 } from "../../shared/models.js";
+import { modelCostKeys } from "../../shared/models.js";
 import { Icon } from "../components.js";
 import { DeleteButton } from "../DeleteButton.js";
 import { ModelEditor } from "./ModelEditor.js";
@@ -162,6 +163,9 @@ export function ModelRegistry({
                   </div>
                   <span className="model-input-summary" aria-label="输入能力">
                     {m.input?.includes("image") ? "文本 + 图片" : "仅文本"}
+                  </span>
+                  <span className="model-input-summary" aria-label="计费状态">
+                    {m.cost && modelCostKeys.some(key => m.cost![key] > 0) ? "已设置计费单价" : "计费价格未知 · 编辑模型设置"}
                   </span>
                   <span className="mobile-model-reasoning">
                     思考：{m.levels.join(", ") || "不设置"}

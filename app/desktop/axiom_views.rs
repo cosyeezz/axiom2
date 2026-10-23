@@ -11,6 +11,45 @@ static PAGE_GENERATION: AtomicU64 = AtomicU64::new(0);
 static READY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static REVISION: AtomicU64 = AtomicU64::new(0);
 static OPENING: AtomicU64 = AtomicU64::new(0);
+// Low bit is light/dark; upper bits order replies across document loads.
+static THEME: AtomicU64 = AtomicU64::new(0);
+const THEME_SCRIPT: &str = include_str!("axiom_theme.js");
+fn theme_state() -> serde_json::Value {
+    let state = THEME.load(Ordering::Acquire);
+    serde_json::json!({ "theme": if state & 1 == 1 { "light" } else { "dark" }, "revision": state >> 1 })
+}
+fn theme_color() -> tauri::webview::Color {
+    if THEME.load(Ordering::Acquire) & 1 == 1 { tauri::webview::Color(247, 246, 243, 255) }
+    else { tauri::webview::Color(8, 9, 10, 255) }
+}
+pub fn apply_workbench_theme(view: &Webview) {
+    if view.label() != "axiom-workbench" { return; }
+    let _ = view.set_background_color(Some(theme_color()));
+    let _ = view.eval(&format!("{}; window.__axiomApplyTheme({});", THEME_SCRIPT, theme_state()));
+}
+#[tauri::command]
+pub async fn axiom_theme(webview: Webview, theme: Option<String>) -> Result<serde_json::Value, String> {
+    // Both the built-in controller and the validated workbench may choose a theme.
+    // Service and view-management commands keep their stricter controller-only authorization.
+    if webview.label() == "axiom-workbench" && webview.window().label() == "pake" {
+        let url = webview.url().map_err(|e| e.to_string())?;
+        if !crate::axiom_remote::valid_target(&url) { return Err("页面来源无效。".into()); }
+    } else { authorize(&webview)?; }
+    if let Some(theme) = theme {
+        let light = match theme.as_str() { "light" => 1, "dark" => 0, _ => return Err("主题无效。".into()) };
+        let app = webview.app_handle().clone();
+        on_main(&app, move |app| {
+            let previous = THEME.load(Ordering::Acquire);
+            THEME.store(((previous >> 1) + 1) * 2 + light, Ordering::Release);
+            if let Some(view) = app.get_webview("axiom-workbench") { apply_workbench_theme(&view); }
+            if let Some(view) = app.get_webview("pake") {
+                let _ = view.eval(&format!("{}; window.__axiomApplyTheme({});", THEME_SCRIPT, theme_state()));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(theme_state())
+}
 pub struct OpenRequest { pub revision: u64 }
 impl Drop for OpenRequest {
     fn drop(&mut self) { OPENING.fetch_sub(1, Ordering::AcqRel); }
@@ -192,8 +231,9 @@ pub async fn open(app: &AppHandle, target: tauri::Url, observed: u64, managed: b
         }})();"#);
         let builder = WebviewBuilder::new("axiom-workbench", WebviewUrl::External(target))
             .initialization_script(&ready_script)
+            .initialization_script(&format!("{}; window.__TAURI_INTERNALS__.invoke('axiom_theme').then(window.__axiomApplyTheme).catch(() => {{}});", THEME_SCRIPT))
             .focused(false)
-            .background_color(tauri::webview::Color(16, 18, 20, 255))
+            .background_color(theme_color())
             .on_navigation(move |url| url.origin() == origin)
             .on_new_window(move |url, _| {
                 if ["https", "http"].contains(&url.scheme()) && url.username().is_empty() && url.password().is_none() {

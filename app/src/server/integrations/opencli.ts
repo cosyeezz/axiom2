@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -84,19 +85,35 @@ export class OpenCliService {
   private controller?: AbortController;
   private closed = false;
   private readonly jobFile: string;
-  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage) {
+  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage, private readonly installBlocked: () => string | undefined = () => undefined) {
     this.jobFile = join(root, "integrations", "opencli-job.json");
     this.loadConfig();
     try {
       const job: OpenCliJob = JSON.parse(readFileSync(this.jobFile, "utf8"));
-      if (job.running) Object.assign(job, { running: false, error: "上次操作被服务退出中断，请重新检查当前安装；不会自动重复安装。", message: "操作已中断" });
+      if (job.running) Object.assign(job, { running: false, queued: false, error: "上次操作被服务退出中断，请重新检查当前安装；不会自动重复安装。", message: "操作已中断" });
       this.state.job = job;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.state.error = "无法读取上次 OpenCLI 操作记录，请检查 integrations/opencli-job.json。";
     }
   }
   snapshot(): OpenCliState { return structuredClone(this.state); }
-  get installing() { return this.state.job?.running === true && this.state.job.kind === "install"; }
+  get installing() { return this.state.job?.running === true && !this.state.job.queued && this.state.job.kind === "install"; }
+  private async waitForInstall() {
+    const signal = this.controller!.signal;
+    while (true) {
+      signal.throwIfAborted();
+      const reason = this.installBlocked();
+      if (!reason) {
+        // Reserve installation synchronously with the idle check, before yielding.
+        this.state.job!.queued = false;
+        this.notify("正在检查本机环境…");
+        return;
+      }
+      const message = `已加入安装队列；${reason}，空闲后自动安装 OpenCLI ${this.state.job!.version}。`;
+      if (this.state.job!.message !== message) this.notify(message);
+      await delay(1000, undefined, { signal });
+    }
+  }
   private loadConfig() {
     try {
       this.config = readOpenCliConfig(this.root);
@@ -159,6 +176,13 @@ export class OpenCliService {
     if (c.workspaceId || c.sessionId) throw new AppError("INVALID_SCOPE", "内置工具属于本机应用配置。");
     if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
     if (c.op === "opencli.get") return this.snapshot();
+    if (c.op === "opencli.cancel") {
+      if (!this.state.job?.running || !this.state.job.queued || c.params?.jobId !== this.state.job.id)
+        throw new AppError("NOT_QUEUED", "此排队任务已结束或开始安装，请读取最新状态。");
+      this.controller!.abort();
+      await this.pending;
+      return this.snapshot();
+    }
     if (c.op === "opencli.openExtension") {
       const params = c.params ?? {};
       const target = params.target ?? "store";
@@ -184,10 +208,11 @@ export class OpenCliService {
     const version = this.state.latest;
     const revision = this.state.revision;
     this.controller = new AbortController();
-    this.state.job = { id: randomUUID(), kind, running: true, message: "正在检查本机环境…" };
+    this.state.job = { id: randomUUID(), kind, running: true, ...(kind === "install" ? { queued: true, version } : {}), message: kind === "install" ? "已加入安装队列，正在检查执行条件…" : "正在检查本机环境…" };
     if (kind === "doctor") delete this.state.diagnostic;
     try { this.notify(); } catch {
       this.state.job.running = false;
+      this.state.job.queued = false;
       this.state.job.error = "无法保存操作记录，请检查数据目录权限与剩余空间；尚未开始操作。";
       this.controller = undefined;
       this.changed();
@@ -196,6 +221,7 @@ export class OpenCliService {
     // A short receipt acknowledges the job; progress survives page navigation via its own scope.
     this.pending = Promise.resolve().then(async () => {
       try {
+        if (kind === "install") await this.waitForInstall();
         await this.inspect();
         if (kind === "check") {
           delete this.state.latest;
@@ -221,14 +247,19 @@ export class OpenCliService {
         }
         this.state.job!.message = kind === "install" ? "安装与技能接入已完成；请继续安装扩展并检测连接。" : kind === "doctor" ? "诊断已完成，请查看下方官方报告。" : "检查已完成。";
       } catch (error) {
-        this.state.job!.error = errorMessage(error, "OpenCLI 操作未完成，请重新检查。");
-        this.state.job!.message = "操作未完成";
-        if (kind === "install") {
+        if (this.state.job!.queued && this.controller!.signal.aborted) {
+          this.state.job!.message = this.closed ? "服务已退出，排队安装已取消。" : "已取消排队安装。";
+        } else {
+          this.state.job!.error = errorMessage(error, "OpenCLI 操作未完成，请重新检查。");
+          this.state.job!.message = "操作未完成";
+        }
+        if (kind === "install" && !this.state.job!.queued) {
           // npm global installation is not transactional. Re-read actual state; don't promise rollback.
           try { if (!this.controller!.signal.aborted) await this.inspect(); } catch { this.state.ready = false; delete this.state.version; }
         }
       } finally {
         this.state.job!.running = false;
+        this.state.job!.queued = false;
         this.pending = undefined;
         try { this.notify(); } catch { this.state.error = "操作记录未能保存，请重新检查当前安装状态。"; this.changed(); }
       }

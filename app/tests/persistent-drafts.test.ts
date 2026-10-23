@@ -10,6 +10,7 @@ import { SessionDrafts } from "../src/server/session-drafts.js";
 import { startServer } from "../src/server/index.js";
 import { skillsInput } from "../src/shared/skills.js";
 import { mergeRecalledDrafts } from "../src/client/chat/recall-drafts.js";
+import { draftContent } from "../src/client/drafts.js";
 import type { DraftWrite } from "../src/shared/drafts.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -56,7 +57,9 @@ test("recalled skills above the message limit remain durable until the user remo
     assert.equal(draft.skills?.length, 33);
     new SessionDrafts(store).save(owner, { ...write(""), draft });
     store.close(); store = new Store(root);
-    assert.deepEqual(new SessionDrafts(store).read(owner).draft.skills, draft.skills);
+    const namedSkills = draft.skills!.map(skill => ({ ...skill, id: skill.name }));
+    assert.deepEqual(new SessionDrafts(store).read(owner).draft.skills, namedSkills);
+    assert.deepEqual(draftContent(draft).skills, namedSkills, "historical browser drafts use names for previews and deduplication");
     assert.throws(() => skillsInput(draft.skills), { code: "INVALID_INPUT" });
     assert.equal(skillsInput(draft.skills!.slice(1)).length, 32);
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }

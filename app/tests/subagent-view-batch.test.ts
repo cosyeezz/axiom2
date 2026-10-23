@@ -20,7 +20,7 @@ test("three children commit every receipt before one coalesced parent snapshot w
     const workspace = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: root, authorized: true } }) as Workspace;
     const session = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as Session;
     const scope = { workspaceId: workspace.id, sessionId: session.id }, records = new TaskRecords(store), selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-    const ids = records.create(scope, "batch", "context", [0, 1, 2].map(i => ({ task: `child-${i}`, role: "" })), selection).taskIds;
+    const ids = records.create(scope, "batch", "context", [0, 1, 2].map(i => ({ task: `child-${i}` })), selection).taskIds;
     const snapshots: ReturnType<TaskRecords["list"]>[] = [], published: string[] = [];
     const agents = { store, info: () => ({ selection, run: null }), setQueue: () => {},
       thread: () => { throw Error("input receipts must not rebuild parent chat"); },

@@ -21,6 +21,11 @@
 .resources-app .detail-heading .tag { margin-top:3px; white-space:nowrap; }
 .resources-app .tools-content { padding-top:0; }
 .resources-app .tools-feedback:not(:empty) { margin-bottom:12px; }
+.resources-job-error { display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px 16px; }
+.resources-job-error > div { flex:1 1 240px; min-width:0; overflow-wrap:anywhere; }
+.resources-job-error p { margin:4px 0 0; }
+.resources-job-error .resources-job-context { color:var(--muted); font-weight:400; }
+.resources-job-error > .btn { flex-shrink:0; min-height:44px; }
 .resources-app .tools-section { padding-block:20px; }
 .resources-app .resources-content-section { padding-top:8px; }
 .resources-app .section-heading { align-items:center; gap:10px; margin-bottom:12px; }
@@ -30,7 +35,7 @@
 .resources-json:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .resources-json[readonly] { color:var(--fg-2); background:color-mix(in srgb,var(--fg) 2%,var(--surface)); }
 .resources-guide { min-height:340px; white-space:pre-wrap; overflow-wrap:anywhere; }
-.resources-field-heading { display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.resources-field-heading { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start; align-items:center; margin-bottom:8px; }
 .resources-field-heading label { margin:0!important; }
 .resources-templates { display:flex; gap:4px; }
 .resources-templates .btn { min-height:36px; padding:4px 8px; font-size:11px; }
@@ -41,17 +46,22 @@
 .resources-facts code { font:11px/1.8 var(--font-mono); }
 .resources-scope-note { padding:10px 12px; background:color-mix(in srgb,var(--fg) 4%,transparent); border-left:2px solid var(--border); font-size:12px; line-height:1.8; color:var(--fg-2); overflow-wrap:anywhere; margin-bottom:12px; }
 .resources-scope-note code { display:block; }
+.resources-move { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; margin-top:12px; }
+.resources-move .field { flex:1 1 200px; min-width:0; max-width:360px; }
+.resources-move .select-trigger { width:100%; }
+.resources-move > .btn { flex-shrink:0; }
 .resources-maintenance details { margin-bottom:16px; border:1px solid var(--border-soft); border-radius:var(--radius-sm); }
 .resources-maintenance summary { padding:12px; cursor:pointer; font-size:12px; color:var(--fg-2); }
 .resources-maintenance details .tools-fields { padding:4px 12px 12px; margin:0; }
 .resources-maintenance details .btn { margin-top:12px; }
-.resources-remove { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.resources-remove { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
 .resources-remove strong { font-size:12px; font-weight:510; }
 .resources-remove .btn { flex-shrink:0; }
 .resources-danger { color:var(--danger, #fca5a5); border-color:color-mix(in srgb,#f87171 40%,var(--border)); }
 .resources-danger:hover { background:color-mix(in srgb,#f87171 9%,transparent); }
-.resources-save-state { color:var(--muted); font-size:11px; margin-right:auto; }
-.resources-app .configuration-actions { gap:8px; flex-wrap:wrap; }
+.resources-save-state { color:var(--muted); font-size:11px; flex-basis:100%; }
+.resources-app .resources-actions { gap:8px; flex-wrap:wrap; justify-content:flex-start; padding:16px 0; margin:0; }
+.resources-save-state:empty { display:none; }
 .resources-empty { padding:24px 12px; color:var(--muted); font-size:12px; line-height:1.8; }
 .resources-empty .btn { margin-top:8px; }
 .resources-welcome { padding:64px 12px; color:var(--muted); font-size:13px; text-align:center; line-height:1.8; }
@@ -61,7 +71,7 @@
 .resources-dialog::backdrop { background:#0009; }
 .resources-dialog h2 { margin:0 0 12px; font-size:18px; overflow-wrap:anywhere; }
 .resources-dialog ul { padding-left:20px; overflow-wrap:anywhere; margin-block:12px; }
-.resources-dialog-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:20px; }
+.resources-dialog-actions { display:flex; justify-content:flex-start; flex-wrap:wrap; gap:10px; margin-top:20px; }
 @media(max-width:1100px) { .resources-app .configuration-layout { grid-template-columns:220px minmax(0,1fr); } .resources-topbar { padding-inline:16px; } }
 @media(max-width:800px) {
  .resources-app .configuration-layout { grid-template-columns:minmax(0,1fr); }

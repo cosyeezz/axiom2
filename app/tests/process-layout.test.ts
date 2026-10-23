@@ -15,18 +15,21 @@ test("task cards and prose split ordinary process segments in call order", () =>
     m("notice", { role: "notice", text: "结果已到达", taskNotice: "completed" }), m("d", { thinking: "next", calls: [call("d1")] }),
   ]);
   assert.deepEqual(slices.map(s => [s.kind, s.kind === "process" ? s.calls.map(c => c.callId) : s.id]), [
-    ["process", ["a1", "a2", "b1"]], ["body", "c"], ["process", ["c1"]], ["task", "task"], ["process", ["c2", "d1"]],
+    ["process", ["a1", "a2", "b1"]], ["body", "c"], ["process", ["c1"]], ["task", "task"], ["process", ["c2"]],
+    ["task-notices", "notice"], ["process", ["d1"]],
   ]);
   assert.equal(slices[0].kind, "process");
   if (slices[0].kind === "process") assert.deepEqual(slices[0].entries.map(e => [e.kind, e.id]), [
     ["thinking", "a"], ["tool", "a1"], ["tool", "a2"], ["thinking", "b"], ["tool", "b1"], ["thinking", "c"],
   ]);
   if (slices[2].kind === "process") assert.deepEqual(slices[2].entries.map(e => [e.kind, e.id]), [["tool", "c1"]]);
-  if (slices[4].kind === "process") assert.deepEqual(slices[4].entries.map(e => [e.kind, e.id]), [
-    ["tool", "c2"], ["notice", "notice"], ["thinking", "d"], ["tool", "d1"],
+  if (slices[4].kind === "process") assert.deepEqual(slices[4].entries.map(e => [e.kind, e.id]), [["tool", "c2"]]);
+  assert.deepEqual(slices[5], { kind: "task-notices", id: "notice", ids: ["notice"] });
+  if (slices[6].kind === "process") assert.deepEqual(slices[6].entries.map(e => [e.kind, e.id]), [
+    ["thinking", "d"], ["tool", "d1"],
   ]);
 });
-test("standalone task notices share a disclosure without an empty execution header", () => {
+test("task notices stay outside execution segments, including consecutive and trailing results", () => {
   const slices = processSlices([
     m("delegating", { calls: [call("delegate", "delegate")] }),
     m("notice", { role: "notice", text: "结果已到达", taskNotice: "completed" }),
@@ -35,11 +38,10 @@ test("standalone task notices share a disclosure without an empty execution head
     m("notice2", { role: "notice", text: "另一个结果已到达", taskNotice: "completed" }),
   ]);
   assert.deepEqual(slices.map(s => [s.kind, s.id]), [
-    ["task", "delegate"], ["task-notices", "notice"], ["task", "result"], ["process", "tool:ordinary"],
+    ["task", "delegate"], ["task-notices", "notice"], ["task", "result"], ["process", "tool:ordinary"], ["task-notices", "notice2"],
   ]);
   assert.deepEqual(slices[1], { kind: "task-notices", id: "notice", ids: ["notice", "failed"] });
-  const last = slices.at(-1)!;
-  if (last.kind === "process") assert.deepEqual(last.entries.map(e => e.kind), ["tool", "notice"]);
+  assert.deepEqual(slices.at(-1), { kind: "task-notices", id: "notice2", ids: ["notice2"] });
 });
 test("final thinking and calls-only slices never duplicate final text or preceding narration", () => {
   const messages = [m("final", { text: "答案", thinking: "检查", calls: [call("excluded")] }), m("calls", { text: "说明", thinking: "已有思考", calls: [call("tool")] })];

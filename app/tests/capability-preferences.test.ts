@@ -36,7 +36,9 @@ test("global per-resource preferences synchronize, preserve locked snapshots, pe
     assert.equal(outcomes.filter(item => item.status === "rejected" && item.reason.code === "REVISION_CONFLICT").length, 1);
     assert.deepEqual(caps.state(scope), frozen);
     assert.equal((await caps.get(other)).skills.find(item => item.name === "shared")?.defaultSelected, false);
-    assert.ok(!(await caps.prepare(other)).runtime.skillPaths?.includes(file));
+    const manualPlan = await caps.prepare(other);
+    assert.ok(manualPlan.runtime.skillPaths?.includes(file), "global automatic selection does not remove manual skills");
+    assert.ok(!manualPlan.runtime.selection.skills?.includes(skill.id));
     await save(1, "mcp", "local", true);
     assert.equal((await caps.get(scope)).mcp.find(item => item.id === "local")?.defaultSelected, true);
     assert.equal((await caps.get(other)).mcp.find(item => item.id === "local")?.defaultSelected, false);

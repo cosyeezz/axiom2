@@ -1,8 +1,11 @@
 import {
   reasoningLevels as levels,
+  modelCostKeys,
+  emptyModelPricing,
   type ModelDraft as Model,
   type ProviderDraft as Provider,
 } from "../../shared/models.js";
+import { costPartLabels } from "../../shared/costs.js";
 import { Icon } from "../Icon.js";
 import { Headers, BodyOverrides } from "./Overrides.js";
 export function ModelEditor({
@@ -122,6 +125,23 @@ export function ModelEditor({
             </span>
           </div>
         </div>
+        <section className="model-pricing" aria-labelledby="model-pricing-heading">
+          <h3 id="model-pricing-heading">计费设置 <span className="meta">美元 / 百万 Token</span></h3>
+          <p className="field-help" id="model-pricing-help">按供应商价格填写，用于预计费用统计。保存后从下一次执行生效，历史费用保留原记录。</p>
+          <div className="model-pricing-fields">
+            {modelCostKeys.map(key => (
+              <div className="field" key={key}>
+                <label htmlFor={`model-cost-${key}`}>{costPartLabels[key]}单价</label>
+                <input className="input num" id={`model-cost-${key}`} type="number" min="0" step="any"
+                  aria-describedby="model-pricing-help" placeholder="0" required={!!editor.cost}
+                  value={editor.cost && Number.isFinite(editor.cost[key]) ? editor.cost[key] : ""}
+                  onChange={event => setEditor({ ...editor, cost: { ...(editor.cost ?? emptyModelPricing()), [key]: event.target.valueAsNumber } })} />
+              </div>
+            ))}
+          </div>
+          <p className="field-help">统计需要接口返回 Token 用量。缺少价格或四项单价均为 0 时，费用无法确认，会显示为未知。</p>
+          {editor.costTiered && <p className="field-help">此模型包含阶梯定价；这里编辑基础单价，已有阶梯价格继续生效。</p>}
+        </section>
         <div className="override-grid">
           <Headers
             scope="model"
@@ -135,9 +155,6 @@ export function ModelEditor({
           />
         </div>
         <div className="inline-model-actions">
-          <p className="feedback" role="status">
-            {feedback}
-          </p>
           <button
             type="button"
             className="btn btn-ghost"
@@ -148,6 +165,7 @@ export function ModelEditor({
           <button className="btn" type="submit">
             完成编辑
           </button>
+          <p className="feedback" role="status">{feedback}</p>
         </div>
       </form>
     </section>

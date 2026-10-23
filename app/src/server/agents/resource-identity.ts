@@ -3,6 +3,7 @@ import { lstatSync, readdirSync, readFileSync, constants, type BigIntStats } fro
 import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { openCliConfigPath, openCliSkillNames, readOpenCliConfig } from "../integrations/opencli-runtime.js";
+import { reaConfigPath, reaPackageRoot, reaSkillName, readReaConfig } from "../integrations/rea-runtime.js";
 
 type Resource = { path: string; kind: "missing" | "directory" | "file"; revision?: string };
 const revision = (stat?: BigIntStats) => stat
@@ -95,6 +96,16 @@ function* resources(cwd: string, agentDir: string, witnesses?: Map<string, Witne
   if (opencli) {
     yield* visit(join(opencli.packageRoot, "package.json"));
     for (const name of openCliSkillNames) yield* visit(join(opencli.packageRoot, "skills", name, "SKILL.md"));
+  }
+  yield* visit(reaConfigPath(root));
+  const rea = readReaConfig(root), packageRoot = reaPackageRoot(root, rea);
+  if (packageRoot) {
+    yield* visit(join(packageRoot, "package.json"));
+    if (rea.mcpInstalled !== false) {
+      yield* visit(join(packageRoot, "scripts", "rea.mjs"));
+      yield* visit(join(packageRoot, "dist", "mcp", "main.js"));
+    }
+    if (rea.skillInstalled !== false) yield* visit(join(packageRoot, "skills", reaSkillName));
   }
   yield* group(agentDir);
   for (let dir = cwd; ; dir = dirname(dir)) {

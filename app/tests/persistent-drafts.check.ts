@@ -67,18 +67,20 @@ try {
 
   const other = await open(withImage);
   await page.locator("#prompt").fill("first window"); await saved("first window");
+  const conflict = other.waitForResponse(response => response.url().includes("/api/draft?") && response.status() === 409);
   await other.locator("#prompt").fill("second window local");
-  await other.getByRole("button", { name: "载入已保存草稿", exact: true }).waitFor();
+  await (await conflict).finished();
   assert.equal(await other.locator("#prompt").inputValue(), "second window local");
   assert.equal(drafts.read(scope).draft.text, "first window");
-  await other.getByRole("button", { name: "载入已保存草稿", exact: true }).click();
-  await until(async () => await other.locator("#prompt").inputValue() === "first window", "load conflict winner");
-  await other.locator("#prompt").fill("second window saved"); await saved("second window saved");
-  await page.locator("#prompt").fill("keep local explicitly");
-  await page.getByRole("button", { name: "保存当前输入", exact: true }).click();
-  await saved("keep local explicitly");
+  await other.locator("#prompt").fill("second window continues typing");
+  assert.equal(await other.locator("#prompt").inputValue(), "second window continues typing");
+  assert.equal(await other.locator(".draft-status").count(), 0);
+  assert.equal(await other.getByRole("button", { name: /保存当前输入|载入已保存草稿|重试草稿保存/ }).count(), 0);
+  await page.locator("#prompt").fill("first window continues saving");
+  await saved("first window continues saving");
+  assert.equal(await other.locator("#prompt").inputValue(), "second window continues typing");
   await other.context().close();
-  console.log("PASS competing windows preserve both inputs; explicit load and keep choices");
+  console.log("PASS competing windows silently preserve local input and saved draft without blocking typing");
 
   // Input remains editable while its initial draft read is held.
   const context = await browser.newContext(), loading = await context.newPage(), readGate = gate();
@@ -86,10 +88,12 @@ try {
   await loading.goto(app.accessUrl);
   await loading.locator("#prompt").waitFor();
   await loading.locator("#prompt").fill("typing while loading");
+  const recovered = loading.waitForResponse(response => response.url().includes("/api/draft?") && response.request().method() === "GET");
   readGate.release();
-  await loading.getByRole("button", { name: "载入已保存草稿", exact: true }).waitFor();
-  assert.equal(drafts.read(scope).draft.text, "keep local explicitly");
+  await (await recovered).finished();
+  assert.equal(drafts.read(scope).draft.text, "first window continues saving");
   assert.equal(await loading.locator("#prompt").inputValue(), "typing while loading");
+  assert.equal(await loading.locator(".draft-status").count(), 0);
   await context.close();
   console.log("PASS hydration race retains saved draft and typing during background loading");
 
@@ -110,7 +114,7 @@ try {
     server.onMessage(raw => route.send(raw));
   });
   await page.goto(app.accessUrl);
-  await until(async () => await page.locator("#prompt").inputValue().catch(() => null) === "keep local explicitly", "submit draft restored");
+  await until(async () => await page.locator("#prompt").inputValue().catch(() => null) === "first window continues saving", "submit draft restored");
   await page.locator("#prompt").fill("submitted");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await until(() => !!seen, "prompt reached fixture");

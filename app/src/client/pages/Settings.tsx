@@ -1,3 +1,4 @@
+import { LocalPath } from "../LocalPath.js";
 import { Icon, SettingsSidebar } from "../components.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
 import { PhoneConnect } from "../settings/PhoneConnect.js";
@@ -25,6 +26,12 @@ export default function Settings() {
             <h1>配置</h1>
             <p>集中管理模型与工具，技能和 MCP 可按全局或项目分别配置。</p>
           </div>
+          <section className="overview-section" aria-label="通用设置">
+            <a className="log-row module-row" href="/display.html">
+              <div><h3>显示与阅读</h3><p>字体、字号与间距、亮度和对比度</p></div>
+              <span className="meta">当前设备</span><Icon name="chevron-right" />
+            </a>
+          </section>
           <section
             className="overview-section"
             aria-labelledby="module-heading"
@@ -57,7 +64,7 @@ export default function Settings() {
               <Icon name="chevron-right" />
             </a>
             <p className="overview-message" role={config.error ? "alert" : "status"}>
-              {config.error ||
+              {config.error || config.warning ||
                 (config.revision
                   ? `${connection} · ${config.available.length} 个模型可用。实际调用结果以供应商响应为准。`
                   : `${connection} · 正在读取配置…`)}
@@ -88,7 +95,7 @@ export default function Settings() {
               <div className="scope-row">
                 <dt>数据目录</dt>
                 <dd>
-                  {config.dataRoot || "等待服务提供目录"}
+                  {config.dataRoot ? <LocalPath path={config.dataRoot} /> : "等待服务提供目录"}
                 </dd>
               </div>
             </dl>

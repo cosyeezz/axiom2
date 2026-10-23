@@ -108,6 +108,20 @@ try {
       }
     }
   }
+  // A plain click to focus the conversation must not silently cancel tail following.
+  for (const target of ["text", "blank"] as const) {
+    const tail = page.locator("#messages .reply-body .markdown p").last();
+    if (target === "text") await tail.click();
+    else {
+      const bounds = (await page.locator("#thread").boundingBox())!;
+      await page.mouse.click(bounds.x + 24, bounds.y + bounds.height - 12);
+    }
+    const marker = `普通${target}点击后的流式输出`;
+    views.messageChanged(scopes[1], { id: `click-output-${target}`, role: "assistant", phase: "final_answer", text: `${marker}\n\n` + "继续跟随正文\n\n".repeat(30) });
+    views.flush(scopes[1]);
+    await page.getByText(marker, { exact: true }).waitFor();
+    await bottom(page, `streaming after plain ${target} click`);
+  }
   // The bottom navigation keeps its animation instead of snapping on its first scroll event.
   const thread = page.locator("#thread");
   const box = (await thread.boundingBox())!;

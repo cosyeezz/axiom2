@@ -7,6 +7,7 @@ import type {
   ProviderDraft as Provider,
   ModelConfiguration,
 } from "../../shared/models.js";
+import { validModelPricing } from "../../shared/models.js";
 const empty: Configuration = {
   revision: "",
   providerCount: 0,
@@ -74,6 +75,12 @@ export function useConfiguration() {
       );
       setTab("models");
       requestAnimationFrame(() => document.getElementById("new-model-id")?.focus());
+      return null;
+    }
+    if (editor.cost !== undefined && !validModelPricing(editor.cost)) {
+      setFeedback(`模型「${editor.name || id}」→ 计费设置：请填写四项有效单价，必须大于或等于 0（美元 / 百万 Token）。`, true);
+      setTab("models");
+      requestAnimationFrame(() => document.getElementById("model-cost-input")?.focus());
       return null;
     }
     const model = { ...editor, id, name: editor.name.trim() || id };

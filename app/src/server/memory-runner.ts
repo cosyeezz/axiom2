@@ -53,17 +53,17 @@ export class PooledMemoryRunner implements MemoryRunner {
       signal.throwIfAborted();
       if(!environment.current())throw Error('记忆模型配置在准备期间变化，请重试');
       const revisionAware = input as RevisionAwareExecution;
-      return await this.observe(child,lease,revisionAware,signal,{executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,readChars:input.readChars??preferences.readChars,maxTurns:preferences.maxTurns,revisionChecks:typeof revisionAware.revision === "function"});
+      return await this.observe(child,lease,revisionAware,signal,{kind:input.kind,executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,systemPrompt:input.systemPrompt});
     } catch(error) {
       if(lease)await this.pool.retire(lease.ref,'memory_failed');
       if(timeout.aborted)throw timeoutError();
-      if(signal.aborted)throw Error('记忆执行已取消或超时；未返回完整结果');
+      if(signal.aborted)throw new AppError('MEMORY_CANCELLED', '记忆执行已取消；未返回完整结果');
       throw error;
     } finally {environment.release();}
   }
   private observe(child:ChildProcess,lease:ExecutionLease,input:RevisionAwareExecution,signal:AbortSignal,start:MemoryWorkerInput):Promise<MemoryExecutionResult> {
     return new Promise((resolve,reject)=>{
-      let result:MemoryExecutionResult|undefined,failure:Error|undefined,used=0,settled=false;
+      let result:MemoryExecutionResult|undefined,failure:Error|undefined,settled=false;
       let reap:NodeJS.Timeout|undefined;
       const charges=new Map<string,string>();
       const cleanup=()=>{clearTimeout(reap);signal.removeEventListener('abort',abort);child.removeListener('message',message);child.removeListener('error',error);child.removeListener('close',close);};
@@ -82,20 +82,16 @@ export class PooledMemoryRunner implements MemoryRunner {
               .run(id,input.scope.sessionId,input.kind,event.provider,event.model,event.usage?JSON.stringify(event.usage):null,Date.now());
             this.memories.publish(`costs:${input.scope.workspaceId}:${input.scope.sessionId}`,{revision:Date.now()});
           }
+          if (event.type === 'model_call' && input.processingId && input.processingCallId) this.memories.records.callSent(input.processingId, input.processingCallId);
+          if (event.type === 'model_result' && input.processingId && input.processingCallId) {
+            const result = event.result;
+            this.memories.records.callFinish(input.processingId, input.processingCallId, result,
+              result?.stopReason === 'error' || result?.stopReason === 'aborted' ? result.errorMessage || '模型请求失败' : undefined, result?.usage);
+          }
           if(signal.aborted)return;
-          if(event.type==='read'){
-            try{if(used>=start.readChars)throw Error('读取预算已到');const document=input.read(event.sessionId,event.path,event.offset,Math.min(event.limit??16000,start.readChars-used),{includeImage:event.includeImage!==false});used+=document.content.length;
-              send({type:'read-result',id:event.id,document:{...document,image:document.image?'图片产物；本次查询未读取图像内容':undefined}});
-            }catch(error){send({type:'read-result',id:event.id,error:error instanceof Error?error.message:'读取失败'});}
-          }
-          if(event.type==='revision'){
-            try {
-              if (!input.revision) throw Error('记忆执行器未提供轻量修订校验');
-              send({type:'revision-result',id:event.id,revision:input.revision(event.sessionId,event.path)});
-            } catch(error) { send({type:'revision-result',id:event.id,error:error instanceof Error?error.message:'修订校验失败'}); }
-          }
+          if(event.type==='read'||event.type==='revision')throw Error('独立记忆请求不允许工具读取');
           if(event.type==='completed'){
-            if(typeof event.answer!=='string'||!event.answer||event.answer.length>32000||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
+            if(typeof event.answer!=='string'||input.kind==='organize'&&!event.answer||event.answer.length>32000||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
             if(event.incompleteReason !== undefined && (typeof event.incompleteReason !== 'string' || !Object.hasOwn(memoryIncompleteMessages,event.incompleteReason)))throw Error('记忆未完成原因无效');
             result={answer:event.answer,incomplete:event.incomplete,...(event.incompleteReason ? {incompleteReason:event.incompleteReason as MemoryIncompleteReason} : {})};
             reap=setTimeout(()=>{failure=Error('记忆清理未完成');void this.pool.retire(lease.ref,'cleanup_timeout');},1500);

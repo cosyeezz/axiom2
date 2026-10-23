@@ -4,6 +4,8 @@ import { folderResponse } from "./workspaces/folder-response.js";
 
 export type OpenFileDialogRequest =
   | { purpose: "workspace"; kind: "folder"; multiple: false }
+  | { purpose: "resource"; kind: "mixed"; multiple: false }
+  | { purpose: "path"; kind: OpenDialogKind; multiple: false }
   | { purpose: "attachment"; kind: OpenDialogKind; multiple: boolean; scope: Scope };
 
 /** Headless Open component. Native UI is owned by the local service, never an upload input.
@@ -24,8 +26,8 @@ export async function openFileDialog(options: OpenFileDialogRequest, signal: Abo
       combined.throwIfAborted();
       return path === null ? [] : [{ path, name: path, kind: "folder" }];
     }
-    const query = new URLSearchParams({ ...options.scope, kind: options.kind, multiple: String(options.multiple) });
-    const response = await fetch(`/api/attachments/pick?${query}`, { method: "POST", signal: combined });
+    const endpoint = options.purpose === "resource" ? "/api/resources/pick" : options.purpose === "path" ? `/api/files/pick?${new URLSearchParams({ kind: options.kind })}` : `/api/attachments/pick?${new URLSearchParams({ ...options.scope, kind: options.kind, multiple: String(options.multiple) })}`;
+    const response = await fetch(endpoint, { method: "POST", signal: combined });
     const body = await response.text();
     let result: { items?: PickedAttachment[]; error?: string };
     try { result = JSON.parse(body); }

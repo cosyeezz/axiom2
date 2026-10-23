@@ -1,5 +1,7 @@
 import type { Draft } from "./protocol.js";
 
+export const maxDraftTextLength = 200_000;
+
 export interface DraftStamp {
   revision: number;
   writer: string;

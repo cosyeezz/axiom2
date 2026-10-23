@@ -92,7 +92,9 @@ export function chatMessage(
   const isInput = message.role === "user" || (message.role === "custom" && message.customType === "axiom-append");
   // Inline mapping is the outer suffix when legacy inline and path attachments coexist.
   const skillInput = isInput ? persistedSkillInput(message) : undefined;
-  const display = isInput ? attachmentDisplay(imageDisplayText(skillInput?.text ?? text, imageBlocks.length)) : { text, attachments: [] };
+  const taskInputText = message.role === "custom" && message.customType === "axiom-append" && typeof message.details?.taskInputText === "string"
+    ? message.details.taskInputText : text;
+  const display = isInput ? attachmentDisplay(imageDisplayText(skillInput?.text ?? taskInputText, imageBlocks.length)) : { text, attachments: [] };
   for (const attachment of display.attachments) if (attachment.kind === "image") {
     const mimeTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
     images.push({ id: attachment.id!, name: attachment.name, path: attachment.path!,
@@ -123,6 +125,7 @@ export function chatMessage(
     ...(phase ? { phase } : {}),
     ...(skillInput ? { skills: skillInput.skills } : {}),
     ...(images.length ? { images } : {}),
+    ...(display.attachments.length ? { attachments: display.attachments.map(({ id, kind, name, path }) => ({ id, kind, name, path })) } : {}),
     ...(thinking ? { thinking } : {}),
     ...(thinkingActive ? { thinkingActive: true } : {}),
     streaming,
@@ -175,8 +178,9 @@ export function boundedMessage(message: ChatMessage): ChatMessage {
   const truncated = message.text.length > textCap || (message.thinking?.length ?? 0) > 320 ||
     calls?.some((call) => call.input.length < call.inputLength);
   const textRevision = hash(message.text), thinkingRevision = hash(message.thinking ?? "");
+  const { deliveryTiming: _timing, ...projection } = message;
   return {
-    ...message,
+    ...projection,
     text: message.text.slice(0, textCap), textLength: message.text.length, textRevision,
     thinking: message.thinking?.slice(0, 320), thinkingLength: message.thinking?.length, thinkingRevision,
     calls,
@@ -206,7 +210,7 @@ export function transcriptHeader(file: string) {
     throw Error("Session header exceeds 64 KiB");
   } finally { closeSync(fd); }
 }
-export function openTranscript(file: string, cwd: string): SessionManager {
+export function openTranscript(file: string, cwd: string, options: { readOnly?: boolean } = {}): SessionManager {
   try {
     // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
     const { header, identity } = transcriptHeader(file);
@@ -214,7 +218,9 @@ export function openTranscript(file: string, cwd: string): SessionManager {
     // Resolve OS aliases natively: Windows short names and macOS /var aliases
     // must identify the same real workspace, without case-folding path strings.
     if (resolve(header.cwd) !== resolve(cwd) && realpathSync.native(header.cwd) !== realpathSync.native(cwd)) throw Error();
-    const manager = SessionManager.open(file);
+    const manager = options.readOnly ? SessionManager.inMemory(cwd) : SessionManager.open(file);
+    // Keep native recovery/migration in memory for statistics-only readers.
+    if (options.readOnly) manager.setSessionFile(file);
     const current = statSync(file);
     if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");
     return manager;

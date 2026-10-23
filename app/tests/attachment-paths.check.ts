@@ -167,7 +167,8 @@ try {
   const overlay = page.locator(".attachment-input-overlay");
   await eventually(async () => await overlay.locator(".attachment-reference-icon").count() === 4, "all bound references render as icons");
   assert.equal(await page.locator(".attachment-chip .attachment-symbol").count(), 4);
-  assert.deepEqual(await overlay.locator(".attachment-symbol small").allTextContents(), ["1", "img1", "1", "2"]);
+  assert.deepEqual(await overlay.locator(".attachment-symbol small").allTextContents(), ["file1", "img1", "folder1", "file2"]);
+  assert.deepEqual(await overlay.locator(".attachment-symbol use").evaluateAll(nodes => nodes.map(node => node.getAttribute("href"))), ["#i-file-text", "#i-image", "#i-folder-open", "#i-file-text"]);
   assert.equal(await page.locator('.attachment-label[aria-label^="文件夹"] .attachment-name').textContent(), "项目资料", "folder label uses this selection's name, not the workspace name");
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });

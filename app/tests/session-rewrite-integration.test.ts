@@ -47,7 +47,7 @@ test("child rewrite uses scheduler and discarded parent results survive notifica
     await f.call("prompt", { text: "PARENT_OLD" }); await f.idle();
     const records = new TaskRecords(f.app.store);
     records.freeze(f.scope);
-    const { taskIds: [id] } = records.create(f.scope, "fixture-delegate", "fixture context", [{ task: "CHILD_OLD", role: "" }], f.selection);
+    const { taskIds: [id] } = records.create(f.scope, "fixture-delegate", "fixture context", [{ task: "CHILD_OLD" }], f.selection);
     // Seed a completed delegation, then exercise user input via the real scheduler.
     f.app.store.db.prepare("DELETE FROM task_inputs WHERE taskId=?").run(id);
     f.app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(id);
@@ -58,13 +58,17 @@ test("child rewrite uses scheduler and discarded parent results survive notifica
     assert.ok(m);
     const source = await f.call("agent.editable", { messageId: m.id }, child) as EditableMessage;
     assert.equal(source.draft.text, "CHILD_FIRST", "budget control never enters the editable draft");
+    const originalBudget = f.requests.at(-1).messages.find((message: any) => JSON.stringify(message.content).includes("本次工作预算："));
+    assert.ok(originalBudget);
     await f.call("prompt", { text: "CHILD_NEW", rewrite: { messageId: source.messageId, revision: source.revision } }, child);
     await until(() => !taskActive(records.rows("WHERE id=?", id)[0].status), "child rewrite did not finish");
     assert.equal(records.rows("WHERE id=?", id)[0].status, "completed");
     assert.deepEqual(f.app.agents.messages(child).filter((m) => m !== null).filter((m) => m.role === "user").map((m) => m.text), ["CHILD_NEW"]);
     assert.match(JSON.stringify(f.requests.at(-1).messages), /CHILD_NEW/);
     assert.doesNotMatch(JSON.stringify(f.requests.at(-1).messages), /CHILD_FIRST/);
-    assert.equal((JSON.stringify(f.requests.at(-1).messages).match(/本次执行预算/g) ?? []).length, 1, "only the active budget reaches the provider");
+    const budgets = f.requests.at(-1).messages.filter((message: any) => JSON.stringify(message.content).includes("本次工作预算："));
+    assert.equal(budgets.length, 2, "rewrite retains the earlier budget snapshot and appends the new execution budget");
+    assert.deepEqual(budgets[0], originalBudget, "an already-sent budget is never refreshed in place");
     const results = f.app.store.db.prepare("SELECT id,body FROM task_results WHERE taskId=?").all(id);
     assert.equal(results.length, 2);
     const original = f.app.agents.messages(f.scope).filter((m) => m !== null).find((m) => m.text === "PARENT_OLD")!;

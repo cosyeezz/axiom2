@@ -1,10 +1,12 @@
+import { inModelNetworkWorker, modelNetwork } from "./model-network.js";
+import { providerProxyUrl, providerProxyView, readProviderProxy } from "./integrations/model-proxy-env.js";
 import { mkdirSync, readFileSync, realpathSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import {
-  ModelRuntime,
+  type ModelRuntime,
   ModelRegistry,
   CredentialSynchronizationError,
   readStoredCredential,
@@ -18,10 +20,14 @@ import {
   validateDraft,
   invalid,
 } from "./models/draft.js";
+import { createModelRuntime, ensureModelProvider, nativeProviderTemplates } from "./model-runtime.js";
 import { discoverModels } from "./model-discovery.js";
 import { AppError, object, text } from "../shared/protocol.js";
 import {
   samplingKeys,
+  modelCostKeys,
+  emptyModelPricing,
+  type ModelPricing,
   type ModelConfiguration,
   type ModelCatalog,
   type ProviderDraft,
@@ -64,7 +70,7 @@ export class ModelService {
   private tail: Promise<unknown> = Promise.resolve();
   authActive = false;
   beforeLogout?: (providers: string[], confirmed: boolean) => Promise<void>;
-  constructor(readonly root: string) {
+  constructor(readonly root: string, private readonly network: typeof modelNetwork | null = inModelNetworkWorker ? null : modelNetwork) {
     const configured = process.env.AXIOM_PI_DIR || join(root, "pi");
     const homeRelative = configured.startsWith("~/") || (process.platform === "win32" && configured.startsWith("~\\"));
     this.dir = resolve(configured === "~" ? homedir() : homeRelative ? join(homedir(), configured.slice(2)) : configured);
@@ -119,7 +125,11 @@ export class ModelService {
     }
   }
   async runtime(path = join(this.dir, "models.json")) {
-    return ModelRuntime.create({
+    let providerIds: string[] = [];
+    try { providerIds = Object.keys(JSON.parse((await readFile(path, "utf8")).replace(/^\uFEFF/, "")).providers ?? {}); }
+    catch { /* The SDK below retains configuration read/validation diagnostics. */ }
+    return createModelRuntime({
+      providerIds,
       modelsPath: path,
       authPath: join(this.dir, "auth.json"),
       modelsStorePath: join(this.dir, "models-store.json"),
@@ -173,6 +183,11 @@ export class ModelService {
     return { raw, config, runtime, revision: digest(raw) };
   }
   private async storeApiKey(runtime: ModelRuntime, providerId: string, key: string, migrating = false) {
+    if (this.network) {
+      if (migrating && readStoredCredential(providerId, join(this.dir, "auth.json")))
+        throw new AppError("REVISION_CONFLICT", "认证在迁移期间已改变；原密钥已保留，请重新读取。");
+      return this.network<void>(this.root, this.dir, providerId, join(this.dir, "models.json"), "storeKey", { key }, { signal: AbortSignal.timeout(15000) });
+    }
     let supplied = false;
     await runtime.login(providerId, "api_key", {
       signal: AbortSignal.timeout(15000),
@@ -189,10 +204,10 @@ export class ModelService {
   }
   // Called only inside serial(). Persist and verify credentials before removing
   // legacy keys; an existing auth.json entry (including OAuth) always wins.
-  private async normalizeCredentials(state: Awaited<ReturnType<ModelService["load"]>>) {
+  private async normalizeCredentials(state: Awaited<ReturnType<ModelService["load"]>>, onlyProvider?: string) {
     const candidate: Json = JSON.parse(state.raw);
-    const legacy = Object.entries(candidate.providers).filter(([, value]) =>
-      Object.hasOwn(value as Json, "apiKey")) as [string, Json][];
+    const legacy = Object.entries(candidate.providers).filter(([providerId, value]) =>
+      (!onlyProvider || providerId === onlyProvider) && Object.hasOwn(value as Json, "apiKey")) as [string, Json][];
     if (!legacy.length || this.authActive) return state;
     const path = join(this.dir, `models-credentials-${randomUUID()}.tmp`);
     const signal = AbortSignal.timeout(15000);
@@ -208,7 +223,13 @@ export class ModelService {
           // An empty legacy value is a repairable missing-key state, not a migration.
           if (typeof provider.apiKey !== "string" || !provider.apiKey.trim()) continue;
           // Keep expressions intact: pi resolves environment/command values at use time.
-          await this.storeApiKey(current, providerId, provider.apiKey, true);
+          try { await this.storeApiKey(current, providerId, provider.apiKey, true); }
+          catch (error) {
+            // A stopped proxy must not make the connection editor inaccessible.
+            // Keep the legacy key intact until its configured route is available.
+            if (error instanceof AppError && error.code === "PROXY_UNAVAILABLE") continue;
+            throw error;
+          }
           const persisted = readStoredCredential(providerId, join(this.dir, "auth.json"));
           if (persisted?.type !== "api_key" || persisted.key !== provider.apiKey)
             throw new AppError("CREDENTIAL_NOT_PERSISTED", "未能确认密钥已保存到 auth.json；models.json 中的密钥已保留。");
@@ -247,15 +268,18 @@ export class ModelService {
     const state = await this.load();
     const { config, runtime, revision } = normalize ? await this.normalizeCredentials(state) : state;
     const credentials = await runtime.listCredentials();
+    const providerEntries = Object.entries(config.providers) as [string, Json][];
+    // Credential checks are independent; one failing provider must not delay or
+    // hide the status of the others.
+    const checks = await Promise.all(providerEntries.map(async ([providerId]) => {
+      try { return [providerId, await this.checkAuth(runtime, providerId)] as const; }
+      catch (error) { return [providerId, undefined, error instanceof AppError ? error.message : "无法检查认证，请检查供应商代理设置。"] as const; }
+    }));
+    const auth = new Map(checks.map(([providerId, check, error]) => [providerId, { check, error }]));
     const providers: ProviderDraft[] = [];
-    for (const [providerId, p] of Object.entries(config.providers) as [
-      string,
-      Json,
-    ][]) {
-      const provider = runtime.getProvider(providerId),
-        check = await runtime.checkAuth(providerId, {
-          signal: AbortSignal.timeout(5000),
-        });
+    for (const [providerId, p] of providerEntries) {
+      const provider = runtime.getProvider(providerId);
+      const { check, error: connectionError } = auth.get(providerId)!;
       const credential = credentials.find((item) => item.providerId === providerId);
       const oauth = credential?.type === "oauth" || (!credential && provider?.auth.oauth && !p.baseUrl && !p.api && !p.apiKey);
       providers.push({
@@ -274,14 +298,15 @@ export class ModelService {
             runtime.getModels(providerId)[0]?.baseUrl ??
             "",
         ),
+        proxy: providerProxyView(p.axiomProxy),
         key: "",
         headers: headersView(p.headers),
         body: [],
         auth: {
-          configured: !!credential && !!check,
-          error: !oauth && (!credential || !check)
+          configured: !!credential && (!!check || !!connectionError),
+          error: connectionError ?? (!oauth && (!credential || !check)
             ? "未配置有效 API 密钥：请填写密钥并保存到 auth.json 后重试。"
-            : undefined,
+            : undefined),
           source: credentials.some((c) => c.providerId === providerId)
             ? "stored"
             : (runtime.getProviderAuthStatus(providerId).source ??
@@ -302,6 +327,8 @@ export class ModelService {
             m.name ?? runtime.getModel(providerId, modelId)?.name ?? modelId,
           levels: levelsOf(runtime.getModel(providerId, modelId)),
           input: [...(runtime.getModel(providerId, modelId)?.input ?? m.input ?? ["text"])],
+          cost: Object.fromEntries(modelCostKeys.map(key => [key, runtime.getModel(providerId, modelId)?.cost[key] ?? m.cost?.[key] ?? emptyModelPricing()[key]])) as ModelPricing,
+          costTiered: !!runtime.getModel(providerId, modelId)?.cost.tiers?.length,
           headers: headersView(m.headers),
           body: bodyView(m.samplingParams),
         })),
@@ -314,7 +341,9 @@ export class ModelService {
         modelsPath: join(this.dir, "models.json"),
         authPath: join(this.dir, "auth.json"),
       },
-      templates: runtime.getProviders().map((p) => ({
+      templates: [...new Map<string, ModelConfiguration["templates"][number]>([
+        ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, { ...p, methods: [...(p.methods ?? [])] }]),
+        ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
         name: p.name,
         api: p.getModels()[0]?.api ?? "openai-completions",
@@ -323,7 +352,8 @@ export class ModelService {
           ...(p.auth.apiKey?.login ? ["api_key" as const] : []),
           ...(p.auth.oauth?.login ? ["oauth" as const] : []),
         ],
-      })),
+      }]),
+      ]).values()],
     };
   }
   // Discovery uses connection settings only. models.json is the import target;
@@ -347,14 +377,27 @@ export class ModelService {
       await rm(path, { force: true });
     }
   }
-  catalog(provider: unknown, expectedRevision: unknown): Promise<ModelCatalog> {
+  // Credential presence is local metadata: checking it never opens a provider
+  // connection, so it must not pay for a per-provider network worker. The route
+  // is still resolved first, keeping a stopped proxy an explicit auth error.
+  async checkAuth(runtime: ModelRuntime, providerId: string) {
+    if (this.network) providerProxyUrl(this.root, readProviderProxy(join(this.dir, "models.json"), providerId));
+    return runtime.checkAuth(providerId, { signal: AbortSignal.timeout(5000) });
+  }
+  catalog(provider: unknown, expectedRevision: unknown, cancellation?: AbortSignal): Promise<ModelCatalog> {
+    if (this.network) return this.serial(() => {
+      if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
+      return this.network!<ModelCatalog>(this.root, this.dir, id(provider, "供应商 ID"), join(this.dir, "models.json"), "catalog", { revision: expectedRevision }, { signal: cancellation });
+    }, cancellation);
     return this.serial(async () => {
       if (this.authActive) throw new AppError("AUTH_BUSY", "请先完成或取消正在进行的认证");
       const providerId = id(provider, "供应商 ID");
       let state = await this.load();
       if (expectedRevision !== state.revision)
         throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后拉取模型列表。");
-      state = await this.normalizeCredentials(state);
+      // This worker owns only this provider's network and must not log in
+      // another provider while normalizing legacy credentials.
+      state = await this.normalizeCredentials(state, providerId);
       const { config, revision } = state;
       if (expectedRevision !== revision)
         throw new AppError("REVISION_CONFLICT", "密钥已统一保存到 auth.json，请重新读取配置后拉取模型列表。");
@@ -367,7 +410,7 @@ export class ModelService {
         const credential = (await runtime.listCredentials()).find((item) => item.providerId === providerId);
         const oauth = connection.oauth === "radius" || (!connection.baseUrl &&
           (credential?.type === "oauth" || (!credential && native.auth.oauth && !connection.api && !connection.apiKey)));
-        const signal = AbortSignal.timeout(15000);
+        const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
         let models: ModelCatalog["models"];
         let source: ModelCatalog["source"];
         let message: string;
@@ -401,14 +444,17 @@ export class ModelService {
             source = "endpoint";
             message = "已从当前 Base URL 拉取模型列表。接口未提供的能力参考 pi 原生目录；未知能力请在添加后确认。";
           } else {
-            if (!native.refreshModels) throw new AppError("MODEL_DISCOVERY_FAILED", "该 OAuth 供应商不支持模型目录刷新，请手动添加模型。");
             if (!await runtime.checkAuth(providerId, { signal }))
               throw new AppError("MODEL_DISCOVERY_FAILED", "请先完成 OAuth 登录，再拉取模型列表。");
-            const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
-            if (result.aborted || result.errors.size)
-              throw new AppError("MODEL_DISCOVERY_FAILED", "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
+            if (native.refreshModels) {
+              const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
+              if (result.aborted || result.errors.size)
+                throw new AppError("MODEL_DISCOVERY_FAILED", "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
+            }
             source = "native";
-            message = "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。";
+            message = native.refreshModels
+              ? "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。"
+              : "此 OAuth 连接使用应用内置模型目录；未向供应商查询实时列表，实际可用性以账号权限为准。";
             models = runtime.getModels(providerId).map((model) => ({
               id: model.id, name: model.name, api: model.api,
               levels: levelsOf(model), input: [...model.input], contextWindow: model.contextWindow,
@@ -424,7 +470,7 @@ export class ModelService {
           throw new AppError("REVISION_CONFLICT", "拉取期间配置已改变，请重新读取后重试。");
         return { providerId, revision, source, message, models };
       });
-    });
+    }, cancellation);
   }
   save(input: unknown): Promise<{ revision: string; loggedOut: string[] }> {
     return this.serial(async () => {
@@ -437,6 +483,12 @@ export class ModelService {
           "REVISION_CONFLICT",
           "配置已被修改；保留本页草稿，请重新读取后合并。",
         );
+      // New OAuth/custom drafts may refer to a native provider absent from disk.
+      if (Array.isArray(draft.providers)) {
+        for (const p of draft.providers) {
+          if (p && typeof p.providerId === "string") await ensureModelProvider(runtime, p.providerId);
+        }
+      }
       const { candidate, providers, logout, keys } = prepareDraft(
         draft,
         config,
@@ -474,9 +526,10 @@ export class ModelService {
             "停止执行期间配置已改变；请重新读取。",
           );
         for (const providerId of logout) {
-          await runtime.logout(providerId);
+          // Native logout deletes local credentials and refreshes cached metadata.
+          // It must remain possible to remove a provider whose proxy is stopped.
+          await runtime.logout(providerId); await runtime.removeRuntimeApiKey(providerId);
           credentialsChanged = true;
-          await runtime.removeRuntimeApiKey(providerId);
         }
         if (digest(await this.raw()) !== revision)
           throw new AppError(
@@ -499,9 +552,8 @@ export class ModelService {
               "CREDENTIAL_NOT_PERSISTED",
               "未能从本地认证文件重新读取已保存的 API 密钥。",
             );
-        await persisted.getAvailable(undefined, {
-          signal: AbortSignal.timeout(5000),
-        });
+        // Saving connection settings must also work while the chosen proxy is stopped.
+        // Connectivity and token refresh are checked when making the next network request.
         if (persisted.getError()) throw Error();
         const normalized = await this.normalizeCredentials(await this.load());
         return { revision: normalized.revision, loggedOut: [...logout] };

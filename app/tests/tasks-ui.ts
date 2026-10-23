@@ -200,7 +200,8 @@ export async function checkTasksUI(
     await dialog
       .getByRole("button", { name: "第 1 次 · 已停止", exact: true })
       .click();
-    await dialog.getByText(/文件及外部副作用未回滚/).last().waitFor();
+    await dialog.locator(".task-results").getByText(/任务未正常完成/).waitFor();
+    assert.equal(await dialog.locator(".task-results").getByText(/已记录返回|文件及外部副作用未回滚/).count(), 0);
     assert.equal(await dialog.getByRole("button", { name: /显式继续|确认清理/ }).count(), 0);
     const stoppedTask = app.tasks.list(scope!).tasks[0];
     const childTrigger = dialog.locator(

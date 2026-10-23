@@ -1,3 +1,4 @@
+import { compressionMemoryRead } from "./compression-memory-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -95,8 +96,8 @@ test("automatic compression uses real pi usage and the chat window, shares persi
   mkdirSync(project); mkdirSync(join(root, "pi"));
   let tokens = 119, holdSummaries = false, summaryRequests = 0, holdChat = false;
   const summaries: ServerResponse[] = [], chats: ServerResponse[] = [];
-  const reply = (res: ServerResponse, content: string) => {
-    for (const [delta, finish_reason] of [[{ role: "assistant", content }, null], [{}, "stop"]])
+  const reply = (res: ServerResponse, content: string | object) => {
+    for (const [delta, finish_reason] of [[typeof content === "string" ? { role: "assistant", content } : content, null], [{}, typeof content === "string" ? "stop" : "tool_calls"]])
       res.write(`data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", created: 1,
         model: "chat", choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
     res.write(`data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", created: 1, model: "chat", choices: [],
@@ -114,7 +115,7 @@ test("automatic compression uses real pi usage and the chat window, shares persi
       if (holdSummaries) summaries.push(res);
       else reply(res, "<axiom-summary>自动压缩验证</axiom-summary>\n## Goal\nAUTO_SUMMARY");
     } else if (holdChat) chats.push(res);
-    else reply(res, "chat reply");
+    else reply(res, compressionMemoryRead(body) ?? "chat reply");
   });
   await new Promise<void>((resolve) => fixture.listen(0, "127.0.0.1", resolve));
   writeFileSync(join(root, "pi/models.json"), JSON.stringify({ providers: { fixture: {

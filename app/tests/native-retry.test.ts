@@ -182,7 +182,7 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
     // A child retry must keep task scheduling, immutable reports and research/test tools.
     const parent = await create(), child = await create(), taskId = randomUUID();
     service.store.db.prepare("INSERT INTO task_parents(sessionId,frozen) VALUES(?,1)").run(parent.sessionId);
-    service.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES(?,?,?,?,'fixture','retry child','','interrupted','{}',?)")
+    service.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES(?,?,?,?,'fixture','retry child','interrupted','{}',?)")
       .run(taskId, w.id, parent.sessionId, child.sessionId, Date.now());
     await run(child, "auth");
     await until(() => service.tasks.child(child)?.status === "failed", "child initial execution did not fail");

@@ -1,3 +1,4 @@
+import { ProcessingRecords } from "./processing-records.js";
 import { type ChildProcess } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import type { ExecutionLease } from "./execution-pool.js";
@@ -31,6 +32,8 @@ type Live = {
   snapshot?: CompressionSnapshot;
   entry?: CompactionEntry;
   applyRun?: string;
+  preparing?: Promise<unknown>;
+  preparationRun?: string;
   cancelAck?: () => void;
   cancelConfirmedRun?: string;
 };
@@ -45,8 +48,10 @@ export class Compressions {
   private closing = false;
   private readonly directory: string;
   private readonly store;
+  private readonly records: ProcessingRecords;
   constructor(private readonly agents: Agents) {
     this.store = agents.store;
+    this.records = ProcessingRecords.for(this.store);
     this.directory = join(this.store.root, "compression-snapshots");
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     this.store.db.exec("CREATE TABLE IF NOT EXISTS compressions(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,body TEXT NOT NULL)");
@@ -65,6 +70,8 @@ export class Compressions {
         job.error = applied ? null : "没有此摘要已应用的持久记录；未自动重新压缩或应用历史摘要。";
         this.store.db.prepare("UPDATE compressions SET body=? WHERE id=?").run(JSON.stringify(job), row.id);
       }
+      const owner = this.store.db.prepare("SELECT workspaceId FROM sessions WHERE id=?").get(row.sessionId);
+      if (owner) this.records.syncCompression({ workspaceId: String(owner.workspaceId), sessionId: String(row.sessionId) }, job);
     }
     for (const name of readdirSync(this.directory))
       if (/^[0-9a-f-]+\.(json|jsonl)$/.test(name)) rmSync(join(this.directory, name), { force: true });
@@ -79,6 +86,7 @@ export class Compressions {
       return this.manager(scope).getBranch().some((e) => e.type === "compaction" && (e.details as any)?.axiomCompressionId === id);
     } catch { return false; }
   }
+  get busy() { return this.live.size > 0 || this.autoPending.size > 0 || this.autoWork.size > 0; }
   info(scope: Scope): Compression | null {
     this.store.session(scope.workspaceId, scope.sessionId);
     const row = this.store.db.prepare("SELECT body FROM compressions WHERE sessionId=? ORDER BY rowid DESC LIMIT 1").get(scope.sessionId);
@@ -87,6 +95,7 @@ export class Compressions {
   private save(live: Pick<Live, "scope" | "job">) {
     this.store.db.prepare("UPDATE compressions SET body=? WHERE id=? AND sessionId=?")
       .run(JSON.stringify(live.job), live.job.id, live.scope.sessionId);
+    this.records.syncCompression(live.scope, live.job);
     this.agents.publish(compressionScope(live.scope), live.job);
   }
   private selection(value: unknown, config: Configuration): Selection {
@@ -142,10 +151,12 @@ export class Compressions {
     if (c.op !== "compression.start") return Promise.reject(new AppError("UNKNOWN_OPERATION", "不支持的压缩操作"));
     return this.start(c, scope);
   }
-  private start(c: Command, scope: Scope, autoRunId?: string): Promise<unknown> {
+  private start(c: Command, scope: Scope, autoRunId?: string, processingId?: string): Promise<unknown> {
     const epoch = this.epochs.get(scope.sessionId) ?? 0;
     return this.store.external(c, () => this.agents.models.serial(async () => {
       this.store.session(scope.workspaceId, scope.sessionId);
+      const id = this.records.start(scope, "compression", autoRunId ? "自动压缩" : "手动压缩", processingId);
+      try {
       const check = () => {
         if (this.agents.reloads.active(scope)) throw new AppError("COMPRESSION_BUSY", "会话正在重载，请等待完成后压缩。");
         if (this.closing || epoch !== (this.epochs.get(scope.sessionId) ?? 0))
@@ -180,7 +191,7 @@ export class Compressions {
       if (createHash("sha256").update(raw).digest("hex") !== config.revision)
         throw new AppError("REVISION_CONFLICT", "模型配置已变化；请重新确认");
       check();
-      const id = randomUUID(), input: CompressionInput = {
+      const input: CompressionInput = {
         root: this.store.root, cwd: this.store.workspace(scope.workspaceId).path,
         file: join(this.directory, `${id}.jsonl`), modelsFile: join(this.directory, `${id}.json`), selection,
       };
@@ -202,6 +213,7 @@ export class Compressions {
         throw new AppError("COMPRESSION_START", job.error!);
       }
       return { id, status: "accepted" };
+      } catch (error) { this.records.failure(id, error); throw error; }
     }));
   }
   // Only fresh worker measurements trigger work; reads/reconnects/restarts never do.
@@ -224,8 +236,8 @@ export class Compressions {
     if (!trigger || state.attempted || this.live.has(scope.sessionId) || this.autoPending.has(scope.sessionId) || this.live.size >= 4) return;
     state.attempted = true;
     this.autoPending.add(scope.sessionId);
-    const requestId = randomUUID(), previousId = this.info(scope)?.id;
-    const work = this.start({ op: "compression.start", requestId, ...scope }, scope, runId).catch((error) => {
+    const requestId = randomUUID(), processingId = randomUUID(), previousId = this.info(scope)?.id;
+    const work = this.start({ op: "compression.start", requestId, ...scope }, scope, runId, processingId).catch((error) => {
       // Stops, capacity and changed conditions are intentional skips. A model or
       // configuration failure is visible in the same page as manual failures.
       if (this.closing || state.stopped) return;
@@ -237,7 +249,7 @@ export class Compressions {
         if (this.info(scope)?.id !== previousId) return;
         const selection = this.store.compressionPreferences().selection ?? info.selection;
         if (!selection) return;
-        const job: Compression = { id: randomUUID(), requestId, trigger: "auto", state: "failed", phase: "snapshot",
+        const job: Compression = { id: processingId, requestId, trigger: "auto", state: "failed", phase: "snapshot",
           startedAt: Date.now(), endedAt: Date.now(), messageCount: 0, before: context.tokens,
           after: null, summary: "", error: compressionError(error), selection, usage: null };
         this.store.db.prepare("INSERT INTO compressions VALUES(?,?,?)").run(job.id, scope.sessionId, JSON.stringify(job));
@@ -291,6 +303,11 @@ export class Compressions {
       const { scope, job } = live;
       if (this.applied(scope, job.id)) { this.finish(live, "completed"); return; }
       if (live.snapshot && !live.entry) return;
+      if (live.entry) {
+        const details = live.entry.details as Record<string, unknown> | undefined;
+        if (!details?.axiomMemoryTopics && !this.agents.info(scope).task)
+          live.entry = { ...live.entry, details: { ...details, axiomMemoryTopics: this.agents.memories.topicSnapshot(scope.workspaceId) } };
+      }
       if (this.agents.active(scope)) {
         const run = this.agents.info(scope).run;
         if (!run) return;
@@ -298,6 +315,27 @@ export class Compressions {
           if (this.agents.signal(scope, run.id, { type: "compression-apply", id: job.id, snapshot: live.snapshot, entry: live.entry })) live.applyRun = run.id;
         } else this.agents.signal(scope, run.id, { type: "compression-snapshot", id: job.id });
         // If already finishing, close/settled will retry against the idle manager.
+      } else if (!live.entry && !this.agents.info(scope).task) {
+        if (live.preparing) return;
+        if (live.preparationRun) throw Error("压缩提醒请求已结束，但未取得安全快照。");
+        const validate = () => {
+          if (live.cancel || this.live.get(scope.sessionId) !== live)
+            throw new AppError("COMPRESSION_STOPPED", "压缩已取消，未启动记忆维护。");
+        };
+        live.preparing = Promise.resolve().then(() => {
+          validate();
+          return this.agents.command({ op: "prompt", requestId: `compression-memory-${job.id}`, ...scope }, {
+            compressionPreparation: { id: job.id, validate, signal: live.controller.signal },
+            onStart: (run) => {
+              live.preparationRun = run.id;
+              this.automatic.set(scope.sessionId, { runId: run.id, attempted: true, stopped: false });
+            },
+          });
+        }).catch((error) => {
+          if (live.cancel || this.live.get(scope.sessionId) !== live) return;
+          if (error?.code === "AGENT_BUSY" && this.agents.active(scope)) this.advance(live);
+          else this.finish(live, "failed", `压缩提醒请求未启动：${compressionError(error)}；未生成摘要。`);
+        }).finally(() => { live.preparing = undefined; this.advance(live); });
       } else if (this.agents.hasIdle(scope)) {
         // Shutdown hooks can still append entries. Wait for the sole writer to
         // release ownership before either capturing or applying a snapshot.
@@ -355,6 +393,8 @@ export class Compressions {
     child.on("message", (event: any) => {
       if (!sameLease(event.lease, lease.ref)) return;
       try {
+        if (event.type === "model_call") { this.records.callStart(job.id, "生成摘要", event.input, input.selection, event.id); this.records.callSent(job.id, event.id); }
+        if (event.type === "model_result") this.records.callFinish(job.id, event.id, event.output, event.error, event.usage);
         if (event.type === "closed") live.closed = true;
         // A stopped request can still report real usage before its worker exits.
         if (event.type === "billing") { job.billing = event.billing; this.save(live); }
@@ -446,6 +486,7 @@ export class Compressions {
     const live = this.live.get(scope.sessionId);
     if (!live) return;
     live.cancel = true;
+    this.records.cancelling(live.job.id);
     live.controller.abort();
     // Abort the billable summarization first, even if the live agent is too busy
     // to acknowledge cancellation of its queued apply within the deadline.

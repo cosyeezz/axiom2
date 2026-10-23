@@ -8,6 +8,7 @@ import { ModelService } from "../src/server/model-service.js";
 import { configuration } from "../src/server/models.js";
 import { Store } from "../src/server/storage.js";
 import { Logins } from "../src/server/auth.js";
+import { fixtureLoginNetwork } from "./model-network-fixture.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AuthState } from "../src/shared/models.js";
 import type { ProviderDraft, ModelDraft } from "../src/shared/models.js";
@@ -149,7 +150,7 @@ test("API key save rejects a login that did not persist a credential", async () 
   const previous = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
   try {
-    const service = new ModelService(root);
+    const service = new ModelService(root, null);
     const createRuntime = service.runtime.bind(service);
     service.runtime = async (path) => {
       const runtime = await createRuntime(path);
@@ -436,6 +437,7 @@ test("pi auth bridge: owner-bound prompts, OAuth interactions, abort and secret-
     (owner, state) => states.push({ owner, state }),
     async () => {},
     async (url, signal) => { signal.throwIfAborted(); opened.push(url); },
+    fixtureLoginNetwork(service),
   );
   const until = async (predicate: () => boolean) => {
     for (let n = 0; n < 100 && !predicate(); n++) await delay(10);

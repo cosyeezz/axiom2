@@ -18,11 +18,11 @@ try{
  await page.goto(server.resolvedUrls!.local[0]+'upload-check');await page.waitForFunction(async()=>typeof(window as any).ready==='function'&&await(window as any).ready());
  const open=async()=>{await page.locator('#open').click();await page.locator('.remote-file-dialog').waitFor();await page.locator('.remote-file-dialog nav span').getByText('0 项',{exact:true}).waitFor();};
  const files=[{name:'one.txt',mimeType:'text/plain',buffer:Buffer.from('one')},{name:'two.txt',mimeType:'text/plain',buffer:Buffer.from('two')}];
- await open();await page.locator('input[type=file]').setInputFiles(files);await page.waitForFunction(()=>document.querySelector('.remote-file-dialog [role=status]')?.textContent?.includes('已确认 1/2'));
+ await open();await page.locator('input[type=file]').setInputFiles(files);await page.waitForFunction(()=>document.querySelector('.remote-file-status')?.textContent?.includes('已确认 1/2'));
  assert.equal(uploads,2);assert.equal(await page.locator('.upload-progress-icon rect').last().getAttribute('width'),'14');assert.equal(await page.locator('.remote-file-dialog nav').evaluate(n=>(n as HTMLElement).inert),true);
  await page.screenshot({path:resolve(output,'waiting-confirmation.png')});
  pending!.socket.send(JSON.stringify({type:'receipt',requestId:pending!.id,ok:false,error:{code:'UNCERTAIN',message:'测试回执不确定'}}));
- await page.getByText(/结果待核实，请勿重复上传/).waitFor();assert.match(await page.locator('.remote-file-dialog [role=status]').innerText(),/已确认 1\/2.*已确认文件仍保留/);assert.equal(await page.locator('.upload-progress-icon animate').count(),0);assert.equal(uploads,2);
+ await page.getByText(/结果待核实，请勿重复上传/).waitFor();assert.match(await page.locator('.remote-file-status').innerText(),/已确认 1\/2.*已确认文件仍保留/);assert.equal(await page.locator('.upload-progress-icon animate').count(),0);assert.equal(uploads,2);
  await page.screenshot({path:resolve(output,'partial-uncertain.png')});await page.getByRole('button',{name:'关闭选择',exact:true}).click();
  await open();await page.locator('input[type=file]').setInputFiles(files[0]);await page.getByText(/等待 one.txt 的上传回执/).waitFor();
  pending!.socket.send(JSON.stringify({type:'receipt',requestId:pending!.id,ok:false,error:{code:'INVALID_FILE',message:'确定的上传失败'}}));
@@ -32,5 +32,15 @@ try{
  await open();await page.locator('input[type=file]').setInputFiles(files[0]);await page.getByText(/读取 one.txt/).waitFor();await page.getByRole('button',{name:'关闭选择',exact:true}).click();await page.evaluate(()=>(window as any).releaseRead());await page.waitForTimeout(100);assert.equal(uploads,3);await page.evaluate(()=>(window as any).restoreReader());
  // A late receipt after closing cannot open or advance the old picker.
  await open();await page.locator('input[type=file]').setInputFiles(files);await page.getByText(/等待 one.txt 的上传回执/).waitFor();await page.getByRole('button',{name:'关闭选择',exact:true}).click();pending!.socket.send(JSON.stringify({type:'receipt',requestId:pending!.id,ok:true,data:{name:'one.txt',path:'C:/fixture/one.txt',kind:'file'}}));await page.waitForTimeout(100);assert.equal(uploads,4);assert.equal(await page.locator('.remote-file-dialog').count(),0);
- assert.deepEqual(errors,[]);writeFileSync(resolve(output,'results.json'),JSON.stringify({passed:true,uploads,errors,checks:['confirmed count only','uncertain retained','no retry','read-close prevents send','late receipt ignored']},null,2));console.log('PASS: confirmed upload counts, partial uncertain status, close during read, late receipt and no automatic retransmission');
+ // A failed phone upload while the first directory request is pending must not strand the browser.
+ let releaseBrowse:(()=>Promise<void>)|undefined;
+ await page.route('**/api/files/browse?**',route=>{releaseBrowse=()=>route.fulfill({json:{path:'C:/fixture',parent:'C:/',total:1,offset:0,entries:[{name:'ready.txt',path:'C:/fixture/ready.txt',directory:false}]}});});
+ await page.locator('#open').click();await page.locator('.remote-file-dialog').waitFor();
+ await page.locator('input[type=file]').setInputFiles(Array.from({length:51},(_,i)=>({name:`limit-${i}.txt`,mimeType:'text/plain',buffer:Buffer.from('x')})));
+ await page.getByText(/每次最多 50 个文件/).waitFor();await releaseBrowse!();
+ await page.getByRole('checkbox',{name:'选择 ready.txt',exact:true}).check();
+ assert.equal(await page.getByRole('button',{name:'添加所选附件',exact:true}).isEnabled(),true);
+ assert.match(await page.locator('.remote-file-status').innerText(),/每次最多 50 个文件/);assert.equal(uploads,4);
+ await page.getByRole('button',{name:'关闭选择',exact:true}).click();
+ assert.deepEqual(errors,[]);writeFileSync(resolve(output,'results.json'),JSON.stringify({passed:true,uploads,errors,checks:['confirmed count only','uncertain retained','no retry','read-close prevents send','late receipt ignored','upload failure during directory load recovers']},null,2));console.log('PASS: confirmed upload counts, partial uncertain status, close during read, late receipt, directory loading recovery and no automatic retransmission');
 }finally{await browser.close();await server.close();}

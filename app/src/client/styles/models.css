@@ -53,7 +53,7 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .topnav .row{gap:8px;font-size:12px;color:var(--muted)}
 .topnav strong{color:var(--fg-2);font-weight:510}
 .configuration-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--border-soft);background:var(--bg)}
-.configuration-actions .save-state{margin-left:auto;font-size:11px;color:var(--muted)}
+.configuration-actions .save-state{font-size:11px;color:var(--muted)}
 .configuration-actions .save-state[data-dirty=true]{color:var(--fg)}
 .configuration-actions .config-reload{color:var(--fg-2)}
 .configuration-actions .config-reload svg{width:18px;height:18px}
@@ -124,8 +124,8 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .key-field{position:relative}
 .key-field input{padding-right:42px}
 .key-field button{position:absolute;right:1px;top:1px;bottom:1px;height:auto;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
-.save-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid var(--border-soft)}
-.save-bar>div{min-width:0}
+.save-bar{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding-top:8px;border-top:1px solid var(--border-soft)}
+.save-bar>div{min-width:0;width:100%;max-width:100%}
 .save-bar .meta{font-size:11px;line-height:1.8}
 .save-bar .btn{font-size:12px}
 .feedback{font-size:12px;color:var(--fg-2);overflow-wrap:anywhere}
@@ -201,13 +201,17 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 #reasoning-level-options input:enabled:checked:active+span{background:var(--accent-active);border-color:var(--accent-active)}
 #reasoning-level-options input:focus-visible+span{outline:2px solid var(--accent-hover);outline-offset:2px}
 #reasoning-legacy-note{flex-basis:100%;font-size:11px;color:var(--fg-2)}
-.inline-model-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap}
-.inline-model-actions .feedback{flex:1;min-width:0;margin:0}
+.inline-model-actions{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:8px;flex-wrap:wrap}
+.inline-model-actions .feedback{min-width:0;margin:0}
+.inline-model-actions .feedback:empty{display:none}
 .inline-model-editor .btn{font-size:12px}
 .override-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;border-top:1px solid var(--border-soft);padding:8px 0}
 .override-editor{min-width:0;container-type:inline-size}
-.inline-model-fields+.override-grid{margin-top:16px;padding-top:12px}
-.override-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.model-pricing{margin-top:16px;padding-top:12px;border-top:1px solid var(--border-soft)}
+.model-pricing h3{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin:0 0 6px;font-size:13px}
+.model-pricing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.inline-model-fields+.override-grid,.model-pricing+.override-grid{margin-top:16px;padding-top:12px}
+.override-heading{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:4px}
 .override-heading h3{font-size:13px}
 .override-heading .btn{font-size:12px;padding:4px 8px}
 .override-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) 32px;gap:6px;align-items:center}
@@ -236,7 +240,7 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .settings-dialog::backdrop{background:color-mix(in srgb,var(--bg) 80%,transparent)}
 .settings-dialog h2{font-size:20px;margin-bottom:8px}
 .settings-dialog p{font-size:12px;color:var(--muted);margin-bottom:24px}
-.dialog-actions{justify-content:flex-end;flex-wrap:wrap}
+.dialog-actions{justify-content:flex-start;flex-wrap:wrap}
 @media(max-width:1200px){
  .settings-app{grid-template-columns:152px minmax(0,1fr)}
  .configuration-layout{grid-template-columns:184px minmax(0,1fr)}
@@ -278,7 +282,7 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
  .section-heading{gap:4px}
  .section-heading p{flex-basis:100%}
  .save-bar{flex-wrap:wrap;gap:8px}
- .save-bar .btn{margin-left:auto}
+ .save-bar .btn{margin-left:0}
  .ds-table .id-col{display:none}
  .ds-table th.name-col{width:calc(100% - 88px)}
  .ds-table th.actions-col{width:88px}

@@ -34,10 +34,11 @@ try {
   manager.appendUsage("tool:search", "tool-provider", "search-model", usage(.4));
   manager.appendCompaction("摘要", null, 5000, { axiomCompressionId: "compressed" }, true, usage(.2));
   manager.appendMessage(reply(.05));
+  manager.appendMessage(reply(0)); // Unknown pricing must remain visible in the current-session summary too.
   const stored = { input: 1000, output: 200, cacheRead: 400, cacheWrite: 100, total: 1700, cost: .65, context: { tokens: 1000, window: 32000, percent: 3.125 } };
   app.store.db.prepare("INSERT INTO agent_sessions(sessionId,file,usage) VALUES(?,?,?)").run(parent.id, manager.getSessionFile()!, JSON.stringify(stored));
   const records = new TaskRecords(app.store);
-  const { taskIds } = records.create(scope, "fixture", "context", [{ task: "调查数据来源", role: "" }, { task: "检查边界条件", role: "" }], { provider: "fixture", id: "fixture-model", thinking: "off" });
+  const { taskIds } = records.create(scope, "fixture", "context", [{ title: "调查数据来源", task: "调查数据来源的完整任务正文，仅供执行使用" }, { title: "检查边界条件", task: "检查边界条件的完整任务正文，仅供执行使用" }], { provider: "fixture", id: "fixture-model", thinking: "off" });
   const childIds = taskIds.map((id) => String(app.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(id)!.sessionId));
   for (const [index, id] of childIds.entries()) {
     const child = SessionManager.create(project, join(root, "children"));
@@ -107,6 +108,13 @@ try {
   assert.deepEqual(await page.locator(".composer").boundingBox(), composerBefore, "popover styles do not change the composer");
   await detail.locator(".cost-total > .cost-number").filter({ hasText: "$1.5500 + 未知" }).waitFor();
   console.log("cost UI: totals loaded");
+  assert.equal(await dialog.locator('.cost-session-facts dd').first().textContent(), '$1.0500 + 未知', 'current-session summary uses the same ledger and retains unknown costs');
+  assert.equal(await dialog.locator('.cost-session-facts dd').nth(1).textContent(), '10,200', 'current-session tokens include main, tool and compression usage');
+  assert.deepEqual(await dialog.locator('.cost-token-facts dd').allTextContents(), ['13,600', '8,000', '1,600', '3,200', '800']);
+  assert.ok(!(await dialog.innerText()).includes('完整任务正文'), 'cost details show child titles without task contents');
+  assert.match(await dialog.locator('#cost-main .cost-line summary').innerText(), /5,100 Token/);
+  assert.match(await dialog.locator('#cost-subagent .cost-line summary').first().innerText(), /1,700 Token/);
+  assert.equal(await dialog.getByRole('link', { name: '模型配置', exact: true }).getAttribute('href'), '/model-config.html');
   assert.equal(await dialog.locator('.cost-title').count(), 0, 'popover does not repeat the session name as a large title');
   assert.equal(await dialog.locator('.cost-refresh span').count(), 0, 'refresh stays an icon control');
   assert.ok(await dialog.locator('.cost-total > .cost-number').evaluate(el => parseFloat(getComputedStyle(el).fontSize) <= 18), 'compact total size survives stylesheet ordering');
@@ -177,6 +185,7 @@ try {
       return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight && content.scrollWidth <= content.clientWidth + 1;
     }), `${width}: popover fits viewport without internal horizontal overflow`);
     await detail.screenshot({ path: join(artifacts, `${width}-${height}.png`), fullPage: true });
+    await dialog.locator('#cost-subagent').screenshot({ path: join(artifacts, `subagents-${width}-${height}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   const readsBeforeRefresh = await page.evaluate(() => (window as any).__costReads);
@@ -212,7 +221,7 @@ try {
   views.messageChanged(scope, { id: "cost-child-launcher", role: "assistant", text: "费用子会话验证", calls: [{ id: "fixture", name: "delegate", input: "{}" }] });
   views.flush(scope);
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));
-  await page.locator(".tool-activity > summary").click();
+  // Delegation cards are visible directly in the conversation.
   await page.getByRole("button", { name: "打开子会话：调查数据来源", exact: true }).click();
   const childDialog = page.getByRole("dialog", { name: "子代理会话", exact: true });
   await page.evaluate(() => { (window as any).__costDelay = 400; });
@@ -222,6 +231,8 @@ try {
   await page.evaluate(() => { (window as any).__costDelay = 0; });
   await dialog.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();
   await dialog.getByText(/当前查看的子会话/).waitFor();
+  assert.equal(await dialog.locator('.cost-session-facts dd').first().textContent(), '$0.5000', 'child summary includes only its own session ledger');
+  assert.equal(await dialog.locator('.cost-session-facts dd').nth(1).textContent(), '1,700', 'child token summary includes only its own session ledger');
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
   assert.ok(await childDialog.isVisible(), "Escape does not close the child conversation");

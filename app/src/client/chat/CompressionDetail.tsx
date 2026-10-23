@@ -11,6 +11,8 @@ import type { Selection } from "../../shared/agent.js";
 import { ModelPicker } from "./ModelPicker.js";
 import { CompressionSummary } from "./CompressionSummary.js";
 import { AutoCompressionSettings } from "./AutoCompressionSettings.js";
+import { ProcessingPage } from "../pages/ProcessingPage.js";
+import type { Scope } from "../../shared/protocol.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
 
 export function compressionStatusLabel(job: Compression) {
@@ -57,7 +59,9 @@ export function CompressionDetail({
   onSelect,
   startUnavailable,
   contextWindow,
+  scope,
 }: {
+  scope?: Scope | null;
   contextWindow?: number | null;
   id: string;
   trigger: HTMLButtonElement;
@@ -76,6 +80,7 @@ export function CompressionDetail({
   onCancel: () => void;
 }) {
   const { panel, close, host } = useSettingsPopover(trigger, onClose);
+  const [records, setRecords] = useState(false);
   const [now, setNow] = useState(Date.now());
   const active = job?.state === "running",
     done = job?.state === "completed" && job.phase === "done",
@@ -104,7 +109,7 @@ export function CompressionDetail({
       open
       popover="auto"
       id={id}
-      className="compression-page"
+      className={`compression-page${records ? " processing-dialog" : ""}`}
       data-od-id="background-compression-page"
       aria-labelledby={`${id}-heading`}
       aria-describedby={`${id}-note`}
@@ -130,7 +135,9 @@ export function CompressionDetail({
           <Icon name="close" />
         </button>
       </header>
-      <div className="compression-body">
+      {records && scope && <div className="compression-body"><ProcessingPage key={scope.workspaceId + scope.sessionId} workspaceId={scope.workspaceId} initial={{ kind: "compression", sessionId: scope.sessionId, id: job?.id }} onBack={() => setRecords(false)} /></div>}
+      <div className="compression-body" hidden={records}>
+        {scope && <button className="btn" onClick={() => setRecords(true)}>处理记录</button>}
         <section className="compression-settings" aria-label="压缩模型设置">
           <h3>压缩模型</h3>
           <ModelPicker nested value={selection} disabled={busy || pending} onSelect={onSelect} />
@@ -286,7 +293,7 @@ export function CompressionDetail({
           )}
         </section>
       </div>
-      <footer>
+      <footer hidden={records}>
         <small>
           {active ? "返回会话不影响后台任务" : "压缩不会删除原始历史"}
         </small>

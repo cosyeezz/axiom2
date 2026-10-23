@@ -72,7 +72,25 @@ namespace AxiomExplorer {
     // Explorer can reuse its process or a pre-existing window. Match the exact filesystem
     // location and active tab before touching any geometry. A UIA display name cannot
     // establish directory identity, so inactive tabs are left unchanged and opened separately.
-    static IntPtr Find(dynamic windows, string directory) {
+    static bool SelectFile(dynamic browser, string path) {
+      object document = null, folder = null, item = null, selected = null, selectedItem = null;
+      try {
+        document = browser.Document;
+        folder = ((dynamic)document).Folder;
+        item = ((dynamic)folder).ParseName(Path.GetFileName(path));
+        if (item == null) return false;
+        // Select, deselect other items, scroll into view, and focus the requested file.
+        ((dynamic)document).SelectItem(item, 1 | 4 | 8 | 16);
+        selected = ((dynamic)document).SelectedItems();
+        if (((dynamic)selected).Count != 1) return false;
+        selectedItem = ((dynamic)selected).Item(0);
+        return String.Equals(Normalize((string)((dynamic)selectedItem).Path), Normalize(path), StringComparison.OrdinalIgnoreCase);
+      } finally {
+        foreach (object value in new object[] { selectedItem, selected, item, folder, document })
+          if (value != null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value);
+      }
+    }
+    static IntPtr Find(dynamic windows, string directory, string selection = null) {
       // New Explorer windows are appended; inspect them first and read Count once
       // to avoid a separate cross-process COM round trip on every iteration.
       int count = windows.Count;
@@ -90,7 +108,7 @@ namespace AxiomExplorer {
           if (name.ToString() != "CabinetWClass" && name.ToString() != "ExploreWClass") continue;
           bool active = ActiveTab(item, window, directory.Length == 0);
           if (directory.Length == 0) return IntPtr.Zero;
-          if (active) return window;
+          if (active && (selection == null || SelectFile(browser, selection))) return window;
         } catch (COMException) { /* A user may close/navigate an unrelated window during enumeration. */ }
         catch (ArgumentException) { /* Non-filesystem shell locations cannot match this request. */ }
         finally { if (item != null && Marshal.IsComObject(item)) Marshal.ReleaseComObject(item); }
@@ -117,6 +135,10 @@ namespace AxiomExplorer {
         var options = json.Deserialize<Dictionary<string, string>>(request);
         string directory = Normalize(options["directory"]);
         if (!Directory.Exists(options["directory"])) throw new DirectoryNotFoundException();
+        string selection;
+        options.TryGetValue("selection", out selection);
+        if (selection != null && (!File.Exists(selection) || !String.Equals(Normalize(Path.GetDirectoryName(selection)), directory, StringComparison.OrdinalIgnoreCase)))
+          throw new FileNotFoundException();
         IntPtr owner = GetForegroundWindow();
         // A disconnected/locked input desktop cannot display the requested window to the user.
         // Reject before creating or moving a shell-owned Explorer window.
@@ -133,7 +155,7 @@ namespace AxiomExplorer {
               if (!Activate(window)) return ForegroundUnavailable();
               // Activation/restoration may complete layout asynchronously; success requires
               // both the actual foreground identity and final geometry, not just API return codes.
-              if (Find(windowsObject, directory) == window && AxiomOpen.Placement.Center(window, owner, false) && IsWindowVisible(window) &&
+              if (Find(windowsObject, directory, selection) == window && AxiomOpen.Placement.Center(window, owner, false) && IsWindowVisible(window) &&
                   !IsIconic(window) && !IsZoomed(window) && GetForegroundWindow() == window) {
                 Console.WriteLine("opened");
                 return 0;

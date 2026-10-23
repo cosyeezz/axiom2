@@ -9,7 +9,7 @@
 .skill-card-copy>span{font-size:12px;color:#aba2b8}
 .skill-file-actions{display:inline-flex;align-items:center;flex:none}
 .skill-card .icon-btn,.skill-file-actions .icon-btn,.capability-use{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}
-.skill-file-actions .ui-glyph,.capability-use .ui-glyph{width:18px;height:18px;--icon-stroke:1.2px}
+.skill-file-actions .ui-glyph,.capability-use .ui-glyph{width:13px;height:13px;--icon-stroke:1.2px}
 .skill-file-error{flex-basis:100%;color:#fca5a5;font-size:12px;overflow-wrap:anywhere}
 .capability-settings .capability-item{flex-wrap:wrap}
 .capability-choice{display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;cursor:pointer}

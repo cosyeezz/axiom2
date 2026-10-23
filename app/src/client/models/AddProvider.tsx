@@ -34,7 +34,10 @@ export function ProviderAddMenu({ disabled, oauth, custom }: {
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   return (
     <div className="provider-add-control" ref={root} onBlur={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !menu.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+      // macOS WebViews can blur a button with no next focus target on mousedown.
+      // Keep the menu mounted for its click; outside pointers, Tab and window blur
+      // already dismiss it when focus genuinely leaves the interaction.
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node) && !menu.current?.contains(event.relatedTarget as Node)) setOpen(false);
     }} onKeyDown={(event) => {
       if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); }
     }}>

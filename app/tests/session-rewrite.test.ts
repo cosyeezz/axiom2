@@ -80,7 +80,8 @@ test("legacy inline attachments and host budgets recover without charging payloa
   const attachments = [{ name: "large.txt", text: "x".repeat(13000) }];
   const budget = { workMs: 600000, elapsedMs: 12, deadlineAt: 1800000000000 };
   const body = attachmentPrompt("original input", attachments);
-  manager.appendMessage({ role: "user", content: taskBudgetIntro(budget) + "\n\n" + body,
+  const legacyBudget = "本次执行预算：600000ms；截止时间：2027-01-15T08:00:00.000Z；此前任务链累计执行：12ms。有效追加会刷新工作时限。服务端会在剩余总预算的 20%（最多提前 60 秒）时提醒；工作到期进入无工具总结，总结最多 3 分钟，超时强制停止。";
+  manager.appendMessage({ role: "user", content: legacyBudget + "\n\n" + body,
     timestamp: 1, axiomId: "legacy", axiomRunId: "legacy-run", axiomInputIds: ["legacy-input"] } as any);
   const source = editableMessage(manager, "legacy");
   assert.equal(source.draft.text, "original input");
@@ -91,4 +92,17 @@ test("legacy inline attachments and host budgets recover without charging payloa
   manager.appendMessage({ role: "user", content: taskBudgetIntro(budget) + "\n\nuser quotation", timestamp: 2,
     axiomId: "literal", axiomRunId: "new-run", axiomInputIds: ["new-input"] } as any);
   assert.equal(editableMessage(manager, "literal").draft.text, taskBudgetIntro(budget) + "\n\nuser quotation");
+});
+
+test("task append editing restores the exact user input without its budget update", () => {
+  const manager = SessionManager.inMemory();
+  const text = "工作预算已更新，这是用户原文。\n\nReview [file1].";
+  const attachments = [{ id: "file1", name: "source.ts", kind: "file" as const, path: "/project/source.ts", text: "" }];
+  const taskInputText = attachmentPrompt(text, attachments);
+  manager.appendCustomMessageEntry("axiom-append", "工作预算已更新，当前截止时间为2027-01-15T08:00:00.000Z，以此为准。\n\n" + taskInputText,
+    true, { axiomInput: "budget-append", taskInputText });
+  const before = manager.getEntries();
+  assert.deepEqual(editableMessage(manager, "input-budget-append").draft, { text, attachment: null, attachments, images: [] });
+  assert.deepEqual(transcriptMessages(manager).map(message => message.text), [text]);
+  assert.deepEqual(manager.getEntries(), before, "opening the editor preserves the stored budget and input");
 });

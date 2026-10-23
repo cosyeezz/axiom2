@@ -34,7 +34,7 @@ test("0/32/500/2000 task lists use fixed SQL executions with ordered independent
     const ids: string[] = [], counts: number[] = [];
     for (const count of [0, 32, 500, 2000]) {
       while (ids.length < count) {
-        const batch = records.create(scope, "anchor", "context", Array.from({ length: Math.min(8, count - ids.length) }, () => ({ task: "historical", role: "" })), { provider: "fixture", id: "fixture", thinking: "off" }).taskIds;
+        const batch = records.create(scope, "anchor", "context", Array.from({ length: Math.min(8, count - ids.length) }, () => ({ task: "historical" })), { provider: "fixture", id: "fixture", thinking: "off" }).taskIds;
         for (const id of batch) {
           const row = records.rows("WHERE id=?", id)[0];
           store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(id);

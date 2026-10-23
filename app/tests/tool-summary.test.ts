@@ -69,7 +69,7 @@ test("search and web summaries retain queries, URLs and search scope", () => {
   assert.equal(toolSummary(call("web_search", { queries: ["first", null, {}, "second"] })).target, "first · second");
   assert.equal(toolSummary(call("fetch_content", { urls: ["https://example.com", "https://example.org"] })).target, "https://example.com · https://example.org");
   assert.equal(toolSummary(call("read", { path: "", file_path: "fallback.ts" })).target, "fallback.ts");
-  assert.equal(toolSummary(call("delegate", { tasks: [null, { task: "测试" }] })).target, "子任务 · 测试");
+  assert.equal(toolSummary(call("delegate", { tasks: [null, { title: "测试", task: "完整测试要求" }] })).target, "子任务 · 测试");
 });
 test("cached English summaries are localized without losing full-input metadata", () => {
   const summary = { label: "read", icon: "read" as const, target: "src/full-path.ts", detail: "L20–29" };

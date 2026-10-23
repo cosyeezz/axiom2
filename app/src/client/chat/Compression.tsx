@@ -157,6 +157,7 @@ export function Compression({ scope }: { scope?: Scope }) {
       </button>
       {open && (
         <CompressionDetail
+          scope={scope}
           id={id}
           trigger={trigger.current!}
           job={job}

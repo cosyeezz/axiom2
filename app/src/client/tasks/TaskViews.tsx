@@ -56,7 +56,7 @@ function TaskWindow({
   const [report, setReport] = useState<TaskResult | null>(null),
     [error, setError] = useState("");
   const [detailsVisited, setDetailsVisited] = useState(false), [loadingReport, setLoadingReport] = useState(false);
-  const [readingRevision, setReadingRevision] = useState(0);
+  const [readingRevision, setReadingRevision] = useState(0), [briefRevision, setBriefRevision] = useState(0);
   const reportRequest = useRef(0);
   useEffect(() => () => { reportRequest.current++; }, []);
   useEffect(() => {
@@ -95,9 +95,10 @@ function TaskWindow({
     >
       <header className="subagent-dialog-head">
         <div className="subagent-dialog-heading">
-          <strong>子代理会话</strong>
+          <Icon name="subagent-identity" />
+          <strong title={task?.title || "子任务"}>{task?.title || "子任务"}</strong>
         </div>
-        {task && <TaskState task={task} />}
+        {task && <><TaskState task={task} /><button type="button" className="btn task-brief-link" onClick={() => setBriefRevision(value => value + 1)}>任务说明</button></>}
         <button
           className="icon-btn"
           type="button"
@@ -115,7 +116,7 @@ function TaskWindow({
               <summary>
                 执行与交付 · {task.results.length} 次
               </summary>
-              {detailsVisited && <><p className="task-description">{task.description}</p>
+              {detailsVisited && <>
               {task.error && <p className="execution-alert">{task.error}</p>}
               {task.results.map((r, i) => (
                 <button
@@ -141,9 +142,9 @@ function TaskWindow({
               {loadingReport && <p role="status">正在读取交付…</p>}
               {report && (
                 <div>
-                  <p>{report.sideEffects}</p>
+                  {report.sideEffects && <p>{report.sideEffects}</p>}
                   <TaskReportBody key={report.id} scope={scope} report={report} />
-                  <p>{report.unfinished.join("；")}</p>
+                  {report.unfinished.length > 0 && <p>{report.unfinished.join("；")}</p>}
                 </div>
               )}
               {error && <p role="alert">{error}</p>}</>}
@@ -151,7 +152,7 @@ function TaskWindow({
           </div>
           <FilePreviewHost key={`${child.workspaceId}:${child.sessionId}`}>
           <OriginalConversationProvider key={`${child.workspaceId}:${child.sessionId}`} scope={child}>
-            <AgentThread scope={child} nested readingRevision={readingRevision} />
+            <AgentThread scope={child} nested readingRevision={readingRevision} task={task} briefRevision={briefRevision} />
             {composer(child)}
           </OriginalConversationProvider>
           </FilePreviewHost>

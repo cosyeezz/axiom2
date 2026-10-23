@@ -7,6 +7,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  existsSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -54,6 +55,8 @@ test(
     const requests: any[] = [];
     let memoryPath = "";
     const observedProgress: (number | null)[] = [];
+    const cacheReads = [0, 80, 20, 90];
+    let responseReady = 0, releaseResponse: (() => void) | undefined;
     const fixture = createServer(async (req, res) => {
       let raw = "";
       for await (const chunk of req) raw += chunk;
@@ -69,6 +72,7 @@ test(
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
       if (stall) return;
+      if (count >= 2 && count <= 4) await new Promise<void>(resolve => { responseReady = count; releaseResponse = resolve; });
       const chunk = (delta: unknown, finish_reason: string | null = null) =>
         res.write(
           `data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta, finish_reason }] })}\n\n`,
@@ -90,6 +94,10 @@ test(
               },
             },
             { index: 1, id: "read-memory", type: "function", function: { name: "read", arguments: JSON.stringify({ path: memoryPath }) } },
+            { index: 2, id: "cache-tool-barrier", type: "function", function: {
+              name: process.platform === "win32" ? "powershell" : "bash",
+              arguments: JSON.stringify({ command: `node -e "const fs = require('fs'); fs.writeFileSync('cache-tool-started', ''); const timer = setInterval(() => { if (fs.existsSync('cache-tool-release')) clearInterval(timer); }, 25);"`, timeout: 20 }),
+            } },
           ],
         });
         chunk({}, "tool_calls");
@@ -153,7 +161,7 @@ test(
         chunk({}, "stop");
       }
       res.write(
-        `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } })}\n\n`,
+        `data: ${JSON.stringify({ id: "usage", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: cacheReads[count - 1] ?? 30 } } })}\n\n`,
       );
       res.end("data: [DONE]\n\n");
     });
@@ -163,6 +171,7 @@ test(
     const cleanup = () => cleanupTask ??= (async () => {
       // After-hooks run on timeout even if the test's await never settles.
       // Close the stalled provider independently of application shutdown.
+      releaseResponse?.();
       fixture.closeAllConnections();
       const fixtureClosed = new Promise<void>(resolve => fixture.close(() => resolve()));
       const closing = Promise.allSettled([...applications].map(app => app.close()));
@@ -279,7 +288,7 @@ test(
       // Reproduce a just-settled child's refresh before a cold main prompt.
       // It must not reject this request or cause the model to receive it twice.
       const records = new TaskRecords(app.store);
-      const child = records.create(scope, "settled-child", "context", [{ task: "finished child", role: "" }],
+      const child = records.create(scope, "settled-child", "context", [{ task: "finished child" }],
         { provider: "axiom-product-fixture", id: "fixture", thinking: "off" });
       app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(child.taskIds[0]);
       const childSessionId = String(app.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(child.taskIds[0])!.sessionId);
@@ -294,6 +303,18 @@ test(
         call("prompt", { text: "conflict" }, scope, requestId),
         { code: "REQUEST_CONFLICT" },
       );
+      await wait(() => existsSync(join(project, "cache-tool-started")), "tool barrier did not start");
+      await wait(() => app.agents.info(scope).usage?.lastRequest?.input === 100, "native request usage was not published while the tool was running");
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, { input: 100, cacheRead: 0, cacheWrite: 0 });
+      assert.ok(running(app.agents.info(scope).run));
+      writeFileSync(join(project, "cache-tool-release"), "");
+      for (const next of [2, 3, 4]) {
+        await wait(() => responseReady === next, `request ${next} did not reach response barrier`);
+        const cached = cacheReads[next - 2];
+        await wait(() => app.agents.info(scope).usage?.lastRequest?.cacheRead === cached, `request ${next - 1} usage did not update`);
+        assert.deepEqual(app.agents.info(scope).usage?.lastRequest, { input: 100 - cached, cacheRead: cached, cacheWrite: 0 });
+        releaseResponse!();
+      }
       await wait(
         () => !running(app.agents.info(scope).run),
         "worker did not finish",
@@ -315,7 +336,7 @@ test(
         const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
         assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
         assert.match(system, /主动维护会话记忆文件/);
-        assert.match(system, /最终回复前，核对记忆/);
+        assert.match(system, /最终回复前，检查并更新本会话记忆/);
         assert.match(system, /RULES\.md/);
         assert.match(system, /首次维护前先读取/);
       };
@@ -346,7 +367,9 @@ test(
           JSON.stringify(m).includes("captured attachment"),
         ),
       );
-      assert.ok(app.agents.info(scope).usage!.total > 0);
+      assert.equal(app.agents.info(scope).usage!.total, 480);
+      assert.equal(app.agents.info(scope).usage!.cacheRead, 190);
+      assert.deepEqual(app.agents.info(scope).usage!.lastRequest, { input: 10, cacheRead: 90, cacheWrite: 0 });
       const environment = app.agents.info(scope).environment!;
       assert.ok(environment.tools.includes("write"));
       assert.ok(environment.skills.includes("fixture-skill"));
@@ -364,6 +387,7 @@ test(
       stall = true;
       await call("prompt", { text: "stall" });
       await wait(() => count === 5, "stall did not start");
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, { input: 10, cacheRead: 90, cacheWrite: 0 }, "a request awaiting its native response keeps the last returned usage");
       assertMemoryPrompt(requests[4], memoryPath);
       assert.equal(runs.live.get(scope.sessionId).child.pid, warmPid, "next prompt reuses the live pi worker");
       assert.equal(warmInstance.state, "leased", "busy worker holds an execution lease");
@@ -404,9 +428,16 @@ test(
       );
       await call("agent.stop", { runId: app.agents.info(scope).run!.id });
       assert.equal(app.agents.info(scope).run!.status, "cancelled");
+      const boundFile = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file as string;
+      const latestStoppedReply = readFileSync(boundFile, "utf8").trim().split("\n").map(line => JSON.parse(line))
+        .filter(entry => entry.type === "message" && entry.message.role === "assistant").at(-1)!.message;
+      // Forced shutdown can win before abort is recorded, or after a zero-usage
+      // aborted response is persisted. The snapshot must match the native record.
+      const stoppedUsage = latestStoppedReply.stopReason === "aborted" ? null : { input: 10, cacheRead: 90, cacheWrite: 0 };
+      assert.equal(latestStoppedReply.usage.input + latestStoppedReply.usage.cacheRead + latestStoppedReply.usage.cacheWrite, stoppedUsage ? 100 : 0);
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, stoppedUsage, "stop settles against the latest persisted native response");
       assert.ok(!("cleanup" in app.agents.info(scope).run!));
       assert.equal(count, 6, "stop must not ask the model for a summary");
-      const boundFile = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file;
       assert.ok(running(app.agents.info(otherScope).run));
       await call(
         "agent.stop",
@@ -419,6 +450,7 @@ test(
       app = await start({ root, port: 0 });
       assert.deepEqual(app.agents.thread(scope).ids, before);
       assert.equal(app.agents.info(scope).environment!.systemPrompt, savedPrompt);
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, stoppedUsage, "restart retains the settled native reading");
       assert.equal(count, 6, "restart must not replay");
       assert.deepEqual(
         await call("prompt", params, scope, requestId),
@@ -435,6 +467,12 @@ test(
       assert.equal(count, 7);
       assertMemoryPrompt(requests[6], memoryPath);
       assert.equal(app.agents.info(scope).run!.status, "completed");
+      const lastRequest = { input: 70, cacheRead: 30, cacheWrite: 0 };
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, lastRequest);
+      await app.close();
+      app = await start({ root, port: 0 });
+      assert.deepEqual(app.agents.info(scope).usage?.lastRequest, lastRequest, "latest native request survives restart");
+      assert.equal(count, 7, "restoring usage must not request the model");
       assert.ok(
         !requests[6].messages.some(
           (m: any) =>
@@ -455,6 +493,7 @@ test(
       assert.equal(count, 8);
       const failedRun = app.agents.info(scope).run!;
       assert.equal(failedRun.status, "failed");
+      assert.equal(app.agents.info(scope).usage?.lastRequest, null, "rejected request cannot display an older cache rate");
       assert.match(failedRun.error!, /400.*Unsupported parameter: temperature/s);
       assert.doesNotMatch(failedRun.error!, /sk-fixture-secret/);
       const failedMessage = app.agents.thread(scope).ids.map((id) => app.agents.message(scope, id))

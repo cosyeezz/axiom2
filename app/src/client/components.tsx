@@ -42,7 +42,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className={className}
+      className={`${className} scrollable-dialog`}
       aria-label={title}
       aria-describedby={describedBy}
       onKeyDown={(e) => e.stopPropagation()}
@@ -52,12 +52,14 @@ export function Dialog({
         onClose();
       }}
     >
-      <h2>{title}</h2>
-      {children}
+      <div className="dialog-content">
+        <h2>{title}</h2>
+        {children}
+      </div>
     </dialog>
   );
 }
-export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools" | "resources" }) {
+export function SettingsSidebar({ page }: { page: "overview" | "display" | "models" | "tools" | "resources" }) {
   return (
     <aside className="settings-sidebar" aria-label="配置导航">
       <a className="btn btn-ghost back-link" href="/">
@@ -74,6 +76,7 @@ export function SettingsSidebar({ page }: { page: "overview" | "models" | "tools
         >
           配置概览
         </a>
+        <a href="/display.html" className="settings-nav" aria-current={page === "display" ? "page" : undefined}>显示与阅读</a>
         <p className="sidebar-label">AI 与连接</p>
         <a
           href="/model-config.html"

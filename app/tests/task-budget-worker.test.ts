@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fork } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,8 +48,7 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
   writeFileSync(join(pi, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "loopback-only" } }));
   writeFileSync(join(pi, "settings.json"), JSON.stringify({ retry: { enabled: false }, compaction: { enabled: false } }));
   const manager = SessionManager.create(cwd, root);
-  manager.appendMessage({ role: "user", content: "Bound task", timestamp: Date.now() });
-  manager.appendCustomEntry("axiom-test", {});
+  writeFileSync(manager.getSessionFile()!, JSON.stringify(manager.getHeader()) + "\n");
   const worker = process.env.AXIOM_TEST_COMPILED
     ? new URL("../dist/server/agent-worker.js", import.meta.url) : new URL("../src/server/agent-worker.ts", import.meta.url);
   const instanceId = randomUUID();
@@ -68,29 +67,44 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     return send({ type: "start", input: {
     root, cwd, modelsFile, file: manager.getSessionFile(), runId,
     selection: { provider: "fixture", id: "fixture", thinking: "off" }, prompt: "Investigate evidence.",
-    task: { id: "budget-task", role: "", inputIds: [], budget: { workMs: 600_000, elapsedMs: 0, deadlineAt: Date.now() + 600_000 } },
+    task: { id: "budget-task", inputIds: [], budget: { workMs: 600_000, elapsedMs: 0, deadlineAt: Date.now() + 600_000 } },
   } }); };
   const barrier = async (runId: string) => {
     const key = randomUUID();
     send({ type: "recall", runId, key, ids: [] });
     await wait(() => events.some((event) => event.type === "recalled" && event.key === key), `IPC barrier failed: ${stderr}`);
   };
+  const next = async (reply: () => void, label: string) => {
+    const count = bodies.length;
+    reply();
+    await wait(() => bodies.length === count + 1, `${label}: ${stderr}`);
+    return bodies.at(-1);
+  };
+  const prefix = (previous: any, current: any) => assert.deepEqual(current.messages.slice(0, previous.messages.length), previous.messages,
+    "already-sent message prefix remains unchanged");
   try {
     const firstRun = randomUUID();
     start(firstRun);
     await wait(() => bodies.length === 1, `initial request missing: ${stderr}`);
-    assert.match(JSON.stringify(bodies[0].messages), /本次执行预算：600000ms/);
-    assert.match(JSON.stringify(bodies[0].messages), /最多提前 60 秒/);
+    const initial = bodies[0];
+    assert.equal(initial.messages[0].role, "system");
+    assert.match(JSON.stringify(initial.messages[1]), /本次工作预算：600000ms/);
+    assert.match(JSON.stringify(initial.messages[2]), /Investigate evidence\./);
+    assert.match(JSON.stringify(initial.messages[0]), /最终交付不超过2000字/);
     const deadlineAt = Date.now() + 10_000;
     const update = { type: "budget", runId: firstRun, workMs: 60_000, deadlineAt };
     send(update); send(update);
     await barrier(firstRun);
     assert.equal(bodies.length, 1, "warning must not interrupt an in-flight request");
-    releases[0]();
-    await wait(() => bodies.length === 2, "warning did not continue at the native Steering boundary");
-    const warned = JSON.stringify(bodies[1].messages);
-    assert.equal(warned.match(/子任务预算即将用尽/g)?.length, 1, "repeated budget update must not duplicate the warning");
-    assert.match(warned, /剩余约 \d+ 秒/);
+    const updated = await next(() => releases.at(-1)!(), "budget update did not continue at the native Steering boundary");
+    prefix(initial, updated);
+    assert.match(JSON.stringify(updated.messages.at(-1)), /工作预算已更新/);
+    const warnedRequest = await next(() => releases.at(-1)!(), "warning did not continue at the native Steering boundary");
+    prefix(updated, warnedRequest);
+    const warned = JSON.stringify(warnedRequest.messages);
+    assert.equal(warned.match(/截至本条提醒生成时/g)?.length, 1, "repeated budget update must not duplicate the warning");
+    assert.equal(warned.match(/工作预算已更新/g)?.length, 1, "duplicate revisions must not duplicate the update");
+    assert.match(warned, /剩余约\d+秒/);
     assert.match(warned, /未完成／未验证项/);
 
     const refreshedDeadline = Date.now() + 600_000;
@@ -98,62 +112,69 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     send({ type: "input", runId: firstRun, id: inputId, text: "Continue after budget extension.", mode: "steer",
       budget: { workMs: 600_000, elapsedMs: 0, deadlineAt: refreshedDeadline, revision: 1 } });
     await wait(() => events.some((event) => event.type === "input-accepted" && event.id === inputId), "follow-up was not accepted");
-    releases[1]();
-    await wait(() => bodies.length === 3, "extended request missing");
-    assert.doesNotMatch(JSON.stringify(bodies[2].messages), /子任务预算即将用尽/, "obsolete warning must leave the request context after extension");
-    const append = bodies[2].messages.find((message: any) => JSON.stringify(message.content).includes("Continue after budget extension."));
+    const extended = await next(() => releases.at(-1)!(), "extended request missing");
+    prefix(warnedRequest, extended);
+    const append = extended.messages.find((message: any) => JSON.stringify(message.content).includes("Continue after budget extension."));
     assert.ok(JSON.stringify(append).includes(new Date(refreshedDeadline).toISOString()), "append alone must tell the model its refreshed deadline");
-    assert.match(JSON.stringify(append), /覆盖此前截止时间/);
-    releases[2]();
+    assert.match(JSON.stringify(append), /以此为准/);
+    releases.at(-1)!();
     await wait(() => events.some((event) => event.type === "idle" && event.runId === firstRun), "first run did not settle");
 
     const secondRun = randomUUID();
-    start(secondRun);
-    await wait(() => bodies.length === 4, "reused worker did not start new run");
-    assert.doesNotMatch(JSON.stringify(bodies[3].messages), /子任务预算即将用尽/, "historical warning must not carry into a new execution");
+    const second = await next(() => start(secondRun), "reused worker did not start new run");
+    prefix(extended, second);
     send(update); // Old-run IPC cannot arm a warning in the new execution.
     await barrier(secondRun);
-    releases[3]();
+    releases.at(-1)!();
     await wait(() => events.some((event) => event.type === "idle" && event.runId === secondRun), "second run did not settle");
-    assert.equal(bodies.length, 4, "stale run must not trigger a warning continuation");
+    assert.equal(bodies.length, 5, "stale run must not trigger a warning continuation");
     assert.equal(events.filter((event) => event.type === "done" && event.status === "completed").length, 2, stderr);
 
     const thirdRun = randomUUID(), shell = process.platform === "win32" ? "powershell" : "bash";
-    start(thirdRun);
-    await wait(() => bodies.length === 5, "third run missing");
-    releases[4]({ name: shell, args: { command: process.platform === "win32" ? "Start-Sleep -Seconds 30" : "sleep 30" } });
+    const third = await next(() => start(thirdRun), "third run missing");
+    prefix(second, third);
+    releases.at(-1)!({ name: shell, args: { command: process.platform === "win32" ? "Start-Sleep -Seconds 30" : "sleep 30" } });
     await wait(() => events.some((event) => event.runId === thirdRun && event.type === "tool" && event.status === "running"), "long tool did not start");
+    send({ type: "budget", runId: thirdRun, workMs: 60_000, elapsedMs: 0, deadlineAt: Date.now() + 10_000, revision: 1 });
+    await barrier(thirdRun); // Leave both the update and its immediate warning unconsumed.
     const summary = { type: "summarize", runId: thirdRun, workMs: 1000, elapsedMs: 0,
-      deadlineAt: Date.now(), summaryDeadlineAt: Date.now() + 180000, revision: 1 };
-    send(summary);
-    await wait(() => bodies.length === 6, `tool abort did not enter summary: ${stderr}`);
-    assert.deepEqual(bodies[5].tools ?? [], []);
-    assert.match(JSON.stringify(bodies[5].messages.at(-1)), /工作预算已到/);
+      deadlineAt: Date.now(), summaryDeadlineAt: Date.now() + 180000, revision: 2 };
+    const summarizing = await next(() => send(summary), "tool abort did not enter summary");
+    assert.deepEqual(summarizing.tools ?? [], []);
+    assert.match(JSON.stringify(summarizing.messages.at(-1)), /工作预算已到/);
+    assert.match(JSON.stringify(summarizing.messages.at(-2)), /截至本条提醒生成时/);
+    assert.match(JSON.stringify(summarizing.messages.at(-3)), /工作预算已更新/);
+    prefix(third, summarizing);
     assert.ok(!events.some((event) => event.runId === thirdRun && event.type === "done"), "internal abort cannot settle the business run");
     const forbidden = join(cwd, "summary-must-not-execute.txt");
-    releases[5]({ name: shell, args: { command: process.platform === "win32"
-      ? `Set-Content -LiteralPath '${forbidden}' -Value forbidden` : `echo forbidden > '${forbidden}'` } });
-    await wait(() => bodies.length === 7, "invalid summary tool was not rejected");
+    const refused = await next(() => releases.at(-1)!({ name: shell, args: { command: process.platform === "win32"
+      ? `Set-Content -LiteralPath '${forbidden}' -Value forbidden` : `echo forbidden > '${forbidden}'` } }), "invalid summary tool was not rejected");
+    prefix(summarizing, refused);
     assert.equal(existsSync(forbidden), false, "summary cannot execute tools even when the model invents a call");
-    assert.deepEqual(bodies[6].tools ?? [], []);
+    assert.deepEqual(refused.tools ?? [], []);
     const appendId = randomUUID();
-    send({ type: "input", runId: thirdRun, id: appendId, text: "NEW-WORK-AFTER-SUMMARY", mode: "steer",
-      budget: { workMs: 600000, elapsedMs: 0, deadlineAt: Date.now() + 600000, summaryDeadlineAt: null, revision: 2 } });
-    await wait(() => bodies.length === 8, `summary append did not resume work: ${stderr}`);
-    assert.ok(bodies[7].tools.some((tool: any) => tool.function.name === "read"));
-    assert.match(JSON.stringify(bodies[7].messages), /NEW-WORK-AFTER-SUMMARY/);
-    assert.doesNotMatch(JSON.stringify(bodies[7].messages), /现在只基于已有上下文生成最终总结/);
+    const resumed = await next(() => send({ type: "input", runId: thirdRun, id: appendId, text: "NEW-WORK-AFTER-SUMMARY", mode: "steer",
+      budget: { workMs: 600000, elapsedMs: 0, deadlineAt: Date.now() + 600000, summaryDeadlineAt: null, revision: 3 } }), "summary append did not resume work");
+    prefix(refused, resumed);
+    assert.ok(resumed.tools.some((tool: any) => tool.function.name === "read"));
+    assert.match(JSON.stringify(resumed.messages), /NEW-WORK-AFTER-SUMMARY/);
+    assert.match(JSON.stringify(resumed.messages), /工作预算已到/);
+    assert.match(JSON.stringify(resumed.messages.at(-1)), /恢复工作/);
     assert.ok(events.some((event) => event.type === "input-accepted" && event.id === appendId));
     send(summary); // Same-run, older revision must not undo the append.
     await barrier(thirdRun);
     writeFileSync(join(cwd, "evidence.txt"), "verified restored tools");
-    releases[7]({ name: "read", args: { path: join(cwd, "evidence.txt") } });
-    await wait(() => bodies.length === 9, "restored read tool did not finish");
-    assert.match(JSON.stringify(bodies[8].messages), /verified restored tools/);
-    releases[8]();
+    const evidence = await next(() => releases.at(-1)!({ name: "read", args: { path: join(cwd, "evidence.txt") } }), "restored read tool did not finish");
+    prefix(resumed, evidence);
+    assert.match(JSON.stringify(evidence.messages), /verified restored tools/);
+    releases.at(-1)!();
     await wait(() => events.some((event) => event.type === "idle" && event.runId === thirdRun), "resumed work did not settle");
     assert.equal(events.filter((event) => event.runId === thirdRun && event.type === "done").length, 1);
     assert.equal(events.find((event) => event.runId === thirdRun && event.type === "done").status, "completed");
+    const persisted = readFileSync(manager.getSessionFile()!, "utf8");
+    assert.match(persisted, /截至本条提醒生成时/);
+    assert.match(persisted, /工作预算已更新/);
+    assert.match(persisted, /工作预算已到/);
   } finally {
     clearTimeout(watchdog);
     if (child.exitCode === null) child.kill();

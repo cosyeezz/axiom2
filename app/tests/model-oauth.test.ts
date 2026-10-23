@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { ModelService } from "../src/server/model-service.js";
 import { Logins } from "../src/server/auth.js";
+import { fixtureLoginNetwork } from "./model-network-fixture.js";
 
 test("OAuth automatic callback cancels manual prompt; device flow needs no code submission", async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-oauth-callback-"));
@@ -14,7 +15,7 @@ test("OAuth automatic callback cancels manual prompt; device flow needs no code 
   const service = new ModelService(root);
   const owner = {};
   let changed = 0;
-  const logins = new Logins(service, () => {}, async () => { changed++; }, async () => {});
+  const logins = new Logins(service, () => {}, async () => { changed++; }, async () => {}, fixtureLoginNetwork(service));
   const until = async (predicate: () => boolean) => {
     for (let n = 0; n < 100 && !predicate(); n++) await delay(10);
     assert.ok(predicate());

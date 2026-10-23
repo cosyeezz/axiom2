@@ -15,7 +15,7 @@ export class Costs {
   /** File metadata and accounting rows only: progress notifications never parse history. */
   private sourceVersion(scope: Scope): string {
     const root = this.store.session(scope.workspaceId, scope.sessionId);
-    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.description,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
+    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.title,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
     const hasMemory = !!this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_usage'").get();
     const sources = [root.id, ...children.map((row) => String(row.sessionId))].map((id) => {
       const stored = this.store.db.prepare("SELECT file,usage FROM agent_sessions WHERE sessionId=?").get(id);
@@ -53,9 +53,9 @@ export class Costs {
     // A direct read must not consume an invalidation still owed to other views.
     const key = JSON.stringify(scope);
     if (this.versions.get(key) === undefined) this.versions.set(key, this.sourceVersion(scope));
-    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.description,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
+    const children = this.store.db.prepare("SELECT t.id,t.sessionId,t.title,t.status FROM tasks t JOIN sessions s ON s.id=t.sessionId AND s.workspaceId=t.workspaceId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY t.createdAt,t.id").all(scope.workspaceId, scope.sessionId);
     const sessions: CostReport["sessions"] = [{ id: root.id, title: root.title, taskId: null, status: null },
-      ...children.map((row) => ({ id: String(row.sessionId), title: String(row.description), taskId: String(row.id), status: String(row.status) }))];
+      ...children.map((row) => ({ id: String(row.sessionId), title: typeof row.title === "string" && row.title.trim() ? row.title : "子任务", taskId: String(row.id), status: String(row.status) }))];
     const rows = new Map<string, CostRow>(), warnings: string[] = [];
     for (const session of sessions) {
       const add = (category: CostCategory, sourceId: string, source: string, totals: CostTotals,

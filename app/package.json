@@ -28,13 +28,17 @@
     "@earendil-works/pi-mcp": "1.1.0",
     "@earendil-works/pi-tui": "1.1.0",
     "highlight.js": "10.7.3",
+    "jsqr": "1.4.0",
     "koffi": "3.3.3",
     "marked": "18.0.11",
+    "mermaid": "12.2.0",
     "qrcode": "1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "sql-formatter": "15.9.0",
     "typebox": "1.1.38",
     "typescript": "6.0.2",
+    "undici": "8.10.2",
     "ws": "8.22.0"
   },
   "devDependencies": {

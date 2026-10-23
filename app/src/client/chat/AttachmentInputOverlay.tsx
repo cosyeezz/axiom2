@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type RefObject, type ReactNode } from "react";
 import type { Draft } from "../../shared/protocol.js";
-import { AttachmentSymbol } from "./AttachmentSymbol.js";
+import { AttachmentReference } from "./AttachmentSymbol.js";
+import { subscribeDisplaySettings } from "../display-settings.js";
 
 /** A visual mirror keeps the native textarea's selection, IME, undo and clipboard behavior. */
 export function AttachmentInputOverlay({ input, draft }: { input: RefObject<HTMLTextAreaElement | null>; draft: Draft }) {
@@ -23,7 +24,7 @@ export function AttachmentInputOverlay({ input, draft }: { input: RefObject<HTML
     parts.push(draft.text.slice(end, start));
     parts.push(editing ? match[0] : <span className="attachment-inline-reference" key={start}>
       <span className="attachment-reference-source">{match[0]}</span>
-      <span className="attachment-reference-icon"><AttachmentSymbol kind={item.kind} id={match[1]} label={item.kind === "image" ? match[1] : undefined} /></span>
+      <span className="attachment-reference-icon"><AttachmentReference kind={item.kind} id={match[1]} /></span>
     </span>);
     count++; end = finish;
   }
@@ -65,12 +66,14 @@ export function AttachmentInputOverlay({ input, draft }: { input: RefObject<HTML
     node.classList.toggle("has-attachment-overlay", enabled);
     sync(); select();
     const observer = new ResizeObserver(sync); observer.observe(node);
+    const unsubscribeDisplay = subscribeDisplaySettings(sync);
     node.addEventListener("scroll", sync); node.addEventListener("select", select);
     node.addEventListener("keyup", select); node.addEventListener("click", select);
     node.addEventListener("focus", select); node.addEventListener("blur", select);
     node.addEventListener("input", select);
     node.addEventListener("compositionstart", select); node.addEventListener("compositionend", select);
     return () => {
+      unsubscribeDisplay();
       observer.disconnect(); node.classList.remove("has-attachment-overlay");
       node.removeEventListener("scroll", sync); node.removeEventListener("select", select);
       node.removeEventListener("keyup", select); node.removeEventListener("click", select);

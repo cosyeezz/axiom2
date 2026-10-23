@@ -13,7 +13,6 @@ import {
   type TaskInputReceipt,
 } from "../../shared/tasks.js";
 export type TaskRow = Omit<Task, "budgets" | "results"> & {
-  role: string;
   budgets: string;
 };
 export type TaskInput = {
@@ -45,7 +44,9 @@ export class TaskRecords {
   }
   constructor(readonly store: Store) {
     const columns = new Set((store.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map((column) => column.name));
-    for (const [name, declaration] of Object.entries({ title: "TEXT", workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
+    // Task-specific instructions now live entirely in the task body.
+    if (columns.has("role")) store.db.exec("ALTER TABLE tasks DROP COLUMN role");
+    for (const [name, declaration] of Object.entries({ title: "TEXT", context: "TEXT", initialInputId: "TEXT", workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
       if (!columns.has(name)) store.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
     store.db.exec(
       "CREATE TABLE IF NOT EXISTS task_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL)",
@@ -123,7 +124,7 @@ export class TaskRecords {
       WHERE t.workspaceId=? AND t.parentSessionId=? GROUP BY tr.taskId`).all(scope.workspaceId, scope.sessionId)
       .map((entry) => [String(entry.taskId), Number(entry.ms)]));
     return {
-      tasks: rows.map(({ role: _role, ...task }) => ({ ...task, budgets: this.budgets(task.budgets),
+      tasks: rows.map((task) => ({ ...task, budgets: this.budgets(task.budgets),
         inputs: inputs.get(task.id) ?? [], results: results.get(task.id) ?? [], elapsedMs: elapsed.get(task.id) ?? 0 })),
       frozen: !!row?.frozen,
       defaultModel: this.settings().selection,
@@ -228,7 +229,7 @@ export class TaskRecords {
     scope: Scope,
     anchor: string,
     context: string,
-    definitions: { title?: string; task: string; role: string }[],
+    definitions: { title?: string; task: string }[],
     selection: Selection,
   ) {
     const budgets = this.preferences(),
@@ -241,13 +242,13 @@ export class TaskRecords {
         .run(scope.sessionId);
       for (const d of definitions) {
         const id = randomUUID(),
-          child = randomUUID();
+          child = randomUUID(), initialInputId = randomUUID();
         taskIds.push(id);
         this.store.db
           .prepare(
             "INSERT INTO sessions(id,workspaceId,title,updatedAt) VALUES(?,?,?,?)",
           )
-          .run(child, scope.workspaceId, d.title ?? d.task.slice(0, 120), Date.now());
+          .run(child, scope.workspaceId, d.title ?? "子任务", Date.now());
         this.store.db
           .prepare(
             "INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)",
@@ -255,7 +256,7 @@ export class TaskRecords {
           .run(child, JSON.stringify(selection));
         this.store.db
           .prepare(
-            "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,title,description,role,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,?,'queued',?,?)",
+            "INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,title,context,initialInputId,description,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?)",
           )
           .run(
             id,
@@ -264,8 +265,9 @@ export class TaskRecords {
             child,
             anchor,
             d.title ?? null,
+            context,
+            initialInputId,
             d.task,
-            d.role,
             JSON.stringify(budgets),
             Date.now(),
           );
@@ -274,6 +276,7 @@ export class TaskRecords {
           id,
           `任务背景:\n${context}\n\n当前任务:\n${d.task}`,
           "steer",
+          [], initialInputId,
         );
       }
       this.store.db.exec("COMMIT");

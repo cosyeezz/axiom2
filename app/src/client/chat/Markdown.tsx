@@ -1,14 +1,33 @@
 import { createContext, memo, useContext, useId, useMemo, useRef, type ReactNode } from "react";
+import { LocalPath, isLocalPath } from "../LocalPath.js";
+import { pathRelativeToFile } from "../../shared/local-paths.js";
+import type { Scope } from "../../shared/protocol.js";
 import { DerivedContext } from "./derived-cache.js";
 import type { Token } from "marked";
 import { FileLink } from "./FileLink.js";
 import { localFileLink } from "../../shared/file-preview.js";
 import { CodeBlock } from "./CodeBlock.js";
+import { InlineCode } from "./InlineCode.js";
 import { markdown, markdownTokens, markdownImagePath, type FootnoteDefinition } from "../../shared/markdown.js";
+import { AttachmentReference, type AttachmentReferenceInfo } from "./AttachmentSymbol.js";
 import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
 // Render token AST as React nodes, never untrusted HTML. Raw HTML stays literal.
 type Note = FootnoteDefinition & { number: number };
-const MarkdownContext = createContext<{ prefix: string; notes: Map<string, Note>; returns: Map<string, string>; onLocalLink?: (href: string) => void } | null>(null);
+type MarkdownPaths = { pathScope?: Scope; pathBase?: "workspace" | "memory"; sourceFile?: string; attachments?: AttachmentReferenceInfo[] };
+const MarkdownContext = createContext<({ prefix: string; notes: Map<string, Note>; returns: Map<string, string>; onLocalLink?: (href: string) => void } & MarkdownPaths) | null>(null);
+function AttachmentText({ text }: { text: string }) {
+  const attachments = useContext(MarkdownContext)?.attachments;
+  if (!attachments?.length) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let end = 0;
+  for (const match of text.matchAll(/\[(file\d+|folder\d+|(?:img|imag)\d+)\]/g)) {
+    const attachment = attachments.find(item => item.id === match[1]);
+    if (!attachment) continue;
+    parts.push(text.slice(end, match.index), <AttachmentReference key={match.index} {...attachment} />);
+    end = match.index + match[0].length;
+  }
+  return <>{parts}{text.slice(end)}</>;
+}
 function focusNote(id?: string) {
   const target = id ? document.getElementById(id) : null;
   target?.scrollIntoView({ block: "nearest" });
@@ -26,14 +45,20 @@ function FootnoteReference({ id, raw, compact }: { id: string; raw: string; comp
 }
 function LocalMarkdownLink({ href, images, children }: { href: string; images?: MarkdownImageOwner; children: ReactNode }) {
   const context = useContext(MarkdownContext);
-  if (context?.onLocalLink) return <a href={href} onClick={(event) => { event.preventDefault(); context.onLocalLink!(href); }}>{children}</a>;
-  return images ? <FileLink href={href} owner={images}>{children}</FileLink> : <span>{children}</span>;
+  const path = pathRelativeToFile(localFileLink(href)?.path ?? href.split("#")[0], context?.sourceFile);
+  if (context?.onLocalLink) return <span className="local-path"><a href={href} onClick={(event) => { event.preventDefault(); context.onLocalLink!(href); }}>{children}</a></span>;
+  if (images) return <FileLink href={href} owner={images}>{children}</FileLink>;
+  return context?.pathScope ? <LocalPath path={path} scope={context.pathScope} base={context.pathBase} showActions={false}>{children}</LocalPath> : <span>{children}</span>;
+}
+function InlinePath({ path, images }: { path: string; images?: MarkdownImageOwner }) {
+  const context = useContext(MarkdownContext);
+  return <LocalPath path={pathRelativeToFile(path, context?.sourceFile)} scope={images?.scope ?? context?.pathScope} base={context?.pathBase} showActions={false}><code>{path}</code></LocalPath>;
 }
 type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
 function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false): ReactNode {
   return items.map((t: any, i) => {
     const render = () => {
-    const inner = () => (t.tokens ? tokens(t.tokens, images, undefined, compact) : t.text);
+    const inner = () => (t.tokens ? tokens(t.tokens, images, undefined, compact || t.type === "link") : t.text);
     // The activity summary is a single-line disclosure control: no nested links,
     // copy buttons, checkboxes, or block layout inside its Markdown preview.
     if (compact) {
@@ -45,6 +70,8 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
       if (t.type === "table") return <span key={i}>{[t.header, ...t.rows].map((row: any[], n: number) => <span key={n}>{row.map((cell: any, j: number) => <span key={j}>{tokens(cell.tokens, images, undefined, true)}{" "}</span>)}</span>)}</span>;
     }
     switch (t.type) {
+      case "text":
+        return <span key={i}>{t.tokens ? inner() : <AttachmentText text={t.text ?? t.raw} />}</span>;
       case "space":
       case "footnote_definition":
         return null;
@@ -63,7 +90,9 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
       case "del":
         return <del key={i}>{inner()}</del>;
       case "codespan":
-        return <code key={i}>{t.text}</code>;
+        return compact ? <code key={i}>{t.text}</code> : isLocalPath(t.text)
+          ? <InlinePath key={i} path={t.text} images={images} />
+          : <InlineCode key={i} text={t.text} />;
       case "code":
         return <CodeBlock key={i} text={t.text} language={t.lang || ""} />;
       case "blockquote":
@@ -149,7 +178,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void }) => {
+export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink, pathScope, pathBase, sourceFile, attachments }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
   const cache = useContext(DerivedContext), prefix = useId(), returns = useRef(new Map<string, string>());
   const ast = useMemo(() => cache ? cache.get(`markdown:footnotes-v2:breaks:${text}`, () => markdownTokens(text)) : markdownTokens(text), [cache, text]);
   const notes = useMemo(() => {
@@ -165,7 +194,7 @@ export const Markdown = memo(({ text, images, renderBlock, compact = false, onLo
     }
     return result;
   }, [ast]);
-  return <MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink }}>
+  return <MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink, pathScope, pathBase, sourceFile, attachments }}>
     {tokens(ast, images, renderBlock, compact)}
     {!compact && notes.size > 0 && <section aria-label="引用"><hr /><ol>{[...notes.values()].map((note) => {
       const target = `${prefix}-note-${note.number}`;

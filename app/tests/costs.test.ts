@@ -8,7 +8,7 @@ import { Store } from "../src/server/storage.js";
 import { TaskRecords } from "../src/server/tasks/records.js";
 import { Costs } from "../src/server/costs.js";
 import { usageCost } from "../src/server/usage-cost.js";
-import { costAmount, sumCosts } from "../src/shared/costs.js";
+import { costAmount, costTokens, emptyCostTotals, sumCosts } from "../src/shared/costs.js";
 import type { Compression } from "../src/shared/compression.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -56,7 +56,7 @@ test("costs include full main history, distinct children, compactions and tool m
     main.appendUsage("tool:search", "tool-provider", "search-model", usage(.7));
     main.appendUsage("cache_warm", "fixture", "model-one", usage(.8));
     f.job("unapplied", f.scope.sessionId, { state: "cancelled", phase: "applying", appliedAt: null, usage: { input: 100, output: 20, total: 170, cost: .9 } });
-    const taskIds = f.tasks.create(f.scope, "delegate", "context", [{ task: "调查 A", role: "" }, { task: "调查 B", role: "" }], { provider: "fixture", id: "model-one", thinking: "off" }).taskIds;
+    const taskIds = f.tasks.create(f.scope, "delegate", "context", [{ task: "调查 A" }, { task: "调查 B" }], { provider: "fixture", id: "model-one", thinking: "off" }).taskIds;
     const childIds = taskIds.map((id) => String(f.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(id)!.sessionId));
     const child = f.transcript(childIds[0]);
     child.appendMessage({ ...reply(1, "requested-alias"), responseModel: "child-response-model" });
@@ -137,7 +137,7 @@ test("cost invalidation ignores progress but tracks family, unknown records and 
     main.appendMessage(reply(0));
     assert.equal(f.costs.changed(f.scope), true, 'unknown price is still a new record');
     assert.equal(f.costs.changed(f.scope), false);
-    const [task] = f.tasks.create(f.scope, 'version-child', 'context', [{ task: 'child', role: '' }], { provider: 'fixture', id: 'model-one', thinking: 'off' }).taskIds;
+    const [task] = f.tasks.create(f.scope, 'version-child', 'context', [{ task: 'child' }], { provider: 'fixture', id: 'model-one', thinking: 'off' }).taskIds;
     const childScope = { ...f.scope, sessionId: String(f.store.db.prepare('SELECT sessionId FROM tasks WHERE id=?').get(task)!.sessionId) };
     assert.equal(f.costs.changed(childScope), true, 'membership changes are visible from a child');
     assert.equal(f.costs.changed(f.scope), false, 'one baseline per family');
@@ -160,6 +160,34 @@ test("cost invalidation ignores progress but tracks family, unknown records and 
     rmSync(main.getSessionFile()!);
     assert.equal(f.costs.changed(f.scope), true, 'lost transcript must expose incomplete accounting');
   } finally { f.close(); }
+});
+
+test("cost reports expose task titles without task contents and invalidate title changes", () => {
+  const f = fixture();
+  try {
+    const { taskIds } = f.tasks.create(f.scope, "titles", "context", [
+      { title: "核对费用", task: "完整任务正文不应出现在费用明细中" },
+      { task: "历史任务正文同样不应作为标题" },
+    ], { provider: "fixture", id: "model-one", thinking: "off" });
+    const children = taskIds.map(id => String(f.store.db.prepare("SELECT sessionId FROM tasks WHERE id=?").get(id)!.sessionId));
+    children.forEach(id => f.transcript(id));
+    const report = f.costs.get(f.scope);
+    assert.deepEqual(children.map(id => report.sessions.find(session => session.id === id)!.title), ["核对费用", "子任务"]);
+    assert.ok(!JSON.stringify(report).includes("任务正文"));
+    assert.equal(f.costs.changed(f.scope), false);
+    f.store.db.prepare("UPDATE tasks SET title=? WHERE id=?").run("复核账单", taskIds[0]);
+    assert.equal(f.costs.changed(f.scope), true);
+    assert.equal(f.costs.get(f.scope).sessions.find(session => session.id === children[0])!.title, "复核账单");
+  } finally { f.close(); }
+});
+
+test("token totals include cache usage and distinguish empty, zero and unknown records", () => {
+  assert.equal(costTokens(emptyCostTotals()), "—");
+  assert.equal(costTokens(sumCosts([usageCost(usage(.1)), usageCost(usage(.2))])), "340");
+  assert.equal(costTokens(usageCost({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })), "0");
+  assert.equal(costTokens(usageCost(null)), "未知");
+  assert.equal(costTokens(sumCosts([usageCost(usage(.1)), usageCost(null)])), "170 + 未知");
+  assert.equal(costTokens(usageCost({ input: 100, output: 20 })), "120 + 未知");
 });
 
 test("recorded parts are finite and consistent; totals do not round before aggregation", () => {

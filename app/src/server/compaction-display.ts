@@ -1,6 +1,7 @@
+import { memoryCompressionPrompt } from "../shared/memory-prompts.js";
 import { Lexer } from "marked";
 import { buildSessionProjection, estimateTokens, type SessionEntry, type CompactionEntry } from "@earendil-works/pi-coding-agent";
-export const compactionInstructions = "保留原生完整交接摘要结构和所有必要上下文。在摘要最前面额外输出一行 <axiom-summary>不超过100个字的中文压缩短摘要</axiom-summary>，只概括本次被压缩内容；不得用这个短摘要替代完整摘要。";
+export const compactionInstructions = "保留原生完整交接摘要结构和所有必要上下文。在摘要最前面额外输出一行 <axiom-summary>不超过100个字的中文压缩短摘要</axiom-summary>，只概括本次被压缩内容；不得用这个短摘要替代完整摘要。" + "\n\n" + memoryCompressionPrompt;
 /** Short summary for the compression card; independent of the session title. */
 export function compactionShortSummary(summary: string) {
   // Metadata must be a standalone line, never a quoted/code example.

@@ -103,7 +103,7 @@ test("worker steering: original drafts, request dedupe, scope isolation, consume
     assert.equal(bodies.length, 3);
     // A frozen parent does not prevent an explicit child prompt; no notice wake.
     const records = new TaskRecords(app.store);
-    const id = records.create(scope, "test-anchor", "explicit background", [{ task: "child initial", role: "" }],
+    const id = records.create(scope, "test-anchor", "explicit background", [{ task: "child initial" }],
       { provider: "fixture", id: "fixture", thinking: "off" }).taskIds[0];
     const child = target(records.rows("WHERE id=?", id)[0]);
     await call("prompt", { text: "queued child draft" }, child);

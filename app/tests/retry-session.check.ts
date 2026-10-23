@@ -186,7 +186,7 @@ try {
   await until(() => !app.store.session(workspace.id, target.sessionId).unread, "opened result wasn't read");
   // Remaining child work keeps the sidebar active without an execution footer.
   const child = create("子任务");
-  app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,role,status,budgets,createdAt) VALUES('active-child',?,?,?,'a','fixture','','running','{}',1)")
+  app.store.db.prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,description,status,budgets,createdAt) VALUES('active-child',?,?,?,'a','fixture','running','{}',1)")
     .run(workspace.id, target.sessionId, child.sessionId);
   app.store.recordResult(target.sessionId, "another-result", "run"); app.agents.refresh(target);
   await targetRow.locator('[aria-label="运行中"]').waitFor();
