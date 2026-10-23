@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { closeModelNetworks } from "../src/server/model-network.js";
 
 const providerId = "codebuddy-cn";
-test("CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes", async () => {
+test("CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes", { timeout: 60000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-codebuddy-runtime-"));
   const previous = process.env.AXIOM_PI_DIR;
   const previousNodeOptions = process.env.NODE_OPTIONS;
@@ -42,10 +42,22 @@ test("CodeBuddy is built in across login, reopened settings, catalog, configurat
     assert.equal(runtime.getRegisteredNativeProvider(providerId), undefined);
     assert.equal((await runtime.getAvailable(providerId)).length, 0);
     const flow = await logins.start(owner, providerId, "oauth", draft.revision);
-    for (let i = 0; i < 200 && !logins.get(owner, flow.id).state.url; i++) await delay(10);
+    const loginDeadline = Date.now() + 15000;
+    while (!logins.get(owner, flow.id).state.url) {
+      const state = logins.get(owner, flow.id).state;
+      assert.equal(state.status, "running", `Login ended before URL notification: ${state.status}; ${state.message}`);
+      assert.ok(Date.now() < loginDeadline, `Login URL notification timed out: ${state.status}; ${state.message}`);
+      await delay(10);
+    }
     assert.equal(logins.get(owner, flow.id).state.url, "https://copilot.tencent.com/login?fixture");
     await logins.open(owner, flow.id);
-    for (let i = 0; i < 1500 && service.authActive; i++) await delay(10);
+    const completionDeadline = Date.now() + 15000;
+    while (service.authActive) {
+      const state = logins.get(owner, flow.id).state;
+      assert.notEqual(state.status, "failed", `Login failed: ${state.message}`);
+      assert.ok(Date.now() < completionDeadline, `Login completion timed out: ${state.status}; ${state.message}`);
+      await delay(10);
+    }
     assert.equal(logins.get(owner, flow.id).state.status, "completed");
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.ok(requests.some(request => request.path === "/v2/plugin/auth/token"));
