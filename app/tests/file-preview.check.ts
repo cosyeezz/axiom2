@@ -72,10 +72,12 @@ try {
   await page.route("https://preview-egress.invalid/**", route => { externalRequests.push(route.request().url()); return route.abort(); });
   let hold = false, held: (() => void) | undefined;
   const requests = new Map<string, string>(); let revealRequest: any;
+  let previewStarts = 0;
   await page.routeWebSocket("**/ws", socket => {
     const server = socket.connectToServer();
     socket.onMessage(raw => {
       const c = JSON.parse(raw.toString());
+      if (c.op === "preview.start") previewStarts++;
       if (c.op === "files.document") requests.set(c.requestId, c.params.href);
       if (c.op === "files.reveal") { revealRequest = c; socket.send(JSON.stringify({ type: "receipt", requestId: c.requestId, ok: false, error: { code: "TEST", message: "测试：桌面暂不可用" } })); }
       else server.send(raw);
@@ -272,6 +274,15 @@ try {
   await html.getByRole("heading", { name: "HTML 页面已显示" }).waitFor();
   assert.equal(await html.locator("body").getAttribute("data-companion"), null, "closing and reopening resets script permission");
   assert.equal(await page.frameLocator(".file-html-frame").locator("iframe").getAttribute("sandbox"), "");
+  const networkDialog = page.getByRole("dialog", { name: "允许页面联网？", exact: true });
+  const allowNetwork = page.getByRole("button", { name: "允许联网", exact: true });
+  await allowNetwork.click(); await networkDialog.waitFor();
+  await networkDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await allowNetwork.getAttribute("aria-pressed"), "false");
+  await allowNetwork.click(); await networkDialog.getByRole("button", { name: "允许联网", exact: true }).click();
+  await networkDialog.waitFor({ state: "detached" });
+  assert.equal(await page.getByRole("button", { name: "禁止普通联网", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.getByRole("button", { name: "禁止普通联网", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 900 });
   await htmlGeometry(); await geometry();
   await page.screenshot({ path: join(artifacts, "html-static-390.png") });
@@ -279,7 +290,20 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await open("模块网页"); await page.getByRole("button", { name: "网页／项目运行", exact: true }).click();
   await page.getByRole("button", { name: "确认并启动", exact: true }).waitFor();
-  page.once("dialog", dialog => dialog.accept()); await page.getByRole("button", { name: "确认并启动", exact: true }).click();
+  const runtimeNetwork = page.getByRole("checkbox", { name: "允许普通联网", exact: true });
+  await runtimeNetwork.click(); await networkDialog.waitFor(); await page.keyboard.press("Escape");
+  assert.equal(await runtimeNetwork.isChecked(), false);
+  await runtimeNetwork.click(); await networkDialog.getByRole("button", { name: "允许联网", exact: true }).click();
+  await networkDialog.waitFor({ state: "detached" }); assert.equal(await runtimeNetwork.isChecked(), true);
+  await runtimeNetwork.uncheck();
+  const startDialog = page.getByRole("dialog", { name: "启动网页／项目？", exact: true });
+  await page.getByRole("button", { name: "确认并启动", exact: true }).click(); await startDialog.waitFor();
+  assert.ok((await startDialog.innerText()).includes(join(root, "runtime")));
+  await startDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(previewStarts, 0, "cancelling the styled confirmation must not start a runtime");
+  await page.getByRole("button", { name: "确认并启动", exact: true }).click();
+  await startDialog.getByRole("button", { name: "确认启动", exact: true }).click();
+  await startDialog.waitFor({ state: "detached" });
   const running = page.frameLocator('iframe[title="独立网页运行预览"]').frameLocator("iframe");
   await running.locator('body[data-result="模块/原文11动态请求动态模块"]').waitFor(); assert.equal(await running.locator("body").getAttribute("data-isolated"), "yes");
   const runtimeUrl = await running.locator("body").evaluate(() => location.href); assert.notEqual(new URL(runtimeUrl).origin, app.origin);
@@ -287,7 +311,10 @@ try {
   await page.getByRole("button", { name: "停止运行", exact: true }).click(); await page.locator('iframe[title="独立网页运行预览"]').waitFor({ state: "detached" });
   await assert.rejects(fetch(runtimeUrl)); await close(); await open("模块网页"); assert.equal(await page.locator('iframe[title="独立网页运行预览"]').count(), 0); await close();
   await open("临时项目"); await page.getByRole("button", { name: "网页／项目运行", exact: true }).click(); await page.getByRole("button", { name: "确认并启动", exact: true }).waitFor();
-  page.once("dialog", dialog => dialog.accept()); await page.getByRole("button", { name: "确认并启动", exact: true }).click();
+  await page.getByRole("button", { name: "确认并启动", exact: true }).click();
+  await startDialog.waitFor(); assert.ok((await startDialog.innerText()).includes("不是操作系统沙箱"));
+  await startDialog.getByRole("button", { name: "确认启动", exact: true }).click();
+  await startDialog.waitFor({ state: "detached" });
   await running.getByRole("heading", { name: "临时项目运行成功", exact: true }).waitFor(); const projectUrl = await running.locator("body").evaluate(() => location.href); await close();
   // Stop is asynchronous after unmount; observe a bounded endpoint shutdown rather than sleeping indefinitely.
   for (let i = 0; i < 30; i++) { try { await fetch(projectUrl); await page.waitForTimeout(50); } catch { break; } } await assert.rejects(fetch(projectUrl));
