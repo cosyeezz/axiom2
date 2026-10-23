@@ -1,0 +1,4 @@
+Checked 2026-10-21T03:04:36.465081+00:00
+50 candidates; 50 SVG files present, valid XML and SHA-256 matching candidates.json.
+New MDI: 4/4 official raw HTTP 200. License declaration fetched.
+Website detail pages not individually verified.

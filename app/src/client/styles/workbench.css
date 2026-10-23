@@ -20,7 +20,10 @@
 .history-row .session-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history-item .session-state{width:8px;height:8px;margin:0;flex-shrink:0}
 .session-state.running{color:var(--success)}
-.session-state.unread{color:#6db6ff}
+.session-state.unread{color:#6db6ff;overflow:visible}
+.session-state-halo{animation:session-unread-halo 3s ease-in-out infinite}
+@keyframes session-unread-halo{0%,100%{opacity:.25}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.session-state-halo{animation:none;opacity:.65}}
 .history-row{position:relative;display:flex;align-items:center;border-radius:6px;margin-bottom:0;min-width:0}
 .history-row:has([aria-current=true]){background:color-mix(in srgb,var(--fg) 6%,transparent)}
 .history-row:hover,.history-row:focus-within{background:color-mix(in srgb,var(--fg) 10%,transparent)}

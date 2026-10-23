@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { command, scopeOrder, useScope } from "../transport.js";
 import { Icon } from "../components.js";
-import { PulseRingsIcon } from "../StatusIcons.js";
+import { SessionStatusIcon } from "../StatusIcons.js";
 import { DeleteButton } from "../DeleteButton.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { sessionState } from "../../shared/session-state.js";
@@ -226,10 +226,10 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
     <span>
       <span className="session-title-line">
         {isPrioritySession(s) && (state.active || !selected) && (state.active ? (
-          <PulseRingsIcon className="session-state running" label={state.indicatorLabel}
+          <SessionStatusIcon state="running" label={state.indicatorLabel}
             title={s.unread ? `${state.label}，有未读结果` : state.label} />
         ) : (
-          <PulseRingsIcon className="session-state unread" label={state.indicatorLabel} title={state.label} />
+          <SessionStatusIcon state="unread" label={state.indicatorLabel} title={state.label} />
         ))}
         {editing ? (
           <input

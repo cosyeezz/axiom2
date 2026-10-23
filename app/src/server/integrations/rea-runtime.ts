@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { ReaEnginePaths } from "../../shared/rea-engines.js";
+import { validEnginePaths } from "./rea-engines.js";
 
 export const reaSkillName = "reverse-engineer-anything";
 export const reaDirectory = (root: string) => join(root, "integrations", "rea");
@@ -10,13 +12,14 @@ export function reaSupportedNode(version = process.versions.node) {
   const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
   return major === 22 && minor >= 19 || major === 24 && minor >= 11 || major >= 26;
 }
-export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; installation?: { directory: string; version: string } };
+export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; installation?: { directory: string; version: string } };
 export function readReaConfig(root: string): ReaConfig {
   try {
     const value = JSON.parse(readFileSync(reaConfigPath(root), "utf8"));
     if (value.format !== 1 || typeof value.revision !== "string" || !value.revision || typeof value.enabled !== "boolean" ||
         value.skillInstalled !== undefined && typeof value.skillInstalled !== "boolean" ||
         value.mcpInstalled !== undefined && typeof value.mcpInstalled !== "boolean" ||
+        value.engines !== undefined && !validEnginePaths(value.engines) ||
         value.installation && (!validReaVersion(value.installation.version) || typeof value.installation.directory !== "string" ||
           !/^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/.test(value.installation.directory))) throw Error();
     return value;

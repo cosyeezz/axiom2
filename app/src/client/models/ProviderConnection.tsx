@@ -63,7 +63,9 @@ export function ProviderConnection({
           {storage && <p className="meta credential-path">凭据保存位置：<LocalPath path={storage.authPath} /></p>}
         </div>
       </section>
-      <p className="prototype-note">账号凭据仅保存在服务端。登录成功后可到「模型配置」拉取和选择模型，调用权限以供应商账号为准。</p>
+      <p className="prototype-note">{p.providerId === "kiro"
+        ? "Kiro 当前仅支持账号认证与令牌刷新，尚未接入模型推理。可选择个人 Builder ID、Google / GitHub 或企业 IAM Identity Center；暂不支持直接外部 IdP。切换登录方式会替换此供应商当前账号，退出仅删除本地凭据。"
+        : "账号凭据仅保存在服务端。登录成功后可到「模型配置」拉取和选择模型，调用权限以供应商账号为准。"}</p>
     </div>
   );
   return (

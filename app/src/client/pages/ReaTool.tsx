@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { emptyReaState, reaVersion, type ReaState } from "../../shared/rea.js";
 import { LocalPath } from "../LocalPath.js";
+import { ReaEngines } from "./ReaEngines.js";
 import { command, useConnectionState, useScope } from "../transport.js";
 
 export function ReaTool({ active }: { active: boolean }) {
@@ -19,6 +20,7 @@ export function ReaTool({ active }: { active: boolean }) {
     setSending(true); setFeedback(undefined);
     try {
       await command(op, params) as ReaState;
+      if (op === "rea.engineSave") setFeedback({ text: "组件路径已保存，请检测配套组件；已有会话需重新加载技能与 MCP。" });
       if (op === "rea.save") setFeedback({ text: "默认设置已保存；已有会话请在技能与 MCP 面板重新加载。" });
       if (["rea.installSkill", "rea.uninstallSkill", "rea.installMcp", "rea.uninstallMcp"].includes(op)) {
         const installed = op.startsWith("rea.install");
@@ -75,6 +77,7 @@ export function ReaTool({ active }: { active: boolean }) {
         <label className="tools-toggle"><input type="checkbox" checked={choice?.revision === state.revision ? choice.enabled : state.enabled} disabled={busy || !state.version} onChange={e => { setChoice({ revision: state.revision, enabled: e.target.checked }); void action("rea.save", { enabled: e.target.checked, revision: state.revision }); }} /><span><strong>默认启用 REA</strong><small>新会话默认选用已安装的 Skill 与 MCP；会话及全局能力选择优先。</small></span></label>
         <p className="field-help tools-help">更新或重装 REA 会保留两个组件的安装选择。已有会话请在「技能与 MCP」面板调整选择后重新加载；无同名回退资源时，请取消失效的选择。卸载不会中断正在执行的任务。</p>
       </section>
+      <ReaEngines state={state} busy={busy} action={action} />
       <section className="section tools-section" aria-labelledby="rea-doctor-heading">
         <div className="section-heading"><h3 id="rea-doctor-heading">连接检查</h3><p>检查版本、工具列表，并实际调用会话检查工具。</p></div>
         <button className="btn" disabled={busy || !state.version} onClick={() => void action("rea.doctor")}>检测 REA 连接</button>

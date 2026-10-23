@@ -74,7 +74,9 @@ export async function discoverCapabilities(root: string, cwd: string, sharedPiDi
   const opencli = openCliResources(root, cwd), rea = reaResources(root, cwd);
   const builtinSkills = [...opencli.skills, ...rea.skills];
   const skills = resolveBuiltinSkills(loaded.skills, builtinSkills);
-  if (loaded.diagnostics.length || opencli.diagnostics.length) warnings.push("部分技能存在重复或格式问题，仅列出可读取的有效项。");
+  // Pi already resolves name collisions and skips unreadable/malformed skills.
+  // Other diagnostics can be advisory (for example, a usable nonstandard name).
+  // Do not turn these into an unactionable blanket warning in resource catalogs.
   if (opencli.warning) warnings.push("OpenCLI 技能未完整加载，请在内置工具设置中检查。");
   if (rea.warning) warnings.push(rea.warning);
   // Skills and MCP share the host's resolved model/credential directory;

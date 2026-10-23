@@ -56,6 +56,8 @@
 .file-source-scroll.is-wrapped .file-source-lines { display: none; }
 .file-source-scroll.is-wrapped .file-source-code { min-width: 0; }
 .file-source-scroll.is-wrapped pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-html-safety { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 12px; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
+.file-html-safety > span { flex: 1; min-width: 140px; font-size: 11px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; }
 .file-html-frame { display: block; flex: 1; width: 100%; min-height: 0; border: 0; background: #fff; color-scheme: normal; }
 .file-reading-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: none; }
 .file-reading { max-width: 850px; margin: 0 auto; padding: 32px 40px 64px; font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; color: var(--fg-2); }
@@ -86,6 +88,28 @@
 @container file-preview (max-width: 560px) { .file-preview-header { padding: 10px 8px 8px 12px; gap: 6px; } .file-title { gap: 8px; } .file-type-icon { display: none; } .file-preview-toolbar { padding: 4px 8px 6px; gap: 4px; } .file-mode-caption { display: none; } .file-reading { padding: 22px 20px 40px; } .file-reading h1 { font-size: 23px; } .file-pane-label { padding: 0 10px; } .file-pane-label > span:last-child { display: none; } .file-source-code .code-card pre { padding-inline: 12px; } .file-source-lines { min-width: 30px; padding-inline: 6px; } .file-title strong { font-size: 13px; } .file-preview-footer { padding-inline: 12px; gap: 8px; } }
 @container file-preview (max-width: 350px) { .file-preview-toolbar { flex-wrap: wrap; } .file-view-actions { gap: 0; } .file-mode-group .file-action { width: 40px; } .file-reading { padding-inline: 14px; } }
 @media(max-width:640px) { .file-preview-panel { inset: 6px 6px 6px 10%; border-radius: 10px; } }
+.file-office, .file-archive, .file-media { width: 100%; min-width: 0; padding: 16px; overflow: auto; }
+.file-format-notice { color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; margin: 0 0 16px; }
+.file-media video, .file-media audio { display: block; width: 100%; max-height: 100%; }
+.file-office article { font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.file-office article p { white-space: pre-wrap; }
+.file-office-table { overflow: auto; margin-block: 12px; }
+.file-office table { border-collapse: collapse; font-size: 13px; }
+.file-office td { border: 1px solid var(--border); padding: 6px 10px; min-width: 64px; max-width: 320px; white-space: pre-wrap; }
+.file-office select, .file-archive input { max-width: 100%; min-height: 40px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.file-archive ul { list-style: none; padding: 0; }
+.file-archive li { display: flex; gap: 12px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-soft); }
+.file-archive li > button, .file-archive li > span { min-width: 0; padding: 12px 0; overflow-wrap: anywhere; text-align: left; background: none; border: 0; color: var(--text); }
+.file-archive li > button { cursor: pointer; color: var(--accent-hover); }
+.file-archive li > small { flex-shrink: 0; color: var(--muted); }
+.file-web-preview { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 0; height: 100%; }
+.file-web-preview > .file-panes, .file-web-preview > .file-html-frame { flex: 1; min-height: 100px; }
+.file-web-settings { flex-shrink: 0; max-height: 45%; overflow: auto; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.file-web-settings p { margin: 6px 0; line-height: 1.6; }
+.file-web-settings pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-web-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.file-web-actions label { display: flex; align-items: center; gap: 4px; }
+.file-web-actions select { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; min-height: 32px; max-width: 100%; }
 @keyframes file-enter { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes file-spin { to { transform: rotate(360deg); } }
 @media(prefers-reduced-motion:reduce) { .file-preview-panel { animation: none; } .file-action { transition: none; } }

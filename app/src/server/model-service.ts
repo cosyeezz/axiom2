@@ -291,7 +291,7 @@ export class ModelService {
           ? "oauth" : "custom",
         hasConnectionOverrides: !!(p.baseUrl || p.api || p.apiKey),
         name: p.name ?? provider?.name ?? providerId,
-        api: p.api ?? provider?.getModels()[0]?.api ?? "openai-completions",
+        api: p.api ?? provider?.getModels()[0]?.api ?? (providerId === "kiro" ? "kiro-auth-only" : "openai-completions"),
         ...urlView(
           p.baseUrl ??
             provider?.baseUrl ??
@@ -343,10 +343,10 @@ export class ModelService {
       },
       templates: [...new Map<string, ModelConfiguration["templates"][number]>([
         ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, { ...p, methods: [...(p.methods ?? [])] }]),
-        ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
+        ...runtime.getProviders().filter(p => !["qoder", "qoder-cn"].includes(p.id) || process.env.AXIOM_EXPERIMENTAL_QODER === "1").map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
         name: p.name,
-        api: p.getModels()[0]?.api ?? "openai-completions",
+        api: p.getModels()[0]?.api ?? (p.id === "kiro" ? "kiro-auth-only" : "openai-completions"),
         url: urlView(p.baseUrl ?? p.getModels()[0]?.baseUrl ?? "").url,
         methods: [
           ...(p.auth.apiKey?.login ? ["api_key" as const] : []),
@@ -410,12 +410,16 @@ export class ModelService {
         const credential = (await runtime.listCredentials()).find((item) => item.providerId === providerId);
         const oauth = connection.oauth === "radius" || (!connection.baseUrl &&
           (credential?.type === "oauth" || (!credential && native.auth.oauth && !connection.api && !connection.apiKey)));
+        // Qoder's PAT and device-token connections share a signed catalog, not /models.
+        const qoderCatalog = (providerId === "qoder" || providerId === "qoder-cn") && !!native.refreshModels;
+        if (qoderCatalog && connection.baseUrl && connection.baseUrl !== native.baseUrl)
+          throw new AppError("MODEL_DISCOVERY_FAILED", "Qoder 原生接入使用固定地区接口，不支持自定义 Base URL。请使用其他供应商 ID 配置代理。");
         const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
         let models: ModelCatalog["models"];
         let source: ModelCatalog["source"];
         let message: string;
         try {
-          if (!oauth) {
+          if (!oauth && !qoderCatalog) {
             if (!credential)
               throw new AppError("MODEL_AUTH_MISSING", "未配置 API 密钥：auth.json 和 models.json 中均无该供应商密钥，请填写密钥并保存后重试。");
             const baseUrl = connection.baseUrl ?? native.baseUrl ?? runtime.getModels(providerId)[0]?.baseUrl;
@@ -445,14 +449,18 @@ export class ModelService {
             message = "已从当前 Base URL 拉取模型列表。接口未提供的能力参考 pi 原生目录；未知能力请在添加后确认。";
           } else {
             if (!await runtime.checkAuth(providerId, { signal }))
-              throw new AppError("MODEL_DISCOVERY_FAILED", "请先完成 OAuth 登录，再拉取模型列表。");
+              throw new AppError("MODEL_DISCOVERY_FAILED", qoderCatalog ? "请先登录 Qoder 或保存 Personal Access Token，再拉取模型列表。" : "请先完成 OAuth 登录，再拉取模型列表。");
             if (native.refreshModels) {
               const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
               if (result.aborted || result.errors.size)
                 throw new AppError("MODEL_DISCOVERY_FAILED", "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
             }
             source = "native";
-            message = native.refreshModels
+            message = providerId === "kiro"
+              ? "Kiro 当前仅接入账号认证，模型推理与模型目录尚未实现；登录成功不代表可以在 Axiom 中调用 Kiro 模型。"
+              : qoderCatalog
+              ? "已通过 Qoder 签名接口刷新账号模型目录；不代表已验证真实推理权限。当前接入仅声明文本能力，单价未核验。"
+              : native.refreshModels
               ? "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。"
               : "此 OAuth 连接使用应用内置模型目录；未向供应商查询实时列表，实际可用性以账号权限为准。";
             models = runtime.getModels(providerId).map((model) => ({
@@ -486,7 +494,9 @@ export class ModelService {
       // New OAuth/custom drafts may refer to a native provider absent from disk.
       if (Array.isArray(draft.providers)) {
         for (const p of draft.providers) {
-          if (p && typeof p.providerId === "string") await ensureModelProvider(runtime, p.providerId);
+          // Existing disabled experimental entries remain editable/removable;
+          // only adding a provider is an explicit enable operation here.
+          if (p && typeof p.providerId === "string" && !Object.hasOwn(config.providers, p.providerId)) await ensureModelProvider(runtime, p.providerId);
         }
       }
       const { candidate, providers, logout, keys } = prepareDraft(

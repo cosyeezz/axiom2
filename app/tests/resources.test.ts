@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
 import { basename, dirname, join } from "node:path";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { loadSkills, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { setTimeout as delay } from "node:timers/promises";
 import { Store } from "../src/server/storage.js";
 import { Capabilities } from "../src/server/capabilities.js";
@@ -29,6 +29,41 @@ async function fixture(t: TestContext, execute?: OpenCliExecute, idle = async ()
   };
   return { root, pi, store, resources, act };
 }
+test("skill discovery silently resolves duplicates and skips malformed files without hiding actionable errors", async t => {
+  const f = await fixture(t);
+  const contents = [
+    "---\nname: catalog-duplicate\ndescription: first wins\n---\nFirst",
+    "---\nname: catalog-duplicate\ndescription: second skipped\n---\nSecond",
+    "---\nname: catalog-broken\ndescription: [invalid\n---\nBroken",
+    "---\nname: catalog-no-description\n---\nMissing description",
+    "---\nname: 中文技能\ndescription: usable advisory-only skill\n---\nGuide",
+  ];
+  const paths = contents.map((content, index) => {
+    const path = join(f.root, "catalog-fixtures", String(index), "SKILL.md");
+    file(path, content); return path;
+  });
+  file(join(f.root, "pi/settings.json"), JSON.stringify({ skills: paths }));
+  const native = loadSkills({ cwd: f.root, agentDir: join(f.root, "pi"), skillPaths: paths, includeDefaults: false });
+  assert.ok(native.diagnostics.some(d => d.type === "collision"));
+  for (const path of paths.slice(2)) assert.ok(native.diagnostics.some(d => d.path === path), path);
+  const catalog = await discoverCapabilities(f.root, f.root, f.pi);
+  assert.deepEqual(catalog.skills.filter(s => s.name === "catalog-duplicate").map(s => s.source), [paths[0]]);
+  assert.equal(catalog.skills.some(s => s.name === "catalog-broken" || s.name === "catalog-no-description"), false);
+  assert.ok(catalog.skills.some(s => s.name === "中文技能"), "advisory-only skills remain usable");
+  assert.equal(catalog.warnings.some(w => /重复或格式问题/.test(w)), false);
+  let state = await f.resources.refresh();
+  assert.equal(state.items.filter(i => i.name === "catalog-duplicate").length, 1);
+  assert.equal(state.items.some(i => i.name === "catalog-broken" || i.name === "catalog-no-description"), false);
+  assert.equal(state.warnings.some(w => /重复或格式问题/.test(w)), false);
+  file(join(f.pi, "mcp.json"), '{"mcpServers": "secret-invalid-json');
+  const broken = await discoverCapabilities(f.root, f.root, f.pi);
+  assert.ok(broken.warnings.some(w => w.includes("MCP 配置")));
+  assert.ok(!JSON.stringify(broken.warnings).includes("secret-invalid-json"));
+  file(join(f.pi, "mcp.json"), "{}");
+  state = await f.act("resources.install", { kind: "skill", source: paths[2], name: "broken-import" });
+  assert.ok(state.job?.error, "invalid installation still reports an actionable job error");
+  assert.deepEqual(paths.map(path => readFileSync(path, "utf8")), contents, "discovery never repairs or deletes user files");
+});
 test("skill import copies attachments, update replaces old tree, uninstall removes owned dependencies and references", async t => {
   const f = await fixture(t), source = join(f.root, "source"); skill(source);
   let state = await f.act("resources.install", { kind: "skill", source }); assert.equal(state.job?.error, undefined);

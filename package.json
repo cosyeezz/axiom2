@@ -45,17 +45,21 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sql-formatter": "15.9.0",
+    "tar-stream": "3.2.2",
     "typebox": "1.1.38",
     "typescript": "6.0.2",
     "undici": "8.10.2",
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@types/node": "24.12.0",
     "@types/qrcode": "1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/tar-stream": "3.1.5",
     "@types/ws": "8.18.1",
+    "@types/yauzl": "3.4.0",
     "playwright": "1.64.0",
     "tsx": "4.23.15",
     "vite": "8.3.4"

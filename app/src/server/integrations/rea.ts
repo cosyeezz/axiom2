@@ -1,4 +1,7 @@
 import { loadReaSkill } from "./rea-resources.js";
+import { isReaEngineId } from "../../shared/rea-engines.js";
+import { checkEngines, discoverEnginePaths, engineEnvironment, engineHost, listEngines, validEnginePath } from "./rea-engines.js";
+import { prepareEngine } from "./rea-engine-install.js";
 import { McpClient, StdioTransport } from "@earendil-works/pi-mcp";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -18,7 +21,7 @@ export async function diagnoseRea(root: string, packageRoot: string, version: st
   const abort = () => { void close().catch(() => {}); };
   signal.addEventListener("abort", abort, { once: true });
   try {
-    const result = await client.connect(new StdioTransport({ command: process.execPath, args: [entry, "mcp"], cwd: root }));
+    const result = await client.connect(new StdioTransport({ command: process.execPath, args: [entry, "mcp"], cwd: root, env: Object.fromEntries(Object.entries({ ...process.env, ...engineEnvironment(discoverEnginePaths(readReaConfig(root).engines)) }).filter((entry): entry is [string, string] => entry[1] !== undefined)) }));
     signal.throwIfAborted();
     if (result.serverInfo.name !== "rea" || result.serverInfo.version !== version) throw Error("REA MCP 服务版本不匹配。");
     const tools = await client.listTools({ signal });
@@ -28,7 +31,7 @@ export async function diagnoseRea(root: string, packageRoot: string, version: st
     return { text: `REA ${version} 连接成功，发现 ${tools.length} 个工具；binary_session 调用通过。原生反编译引擎需单独配置。`, toolCount: tools.length, at: Date.now() };
   } finally { signal.removeEventListener("abort", abort); await close(); }
 }
-export type ReaDependencies = { execute?: OpenCliExecute; locateNpm?: () => string; diagnose?: typeof diagnoseRea };
+export type ReaDependencies = { execute?: OpenCliExecute; locateNpm?: () => string; diagnose?: typeof diagnoseRea; checkEngines?: typeof checkEngines; prepareEngine?: typeof prepareEngine };
 export class ReaService {
   private state: ReaState = { ...emptyReaState, nodeVersion: process.version, supported: reaSupportedNode() };
   private pending?: Promise<void>;
@@ -38,7 +41,7 @@ export class ReaService {
     this.load();
     try {
       const job: ReaJob = JSON.parse(readFileSync(this.jobPath, "utf8"));
-      if (job && typeof job.id === "string" && ["check", "install", "doctor"].includes(job.kind)) {
+      if (job && typeof job.id === "string" && ["check", "install", "doctor", "engines-check", "engine-install"].includes(job.kind)) {
         this.state.job = job;
         if (job.running) Object.assign(job, { running: false, message: "上次操作被中断", error: "请重新检查当前安装；不会自动重复安装。" });
       }
@@ -50,6 +53,8 @@ export class ReaService {
     this.state.skillInstalled = false; this.state.mcpInstalled = false;
     try {
       const config = readReaConfig(this.root);
+      this.state.engines = listEngines(config, this.state.revision === config.revision ? this.state.engines : []);
+      this.state.engineHost = engineHost();
       this.state.revision = config.revision; this.state.enabled = config.enabled;
       this.state.version = config.installation?.version; this.state.packageRoot = reaPackageRoot(this.root, config);
       this.state.skillInstalled = !!config.installation && config.skillInstalled !== false;
@@ -100,6 +105,14 @@ export class ReaService {
       atomicReaJson(reaConfigPath(this.root), { ...current, [skill ? "skillInstalled" : "mcpInstalled"]: installed, revision: randomUUID() });
       this.load(); this.changed(); return this.snapshot();
     }
+    if (c.op === "rea.engineSave") {
+      if (!isReaEngineId(p.engine) || !validEnginePath(p.path)) throw new AppError("INVALID_SETTINGS", "请输入后台电脑上的绝对路径，不支持变量或控制字符；留空恢复自动发现。");
+      if (p.revision !== current.revision) { this.load(); this.changed(); throw new AppError("CONFIGURATION_CONFLICT", "REA 配置已变化，请重新读取后保存。"); }
+      const engines = { ...current.engines };
+      if (p.path) engines[p.engine] = p.path; else delete engines[p.engine];
+      atomicReaJson(reaConfigPath(this.root), { ...current, engines, revision: randomUUID() });
+      this.load(); this.changed(); return this.snapshot();
+    }
     if (c.op === "rea.save") {
       if (typeof p.enabled !== "boolean") throw new AppError("INVALID_SETTINGS", "请选择是否默认启用 REA。");
       if (p.revision !== current.revision) { this.load(); this.changed(); throw new AppError("CONFIGURATION_CONFLICT", "REA 配置已变化，请重新读取后保存。"); }
@@ -108,20 +121,39 @@ export class ReaService {
       this.load(); this.changed(); return this.snapshot();
     }
     const kind = c.op.slice(4) as ReaJob["kind"];
-    if (!c.op.startsWith("rea.") || !["check", "install", "doctor"].includes(kind)) throw new AppError("UNKNOWN_OPERATION", "不支持此 REA 操作。");
+    if (!c.op.startsWith("rea.") || !["check", "install", "doctor", "engines-check", "engine-install"].includes(kind)) throw new AppError("UNKNOWN_OPERATION", "不支持此 REA 操作。");
     if (!this.state.supported) throw new AppError("NODE_VERSION", "REA 需要 Node.js 22.19+（22.x）、24.11+（24.x）或 26+。");
+    const engine = isReaEngineId(p.engine) ? p.engine : undefined;
+    if (kind === "engine-install") {
+      if (p.revision !== current.revision) throw new AppError("CONFIGURATION_CONFLICT", "REA 配置已变化，请刷新后操作。");
+      if (!engine || !listEngines(current).find(item => item.id === engine)?.installable) throw new AppError("UNSUPPORTED_ENGINE", "当前 REA 版本或后台平台不支持此组件的托管安装，请接入已有安装。");
+    }
     const version = this.state.latest ?? reaVersion;
     if (kind === "install" && (p.version !== version || !validReaVersion(version))) throw new AppError("CHECK_REQUIRED", "请安装推荐版本，或先检查更新再安装已确认的版本。");
     if (kind === "install" && current.installation && version !== current.installation.version && !newerOpenCli(version, current.installation.version)) throw new AppError("DOWNGRADE", "当前版本较新，未执行降级。");
     this.controller = new AbortController(); const signal = this.controller.signal;
-    this.state.job = { id: randomUUID(), kind, running: true, message: kind === "install" ? `正在安装 REA ${version}…` : "正在检查 REA…" };
+    this.state.job = { id: randomUUID(), kind, engine, running: true, message: kind === "install" ? `正在安装 REA ${version}…` : "正在检查 REA…" };
     if (kind === "check") delete this.state.latest;
     if (kind === "doctor" || kind === "install") delete this.state.diagnostic;
     try { this.notify(); } catch { this.state.job.running = false; this.changed(); throw new AppError("STORAGE_ERROR", "无法保存操作记录；尚未开始执行。"); }
     this.pending = Promise.resolve().then(async () => {
       let prepared: string | undefined;
       try {
-        if (kind === "check") {
+        if (kind === "engines-check") {
+          this.state.engines = await (this.dependencies.checkEngines ?? checkEngines)(this.root, current, reaPackageRoot(this.root, current), signal);
+        } else if (kind === "engine-install") {
+          const installation = await (this.dependencies.prepareEngine ?? prepareEngine)(this.root, engine!, signal, message => this.notify(message));
+          prepared = installation.directory;
+          const next = { ...current, engines: { ...current.engines, [engine!]: installation.path }, revision: randomUUID() };
+          this.notify("正在验证新组件，验证通过后才切换路径…");
+          const checks = await (this.dependencies.checkEngines ?? checkEngines)(this.root, next, reaPackageRoot(this.root, current), signal);
+          const result = checks.find(item => item.id === engine);
+          if (result?.status !== "ready") throw Error(`组件安装后检测未通过：${result?.detail ?? "未返回检测结果"}。当前路径保持不变。`);
+          signal.throwIfAborted();
+          if (readReaConfig(this.root).revision !== current.revision) throw Error("安装期间配置已变化，未切换组件路径。");
+          atomicReaJson(reaConfigPath(this.root), next); prepared = undefined;
+          this.state.revision = next.revision; this.state.engines = checks;
+        } else if (kind === "check") {
           const npm = (this.dependencies.locateNpm ?? findNpmCli)();
           const latest = JSON.parse(await this.run([npm, "view", "rea-agents", "dist-tags.latest", "--json", "--registry=https://registry.npmjs.org", "--fetch-retries=0", "--fetch-timeout=20000"]));
           if (!validReaVersion(latest)) throw Error("npm 未返回有效的 REA 稳定版本。");
@@ -150,7 +182,7 @@ export class ReaService {
           if (!packageRoot) throw Error("请先安装 REA。");
           this.state.diagnostic = await (this.dependencies.diagnose ?? diagnoseRea)(this.root, packageRoot, current.installation!.version, signal);
         }
-        this.state.job!.message = kind === "install" ? current.skillInstalled === false || current.mcpInstalled === false
+        this.state.job!.message = kind === "engine-install" ? "组件已安装并通过环境检查；已有会话请重新加载技能与 MCP。" : kind === "engines-check" ? "组件检查完成；请查看各项状态，未启动分析目标。" : kind === "install" ? current.skillInstalled === false || current.mcpInstalled === false
           ? "REA 已安装；保留技能与 MCP 原有的安装选择。"
           : "REA 与技能已接入；已有会话请重新加载技能与 MCP。" : "检查完成。";
       } catch (error) {

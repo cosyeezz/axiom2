@@ -62,7 +62,8 @@ try {
     const target = name === "Local B" ? b : a;
     const selectionsBefore = workspaceSelections.length;
     await page.locator("#workspace-picker > summary").click();
-    await page.getByRole("button", { name, exact: true }).click();
+    // Target the label: the row's trailing actions can cover its center.
+    await page.getByRole("button", { name, exact: true }).locator("strong").click();
     // Selecting the current space still runs deferred navigation. Its old title
     // and saved view cannot prove that this selection has completed.
     await page.waitForFunction(() => !document.querySelector("#workspace-picker")?.hasAttribute("open"));
@@ -100,19 +101,16 @@ try {
   assert.equal(await page.getByRole("button", { name: /^管理会话：/ }).count(), 0);
   assert.equal(await pins.locator(".session-title-line > :first-child").getAttribute("aria-label"), "未读");
   assert.equal(await pins.locator(".session-state").evaluate((el) => getComputedStyle(el).width), "8px");
-  assert.equal(await pins.locator(".session-state.pulse-rings-multiple path").count(), 3);
-  const unreadFrames = await pins.locator(".session-state").evaluate(node => {
-    const svg = node as SVGSVGElement;
-    svg.pauseAnimations();
-    svg.setCurrentTime(0.3);
-    const first = svg.querySelector<SVGCircleElement>(".unread-solid-dot")!.r.animVal.value;
-    svg.setCurrentTime(0.8);
-    const second = svg.querySelector<SVGCircleElement>(".unread-solid-dot")!.r.animVal.value;
-    svg.unpauseAnimations();
-    return { first, second, stroke: getComputedStyle(svg).stroke };
-  });
-  assert.ok(unreadFrames.second > unreadFrames.first, "unread rings fill towards a solid dot even with reduced motion");
-  assert.equal(unreadFrames.stroke, "none");
+  assert.equal(await pins.locator('.session-state animate, .session-state animateTransform').count(), 0);
+  assert.equal(await pins.locator('.session-state-dot').getAttribute('r'), '8');
+  assert.equal(await pins.locator('.session-state-halo').getAttribute('r'), '24');
+  const unreadStyle = await pins.locator('.session-state-halo').evaluate(node => ({
+    animation: getComputedStyle(node).animationName, opacity: getComputedStyle(node).opacity,
+    stroke: getComputedStyle(node.closest('svg')!).stroke,
+  }));
+  assert.equal(unreadStyle.animation, 'none', 'reduced motion uses a steady unread halo');
+  assert.equal(unreadStyle.opacity, '0.65');
+  assert.equal(unreadStyle.stroke, 'none');
   await search.fill("Pinned A");
   assert.equal(await page.locator(".history-item").count(), 1);
   await search.fill("");
@@ -383,7 +381,7 @@ try {
   }
   assert.deepEqual(browserDialogs, [], "no browser dialogs throughout session history scenarios");
   assert.deepEqual(errors, []);
-  console.log("PASS: global pins/search; hidden pointer-safe sibling actions, hover highlight, keyboard focus, full-width/ellipsized titles and stable row geometry; inline double-click/F2 rename, Enter/Escape/blur/blank/IME; owner-bound rename/pin/delete in-app confirmation Escape/cancel/accept, default/returned focus, keyboard navigation and narrow viewport without browser dialogs; navigation, drafts and animated leading status icon");
+  console.log("PASS: global pins/search; hidden pointer-safe sibling actions, hover highlight, keyboard focus, full-width/ellipsized titles and stable row geometry; inline double-click/F2 rename, Enter/Escape/blur/blank/IME; owner-bound rename/pin/delete in-app confirmation Escape/cancel/accept, default/returned focus, keyboard navigation and narrow viewport without browser dialogs; navigation, drafts and fixed-size leading unread marker with reduced-motion halo");
 } finally {
   await browser.close();
   await app.close();

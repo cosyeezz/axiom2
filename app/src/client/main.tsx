@@ -6,11 +6,13 @@ import { TooltipLayer } from "./TooltipLayer.js";
 import { PageBoundary } from "./PageBoundary.js";
 import { initializeTheme } from "./theme.js";
 import { initializeDisplaySettings } from "./display-settings.js";
-import { FontScaleFeedback } from "./settings/DisplaySettings.js";
+import { FontScaleFeedback } from "./settings/FontScaleFeedback.js";
 import "./styles/tokens.css";
 import "./styles/scrollbars.css";
 
 initializeTheme();
+// Establish transport while the selected page loads; late-mounted scopes subscribe immediately.
+if (location.pathname !== "/connect.html") void connect();
 // Full-page navigation keeps page styles isolated.
 const Page = (
   await (location.pathname === "/connect.html"
@@ -29,12 +31,9 @@ const Page = (
       ? import("./pages/Models.js")
       : import("./pages/Workbench.js"))
 ).default;
-// Apply shared control states after the selected page's styles.
-await import("./styles/action-icons.css");
-await import("./styles/icon-geometry.css");
-await import("./styles/mobile.css");
+// Apply shared control states after page styles, in one ordered stylesheet instead of four round trips.
+await import("./styles/page-overrides.css");
 initializeDisplaySettings();
-await import("./styles/theme.css");
 createRoot(document.getElementById("root")!).render(
   <PageBoundary>
     <Icons />
@@ -43,4 +42,3 @@ createRoot(document.getElementById("root")!).render(
     <FontScaleFeedback />
   </PageBoundary>,
 );
-if (location.pathname !== "/connect.html") void connect();

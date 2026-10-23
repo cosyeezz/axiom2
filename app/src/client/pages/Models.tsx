@@ -4,6 +4,7 @@ import { Icon, Dialog, SettingsSidebar } from "../components.js";
 import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
 import { ModelRegistry } from "../models/ModelRegistry.js";
+import { MountOnVisit } from "../MountOnVisit.js";
 import { useConfiguration } from "../models/useConfiguration.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
 import "../styles/settings.css";
@@ -231,8 +232,8 @@ export default function Models() {
                       removeProvider,
                     }}
                   />
+                  <MountOnVisit key={p.id} active={tab === "models"}>
                   <ModelRegistry
-                    key={p.id}
                     {...{
                       p,
                       revision,
@@ -254,6 +255,7 @@ export default function Models() {
                       setDecision,
                     }}
                   />
+                  </MountOnVisit>
                 </>
               )}
               {!hasError && <p

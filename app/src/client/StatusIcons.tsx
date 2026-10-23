@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 // SVG timelines are kept local to each mounted icon.
 // Filled icons explicitly opt out of the workbench's default outline stroke.
@@ -19,18 +19,22 @@ export function BubbleLoadingIcon(props: IconProps) {
   </FilledIcon>;
 }
 
-export function PulseRingsIcon(props: IconProps) {
-  return <FilledIcon {...props} className={`pulse-rings-multiple ${props.className ?? ""}`}>
-    {/* Fill over 2s, hold for 2s, then reverse over 2s without a loop-boundary jump. */}
-    <g transform="translate(12 12)">
-      {[0.35, 0.65, 1].map(scale => <g key={scale} transform={`scale(${scale})`}>
-        <animateTransform attributeName="transform" type="scale" values={`${scale};1;1;${scale}`} keyTimes="0;0.3333333333333333;0.6666666666666666;1" dur="6s" repeatCount="indefinite" />
-        <path fill="currentColor" d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,20a9,9,0,1,1,9-9A9,9,0,0,1,12,21Z" transform="translate(-12 -12)" />
-      </g>)}
-    </g>
-    <circle className="unread-solid-dot" cx="12" cy="12" r="0" fill="currentColor">
-      <animate attributeName="r" values="0;9;9;0" keyTimes="0;0.3333333333333333;0.6666666666666666;1" dur="6s" repeatCount="indefinite" />
-    </circle>
+export function SessionStatusIcon({ state, ...props }: IconProps & { state: "running" | "unread" }) {
+  const haloId = useId();
+  return <FilledIcon {...props} className={`session-state ${state} ${props.className ?? ""}`}>
+    {state === "unread" && <>
+      <defs>
+        <radialGradient id={haloId}>
+          <stop offset="0" stopColor="currentColor" stopOpacity=".85" />
+          <stop offset=".28" stopColor="currentColor" stopOpacity=".65" />
+          <stop offset=".6" stopColor="currentColor" stopOpacity=".25" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      {/* Only halo opacity changes: neither the core nor the glow contracts. */}
+      <circle className="session-state-halo" cx="12" cy="12" r="24" fill={`url(#${haloId})`} />
+    </>}
+    <circle className="session-state-dot" cx="12" cy="12" r={state === "running" ? 9 : 8} fill="currentColor" />
   </FilledIcon>;
 }
 

@@ -2,18 +2,36 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { Select } from "../Select.js";
 import { fontOptions, getDisplaySettings, setDisplaySettings, subscribeDisplaySettings } from "../display-settings.js";
 import { customFontFamily, getFontLibrary, importFont, previewOnlineFont, releaseFontPreviews, reloadFontLibrary, removeFont, saveFont, subscribeFontLibrary, type OnlineFont, type SavedFont } from "../font-library.js";
-import { onlineFonts } from "../online-fonts.js";
 import { FontRow } from "./FontRow.js";
+import catalogUrl from "../font-catalog.json?url";
+import { formatFontCatalog, type FontCatalog } from "../format-font-catalog.js";
 
 const sizeLabel = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 const categories = [{ value: "all", label: "所有风格" }, { value: "sans-serif", label: "无衬线 / 黑体" }, { value: "serif", label: "衬线 / 宋体" }, { value: "monospace", label: "等宽" }, { value: "handwriting", label: "手写" }, { value: "display", label: "展示" }];
 const languages = [{ value: "all", label: "所有语言" }, { value: "chinese", label: "中文" }, { value: "latin", label: "拉丁字母" }, { value: "other", label: "其他 / 未标注" }];
 const defaultSample = "让阅读更舒适，灵感从这里开始。\nThe quick brown fox jumps over the lazy dog.\n0123456789 · Aa Bb Cc";
+const emptyCatalog: OnlineFont[] = [];
 
 export function FontSettings() {
   const settings = useSyncExternalStore(subscribeDisplaySettings, getDisplaySettings);
   const library = useSyncExternalStore(subscribeFontLibrary, getFontLibrary);
   const [open, setOpen] = useState(false);
+  const [catalog, setCatalog] = useState<OnlineFont[] | null>(null);
+  const [catalogError, setCatalogError] = useState(""), [catalogAttempt, setCatalogAttempt] = useState(0);
+  const onlineFonts = catalog ?? emptyCatalog;
+  useEffect(() => {
+    if (!open || catalog) return;
+    let alive = true;
+    setCatalogError("");
+    // Fetch data rather than importing a module: failed module URLs are remembered
+    // by browsers and cannot reliably be retried without reloading the whole page.
+    void fetch(catalogUrl).then(async response => {
+      if (!response.ok) throw new Error(`Font catalog: ${response.status}`);
+      const data = await response.json() as FontCatalog;
+      if (alive) setCatalog(formatFontCatalog(data));
+    }).catch(() => { if (alive) setCatalogError("字体目录加载失败，请重试；本地字体仍可使用。若更新后仍失败，请刷新页面。"); });
+    return () => { alive = false; };
+  }, [open, catalog, catalogAttempt]);
   const [panel, setPanel] = useState<"saved" | "online">("online");
   const [query, setQuery] = useState("");
   const [language, setLanguage] = useState("all"), [category, setCategory] = useState("all");
@@ -45,7 +63,7 @@ export function FontSettings() {
       const matchesLanguage = language === "all" || (language === "chinese" ? chinese : language === "latin" ? font.languages?.includes("latin") : !font.languages?.length || font.languages.some(item => !item.startsWith("chinese") && !item.startsWith("latin")));
       return matchesLanguage && (category === "all" || font.category === category) && `${font.name} ${font.aliases ?? ""}`.toLocaleLowerCase().includes(search);
     });
-  }, [query, panel, language, category, library.fonts]);
+  }, [query, panel, language, category, library.fonts, onlineFonts]);
   const saved = library.fonts.find(font => font.id === picked?.id);
   const online = picked ? onlineFonts.find(font => font.id === picked.id) : undefined;
   const active = !!picked && settings.fontFamily === picked.id;
@@ -77,6 +95,8 @@ export function FontSettings() {
     setDisplaySettings({ fontFamily: saved.id }); setNotice(`已使用 ${saved.name}`); setError("");
   };
   const status = <>
+    {open && !catalog && !catalogError && <p className="font-status" role="status">正在加载字体目录…</p>}
+    {open && catalogError && <p className="display-theme-error" role="alert">{catalogError}<button type="button" className="display-reset" onClick={() => setCatalogAttempt(value => value + 1)}>重试字体目录</button></p>}
     {(busy || notice) && <p className="font-status" role="status">{busy || notice}{busy && <button type="button" className="display-reset" onClick={() => controller.current?.abort()}>取消</button>}</p>}
     {(error || library.error) && <p className="display-theme-error" role="alert">{error || library.error}</p>}
     {library.error && <button type="button" className="display-reset" disabled={!!busy || library.loading} onClick={() => void run("正在重新读取字体…", async () => { await reloadFontLibrary(); })}>重新读取字体</button>}
@@ -84,7 +104,7 @@ export function FontSettings() {
   return <div className="font-settings">
     <div className="display-font"><label htmlFor="display-font-family">当前字体</label>
       <Select id="display-font-family" label="字体" value={settings.fontFamily} options={options} onChange={value => setDisplaySettings({ fontFamily: value as typeof settings.fontFamily })} /></div>
-    <div className="font-entry"><span className="font-help">{onlineFonts.length.toLocaleString()} 款免费字体</span><button ref={trigger} type="button" className="display-reset" onClick={show}>浏览字体库</button><button type="button" className="display-reset" disabled={!!busy || library.loading} onClick={() => input.current?.click()}>导入字体</button></div>
+    <div className="font-entry"><span className="font-help">{catalog ? `${catalog.length.toLocaleString()} 款免费字体` : "免费字体 · 按需浏览"}</span><button ref={trigger} type="button" className="display-reset" onClick={show}>浏览字体库</button><button type="button" className="display-reset" disabled={!!busy || library.loading} onClick={() => input.current?.click()}>导入字体</button></div>
     <input ref={input} className="font-file-input" type="file" accept=".ttf,.otf,.woff,.woff2" aria-label="选择字体文件" disabled={!!busy || library.loading}
       onChange={event => {
         const file = event.currentTarget.files?.[0]; event.currentTarget.value = "";
@@ -113,7 +133,7 @@ export function FontSettings() {
             event.preventDefault(); buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
           }}>
             {filtered.slice(0, limit).map(font => <FontRow key={font.id} font={font} online={"url" in font ? font : undefined} selected={picked?.id === font.id} available={library.fonts.some(item => item.id === font.id) || preview?.id === font.id} active={settings.fontFamily === font.id} disabled={!!busy} onSelect={() => select(font)} />)}
-            {!filtered.length && <div className="font-empty"><p>{query || (panel === "online" && (language !== "all" || category !== "all")) ? "没有找到匹配的字体" : "还没有添加字体"}</p><button type="button" className="display-reset" onClick={() => { setQuery(""); setLanguage("all"); setCategory("all"); setPanel("online"); }}>查看全部字体</button></div>}
+            {!filtered.length && (panel === "saved" || catalog) && <div className="font-empty"><p>{query || (panel === "online" && (language !== "all" || category !== "all")) ? "没有找到匹配的字体" : "还没有添加字体"}</p><button type="button" className="display-reset" onClick={() => { setQuery(""); setLanguage("all"); setCategory("all"); setPanel("online"); }}>查看全部字体</button></div>}
             {filtered.length > limit && <button type="button" className="font-more btn" onClick={() => setLimit(value => value + 60)}>显示更多（还有 {filtered.length - limit} 款）</button>}
           </div>
           <div className="font-list-footer"><button type="button" className="display-reset" disabled={!!busy || library.loading} onClick={() => input.current?.click()}>导入本地字体</button><span className="font-help">TTF / OTF / WOFF / WOFF2</span></div>

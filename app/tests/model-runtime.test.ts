@@ -111,6 +111,19 @@ test("runtime creation without refresh preserves a cold execution profile; expli
   } finally { await Promise.allSettled(pending); environment.release(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test("a cold dynamic native provider must not create a models store during snapshot initialization", async t => {
+  const f = fixture();
+  writeFileSync(f.options.modelsPath, '{"providers":{"qoder-cn":{"headers":{}}}}');
+  t.mock.method(ModelRuntime.prototype, "refresh", () => assert.fail("cold dynamic runtime must not refresh"));
+  try {
+    const runtime = await createModelRuntime({ ...f.options, providerIds: ["qoder-cn"], refreshOnCreate: false });
+    assert.ok(runtime.getRegisteredNativeProvider("qoder-cn"));
+    assert.equal(runtime.getError(), undefined);
+    assert.equal(existsSync(f.options.modelsStorePath), false);
+    assert.equal(readFileSync(f.options.authPath, "utf8"), "{}");
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 for (const offline of ["", "1"]) test(`PI_OFFLINE=${JSON.stringify(offline)} prevents network refresh even when requested`, async t => {
   const f = fixture(), previous = process.env.PI_OFFLINE;
   let refreshes = 0;

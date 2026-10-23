@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { chromium } from "playwright";
-import { BubbleLoadingIcon, FoldIcon, PulseRingsIcon } from "../src/client/StatusIcons.js";
+import { BubbleLoadingIcon, FoldIcon, SessionStatusIcon } from "../src/client/StatusIcons.js";
 import { RunningDots } from "../src/client/chat/RunningDots.js";
 import { CacheUsageIcon } from "../src/client/chat/UsageIcons.js";
 
@@ -18,7 +18,8 @@ try {
   await page.setContent(`<main style="padding:60px;display:flex;gap:32px;align-items:center">
     <div id="bubble">${markup(createElement(BubbleLoadingIcon))}</div>
     <div id="dots">${markup(createElement(RunningDots, { className: "running-dots" }))}</div>
-    <div id="rings">${markup(createElement(PulseRingsIcon))}</div>
+    <div id="session-running">${markup(createElement(SessionStatusIcon, { state: "running" }))}</div>
+    <div id="session-unread">${markup(createElement(SessionStatusIcon, { state: "unread" }))}</div>
     <div id="fold">${markup(createElement(FoldIcon))}</div>
     <div id="cache">${markup(createElement(CacheUsageIcon, { active: true, percent: 75 }))}</div>
     <div id="compression">${markup(createElement(CompressionProgressIcon, { state: "running", phase: "applying" }))}</div>
@@ -38,7 +39,7 @@ try {
     await page.mouse.move(0, 0);
     const result = await page.evaluate(async () => {
       const ids = ["task", "file", "cost", "update", "send", "send-glow"];
-      const svgIds = ["bubble", "dots", "rings", "fold", "cache", "compression", "batch"];
+      const svgIds = ["bubble", "dots", "fold", "cache", "compression", "batch"];
       const svgs = svgIds.map((id) => document.querySelector<SVGSVGElement>(`#${id} svg`)!);
       for (const svg of svgs) svg.setCurrentTime(0.1);
       const samples = [];
@@ -69,13 +70,24 @@ try {
     }
     for (let i = 0; i < result.after.css.length; i++) {
       const before = result.before.css[i], after = result.after.css[i];
+      if (after.id === 'update' || (after.id === 'cost' && reducedMotion === 'reduce')) {
+        // Connection progress is static; cost refresh honors reduced motion.
+        assert.equal(after.name, 'none');
+        assert.deepEqual(after, before, `${reducedMotion}: ${after.id} stays static`);
+        continue;
+      }
       assert.notEqual(after.name, "none", `${reducedMotion}: ${after.id} has animation`);
       assert.ok(after.transform !== before.transform || after.opacity !== before.opacity, `${reducedMotion}: ${after.id} visibly changes`);
     }
+    assert.equal(await page.locator('#session-running svg').evaluate(node => node.getAnimations({ subtree: true }).length), 0, 'green session marker stays static');
+    assert.equal(await page.locator('#session-running animate, #session-unread animate').count(), 0);
+    assert.equal(await page.locator('#session-unread .session-state-halo').evaluate(node => getComputedStyle(node).animationName), reducedMotion === 'reduce' ? 'none' : 'session-unread-halo');
     assert.equal(await page.locator("#idle-cache animate").count(), 0, "completed work has no looping cache timeline");
     assert.equal(await page.locator("#idle-cache .cache-outline").evaluate(node => getComputedStyle(node).opacity), "1");
     assert.equal(await page.locator("#cache .data-level").getAttribute("height"), "11.25", "activity never changes the measured 75% fill");
-    assert.equal(await page.locator("#progress .data-filled").count(), 6, "context segments retain the measured value");
+    assert.equal(await page.locator("#progress .data-filled").count(), 1, "context capacity uses one measured arc");
+    const angle = .6 * Math.PI * 2;
+    assert.equal(await page.locator("#progress .data-filled").getAttribute("d"), `M10 1.5A8.5 8.5 0 1 1 ${10 + 8.5 * Math.sin(angle)} ${10 - 8.5 * Math.cos(angle)}`, "activity never changes the measured 60% arc");
     assert.equal(await page.locator("#progress .data-activity, #cache .data-activity").count(), 0, "context and cache omit redundant activity dots");
     assert.equal(await page.locator("#progress animate, #progress animateTransform").count(), 0, "context capacity stays static");
     results.push({ reducedMotion, ...result });
@@ -89,5 +101,5 @@ try {
   for (const id of ["cost", "send"]) assert.equal(await page.locator(`#${id}`).evaluate(node => getComputedStyle(node).animationName), "none", `${id}: work ending removes animation`);
   mkdirSync("test-results/status-motion", { recursive: true });
   writeFileSync("test-results/status-motion/results.json", JSON.stringify(results, null, 2));
-  console.log("PASS: 7 real SVG components and 6 CSS indicators visibly advance in reduce/no-preference; context and cache have no activity dots; context, idle cache and ended operations are static; measured levels and stop focus policy are preserved.");
+  console.log("PASS: 6 real SVG components and active CSS indicators visibly advance; cost refresh and unread halo respect reduced motion; connection update and green session dots stay static; context and cache have no activity dots; context, idle cache and ended operations are static; measured levels and stop focus policy are preserved.");
 } finally { await browser.close(); }

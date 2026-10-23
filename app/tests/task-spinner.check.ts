@@ -12,7 +12,7 @@ const bundle = await build({
     import { createElement as h } from 'react';
     import { createRoot } from 'react-dom/client';
     import { TaskState } from './src/client/tasks/TaskCards.tsx';
-    import { PulseRingsIcon, FoldIcon } from './src/client/StatusIcons.tsx';
+    import { SessionStatusIcon, FoldIcon } from './src/client/StatusIcons.tsx';
     import { defaultBudgets } from './src/shared/tasks.ts';
     const root = createRoot(document.getElementById('icons'));
     window.renderIcons = (completed = false) => root.render(h('main', null,
@@ -21,8 +21,8 @@ const bundle = await build({
           workspaceId: 'workspace', parentSessionId: 'parent', sessionId: 'child', anchor: 'message',
           description: '检查子任务', runId: 'run', createdAt: 0, budgets: defaultBudgets, results: [], error: null } }))),
       ...[0, 1].map(index => h('p', { className: 'history-item session-title-line', key: 'title-' + index },
-        h(PulseRingsIcon, { className: 'session-state running', label: '运行中' }), '进行中',
-        h(PulseRingsIcon, { className: 'session-state unread', label: '未读' }), '待阅读')),
+        h(SessionStatusIcon, { state: 'running', label: '运行中' }), '进行中',
+        h(SessionStatusIcon, { state: 'unread', label: '未读' }), '待阅读')),
       h('span', { className: 'compaction-icon' }, h(FoldIcon))));
     window.renderIcons();
   ` },
@@ -84,31 +84,40 @@ try {
       assert.ok(new Set(frames.map(frame => JSON.stringify(frame[index]))).size > 1, `icon ${index} animates in ${reducedMotion}`);
       assert.notDeepEqual(frames[2][index], frames[3][index], `icon ${index} continues beyond its first cycle`);
     }
-    for (const icon of await page.locator(".pulse-rings-multiple").all()) {
-      assert.equal(await icon.evaluate(node => getComputedStyle(node).width), "8px");
-      const phases = [];
-      for (const time of [0, 1, 2, 3, 4, 4.5, 5, 5.5, 5.99, 6, 6.01]) {
-        phases.push(await icon.evaluate((node, time) => {
-          const svg = node as SVGSVGElement;
-          svg.pauseAnimations();
-          svg.setCurrentTime(time);
-          return {
-            radius: svg.querySelector<SVGCircleElement>(".unread-solid-dot")!.r.animVal.value,
-            rings: [...svg.querySelectorAll("g > g")].map(ring => getComputedStyle(ring).transform),
-          };
-        }, time));
+    const gradientIds = await page.locator('.session-state radialGradient').evaluateAll(nodes => nodes.map(node => node.id));
+    assert.equal(new Set(gradientIds).size, 2, 'each unread icon has an independent gradient ID');
+    for (const icon of await page.locator('.session-state').all()) {
+      assert.equal(await icon.evaluate(node => getComputedStyle(node).width), '8px');
+      assert.equal(await icon.locator('animate, animateTransform').count(), 0, 'status markers never shrink or expand');
+      const running = await icon.evaluate(node => node.classList.contains('running'));
+      assert.equal(await icon.locator('.session-state-dot').getAttribute('r'), running ? '9' : '8');
+      if (running) {
+        assert.equal(await icon.locator('.session-state-halo').count(), 0);
+        assert.equal(await icon.evaluate(node => node.getAnimations({ subtree: true }).length), 0, 'green point stays static');
+        continue;
       }
-      assert.equal(phases[0].radius, 0);
-      assert.ok(phases[1].radius > 0 && phases[1].radius < 9, "rings fill gradually during the first two seconds");
-      assert.equal(phases[2].radius, 9);
-      assert.deepEqual(phases[2], phases[3], "solid dot stays still during its hold");
-      assert.deepEqual(phases[2], phases[4], "solid dot holds until four seconds");
-      assert.ok(phases[5].radius < 9 && phases[5].radius > phases[6].radius && phases[6].radius > phases[7].radius && phases[7].radius > 0, "solid dot shrinks gradually over the last two seconds");
-      assert.ok(Math.abs(phases[6].radius - phases[1].radius) < 0.001, "reverse midpoint mirrors the filling midpoint");
-      assert.deepEqual(phases[6].rings, phases[1].rings, "rings reverse along the same path");
-      assert.deepEqual(phases[9], phases[0], "six-second cycle returns to its starting shape");
-      assert.ok(phases[8].radius < 0.05 && phases[10].radius < 0.05, "loop boundary stays continuous");
-      await icon.evaluate(node => (node as SVGSVGElement).setCurrentTime(3));
+      const halo = icon.locator('.session-state-halo');
+      assert.equal(await halo.getAttribute('r'), '24');
+      assert.equal(await halo.getAttribute('fill'), `url(#${await icon.locator('radialGradient').getAttribute('id')})`);
+      const phases = await halo.evaluate((node, reduced) => {
+        const animation = node.getAnimations()[0];
+        if (!reduced) animation.pause();
+        return [0, 750, 1500, 2250, 3000].map(time => {
+          if (!reduced) animation.currentTime = time;
+          return { opacity: Number(getComputedStyle(node).opacity), transform: getComputedStyle(node).transform,
+            radius: (node as SVGCircleElement).r.animVal.value };
+        });
+      }, reducedMotion === 'reduce');
+      assert.ok(phases.every(phase => phase.radius === 24 && phase.transform === 'none'), 'halo geometry never changes');
+      if (reducedMotion === 'reduce') {
+        assert.ok(phases.every(phase => phase.opacity === .65), 'reduced motion keeps a steady halo');
+      } else {
+        assert.equal(phases[0].opacity, .25);
+        assert.ok(phases[1].opacity > .25 && phases[1].opacity < 1);
+        assert.equal(phases[2].opacity, 1);
+        assert.equal(phases[4].opacity, .25);
+      }
+      assert.equal(await icon.locator('.session-state-dot').evaluate(node => getComputedStyle(node).opacity), '1', 'blue core is always visible');
     }
     const title = await page.locator(".session-state.running").first().elementHandle();
     await page.evaluate(() => (window as any).renderIcons(true));
@@ -119,7 +128,7 @@ try {
     await page.screenshot({ path: `test-results/status-icons/${reducedMotion}.png` });
   }
   assert.deepEqual(errors, []);
-  console.log("PASS: selected subagent icons, rotating Tabler loader, static queued/terminal states, running/unread rings distinguished by color, fill over 2s, hold solid for 2s and reverse over 2s at 8px, animated fold, normal/reduced motion, stable labels and state transitions.");
+  console.log("PASS: selected subagent icons, rotating Tabler loader, static queued/terminal states, static green session dots and fixed-size blue halos at 8px, unique gradients, 3-second opacity cycle, animated fold, normal/reduced motion, stable labels and state transitions.");
 } finally {
   await browser.close();
 }

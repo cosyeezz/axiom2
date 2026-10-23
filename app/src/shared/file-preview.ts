@@ -3,9 +3,12 @@ import type { HtmlResource } from "./html-preview.js";
 
 export type FileReference = { messageId: string; href: string; skillId?: never } | { skillId: string; messageId?: never; href?: never };
 export interface FileSaveResult { revision: string; size: number; modified: string }
+export interface ArchiveEntry { name: string; size: number; directory: boolean }
+export interface OfficePart { name: string; text: string }
 export interface FilePreview {
   name: string; path: string; size: number; modified: string;
-  kind: "markdown" | "code" | "text" | "image" | "pdf" | "unsupported";
+  kind: "markdown" | "code" | "text" | "image" | "pdf" | "audio" | "video" | "archive" | "office" | "unsupported";
+  entries?: ArchiveEntry[]; archiveMember?: string; officeParts?: OfficePart[]; directory?: boolean;
   language?: string; text?: string; encoding?: string; data?: string; mimeType?: string; reason?: string; line?: number;
   resources?: HtmlResource[]; resourceNotice?: string;
   revision?: string; editable?: boolean; editReason?: string;

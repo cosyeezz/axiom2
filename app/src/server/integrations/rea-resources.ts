@@ -1,3 +1,4 @@
+import { engineEnvironment, discoverEnginePaths } from "./rea-engines.js";
 import { loadSkills, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { errorMessage } from "../error-message.js";
@@ -31,6 +32,7 @@ export function reaResources(root: string, cwd: string): Resources {
         files.push(...installation.files);
         result.server = { name: "rea", source: reaConfigPath(root), scope: "extension", config: {
           command: process.execPath, args: [installation.entry, "mcp"], enabled: config.enabled,
+          env: engineEnvironment(discoverEnginePaths(config.engines)),
           description: "REA · 逆向分析 JavaScript、应用程序与二进制文件", exposure: "codemode",
         } };
       } catch (error) { result.warning = `内置 REA MCP 未加载：${errorMessage(error, "请重新安装 REA。")}`; }

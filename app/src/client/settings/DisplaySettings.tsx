@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Select } from "../Select.js";
 import { chooseTheme, useTheme, type Theme } from "../theme.js";
 import { defaultDisplaySettings, displayRanges, getDisplaySettings, isDisplayStorageAvailable, setDisplaySettings, subscribeDisplaySettings } from "../display-settings.js";
@@ -57,19 +57,4 @@ export function DisplaySettings() {
       <p className="display-save-state" role="status">{isDisplayStorageAvailable() ? "自动保存在当前设备" : "本次已生效，当前浏览器无法保存设置"}</p>
     </footer>
   </section>;
-}
-
-export function FontScaleFeedback() {
-  const settings = useSyncExternalStore(subscribeDisplaySettings, getDisplaySettings);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const show = () => { setVisible(true); clearTimeout(timer); timer = setTimeout(() => setVisible(false), 1800); };
-    window.addEventListener("axiom:font-scale", show);
-    return () => { window.removeEventListener("axiom:font-scale", show); clearTimeout(timer); };
-  }, []);
-  return <div className="font-scale-feedback" role="status" aria-live="polite" aria-atomic="true" hidden={!visible}>
-    字号与间距 {percent(settings.fontScale)}{settings.fontScale === 50 ? " · 已到最小" : settings.fontScale === 200 ? " · 已到最大" : ""}
-    <button type="button" onClick={() => setDisplaySettings({ fontScale: 100 })}>恢复 100%</button>
-  </div>;
 }

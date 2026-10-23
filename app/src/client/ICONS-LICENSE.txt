@@ -62,7 +62,7 @@ Sources: https://lucide.dev/icons/copy https://lucide.dev/icons/file-text https:
 SVG source: https://github.com/lucide-icons/lucide/tree/main/icons (ISC license below).
 Shared loading status: eos-icons:bubble-loading, official SVG animation in StatusIcons.tsx.
 EOS loading source: https://icon-sets.iconify.design/eos-icons/bubble-loading/
-Session title status: svg-spinners:pulse-rings-multiple (Utkarsh Verma, MIT), in StatusIcons.tsx. Running and unread indicators share the original ring paths, distinguished by color, with a custom 2-second transition to a solid dot, 2-second hold and 2-second reverse transition, repeating seamlessly every 6 seconds.
+Session title status: original Axiom circle and radial-gradient shapes in StatusIcons.tsx. Running uses a static green dot. Unread uses a fixed blue dot with a fixed-size halo whose opacity cycles over 3 seconds; reduced motion keeps a steady halo. The former svg-spinners:pulse-rings-multiple paths are no longer used.
 SVG Spinners source: https://github.com/n3r4zzurr0/svg-spinners
 Compression card: Tabler fold, original paths with inward/outward arrow animation in StatusIcons.tsx.
 Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold.svg

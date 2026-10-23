@@ -1,0 +1,731 @@
+<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+*{box-sizing:border-box}body{background:#17191d;color:#ddd;font:14px/1.6 system-ui;margin:0;padding:28px;max-width:1500px;margin:auto}h1{font-size:24px;margin:0 0 10px}h2{font-size:18px;margin:32px 0 12px}p{color:#aaa}main,section{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:14px}article{padding:20px;background:#202329;border:1px solid #343840;border-radius:10px}.primary{border-color:#7e694e;background:#292620}.primary strong{color:#f1c896}strong{display:block;font-size:14px}a{color:#e4c09c;display:inline-block;min-height:44px;padding-top:10px}small{display:block;color:#9298a3}.glyph{height:70px;display:flex;align-items:center;justify-content:center;color:#b5bac3}.glyph svg{width:40px;height:40px}.actual .glyph svg{width:16px;height:16px}label{display:block;margin:20px 0}input{accent-color:#e4c09c}button{min-height:44px;padding:8px 16px;background:#292d35;color:#ddd;border:1px solid #555;border-radius:6px;cursor:pointer}.hint{max-width:900px}.references{grid-template-columns:repeat(auto-fill,minmax(225px,1fr))}@media(max-width:540px){body{padding:16px}section{grid-template-columns:repeat(2,minmax(0,1fr))}article{padding:12px;overflow-wrap:anywhere}strong{font-size:13px}}
+</style><h1>配置重新加载 · 图标选择</h1><p class="hint">优先看 C01–C04：齿轮表示“配置”，箭头表示“重新加载 / 同步”。推荐 C01，最贴近重新读取配置的动作。C02 更偏向同步配置；C03、C04 是实心版本。</p><label><input type="checkbox" onchange="document.body.classList.toggle('actual',this.checked)">查看底栏实际尺寸（16px）</label><section><article id="C01" class="primary"><div class="glyph"><svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" id="mdi-cog-refresh-outline" viewBox="0 0 24 24"><path d="M18 14.5C19.1 14.5 20.1 14.9 20.8 15.7L22 14.5V18.5H18L19.8 16.7C19.3 16.3 18.7 16 18 16C16.6 16 15.5 17.1 15.5 18.5S16.6 21 18 21C18.8 21 19.5 20.6 20 20H21.7C21.1 21.5 19.7 22.5 18 22.5C15.8 22.5 14 20.7 14 18.5S15.8 14.5 18 14.5M11.7 20H11.3L10.9 17.4C9.7 17.2 8.7 16.5 7.9 15.6L5.5 16.6L4.7 15.3L6.8 13.7C6.4 12.5 6.4 11.3 6.8 10.1L4.7 8.7L5.5 7.4L7.9 8.4C8.7 7.5 9.7 6.9 10.9 6.6L11.2 4H12.7L13.1 6.6C14.3 6.8 15.4 7.5 16.1 8.4L18.5 7.4L19.3 8.7L17.2 10.2C17.4 10.8 17.5 11.4 17.5 12H18C18.5 12 19 12.1 19.5 12.2V12L19.4 11L21.5 9.4C21.7 9.2 21.7 9 21.6 8.8L19.6 5.3C19.5 5 19.3 5 19 5L16.5 6C16 5.6 15.4 5.3 14.8 5L14.4 2.3C14.5 2.2 14.2 2 14 2H10C9.8 2 9.5 2.2 9.5 2.4L9.1 5.1C8.5 5.3 8 5.7 7.4 6L5 5C4.7 5 4.5 5 4.3 5.3L2.3 8.8C2.2 9 2.3 9.2 2.5 9.4L4.6 11L4.5 12L4.6 13L2.5 14.7C2.3 14.9 2.3 15.1 2.4 15.3L4.4 18.8C4.5 19 4.7 19 5 19L7.5 18C8 18.4 8.6 18.7 9.2 19L9.6 21.7C9.6 21.9 9.8 22.1 10.1 22.1H12.6C12.1 21.4 11.9 20.7 11.7 20M16 12.3V12C16 9.8 14.2 8 12 8S8 9.8 8 12C8 14.2 9.8 16 12 16C12.7 14.3 14.2 12.9 16 12.3M10 12C10 10.9 10.9 10 12 10S14 10.9 14 12 13.1 14 12 14 10 13.1 10 12Z" /></svg></div><strong>C01 · 配置重新加载（线框）</strong><p>mdi:cog-refresh-outline</p><a href="https://pictogrammers.com/library/mdi/icon/cog-refresh-outline/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/Templarian/MaterialDesign/blob/master/svg/cog-refresh-outline.svg" target="_blank" rel="noreferrer">原始SVG</a><small>Apache-2.0</small></article><article id="C02" class="primary"><div class="glyph"><svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" id="mdi-cog-sync-outline" viewBox="0 0 24 24"><path d="M11.7 20H11.3L10.9 17.4C9.7 17.2 8.7 16.5 7.9 15.6L5.5 16.6L4.7 15.3L6.8 13.7C6.4 12.5 6.4 11.3 6.8 10.1L4.7 8.7L5.5 7.4L7.9 8.4C8.7 7.5 9.7 6.9 10.9 6.6L11.2 4H12.7L13.1 6.6C14.3 6.8 15.4 7.5 16.1 8.4L18.5 7.4L19.3 8.7L17.2 10.2C17.4 10.8 17.5 11.4 17.5 12H18C18.5 12 19 12.1 19.5 12.2V12L19.4 11L21.5 9.4C21.7 9.2 21.7 9 21.6 8.8L19.6 5.3C19.5 5 19.3 5 19 5L16.5 6C16 5.6 15.4 5.3 14.8 5L14.4 2.3C14.5 2.2 14.2 2 14 2H10C9.8 2 9.5 2.2 9.5 2.4L9.1 5.1C8.5 5.3 8 5.7 7.4 6L5 5C4.7 5 4.5 5 4.3 5.3L2.3 8.8C2.2 9 2.3 9.2 2.5 9.4L4.6 11L4.5 12L4.6 13L2.5 14.7C2.3 14.9 2.3 15.1 2.4 15.3L4.4 18.8C4.5 19 4.7 19 5 19L7.5 18C8 18.4 8.6 18.7 9.2 19L9.6 21.7C9.6 21.9 9.8 22.1 10.1 22.1H12.6C12.1 21.4 11.9 20.7 11.7 20M16 12.3V12C16 9.8 14.2 8 12 8S8 9.8 8 12C8 14.2 9.8 16 12 16C12.7 14.3 14.2 12.9 16 12.3M10 12C10 10.9 10.9 10 12 10S14 10.9 14 12 13.1 14 12 14 10 13.1 10 12M18 14.5V13L15.8 15.2L18 17.4V16C19.4 16 20.5 17.1 20.5 18.5C20.5 18.9 20.4 19.3 20.2 19.6L21.3 20.7C22.5 18.9 22 16.4 20.2 15.2C19.6 14.7 18.8 14.5 18 14.5M18 21C16.6 21 15.5 19.9 15.5 18.5C15.5 18.1 15.6 17.7 15.8 17.4L14.7 16.3C13.5 18.1 14 20.6 15.8 21.8C16.5 22.2 17.2 22.5 18 22.5V24L20.2 21.8L18 19.5V21Z" /></svg></div><strong>C02 · 配置同步（线框）</strong><p>mdi:cog-sync-outline</p><a href="https://pictogrammers.com/library/mdi/icon/cog-sync-outline/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/Templarian/MaterialDesign/blob/master/svg/cog-sync-outline.svg" target="_blank" rel="noreferrer">原始SVG</a><small>Apache-2.0</small></article><article id="C03" class="primary"><div class="glyph"><svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" id="mdi-cog-refresh" viewBox="0 0 24 24"><path d="M18 14.5C19.1 14.5 20.1 14.9 20.8 15.7L22 14.5V18.5H18L19.8 16.7C19.3 16.3 18.7 16 18 16C16.6 16 15.5 17.1 15.5 18.5S16.6 21 18 21C18.8 21 19.5 20.6 20 20H21.7C21.1 21.5 19.7 22.5 18 22.5C15.8 22.5 14 20.7 14 18.5S15.8 14.5 18 14.5M11.5 18.5C11.5 17.4 11.8 16.4 12.2 15.5H12C10.1 15.5 8.5 13.9 8.5 12S10.1 8.5 12 8.5 15.5 10.1 15.5 12C15.5 12.2 15.5 12.4 15.4 12.5C16.2 12.2 17 12 18 12C18.5 12 19 12.1 19.5 12.2V12C19.5 11.7 19.5 11.3 19.4 11L21.5 9.4C21.7 9.2 21.7 9 21.6 8.8L19.6 5.3C19.5 5 19.3 5 19 5L16.5 6C16 5.6 15.4 5.3 14.8 5L14.4 2.3C14.5 2.2 14.2 2 14 2H10C9.8 2 9.5 2.2 9.5 2.4L9.1 5.1C8.5 5.3 8 5.7 7.4 6L5 5C4.7 5 4.5 5 4.3 5.3L2.3 8.8C2.2 9 2.3 9.2 2.5 9.4L4.6 11C4.6 11.3 4.5 11.7 4.5 12S4.5 12.7 4.6 13L2.5 14.7C2.3 14.9 2.3 15.1 2.4 15.3L4.4 18.8C4.5 19 4.7 19 5 19L7.5 18C8 18.4 8.6 18.7 9.2 19L9.6 21.7C9.6 21.9 9.8 22.1 10.1 22.1H12.6C11.9 21 11.5 19.8 11.5 18.5Z" /></svg></div><strong>C03 · 配置重新加载（实心）</strong><p>mdi:cog-refresh</p><a href="https://pictogrammers.com/library/mdi/icon/cog-refresh/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/Templarian/MaterialDesign/blob/master/svg/cog-refresh.svg" target="_blank" rel="noreferrer">原始SVG</a><small>Apache-2.0</small></article><article id="C04" class="primary"><div class="glyph"><svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" id="mdi-cog-sync" viewBox="0 0 24 24"><path d="M11.5 18.5C11.5 17.4 11.8 16.4 12.2 15.5H12C10.1 15.5 8.5 13.9 8.5 12S10.1 8.5 12 8.5 15.5 10.1 15.5 12C15.5 12.2 15.5 12.4 15.4 12.5C16.2 12.2 17 12 18 12C18.5 12 19 12.1 19.5 12.2V12C19.5 11.7 19.5 11.3 19.4 11L21.5 9.4C21.7 9.2 21.7 9 21.6 8.8L19.6 5.3C19.5 5 19.3 5 19 5L16.5 6C16 5.6 15.4 5.3 14.8 5L14.4 2.3C14.5 2.2 14.2 2 14 2H10C9.8 2 9.5 2.2 9.5 2.4L9.1 5.1C8.5 5.3 8 5.7 7.4 6L5 5C4.7 5 4.5 5 4.3 5.3L2.3 8.8C2.2 9 2.3 9.2 2.5 9.4L4.6 11C4.6 11.3 4.5 11.7 4.5 12S4.5 12.7 4.6 13L2.5 14.7C2.3 14.9 2.3 15.1 2.4 15.3L4.4 18.8C4.5 19 4.7 19 5 19L7.5 18C8 18.4 8.6 18.7 9.2 19L9.6 21.7C9.6 21.9 9.8 22.1 10.1 22.1H12.6C11.9 21 11.5 19.8 11.5 18.5M18 14.5V13L15.8 15.2L18 17.4V16C19.4 16 20.5 17.1 20.5 18.5C20.5 18.9 20.4 19.3 20.2 19.6L21.3 20.7C22.5 18.9 22 16.4 20.2 15.2C19.6 14.7 18.8 14.5 18 14.5M18 21C16.6 21 15.5 19.9 15.5 18.5C15.5 18.1 15.6 17.7 15.8 17.4L14.7 16.3C13.5 18.1 14 20.6 15.8 21.8C16.5 22.2 17.2 22.5 18 22.5V24L20.2 21.8L18 19.5V21Z" /></svg></div><strong>C04 · 配置同步（实心）</strong><p>mdi:cog-sync</p><a href="https://pictogrammers.com/library/mdi/icon/cog-sync/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/Templarian/MaterialDesign/blob/master/svg/cog-sync.svg" target="_blank" rel="noreferrer">原始SVG</a><small>Apache-2.0</small></article></section><h2>其他参考图标</h2><p>以下用于比较刷新、设置、文件与资源的单独语义；当前共 50 个候选，均保留官网来源。</p><main class="references"><article id="R05" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+</svg>
+</div><strong>R05 · 顺时针单箭头重载</strong><p>lucide:rotate-cw</p><a href="https://lucide.dev/icons/rotate-cw" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/rotate-cw.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R06" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+  <path d="M3 3v5h5" />
+</svg>
+</div><strong>R06 · 逆时针单箭头重载</strong><p>lucide:rotate-ccw</p><a href="https://lucide.dev/icons/rotate-ccw" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/rotate-ccw.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R07" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m17 2 4 4-4 4" />
+  <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+  <path d="m7 22-4-4 4-4" />
+  <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+</svg>
+</div><strong>R07 · 循环加载</strong><p>lucide:repeat</p><a href="https://lucide.dev/icons/repeat" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/repeat.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R08" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m17 2 4 4-4 4" />
+  <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+  <path d="m7 22-4-4 4-4" />
+  <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+  <path d="M11 10h1v4" />
+</svg>
+</div><strong>R08 · 单次循环</strong><p>lucide:repeat-1</p><a href="https://lucide.dev/icons/repeat-1" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/repeat-1.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R09" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m2 9 3-3 3 3" />
+  <path d="M13 18H7a2 2 0 0 1-2-2V6" />
+  <path d="m22 15-3 3-3-3" />
+  <path d="M11 6h6a2 2 0 0 1 2 2v10" />
+</svg>
+</div><strong>R09 · 双路径循环</strong><p>lucide:repeat-2</p><a href="https://lucide.dev/icons/repeat-2" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/repeat-2.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R10" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg>
+</div><strong>R10 · 齿轮配置</strong><p>lucide:settings</p><a href="https://lucide.dev/icons/settings" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R11" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14 17H5" />
+  <path d="M19 7h-9" />
+  <circle cx="17" cy="17" r="3" />
+  <circle cx="7" cy="7" r="3" />
+</svg>
+</div><strong>R11 · 双滑块配置</strong><p>lucide:settings-2</p><a href="https://lucide.dev/icons/settings-2" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/settings-2.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R12" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 5H3" />
+  <path d="M12 19H3" />
+  <path d="M14 3v4" />
+  <path d="M16 17v4" />
+  <path d="M21 12h-9" />
+  <path d="M21 19h-5" />
+  <path d="M21 5h-7" />
+  <path d="M8 10v4" />
+  <path d="M8 12H3" />
+</svg>
+</div><strong>R12 · 横向配置滑块</strong><p>lucide:sliders-horizontal</p><a href="https://lucide.dev/icons/sliders-horizontal" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/sliders-horizontal.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R13" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 8h4" />
+  <path d="M12 21v-9" />
+  <path d="M12 8V3" />
+  <path d="M17 16h4" />
+  <path d="M19 12V3" />
+  <path d="M19 21v-5" />
+  <path d="M3 14h4" />
+  <path d="M5 10V3" />
+  <path d="M5 21v-7" />
+</svg>
+</div><strong>R13 · 纵向配置滑块</strong><p>lucide:sliders-vertical</p><a href="https://lucide.dev/icons/sliders-vertical" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/sliders-vertical.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R14" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 8a1 1 0 0 1-1-1V2a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8z" />
+  <path d="M20 8v12a2 2 0 0 1-2 2h-4.182" />
+  <path d="m3.305 19.53.923-.382" />
+  <path d="M4 10.592V4a2 2 0 0 1 2-2h8" />
+  <path d="m4.228 16.852-.924-.383" />
+  <path d="m5.852 15.228-.383-.923" />
+  <path d="m5.852 20.772-.383.924" />
+  <path d="m8.148 15.228.383-.923" />
+  <path d="m8.53 21.696-.382-.924" />
+  <path d="m9.773 16.852.922-.383" />
+  <path d="m9.773 19.148.922.383" />
+  <circle cx="7" cy="18" r="3" />
+</svg>
+</div><strong>R14 · 配置文件</strong><p>lucide:file-cog</p><a href="https://lucide.dev/icons/file-cog" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/file-cog.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R15" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10.3 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.98a2 2 0 0 1 1.69.9l.66 1.2A2 2 0 0 0 12 6h8a2 2 0 0 1 2 2v3.3" />
+  <path d="m14.305 19.53.923-.382" />
+  <path d="m15.228 16.852-.923-.383" />
+  <path d="m16.852 15.228-.383-.923" />
+  <path d="m16.852 20.772-.383.924" />
+  <path d="m19.148 15.228.383-.923" />
+  <path d="m19.53 21.696-.382-.924" />
+  <path d="m20.772 16.852.924-.383" />
+  <path d="m20.772 19.148.924.383" />
+  <circle cx="18" cy="18" r="3" />
+</svg>
+</div><strong>R15 · 配置目录</strong><p>lucide:folder-cog</p><a href="https://lucide.dev/icons/folder-cog" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/folder-cog.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R16" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+  <path d="M12 22V12" />
+  <polyline points="3.29 7 12 12 20.71 7" />
+  <path d="m7.5 4.27 9 5.15" />
+</svg>
+</div><strong>R16 · 资源包</strong><p>lucide:package</p><a href="https://lucide.dev/icons/package" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/package.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R17" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 22v-9" />
+  <path d="M15.17 2.21a1.67 1.67 0 0 1 1.63 0L21 4.57a1.93 1.93 0 0 1 0 3.36L8.82 14.79a1.655 1.655 0 0 1-1.64 0L3 12.43a1.93 1.93 0 0 1 0-3.36z" />
+  <path d="M20 13v3.87a2.06 2.06 0 0 1-1.11 1.83l-6 3.08a1.93 1.93 0 0 1-1.78 0l-6-3.08A2.06 2.06 0 0 1 4 16.87V13" />
+  <path d="M21 12.43a1.93 1.93 0 0 0 0-3.36L8.83 2.2a1.64 1.64 0 0 0-1.63 0L3 4.57a1.93 1.93 0 0 0 0 3.36l12.18 6.86a1.636 1.636 0 0 0 1.63 0z" />
+</svg>
+</div><strong>R17 · 打开资源包</strong><p>lucide:package-open</p><a href="https://lucide.dev/icons/package-open" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/package-open.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R18" class="reference"><div class="glyph"><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v.5" />
+  <path d="M12 10v4h4" />
+  <path d="m12 14 1.535-1.605a5 5 0 0 1 8 1.5" />
+  <path d="M22 22v-4h-4" />
+  <path d="m22 18-1.535 1.605a5 5 0 0 1-8-1.5" />
+</svg>
+</div><strong>R18 · 目录同步</strong><p>lucide:folder-sync</p><a href="https://lucide.dev/icons/folder-sync" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/lucide-icons/lucide/blob/main/icons/folder-sync.svg" target="_blank" rel="noreferrer">原始SVG</a><small>ISC</small></article><article id="R19" class="reference"><div class="glyph"><!--
+tags: [reload, sync, update, reset, arrows, loader, spinner, restart, refresh]
+category: Arrows
+version: "1.0"
+unicode: "eb13"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+</svg>
+</div><strong>R19 · 双箭头刷新</strong><p>tabler:refresh</p><a href="https://tabler.io/icons/icon/refresh" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R20" class="reference"><div class="glyph"><!--
+tags: [refresh, reload, sync, update, replay, again, arrows, dot]
+category: Arrows
+version: "1.49"
+unicode: "efbf"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+  <path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+</svg>
+</div><strong>R20 · 刷新状态点</strong><p>tabler:refresh-dot</p><a href="https://tabler.io/icons/icon/refresh-dot" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh-dot.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R21" class="reference"><div class="glyph"><!--
+tags: [refresh, reload, sync, error, warning, failed, update, alert]
+category: Arrows
+version: "1.0"
+unicode: "ed57"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+  <path d="M12 9l0 3" />
+  <path d="M12 15l.01 0" />
+</svg>
+</div><strong>R21 · 刷新告警</strong><p>tabler:refresh-alert</p><a href="https://tabler.io/icons/icon/refresh-alert" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh-alert.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R22" class="reference"><div class="glyph"><!--
+tags: [refresh, reload, sync, no-sync, update, reset, arrows, disabled, unavailable, inactive, hidden, off]
+category: Arrows
+version: "1.66"
+unicode: "f18d"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 11a8.1 8.1 0 0 0 -11.271 -6.305m-2.41 1.624a8.083 8.083 0 0 0 -1.819 2.681m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 13.671 4.691m2.329 -1.691v-1h-1" />
+  <path d="M3 3l18 18" />
+</svg>
+</div><strong>R22 · 禁用刷新</strong><p>tabler:refresh-off</p><a href="https://tabler.io/icons/icon/refresh-off" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/refresh-off.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R23" class="reference"><div class="glyph"><!--
+tags: [refresh, sync, update, repeat, restart, rotate, arrow, reload]
+category: Arrows
+version: "1.93"
+unicode: "f3ae"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19.933 13.041a8 8 0 1 1 -9.925 -8.788c3.899 -1 7.935 1.007 9.425 4.747" />
+  <path d="M20 4v5h-5" />
+</svg>
+</div><strong>R23 · 单箭头重新加载</strong><p>tabler:reload</p><a href="https://tabler.io/icons/icon/reload" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/reload.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R24" class="reference"><div class="glyph"><!--
+tags: [rotate, rotation, refresh, reload, spin, redo, counterclockwise, arrow]
+category: Arrows
+version: "1.0"
+unicode: "eb16"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19.95 11a8 8 0 1 0 -.5 4m.5 5v-5h-5" />
+</svg>
+</div><strong>R24 · 逆时针旋转</strong><p>tabler:rotate</p><a href="https://tabler.io/icons/icon/rotate" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/rotate.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R25" class="reference"><div class="glyph"><!--
+tags: [rotate, rotation, clockwise, refresh, reload, spin, redo, arrow]
+category: Arrows
+version: "1.0"
+unicode: "eb15"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5" />
+</svg>
+</div><strong>R25 · 顺时针旋转</strong><p>tabler:rotate-clockwise</p><a href="https://tabler.io/icons/icon/rotate-clockwise" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/rotate-clockwise.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R26" class="reference"><div class="glyph"><!--
+tags: [rotate, rotation, refresh, reload, spin, redo, counterclockwise, arrow]
+category: Arrows
+version: "1.4"
+unicode: "ebb4"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 4.55a8 8 0 0 0 -6 14.9m0 -4.45v5h-5" />
+  <path d="M18.37 7.16l0 .01" />
+  <path d="M13 19.94l0 .01" />
+  <path d="M16.84 18.37l0 .01" />
+  <path d="M19.37 15.1l0 .01" />
+  <path d="M19.94 11l0 .01" />
+</svg>
+</div><strong>R26 · 分段逆时针旋转</strong><p>tabler:rotate-2</p><a href="https://tabler.io/icons/icon/rotate-2" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/rotate-2.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R27" class="reference"><div class="glyph"><!--
+tags: [rotate, rotation, clockwise, refresh, reload, spin, redo, arrow]
+category: Arrows
+version: "1.4"
+unicode: "ebb5"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9 4.55a8 8 0 0 1 6 14.9m0 -4.45v5h5" />
+  <path d="M5.63 7.16l0 .01" />
+  <path d="M4.06 11l0 .01" />
+  <path d="M4.63 15.1l0 .01" />
+  <path d="M7.16 18.37l0 .01" />
+  <path d="M11 19.94l0 .01" />
+</svg>
+</div><strong>R27 · 分段顺时针旋转</strong><p>tabler:rotate-clockwise-2</p><a href="https://tabler.io/icons/icon/rotate-clockwise-2" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/rotate-clockwise-2.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R28" class="reference"><div class="glyph"><!--
+tags: [360-degrees, rotate, rotation, spin, panorama, 360, view]
+category: Arrows
+version: "1.46"
+unicode: "ef85"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 16h4v4" />
+  <path d="M19.458 11.042c.86 -2.366 .722 -4.58 -.6 -5.9c-2.272 -2.274 -7.185 -1.045 -10.973 2.743c-3.788 3.788 -5.017 8.701 -2.744 10.974c2.227 2.226 6.987 1.093 10.74 -2.515" />
+</svg>
+</div><strong>R28 · 360度旋转</strong><p>tabler:rotate-360</p><a href="https://tabler.io/icons/icon/rotate-360" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/rotate-360.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R29" class="reference"><div class="glyph"><!--
+tags: [loop, repeat-all, replay, cycle, redo, again, music, playlist, repeat]
+category: Media
+version: "1.2"
+unicode: "eb72"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 12v-3a3 3 0 0 1 3 -3h13m-3 -3l3 3l-3 3" />
+  <path d="M20 12v3a3 3 0 0 1 -3 3h-13m3 3l-3 -3l3 -3" />
+</svg>
+</div><strong>R29 · 重复执行</strong><p>tabler:repeat</p><a href="https://tabler.io/icons/icon/repeat" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/repeat.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R30" class="reference"><div class="glyph"><!--
+tags: [loop, repeat-one, replay, single, once, music, repeat]
+category: Media
+version: "1.2"
+unicode: "eb71"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 12v-3a3 3 0 0 1 3 -3h13m-3 -3l3 3l-3 3" />
+  <path d="M20 12v3a3 3 0 0 1 -3 3h-13m3 3l-3 -3l3 -3" />
+  <path d="M11 11l1 -1v4" />
+</svg>
+</div><strong>R30 · 执行一次</strong><p>tabler:repeat-once</p><a href="https://tabler.io/icons/icon/repeat-once" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/repeat-once.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R31" class="reference"><div class="glyph"><!--
+tags: [loop, repeat, replay, no-repeat, repeat-all, cycle, redo, disabled, unavailable, inactive, hidden, off]
+category: Media
+version: "1.66"
+unicode: "f18e"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 12v-3c0 -1.336 .873 -2.468 2.08 -2.856m3.92 -.144h10m-3 -3l3 3l-3 3" />
+  <path d="M20 12v3a3 3 0 0 1 -.133 .886m-1.99 1.984a3 3 0 0 1 -.877 .13h-13m3 3l-3 -3l3 -3" />
+  <path d="M3 3l18 18" />
+</svg>
+</div><strong>R31 · 禁用重复</strong><p>tabler:repeat-off</p><a href="https://tabler.io/icons/icon/repeat-off" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/repeat-off.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R32" class="reference"><div class="glyph"><!--
+tags: [cog, gear, preferences, configuration, options, config, setup, control, settings]
+category: System
+version: "1.0"
+unicode: "eb20"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
+  <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+</svg>
+</div><strong>R32 · 齿轮设置</strong><p>tabler:settings</p><a href="https://tabler.io/icons/icon/settings" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R33" class="reference"><div class="glyph"><!--
+tags: [cog, gear, preferences, configuration, options, config, setup, control, settings]
+category: System
+version: "1.110"
+unicode: "f5ac"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M19.875 6.27a2.225 2.225 0 0 1 1.125 1.948v7.284c0 .809 -.443 1.555 -1.158 1.948l-6.75 4.27a2.269 2.269 0 0 1 -2.184 0l-6.75 -4.27a2.225 2.225 0 0 1 -1.158 -1.948v-7.285c0 -.809 .443 -1.554 1.158 -1.947l6.75 -3.98a2.33 2.33 0 0 1 2.25 0l6.75 3.98h-.033" />
+  <path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+</svg>
+</div><strong>R33 · 替代齿轮设置</strong><p>tabler:settings-2</p><a href="https://tabler.io/icons/icon/settings-2" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/settings-2.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R34" class="reference"><div class="glyph"><!--
+tags: [settings, sliders, equalizer, controls, filter, options, tune, preferences, mixer, configure, adjustments]
+category: System
+version: "1.0"
+unicode: "ea03"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 10a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+  <path d="M6 4v4" />
+  <path d="M6 12v8" />
+  <path d="M10 16a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+  <path d="M12 4v10" />
+  <path d="M12 18v2" />
+  <path d="M16 7a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+  <path d="M18 4v1" />
+  <path d="M18 9v11" />
+</svg>
+</div><strong>R34 · 纵向调整</strong><p>tabler:adjustments</p><a href="https://tabler.io/icons/icon/adjustments" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/adjustments.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R35" class="reference"><div class="glyph"><!--
+tags: [settings, sliders, equalizer, controls, filter, options, tune, preferences, mixer, configure, adjustments, horizontal]
+category: System
+version: "1.11"
+unicode: "ec38"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M4 6l8 0" />
+  <path d="M16 6l4 0" />
+  <path d="M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M4 12l2 0" />
+  <path d="M10 12l10 0" />
+  <path d="M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M4 18l11 0" />
+  <path d="M19 18l1 0" />
+</svg>
+</div><strong>R35 · 横向调整</strong><p>tabler:adjustments-horizontal</p><a href="https://tabler.io/icons/icon/adjustments-horizontal" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/adjustments-horizontal.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R36" class="reference"><div class="glyph"><!--
+tags: [settings, config, configuration, preferences, gear, options, document, file, setup]
+category: Document
+version: "1.55"
+unicode: "f029"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+  <path d="M12 10.5v1.5" />
+  <path d="M12 16v1.5" />
+  <path d="M15.031 12.25l-1.299 .75" />
+  <path d="M10.268 15l-1.3 .75" />
+  <path d="M15 15.803l-1.285 -.773" />
+  <path d="M10.285 12.97l-1.285 -.773" />
+  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+  <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" />
+</svg>
+</div><strong>R36 · 文件设置</strong><p>tabler:file-settings</p><a href="https://tabler.io/icons/icon/file-settings" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/tabler/tabler-icons/blob/main/icons/outline/file-settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R37" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M21.8883 13.5C21.1645 18.3113 17.013 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C16.1006 2 19.6248 4.46819 21.1679 8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M17 8H21.4C21.7314 8 22 7.73137 22 7.4V3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R37 · 单箭头刷新</strong><p>iconoir:refresh</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/refresh.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R38" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M17 8H21.4C21.7314 8 22 7.73137 22 7.4V3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M2.88146 16C4.42458 19.5318 7.94874 22 12.0494 22C17.2347 22 21.4983 18.0533 22 13" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.04932 16H2.64932C2.31795 16 2.04932 16.2686 2.04932 16.6V21" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R38 · 双箭头刷新</strong><p>iconoir:refresh-double</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/refresh-double.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R39" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="10" stroke="currentColor"/>
+<path d="M16.5829 9.66667C15.8095 8.09697 14.043 7 11.9876 7C9.38854 7 7.25148 8.75408 7 11" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M14.4939 9.72222H16.4001C16.7315 9.72222 17.0001 9.45359 17.0001 9.12222V7.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.41707 13.6667C8.19054 15.6288 9.95698 17 12.0124 17C14.6115 17 16.7485 14.8074 17 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9.5061 13.6222H7.59992C7.26855 13.6222 6.99992 13.8909 6.99992 14.2222V16.4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R39 · 圆形刷新入口</strong><p>iconoir:refresh-circle</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/refresh-circle.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R40" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M6.67742 20.5673C2.53141 18.0212 0.758026 12.7584 2.71678 8.1439C4.87472 3.0601 10.7453 0.68822 15.8291 2.84617C20.9129 5.00412 23.2848 10.8747 21.1269 15.9585C20.2837 17.945 18.8736 19.5174 17.1651 20.5673" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M17 16V20.4C17 20.7314 17.2686 21 17.6 21H22" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 22.01L12.01 21.9989" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R40 · 重新开始</strong><p>iconoir:restart</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/restart.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R41" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 2V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 18V22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 12H18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 12H2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M4.92896 4.92896L7.75738 7.75738" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16.2427 16.2427L19.0711 19.0711" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19.071 4.92896L16.2426 7.75738" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.75732 16.2427L4.9289 19.0711" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R41 · 系统重启</strong><p>iconoir:system-restart</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/system-restart.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R42" class="reference"><div class="glyph"><svg width="24" height="24" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H20C21.1046 3 22 3.89543 22 5V12" stroke="currentColor" stroke-linecap="round"/>
+<path d="M2 7L22 7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M5 5.01L5.01 4.99889" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M8 5.01L8.01 4.99889" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M11 5.01L11.01 4.99889" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M21.6665 16.6667C21.0477 15.097 19.6346 14 17.9903 14C16.2319 14 14.7378 15.2545 14.1969 17" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19.9952 16.7723H21.4002C21.7316 16.7723 22.0002 16.5036 22.0002 16.1723V14.55" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M14.3337 19.3333C14.9525 20.903 16.3657 22 18.01 22C19.7684 22 21.2624 20.7455 21.8033 19" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16.005 19.2277H14.6001C14.2687 19.2277 14.0001 19.4964 14.0001 19.8277V21.45" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R42 · 窗口重新加载</strong><p>iconoir:reload-window</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/reload-window.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R43" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19.6224 10.3954L18.5247 7.7448L20 6L18 4L16.2647 5.48295L13.5578 4.36974L12.9353 2H10.981L10.3491 4.40113L7.70441 5.51596L6 4L4 6L5.45337 7.78885L4.3725 10.4463L2 11V13L4.40111 13.6555L5.51575 16.2997L4 18L6 20L7.79116 18.5403L10.397 19.6123L11 22H13L13.6045 19.6132L16.2551 18.5155C16.6969 18.8313 18 20 18 20L20 18L18.5159 16.2494L19.6139 13.598L21.9999 12.9772L22 11L19.6224 10.3954Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R43 · 齿轮设置</strong><p>iconoir:settings</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R44" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11.6065 2.34184C11.8322 2.14578 12.1678 2.14578 12.3935 2.34184L14.3418 4.03445C14.4646 4.14111 14.6254 4.19336 14.7874 4.17924L17.3586 3.9551C17.6564 3.92913 17.9279 4.1264 17.9953 4.41768L18.5766 6.93224C18.6133 7.09069 18.7126 7.22748 18.852 7.31129L21.0639 8.64123C21.3201 8.79529 21.4238 9.11447 21.307 9.3897L20.2994 11.7657C20.2359 11.9155 20.2359 12.0845 20.2994 12.2343L21.307 14.6103C21.4238 14.8855 21.3201 15.2047 21.0639 15.3588L18.852 16.6887C18.7126 16.7725 18.6133 16.9093 18.5766 17.0678L17.9953 19.5823C17.9279 19.8736 17.6564 20.0709 17.3586 20.0449L14.7874 19.8208C14.6254 19.8066 14.4646 19.8589 14.3418 19.9655L12.3935 21.6582C12.1678 21.8542 11.8322 21.8542 11.6065 21.6582L9.65816 19.9655C9.53539 19.8589 9.37458 19.8066 9.21256 19.8208L6.64142 20.0449C6.34359 20.0709 6.07208 19.8736 6.00474 19.5823L5.42338 17.0678C5.38675 16.9093 5.28736 16.7725 5.14798 16.6887L2.93615 15.3588C2.67993 15.2047 2.57622 14.8855 2.69295 14.6103L3.70065 12.2343C3.76414 12.0845 3.76414 11.9155 3.70065 11.7657L2.69295 9.3897C2.57622 9.11447 2.67993 8.79529 2.93615 8.64123L5.14798 7.31129C5.28736 7.22748 5.38675 7.09069 5.42338 6.93224L6.00474 4.41768C6.07208 4.1264 6.34359 3.92913 6.64142 3.9551L9.21256 4.17924C9.37458 4.19336 9.53539 4.14111 9.65816 4.03445L11.6065 2.34184Z" stroke="currentColor" stroke-width="1.5"/>
+<path d="M9 13L11 15L16 10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R44 · 配置档案</strong><p>iconoir:settings-profiles</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/settings-profiles.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R45" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 18C15.3137 18 18 15.3137 18 12C18 8.68629 15.3137 6 12 6C8.68629 6 6 8.68629 6 12C6 15.3137 8.68629 18 12 18Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18 12H12M9 6.80273L12 12M12 12L9 17.1973" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 3"/>
+<path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R45 · 系统设置滑块</strong><p>iconoir:ios-settings</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/ios-settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R46" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 6V12C4 12 4 15 11 15C18 15 18 12 18 12V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M11 3C18 3 18 6 18 6C18 6 18 9 11 9C4 9 4 6 4 6C4 6 4 3 11 3Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M11 21C4 21 4 18 4 18V12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19 21C20.1046 21 21 20.1046 21 19C21 17.8954 20.1046 17 19 17C18.6357 17 18.2942 17.0974 18 17.2676C17.4022 17.6134 17 18.2597 17 19C17 19.7403 17.4022 20.3866 18 20.7324C18.2942 20.9026 18.6357 21 19 21Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19 22C20.6569 22 22 20.6569 22 19C22 17.3431 20.6569 16 19 16C17.3431 16 16 17.3431 16 19C16 20.6569 17.3431 22 19 22Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0.3 2"/>
+</svg>
+</div><strong>R46 · 数据库设置</strong><p>iconoir:database-settings</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/database-settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R47" class="reference"><div class="glyph"><svg width="24" height="24" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V10.4C22 10.7314 21.7314 11 21.4 11H2.6C2.26863 11 2 10.7314 2 10.4V4.6C2 4.26863 2.26863 4 2.6 4Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 10L22 14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M2 10V19.4C2 19.7314 2.26863 20 2.6 20H13" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19 21C20.1046 21 21 20.1046 21 19C21 17.8954 20.1046 17 19 17C18.6357 17 18.2942 17.0974 18 17.2676C17.4022 17.6134 17 18.2597 17 19C17 19.7403 17.4022 20.3866 18 20.7324C18.2942 20.9026 18.6357 21 19 21Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19 22C20.6569 22 22 20.6569 22 19C22 17.3431 20.6569 16 19 16C17.3431 16 16 17.3431 16 19C16 20.6569 17.3431 22 19 22Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0.3 2"/>
+</svg>
+</div><strong>R47 · 文件夹设置</strong><p>iconoir:folder-settings</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/folder-settings.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R48" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M20 17.6073C21.4937 17.0221 23 15.6889 23 13C23 9 19.6667 8 18 8C18 6 18 2 12 2C6 2 6 6 6 8C4.33333 8 1 9 1 13C1 15.6889 2.50628 17.0221 4 17.6073" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.58059 19.4874L9.34836 21.2552C10.9105 22.8173 13.4431 22.8173 15.0052 21.2552L15.3588 20.9016" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.93413 21.9623L7.58058 19.4874L10.0554 19.841L7.93413 21.9623Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16.2981 16.9016L14.5303 15.1339C12.9682 13.5718 10.4355 13.5718 8.87345 15.1339L8.51989 15.4874" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M15.9445 14.4268L16.2981 16.9017L13.8232 16.5481L15.9445 14.4268Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R48 · 云端同步</strong><p>iconoir:cloud-sync</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/cloud-sync.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R49" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M20 5.99999L20 18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V6C4 4.89543 4.89543 4 6 4H18C19.1045 4 19.9999 4.89543 20 5.99999Z" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 9V4" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R49 · 资源包</strong><p>iconoir:package</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/package.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article><article id="R50" class="reference"><div class="glyph"><svg width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M9.99998 15L9.99999 19C10 20.1046 9.10457 21 7.99999 21H4C2.89543 21 2 20.1046 2 19V15C2 13.8954 2.89543 13 4 13H7.99998C9.10455 13 9.99998 13.8954 9.99998 15Z" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 4.99999L16 8.99999C16 10.1046 15.1046 11 14 11H10C8.89543 11 8 10.1046 8 9V5C8 3.89543 8.89543 3 10 3H14C15.1045 3 16 3.89543 16 4.99999Z" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 15L22 19C22 20.1046 21.1046 21 20 21H16C14.8954 21 14 20.1046 14 19V15C14 13.8954 14.8954 13 16 13H20C21.1045 13 22 13.8954 22 15Z" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 16V13" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 6V3" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18 16V13" stroke="currentColor"   stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div><strong>R50 · 多个资源包</strong><p>iconoir:packages</p><a href="https://iconoir.com/" target="_blank" rel="noreferrer">官网</a> · <a href="https://github.com/iconoir-icons/iconoir/blob/main/icons/regular/packages.svg" target="_blank" rel="noreferrer">原始SVG</a><small>MIT</small></article></main></html>

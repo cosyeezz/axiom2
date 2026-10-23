@@ -8,6 +8,9 @@ import { FileIcon, type FileIconName } from "./FileIcon.js";
 import { Markdown } from "./Markdown.js";
 import { CodeBlock } from "./CodeBlock.js";
 import { HtmlFile } from "./HtmlFile.js";
+import { WebPreview } from "./WebPreview.js";
+import { OfficeFile } from "./OfficeFile.js";
+import { ArchiveFile, MediaFile } from "./RichFile.js";
 import { Icon } from "../Icon.js";
 import "../styles/file-preview.css";
 type Mode = "source" | "split" | "reading";
@@ -72,6 +75,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     return () => { unregister(); window.removeEventListener("beforeunload", unload); };
   }, []);
   const [attempt, setAttempt] = useState(0), [loading, setLoading] = useState(true);
+  const [member, setMember] = useState<{ entry: string; archiveRevision: string } | null>(null);
   const [mode, setMode] = useState<Mode>("reading"), [ratio, setRatio] = useState(50), [wrap, setWrap] = useState(false);
   const html = file?.kind === "code" && /\.html?$/i.test(file.name);
   const rendered = file?.kind === "markdown" || html;
@@ -89,12 +93,12 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     let current = true;
     const controller = new AbortController();
     setLoading(true); setError(""); setNotice("");
-    void command<FilePreview>("files.document", parameters(), reference.owner.scope, crypto.randomUUID(), controller.signal)
+    void command<FilePreview>("files.document", { ...parameters(), ...member }, reference.owner.scope, crypto.randomUUID(), controller.signal)
       .then(result => { if (current) { setFile(result); setDraft((result.text ?? "").replace(/\r\n/g, "\n")); setEditing(!!reference.edit && !!result.editable); if (result.line || reference.edit && result.editable) setMode("source"); } })
       .catch(e => { if (current) setError(e.message); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; controller.abort(); };
-  }, [reference, attempt]);
+  }, [reference, attempt, member]);
   const reveal = async () => {
     setRevealing(true); setNotice("");
     try {
@@ -140,16 +144,20 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
         onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) move(event.clientX); }}
         onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}><span /></div>
       <section className="file-reading-pane" hidden={mode === "source"} aria-label="渲染预览">
-        <div className="file-pane-label"><span>预览</span><span>{html ? "HTML · 内嵌资源预览" : "MARKDOWN"}</span></div>
+        <div className="file-pane-label"><span>预览</span><span>{html ? "HTML · 隔离预览" : "MARKDOWN"}</span></div>
         {html ? (mode !== "source" || visited.reading) && <HtmlFile text={displayFile?.text ?? ""} name={file.name} resources={file.resources} /> : <div className="file-reading-scroll" tabIndex={0}>
           {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={displayFile?.text ?? ""} pathScope={reference.owner.scope} sourceFile={displayFile?.path} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
         </div>}
       </section>
     </>}
   </div>;
+  else if (file.kind === "office") body = <OfficeFile key={file.name} parts={file.officeParts ?? []} />;
+  else if (file.kind === "archive") body = <ArchiveFile entries={file.entries ?? []} onOpen={entry => { setMember({ entry, archiveRevision: file.revision! }); setMode("reading"); }} />;
+  else if (file.kind === "audio" || file.kind === "video") body = <MediaFile url={url} kind={file.kind} name={file.name} />;
   else if (file.kind === "image") body = <ImageFile url={url} name={file.name} zoom={zoom} />;
   else if (file.kind === "pdf") body = <div className="file-pdf"><p>PDF 阅读器不可用时，可通过右上角打开所在文件夹。</p>{url && <object data={url} type="application/pdf" aria-label={`PDF 预览：${file.name}`}><div className="file-empty"><strong>此环境无法内嵌显示 PDF</strong><p>请打开所在文件夹，使用本地 PDF 阅读器查看。</p></div></object>}</div>;
   else body = <div className="file-empty"><FileIcon name="file" /><strong>{file.name}</strong><p>{file.reason}</p><button type="button" className="btn" disabled={revealing} onClick={() => void reveal()}><FileIcon name="folder" />打开所在文件夹</button></div>;
+  if (!loading && !error && file && !member && !reference.skillId && !editing && (html || file.directory || file.name === "package.json")) body = <WebPreview key={`${file.path}:${attempt}:${file.revision ?? file.modified}`} reference={reference}>{body}</WebPreview>;
   return <aside className={`file-preview-panel${maximized ? " is-maximized" : ""}`} ref={panel} role="dialog" aria-modal="false" aria-label={`文件预览：${title}`} tabIndex={-1}
     onKeyDown={event => {
       if (editing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); event.stopPropagation(); void save(); }
@@ -163,8 +171,9 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
       </div>
     </header>
     <div className="file-preview-toolbar">
+      {member && <button type="button" className="file-edit-action" onClick={() => setMember(null)}>返回压缩包</button>}
       <div className="file-mode-group" role="group" aria-label="预览模式">
-        {rendered ? modes.map(([value, label]) => <Action key={value} icon={value} label={html ? label.replace("Markdown 源码", "HTML 源码").replace("Markdown 阅读", "HTML 预览") : label} pressed={mode === value} onClick={() => setMode(value)} disabled={loading} />) : <span className="file-format-label">{file ? ({ code: "代码", text: "纯文本", image: "图片", pdf: "PDF 文档", unsupported: "文件信息", markdown: "Markdown" })[file.kind] : "文件预览"}</span>}
+        {rendered ? modes.map(([value, label]) => <Action key={value} icon={value} label={html ? label.replace("Markdown 源码", "HTML 源码").replace("Markdown 阅读", "HTML 预览") : label} pressed={mode === value} onClick={() => setMode(value)} disabled={loading} />) : <span className="file-format-label">{file ? ({ code: "代码", text: "纯文本", image: "图片", pdf: "PDF 文档", audio: "音频", video: "视频", archive: "压缩包", office: "办公文档", unsupported: "文件信息", markdown: "Markdown" })[file.kind] : "文件预览"}</span>}
       </div>
       <span className="file-mode-caption">{editing ? dirty.current ? "尚未保存" : "编辑中" : rendered ? mode === "split" ? "源码 · 预览" : mode === "source" ? "源码" : html ? "页面" : "阅读" : "预览"}</span>
       <div className="file-view-actions">
@@ -179,6 +188,6 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     </div>
     {editing && notice && <p className="file-editor-notice" role="status">{notice}</p>}
     <div className="file-preview-body" aria-busy={loading}>{body}</div>
-    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice || file?.resourceNotice}>{notice || file?.editReason || file?.resourceNotice || (file?.encoding ?? "只读预览")}</span></footer>
+    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice || file?.resourceNotice}>{notice || file?.editReason || file?.resourceNotice || (html ? "默认静态预览 · 模块与项目可单独确认运行" : file?.encoding ?? "只读预览")}</span></footer>
   </aside>;
 }

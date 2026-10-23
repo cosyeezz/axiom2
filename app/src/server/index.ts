@@ -1,4 +1,5 @@
 import { latencyFor } from "./latency.js";
+import { assetCacheControl } from "./asset-cache.js";
 import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
 import { Resources } from "./resources.js";
@@ -20,6 +21,8 @@ import { SessionDrafts } from "./session-drafts.js";
 import type { DraftStamp } from "../shared/drafts.js";
 import { SessionAttention } from "./session-attention.js";
 import { Files } from "./files.js";
+import { PreviewRuntimes } from "./preview-runtimes.js";
+import { hasFileLink, type FilePreview } from "../shared/file-preview.js";
 import { FolderPicker, FolderPickerError, type PickFolder } from "./folder-picker.js";
 import { OpenDialog, OpenDialogError, type PickPaths } from "./open-dialog.js";
 import { FileManager, FileManagerError } from "./file-manager.js";
@@ -67,6 +70,13 @@ export async function startServer(
       if (!skill) throw new AppError("CAPABILITY_UNAVAILABLE", "技能已不存在或不可读取，请刷新技能列表。");
       return skill.source;
     });
+  const previews = new PreviewRuntimes(async (c, signal) => await files.command(c, signal) as FilePreview, c => {
+    const scope = { workspaceId: text(c.workspaceId, "工作空间标识"), sessionId: text(c.sessionId, "会话标识") };
+    store.session(scope.workspaceId, scope.sessionId);
+    if (!store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
+    const message = agents.message(scope, text(c.params?.messageId, "消息标识"), true);
+    if (message?.role !== "assistant" || !hasFileLink(message.text, text(c.params?.href, "文件链接"))) throw new AppError("FILE_PREVIEW_FORBIDDEN", "原始文件链接已不可访问");
+  });
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
   const pathActions = new PathActions(store, fileManager);
@@ -488,6 +498,11 @@ export async function startServer(
           ws.once("close", abort);
           try { data = await pathActions.command(c, controller.signal); }
           finally { ws.off("close", abort); }
+        } else if (c.op.startsWith("preview.")) {
+          const controller = new AbortController(), abort = () => controller.abort();
+          reads.set(requestId, controller); ws.once("close", abort);
+          try { data = await previews.command(c, AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])); }
+          finally { reads.delete(requestId); ws.off("close", abort); }
         } else if (c.op.startsWith("files.")) {
           const controller = new AbortController();
           const abort = () => controller.abort();
@@ -892,6 +907,9 @@ export async function startServer(
         return;
       }
       const body = await readFile(file);
+      // Set only after a successful read: missing old chunks must never cache a 404.
+      // HTML remains no-store so every navigation discovers the current asset hashes.
+      res.setHeader("Cache-Control", route ? "no-store" : assetCacheControl(url.pathname));
       const mime: Record<string, string> = {
         ".html": "text/html; charset=utf-8",
         ".js": "text/javascript",
@@ -944,7 +962,7 @@ export async function startServer(
       server.listen(options.port ?? 4317, "127.0.0.1", resolve);
     });
   } catch (error) {
-    await Promise.all([openDialog.close(), fileManager.close(), modelProxy.close(), closeModelNetworks(store.root)]);
+    await Promise.all([previews.close(), openDialog.close(), fileManager.close(), modelProxy.close(), closeModelNetworks(store.root)]);
     sockets.close();
     await vite?.close();
     attention.close();
@@ -965,6 +983,7 @@ export async function startServer(
       shuttingDown = true;
       clearTimeout(proxyRefreshTimer);
       clearTimeout(costTimer); costWorkspaces.clear();
+      await previews.close();
       await remoteAccess?.close();
       attention.close();
       await resources.close();
