@@ -31,22 +31,23 @@ axiom2 start
 
 | 客户端与后台 | 下载与使用 |
 | --- | --- |
-| Windows x64 安装包 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2.msi)，安装后打开 Axiom2 |
-| Windows x64 便携版 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2.exe)，直接运行 |
-| macOS 通用版（Apple 芯片 / Intel） | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
-| Android 8.0+ | [下载 Axiom2-Android.apk](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2-Android.apk)，安装后连接电脑后台 |
-| Android 集成 SDK | [下载 axiom2-android-sdk.aar](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/axiom2-android-sdk.aar) |
-| 后台 / Web（Windows、macOS、Linux） | [下载 axiom2.tgz](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/axiom2.tgz)，在下载目录运行 `npm install -g ./axiom2.tgz` 后执行 `axiom2 start` |
-| 全部下载文件 SHA-256 校验 | [SHA256SUMS](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/SHA256SUMS) |
+| Windows x64 安装包 v0.4.12 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.msi)，安装后打开 Axiom2 |
+| Windows x64 便携版 v0.4.12 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.exe)，直接运行 |
+| macOS 通用版（Apple 芯片 / Intel）v0.4.12 | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
+| Android 8.0+ v0.4.9 | [下载 Axiom2-Android.apk](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2-Android.apk)，安装后连接电脑后台 |
+| Android 集成 SDK v0.4.9 | [下载 axiom2-android-sdk.aar](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/axiom2-android-sdk.aar) |
+| 后台 / Web v0.4.12（Windows、macOS、Linux） | [下载 axiom2.tgz](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/axiom2.tgz)，在下载目录运行 `npm install -g ./axiom2.tgz` 后执行 `axiom2 start` |
+| 下载文件 SHA-256 校验 | [v0.4.12 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/SHA256SUMS)；[Android v0.4.9 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/SHA256SUMS) |
 | Linux 客户端 | 使用浏览器连接后台；尚无发布并验收的原生客户端 |
+| iOS 客户端 | 尚无原生客户端或 IPA 安装包 |
 
-以上下载统一为 [v0.4.9](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.9)，全部产品包从同一正式 tag 构建。后台服务仍可独立更新；旧客户端的连接状态上报需要支持该功能的后台。
+Windows、macOS 客户端与后台统一为 [v0.4.12](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12)，从同一正式 tag 构建；Android APK／SDK 仍为 [v0.4.9](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.9)。后台服务可独立更新；Android 工作台界面由所连接的后台提供，更新后台后在手机中切换连接并重新连接可加载新版界面，原生功能需更新 APK。旧客户端的连接状态上报需要支持该功能的后台。
 
 **Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后核对地址与端口并点击“连接”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，确认后台停止或确认更新后返回控制页。桌面客户端使用波形图标表示连接：绿为已连接，红为已断开，灰为确认中，文字颜色固定。业务订阅报错或服务管理通道暂不可用时，保留当前工作台；连接信息过期时显示确认中。旧后台不支持连接上报时需更新后台才能显示准确状态。安装期间关闭按钮返回进度页，其余时候关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，在本机运行后台时需先安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
 **应用内更新：** 在 Pake 控制页的“版本与更新”点击“检查更新”，分别查看客户端、后台服务与最新版本。点击“更新后台服务”并确认后关闭工作台，先下载、校验和准备新版，再停止旧服务、切换程序并验证启动；项目与会话数据保留，正在执行的任务会结束。更新由独立任务执行，关闭、重开客户端仍可查看进度。程序切换或启动失败会尝试恢复旧程序，更新进程异常退出且留下恢复记录时可点击“恢复旧版本”；恢复会核对旧程序版本，备份缺失且安装目录仍是其他版本时保留恢复记录并报错。后台必须安装在标准 npm 包目录且目录可写（一行安装命令符合此方式），源码目录请使用原方式更新。**应用内更新与恢复仅支持一个数据目录独占一个服务安装。多个数据目录共用全局安装不受支持；请为各数据目录使用独立安装目录，或停止所有相关服务后手动更新。** 当前任务锁和服务探测均按数据目录工作，不能检查其他数据目录是否仍在使用同一程序。
 
-Windows 客户端更新使用“下载客户端更新”→“运行安装器”：附件校验通过后才打开 MSI 安装向导并关闭当前客户端，后台继续运行；安装完成后重新打开客户端查看版本。安装器启动不代表安装成功，仍需完成系统向导。**v0.2.x 客户端首次需手动下载新版 MSI／EXE，之后才能使用应用内更新入口。** v0.4.9 客户端默认收起“安装与准备”，已有服务可在设备选择区核对端口后点击“连接”，无需逐步安装；本地服务状态、刷新和启停常驻下方。准备摘要提供Node.js、npm及Tailscale检测标签，Node.js/npm为联合环境检查，检测到Tailscale不代表已登录或远端服务可用。展开准备后，运行环境 → 后台服务 → 连接工作台各步骤提供校验、自动安装和可复制下载地址；运行环境直接展示平台安装命令，后台步骤直接展示一行安装命令，并可展开 npm 手动安装、CLI 启动和开发运行命令。Windows 优先调用 winget，缺少 winget 时 Node 使用官方 MSI；macOS Node 使用官方 PKG。服务安装到当前用户数据目录的 `service/`，不会覆盖已有安装记录。执行日志与任务结果落盘，安装期间普通关闭返回进度页；异常退出后核实结果，未确认时阻止重复安装。系统安装授权仍由系统完成。上方 v0.4.9 客户端包含该入口。使用 Node 22 时，如果旧客户端仍提示需要 Node 24，请先手动替换新版客户端，再运行后台安装命令；仅更新后台不会替换客户端内嵌的运行时检查。
+Windows 客户端更新使用“下载客户端更新”→“运行安装器”：附件校验通过后才打开 MSI 安装向导并关闭当前客户端，后台继续运行；安装完成后重新打开客户端查看版本。安装器启动不代表安装成功，仍需完成系统向导。**v0.2.x 客户端首次需手动下载新版 MSI／EXE，之后才能使用应用内更新入口。** v0.4.9 客户端默认收起“安装与准备”，已有服务可在设备选择区核对端口后点击“连接”，无需逐步安装；本地服务状态、刷新和启停常驻下方。准备摘要提供Node.js、npm及Tailscale检测标签，Node.js/npm为联合环境检查，检测到Tailscale不代表已登录或远端服务可用。展开准备后，运行环境 → 后台服务 → 连接工作台各步骤提供校验、自动安装和可复制下载地址；运行环境直接展示平台安装命令，后台步骤直接展示一行安装命令，并可展开 npm 手动安装、CLI 启动和开发运行命令。Windows 优先调用 winget，缺少 winget 时 Node 使用官方 MSI；macOS Node 使用官方 PKG。服务安装到当前用户数据目录的 `service/`，不会覆盖已有安装记录。执行日志与任务结果落盘，安装期间普通关闭返回进度页；异常退出后核实结果，未确认时阻止重复安装。系统安装授权仍由系统完成。上方提供的 Windows 客户端包含该入口。使用 Node 22 时，如果旧客户端仍提示需要 Node 24，请先手动替换新版客户端，再运行后台安装命令；仅更新后台不会替换客户端内嵌的运行时检查。
 
 macOS 客户端使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公证；首次打开如被系统阻止，可在“系统设置 → 隐私与安全性”中确认“仍要打开”。Mac 客户端自身更新需退出客户端后下载新版 DMG 并替换 Applications 中的应用；后台服务可从控制页管理和更新，仍需满足上述独占安装要求。
 
@@ -64,7 +65,7 @@ macOS 客户端使用 ad-hoc 签名，未经过 Apple Developer ID 签名或公�
 
 对于已经运行、尚未重启加载新代码的开发服务，可运行 `node scripts/dev-tailnet.mjs`，将 Tailnet 地址透明转发到当前 `127.0.0.1:4317`，不打断正在执行的任务；新版后台启动并提供本机只读连接诊断接口后，临时网关自动退出并交回监听。该桥接只转发当前服务，不为旧进程补装新增业务接口。
 
-安卓要求 Android 8.0+ 和更新的 Android System WebView，使用系统 Tailscale VPN。打开后选择连接，失败时提供重试，已连接工作台回到前台时检查连接；任务仍由电脑执行。安装、SDK 集成与构建参数见 [安卓与内网连接说明](app/android/README.md)。APK 与 AAR 可从上方同版本 GitHub Release 下载。
+安卓要求 Android 8.0+ 和更新的 Android System WebView，使用系统 Tailscale VPN。打开后选择连接，失败时提供重试，已连接工作台回到前台时检查连接；任务仍由电脑执行。安装、SDK 集成与构建参数见 [安卓与内网连接说明](app/android/README.md)。APK 与 AAR 可从上方标明版本的 GitHub Release 下载。
 
 验证覆盖无凭据 HTTP／WS 直连、来源校验、接口变化、生产构建、APK 签名及手机浏览器多尺寸交互；实际开发地址另做只读连接检查。本机 Chrome 测试不替代实体安卓、跨设备 VPN、真实软键盘或真实模型验收。
 
