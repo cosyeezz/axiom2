@@ -465,12 +465,16 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       started.data.id,
       "duplicate starts never restart login",
     );
-    const prompt = second.messages.find(
+    // Login runs in the model network worker, so its prompt arrives after auth.start.
+    const findPrompt = () => second.messages.find(
       (m) =>
         m.scope === "authentication" &&
         m.data?.id === started.data.id &&
         m.data.prompt,
     )?.data.prompt;
+    for (const deadline = Date.now() + 10_000; !findPrompt() && Date.now() < deadline;)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    const prompt = findPrompt();
     assert.ok(prompt);
     const input = {
       id: started.data.id,

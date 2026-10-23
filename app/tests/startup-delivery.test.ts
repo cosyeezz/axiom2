@@ -20,7 +20,7 @@ function fixture(t: TestContext) {
   const saved: unknown[][] = [], settlements: Run[] = [], sent: string[] = [], receipts: unknown[][] = [];
   let killed = 0;
   const runs = new AgentRuns({ session() {}, finishRun: (...args: unknown[]) => saved.push(args), db: { prepare: (sql: string) => ({ run(...args: unknown[]) { if (sql.startsWith("UPDATE external_requests")) receipts.push([sql, ...args]); } }) } } as any,
-    { changed() {}, refresh() {}, flush() {}, settled() {}, thread() { return {}; }, publishMessages() {}, info() { return {}; }, messages: new Map(), queues: new Map() } as any, () => {}) as any;
+    { changed() {}, refresh() {}, flush() {}, settled() {}, recoverRequestUsage() {}, thread() { return {}; }, publishMessages() {}, info() { return {}; }, messages: new Map(), queues: new Map() } as any, () => {}) as any;
   const child = Object.assign(new EventEmitter(), {
     connected: true, exitCode: null as number | null, signalCode: null,
     send(value: any, callback: (error?: Error | null) => void): boolean { sent.push(value.type); queueMicrotask(() => callback()); return true; },

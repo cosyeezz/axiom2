@@ -10,7 +10,7 @@
     "dev": "tsx src/server/index.ts --dev",
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
-    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/*.test.ts",
     "check:ui": "tsx tests/ui.check.ts",
     "check:sdk": "tsx tests/sdk.check.ts",
     "generate:icons": "node scripts/generate-icons.mjs",

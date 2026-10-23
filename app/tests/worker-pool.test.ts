@@ -112,7 +112,7 @@ test('binding completion revalidates configuration and snapshot before permittin
   assert.equal(child.messages.some((m:any)=>m.type==='shutdown'),false,'the denied run owns failure reporting and cleanup');
   assert.equal(h.pool.isActive(first.ref),false,'rejection revokes the lease before the worker closes');
   assert.equal(h.pool.stats().total,1,'rejection still holds physical capacity until close');
-  t.mock.timers.tick(1499);assert.equal(kills,0);
+  t.mock.timers.tick(19999);assert.equal(kills,0);
   t.mock.timers.tick(1);assert.equal(kills,1,'a denied worker that does not close is still force-stopped');
   assert.equal(h.pool.stats().total,1,'initiating forced termination does not release capacity');
   child.close();await first.released;
