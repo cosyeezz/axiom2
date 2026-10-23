@@ -28,7 +28,8 @@
     window.__axiomProbeSample = () => invoke("record", { token, sample: ++sample, draft: input.value,
       selection: [input.selectionStart, input.selectionEnd], scroll: thread.scrollTop,
       focused: document.hasFocus() && document.activeElement === input, denied,
-      titleIconCount: document.querySelectorAll('.title-heading svg').length,
+      titleIconCount: document.querySelectorAll('.title-heading .connection-status svg').length,
+      titleCopyIconCount: document.querySelectorAll('.title-heading .title-copy svg').length,
       viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } });
     await window.__axiomProbeSample();
   })().catch((error) => { console.error(error); void invoke("record", { error: String(error) }); });

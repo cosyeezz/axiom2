@@ -210,7 +210,8 @@ try {
   await workbench.locator("#thread").evaluate((thread) => { thread.scrollTop = 237; });
   const beforeSwitch = await workbench.evaluate(() => ({ sentinel: (window as any).__switchSentinel, scroll: document.getElementById("thread")!.scrollTop }));
   assert.ok(beforeSwitch.scroll > 0);
-  assert.equal(await workbench.locator('.title-heading svg').count(), 0, "workspace title has no connection icon");
+  assert.equal(await workbench.locator('.title-heading .connection-status svg').count(), 0, "workspace title has no connection icon");
+  assert.equal(await workbench.locator('.title-heading .title-copy svg').count(), 1, "workspace title retains its copy icon");
   const rejectedReport = await workbench.evaluate(async () => {
     try { await (window as any).__TAURI_INTERNALS__.invoke("axiom_connection_report", { probe: 0, state: "connected" }); return false; }
     catch { return true; }

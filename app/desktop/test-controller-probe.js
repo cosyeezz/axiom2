@@ -107,6 +107,7 @@
     const before = await observation((value) => value.sample === 1);
     check(before.denied.length === 4 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
     check(before.titleIconCount === 0, "The old title connection icon must be removed");
+    check(before.titleCopyIconCount === 1, "The title copy button must retain its icon");
     const headerStatus = await wait(() => document.querySelector('.desktop-workbench-status[data-state="connected"]'));
     check(headerStatus.textContent.trim() === "后台服务已连接", "Connected header label missing");
     const bridgeStates = await Promise.all([1, 2].map(() => window.__TAURI_INTERNALS__.invoke("axiom_connection")));
@@ -121,7 +122,7 @@
       colors[state] = { text, icon };
     }
     headerStatus.dataset.state = "connected";
-    const header = { bridgeStates, colors, titleIconCount: before.titleIconCount };
+    const header = { bridgeStates, colors, titleIconCount: before.titleIconCount, titleCopyIconCount: before.titleCopyIconCount };
     check(before.scroll > 0 && before.draft === "Mac 单窗口切换保留草稿", "Real composer/scroll fixture missing");
     stage = "workbench-lifecycle";
     bounds(await invoke("snapshot"));
