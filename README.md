@@ -31,17 +31,19 @@ axiom2 start
 
 | 客户端与后台 | 下载与使用 |
 | --- | --- |
-| Windows x64 安装包 v0.4.12 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.msi)，安装后打开 Axiom2 |
-| Windows x64 便携版 v0.4.12 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.exe)，直接运行 |
-| macOS 通用版（Apple 芯片 / Intel）v0.4.12 | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
+| Windows x64 安装包 v0.4.13 | [下载 Axiom2.msi](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.msi)，安装后打开 Axiom2 |
+| Windows x64 便携版 v0.4.13 | [下载 Axiom2.exe](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.exe)，直接运行 |
+| macOS 通用版（Apple 芯片 / Intel）v0.4.13 | [下载 Axiom2.dmg](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.dmg)，打开后将 Axiom2 拖入 Applications，再从应用程序打开 |
 | Android 8.0+ v0.4.9 | [下载 Axiom2-Android.apk](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/Axiom2-Android.apk)，安装后连接电脑后台 |
 | Android 集成 SDK v0.4.9 | [下载 axiom2-android-sdk.aar](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/axiom2-android-sdk.aar) |
-| 后台 / Web v0.4.12（Windows、macOS、Linux） | [下载 axiom2.tgz](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/axiom2.tgz)，在下载目录运行 `npm install -g ./axiom2.tgz` 后执行 `axiom2 start` |
-| 下载文件 SHA-256 校验 | [v0.4.12 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.12/SHA256SUMS)；[Android v0.4.9 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/SHA256SUMS) |
+| 后台 / Web v0.4.13（Windows、macOS、Linux） | [下载 axiom2.tgz](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/axiom2.tgz)，在下载目录运行 `npm install -g ./axiom2.tgz` 后执行 `axiom2 start` |
+| 下载文件 SHA-256 校验 | [v0.4.13 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/SHA256SUMS)；[Android v0.4.9 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.9/SHA256SUMS) |
 | Linux 客户端 | 使用浏览器连接后台；尚无发布并验收的原生客户端 |
 | iOS 客户端 | 尚无原生客户端或 IPA 安装包 |
 
-Windows、macOS 客户端与后台统一为 [v0.4.12](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12)，从同一正式 tag 构建；Android APK／SDK 仍为 [v0.4.9](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.9)。后台服务可独立更新；Android 工作台界面由所连接的后台提供，更新后台后在手机中切换连接并重新连接可加载新版界面，原生功能需更新 APK。旧客户端的连接状态上报需要支持该功能的后台。
+Windows、macOS 客户端与后台统一为 [v0.4.13](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.13)，从同一正式 tag 构建；Android APK／SDK 仍为 [v0.4.9](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.9)。后台服务可独立更新；Android 工作台界面由所连接的后台提供，更新后台后在手机中切换连接并重新连接可加载新版界面，原生功能需更新 APK。旧客户端的连接状态上报需要支持该功能的后台。
+
+**v0.4.13 安装体验：** 终端 Pi 的检查、安装与更新不再要求先安装后台服务，但仍需本机 Node.js/npm。安装下载显示文件大小、已下载量、进度和速度；npm 安装阶段显示实际日志；失败直接展示具体原因并展开详情。上述控制页修复需要升级桌面客户端，单独更新后台不会替换旧客户端。
 
 **Pake 自带离线可用的服务控制页。** 服务未启动时仍能打开客户端，点击“启动后台服务”，就绪后核对地址与端口并点击“连接”；关闭服务前会列出活动会话并要求确认。服务启动期间可查询“正在启动”状态并关闭服务；启动命令等待超时后，仍可刷新状态或执行 `axiom2 stop`，停止成功后不会再次上线。Windows 与 macOS 都使用一个原生窗口：就绪后在当前窗口切到工作台，点击顶部“服务与更新”返回原有控制页。普通切换保留工作台实例、草稿、选区和滚动位置；服务地址变化时重新建立工作台视图，确认后台停止或确认更新后返回控制页。桌面客户端使用波形图标表示连接：绿为已连接，红为已断开，灰为确认中，文字颜色固定。业务订阅报错或服务管理通道暂不可用时，保留当前工作台；连接信息过期时显示确认中。旧后台不支持连接上报时需更新后台才能显示准确状态。安装期间关闭按钮返回进度页，其余时候关闭窗口会退出桌面客户端，退出后再次打开会恢复控制入口并识别已有后台。Pake 不包含 Node.js、pi 或后端，在本机运行后台时需先安装服务；Windows 需要 WebView2 Runtime，客户端未签名。关闭客户端不会退出后台服务。真实供应商、OAuth 与原生安装交互的验收范围见下文。
 
