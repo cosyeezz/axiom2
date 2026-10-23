@@ -14,7 +14,8 @@ import { ProcessTitle, ProcessOutcome } from "./ProcessStatus.js";
 import type { CallReference } from "../../shared/process-layout.js";
 import { toolPreview, toolStatusLabels, toolSummary, ordinaryToolStatus, type ToolCall, type ToolStatus } from "./tool-summary.js";
 
-export type ActivityFact = { name: string; icon: string; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; runId?: string; order: readonly [number, number] };
+import type { ToolIcon } from "../../shared/tool-summary.js";
+export type ActivityFact = { name: string; icon: ToolIcon | "thinking"; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; runId?: string; order: readonly [number, number] };
 export const ActivityExpanded = createContext(true);
 export const ActivitySettled = createContext(false);
 
@@ -41,8 +42,8 @@ function CompletedStatusIcon({ animate }: { animate: boolean }) {
   </svg>;
 }
 
-function toolGlyphKind(icon: string) {
-  return icon === "bash" || icon === "read" || icon === "edit" || icon === "write" ? icon : "tool";
+function toolGlyphKind(icon: ActivityFact["icon"]) {
+  return icon === "thinking" ? "think" : icon;
 }
 
 function ActivitySummary({ fact, settled = false }: { fact: ActivityFact; settled?: boolean }) {

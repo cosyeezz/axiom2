@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Markdown } from "../src/client/chat/Markdown.js";
+import { Markdown } from "./markdown-fixture.js";
 import { markdownLocalLinks } from "../src/shared/markdown.js";
 import { hasFileLink } from "../src/shared/file-preview.js";
 import { memoryExcerpt, parseMemory } from "../src/shared/memory.js";

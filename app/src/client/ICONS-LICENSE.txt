@@ -77,8 +77,10 @@ Open workspace: adapted from that folder silhouette with a tilted front inspired
 Reference: https://icon-sets.iconify.design/tabler/folder-open/ (Tabler MIT notice below).
 Tabler hand-click is used by the skill/MCP picker and skill use buttons.
 Source: https://icon-sets.iconify.design/tabler/hand-click/
-Default tool glyph: Tabler automation (T013), original paths in chat/ProcessIcon.tsx, with a fitted viewBox and 1em size / 0.1em non-scaling rounded stroke following the row font. Tool rows and collapsed summaries share this renderer; the outer process heading has no running glyph.
-Source: https://icon-sets.iconify.design/tabler/automation/
+Tool-call glyphs selected by the user: Iconoir brain-research (memory-03); Lucide code-xml (code-01) and plug (mcp-04); Tabler settings-search (discovery-02), packages (resources-32), template (templates-02), file-search (read-resource-29), search (search-23), world-search (web-27).
+Original path geometry is retained in icons.svg, with fitted viewBoxes and shared rounded, non-scaling strokes. ProcessIcon uses the same symbols in tool rows and collapsed summaries, at 1em size and 0.1em stroke to match existing operation glyphs. Other sprite consumers retain the shared 1.5px outline. MCP calls and unregistered external tools share the plug glyph without changing their tool names. Iconoir/Tabler MIT and Lucide ISC notices are included in this file.
+Sources: https://icon-sets.iconify.design/iconoir/brain-research/ https://icon-sets.iconify.design/lucide/code-xml/ https://icon-sets.iconify.design/lucide/plug/
+Sources: https://icon-sets.iconify.design/tabler/settings-search/ https://icon-sets.iconify.design/tabler/packages/ https://icon-sets.iconify.design/tabler/template/ https://icon-sets.iconify.design/tabler/file-search/ https://icon-sets.iconify.design/tabler/search/ https://icon-sets.iconify.design/tabler/world-search/
 Thought-summary glyph: Tabler bulb (TH25), original path in chat/ProcessIcon.tsx and icons.svg; fitted viewBox, 1em size and pale-yellow outline. Expanded thought rows have no leading glyph.
 Source: https://icon-sets.iconify.design/tabler/bulb/ (MIT notice below).
 Read, edit, write and command glyphs show standalone operation symbols without a file outline in chat/ProcessIcon.tsx and icons.svg: a magnifier adapted from Lucide file-search-corner (R08), the Lucide pencil, the same pencil with a custom writing baseline for write, and a custom >_ mark. All four use a common fitted viewBox, 1em size and 0.1em non-scaling rounded strokes in tool rows and collapsed summaries.

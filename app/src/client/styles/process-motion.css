@@ -1,5 +1,5 @@
 /* Tool-row glyphs follow the font size; process feedback shares one entry. */
-.process-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 1em; width: 1em; height: 1em; color: #9ca3af; }
+.process-icon { --icon-stroke: .1em; position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 1em; width: 1em; height: 1em; color: #9ca3af; }
 .process-icon > svg { width: 100%; height: 100%; flex: 0 0 100%; overflow: visible; transform-origin: center; stroke-width: .1em; }
 .process-icon-think { color: #e6d8a3; }
 .process-icon > svg > path { vector-effect: non-scaling-stroke; }

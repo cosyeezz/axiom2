@@ -24,7 +24,11 @@ test("tool labels describe actions in Chinese while icons retain tool categories
     ["read", "read", "读取文件"], ["edit", "edit", "编辑文件"], ["write", "write", "写入文件"],
     ["powershell", "bash", "执行命令"], ["bash", "bash", "执行命令"], ["pwsh", "bash", "执行命令"],
     ["grep", "search", "搜索文本"], ["find", "search", "查找文件"], ["ls", "search", "列出目录"],
-    ["memory_query", "tool", "查询记忆"],
+    ["memory_query", "memory", "查询记忆"],
+    ["codemode", "code", "执行代码"], ["tool_search", "discovery", "搜索工具"],
+    ["list_mcp_resources", "resources", "列出 MCP 资源"],
+    ["list_mcp_resource_templates", "templates", "列出 MCP 资源模板"],
+    ["read_mcp_resource", "resource-read", "读取 MCP 资源"],
     ["web_search", "search", "搜索网页"], ["source_check", "search", "核查来源"],
     ["fetch_content", "web", "读取网页"], ["get_search_content", "web", "读取搜索结果"],
     ["delegate", "delegate", "委派子任务"], ["append", "append", "补充子任务"],
@@ -76,6 +80,29 @@ test("cached English summaries are localized without losing full-input metadata"
   const cached = { id: "cached", name: "functions.read", input: '{"path":', summary };
   assert.deepEqual(toolSummary(cached), { ...summary, label: "读取文件" });
   assert.equal(cached.summary.label, "read", "display localization does not mutate stored calls");
+});
+test("cached generic summaries adopt selected tool icons without losing full-input metadata", () => {
+  const categories = [
+    ["memory_query", "memory"], ["codemode", "code"], ["tool_search", "discovery"],
+    ["list_mcp_resources", "resources"], ["list_mcp_resource_templates", "templates"],
+    ["read_mcp_resource", "resource-read"], ["grep", "search"], ["fetch_content", "web"],
+  ];
+  for (const [name, icon] of categories) {
+    const summary = { label: name, icon: "tool" as const, target: "full cached target", detail: "full cached detail" };
+    const cached = { id: "cached", name: `functions.${name}`, input: '{"truncated":', summary };
+    assert.deepEqual(toolSummary(cached), { ...summary, icon, label: toolSummary(call(name, {})).label });
+    assert.deepEqual(cached.summary, summary);
+    assert.equal(cached.summary.icon, "tool", "display refresh does not mutate stored snapshots");
+  }
+});
+test("MCP and unknown external calls retain their identities with the shared plug category", () => {
+  for (const name of ["mcp__chosen__ping", "mcp__alibabacloud_dataworks_mcp_server__GetNode", "custom_tool"]) {
+    for (const toolName of [name, `functions.${name}`]) {
+      const summary = toolSummary(call(toolName, { query: "needle" }));
+      assert.deepEqual(summary, { label: name, icon: "tool", target: "needle", detail: "" });
+      assert.deepEqual(toolSummary({ id: "cached", name: toolName, input: "{", summary }), summary);
+    }
+  }
 });
 test("fallback summaries always supply safe, bounded labels and generic icons", () => {
   for (const name of ["custom", "constructor", "__proto__", "toString"]) {

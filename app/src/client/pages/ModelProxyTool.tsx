@@ -7,7 +7,8 @@ export function ModelProxyTool({ active }: { active: boolean }) {
   const state = useScope("builtin-tools:model-proxy", emptyModelProxyState), connection = useConnectionState();
   const [draft, setDraft] = useState<ProxyDraft>(), [removing, setRemoving] = useState<string>();
   const [pending, setPending] = useState<{ id: string; op: string }>(), [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
-  const latestState = useRef(state); latestState.current = state;
+  const activeRequest = useRef<{ id: string; acknowledged: boolean } | undefined>(undefined);
+  if (activeRequest.current && activeRequest.current.id === state.job?.id) activeRequest.current.acknowledged = true;
   // A job snapshot acknowledges an accepted request even if its receipt was lost on reconnect.
   const sending = !!pending && state.job?.id !== pending.id;
   const busy = sending || !!state.job?.running || !connection.connected;
@@ -25,16 +26,18 @@ export function ModelProxyTool({ active }: { active: boolean }) {
     });
   }, [state.inspection, draft?.inspectionId]);
   async function action(op: string, params: Record<string, unknown> = {}, requestId = crypto.randomUUID()) {
+    const request = { id: requestId, acknowledged: false };
+    activeRequest.current = request;
     setPending({ id: requestId, op }); setFeedback(undefined);
     try {
       const result = await command(op, { revision: state.revision, ...params }, {}, requestId) as ModelProxyState;
+      if (activeRequest.current !== request) return result;
       if (op === "modelProxy.save") { setDraft(undefined); setFeedback({ text: "线路已保存，请启动后在模型供应商页选择。" }); }
       if (op === "modelProxy.remove") { setRemoving(undefined); setFeedback({ text: "线路已删除。使用此线路的供应商需要重新选择代理。" }); }
       if (op === "modelProxy.stop") setFeedback({ text: "线路已停止；使用此线路的模型请求会失败。" });
       return result;
     } catch (error) {
-      const acknowledged = latestState.current.job?.id === requestId;
-      if (!acknowledged || !["UNCERTAIN", "DISCONNECTED"].includes((error as { code?: string }).code ?? "")) setFeedback({ text: (error as Error).message, error: true });
+      if (activeRequest.current === request && (!request.acknowledged || !["UNCERTAIN", "DISCONNECTED"].includes((error as { code?: string }).code ?? ""))) setFeedback({ text: (error as Error).message, error: true });
     }
     finally { setPending(current => current?.id === requestId ? undefined : current); }
   }

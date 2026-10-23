@@ -465,17 +465,20 @@ test("HTTP/WS: local access, scoped snapshots, recoverable receipts, no mutation
       started.data.id,
       "duplicate starts never restart login",
     );
-    // Login runs in the model network worker, so its prompt arrives after auth.start.
-    const findPrompt = () => second.messages.find(
-      (m) =>
-        m.scope === "authentication" &&
-        m.data?.id === started.data.id &&
-        m.data.prompt,
+    // The receipt accepts the login; worker preparation publishes its prompt later.
+    const authPrompt = () => second.messages.find(
+      (m) => m.scope === "authentication" && m.data?.id === started.data.id && m.data.prompt,
     )?.data.prompt;
-    for (const deadline = Date.now() + 10_000; !findPrompt() && Date.now() < deadline;)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    const prompt = findPrompt();
-    assert.ok(prompt);
+    const promptDeadline = Date.now() + 15_000;
+    while (!authPrompt() && Date.now() < promptDeadline) {
+      const failed = second.messages.find(
+        (m) => m.scope === "authentication" && m.data?.id === started.data.id && m.data.status === "failed",
+      );
+      assert.equal(failed, undefined, "authentication failed before publishing its prompt");
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    const prompt = authPrompt();
+    assert.ok(prompt, "authentication prompt arrives after worker preparation");
     const input = {
       id: started.data.id,
       promptId: prompt.id,

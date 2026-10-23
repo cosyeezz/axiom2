@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Markdown } from "../src/client/chat/Markdown.js";
+import { Markdown } from "./markdown-fixture.js";
 
 const render = (text: string) => renderToStaticMarkup(createElement(Markdown, { text }));
 const strong = (text: string) => `<strong><span>${text}</span></strong>`;

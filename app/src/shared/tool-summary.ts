@@ -5,7 +5,7 @@ export type ToolStatus = NonNullable<ChatMessage["status"]> | "unknown";
 export const toolStatusLabels: Record<ToolStatus, string> = {
   running: "执行中", completed: "已完成", failed: "失败", cancelled: "已停止", unknown: "未确认完成",
 };
-export type ToolIcon = "read" | "edit" | "write" | "bash" | "search" | "web" | "agents" | "delegate" | "append" | "cancel" | "result" | "tool";
+export type ToolIcon = "read" | "edit" | "write" | "bash" | "search" | "web" | "memory" | "code" | "discovery" | "resources" | "templates" | "resource-read" | "agents" | "delegate" | "append" | "cancel" | "result" | "tool";
 const tools: Record<string, { icon: ToolIcon; label: string }> = {
   read: { icon: "read", label: "读取文件" },
   edit: { icon: "edit", label: "编辑文件" },
@@ -16,7 +16,12 @@ const tools: Record<string, { icon: ToolIcon; label: string }> = {
   grep: { icon: "search", label: "搜索文本" },
   find: { icon: "search", label: "查找文件" },
   ls: { icon: "search", label: "列出目录" },
-  memory_query: { icon: "tool", label: "查询记忆" },
+  memory_query: { icon: "memory", label: "查询记忆" },
+  codemode: { icon: "code", label: "执行代码" },
+  tool_search: { icon: "discovery", label: "搜索工具" },
+  list_mcp_resources: { icon: "resources", label: "列出 MCP 资源" },
+  list_mcp_resource_templates: { icon: "templates", label: "列出 MCP 资源模板" },
+  read_mcp_resource: { icon: "resource-read", label: "读取 MCP 资源" },
   web_search: { icon: "search", label: "搜索网页" },
   source_check: { icon: "search", label: "核查来源" },
   fetch_content: { icon: "web", label: "读取网页" },
@@ -51,8 +56,8 @@ export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; ta
   const name = call.name.replace(/^functions\./, "");
   const tool = Object.hasOwn(tools, name) ? tools[name] : undefined;
   const label = tool?.label ?? (compactText(name) || "调用工具");
-  // Relabel compact snapshots without reparsing their truncated input preview.
-  if (call.summary) return tool ? { ...call.summary, label } : call.summary;
+  // Refresh known presentation metadata without reparsing truncated input snapshots.
+  if (call.summary) return tool ? { ...call.summary, label, icon: tool.icon } : call.summary;
   const icon = tool?.icon ?? "tool";
   let input: Record<string, unknown>;
   try {
