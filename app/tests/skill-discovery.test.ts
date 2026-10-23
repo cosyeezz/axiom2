@@ -100,6 +100,7 @@ export default pi => {
     assert.equal(agents.reloads.state(scope)?.status, "running", "one completed tool is not the batch boundary");
     writeFileSync(release(11), "go");
     await wait(() => existsSync(entered(2)), "second request after discovery change");
+    await wait(() => !agents.reloads.active(scope), "discovery result reaches the parent");
     assert.equal(agents.reloads.state(scope)?.status, "completed", JSON.stringify(agents.reloads.state(scope)));
     assert.ok(agents.capabilities.state(scope).selection?.skills?.includes(betaId));
     assert.equal(agents.info(scope).run!.id, runId);

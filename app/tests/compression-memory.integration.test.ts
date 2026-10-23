@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type ServerResponse } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { startServer } from "../src/server/index.js";
@@ -112,6 +112,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     }
     if (scenario === "cancel" || scenario === "cancelRejected") {
       await until(() => !!held, "maintenance did not reach held request");
+      await until(() => app.agents.info(scope).run?.status === "running", "maintenance running state did not reach the parent");
       if (scenario === "cancelRejected") await assert.rejects(agent("prompt", { text: "追加要求",
         skills: [{ id: "0".repeat(64), name: "removed-skill", description: "" }] }), { code: "INPUT_REJECTED" });
       await compress("compression.cancel", { id: app.agents.compressions.info(scope)!.id });

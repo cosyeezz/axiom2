@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from "./temporary.js";
+import { join, resolve } from "node:path";
 import { diagnoseRea, ReaService } from "../src/server/integrations/rea.js";
 import { reaConfigPath, reaDirectory, reaPackageRoot, reaSkillName, reaSupportedNode, readReaConfig } from "../src/server/integrations/rea-runtime.js";
 import { reaResources } from "../src/server/integrations/rea-resources.js";
@@ -41,7 +41,7 @@ test("REA installs privately, checks an actual MCP session, discovers bundled sk
     assert.ok(skill.source.startsWith(reaDirectory(root))); assert.equal(catalog.skills.filter(s => s.name === reaSkillName).length, 1);
     const builtinConfig = catalog.config.servers.find(s => s.name === "rea")!.config;
     assert.ok("command" in builtinConfig); assert.equal(builtinConfig.command, process.execPath);
-    assert.ok(catalog.files.some(f => f.path.endsWith("references/guide.md")));
+    assert.ok(catalog.files.some(f => f.path.endsWith(join("references", "guide.md"))));
     assert.equal(capabilityRuntime(catalog, { skills: [skill.id], mcp: ["rea"] }).mcp.servers.length, 1);
     const identity = resourceIdentity(root, join(root, "pi"));
     assert.notEqual(identity, before); assert.equal(await resourceIdentityAsync(root, join(root, "pi")), identity);
@@ -203,7 +203,7 @@ test("historical path selections resolve by saved name and built-ins fall back t
       const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
       const scope = { workspaceId: workspace.id, sessionId: session.id }, catalog = await capabilities.get(scope);
       const skill = catalog.skills.find(item => item.name === reaSkillName)!;
-      assert.equal(realpathSync(skill.source), realpathSync(join(external, "SKILL.md")));
+      assert.equal(realpathSync.native(skill.source), realpathSync.native(join(external, "SKILL.md")));
       await capabilities.command({ requestId: randomUUID(), op: "capabilities.save", ...scope,
         params: { revision: catalog.state.revision, catalogRevision: catalog.revision, skills: selected ? [skill.id] : [], mcp: [] } });
       capabilities.lock(scope, await capabilities.prepare(scope));
@@ -220,7 +220,7 @@ test("historical path selections resolve by saved name and built-ins fall back t
     const validConfig = readFileSync(reaConfigPath(root), "utf8");
     writeFileSync(reaConfigPath(root), "broken");
     const fallback = await capabilities.get(scopes[0].scope), fallbackSkill = fallback.skills.find(s => s.name === reaSkillName)!;
-    assert.equal(realpathSync(fallbackSkill.source), realpathSync(join(external, "SKILL.md"))); assert.equal(fallbackSkill.builtin, "rea"); assert.equal(fallbackSkill.fallback, true);
+    assert.equal(realpathSync.native(fallbackSkill.source), realpathSync.native(join(external, "SKILL.md"))); assert.equal(fallbackSkill.builtin, "rea"); assert.equal(fallbackSkill.fallback, true);
     assert.deepEqual((await capabilities.prepare(scopes[0].scope)).runtime.selection, { skills: [reaSkillName], mcp: [] });
     writeFileSync(reaConfigPath(root), validConfig);
     for (const removeExternal of [false, true]) {
@@ -260,7 +260,10 @@ test("built-in name preferences preserve historical defaults and remain separate
     mkdirSync(join(root, ".pi", "skills", reaSkillName), { recursive: true });
     writeFileSync(general, `---\nname: ${reaSkillName}\ndescription: General\n---\n`);
     writeFileSync(mcpPath, JSON.stringify({ mcpServers: { rea: { command: "general-rea" } } }));
-    const oldMcpKey = createHash("sha256").update(JSON.stringify([realpathSync(mcpPath), "rea"])).digest("hex");
+    const generalCatalog = await discoverCapabilities(root, root);
+    const generalServer = generalCatalog.config.servers.find(server => server.name === "rea")!;
+    // Reproduce the old writers: MCP used resolve(source), skills used realpathSync.
+    const oldMcpKey = createHash("sha256").update(JSON.stringify([resolve(generalServer.source), "rea"])).digest("hex");
     store.db.prepare("INSERT INTO capability_preferences(id,revision,body) VALUES(1,1,?)")
       .run(JSON.stringify({ skills: { [skillId(realpathSync(general))]: false, rea: true }, mcp: { [oldMcpKey]: false, [reaSkillName]: true } }));
     await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);

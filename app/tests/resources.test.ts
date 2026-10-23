@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { basename, dirname, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { setTimeout as delay } from "node:timers/promises";
@@ -352,7 +352,7 @@ test("move validates scope, stale revision and shared or linked ownership", asyn
   await assert.rejects(f.act("resources.move", { id: item.id, destinationScopeId: "project-a" }), { code: "RESOURCE_SHARED" });
   file(join(source, "SKILL.md"), "---\nname: linked-fixture\ndescription: linked resource\n---\nguide");
   mkdirSync(join(f.pi, "skills"), { recursive: true }); symlinkSync(source, join(f.pi, "skills/linked"));
-  state = await f.resources.refresh(); const linked = state.items.find(i => i.source.includes("skills/linked"))!;
+  state = await f.resources.refresh(); const linked = state.items.find(i => i.source.includes(join("skills", "linked")))!;
   assert.ok(linked); assert.equal(linked.movable, false);
   await assert.rejects(f.act("resources.move", { id: linked.id, destinationScopeId: "project-a" }), { code: "INVALID_INPUT" });
   assert.ok(existsSync(doc.path)); assert.ok(existsSync(join(source, "SKILL.md")));

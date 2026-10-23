@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { startServer } from "../src/server/index.js";
 import { skillImportName } from "../src/shared/skill-import.js";
@@ -23,7 +23,7 @@ test("resource picker shares native Open, returns one file/folder or cancellatio
   assert.deepEqual(await (await fetch(url, { method: "POST", headers })).json(), { items: [] });
   for (const [path, kind] of [[folder, "folder"], [file, "file"]]) {
     selected = [path]; const response = await fetch(url, { method: "POST", headers }); assert.equal(response.status, 200);
-    const result = await response.json(); assert.equal(result.items[0].path, realpathSync(path)); assert.equal(result.items[0].kind, kind);
+    const result = await response.json(); assert.equal(result.items[0].path, realpathSync.native(path)); assert.equal(result.items[0].kind, kind);
   }
   selected = [folder, file]; assert.equal((await fetch(url, { method: "POST", headers })).status, 400);
 });

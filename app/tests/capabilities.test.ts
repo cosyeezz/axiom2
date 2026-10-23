@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { Agents } from "../src/server/agents.js";
 import { ModelService } from "../src/server/model-service.js";
@@ -50,7 +50,7 @@ test("capabilities: private discovery, revisions, atomic startup lock, persisten
     assert.throws(() => service.lock(scope, firstPlan), { code: "REVISION_CONFLICT" });
     assert.equal(service.state(scope).locked, false, "preparation does not lock");
     const emptyPlan = await service.prepare(scope);
-    assert.ok(emptyPlan.runtime.skillPaths?.some(path => realpathSync(path) === realpathSync(skill)), "manual skills remain loaded with automatic discovery disabled");
+    assert.ok(emptyPlan.runtime.skillPaths?.some(path => realpathSync.native(path) === realpathSync.native(skill)), "manual skills remain loaded with automatic discovery disabled");
     assert.deepEqual(emptyPlan.runtime.selection.skills, []);
     assert.deepEqual(emptyPlan.runtime.mcp.servers, []);
     store.db.exec("BEGIN IMMEDIATE");
@@ -144,7 +144,7 @@ test("capabilities: removed selections remain visible and stale resource catalog
     writeFileSync(replacement, "---\nname: drift\ndescription: Different resource with the same name\n---\n");
     const replaced = await service.prepare(scope);
     assert.deepEqual(replaced.runtime.selection.skills, ["drift"]);
-    assert.ok(replaced.runtime.skillPaths?.some(path => realpathSync(path) === realpathSync(replacement)));
+    assert.ok(replaced.runtime.skillPaths?.some(path => realpathSync.native(path) === realpathSync.native(replacement)));
     assert.equal((await service.get(scope)).skills.filter(item => item.name === "drift").length, 1);
     rmSync(join(root, ".pi", "skills", "replacement"), { recursive: true });
     await assert.rejects(service.command({ requestId: randomUUID(), op: "capabilities.save", ...scope, params: { ...params, revision: 1, skills: [] } }), { code: "REVISION_CONFLICT" });

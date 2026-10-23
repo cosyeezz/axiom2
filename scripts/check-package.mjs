@@ -29,7 +29,7 @@ let serviceEnv;
 const control = (action) => JSON.parse(execFileSync(process.execPath, [cli, action, "--json"], {
   encoding: "utf8", env: serviceEnv, cwd: temporary, timeout: 50_000,
 }));
-const request = (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.timeout(3000) });
+const request = (url, options = {}) => fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(3000) });
 try {
   const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--foreground-scripts=false", "--json", "--pack-destination", temporary]));
   const paths = packed.files.map((file) => file.path);
@@ -51,6 +51,10 @@ try {
   let output = "";
   serviceEnv = { ...process.env, AXIOM_PORT: String(port), AXIOM_DATA_DIR: "data", AXIOM_PI_DIR: pi, PI_CODING_AGENT_DIR: pi, NODE_PATH: "" };
   assert.equal(control("status").state, "stopped");
+  const startupTimeout = Number(process.env.AXIOM_PACKAGE_STARTUP_TIMEOUT_MS ?? (process.platform === "win32" ? 90000 : 30000));
+  assert.ok(Number.isFinite(startupTimeout) && startupTimeout > 0, "Invalid package startup timeout");
+  const startedAt = Date.now();
+  console.log(`Installed service spawn: ${new Date(startedAt).toISOString()}; deadline ${startupTimeout}ms`);
   child = spawn(process.execPath, [cli], {
     cwd: temporary,
     env: serviceEnv,
@@ -58,13 +62,24 @@ try {
   });
   child.stdout.on("data", (chunk) => { output += chunk; });
   child.stderr.on("data", (chunk) => { output += chunk; });
-  let response;
-  for (let attempt = 0; attempt < 120; attempt++) {
-    if (child.exitCode !== null) throw Error(`Installed service exited: ${output}`);
-    try { response = await request(`http://127.0.0.1:${port}/`); if (response.ok) break; } catch {}
-    await delay(250);
+  let spawnError;
+  child.on("error", error => { spawnError = error; });
+  child.on("exit", (code, signal) => console.log(`Installed service exit after ${Date.now() - startedAt}ms: code=${code}, signal=${signal}`));
+  let response, lastError;
+  const deadline = startedAt + startupTimeout;
+  while (Date.now() < deadline) {
+    if (spawnError) throw spawnError;
+    if (child.exitCode !== null || child.signalCode !== null) throw Error(`Installed service exited: ${output}`);
+    try {
+      response = await request(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(Math.max(1, Math.min(3000, deadline - Date.now()))) });
+      if (response.ok) break;
+      lastError = `HTTP ${response.status}`;
+      await response.body?.cancel();
+    } catch (error) { lastError = String(error); }
+    await delay(Math.max(0, Math.min(250, deadline - Date.now())));
   }
-  assert.ok(response?.ok, `Installed service did not become ready: ${output}`);
+  assert.ok(response?.ok, `Installed service did not become ready after ${Date.now() - startedAt}ms; last request: ${lastError}; ${output}`);
+  console.log(`Installed service HTTP ready after ${Date.now() - startedAt}ms`);
   const html = await response.text();
   assert.match(html, /<div id="root"><\/div>/);
   const asset = html.match(/src="([^"]+\.js)"/)?.[1];

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { startServer } from "../src/server/index.js";
 import { jsonPathRange } from "../src/client/json-path.js";
@@ -48,7 +48,7 @@ test("generic path picker and remote confirmation enforce file/folder, single se
   for (const [kind, path] of [["folder", folder], ["file", file], ["mixed", file]]) {
     mode = kind; selected = [path];
     const response = await fetch(`${url}?kind=${kind}`, { method: "POST", headers });
-    assert.equal(response.status, 200); assert.equal((await response.json()).items[0].path, realpathSync(path));
+    assert.equal(response.status, 200); assert.equal((await response.json()).items[0].path, realpathSync.native(path));
   }
   mode = "file"; selected = [folder];
   assert.equal((await fetch(url + "?kind=file", { method: "POST", headers })).status, 400);
