@@ -17,20 +17,22 @@ try {
   await page.addInitScript({ content: "window.__name = value => value;" });
   await page.addInitScript(() => {
     const state = {
-      version: null as string | null, release: null as any, job: null as any,
+      version: null as string | null, release: null as any, job: null as any, missing: true, execution: null as any,
       failCheck: false, checkDelay: 0, legacy: false, cliError: "", holdStatus: false,
       held: null as (() => void) | null, calls: [] as any[],
     };
     (window as any).piFixture = state;
     const snapshot = () => ({
-      clientVersion: "0.4.1", serviceVersion: "0.4.1", managed: true, clientSupported: false,
+      clientVersion: "0.4.1", serviceVersion: state.missing ? null : "0.4.1", managed: !state.missing, clientSupported: false, execution: state.execution,
       release: null, recovery: false, job: state.job, log: "/example/updates/update.log",
-      pi: { runtimeVersion: "1.1.0", cli: { version: state.version, legacy: state.legacy, error: state.cliError,
+      pi: { runtimeVersion: state.missing ? null : "1.1.0", cli: { version: state.version, legacy: state.legacy, error: state.cliError,
         packageRoot: "/example/node/lib/node_modules/@earendil-works/pi-coding-agent" }, release: state.release },
     });
+    let theme = "dark", revision = 0;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, ...args });
-      if (name === "axiom_service") return { desktopView: "control", state: "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
+      if (name === "axiom_theme") { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
+      if (name === "axiom_service") return { desktopView: "control", state: state.missing ? "missing" : "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
       if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" } : { job: null };
       if (name === "axiom_peers") return { peers: [] };
       if (name === "axiom_reveal_path") return null;
@@ -64,6 +66,12 @@ try {
   const install = pi.getByRole("button", { name: "安装终端 Pi · 1.1.1", exact: true });
   await install.waitFor();
   assert.ok(await install.isEnabled());
+  assert.ok(await pi.getByText("后台未安装", { exact: true }).isVisible());
+  assert.ok(await page.getByRole("button", { name: "更新后台服务", exact: true }).isDisabled());
+  assert.equal(await page.getByText("请先在下方安装后台服务，再检查和管理终端 Pi。", { exact: true }).count(), 0);
+  await page.screenshot({ path: resolve(output, "pi-without-backend.png"), fullPage: true });
+  await page.evaluate(() => { (window as any).piFixture.missing = false; });
+  await page.getByRole("button", { name: "刷新服务状态", exact: true }).click();
   assert.equal(await pi.locator(".connect-pi-location").getAttribute("open"), null);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await pi.locator(".connect-pi-location > summary").click();
@@ -107,6 +115,10 @@ try {
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi").length), 0);
   await page.evaluate(() => { const f = (window as any).piFixture; f.holdStatus = false; f.held(); });
   await pi.getByRole("status").waitFor();
+  await page.evaluate(() => { (window as any).piFixture.execution = { lines: ["npm http fetch GET 200 https://registry.npmjs.org/pi 200ms"], updatedAt: Date.now() }; });
+  await page.clock.runFor(2100);
+  await pi.getByText(/npm http fetch GET 200/).waitFor();
+  assert.ok(await pi.getByText(/最近日志输出于/).isVisible());
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.find((c: any) => c.action === "pi").version), "confirmed-token");
   assert.ok(await pi.getByRole("button", { name: /正在安装/ }).isDisabled());
   assert.ok(await page.getByRole("button", { name: "关闭后台服务", exact: true }).isDisabled());
@@ -155,6 +167,7 @@ try {
   await page.clock.runFor(3000);
   assert.ok(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).isEnabled());
   assert.equal(await pi.getByRole("alert").count(), 0);
+  assert.equal(await page.locator(".startup-global-error").count(), 0, "no caught IPC errors hidden from pageerror checks");
   assert.deepEqual(errors, []);
   await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
   console.log("Pi UI passed: fresh install, upgrade, confirmation snapshot, queued polling, progress, errors, legacy and six widths.");

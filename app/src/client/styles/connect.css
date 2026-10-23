@@ -184,7 +184,12 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .connection-field input:focus { border-color: #bba173; }
 .connection-address-row { display: grid; grid-template-columns: minmax(0, 1fr) 80px; gap: 12px; }
 .setup-job { margin-top: 20px; padding: 12px 14px; border-left: 2px solid #b99b6b; background: #ffffff03; color: #d9c5a5; font-size: 12px; }
-.setup-job > div { display: flex; align-items: center; gap: 10px; }
+.setup-job > div:first-child { display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+.install-download { margin: 12px 0; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.install-download p { margin: 4px 0; }
+.install-download progress { display: block; width: 100%; height: 8px; accent-color: var(--accent, #c6a870); }
+.install-download small { opacity: .75; }
+.connect-update-log { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.8 var(--font-mono); }
 .setup-job > div > svg { width: 17px; height: 17px; }
 .setup-job > div > span { flex: 1; }
 .setup-job.has-error { border-left-color: #b87666; color: #e6ac94; }

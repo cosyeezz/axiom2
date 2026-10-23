@@ -24,7 +24,7 @@ find_node
 case "$1" in
   check)
     if [ -n "$AXIOM_SETUP_NODE" ]; then
-      "$AXIOM_SETUP_NODE" -e 'const fs=require("fs"),path=require("path");const [a,b]=process.versions.node.split(".").map(Number);let writable=false;try {const p=path.join(process.env.AXIOM_DATA_DIR,".setup-probe-"+process.pid);fs.writeFileSync(p,"");fs.unlinkSync(p);writable=true}catch{}console.log(JSON.stringify({nodeReady:(a>22||a===22&&b>=19)&&!!process.env.AXIOM_SETUP_NPM,nodeVersion:process.version,writable,platform:process.platform,tailscale:fs.existsSync("/Applications/Tailscale.app")||fs.existsSync("/usr/local/bin/tailscale")||fs.existsSync("/opt/homebrew/bin/tailscale")}))'
+      "$AXIOM_SETUP_NODE" -e 'const fs=require("fs"),path=require("path");const [a,b]=process.versions.node.split(".").map(Number);let writable=false;try {const p=path.join(process.env.AXIOM_DATA_DIR,".setup-probe-"+process.pid);fs.writeFileSync(p,"");fs.unlinkSync(p);writable=true}catch{}console.log(JSON.stringify({nodeReady:(a>22||a===22&&b>=19)&&!!process.env.AXIOM_SETUP_NPM,nodeVersion:process.version,node:process.execPath,writable,platform:process.platform,tailscale:fs.existsSync("/Applications/Tailscale.app")||fs.existsSync("/usr/local/bin/tailscale")||fs.existsSync("/opt/homebrew/bin/tailscale")}))'
     else
       writable=false; tailscale=false; platform=linux
       probe="$AXIOM_DATA_DIR/.setup-probe-$$"

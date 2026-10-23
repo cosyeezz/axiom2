@@ -4,6 +4,10 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $env:PATH = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:PATH
 function Phase([string]$Message) { Write-Output "@@phase:$Message" }
+function ResponseText($Response) {
+    if ($Response.Content -is [byte[]]) { return [Text.Encoding]::UTF8.GetString($Response.Content) }
+    return [string]$Response.Content
+}
 function NodePath {
     $candidates = @()
     $registration = Join-Path $env:AXIOM_DATA_DIR 'installation.json'
@@ -42,7 +46,7 @@ try {
         } elseif ($Action -eq 'node') {
             Phase '正在下载 Node.js 官方安装程序…'
             $base = 'https://nodejs.org/dist/latest-v22.x/'
-            $sums = (Invoke-WebRequest -UseBasicParsing ($base + 'SHASUMS256.txt')).Content
+            $sums = ResponseText (Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 ($base + 'SHASUMS256.txt'))
             $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'x64' }
             $match = [regex]::Match($sums, "(?m)^([a-f0-9]{64})\s+(node-v22\.\d+\.\d+-$arch\.msi)\s*$")
             if (-not $match.Success) { throw '未找到本机架构的 Node.js 安装程序。' }
@@ -64,37 +68,13 @@ try {
     $state = EnvironmentState
     if (-not $state.nodeReady) { throw '请先安装 Node.js 22.19.0+ 和 npm。' }
     if (-not $state.writable) { throw '用户数据目录不可写。' }
-    $prefix = Join-Path $env:AXIOM_DATA_DIR 'service'
-    $cli = Join-Path $prefix 'node_modules/@cosyeezz/axiom2/bin/axiom2.mjs'
-    if (Test-Path (Join-Path $env:AXIOM_DATA_DIR 'installation.json')) { throw '已有服务安装记录，请使用服务与更新中的更新或手动修复入口。' }
-    Phase '正在读取正式发布版本…'
-    $release = Invoke-RestMethod 'https://api.github.com/repos/cosyeezz/axiom2/releases/latest'
-    if ($release.draft -or $release.prerelease -or $release.tag_name -notmatch '^v?\d+\.\d+\.\d+$') { throw '发布版本无效。' }
-    $asset = @($release.assets | Where-Object name -eq 'axiom2.tgz')
-    $checksums = @($release.assets | Where-Object name -eq 'SHA256SUMS')
-    if ($asset.Count -ne 1 -or $checksums.Count -ne 1) { throw '发布缺少唯一的服务包或校验清单。' }
-    $base = 'https://github.com/cosyeezz/axiom2/releases/download/' + $release.tag_name + '/'
-    if ($asset[0].browser_download_url -cne ($base + 'axiom2.tgz') -or $checksums[0].browser_download_url -cne ($base + 'SHA256SUMS')) { throw '发布附件地址不可信。' }
-    $cache = Join-Path $env:AXIOM_DATA_DIR 'setup'
-    New-Item -ItemType Directory -Force $cache | Out-Null
-    $archive = Join-Path $cache 'axiom2.tgz'
-    Phase '正在下载服务安装包…'
-    Invoke-WebRequest -UseBasicParsing ($base + 'axiom2.tgz') -OutFile $archive
-    $sums = (Invoke-WebRequest -UseBasicParsing ($base + 'SHA256SUMS')).Content
-    $match = [regex]::Match($sums, '(?m)^([a-fA-F0-9]{64})\s+\*?axiom2\.tgz\s*$')
-    Phase '正在校验安装包…'
-    if (-not $match.Success -or (Get-Item $archive).Length -ne $asset[0].size -or (Get-FileHash $archive -Algorithm SHA256).Hash -ne $match.Groups[1].Value) { throw '服务安装包校验失败。' }
-    Phase '正在安装后台及运行依赖…'
-    $env:PATH = (Split-Path $state.node) + ';' + $env:PATH
-    & $state.node $state.npm install --prefix $prefix --install-strategy=shallow --ignore-scripts --omit=dev --no-audit --no-fund --save=false --registry=https://registry.npmjs.org $archive
-    CheckedExit '后台安装失败'
-    Phase '正在启动并验证后台服务…'
-    $result = & $state.node $cli start --json
-    CheckedExit '后台启动失败'
-    $service = $result | ConvertFrom-Json
-    if ($service.state -ne 'running') { throw ('后台尚未就绪：' + $result) }
-    Phase '安装完成，后台服务已就绪。'
-} catch { $axiomSetupExit = 1; [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+    # One downloader/validator on both platforms; GitHub binary MIME cannot turn
+    # SHA256SUMS into a PowerShell byte[] string and falsely fail the regex.
+    $env:AXIOM_SETUP_NPM = $state.npm
+    & $state.node $env:AXIOM_SETUP_SERVICE 2>&1 | ForEach-Object { [Console]::Out.WriteLine([string]$_) }
+    $axiomSetupExit = $LASTEXITCODE
+    if ($axiomSetupExit -ne 0) { exit $axiomSetupExit }
+} catch { $axiomSetupExit = 1; [Console]::Error.WriteLine('@@error:' + $_.Exception.Message); exit 1 }
 finally {
     if ($Action -ne 'check' -and $env:AXIOM_SETUP_RESULT) { [IO.File]::WriteAllText($env:AXIOM_SETUP_RESULT, [string]$axiomSetupExit) }
 }

@@ -4,18 +4,18 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink, realpath } fr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 const { createUpdater } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
-async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean } = {}) {
+async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean; noBackend?: boolean; noNpm?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "axiom-pi-update-")); t.after(() => rm(root, { recursive: true, force: true }));
   const node = join(root, "node/bin/node"), npm = options.linkedNpm ? join(root, "node/share/npm/bin/npm-cli.js") : join(dirname(node), "node_modules/npm/bin/npm-cli.js");
   const cli = join(root, "service/bin/axiom2.mjs"), prefix = join(root, "global"), modules = join(prefix, process.platform === "win32" ? "node_modules" : "lib/node_modules");
   const pkgPath = join(modules, "@earendil-works/pi-coding-agent/package.json");
   const put = async (path: string, body: unknown) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, typeof body === "string" ? body : JSON.stringify(body)); };
-  await put(node, "fixture"); await put(npm, "fixture"); await put(cli, "fixture");
+  await put(node, "fixture"); if (!options.noNpm) await put(npm, "fixture"); await put(cli, "fixture");
   if (options.linkedNpm) await symlink(npm, join(dirname(node), "npm"));
   await put(join(root, "service/package.json"), { name: "@cosyeezz/axiom2", version: "0.4.1" });
   await put(join(root, "service/node_modules/@earendil-works/pi-coding-agent/package.json"), { name: "@earendil-works/pi-coding-agent", version: "1.1.0", exports: { ".": { import: "./index.js" } } });
   await put(join(root, "service/node_modules/@earendil-works/pi-coding-agent/index.js"), "fixture");
-  await put(join(root, "installation.json"), { node, cli });
+  if (!options.noBackend) await put(join(root, "installation.json"), { node, cli });
   const entry = join(dirname(pkgPath), "dist/bundle/cli.js");
   const shim = process.platform === "win32" ? join(prefix, "pi.cmd") : join(prefix, "bin/pi");
   const installVersion = async (version: string) => {
@@ -40,9 +40,28 @@ async function fixture(t: TestContext, options: { missingEntry?: boolean; missin
     if (fail) throw Error("fixture failure");
     await installVersion("1.1.1"); return "";
   };
-  const updater = createUpdater({ root, command, env: { ...process.env, PATH: "" }, fetcher: async () => new Response(JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "1.1.1" })) });
+  const updater = createUpdater({ root, command, runtimeNode: node, env: { ...process.env, PATH: "" }, fetcher: async () => new Response(JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "1.1.1" })) });
   return { root, modules, updater, installs, installVersion, pkgPath, put, fail: () => { fail = true; } };
 }
+test("terminal Pi installs without a backend or installation record", async t => {
+  const f = await fixture(t, { noBackend: true });
+  await rm(dirname(f.modules), { recursive: true, force: true });
+  const state = await f.updater.piCheck();
+  assert.equal(state.pi.runtimeVersion, null); assert.equal(state.serviceVersion, null); assert.equal(state.managed, false);
+  assert.equal(state.pi.cli.version, null);
+  const result = await f.updater.runJob("pi", state.pi.release.token);
+  assert.equal(result.job.phase, "complete", result.job.message); assert.equal(result.pi.cli.version, "1.1.1");
+  await assert.rejects(access(join(f.root, "installation.json")));
+  assert.equal((await f.updater.runJob("service", "0.4.1")).job.phase, "error");
+  assert.equal(f.installs.length, 1);
+});
+test("standalone Pi reports the missing npm dependency without requesting backend installation", async t => {
+  const f = await fixture(t, { noBackend: true, noNpm: true });
+  const state = await f.updater.piRefresh();
+  assert.match(state.pi.cli.error, /找不到 npm/);
+  assert.doesNotMatch(state.pi.cli.error, /安装.*后台/);
+  assert.equal(f.installs.length, 0);
+});
 test("pi check distinguishes embedded runtime and CLI, upgrades only the inspected global prefix", async t => {
   const f = await fixture(t), state = await f.updater.piCheck();
   assert.equal(state.pi.runtimeVersion, "1.1.0"); assert.equal(state.pi.cli.version, "0.85.1"); assert.equal(f.installs.length, 0);

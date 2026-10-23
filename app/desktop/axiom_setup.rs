@@ -47,7 +47,8 @@ fn snapshot_at(dir: &std::path::Path) -> Result<Option<Value>, String> {
     if !busy { if let Ok(text) = fs::read_to_string(files.join("result.txt")) {
         if let Ok(code) = text.trim().trim_start_matches('\u{feff}').parse::<i32>() {
             job["running"] = json!(false); job["phase"] = json!(if code == 0 { "done" } else { "error" });
-            job["message"] = json!(if code == 0 { "安装步骤已完成，正在验证实际状态。" } else { "安装未完成，请查看执行详情并重试。" });
+            job["exitCode"] = json!(code);
+            job["message"] = json!(if code == 0 { "安装步骤已完成，正在验证实际状态。".to_string() } else { format!("安装命令退出（代码 {code}），未收到具体错误输出。请检查运行环境及网络后重试。") });
         }
     } }
     if !busy && job["running"] == true {
@@ -55,13 +56,35 @@ fn snapshot_at(dir: &std::path::Path) -> Result<Option<Value>, String> {
         job["message"] = json!("上次安装意外中断，结果未确认。请检查系统安装器；确认全部退出后解除占用并重新验证。");
     }
     if let Ok(mut file) = fs::File::open(files.join("install.log")) {
-        let len = file.metadata().map_err(|e| e.to_string())?.len();
+        let metadata = file.metadata().map_err(|e| e.to_string())?;
+        let len = metadata.len();
+        job["logUpdatedAt"] = json!(metadata.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map(|duration| duration.as_millis() as u64));
         file.seek(SeekFrom::Start(len.saturating_sub(32_768))).map_err(|e| e.to_string())?;
         let mut bytes = Vec::new(); file.take(32_768).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&bytes);
-        let lines: Vec<String> = text.lines().rev().take(80).map(|line| line.chars().take(2000).collect()).collect::<Vec<_>>().into_iter().rev().collect();
-        if job["running"] == true { if let Some(message) = lines.iter().rev().find_map(|line| line.strip_prefix("@@phase:")) { job["message"] = json!(message); } }
-        job["lines"] = json!(lines);
+        let mut lines = Vec::new();
+        let mut last_error = None;
+        let mut last_phase = None;
+        job["progress"] = Value::Null;
+        for line in text.lines() {
+            if let Some(value) = line.strip_prefix("@@progress:") {
+                if let Ok(value) = serde_json::from_str::<Value>(value) { job["progress"] = value; }
+                continue;
+            }
+            if let Some(message) = line.strip_prefix("@@phase:") {
+                job["progress"] = Value::Null; last_phase = Some(message.to_string());
+            }
+            if let Some(message) = line.strip_prefix("@@error:") { last_error = Some(message.to_string()); }
+            lines.push(line.trim_start_matches("@@phase:").trim_start_matches("@@error:").chars().take(4000).collect::<String>());
+        }
+        if job["running"] == true {
+            if !job["progress"].is_null() { job["message"] = json!(format!("正在下载并校验 {}…", job["progress"]["name"].as_str().unwrap_or("安装包"))); }
+            else { job["message"] = json!(last_phase.unwrap_or_else(|| "正在执行安装命令；下方显示最近的实际输出。".into())); }
+        }
+        if job["phase"] == "error" {
+            if let Some(message) = last_error.or_else(|| lines.iter().rev().find(|line| !line.trim().is_empty() && !line.contains("请查看执行详情")).cloned()) { job["message"] = json!(message); }
+        }
+        job["lines"] = json!(lines.into_iter().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>());
     }
     Ok(Some(job))
 }
@@ -98,9 +121,10 @@ fn script(action: &str) -> Result<Command, String> {
     let dir = root.join("setup"); fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let file = dir.join(if cfg!(windows) { concat!("bootstrap-", env!("CARGO_PKG_VERSION"), ".ps1") } else { concat!("bootstrap-", env!("CARGO_PKG_VERSION"), ".sh") });
     let source = if cfg!(windows) { format!("\u{feff}{}", include_str!("setup.ps1")) } else { include_str!("setup.sh").to_string() };
-    fs::write(&file, source).map_err(|e| e.to_string())?;
+    if fs::read_to_string(&file).ok().as_deref() != Some(source.as_str()) { fs::write(&file, source).map_err(|e| e.to_string())?; }
     let helper = dir.join(concat!("setup-service-", env!("CARGO_PKG_VERSION"), ".mjs"));
-    fs::write(&helper, include_str!("setup-service.mjs")).map_err(|e| e.to_string())?;
+    let helper_source = include_str!("setup-service.mjs");
+    if fs::read_to_string(&helper).ok().as_deref() != Some(helper_source) { fs::write(&helper, helper_source).map_err(|e| e.to_string())?; }
     let mut command;
     if cfg!(windows) {
         let system = std::env::var_os("SystemRoot").ok_or("无法定位系统 PowerShell")?;
@@ -109,6 +133,13 @@ fn script(action: &str) -> Result<Command, String> {
     } else { command = Command::new("/bin/sh"); command.arg(file).arg(action); }
     command.env("AXIOM_DATA_DIR", &root).env("AXIOM_SETUP_SERVICE", helper).env("AXIOM_SETUP_RESULT", root.join("setup/result.txt"));
     Ok(command)
+}
+pub fn runtime_node() -> Result<std::path::PathBuf, String> {
+    let state: Value = serde_json::from_str(capture(&mut script("check")?, 20)?.trim()).map_err(|_| "运行环境检测未返回有效状态。")?;
+    if state["nodeReady"] != true { return Err("请先在运行环境中安装 Node.js 22.19.0+ 和 npm；终端 Pi 不需要安装后台服务。".into()); }
+    let node = std::path::PathBuf::from(state["node"].as_str().ok_or("未找到 Node.js 路径，请重新验证运行环境。")?);
+    if !node.is_absolute() || !node.is_file() { return Err("Node.js 路径不可用，请重新验证运行环境。".into()); }
+    Ok(node)
 }
 fn install(action: String, id: String) -> Result<(), String> {
     let _control = crate::axiom_service::CONTROL.lock().map_err(|_| "服务控制器不可用")?;
@@ -120,7 +151,8 @@ fn install(action: String, id: String) -> Result<(), String> {
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     let status = child.wait().map_err(|e| e.to_string())?;
     fs::write(dir.join("result.txt"), status.code().unwrap_or(1).to_string()).map_err(|e| e.to_string())?;
-    if !status.success() { return Err("安装未完成，请查看执行详情并重试。".into()); }
+    // The script has already logged the exact failure. Do not append a generic
+    // error that replaces it in both the summary and the execution details.
     Ok(())
 }
 #[tauri::command]
@@ -167,7 +199,7 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         fs::create_dir_all(dir.join(&id)).map_err(|e| e.to_string())?;
         let lease = open_lock(&dir.join(&id).join("owner.lock"))?;
         lease.try_lock().map_err(|e| e.to_string())?;
-        let job = json!({"id":id,"action":action,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","lines":[]});
+        let job = json!({"id":id,"action":action,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","startedAt":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis() as u64,"lines":[]});
         // Readers hold registry.lock, so they cannot observe a partial publication.
         fs::write(dir.join("job.next"), serde_json::to_vec(&job).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         fs::rename(dir.join("job.next"), dir.join("job.json")).map_err(|e| e.to_string())?;
@@ -179,7 +211,7 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         if let Err(error) = result {
             if let Ok(root) = crate::axiom_service::data_root() {
                 let dir = root.join("setup").join(id);
-                if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(dir.join("install.log")) { let _ = writeln!(log, "{error}"); }
+                if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(dir.join("install.log")) { let _ = writeln!(log, "@@error:{error}"); }
                 let _ = fs::write(dir.join("result.txt"), "1");
             }
         }
@@ -191,6 +223,26 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn download_progress_and_exact_errors_survive_snapshots() {
+        let root = std::env::temp_dir().join(format!("axiom-setup-progress-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let files = root.join("123-789"); fs::create_dir_all(&files).unwrap();
+        fs::write(root.join("job.json"), r#"{"id":"123-789","running":true}"#).unwrap();
+        let lease = open_lock(&files.join("owner.lock")).unwrap(); lease.try_lock().unwrap();
+        fs::write(files.join("install.log"), "@@phase:正在下载并校验…\n@@progress:{\"name\":\"axiom2.tgz\",\"downloaded\":512,\"total\":1024,\"speed\":256}\n").unwrap();
+        let job = snapshot_at(&root).unwrap().unwrap();
+        assert_eq!(job["progress"]["downloaded"], 512);
+        assert!(job["message"].as_str().unwrap().contains("axiom2.tgz"));
+        assert!(!job["lines"].to_string().contains("@@progress"));
+        fs::write(files.join("install.log"), "@@phase:正在校验…\n@@error:安装包大小不符：预期 1024 字节，实际 512 字节。\n").unwrap();
+        fs::write(files.join("result.txt"), "1").unwrap(); drop(lease);
+        let job = snapshot_at(&root).unwrap().unwrap();
+        assert_eq!(job["phase"], "error"); assert_eq!(job["exitCode"], 1);
+        assert_eq!(job["message"], "安装包大小不符：预期 1024 字节，实际 512 字节。");
+        assert!(job["progress"].is_null());
+        assert!(!job.to_string().contains("请查看执行详情"));
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn worker_lease_guards_completion_and_exposes_interruption() {
         let root = std::env::temp_dir().join(format!("axiom-setup-test-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));

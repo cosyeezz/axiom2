@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { desktopInvoke } from "./desktop-bridge.js";
 import { Icon } from "../Icon.js";
+import InstallProgress from "./InstallProgress.js";
 import { CommandLine, IconButton, ResourceLink } from "./StartupControls.js";
 type Environment = { nodeReady: boolean; nodeVersion: string; writable: boolean; tailscale: boolean; platform: string };
 export type PreparationDetection = { environment: Environment | null; checking: boolean; failed: boolean };
-type Job = { id?: string; action: string; running: boolean; phase: string; message: string; lines: string[] };
+type Job = { id?: string; action: string; running: boolean; phase: string; message: string; lines: string[]; progress?: unknown; startedAt?: number; logUpdatedAt?: number; exitCode?: number };
 function readJob(value: unknown): Job | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== "object" || typeof (value as Job).running !== "boolean" || typeof (value as Job).phase !== "string") throw Error("安装记录不完整，请重新读取状态。");
@@ -92,7 +93,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
         <div className="startup-step-actions"><button className="connect-primary" disabled={disabled || checking || !environment?.nodeReady || !environment.writable || !service || (!installed && service.state !== "missing")} onClick={() => installed ? setChosen("connect") : void action("service")}><Icon name={installed ? "arrow-right" : "download"} />{installed ? "下一步" : "安装并启动服务"}</button></div>
         <details className="startup-manual"><summary>手动安装与开发运行<Icon name="chevron-down" /></summary><p>已有服务请先关闭；手动安装同样使用正式 Release 包。完成后在上方点击连接。</p><CommandLine label="手动安装命令" command="npm install --global https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz" /><CommandLine label="启动服务命令" command="axiom2 start" /><p>已有源码和开发依赖：在仓库 app 目录运行以下命令，并连接开发服务使用的端口。</p><CommandLine label="开发运行命令" command="npm run dev" /></details>
       </> : children}
-      {(running || job?.phase === "error" || interrupted || uncertain) && <div className={`setup-job ${job?.phase === "error" || interrupted ? "has-error" : ""}`} role="status"><div>{running && <Icon name="loader-circle" className="startup-spin" />}<span>{uncertain ? "操作结果尚未确认，请先重新读取进度，避免重复安装。" : job?.message}</span><IconButton label="重新读取安装进度" icon="refresh-cw" onClick={() => void status().catch(cause => setError(String(cause)))} /></div>{!!job?.lines.length && <details><summary>执行详情</summary><pre>{job.lines.join("\n").replaceAll("@@phase:", "")}</pre></details>}</div>}
+      {(running || job?.phase === "error" || interrupted || uncertain) && <div className={`setup-job ${job?.phase === "error" || interrupted ? "has-error" : ""}`} role="status"><div>{running && <Icon name="loader-circle" className="startup-spin" />}<span>{uncertain ? "操作结果尚未确认，请先重新读取进度，避免重复安装。" : job?.message}</span><IconButton label="重新读取安装进度" icon="refresh-cw" onClick={() => void status().catch(cause => setError(String(cause)))} /></div><InstallProgress value={job?.progress} running={running} />{running && job?.startedAt && <p className="connect-footnote">已用 {Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000))} 秒{job.logUpdatedAt ? ` · 最近输出于 ${Math.max(0, Math.floor((Date.now() - job.logUpdatedAt) / 1000))} 秒前` : " · 等待执行器输出"}{!job.progress && "；此阶段无可计算的总进度。"}</p>}{!!job?.lines.length && <details open={running || job.phase === "error"}><summary>执行详情{typeof job.exitCode === "number" ? ` · 退出码 ${job.exitCode}` : ""}</summary><pre>{job.lines.join("\n").replaceAll("@@phase:", "")}</pre></details>}</div>}
       {interrupted && <button ref={recoveryButton} className="connect-secondary" disabled={submitting || blocked} onClick={() => setConfirmRecovery(true)}>确认安装器退出后解除占用</button>}
       {error && <p className="connect-error" role="alert">{error}</p>}
       {running && <p className="connect-footnote">请保持客户端打开，并完成系统请求的安装授权。</p>}

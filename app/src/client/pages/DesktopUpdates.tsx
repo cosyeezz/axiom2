@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { LocalPath } from "../LocalPath.js";
 import { desktopInvoke } from "./desktop-bridge.js";
 import { IconButton } from "./StartupControls.js";
+import InstallProgress from "./InstallProgress.js";
 
 type UpdateAction = "status" | "check" | "pi-check" | "pi-refresh" | "pi" | "service" | "client" | "recover" | "installer";
 type Update = {
   pi?: { runtimeVersion: string | null; cli: { version?: string | null; packageRoot?: string; error?: string; legacy?: boolean } | null; release: { version: string; checkedAt: number; token: string | null } | null };
   clientVersion: string; serviceVersion: string | null; managed: boolean; clientSupported: boolean;
   release: { version: string; checkedAt: number; assets: Record<string, { url: string }> } | null;
-  job: { kind: string; version?: string; running: boolean; phase: string; message: string } | null;
+  job: { kind: string; version?: string; running: boolean; phase: string; message: string; download?: unknown; updatedAt?: number } | null;
+  execution?: { lines: string[]; updatedAt: number | null } | null;
   recovery: boolean; log: string;
 };
 function newer(a: string | undefined, b: string | null | undefined) {
@@ -18,7 +20,7 @@ function newer(a: string | undefined, b: string | null | undefined) {
   return false;
 }
 async function invoke(action: UpdateAction, version?: string): Promise<Update> {
-  const result = await desktopInvoke<Update>("axiom_update", { action, version: version || null }, action === "pi-check" ? 55_000 : undefined);
+  const result = await desktopInvoke<Update>("axiom_update", { action, version: version || null }, action === "pi-check" ? 75_000 : 55_000);
   if (action !== "installer" && (!result || typeof result.clientVersion !== "string")) throw Error("更新状态不完整，请重新读取。");
   return result;
 }
@@ -46,7 +48,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const piReady = !!pi?.cli && !pi.cli.error && !pi.cli.legacy;
   const piRetry = update?.job?.kind === "pi" && ["error", "interrupted"].includes(update.job.phase) && pi?.cli?.version === pi?.release?.version;
   const piError = error?.action.startsWith("pi");
-  const progress = update?.job && <p className={`connect-update-progress ${update.job.phase === "error" || update.job.phase === "interrupted" ? "has-error" : ""}`} role="status" aria-live="polite">{running && <span className="connect-update-pulse" aria-hidden="true" />}{update.job.message}</p>;
+  const progress = update?.job && <><p className={`connect-update-progress ${update.job.phase === "error" || update.job.phase === "interrupted" ? "has-error" : ""}`} role="status" aria-live="polite">{running && <span className="connect-update-pulse" aria-hidden="true" />}{update.job.message}</p><InstallProgress value={update.job.download} running={running} />{update.job.kind === "pi" && <>{running && <p className="connect-footnote">{update.execution?.updatedAt ? `最近日志输出于 ${Math.max(0, Math.floor((Date.now() - update.execution.updatedAt) / 1000))} 秒前；无新输出不代表下载已停止。` : "等待 npm 输出；安装期间无法计算整体百分比。"}</p>}{!!update.execution?.lines.length && <details open={running || update.job.phase === "error"}><summary>执行详情</summary><pre className="connect-update-log">{update.execution.lines.join("\n")}</pre></details>}</>}</>;
   async function act(action: UpdateAction, quiet = false) {
     if (quiet ? pending.current || requested.current : requested.current) return;
     // Reserve manual actions while a status poll finishes, including confirmed installs.
@@ -95,7 +97,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       <div className="connect-updates-heading"><div><p className="connect-eyebrow">保持就绪</p><h2>版本与更新</h2></div><IconButton label="检查更新" icon="refresh-cw" spinning={busy === "check"} disabled={disabled} onClick={() => void act("check")} /></div>
       <dl className="connect-versions"><div><dt>桌面客户端</dt><dd>{update?.clientVersion || "—"}</dd></div><div><dt>后台服务</dt><dd>{update?.serviceVersion || "—"}</dd></div><div><dt>最新版本</dt><dd>{latest || "尚未检查"}</dd></div></dl>
       <p className="connect-update-detail">后台更新会结束当前任务、保留项目与会话记录。安装包准备好后再切换版本，更新任务会在关闭客户端后继续。</p>
-      {update && !update.managed && <p className="connect-message">当前服务不是标准安装，请使用原安装方式更新后台。</p>}
+      {service?.state === "missing" ? <p className="connect-message">后台尚未安装；终端 Pi 只需 Node.js 22.19.0+ 与 npm，可独立安装或更新。</p> : update && !update.managed && <p className="connect-message">当前服务不是标准安装，请使用原安装方式更新后台。</p>}
       {update?.release && !newer(latest, update.serviceVersion) && !newer(latest, update.clientVersion) && <p className="connect-update-current">已是最新版本。</p>}
       {update?.job?.kind !== "pi" && progress}
       {error && !piError && error.message !== update?.job?.message && <p className="connect-error" role="alert">{error.message}</p>}
@@ -107,7 +109,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       </div>
       <section className="connect-pi" aria-labelledby="pi-heading" aria-busy={busy?.startsWith("pi") || (running && update?.job?.kind === "pi")}>
         <div className="connect-updates-heading"><h3 id="pi-heading">Pi 引擎</h3><IconButton label="刷新 Pi 安装状态" icon="refresh-cw" spinning={busy === "pi-refresh"} disabled={disabled} onClick={() => void act("pi-refresh")} /></div>
-        <dl className="connect-versions"><div><dt>应用内 Pi</dt><dd>{pi?.runtimeVersion || (update ? "未检测到" : "正在读取…")}</dd></div><div><dt>终端 Pi</dt><dd>{pi?.cli ? pi.cli.error ? "读取失败" : pi.cli.legacy ? "需迁移" : pi.cli.version || "未安装" : busy === "pi-refresh" ? "正在读取…" : "尚未读取"}</dd></div><div><dt>最新稳定版</dt><dd>{pi?.release?.version || "尚未检查"}</dd></div></dl>
+        <dl className="connect-versions"><div><dt>应用内 Pi</dt><dd>{pi?.runtimeVersion || (service?.state === "missing" ? "后台未安装" : update ? "未检测到" : "正在读取…")}</dd></div><div><dt>终端 Pi</dt><dd>{pi?.cli ? pi.cli.error ? "读取失败" : pi.cli.legacy ? "需迁移" : pi.cli.version || "未安装" : busy === "pi-refresh" ? "正在读取…" : "尚未读取"}</dd></div><div><dt>最新稳定版</dt><dd>{pi?.release?.version || "尚未检查"}</dd></div></dl>
         <p className="connect-update-detail">应用内 Pi 随后台服务更新。终端 Pi 可在此单独安装或更新，完成后重新打开终端会话即可使用。</p>
         {pi?.cli?.error && <p className="connect-error" role="alert">{pi.cli.error}</p>}
         {pi?.cli?.legacy && <p className="connect-message">检测到旧版终端 Pi，请先通过原安装方式迁移，再刷新安装状态。</p>}
@@ -121,7 +123,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
           <button className="connect-secondary" disabled={disabled} onClick={() => void act("pi-check")}>{busy === "pi-check" ? "正在检查…" : "检查 Pi 更新"}</button>
           <button className="connect-secondary" disabled={disabled || !pi?.release?.token || !piReady || (!!pi.cli?.version && !piNewer && !piRetry)} onClick={() => ask("pi")}>{busy === "pi" || (running && update?.job?.kind === "pi") ? "正在安装…" : piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"}{pi?.release && (!pi.cli?.version || piNewer) ? ` · ${pi.release.version}` : ""}</button>
         </div>
-        {pi?.cli?.packageRoot && <details className="connect-pi-location"><summary>终端安装位置</summary><p className="connect-log"><LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p><p className="connect-update-detail">使用本地后台 Node.js 对应的 npm 全局目录。</p></details>}
+        {pi?.cli?.packageRoot && <details className="connect-pi-location"><summary>终端安装位置</summary><p className="connect-log"><LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p><p className="connect-update-detail">使用本机检测到的 Node.js 对应的 npm 全局目录；已有后台时沿用其 Node.js。</p></details>}
       </section>
       {update?.log && <p className="connect-log">更新日志：<LocalPath path={update.log} onOpen={() => desktopInvoke("axiom_reveal_path", { path: update.log })} /></p>}
       <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(null)} onClose={() => setConfirm(null)} aria-labelledby="update-title">

@@ -109,12 +109,25 @@ test("download checksum failure preserves the running service and installed vers
   f.bytes["axiom2.tgz"] = Buffer.from("tampered");
   const result = await f.updater.runJob("service", nextVersion);
   assert.equal(result.job.phase, "error");
-  assert.match(result.job.message, /校验失败/);
+  assert.match(result.job.message, /大小不符.*预期.*实际/);
   assert.equal(await f.installedVersion(), oldVersion);
   assert.equal(f.state(), "running");
   assert.deepEqual(f.calls, []);
 });
 
+test("same-size checksum mismatch includes expected and actual digests before touching service", async t => {
+  const f = await fixture(t); await f.updater.check();
+  f.bytes["axiom2.tgz"] = Buffer.alloc(f.bytes["axiom2.tgz"].length, 120);
+  const result = await f.updater.runJob("service", nextVersion);
+  assert.equal(result.job.phase, "error"); assert.match(result.job.message, /SHA-256 不符.*预期 [a-f0-9]{64}，实际 [a-f0-9]{64}/);
+  assert.deepEqual(f.calls, []);
+});
+test("npm command errors expose bounded output and exit code instead of a log-only instruction", async t => {
+  const root = await mkdtemp(join(tmpdir(), "axiom-npm-error-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const log = join(root, "output.log");
+  await assert.rejects(execute(process.execPath, ["-e", "console.error('npm error code ECONNRESET'); process.exit(7)"], { log }), /退出（7）.*ECONNRESET/);
+  await assert.rejects(execute(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { log, timeoutMs: 100 }), /超时/);
+});
 test("successful desktop backend update keeps CLI location, dependencies and user data", async (t) => {
   const f = await fixture(t);
   await f.updater.check();

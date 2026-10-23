@@ -31,25 +31,37 @@ async function atomic(path, value) {
   try { await writeFile(temporary, JSON.stringify(value), { mode: 0o600, flag: "wx" }); await rename(temporary, path); }
   finally { await rm(temporary, { force: true }); }
 }
+async function logTail(path) {
+  let file;
+  try {
+    file = await open(path, "r"); const info = await file.stat();
+    const bytes = Buffer.alloc(Math.min(info.size, 8192));
+    await file.read(bytes, 0, bytes.length, Math.max(0, info.size - bytes.length));
+    return { lines: bytes.toString("utf8").split(/\r?\n/).filter(Boolean).slice(-30), updatedAt: info.mtimeMs };
+  } catch { return { lines: [], updatedAt: null }; }
+  finally { await file?.close(); }
+}
 export async function execute(node, args, { env = process.env, timeoutMs = 60_000, log } = {}) {
   const output = log ? await open(log, "a", 0o600) : null;
   try {
     return await new Promise((resolve, reject) => {
       const child = spawn(node, args, { env, windowsHide: true, stdio: ["ignore", output?.fd ?? "pipe", output?.fd ?? "pipe"] });
-      let text = "", errorText = "", oversized = false;
+      let text = "", errorText = "", oversized = false, timedOut = false;
       child.stdout?.on("data", (data) => { text += data; if (text.length > 65536) { oversized = true; child.kill(); } });
       child.stderr?.on("data", (data) => { if (errorText.length < 4096) errorText += data; });
-      const timer = setTimeout(() => { child.kill(); }, timeoutMs);
+      const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
       child.once("error", (error) => { clearTimeout(timer); reject(error); });
-      child.once("close", (code, signal) => {
+      child.once("close", async (code, signal) => {
         clearTimeout(timer);
-        if (code !== 0 || oversized || signal) reject(Error(log ? `安装未完成，请查看更新日志：${log}` : text.trim() || errorText.trim() || "服务操作失败或超时"));
-        else resolve(text.trim());
+        if (code !== 0 || oversized || signal || timedOut) {
+          const detail = log ? (await logTail(log)).lines.slice(-6).join(" · ") : errorText.trim() || text.trim();
+          reject(Error(`命令${timedOut ? `超时（${Math.round(timeoutMs / 1000)} 秒）` : oversized ? "输出超过限制" : `退出（${code ?? signal}）`}：${detail || "没有错误输出，请检查运行环境和网络。"}`));
+        } else resolve(text.trim());
       });
     });
   } finally { await output?.close(); }
 }
-export function createUpdater({ root, fetcher = fetch, command = execute, isAlive = alive, api = RELEASE_API, base = RELEASE_BASE, env = process.env } = {}) {
+export function createUpdater({ root, fetcher = fetch, command = execute, isAlive = alive, api = RELEASE_API, base = RELEASE_BASE, env = process.env, runtimeNode = process.execPath } = {}) {
   if (!root || !isAbsolute(root)) throw Error("缺少绝对数据目录");
   const directory = join(root, "updates");
   const registration = join(root, "installation.json");
@@ -59,7 +71,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   const piReleaseFile = join(directory, "pi-release.json");
   const piPackage = "@earendil-works/pi-coding-agent";
   async function piEnvironment() {
-    const installed = await installation();
+    const installed = await installation(true) ?? { node: runtimeNode };
     const npm = await npmCli(installed.node);
     const modules = await command(installed.node, [npm, "root", "--global"], { env: environment, timeoutMs: 20000 });
     if (!isAbsolute(modules) || /[\r\n]/.test(modules)) throw Error("npm 全局目录无效。");
@@ -80,8 +92,9 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function piStatus(refresh = false) {
     let runtimeVersion = null;
-    const installed = await installation();
+    const installed = await installation(true);
     try {
+      if (!installed) throw Error("后台尚未安装");
       // Read from Node's dependency lookup directories without requiring the SDK:
       // pi exports only an ESM import condition, so require.resolve(piPackage) fails.
       for (const path of createRequire(installed.cli).resolve.paths(piPackage) ?? []) {
@@ -94,7 +107,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     catch { cli = { error: "pi 安装缓存无法读取，请重新查询。" }; }
     if (refresh) {
       try { const info = await piEnvironment(); cli = { version: info.version, packageRoot: info.packageRoot, legacy: info.legacy, identity: info.identity }; }
-      catch { cli = { error: "无法读取此 Node.js 对应的 npm 全局 pi，请检查运行环境。" }; }
+      catch (error) { cli = { error: `无法读取终端 Pi：${error.message}` }; }
       await mkdir(directory, { recursive: true });
       await atomic(join(directory, "pi-installation.json"), cli);
     }
@@ -144,12 +157,13 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function progress(phase, message, extra = {}) {
     const current = await job();
     if (current?.token !== owner?.token || current.pid !== process.pid) throw Error("更新任务归属已变化");
-    const value = { ...current, ...extra, phase, message, updatedAt: Date.now() };
+    const value = { ...current, download: null, ...extra, phase, message, updatedAt: Date.now() };
     delete value.token; delete value.pid;
     await database((db) => db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(JSON.stringify(value), owner.token, process.pid));
   }
-  async function installation() {
+  async function installation(optional = false) {
     const value = await json(registration);
+    if (!value && optional) return null;
     if (!value || !isAbsolute(value.node || "") || !isAbsolute(value.cli || "") || !await exists(value.node)) throw Error("请先安装 Node.js 22.19.0+ 和后台服务，再检查更新。");
     const packageRoot = dirname(dirname(value.cli));
     let managed = value.cli === join(packageRoot, "bin", "axiom2.mjs") && dirname(packageRoot).endsWith(`${process.platform === "win32" ? "\\" : "/"}@cosyeezz`) && dirname(dirname(packageRoot)).endsWith(`${process.platform === "win32" ? "\\" : "/"}node_modules`) && packageRoot.endsWith(`${process.platform === "win32" ? "\\" : "/"}axiom2`);
@@ -195,11 +209,26 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (!asset) throw Error("此版本尚未提供适用于本机的客户端安装包。");
     const destination = join(directory, `${asset.sha256}-${name}`);
     if (await exists(destination) && await validFile(destination, asset)) return destination;
-    await progress("downloading", `正在下载 ${name}…`);
-    const response = await fetcher(asset.url, { signal: AbortSignal.timeout(120_000) });
-    if (!response.ok) throw Error(`下载失败（HTTP ${response.status}），当前服务尚未更改。`);
-    const bytes = await bounded(response, asset.size);
-    if (bytes.length !== asset.size || createHash("sha256").update(bytes).digest("hex") !== asset.sha256) throw Error("安装包校验失败，已拒绝安装。请重新检查更新。");
+    const startedAt = Date.now(); let received = 0, lastBytes = 0, lastAt = startedAt, lastByteAt = startedAt;
+    const publish = async () => {
+      const now = Date.now();
+      await progress("downloading", `正在下载 ${name}…`, { download: { name, downloaded: received, total: asset.size, speed: (received - lastBytes) * 1000 / Math.max(1, now - lastAt), startedAt, updatedAt: now, lastByteAt } });
+      lastAt = now; lastBytes = received;
+    };
+    await publish();
+    const response = await fetcher(asset.url, { signal: AbortSignal.timeout(600_000) });
+    if (!response.ok) throw Error(`下载 ${name} 失败（HTTP ${response.status}），当前服务尚未更改。`);
+    const chunks = [];
+    for await (const chunk of response.body) {
+      received += chunk.length; lastByteAt = Date.now();
+      if (received > asset.size) throw Error(`${name} 大小不符：预期 ${asset.size} 字节，已接收 ${received} 字节。已拒绝安装。`);
+      chunks.push(chunk); if (Date.now() - lastAt >= 500) await publish();
+    }
+    await publish();
+    const bytes = Buffer.concat(chunks);
+    if (bytes.length !== asset.size) throw Error(`${name} 大小不符：预期 ${asset.size} 字节，实际 ${bytes.length} 字节。已拒绝安装。`);
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (actual !== asset.sha256) throw Error(`${name} SHA-256 不符：预期 ${asset.sha256}，实际 ${actual}。已拒绝安装，请重新下载。`);
     await writeFile(destination, bytes, { mode: 0o600 });
     return destination;
   }
@@ -208,14 +237,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     return content.length === asset.size && createHash("sha256").update(content).digest("hex") === asset.sha256;
   }
   async function status() {
-    const installed = await installation();
+    const installed = await installation(true);
     const release = await json(releaseFile);
     const current = await job();
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
     if (current) { delete current.pid; delete current.token; delete current.installer; }
-    return { pi: await piStatus(), serviceVersion: installed.version, managed: installed.managed, release: release ? validateRelease(release) : null,
-      job: current, recovery, log };
+    return { pi: await piStatus(), serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
+      job: current, recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
   async function npmCli(node) {
     const candidates = [join(dirname(node), "node_modules/npm/bin/npm-cli.js"), join(dirname(node), "../lib/node_modules/npm/bin/npm-cli.js")];
@@ -347,7 +376,6 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     }
   }
   async function perform(kind, version) {
-    const installed = await installation();
     if (kind === "pi") {
       const release = await json(piReleaseFile);
       if (!release || version !== release.token || !versionPattern.test(release.version)) throw Error("请先检查 pi 版本，再确认升级。");
@@ -364,8 +392,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       try {
         await handle.writeFile(JSON.stringify({ pid: process.pid, root }));
         if ((await piEnvironment()).identity !== info.identity) throw Error("终端 pi 在准备期间改变，请重新检查。");
-        await progress("installing", `正在安装终端 pi ${version}…`);
-        await command(installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], { env: environment, timeoutMs: 600000, log });
+        await progress("installing", `正在安装终端 pi ${version}（npm 不提供总下载进度，下方显示实时日志）…`);
+        await command(info.installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--loglevel=http", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], { env: environment, timeoutMs: 600000, log });
         const actual = await piEnvironment();
         if (actual.version !== version) throw Error("安装后的 pi 版本未通过校验，请重新读取状态。");
         const pkg = await json(join(actual.packageRoot, "package.json"));
@@ -374,13 +402,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
         const shim = process.platform === "win32" ? join(actual.prefix, "pi.cmd") : join(actual.prefix, "bin/pi");
         if (!cli.startsWith(`${actual.packageRoot}${sep}`) || !await exists(cli) || !await exists(shim)) throw Error("pi 命令入口不完整，请重新检查并安装。");
         await progress("verifying", `正在验证终端 pi ${version}…`);
-        const reported = await command(installed.node, [cli, "--version"], { env: environment, timeoutMs: 20000 });
+        const reported = await command(info.installed.node, [cli, "--version"], { env: environment, timeoutMs: 20000 });
         if (reported !== version) throw Error("终端 pi 未通过运行验证，请查看安装环境后重试。");
         await piStatus(true);
         await progress("complete", `终端 pi 已安装至 ${version}；重新打开终端会话后生效。应用内 pi 随后台服务更新。`, { running: false });
       } finally { await handle.close(); await rm(lock, { force: true }); }
       return;
     }
+    const installed = await installation();
     if (kind === "recover") {
       await restore(installed);
       await progress("complete", "之前的服务程序已恢复。", { running: false });
@@ -397,14 +426,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function runJob(kind, version, claimed) {
     owner = claimed || await claim(kind, version);
-    try { await perform(kind, version); }
+    try { await writeFile(log, "", { mode: 0o600 }); await perform(kind, version); }
     catch (error) { if (kind === "pi") await piStatus(true).catch(() => {}); await progress("error", error.message, { running: false }); }
     finally { await releaseService(); }
     return status();
   }
   async function start(kind, version) {
     if (!["service", "client", "recover", "pi"].includes(kind)) throw Error("不支持的更新任务");
-    await installation();
+    if (kind === "pi") await piEnvironment(); else await installation();
     const reserved = await claim(kind, version);
     const output = await open(log, "a", 0o600);
     let child;

@@ -69,8 +69,11 @@ fn run(action: &str) -> Result<Value, String> {
 
 fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     let _guard = UPDATES.lock().map_err(|_| "更新控制器不可用")?;
-    let (node, _) = installation_paths(false)?;
     let root = data_root()?;
+    // Terminal Pi needs Node/npm, not a backend installation record.
+    // Keep a damaged existing registration visible rather than silently switching Node.
+    let node = if root.join("installation.json").exists() { installation_paths(false)?.0 }
+        else { crate::axiom_setup::runtime_node()? };
     let cache = root.join("updates");
     fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
     let helper = cache.join(concat!("desktop-updater-", env!("CARGO_PKG_VERSION"), ".mjs"));

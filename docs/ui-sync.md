@@ -12,6 +12,8 @@
 
 ## 当前采用交互
 
+- 桌面启动页的终端 Pi 管理不再由“后台未安装”拦截；只需 Node.js 22.19.0+／npm，应用内 Pi 与后台更新仍按真实服务状态展示。安装区增加当前文件的已收／总字节、百分比、速率、耗时及无新数据等待提示；npm 阶段只展示真实日志与最近输出时间，不伪造整体百分比。失败主提示显示具体原因，校验失败附期望／实际值，执行详情在运行及失败时展开并显示退出码。沿用现有启动页样式，不修改 `ui/` 或提升设计采用提交；相关验证为 `setup-service.test.ts`、`pi-updater.test.ts`、`desktop-updater.test.ts`、`setup-progress.check.ts` 与 `pi-updates.check.ts`，Windows 实机下载／安装不以模拟 IPC 测试代替。改动随新版桌面客户端生效，未部署或重启现有后台。
+
 - REA 详情新增“分析引擎与配套组件”，复用内置工具表单、状态标签与操作样式，支持 JDK／Ghidra／Hopper／JADX／WABT 路径、显式检测和受支持组件的安装确认。显示后台系统与架构，远程浏览器及手机客户端不决定下载平台；Windows／macOS／Linux 分支与缺包限制见 [REA 配套组件说明](rea-engines.md)。页面刷新不执行探测、不预热，保存后检测、已有会话重载；外部配置变化保留草稿并提示重载。此项不修改 `ui/` 或提升设计采用提交；28 项定向测试、类型检查、构建及两个 Chrome REA 专项通过。组件区验证 320／390／820／1440px 无横向溢出及至少44px按钮热区，路径输入复用既有表单样式；截图在 `app/test-results/rea-engines/`。测试使用隔离 fixture，不把平台映射或 Windows Job API 替身测试当作 Windows 实机验收，完整边界见专项说明。
 
 - 文件预览扩展音视频原生播放、DOCX/XLSX/PPTX内容阅读和ZIP/TAR/TGZ/GZ目录／只读成员；HTML补齐srcset、递归CSS导入与根内父目录引用，新增单独确认的普通联网开关。HTML/package.json/目录提供“网页／项目运行”，展示授权目录与脚本、显式确认后在独立HTTP origin执行，支持停止／刷新／日志与租约回收；不会自动安装依赖，不共享工作台同源权限，真实项目进程不是OS沙箱。格式／运行边界见[文件预览说明](file-preview.md)。24项单元、Chrome九视口（含Office三格式、真实音视频、归档成员、模块图／动态fetch、临时项目与关闭回收）、类型及隔离前后端构建通过；390宽运行页、1440宽Word截图已审阅，产物 `/private/tmp/axiom-expanded-preview-ui97/` 与 `/private/tmp/axiom-expanded-build97/`。不修改 `ui/`，不覆盖正式dist、不部署或重启正式服务。
