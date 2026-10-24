@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { subscribeDisplaySettings } from "../display-settings.js";
+import { useComposerHeight } from "./useComposerHeight.js";
 import { FilePickerButton } from "../FilePicker.js";
 import { useConnection, useConnectionState, useScope } from "../transport.js";
 import { SkillCards } from "./SkillCards.js";
-import { getDraft, useDraft, updateDraft } from "../drafts.js";
+import { getComposerDraft as getDraft, useComposerDraft as useDraft, updateComposerDraft as updateDraft, useComposerEdit, cancelComposerEdit } from "./composer-edit.js";
 import { usePersistentDraft } from "../draft-persistence.js";
 import { Icon } from "../components.js";
 import { type Configuration, type Scope } from "../../shared/protocol.js";
@@ -50,6 +50,7 @@ export function Composer({
         m.provider === info.selection?.provider && m.id === info.selection.id,
     );
   usePersistentDraft(scope);
+  const editing = useComposerEdit(scope);
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null);
   const [reading, setReading] = useState(false);
@@ -57,6 +58,7 @@ export function Composer({
   useEffect(() => { lastEscape.current = null; }, [scope.workspaceId, scope.sessionId]);
   const completion = useFileCompletion(scope, draft.text, input);
   const hasContent = !!(draft.text.trim() || draft.attachment || draft.attachments?.length || draft.images?.length || draft.skills?.length);
+  const canClear = !!draft.text.length || hasContent;
   const lengthError = messageLengthError(draft.text);
   const imageSelection = running(info.run) ? info.run!.selection : info.selection;
   const imageModel = config.available.find(
@@ -74,27 +76,16 @@ export function Composer({
       task: info.task,
     },
   );
+  const send = () => {
+    if (editing) void submit("prompt", { draft: editing.draft, rewrite: editing.target, onStart: () => cancelComposerEdit(scope) });
+    else void submit(active ? "append" : "prompt");
+  };
   useEffect(() => {
-    const node = input.current!;
-    const resize = () => {
-      const style = getComputedStyle(node);
-      const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--display-font-scale")) || 1;
-      const minimum = parseFloat(style.minHeight) || 44 * scale;
-      const maximum = parseFloat(style.maxHeight) || 180 * scale;
-      node.style.setProperty("height", `${minimum}px`, "important");
-      node.style.setProperty("height", `${Math.min(maximum, Math.max(minimum, node.scrollHeight))}px`, "important");
-    };
-    resize();
-    let width = node.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (node.clientWidth === width) return;
-      width = node.clientWidth;
-      resize();
-    });
-    observer.observe(node);
-    const unsubscribeDisplay = subscribeDisplaySettings(resize);
-    return () => { observer.disconnect(); unsubscribeDisplay(); };
-  }, [draft.text]);
+    if (!editing) return;
+    input.current?.focus({ preventScroll: true });
+    input.current?.setSelectionRange(editing.draft.text.length, editing.draft.text.length);
+  }, [editing?.revision]);
+  useComposerHeight(input, editing ? editing.draft.text : draft.text);
   return (
     <section className="composer-area">
       <div className="container">
@@ -104,6 +95,20 @@ export function Composer({
             draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items, supplement),
           })} />
 
+        {editing && <div className="composer-edit-status" role="status">
+          <span>正在修改所选消息 · 重新发送后将从这里继续对话</span>
+          <button type="button" className="btn" disabled={busy || reading} onClick={() => cancelComposerEdit(scope)}>取消修改</button>
+        </div>}
+        {canClear && <div className="composer-draft-actions">
+          <button type="button" className="btn btn-ghost composer-clear" aria-label="清空输入"
+            data-tooltip="清空文字、附件、图片和技能引用" disabled={busy || reading}
+            onClick={() => {
+              updateDraft(scope, { text: "", attachment: null, attachments: [], images: [], skills: [] });
+              setError("");
+              lastEscape.current = null;
+              input.current?.focus({ preventScroll: true });
+            }}><Icon name="trash-2" /><span>清空输入</span></button>
+        </div>}
         <div className="composer-resources" aria-label="技能与待发送附件">
           <SkillCards skills={draft.skills} scope={scope} onRemove={id => updateDraft(scope, { skills: getDraft(scope).skills?.filter(skill => skill.id !== id) })} />
           <AttachmentList scope={scope} draft={draft} reading={reading} />
@@ -113,7 +118,7 @@ export function Composer({
           onSubmit={(e) => {
             e.preventDefault();
             if (active) void submit("stop");
-            else if (!reading && !imageUnsupported && hasContent) void submit();
+            else if (!reading && !imageUnsupported && hasContent) send();
           }}
         >
           <label className="screen-reader" htmlFor={promptId}>
@@ -147,6 +152,7 @@ export function Composer({
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.repeat || reading || busy) { lastEscape.current = null; return; }
+                if (editing) { cancelComposerEdit(scope); lastEscape.current = null; return; }
                 const now = performance.now();
                 if (lastEscape.current !== null && now - lastEscape.current <= 500) {
                   lastEscape.current = null;
@@ -163,7 +169,7 @@ export function Composer({
               ) {
                 e.preventDefault();
                 if (!e.repeat && !reading && !imageUnsupported && hasContent)
-                  void submit(active ? "append" : "prompt");
+                  send();
               }
             }}
           />
@@ -173,11 +179,10 @@ export function Composer({
               <AttachmentPicker scope={scope} nested={nested} input={input} onBusy={setReading} onError={setError} />
               <ModelPicker scope={scope} nested={nested} />
             </div>
-            <div className="composer-actions">
             <button
               className={`btn btn-primary send${active ? " is-running" : ""}`}
               type="submit"
-              aria-label={active ? "停止执行" : "发送消息"}
+              aria-label={active ? "停止执行" : editing ? "重新发送" : "发送消息"}
               data-tooltip={
                 active
                   ? "停止此会话"
@@ -200,7 +205,6 @@ export function Composer({
                 <Icon name="arrow" />
               )}
             </button>
-            </div>
           </div>
         </form>
         <Usage scope={scope} tools={tools} />

@@ -1,0 +1,287 @@
+{
+  "startedAt": "2026-10-24T10:53:22.449Z",
+  "url": "file:///Volumes/D_Work/axiom2/app/design-previews/task-state-icons/index.html",
+  "cwd": "/Volumes/D_Work/axiom2/app",
+  "checks": [
+    {
+      "name": "六个状态tab",
+      "pass": true
+    },
+    {
+      "name": "pending：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 12,
+        "minHeight": 2
+      }
+    },
+    {
+      "name": "pending：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "pending：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "active：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 9,
+        "minHeight": 9
+      }
+    },
+    {
+      "name": "active：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "active：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "done：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 14,
+        "minHeight": 9.751474380493164
+      }
+    },
+    {
+      "name": "done：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "done：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "waiting：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 7.5,
+        "minHeight": 13.5
+      }
+    },
+    {
+      "name": "waiting：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "waiting：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "failed：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 14,
+        "minHeight": 15.954978942871094
+      }
+    },
+    {
+      "name": "failed：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "failed：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "abandoned：50卡/50个非空SVG",
+      "pass": true,
+      "details": {
+        "cards": 50,
+        "svg": 50,
+        "minWidth": 6,
+        "minHeight": 10
+      }
+    },
+    {
+      "name": "abandoned：选第2候选更新执行树、结果与当前组合",
+      "pass": true
+    },
+    {
+      "name": "abandoned：桌面无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 1440,
+        "document": 1440,
+        "body": 1440,
+        "offenders": []
+      }
+    },
+    {
+      "name": "刷新保留六态选择",
+      "pass": true
+    },
+    {
+      "name": "搜索编号、名称、来源、空结果与清空",
+      "pass": true
+    },
+    {
+      "name": "尺寸16/20/24/32px且执行树保持16px",
+      "pass": true
+    },
+    {
+      "name": "四种动效、动态预览开关、网格静态",
+      "pass": true
+    },
+    {
+      "name": "下载选择内容完整匹配",
+      "pass": true,
+      "details": {
+        "path": "/tmp/axiom-state-icons/download-desktop.txt",
+        "filename": "执行树图标选择.txt"
+      }
+    },
+    {
+      "name": "恢复推荐重置六态图标、动效并持久化",
+      "pass": true
+    },
+    {
+      "name": "pending：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "active：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "done：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "waiting：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "failed：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "abandoned：手机无水平溢出、tab和卡片可点",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "手机控制可操作：树/搜索/尺寸/动效/开关/结果/复制/下载/恢复",
+      "pass": true
+    },
+    {
+      "name": "手机pending最终无水平溢出",
+      "pass": true,
+      "details": {
+        "viewport": 390,
+        "document": 390,
+        "body": 390,
+        "offenders": []
+      }
+    },
+    {
+      "name": "无浏览器console error和pageerror",
+      "pass": true
+    }
+  ],
+  "console": [],
+  "pageerrors": [],
+  "screenshots": [
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-pending.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-active.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-done.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-waiting.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-failed.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/desktop-abandoned.png",
+    "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/mobile-pending.png"
+  ],
+  "unverified": [
+    "剪贴板写入权限及外部图标来源链接未验证；测试不访问外网",
+    "不要求尺寸、动态预览开关或当前tab刷新后保持；仅验证图标选择及每态动效持久化"
+  ],
+  "profile": "/var/folders/gn/pzy6cn7s7m96cr9z58tqwzmw0000gn/T/axiom-state-icons-chromium-gfE1b9",
+  "browser": {
+    "version": "155.0.8059.85",
+    "executablePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "headless": true,
+    "engine": "chromium"
+  },
+  "finishedAt": "2026-10-24T10:53:28.205Z",
+  "passed": 34,
+  "failed": 0,
+  "success": true
+}

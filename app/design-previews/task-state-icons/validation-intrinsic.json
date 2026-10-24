@@ -1,0 +1,3109 @@
+{
+  "started": "2026-10-24T11:07:00.588Z",
+  "checks": [
+    {
+      "name": "new defaults",
+      "pass": true,
+      "detail": [
+        "P02",
+        "A22",
+        "D07",
+        "W37",
+        "F25",
+        "X26"
+      ]
+    },
+    {
+      "name": "source visible shape counts and geometry unchanged",
+      "pass": true,
+      "detail": [
+        {
+          "state": "pending",
+          "count": 2
+        },
+        {
+          "state": "active",
+          "count": 1
+        },
+        {
+          "state": "done",
+          "count": 1
+        },
+        {
+          "state": "waiting",
+          "count": 1
+        },
+        {
+          "state": "failed",
+          "count": 1
+        },
+        {
+          "state": "abandoned",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "name": "no glyph pseudo-element decoration or outer CSS animation",
+      "pass": true,
+      "detail": [
+        {
+          "state": "pending",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row focused",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        },
+        {
+          "state": "active",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        },
+        {
+          "state": "done",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        },
+        {
+          "state": "waiting",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        },
+        {
+          "state": "failed",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        },
+        {
+          "state": "abandoned",
+          "ancestors": [
+            {
+              "tag": "SPAN",
+              "cls": "glyph",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "BUTTON",
+              "cls": "tree-row",
+              "animation": "none",
+              "before": "\"\"",
+              "after": "\"\""
+            },
+            {
+              "tag": "DIV",
+              "cls": "tree",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "panel",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "ASIDE",
+              "cls": "",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            },
+            {
+              "tag": "DIV",
+              "cls": "layout",
+              "animation": "none",
+              "before": "none",
+              "after": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pending failed abandoned have no SVG animation",
+      "pass": true
+    },
+    {
+      "name": "no-preference, CSS animation disabled=false: intrinsic rotation changes",
+      "pass": true,
+      "detail": {
+        "media": "no-preference",
+        "cssOff": false,
+        "start": {
+          "time": 103.80000007152557,
+          "matrix": null,
+          "opacity": 1,
+          "dash": [
+            1
+          ],
+          "doneTime": 0
+        },
+        "mid": {
+          "time": 266.8000000715256,
+          "matrix": [
+            0.7932832168420236,
+            0.6088528047703902,
+            -0.6088528047703902,
+            0.7932832168420236,
+            9.786835055140399,
+            -4.825632259348964
+          ],
+          "opacity": 0.972649,
+          "dash": [
+            0.629564
+          ],
+          "doneTime": 0.1666959971189499
+        },
+        "end": {
+          "time": 721,
+          "matrix": [
+            -0.7518847579010959,
+            0.6592945554424141,
+            -0.6592945554424141,
+            -0.7518847579010959,
+            28.93415176012212,
+            13.11108242950418
+          ],
+          "opacity": 0.5553,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.6166840195655823
+        },
+        "held": {
+          "time": 976.5,
+          "matrix": [
+            -0.965893974389247,
+            -0.2589378887659061,
+            0.2589378887659061,
+            -0.965893974389247,
+            20.48347302748009,
+            26.697982357861836
+          ],
+          "opacity": 0.447526,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.8666980266571045
+        }
+      }
+    },
+    {
+      "name": "no-preference, CSS animation disabled=false: intrinsic opacity changes",
+      "pass": true
+    },
+    {
+      "name": "no-preference, CSS animation disabled=false: done 1→0 once and frozen",
+      "pass": true,
+      "detail": {
+        "start": [
+          1
+        ],
+        "mid": [
+          0.629564
+        ],
+        "end": [
+          0
+        ],
+        "held": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "no-preference, CSS animation disabled=true: intrinsic rotation changes",
+      "pass": true,
+      "detail": {
+        "media": "no-preference",
+        "cssOff": true,
+        "start": {
+          "time": 1019.2000000476837,
+          "matrix": null,
+          "opacity": 1,
+          "dash": [
+            1
+          ],
+          "doneTime": 0
+        },
+        "mid": {
+          "time": 1185.4000000953674,
+          "matrix": [
+            0.7931971086887499,
+            0.6089649799190487,
+            -0.6089649799190487,
+            0.7931971086887499,
+            9.789214454763584,
+            -4.8259450632935845
+          ],
+          "opacity": 0.972635,
+          "dash": [
+            0.629484
+          ],
+          "doneTime": 0.16673199832439423
+        },
+        "end": {
+          "time": 1640.3000000715256,
+          "matrix": [
+            -0.7520088801704808,
+            0.6591529747674202,
+            -0.6591529747674202,
+            -0.7520088801704808,
+            28.933942259254813,
+            13.114270864836728
+          ],
+          "opacity": 0.555269,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.6167320013046265
+        },
+        "held": {
+          "time": 1895.7000000476837,
+          "matrix": [
+            -0.9658654883431544,
+            -0.259044124480058,
+            0.259044124480058,
+            -0.9658654883431544,
+            20.481856366357157,
+            26.698915353878547
+          ],
+          "opacity": 0.447519,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.8667259812355042
+        }
+      }
+    },
+    {
+      "name": "no-preference, CSS animation disabled=true: intrinsic opacity changes",
+      "pass": true
+    },
+    {
+      "name": "no-preference, CSS animation disabled=true: done 1→0 once and frozen",
+      "pass": true,
+      "detail": {
+        "start": [
+          1
+        ],
+        "mid": [
+          0.629484
+        ],
+        "end": [
+          0
+        ],
+        "held": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "reduce, CSS animation disabled=false: intrinsic rotation changes",
+      "pass": true,
+      "detail": {
+        "media": "reduce",
+        "cssOff": false,
+        "start": {
+          "time": 1938.3000000715256,
+          "matrix": null,
+          "opacity": 1,
+          "dash": [
+            1
+          ],
+          "doneTime": 0
+        },
+        "mid": {
+          "time": 2101.7000000476837,
+          "matrix": [
+            0.7933692686019564,
+            0.608740670267723,
+            -0.608740670267723,
+            0.7933692686019564,
+            9.784456819989199,
+            -4.8253192664361535
+          ],
+          "opacity": 0.972662,
+          "dash": [
+            0.629644
+          ],
+          "doneTime": 0.16665999591350555
+        },
+        "end": {
+          "time": 2555.4000000953674,
+          "matrix": [
+            -0.7518327836598397,
+            0.659353824144743,
+            -0.659353824144743,
+            -0.7518327836598397,
+            28.934239293654993,
+            13.109747514181162
+          ],
+          "opacity": 0.555313,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.6166639924049377
+        },
+        "held": {
+          "time": 2808.2000000476837,
+          "matrix": [
+            -0.9659387145675945,
+            -0.2587709406009553,
+            0.2587709406009553,
+            -0.9659387145675945,
+            20.486013287599672,
+            26.696515862022597
+          ],
+          "opacity": 0.447538,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.8666539788246155
+        }
+      }
+    },
+    {
+      "name": "reduce, CSS animation disabled=false: intrinsic opacity changes",
+      "pass": true
+    },
+    {
+      "name": "reduce, CSS animation disabled=false: done 1→0 once and frozen",
+      "pass": true,
+      "detail": {
+        "start": [
+          1
+        ],
+        "mid": [
+          0.629644
+        ],
+        "end": [
+          0
+        ],
+        "held": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "reduce, CSS animation disabled=true: intrinsic rotation changes",
+      "pass": true,
+      "detail": {
+        "media": "reduce",
+        "cssOff": true,
+        "start": {
+          "time": 2853.2000000476837,
+          "matrix": null,
+          "opacity": 1,
+          "dash": [
+            1
+          ],
+          "doneTime": 0
+        },
+        "mid": {
+          "time": 3018.600000023842,
+          "matrix": [
+            0.7933549615181726,
+            0.6087593161788153,
+            -0.6087593161788153,
+            0.7933549615181726,
+            9.784852255927712,
+            -4.825371332363858
+          ],
+          "opacity": 0.97266,
+          "dash": [
+            0.629631
+          ],
+          "doneTime": 0.16666600108146667
+        },
+        "end": {
+          "time": 3470.2000000476837,
+          "matrix": [
+            -0.751910567696741,
+            0.6592651198008012,
+            -0.6592651198008012,
+            -0.751910567696741,
+            28.934108249970507,
+            13.11174537475128
+          ],
+          "opacity": 0.555294,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.6166939735412598
+        },
+        "held": {
+          "time": 3724.100000023842,
+          "matrix": [
+            -0.9659082475030667,
+            -0.25888464111560283,
+            0.25888464111560283,
+            -0.9659082475030667,
+            20.484283276649567,
+            26.697514663424034
+          ],
+          "opacity": 0.44753,
+          "dash": [
+            0
+          ],
+          "doneTime": 0.8666840195655823
+        }
+      }
+    },
+    {
+      "name": "reduce, CSS animation disabled=true: intrinsic opacity changes",
+      "pass": true
+    },
+    {
+      "name": "reduce, CSS animation disabled=true: done 1→0 once and frozen",
+      "pass": true,
+      "detail": {
+        "start": [
+          1
+        ],
+        "mid": [
+          0.629631
+        ],
+        "end": [
+          0
+        ],
+        "held": [
+          0
+        ]
+      }
+    },
+    {
+      "name": "tab switch preserves all tree SVG nodes and done remains completed",
+      "pass": true
+    },
+    {
+      "name": "preview off removes SVG animation and shows complete original shapes",
+      "pass": true,
+      "detail": {
+        "animations": 0,
+        "groups": 0,
+        "shapeCounts": [
+          2,
+          1,
+          1,
+          1,
+          1,
+          2
+        ],
+        "hidden": 0
+      }
+    },
+    {
+      "name": "preview on resumes rotation opacity and reveal",
+      "pass": true
+    },
+    {
+      "name": "explicit replay restarts reveal and other intrinsic motion",
+      "pass": true,
+      "detail": {
+        "a": {
+          "time": 4570.100000023842,
+          "matrix": null,
+          "opacity": 1,
+          "dash": [
+            1
+          ],
+          "doneTime": 0
+        },
+        "b": {
+          "time": 4735,
+          "matrix": [
+            0.7930488146885047,
+            0.6091580891042634,
+            -0.6091580891042634,
+            0.7930488146885047,
+            9.793311292989104,
+            -4.826482845513219
+          ],
+          "opacity": 0.972611,
+          "dash": [
+            0.629347
+          ],
+          "doneTime": 0.16679400205612183
+        }
+      }
+    },
+    {
+      "name": "state 0: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "state 1: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "state 2: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "state 3: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "state 4: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "state 5: all 50 candidates selectable",
+      "pass": true
+    },
+    {
+      "name": "changed six selections survive refresh",
+      "pass": true,
+      "detail": [
+        "P50",
+        "A50",
+        "D50",
+        "W50",
+        "F50",
+        "X50"
+      ]
+    },
+    {
+      "name": "restore confirmed selections",
+      "pass": true,
+      "detail": [
+        "P02",
+        "A22",
+        "D07",
+        "W37",
+        "F25",
+        "X26"
+      ]
+    },
+    {
+      "name": "restored defaults survive refresh",
+      "pass": true,
+      "detail": [
+        "P02",
+        "A22",
+        "D07",
+        "W37",
+        "F25",
+        "X26"
+      ]
+    },
+    {
+      "name": "1440x1000: no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "innerWidth": 1440,
+        "docWidth": 1440,
+        "bodyWidth": 1440
+      }
+    },
+    {
+      "name": "390x844: no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "innerWidth": 390,
+        "docWidth": 390,
+        "bodyWidth": 390
+      }
+    },
+    {
+      "name": "no pageerrors",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "HTML unchanged during test",
+      "pass": true
+    }
+  ],
+  "pageerrors": [],
+  "samples": [
+    {
+      "media": "no-preference",
+      "cssOff": false,
+      "start": {
+        "time": 103.80000007152557,
+        "matrix": null,
+        "opacity": 1,
+        "dash": [
+          1
+        ],
+        "doneTime": 0
+      },
+      "mid": {
+        "time": 266.8000000715256,
+        "matrix": [
+          0.7932832168420236,
+          0.6088528047703902,
+          -0.6088528047703902,
+          0.7932832168420236,
+          9.786835055140399,
+          -4.825632259348964
+        ],
+        "opacity": 0.972649,
+        "dash": [
+          0.629564
+        ],
+        "doneTime": 0.1666959971189499
+      },
+      "end": {
+        "time": 721,
+        "matrix": [
+          -0.7518847579010959,
+          0.6592945554424141,
+          -0.6592945554424141,
+          -0.7518847579010959,
+          28.93415176012212,
+          13.11108242950418
+        ],
+        "opacity": 0.5553,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.6166840195655823
+      },
+      "held": {
+        "time": 976.5,
+        "matrix": [
+          -0.965893974389247,
+          -0.2589378887659061,
+          0.2589378887659061,
+          -0.965893974389247,
+          20.48347302748009,
+          26.697982357861836
+        ],
+        "opacity": 0.447526,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.8666980266571045
+      }
+    },
+    {
+      "media": "no-preference",
+      "cssOff": true,
+      "start": {
+        "time": 1019.2000000476837,
+        "matrix": null,
+        "opacity": 1,
+        "dash": [
+          1
+        ],
+        "doneTime": 0
+      },
+      "mid": {
+        "time": 1185.4000000953674,
+        "matrix": [
+          0.7931971086887499,
+          0.6089649799190487,
+          -0.6089649799190487,
+          0.7931971086887499,
+          9.789214454763584,
+          -4.8259450632935845
+        ],
+        "opacity": 0.972635,
+        "dash": [
+          0.629484
+        ],
+        "doneTime": 0.16673199832439423
+      },
+      "end": {
+        "time": 1640.3000000715256,
+        "matrix": [
+          -0.7520088801704808,
+          0.6591529747674202,
+          -0.6591529747674202,
+          -0.7520088801704808,
+          28.933942259254813,
+          13.114270864836728
+        ],
+        "opacity": 0.555269,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.6167320013046265
+      },
+      "held": {
+        "time": 1895.7000000476837,
+        "matrix": [
+          -0.9658654883431544,
+          -0.259044124480058,
+          0.259044124480058,
+          -0.9658654883431544,
+          20.481856366357157,
+          26.698915353878547
+        ],
+        "opacity": 0.447519,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.8667259812355042
+      }
+    },
+    {
+      "media": "reduce",
+      "cssOff": false,
+      "start": {
+        "time": 1938.3000000715256,
+        "matrix": null,
+        "opacity": 1,
+        "dash": [
+          1
+        ],
+        "doneTime": 0
+      },
+      "mid": {
+        "time": 2101.7000000476837,
+        "matrix": [
+          0.7933692686019564,
+          0.608740670267723,
+          -0.608740670267723,
+          0.7933692686019564,
+          9.784456819989199,
+          -4.8253192664361535
+        ],
+        "opacity": 0.972662,
+        "dash": [
+          0.629644
+        ],
+        "doneTime": 0.16665999591350555
+      },
+      "end": {
+        "time": 2555.4000000953674,
+        "matrix": [
+          -0.7518327836598397,
+          0.659353824144743,
+          -0.659353824144743,
+          -0.7518327836598397,
+          28.934239293654993,
+          13.109747514181162
+        ],
+        "opacity": 0.555313,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.6166639924049377
+      },
+      "held": {
+        "time": 2808.2000000476837,
+        "matrix": [
+          -0.9659387145675945,
+          -0.2587709406009553,
+          0.2587709406009553,
+          -0.9659387145675945,
+          20.486013287599672,
+          26.696515862022597
+        ],
+        "opacity": 0.447538,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.8666539788246155
+      }
+    },
+    {
+      "media": "reduce",
+      "cssOff": true,
+      "start": {
+        "time": 2853.2000000476837,
+        "matrix": null,
+        "opacity": 1,
+        "dash": [
+          1
+        ],
+        "doneTime": 0
+      },
+      "mid": {
+        "time": 3018.600000023842,
+        "matrix": [
+          0.7933549615181726,
+          0.6087593161788153,
+          -0.6087593161788153,
+          0.7933549615181726,
+          9.784852255927712,
+          -4.825371332363858
+        ],
+        "opacity": 0.97266,
+        "dash": [
+          0.629631
+        ],
+        "doneTime": 0.16666600108146667
+      },
+      "end": {
+        "time": 3470.2000000476837,
+        "matrix": [
+          -0.751910567696741,
+          0.6592651198008012,
+          -0.6592651198008012,
+          -0.751910567696741,
+          28.934108249970507,
+          13.11174537475128
+        ],
+        "opacity": 0.555294,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.6166939735412598
+      },
+      "held": {
+        "time": 3724.100000023842,
+        "matrix": [
+          -0.9659082475030667,
+          -0.25888464111560283,
+          0.25888464111560283,
+          -0.9659082475030667,
+          20.484283276649567,
+          26.697514663424034
+        ],
+        "opacity": 0.44753,
+        "dash": [
+          0
+        ],
+        "doneTime": 0.8666840195655823
+      }
+    }
+  ],
+  "environment": {
+    "cwd": "/Volumes/D_Work/axiom2/app",
+    "platform": "darwin",
+    "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "url": "file:///Volumes/D_Work/axiom2/app/design-previews/task-state-icons/index.html",
+    "windowsNative": "NOT VERIFIED: macOS Chrome; prefers-reduced-motion emulation only",
+    "profile": "/tmp/axiom-state-icons/chrome-profile-IKLDvB",
+    "browser": "155.0.8059.85"
+  },
+  "htmlHashBefore": "e9c35b889db966f79da0e59286ca1ab545b5fbd8c0cc4dcfb6c971b50128d53f",
+  "structure": [
+    {
+      "state": "pending",
+      "sourceShapes": [
+        {
+          "tag": "circle",
+          "attrs": {
+            "cx": "12",
+            "cy": "12",
+            "r": "10"
+          }
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M12 6v6l4 2"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "circle",
+          "attrs": {
+            "cx": "12",
+            "cy": "12",
+            "r": "10"
+          }
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M12 6v6l4 2"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 0,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row focused",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "g"
+      ]
+    },
+    {
+      "state": "active",
+      "sourceShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M12 21v-3m6.36.36l-2.12-2.12M21 12h-3m.36-6.36l-2.12 2.12M12 3v3m-6.36-.36l2.12 2.12M4 12h2m1 4.95l.71-.71",
+            "fill": "none",
+            "stroke": "currentColor",
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "stroke-width": "2"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M12 21v-3m6.36.36l-2.12-2.12M21 12h-3m.36-6.36l-2.12 2.12M12 3v3m-6.36-.36l2.12 2.12M4 12h2m1 4.95l.71-.71",
+            "fill": "none",
+            "stroke": "currentColor",
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "stroke-width": "2"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 1,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "g"
+      ]
+    },
+    {
+      "state": "done",
+      "sourceShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M18 6L7 17l-5-5m20-2l-7.5 7.5L13 16",
+            "fill": "none",
+            "stroke": "currentColor",
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "stroke-width": "2"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M18 6L7 17l-5-5m20-2l-7.5 7.5L13 16",
+            "fill": "none",
+            "stroke": "currentColor",
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "stroke-width": "2"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 1,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "g"
+      ]
+    },
+    {
+      "state": "waiting",
+      "sourceShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M200 32h-40a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h40a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16m0 176h-40V48h40ZM96 32H56a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h40a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16m0 176H56V48h40Z",
+            "fill": "currentColor"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M200 32h-40a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h40a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16m0 176h-40V48h40ZM96 32H56a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h40a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16m0 176H56V48h40Z",
+            "fill": "currentColor"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 1,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "g"
+      ]
+    },
+    {
+      "state": "failed",
+      "sourceShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M235.07 189.09L147.61 37.22a22.75 22.75 0 0 0-39.22 0L20.93 189.09a21.53 21.53 0 0 0 0 21.72A22.35 22.35 0 0 0 40.55 222h174.9a22.35 22.35 0 0 0 19.6-11.19a21.53 21.53 0 0 0 .02-21.72m-10.41 15.71a10.46 10.46 0 0 1-9.21 5.2H40.55a10.46 10.46 0 0 1-9.21-5.2a9.51 9.51 0 0 1 0-9.72l87.45-151.87a10.75 10.75 0 0 1 18.42 0l87.46 151.87a9.51 9.51 0 0 1-.01 9.72M122 144v-40a6 6 0 0 1 12 0v40a6 6 0 0 1-12 0m16 36a10 10 0 1 1-10-10a10 10 0 0 1 10 10",
+            "fill": "currentColor"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M235.07 189.09L147.61 37.22a22.75 22.75 0 0 0-39.22 0L20.93 189.09a21.53 21.53 0 0 0 0 21.72A22.35 22.35 0 0 0 40.55 222h174.9a22.35 22.35 0 0 0 19.6-11.19a21.53 21.53 0 0 0 .02-21.72m-10.41 15.71a10.46 10.46 0 0 1-9.21 5.2H40.55a10.46 10.46 0 0 1-9.21-5.2a9.51 9.51 0 0 1 0-9.72l87.45-151.87a10.75 10.75 0 0 1 18.42 0l87.46 151.87a9.51 9.51 0 0 1-.01 9.72M122 144v-40a6 6 0 0 1 12 0v40a6 6 0 0 1-12 0m16 36a10 10 0 1 1-10-10a10 10 0 0 1 10 10",
+            "fill": "currentColor"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 0,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "path"
+      ]
+    },
+    {
+      "state": "abandoned",
+      "sourceShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-6.5v-2a1.5 1.5 0 1 1 3 0V12m0-6.5a1.5 1.5 0 0 1 3 0V12"
+          }
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M17 7.5a1.5 1.5 0 0 1 3 0V16a6 6 0 0 1-6 6h-2h.208a6 6 0 0 1-5.012-2.7L7 19q-.468-.718-3.286-5.728a1.5 1.5 0 0 1 .536-2.022a1.87 1.87 0 0 1 2.28.28L8 13"
+          }
+        }
+      ],
+      "renderedShapes": [
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-6.5v-2a1.5 1.5 0 1 1 3 0V12m0-6.5a1.5 1.5 0 0 1 3 0V12"
+          }
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M17 7.5a1.5 1.5 0 0 1 3 0V16a6 6 0 0 1-6 6h-2h.208a6 6 0 0 1-5.012-2.7L7 19q-.468-.718-3.286-5.728a1.5 1.5 0 0 1 .536-2.022a1.87 1.87 0 0 1 2.28.28L8 13"
+          }
+        }
+      ],
+      "equal": true,
+      "animations": 0,
+      "ancestors": [
+        {
+          "tag": "SPAN",
+          "cls": "glyph",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "BUTTON",
+          "cls": "tree-row",
+          "animation": "none",
+          "before": "\"\"",
+          "after": "\"\""
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "panel",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "ASIDE",
+          "cls": "",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        },
+        {
+          "tag": "DIV",
+          "cls": "layout",
+          "animation": "none",
+          "before": "none",
+          "after": "none"
+        }
+      ],
+      "glyphChildren": [
+        "svg"
+      ],
+      "svgChildren": [
+        "g"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "state": 0,
+      "count": 50,
+      "selected": [
+        {
+          "code": "P01",
+          "actual": "P01",
+          "pressed": "true"
+        },
+        {
+          "code": "P02",
+          "actual": "P02",
+          "pressed": "true"
+        },
+        {
+          "code": "P03",
+          "actual": "P03",
+          "pressed": "true"
+        },
+        {
+          "code": "P04",
+          "actual": "P04",
+          "pressed": "true"
+        },
+        {
+          "code": "P05",
+          "actual": "P05",
+          "pressed": "true"
+        },
+        {
+          "code": "P06",
+          "actual": "P06",
+          "pressed": "true"
+        },
+        {
+          "code": "P07",
+          "actual": "P07",
+          "pressed": "true"
+        },
+        {
+          "code": "P08",
+          "actual": "P08",
+          "pressed": "true"
+        },
+        {
+          "code": "P09",
+          "actual": "P09",
+          "pressed": "true"
+        },
+        {
+          "code": "P10",
+          "actual": "P10",
+          "pressed": "true"
+        },
+        {
+          "code": "P11",
+          "actual": "P11",
+          "pressed": "true"
+        },
+        {
+          "code": "P12",
+          "actual": "P12",
+          "pressed": "true"
+        },
+        {
+          "code": "P13",
+          "actual": "P13",
+          "pressed": "true"
+        },
+        {
+          "code": "P14",
+          "actual": "P14",
+          "pressed": "true"
+        },
+        {
+          "code": "P15",
+          "actual": "P15",
+          "pressed": "true"
+        },
+        {
+          "code": "P16",
+          "actual": "P16",
+          "pressed": "true"
+        },
+        {
+          "code": "P17",
+          "actual": "P17",
+          "pressed": "true"
+        },
+        {
+          "code": "P18",
+          "actual": "P18",
+          "pressed": "true"
+        },
+        {
+          "code": "P19",
+          "actual": "P19",
+          "pressed": "true"
+        },
+        {
+          "code": "P20",
+          "actual": "P20",
+          "pressed": "true"
+        },
+        {
+          "code": "P21",
+          "actual": "P21",
+          "pressed": "true"
+        },
+        {
+          "code": "P22",
+          "actual": "P22",
+          "pressed": "true"
+        },
+        {
+          "code": "P23",
+          "actual": "P23",
+          "pressed": "true"
+        },
+        {
+          "code": "P24",
+          "actual": "P24",
+          "pressed": "true"
+        },
+        {
+          "code": "P25",
+          "actual": "P25",
+          "pressed": "true"
+        },
+        {
+          "code": "P26",
+          "actual": "P26",
+          "pressed": "true"
+        },
+        {
+          "code": "P27",
+          "actual": "P27",
+          "pressed": "true"
+        },
+        {
+          "code": "P28",
+          "actual": "P28",
+          "pressed": "true"
+        },
+        {
+          "code": "P29",
+          "actual": "P29",
+          "pressed": "true"
+        },
+        {
+          "code": "P30",
+          "actual": "P30",
+          "pressed": "true"
+        },
+        {
+          "code": "P31",
+          "actual": "P31",
+          "pressed": "true"
+        },
+        {
+          "code": "P32",
+          "actual": "P32",
+          "pressed": "true"
+        },
+        {
+          "code": "P33",
+          "actual": "P33",
+          "pressed": "true"
+        },
+        {
+          "code": "P34",
+          "actual": "P34",
+          "pressed": "true"
+        },
+        {
+          "code": "P35",
+          "actual": "P35",
+          "pressed": "true"
+        },
+        {
+          "code": "P36",
+          "actual": "P36",
+          "pressed": "true"
+        },
+        {
+          "code": "P37",
+          "actual": "P37",
+          "pressed": "true"
+        },
+        {
+          "code": "P38",
+          "actual": "P38",
+          "pressed": "true"
+        },
+        {
+          "code": "P39",
+          "actual": "P39",
+          "pressed": "true"
+        },
+        {
+          "code": "P40",
+          "actual": "P40",
+          "pressed": "true"
+        },
+        {
+          "code": "P41",
+          "actual": "P41",
+          "pressed": "true"
+        },
+        {
+          "code": "P42",
+          "actual": "P42",
+          "pressed": "true"
+        },
+        {
+          "code": "P43",
+          "actual": "P43",
+          "pressed": "true"
+        },
+        {
+          "code": "P44",
+          "actual": "P44",
+          "pressed": "true"
+        },
+        {
+          "code": "P45",
+          "actual": "P45",
+          "pressed": "true"
+        },
+        {
+          "code": "P46",
+          "actual": "P46",
+          "pressed": "true"
+        },
+        {
+          "code": "P47",
+          "actual": "P47",
+          "pressed": "true"
+        },
+        {
+          "code": "P48",
+          "actual": "P48",
+          "pressed": "true"
+        },
+        {
+          "code": "P49",
+          "actual": "P49",
+          "pressed": "true"
+        },
+        {
+          "code": "P50",
+          "actual": "P50",
+          "pressed": "true"
+        }
+      ]
+    },
+    {
+      "state": 1,
+      "count": 50,
+      "selected": [
+        {
+          "code": "A01",
+          "actual": "A01",
+          "pressed": "true"
+        },
+        {
+          "code": "A02",
+          "actual": "A02",
+          "pressed": "true"
+        },
+        {
+          "code": "A03",
+          "actual": "A03",
+          "pressed": "true"
+        },
+        {
+          "code": "A04",
+          "actual": "A04",
+          "pressed": "true"
+        },
+        {
+          "code": "A05",
+          "actual": "A05",
+          "pressed": "true"
+        },
+        {
+          "code": "A06",
+          "actual": "A06",
+          "pressed": "true"
+        },
+        {
+          "code": "A07",
+          "actual": "A07",
+          "pressed": "true"
+        },
+        {
+          "code": "A08",
+          "actual": "A08",
+          "pressed": "true"
+        },
+        {
+          "code": "A09",
+          "actual": "A09",
+          "pressed": "true"
+        },
+        {
+          "code": "A10",
+          "actual": "A10",
+          "pressed": "true"
+        },
+        {
+          "code": "A11",
+          "actual": "A11",
+          "pressed": "true"
+        },
+        {
+          "code": "A12",
+          "actual": "A12",
+          "pressed": "true"
+        },
+        {
+          "code": "A13",
+          "actual": "A13",
+          "pressed": "true"
+        },
+        {
+          "code": "A14",
+          "actual": "A14",
+          "pressed": "true"
+        },
+        {
+          "code": "A15",
+          "actual": "A15",
+          "pressed": "true"
+        },
+        {
+          "code": "A16",
+          "actual": "A16",
+          "pressed": "true"
+        },
+        {
+          "code": "A17",
+          "actual": "A17",
+          "pressed": "true"
+        },
+        {
+          "code": "A18",
+          "actual": "A18",
+          "pressed": "true"
+        },
+        {
+          "code": "A19",
+          "actual": "A19",
+          "pressed": "true"
+        },
+        {
+          "code": "A20",
+          "actual": "A20",
+          "pressed": "true"
+        },
+        {
+          "code": "A21",
+          "actual": "A21",
+          "pressed": "true"
+        },
+        {
+          "code": "A22",
+          "actual": "A22",
+          "pressed": "true"
+        },
+        {
+          "code": "A23",
+          "actual": "A23",
+          "pressed": "true"
+        },
+        {
+          "code": "A24",
+          "actual": "A24",
+          "pressed": "true"
+        },
+        {
+          "code": "A25",
+          "actual": "A25",
+          "pressed": "true"
+        },
+        {
+          "code": "A26",
+          "actual": "A26",
+          "pressed": "true"
+        },
+        {
+          "code": "A27",
+          "actual": "A27",
+          "pressed": "true"
+        },
+        {
+          "code": "A28",
+          "actual": "A28",
+          "pressed": "true"
+        },
+        {
+          "code": "A29",
+          "actual": "A29",
+          "pressed": "true"
+        },
+        {
+          "code": "A30",
+          "actual": "A30",
+          "pressed": "true"
+        },
+        {
+          "code": "A31",
+          "actual": "A31",
+          "pressed": "true"
+        },
+        {
+          "code": "A32",
+          "actual": "A32",
+          "pressed": "true"
+        },
+        {
+          "code": "A33",
+          "actual": "A33",
+          "pressed": "true"
+        },
+        {
+          "code": "A34",
+          "actual": "A34",
+          "pressed": "true"
+        },
+        {
+          "code": "A35",
+          "actual": "A35",
+          "pressed": "true"
+        },
+        {
+          "code": "A36",
+          "actual": "A36",
+          "pressed": "true"
+        },
+        {
+          "code": "A37",
+          "actual": "A37",
+          "pressed": "true"
+        },
+        {
+          "code": "A38",
+          "actual": "A38",
+          "pressed": "true"
+        },
+        {
+          "code": "A39",
+          "actual": "A39",
+          "pressed": "true"
+        },
+        {
+          "code": "A40",
+          "actual": "A40",
+          "pressed": "true"
+        },
+        {
+          "code": "A41",
+          "actual": "A41",
+          "pressed": "true"
+        },
+        {
+          "code": "A42",
+          "actual": "A42",
+          "pressed": "true"
+        },
+        {
+          "code": "A43",
+          "actual": "A43",
+          "pressed": "true"
+        },
+        {
+          "code": "A44",
+          "actual": "A44",
+          "pressed": "true"
+        },
+        {
+          "code": "A45",
+          "actual": "A45",
+          "pressed": "true"
+        },
+        {
+          "code": "A46",
+          "actual": "A46",
+          "pressed": "true"
+        },
+        {
+          "code": "A47",
+          "actual": "A47",
+          "pressed": "true"
+        },
+        {
+          "code": "A48",
+          "actual": "A48",
+          "pressed": "true"
+        },
+        {
+          "code": "A49",
+          "actual": "A49",
+          "pressed": "true"
+        },
+        {
+          "code": "A50",
+          "actual": "A50",
+          "pressed": "true"
+        }
+      ]
+    },
+    {
+      "state": 2,
+      "count": 50,
+      "selected": [
+        {
+          "code": "D01",
+          "actual": "D01",
+          "pressed": "true"
+        },
+        {
+          "code": "D02",
+          "actual": "D02",
+          "pressed": "true"
+        },
+        {
+          "code": "D03",
+          "actual": "D03",
+          "pressed": "true"
+        },
+        {
+          "code": "D04",
+          "actual": "D04",
+          "pressed": "true"
+        },
+        {
+          "code": "D05",
+          "actual": "D05",
+          "pressed": "true"
+        },
+        {
+          "code": "D06",
+          "actual": "D06",
+          "pressed": "true"
+        },
+        {
+          "code": "D07",
+          "actual": "D07",
+          "pressed": "true"
+        },
+        {
+          "code": "D08",
+          "actual": "D08",
+          "pressed": "true"
+        },
+        {
+          "code": "D09",
+          "actual": "D09",
+          "pressed": "true"
+        },
+        {
+          "code": "D10",
+          "actual": "D10",
+          "pressed": "true"
+        },
+        {
+          "code": "D11",
+          "actual": "D11",
+          "pressed": "true"
+        },
+        {
+          "code": "D12",
+          "actual": "D12",
+          "pressed": "true"
+        },
+        {
+          "code": "D13",
+          "actual": "D13",
+          "pressed": "true"
+        },
+        {
+          "code": "D14",
+          "actual": "D14",
+          "pressed": "true"
+        },
+        {
+          "code": "D15",
+          "actual": "D15",
+          "pressed": "true"
+        },
+        {
+          "code": "D16",
+          "actual": "D16",
+          "pressed": "true"
+        },
+        {
+          "code": "D17",
+          "actual": "D17",
+          "pressed": "true"
+        },
+        {
+          "code": "D18",
+          "actual": "D18",
+          "pressed": "true"
+        },
+        {
+          "code": "D19",
+          "actual": "D19",
+          "pressed": "true"
+        },
+        {
+          "code": "D20",
+          "actual": "D20",
+          "pressed": "true"
+        },
+        {
+          "code": "D21",
+          "actual": "D21",
+          "pressed": "true"
+        },
+        {
+          "code": "D22",
+          "actual": "D22",
+          "pressed": "true"
+        },
+        {
+          "code": "D23",
+          "actual": "D23",
+          "pressed": "true"
+        },
+        {
+          "code": "D24",
+          "actual": "D24",
+          "pressed": "true"
+        },
+        {
+          "code": "D25",
+          "actual": "D25",
+          "pressed": "true"
+        },
+        {
+          "code": "D26",
+          "actual": "D26",
+          "pressed": "true"
+        },
+        {
+          "code": "D27",
+          "actual": "D27",
+          "pressed": "true"
+        },
+        {
+          "code": "D28",
+          "actual": "D28",
+          "pressed": "true"
+        },
+        {
+          "code": "D29",
+          "actual": "D29",
+          "pressed": "true"
+        },
+        {
+          "code": "D30",
+          "actual": "D30",
+          "pressed": "true"
+        },
+        {
+          "code": "D31",
+          "actual": "D31",
+          "pressed": "true"
+        },
+        {
+          "code": "D32",
+          "actual": "D32",
+          "pressed": "true"
+        },
+        {
+          "code": "D33",
+          "actual": "D33",
+          "pressed": "true"
+        },
+        {
+          "code": "D34",
+          "actual": "D34",
+          "pressed": "true"
+        },
+        {
+          "code": "D35",
+          "actual": "D35",
+          "pressed": "true"
+        },
+        {
+          "code": "D36",
+          "actual": "D36",
+          "pressed": "true"
+        },
+        {
+          "code": "D37",
+          "actual": "D37",
+          "pressed": "true"
+        },
+        {
+          "code": "D38",
+          "actual": "D38",
+          "pressed": "true"
+        },
+        {
+          "code": "D39",
+          "actual": "D39",
+          "pressed": "true"
+        },
+        {
+          "code": "D40",
+          "actual": "D40",
+          "pressed": "true"
+        },
+        {
+          "code": "D41",
+          "actual": "D41",
+          "pressed": "true"
+        },
+        {
+          "code": "D42",
+          "actual": "D42",
+          "pressed": "true"
+        },
+        {
+          "code": "D43",
+          "actual": "D43",
+          "pressed": "true"
+        },
+        {
+          "code": "D44",
+          "actual": "D44",
+          "pressed": "true"
+        },
+        {
+          "code": "D45",
+          "actual": "D45",
+          "pressed": "true"
+        },
+        {
+          "code": "D46",
+          "actual": "D46",
+          "pressed": "true"
+        },
+        {
+          "code": "D47",
+          "actual": "D47",
+          "pressed": "true"
+        },
+        {
+          "code": "D48",
+          "actual": "D48",
+          "pressed": "true"
+        },
+        {
+          "code": "D49",
+          "actual": "D49",
+          "pressed": "true"
+        },
+        {
+          "code": "D50",
+          "actual": "D50",
+          "pressed": "true"
+        }
+      ]
+    },
+    {
+      "state": 3,
+      "count": 50,
+      "selected": [
+        {
+          "code": "W01",
+          "actual": "W01",
+          "pressed": "true"
+        },
+        {
+          "code": "W02",
+          "actual": "W02",
+          "pressed": "true"
+        },
+        {
+          "code": "W03",
+          "actual": "W03",
+          "pressed": "true"
+        },
+        {
+          "code": "W04",
+          "actual": "W04",
+          "pressed": "true"
+        },
+        {
+          "code": "W05",
+          "actual": "W05",
+          "pressed": "true"
+        },
+        {
+          "code": "W06",
+          "actual": "W06",
+          "pressed": "true"
+        },
+        {
+          "code": "W07",
+          "actual": "W07",
+          "pressed": "true"
+        },
+        {
+          "code": "W08",
+          "actual": "W08",
+          "pressed": "true"
+        },
+        {
+          "code": "W09",
+          "actual": "W09",
+          "pressed": "true"
+        },
+        {
+          "code": "W10",
+          "actual": "W10",
+          "pressed": "true"
+        },
+        {
+          "code": "W11",
+          "actual": "W11",
+          "pressed": "true"
+        },
+        {
+          "code": "W12",
+          "actual": "W12",
+          "pressed": "true"
+        },
+        {
+          "code": "W13",
+          "actual": "W13",
+          "pressed": "true"
+        },
+        {
+          "code": "W14",
+          "actual": "W14",
+          "pressed": "true"
+        },
+        {
+          "code": "W15",
+          "actual": "W15",
+          "pressed": "true"
+        },
+        {
+          "code": "W16",
+          "actual": "W16",
+          "pressed": "true"
+        },
+        {
+          "code": "W17",
+          "actual": "W17",
+          "pressed": "true"
+        },
+        {
+          "code": "W18",
+          "actual": "W18",
+          "pressed": "true"
+        },
+        {
+          "code": "W19",
+          "actual": "W19",
+          "pressed": "true"
+        },
+        {
+          "code": "W20",
+          "actual": "W20",
+          "pressed": "true"
+        },
+        {
+          "code": "W21",
+          "actual": "W21",
+          "pressed": "true"
+        },
+        {
+          "code": "W22",
+          "actual": "W22",
+          "pressed": "true"
+        },
+        {
+          "code": "W23",
+          "actual": "W23",
+          "pressed": "true"
+        },
+        {
+          "code": "W24",
+          "actual": "W24",
+          "pressed": "true"
+        },
+        {
+          "code": "W25",
+          "actual": "W25",
+          "pressed": "true"
+        },
+        {
+          "code": "W26",
+          "actual": "W26",
+          "pressed": "true"
+        },
+        {
+          "code": "W27",
+          "actual": "W27",
+          "pressed": "true"
+        },
+        {
+          "code": "W28",
+          "actual": "W28",
+          "pressed": "true"
+        },
+        {
+          "code": "W29",
+          "actual": "W29",
+          "pressed": "true"
+        },
+        {
+          "code": "W30",
+          "actual": "W30",
+          "pressed": "true"
+        },
+        {
+          "code": "W31",
+          "actual": "W31",
+          "pressed": "true"
+        },
+        {
+          "code": "W32",
+          "actual": "W32",
+          "pressed": "true"
+        },
+        {
+          "code": "W33",
+          "actual": "W33",
+          "pressed": "true"
+        },
+        {
+          "code": "W34",
+          "actual": "W34",
+          "pressed": "true"
+        },
+        {
+          "code": "W35",
+          "actual": "W35",
+          "pressed": "true"
+        },
+        {
+          "code": "W36",
+          "actual": "W36",
+          "pressed": "true"
+        },
+        {
+          "code": "W37",
+          "actual": "W37",
+          "pressed": "true"
+        },
+        {
+          "code": "W38",
+          "actual": "W38",
+          "pressed": "true"
+        },
+        {
+          "code": "W39",
+          "actual": "W39",
+          "pressed": "true"
+        },
+        {
+          "code": "W40",
+          "actual": "W40",
+          "pressed": "true"
+        },
+        {
+          "code": "W41",
+          "actual": "W41",
+          "pressed": "true"
+        },
+        {
+          "code": "W42",
+          "actual": "W42",
+          "pressed": "true"
+        },
+        {
+          "code": "W43",
+          "actual": "W43",
+          "pressed": "true"
+        },
+        {
+          "code": "W44",
+          "actual": "W44",
+          "pressed": "true"
+        },
+        {
+          "code": "W45",
+          "actual": "W45",
+          "pressed": "true"
+        },
+        {
+          "code": "W46",
+          "actual": "W46",
+          "pressed": "true"
+        },
+        {
+          "code": "W47",
+          "actual": "W47",
+          "pressed": "true"
+        },
+        {
+          "code": "W48",
+          "actual": "W48",
+          "pressed": "true"
+        },
+        {
+          "code": "W49",
+          "actual": "W49",
+          "pressed": "true"
+        },
+        {
+          "code": "W50",
+          "actual": "W50",
+          "pressed": "true"
+        }
+      ]
+    },
+    {
+      "state": 4,
+      "count": 50,
+      "selected": [
+        {
+          "code": "F01",
+          "actual": "F01",
+          "pressed": "true"
+        },
+        {
+          "code": "F02",
+          "actual": "F02",
+          "pressed": "true"
+        },
+        {
+          "code": "F03",
+          "actual": "F03",
+          "pressed": "true"
+        },
+        {
+          "code": "F04",
+          "actual": "F04",
+          "pressed": "true"
+        },
+        {
+          "code": "F05",
+          "actual": "F05",
+          "pressed": "true"
+        },
+        {
+          "code": "F06",
+          "actual": "F06",
+          "pressed": "true"
+        },
+        {
+          "code": "F07",
+          "actual": "F07",
+          "pressed": "true"
+        },
+        {
+          "code": "F08",
+          "actual": "F08",
+          "pressed": "true"
+        },
+        {
+          "code": "F09",
+          "actual": "F09",
+          "pressed": "true"
+        },
+        {
+          "code": "F10",
+          "actual": "F10",
+          "pressed": "true"
+        },
+        {
+          "code": "F11",
+          "actual": "F11",
+          "pressed": "true"
+        },
+        {
+          "code": "F12",
+          "actual": "F12",
+          "pressed": "true"
+        },
+        {
+          "code": "F13",
+          "actual": "F13",
+          "pressed": "true"
+        },
+        {
+          "code": "F14",
+          "actual": "F14",
+          "pressed": "true"
+        },
+        {
+          "code": "F15",
+          "actual": "F15",
+          "pressed": "true"
+        },
+        {
+          "code": "F16",
+          "actual": "F16",
+          "pressed": "true"
+        },
+        {
+          "code": "F17",
+          "actual": "F17",
+          "pressed": "true"
+        },
+        {
+          "code": "F18",
+          "actual": "F18",
+          "pressed": "true"
+        },
+        {
+          "code": "F19",
+          "actual": "F19",
+          "pressed": "true"
+        },
+        {
+          "code": "F20",
+          "actual": "F20",
+          "pressed": "true"
+        },
+        {
+          "code": "F21",
+          "actual": "F21",
+          "pressed": "true"
+        },
+        {
+          "code": "F22",
+          "actual": "F22",
+          "pressed": "true"
+        },
+        {
+          "code": "F23",
+          "actual": "F23",
+          "pressed": "true"
+        },
+        {
+          "code": "F24",
+          "actual": "F24",
+          "pressed": "true"
+        },
+        {
+          "code": "F25",
+          "actual": "F25",
+          "pressed": "true"
+        },
+        {
+          "code": "F26",
+          "actual": "F26",
+          "pressed": "true"
+        },
+        {
+          "code": "F27",
+          "actual": "F27",
+          "pressed": "true"
+        },
+        {
+          "code": "F28",
+          "actual": "F28",
+          "pressed": "true"
+        },
+        {
+          "code": "F29",
+          "actual": "F29",
+          "pressed": "true"
+        },
+        {
+          "code": "F30",
+          "actual": "F30",
+          "pressed": "true"
+        },
+        {
+          "code": "F31",
+          "actual": "F31",
+          "pressed": "true"
+        },
+        {
+          "code": "F32",
+          "actual": "F32",
+          "pressed": "true"
+        },
+        {
+          "code": "F33",
+          "actual": "F33",
+          "pressed": "true"
+        },
+        {
+          "code": "F34",
+          "actual": "F34",
+          "pressed": "true"
+        },
+        {
+          "code": "F35",
+          "actual": "F35",
+          "pressed": "true"
+        },
+        {
+          "code": "F36",
+          "actual": "F36",
+          "pressed": "true"
+        },
+        {
+          "code": "F37",
+          "actual": "F37",
+          "pressed": "true"
+        },
+        {
+          "code": "F38",
+          "actual": "F38",
+          "pressed": "true"
+        },
+        {
+          "code": "F39",
+          "actual": "F39",
+          "pressed": "true"
+        },
+        {
+          "code": "F40",
+          "actual": "F40",
+          "pressed": "true"
+        },
+        {
+          "code": "F41",
+          "actual": "F41",
+          "pressed": "true"
+        },
+        {
+          "code": "F42",
+          "actual": "F42",
+          "pressed": "true"
+        },
+        {
+          "code": "F43",
+          "actual": "F43",
+          "pressed": "true"
+        },
+        {
+          "code": "F44",
+          "actual": "F44",
+          "pressed": "true"
+        },
+        {
+          "code": "F45",
+          "actual": "F45",
+          "pressed": "true"
+        },
+        {
+          "code": "F46",
+          "actual": "F46",
+          "pressed": "true"
+        },
+        {
+          "code": "F47",
+          "actual": "F47",
+          "pressed": "true"
+        },
+        {
+          "code": "F48",
+          "actual": "F48",
+          "pressed": "true"
+        },
+        {
+          "code": "F49",
+          "actual": "F49",
+          "pressed": "true"
+        },
+        {
+          "code": "F50",
+          "actual": "F50",
+          "pressed": "true"
+        }
+      ]
+    },
+    {
+      "state": 5,
+      "count": 50,
+      "selected": [
+        {
+          "code": "X01",
+          "actual": "X01",
+          "pressed": "true"
+        },
+        {
+          "code": "X02",
+          "actual": "X02",
+          "pressed": "true"
+        },
+        {
+          "code": "X03",
+          "actual": "X03",
+          "pressed": "true"
+        },
+        {
+          "code": "X04",
+          "actual": "X04",
+          "pressed": "true"
+        },
+        {
+          "code": "X05",
+          "actual": "X05",
+          "pressed": "true"
+        },
+        {
+          "code": "X06",
+          "actual": "X06",
+          "pressed": "true"
+        },
+        {
+          "code": "X07",
+          "actual": "X07",
+          "pressed": "true"
+        },
+        {
+          "code": "X08",
+          "actual": "X08",
+          "pressed": "true"
+        },
+        {
+          "code": "X09",
+          "actual": "X09",
+          "pressed": "true"
+        },
+        {
+          "code": "X10",
+          "actual": "X10",
+          "pressed": "true"
+        },
+        {
+          "code": "X11",
+          "actual": "X11",
+          "pressed": "true"
+        },
+        {
+          "code": "X12",
+          "actual": "X12",
+          "pressed": "true"
+        },
+        {
+          "code": "X13",
+          "actual": "X13",
+          "pressed": "true"
+        },
+        {
+          "code": "X14",
+          "actual": "X14",
+          "pressed": "true"
+        },
+        {
+          "code": "X15",
+          "actual": "X15",
+          "pressed": "true"
+        },
+        {
+          "code": "X16",
+          "actual": "X16",
+          "pressed": "true"
+        },
+        {
+          "code": "X17",
+          "actual": "X17",
+          "pressed": "true"
+        },
+        {
+          "code": "X18",
+          "actual": "X18",
+          "pressed": "true"
+        },
+        {
+          "code": "X19",
+          "actual": "X19",
+          "pressed": "true"
+        },
+        {
+          "code": "X20",
+          "actual": "X20",
+          "pressed": "true"
+        },
+        {
+          "code": "X21",
+          "actual": "X21",
+          "pressed": "true"
+        },
+        {
+          "code": "X22",
+          "actual": "X22",
+          "pressed": "true"
+        },
+        {
+          "code": "X23",
+          "actual": "X23",
+          "pressed": "true"
+        },
+        {
+          "code": "X24",
+          "actual": "X24",
+          "pressed": "true"
+        },
+        {
+          "code": "X25",
+          "actual": "X25",
+          "pressed": "true"
+        },
+        {
+          "code": "X26",
+          "actual": "X26",
+          "pressed": "true"
+        },
+        {
+          "code": "X27",
+          "actual": "X27",
+          "pressed": "true"
+        },
+        {
+          "code": "X28",
+          "actual": "X28",
+          "pressed": "true"
+        },
+        {
+          "code": "X29",
+          "actual": "X29",
+          "pressed": "true"
+        },
+        {
+          "code": "X30",
+          "actual": "X30",
+          "pressed": "true"
+        },
+        {
+          "code": "X31",
+          "actual": "X31",
+          "pressed": "true"
+        },
+        {
+          "code": "X32",
+          "actual": "X32",
+          "pressed": "true"
+        },
+        {
+          "code": "X33",
+          "actual": "X33",
+          "pressed": "true"
+        },
+        {
+          "code": "X34",
+          "actual": "X34",
+          "pressed": "true"
+        },
+        {
+          "code": "X35",
+          "actual": "X35",
+          "pressed": "true"
+        },
+        {
+          "code": "X36",
+          "actual": "X36",
+          "pressed": "true"
+        },
+        {
+          "code": "X37",
+          "actual": "X37",
+          "pressed": "true"
+        },
+        {
+          "code": "X38",
+          "actual": "X38",
+          "pressed": "true"
+        },
+        {
+          "code": "X39",
+          "actual": "X39",
+          "pressed": "true"
+        },
+        {
+          "code": "X40",
+          "actual": "X40",
+          "pressed": "true"
+        },
+        {
+          "code": "X41",
+          "actual": "X41",
+          "pressed": "true"
+        },
+        {
+          "code": "X42",
+          "actual": "X42",
+          "pressed": "true"
+        },
+        {
+          "code": "X43",
+          "actual": "X43",
+          "pressed": "true"
+        },
+        {
+          "code": "X44",
+          "actual": "X44",
+          "pressed": "true"
+        },
+        {
+          "code": "X45",
+          "actual": "X45",
+          "pressed": "true"
+        },
+        {
+          "code": "X46",
+          "actual": "X46",
+          "pressed": "true"
+        },
+        {
+          "code": "X47",
+          "actual": "X47",
+          "pressed": "true"
+        },
+        {
+          "code": "X48",
+          "actual": "X48",
+          "pressed": "true"
+        },
+        {
+          "code": "X49",
+          "actual": "X49",
+          "pressed": "true"
+        },
+        {
+          "code": "X50",
+          "actual": "X50",
+          "pressed": "true"
+        }
+      ]
+    }
+  ],
+  "screenshot": "/Volumes/D_Work/axiom2/app/design-previews/task-state-icons/screenshots/confirmed-intrinsic.png",
+  "htmlHashAfter": "e9c35b889db966f79da0e59286ca1ab545b5fbd8c0cc4dcfb6c971b50128d53f",
+  "finished": "2026-10-24T11:07:06.995Z",
+  "passed": true
+}

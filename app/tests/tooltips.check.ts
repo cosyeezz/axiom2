@@ -9,7 +9,7 @@ import type { Workspace, Session } from "../src/shared/protocol.js";
 const root = mkdtempSync(join(tmpdir(), "axiom-tooltip-"));
 const previousPi = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
-const app = await startServer({ root: join(root, "data"), port: 0 });
+const app = await startServer({ root: join(root, "data"), port: 0, dev: process.env.AXIOM_TEST_BUILT !== "1" });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
   const run = (op: string, params = {}, workspaceId?: string) =>

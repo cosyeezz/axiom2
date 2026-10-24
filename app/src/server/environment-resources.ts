@@ -7,6 +7,7 @@ import { openCliSkillNames } from "./integrations/opencli-runtime.js";
 import type { openCliResources } from "./integrations/opencli-resources.js";
 import type { reaResources } from "./integrations/rea-resources.js";
 import { memoryInstruction } from "../shared/memory.js";
+import { piDevelopmentSkillPath } from "./axiom-prompt.js";
 
 export interface EnvironmentResourceInput {
   root: string;
@@ -30,15 +31,17 @@ export function environmentResourceOptions(input: EnvironmentResourceInput, buil
           disableModelInvocation: !automatic.has(skill.name) })) };
       }
       const { opencli, rea } = builtins();
+      const development = loadSkills({ cwd: input.cwd, agentDir: join(input.root, "pi"),
+        skillPaths: [piDevelopmentSkillPath], includeDefaults: false });
       const general = input.task ? base.skills.filter(skill => !openCliSkillNames.includes(skill.name)) : base.skills;
-      return { skills: resolveBuiltinSkills(general, [...opencli?.skills ?? [], ...rea?.skills ?? []]),
-        diagnostics: [...base.diagnostics, ...opencli?.diagnostics ?? [], ...rea?.diagnostics ?? []] };
+      return { skills: resolveBuiltinSkills([...general, ...development.skills], [...opencli?.skills ?? [], ...rea?.skills ?? []]),
+        diagnostics: [...base.diagnostics, ...development.diagnostics, ...opencli?.diagnostics ?? [], ...rea?.diagnostics ?? []] };
     },
-    appendSystemPromptOverride: (base) => [...base, "引用本地文件时，使用 Markdown 链接 [文件名](路径)", ...(input.task
+    appendSystemPromptOverride: (base) => [...base, "When referencing files, use Markdown links: [filename](path)", ...(input.task
       ? [childPolicy]
       : [
           ...(input.memoryPath ? [memoryInstruction(input.memoryPath)] : []),
-          "将适合委派的工作拆成独立子任务，独立测试优先并行。委派时交代背景、目标、范围、约束及交付要求；测试任务另给出工作目录、命令或测试范围、前置条件，并协调独立端口、临时目录和输出路径。有依赖或争用共享资源的任务按顺序执行。\n\n测试期间不要修改其覆盖的文件。委派后继续独立工作，不轮询；收到完成通知后用 read_result 读取对应结果，核对证据、实际命令、退出码、关键结果及未验证项。相关文件变化后重跑受影响的检查；文件未变且已验证的检查无需重复。应用调研建议前重新核对当前文件。代码修改由主代理完成。",
+          "Split work suitable for delegation into independent subtasks, prioritizing parallel execution for independent tests. Provide the background, goal, scope, constraints, and deliverables. For test tasks, also provide the working directory, commands or test scope, and prerequisites; coordinate separate ports, temporary directories, and output paths. Run tasks sequentially when they depend on each other or compete for shared resources.\n\nDo not modify files while tests covering them are running. After delegating, continue independent work without polling. When a completion notification arrives, use read_result to retrieve the corresponding result and check the evidence, actual commands, exit codes, key results, and unverified items. Rerun affected checks after relevant files change; do not repeat passed checks when the files are unchanged. Recheck current files before applying research recommendations. The main agent makes code changes.",
         ])],
   };
 }

@@ -4,6 +4,7 @@ import { maxDraftTextLength } from "../../shared/drafts.js";
 import { maxDraftSkills, skillsInput } from "../../shared/skills.js";
 import { optimisticConfirmation, optimisticRemove, optimisticState, pendingMessages } from "./optimistic.js";
 import { getDraft, updateDraft } from "../drafts.js";
+import { getComposerEdit, startComposerEdit } from "./composer-edit.js";
 import { mergeRecalledDrafts } from "./recall-drafts.js";
 
 // Submission feedback belongs to the originating session, including late receipts.
@@ -28,6 +29,17 @@ export function useSubmissionError(scope: Scope) {
 export function restoreFailedSubmission(scope: Scope, id: string) {
   const pending = pendingMessages(scope).find((item) => item.id === id);
   if (pending?.state !== "failed") return false;
+  if (pending.rewrite) {
+    if (getComposerEdit(scope)) {
+      setSubmissionError(scope, "请先完成或取消当前修改，再恢复这条消息。");
+      return false;
+    }
+    // Preserve the original revision: a changed branch must be rejected, never silently rebased or appended.
+    startComposerEdit(scope, pending.rewrite, pending.draft);
+    optimisticRemove(scope, id);
+    setSubmissionError(scope, "");
+    return true;
+  }
   const restored = mergeRecalledDrafts(getDraft(scope), [pending.draft]);
   try {
     if (restored.text.length > maxDraftTextLength) throw Error("合并后的草稿文本过长");

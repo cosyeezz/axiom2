@@ -1,17 +1,17 @@
 import { footnoteDefinition } from "./markdown.js";
+import { assertMemoryTreeEdit } from "./memory-detail-paths.js";
 import { memoryOutline, type MemoryNode, type MemoryState } from "./memory-outline.js";
+import { analyzeMemoryTasks, type MemoryTaskAnalysis } from "./memory-task-analysis.js";
 export { memoryInstruction } from "./memory-instruction.js";
 import type { Scope } from "./protocol.js";
 import type { Selection } from "./agent.js";
 
 export interface MemoryPreferences {
-  topicNameReviewThresholdChars: number;
-  queryModel: Selection | null; organizerModel: Selection | null; intervalMs: number;
+  queryModel: Selection | null; organizerModel: Selection | null;
   timeoutMs: number; readChars: number; maxTurns: number; concurrency: number; queue: number;
 }
 export const defaultMemoryPreferences: MemoryPreferences = {
-  topicNameReviewThresholdChars: 2000,
-  queryModel: null, organizerModel: null, intervalMs: 300000, timeoutMs: 300000,
+  queryModel: null, organizerModel: null, timeoutMs: 300000,
   readChars: 240000, maxTurns: 32, concurrency: 12, queue: 32,
 };
 export const memoryBudgetLimits = {
@@ -27,24 +27,8 @@ export const memoryIncompleteMessages = {
 export type MemoryIncompleteReason = keyof typeof memoryIncompleteMessages;
 export interface MemoryExecutionResult { answer: string; incomplete: boolean; incompleteReason?: MemoryIncompleteReason }
 
-export const memoryTitleMaxChars = 30;
-export const memorySummaryMaxChars = 200;
-/** Titles and summaries form the two-level navigation index. */
-export const memorySummaryVersion = 3;
-export function validMemorySummary(entry: { title: string; summary: string; summaryVersion?: number }) {
-  return entry.summaryVersion === memorySummaryVersion && !!entry.title.trim() && !/[\r\n]/.test(entry.title) &&
-    Array.from(entry.title).length <= memoryTitleMaxChars && !!entry.summary.trim() && Array.from(entry.summary).length <= memorySummaryMaxChars;
-}
 export const memoryScope = (scope: Scope) => `memory:${scope.workspaceId}:${scope.sessionId}`;
 export const memoryCatalogScope = (workspaceId: string) => `memory-catalog:${workspaceId}`;
-export const memoryOrganizationScope = (workspaceId: string) => `memory-organization:${workspaceId}`;
-/** The latest explicitly requested organization in this workspace, retained across reconnects. */
-export interface MemoryOrganization {
-  id: string; workspaceId: string; sessionId?: string;
-  status: "running" | "completed" | "partial" | "failed" | "cancelled" | "interrupted";
-  total: number; processed: number; succeeded: number; failed: number; skipped: number;
-  startedAt: number; endedAt: number | null; error?: string;
-}
 /** Client and service use the same UTF-8 ceiling before submitting an editable document. */
 export const memoryEditBudgetBytes = 180_000;
 export const memoryTemplate = "";
@@ -84,6 +68,7 @@ export interface MemoryProgress {
   goal: string; state: string; stateDetail?: string; current: string; next: string;
   percent: number | null; progressState: "valid" | "unknown" | "conflict";
   tasks: MemoryTask[]; overLimit: boolean; title?: string; outline?: MemoryNode[]; format?: "legacy" | "chapters"; complete?: boolean;
+  analysis?: MemoryTaskAnalysis;
 }
 export interface MemoryFile { path: string; revision: string; size: number; updatedAt: number }
 /**
@@ -105,6 +90,8 @@ export function emptyMemoryDocument(path: string): MemoryDocument {
 }
 export interface MemoryCatalogEntry extends Scope {
   processingId?: string;
+  /** Actual purpose-classification failure, independent of source availability. */
+  organizationError?: string;
   id: string; title: string; sourceTitle?: string; summary: string; excerpt: string; hasContent: boolean; entryChars: number | null; keywords: string[]; revision: string;
   updatedAt: number; indexedAt: number | null; status: "pending" | "indexing" | "ready" | "error";
   deleted: boolean; error?: string; reason?: MemoryReason;
@@ -114,7 +101,8 @@ export interface MemoryReadDocument { sessionId: string; path: string; revision:
 export interface MemoryQueryResult extends MemoryExecutionResult {
   processingId?: string;
   scope: Scope; sources: Array<Pick<MemoryCatalogEntry, "sessionId" | "revision">>;
-  reason?: Extract<MemoryReason, "unavailable" | "timeout" | "revision_conflict" | "read_failed">;
+  reason?: Extract<MemoryReason, "unavailable" | "timeout" | "revision_conflict" | "read_failed"> | "locator_invalid";
+  indexVersion?: number;
   readDocuments?: MemoryReadDocument[];
 }
 const templateLines = new Set(legacyMemoryTemplate.split(/\r?\n/).map((line) => line.trim()));
@@ -176,9 +164,10 @@ function parseLegacyMemory(content: string): MemoryProgress {
     return "";
   };
   const rawState = field("整体状态", true, progress, compatibleGoal, canonicalGoal);
-  const state = rawState.match(/^(已完成|进行中|未开始|等待|已放弃|阻塞|尚未记录)(?=$|[（(\s；;。])/)?.[1] ?? rawState;
+  const state = rawState.match(/^(已完成|进行中|未开始|等待|已放弃|失败|阻塞|尚未记录)(?=$|[（(\s；;。])/)?.[1] ?? rawState;
   // 任务只来自明确的任务栏目与 checkbox；正文项目符号和 Markdown 链接不是 Todo。
-  const tasks: MemoryTask[] = memoryOutline(progress).nodes.filter(node => node.state).map(node => ({
+  const taskOutline = memoryOutline(progress).nodes;
+  const tasks: MemoryTask[] = taskOutline.filter(node => node.state).map(node => ({
     state: node.state!, title: node.title, ...(node.abandoned ? { abandoned: true } : {}), ...(node.waiting ? { waiting: true } : {}),
   }));
   const activeTasks = tasks.filter(task => !task.abandoned);
@@ -187,9 +176,32 @@ function parseLegacyMemory(content: string): MemoryProgress {
   const complete = state === "已完成";
   const valid = value !== null && value >= 0 && value <= 100 && value % 10 === 0 &&
     (value === 100 ? complete && !match?.[1] && activeTasks.length > 0 && activeTasks.every((t) => t.state === "已完成" && !t.waiting) : !complete);
-  return { goal, state, ...(rawState !== state ? { stateDetail: rawState } : {}), current: field("当前进展", true, progress, compatibleGoal, canonicalGoal),
-    next: section("下一步与接续位置", "下一步") || field("下一步", true, progress, compatibleGoal, canonicalGoal, parseableContent),
-    percent: valid ? value : null, progressState: valid ? "valid" : !estimate || estimate === "待评估" ? "unknown" : "conflict",
+  const current = field("当前进展", true, progress, compatibleGoal, canonicalGoal);
+  const next = section("下一步与接续位置", "下一步") || field("下一步", true, progress, compatibleGoal, canonicalGoal, parseableContent);
+  const progressState = valid ? "valid" : !estimate || estimate === "待评估" ? "unknown" : "conflict";
+  const analysis = analyzeMemoryTasks(taskOutline);
+  // Historical prose may carry a global execution boundary. Keep it conservative, but a
+  // percentage-format error alone is not permission to discard explicit actionable work.
+  const waiting = /(?:等待|等候|待用户|需(?:要)?用户|需要确认|待确认|待审批|待授权|暂停|停止|取消|阻塞|\b(?:blocked|waiting|paused|stopped|cancell?ed)\b)/i;
+  if (state === "已放弃" || state === "失败" || waiting.test(rawState) || waiting.test(current) || waiting.test(next)) {
+    analysis.actionable = []; analysis.complete = false;
+    analysis.displayState = state === "已放弃" ? "已放弃" : state === "失败" ? "失败" : "等待";
+    analysis.diagnostics = [];
+  } else {
+    analysis.actionable = analysis.actionable.filter(task => !waiting.test(task.title));
+    if (state === "已完成" && !analysis.complete && tasks.some(task => !task.abandoned)) {
+      analysis.actionable = [];
+      analysis.displayState = "等待";
+      analysis.diagnostics.push({ code: "legacy_completed_unfinished", key: "legacy-state", title: goal || "整体状态", path: [] });
+    }
+    if (progressState === "conflict") analysis.diagnostics.push({ code: "legacy_progress_conflict", key: "legacy-progress", title: "整体进度", path: [] });
+    if (!analysis.actionable.length && analysis.displayState !== "已完成" && analysis.displayState !== "失败" && analysis.displayState !== "已放弃") analysis.displayState = tasks.length ? "等待" : "";
+    // Legacy whole-state and percentage completion requirements remain conservative.
+    analysis.complete &&= state === "已完成" && progressState !== "conflict";
+    if (!analysis.complete && analysis.displayState === "已完成") analysis.displayState = tasks.length ? "等待" : "";
+  }
+  return { goal, state, ...(rawState !== state ? { stateDetail: rawState } : {}), current, next,
+    percent: valid ? value : null, progressState, analysis,
     tasks, overLimit: [...content].length > 2000 };
 }
 export function memoryDocumentTitle(content: string) {
@@ -203,23 +215,18 @@ export function parseMemory(content: string): MemoryProgress {
   if (legacy) {
     const progress = parseLegacyMemory(content);
     return { ...progress, title: memoryDocumentTitle(content), format: "legacy", outline: outline.nodes,
-      complete: progress.state === "已完成" && progress.progressState !== "conflict" && progress.tasks.some(task => !task.abandoned) && progress.tasks.filter(task => !task.abandoned).every(task => task.state === "已完成" && !task.waiting) };
+      complete: progress.analysis!.complete };
   }
   const tasks = outline.nodes.filter(node => node.state).map(node => ({ title: node.title, state: node.state!, abandoned: node.abandoned, waiting: node.waiting, depth: node.depth, line: node.line }));
-  const active = tasks.filter(task => !task.abandoned);
-  const complete = active.length > 0 && active.every(task => task.state === "已完成" && !task.waiting);
-  const actionable = active.filter(task => !task.waiting && (task.state === "进行中" || task.state === "未开始"));
-  const state = complete ? "已完成" : actionable.some(task => task.state === "进行中") ? "进行中" : actionable.length ? "未开始" : active.some(task => task.waiting) ? "等待" : active.some(task => task.state === "失败") ? "失败" : tasks.length ? "已放弃" : "";
+  const analysis = analyzeMemoryTasks(outline.nodes), { actionable, complete, displayState: state } = analysis;
   return { goal: memoryDocumentTitle(content), title: memoryDocumentTitle(content), state, current: actionable.find(task => task.state === "进行中")?.title ?? "",
-    next: actionable.find(task => task.state === "未开始")?.title ?? "", percent: null, progressState: "unknown", tasks,
+    next: actionable.find(task => task.state === "未开始")?.title ?? "", percent: null, progressState: "unknown", tasks, analysis,
     outline: outline.nodes, format: "chapters", complete, overLimit: false };
 }
 export function memoryComplete(progress: MemoryProgress) {
   return progress.complete ?? (progress.state === "已完成" && progress.progressState !== "conflict" && progress.tasks.some(task => !task.abandoned) && progress.tasks.filter(task => !task.abandoned).every(task => task.state === "已完成" && !task.waiting));
 }
-/** Applied at controlled write boundaries. Historical long titles remain readable. */
+/** All task headings share the title-path protection used at write boundaries. */
 export function assertMemoryTitle(previous: string, next: string) {
-  const before = memoryDocumentTitle(previous), after = memoryDocumentTitle(next);
-  if (before && before !== after) throw Error("记忆标题生成后不能修改；新目标请记录在正文中");
-  if (!before && [...after].length > 13) throw Error("初始记忆标题不能超过13字");
+  assertMemoryTreeEdit(previous, next);
 }

@@ -6,12 +6,9 @@ import { emptyMemoryDocument, memoryEditBudgetBytes, type MemoryDocument, type M
 import { markdownLocalLinks } from "../../shared/markdown.js";
 import { BubbleLoadingIcon } from "../StatusIcons.js";
 import { Markdown } from "../chat/Markdown.js";
-import { MemoryOrganizeControl } from "./MemoryOrganizeControl.js";
 import { MemoryEntry } from "./MemoryOutlineView.js";
-import { detailFile } from "../../shared/memory-outline.js";
 
 function referencePath(base: string, href: string) {
-  const fragment = href.match(/#detail:[1-9]\d*$/)?.[0] ?? "";
   let value = href.split("#")[0];
   try { value = decodeURIComponent(value); } catch { /* Literal names still get server validation. */ }
   if (/^(?:[A-Za-z]:[\\/]|\/)/.test(value)) return value;
@@ -20,7 +17,7 @@ function referencePath(base: string, href: string) {
     if (part === ".." && parts.length && parts.at(-1) !== "..") parts.pop();
     else if (part && part !== ".") parts.push(part);
   }
-  return parts.join("/") + fragment;
+  return parts.join("/");
 }
 const utf8Bytes = (content: string) => new TextEncoder().encode(content).byteLength;
 function memoryReasonText(reason?: MemoryReason) {
@@ -35,8 +32,7 @@ function memoryReasonText(reason?: MemoryReason) {
   }
 }
 const budgetMessage = "资料超过 180 KB UTF-8 编辑预算";
-export function MemoryDocumentView({ scope, path, changed, navigate, dirtyChange, onReady }: { scope: Scope; path: string; changed: string; navigate: (path: string) => void; dirtyChange: (value: boolean) => void; onReady?: () => void }) {
-  const managedDetail = path === detailFile || path.startsWith(`${detailFile}#`);
+export function MemoryDocumentView({ scope, path, changed, navigate, dirtyChange, onReady, files = [] }: { scope: Scope; path: string; changed: string; navigate: (path: string) => void; dirtyChange: (value: boolean) => void; onReady?: () => void; files?: ReadonlyArray<{ path: string }> }) {
   const [document, setDocument] = useState<MemoryDocument | null>(null), [draft, setDraft] = useState(""), [editing, setEditing] = useState(false);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
   const [activity, setActivity] = useState("正在读取资料…");
@@ -111,12 +107,10 @@ export function MemoryDocumentView({ scope, path, changed, navigate, dirtyChange
   const byteCount = useMemo(() => utf8Bytes(displayedText), [displayedText]);
   const overBudget = byteCount > memoryEditBudgetBytes;
   return <div className="memory-document">
-    <div className="memory-doc-actions"><LocalPath path={path} scope={scope} base="memory" disabled={managedDetail || !document || document.available === false || busy} />
-      {!managedDetail && /\.(md|txt)$/i.test(path) && <button className="btn" disabled={!document || document.available === false || busy || opening} aria-busy={opening} onClick={() => void openLocal()} data-tooltip="打开磁盘上的文件；不保存当前草稿">{opening && <BubbleLoadingIcon />}{opening ? "正在打开…" : "打开本地文件"}</button>}
+    <div className="memory-doc-actions"><LocalPath path={path} scope={scope} base="memory" disabled={!document || document.available === false || busy} />
+      {/\.(md|txt)$/i.test(path) && <button className="btn" disabled={!document || document.available === false || busy || opening} aria-busy={opening} onClick={() => void openLocal()} data-tooltip="打开磁盘上的文件；不保存当前草稿">{opening && <BubbleLoadingIcon />}{opening ? "正在打开…" : "打开本地文件"}</button>}
       <button className="btn" disabled={busy} onClick={() => { if (editing || dirty) void readLatest(); else setRefresh((n) => n + 1); }}>{editing || dirty ? "读取最新版本以合并" : "重新读取"}</button>
-      {path === "MEMORY.md" && <MemoryOrganizeControl scope={scope} disabled={!document || document.available === false || busy || editing || dirty}
-        disabledReason={editing || dirty ? "请先保存或取消编辑，再整理已保存的记忆" : undefined} />}
-      {!editing && !managedDetail && document?.available !== false && document?.nextOffset === null && (path === "MEMORY.md" || /^references\/.*\.(md|txt)$/i.test(path)) && <button className="btn" disabled={busy} onClick={() => { protectedRef.current = true; setEditing(true); }}>编辑</button>}
+      {!editing && document?.available !== false && document?.nextOffset === null && (path === "MEMORY.md" || /^(?:references|details)\/.*\.(md|txt)$/i.test(path)) && <button className="btn" disabled={busy} onClick={() => { protectedRef.current = true; setEditing(true); }}>编辑</button>}
     </div>
     {notice && <p role="status">{notice}</p>}
     {!!links.length && <details className="memory-related memory-links"><summary>引用文件 <span>{links.length}</span></summary><nav aria-label="资料引用">{links.map((link, i) => <div className="memory-path-row" key={i}><button disabled={dirty} onClick={() => navigate(referencePath(path, link.href))}>{link.label}<span>{link.href}</span></button><PathActions path={referencePath(path, link.href)} scope={scope} base="memory" /></div>)}</nav></details>}
@@ -128,7 +122,7 @@ export function MemoryDocumentView({ scope, path, changed, navigate, dirtyChange
     {document && document.available !== false && <>
       <p className="meta"><span data-tooltip="Unicode 字符数，含标点及空白">{document.image ? "图片资料" : `${editing ? "草稿 " : document.nextOffset !== null ? "已读取 " : ""}${characterCount} 字`}</span>{!document.image && <> · <span data-tooltip="UTF-8 字节数；编辑、合并和服务端保存共用 180 KB 上限">{byteCount.toLocaleString("zh-CN")} / {memoryEditBudgetBytes.toLocaleString("zh-CN")} bytes</span></>} · {new Date(document.updatedAt).toLocaleString()}</p>
       {document.reason && document.reason !== "missing" && <p className="meta" role="status">{memoryReasonText(document.reason)}</p>}
-      {editing ? <><textarea aria-label="记忆内容" disabled={busy} value={draft} onChange={(e) => setDraft(e.target.value)} />{overBudget && <p className="memory-error" role="alert">{budgetMessage}；请删除或拆分内容后再保存。</p>}<div className="row"><button className="btn" disabled={busy || !dirty || !!comparison || overBudget} onClick={() => void save()}>保存</button><button className="btn" disabled={busy} onClick={() => { setDraft(document.content); setEditing(false); setComparison(null); setRefresh((n) => n + 1); }}>取消编辑</button></div></> : document.image ? <img className="memory-image" src={document.image} alt={path} /> : /\.(md|txt)(?:#detail:\d+)?$/i.test(path) ? <div className="markdown">{path === "MEMORY.md" ? <MemoryEntry text={document.content} scope={scope} navigate={href => { if (!dirty) navigate(referencePath(path, href)); }} /> : <Markdown text={document.content} pathScope={scope} pathBase="memory" sourceFile={path.split("#")[0]} onLocalLink={(href) => { if (!dirty) navigate(referencePath(path, href)); }} />}</div> : <pre>{document.content}</pre>}
+      {editing ? <><textarea aria-label="记忆内容" disabled={busy} value={draft} onChange={(e) => setDraft(e.target.value)} />{overBudget && <p className="memory-error" role="alert">{budgetMessage}；请删除或拆分内容后再保存。</p>}<div className="row"><button className="btn" disabled={busy || !dirty || !!comparison || overBudget} onClick={() => void save()}>保存</button><button className="btn" disabled={busy} onClick={() => { setDraft(document.content); setEditing(false); setComparison(null); setRefresh((n) => n + 1); }}>取消编辑</button></div></> : document.image ? <img className="memory-image" src={document.image} alt={path} /> : /\.(md|txt)$/i.test(path) ? <div className="markdown">{path === "MEMORY.md" ? <MemoryEntry text={document.content} files={files} scope={scope} navigate={href => { if (!dirty) navigate(referencePath(path, href)); }} /> : <Markdown text={document.content} pathScope={scope} pathBase="memory" sourceFile={path.split("#")[0]} onLocalLink={(href) => { if (!dirty) navigate(referencePath(path, href)); }} />}</div> : <pre>{document.content}</pre>}
       {document.nextOffset !== null && <button className="btn" disabled={busy} onClick={() => void loadMore()}>继续读取 · 内容尚未完整</button>}
     </>}
   </div>;

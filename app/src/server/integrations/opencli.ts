@@ -5,14 +5,16 @@ import { MaintenanceError } from "../../shared/maintenance.js";
 import { beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, builtinRemovalDirectories, markBuiltinRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration } from "./builtin-operation.js";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultOpenCliSettings, type OpenCliJob, type OpenCliState } from "../../shared/builtin-tools.js";
 import { openExtensionPage, type OpenCliExtensionTarget } from "./opencli-browser.js";
 import { errorMessage } from "../error-message.js";
 import { openCliConfigPath, openCliEnvironment, openCliSkillNames, openCliSkillPaths, openCliVersionPaths, openCliVersionPattern, readOpenCliConfig, validateOpenCliPackage, type OpenCliConfig } from "./opencli-runtime.js";
 
-import { managedChildren, managedDirectory, removeManagedDirectory, type IntegrationRemoval } from "./managed-removal.js";
+import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
+import { openCliRemovalPlan } from "./opencli-removal.js";
+import { managedDirectory, removeManagedDirectory, type IntegrationRemoval } from "./managed-removal.js";
 
 const packageName = "@jackwener/opencli";
 const registry = "--registry=https://registry.npmjs.org";
@@ -91,7 +93,9 @@ export class OpenCliService {
     if (!toolProcessSupported()) { value.ready = false; value.supportError = toolProcessSupportError; }
     try {
       value.pendingOperation = builtinPendingOperation(this.root, "opencli");
-      value.removalPending ||= builtinPendingRemovals(this.root, "opencli").length > 0;
+      const pending = builtinPendingRemovals(this.root, "opencli");
+      value.removalPending ||= pending.length > 0;
+      value.cleanup = cleanupScope(openCliRemovalPlan(this.root, readOpenCliConfig(this.root), pending).paths);
     }
     catch (error) { value.error = errorMessage(error, "维护归属记录不可读取，已保留文件。"); }
     return value;
@@ -199,12 +203,14 @@ export class OpenCliService {
       }
     }
   }
-  private async uninstall(revision: string) {
+  private async uninstall(revision: string, scopeRevision?: unknown) {
+    assertCleanupScope(scopeRevision, cleanupScope(openCliRemovalPlan(this.root, readOpenCliConfig(this.root), builtinRemovalDirectories()).paths));
     await this.removal(() => {
       assertBuiltinFilesSafe();
       const current = readOpenCliConfig(this.root);
       if ((current?.revision ?? "") !== revision) throw new AppError("CONFIGURATION_CONFLICT", "接入配置已变化，请重新确认卸载。");
-      const names = [...new Set([...managedChildren(this.root, ["integrations", "opencli"], "versions", openCliVersionPattern), ...current?.removalPending ?? [], ...builtinRemovalDirectories().map(path => basename(path))])];
+      const plan = openCliRemovalPlan(this.root, current, builtinRemovalDirectories()), { names } = plan;
+      assertCleanupScope(scopeRevision, cleanupScope(plan.paths));
       for (const name of names) {
         const path = managedDirectory(this.root, ["integrations", "opencli", "versions"], name, openCliVersionPattern);
         if (path) assertBuiltinDirectoryOwned(path, name === current?.directory || !!current?.removalPending?.includes(name));
@@ -271,7 +277,7 @@ export class OpenCliService {
     }
     this.pending = operation.run(() => Promise.resolve().then(() => runMaintenance(this.root, { id: this.state.job!.id, resource: "opencli", label: "OpenCLI", action: kind, params: c.params, cancel: kind !== "uninstall", steps: kind === "install" ? ["checking", "installing", "validating"] : kind === "uninstall" ? ["checking", "removing", "validating"] : ["checking"] }, this.controller!, async () => {
       bindBuiltinTask();
-      if (kind === "uninstall") await this.uninstall(revision);
+      if (kind === "uninstall") await this.uninstall(revision, c.params?.cleanupRevision);
       else {
         await this.inspect();
         if (kind === "check") {

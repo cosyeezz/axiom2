@@ -40,7 +40,7 @@
 .model-catalog-item:hover{background:var(--surface)}
 .model-catalog-item:focus-within{outline:2px solid var(--accent-hover);outline-offset:-2px}
 .model-catalog-item[data-disabled=true]{color:var(--fg-2);cursor:default}
-.model-catalog-item input{flex-shrink:0;accent-color:var(--accent)}
+.model-catalog-item input{flex:none;width:18px;height:18px;margin:0;accent-color:var(--accent)}
 .model-catalog-name{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px;overflow-wrap:anywhere}
 .model-catalog-name code{font-size:12px;white-space:normal}
 .model-catalog-item>.meta{max-width:30%;overflow-wrap:anywhere}
@@ -59,21 +59,41 @@
 .credential-path{overflow-wrap:anywhere;min-width:0}
 .credential-path code{font-size:inherit;white-space:normal}
 /* Only the annotated model table: compact, independent copy actions. */
-#configured-model-table .copyable-value{display:flex;align-items:center;gap:4px;min-width:0}
+#configured-model-table{--model-actions-width:108px}
+#configured-model-table th.actions-col{width:var(--model-actions-width)}
+#configured-model-table th.name-col{width:calc((100% - var(--model-actions-width))*.32)}
+#configured-model-table th.id-col{width:calc((100% - var(--model-actions-width))*.43)}
+#configured-model-table th.reasoning-col{width:calc((100% - var(--model-actions-width))*.25)}
+#configured-model-table tbody td{vertical-align:top;padding-top:10px;padding-bottom:10px}
+#configured-model-table .copyable-value{display:flex;align-items:flex-start;gap:4px;min-width:0;line-height:24px}
 #configured-model-table .copyable-value>span,#configured-model-table .copyable-value>code{min-width:0;overflow-wrap:anywhere}
-#configured-model-table .copy-model-value{margin-left:auto}
+#configured-model-table .copy-model-value{flex:none;width:24px;min-width:24px;height:24px;padding:0}
+#configured-model-table .copy-model-value svg{width:13px;height:13px}
+#configured-model-table .model-actions .icon-btn{width:28px;min-width:28px;height:24px;padding:0}
+#configured-model-table .model-actions svg{width:14px;height:14px}
+#configured-model-table td.reasoning-col{line-height:24px}
+.model-duplicate-feedback{font-size:12px;color:var(--fg-2);margin:0 0 8px}
+.model-duplicate-feedback:empty{display:none}
+@media(max-width:960px){
+ #configured-model-table th.name-col{width:calc((100% - var(--model-actions-width))*.4)}
+ #configured-model-table th.id-col{width:calc((100% - var(--model-actions-width))*.6)}
+}
+@media(max-width:600px){#configured-model-table th.name-col{width:calc(100% - var(--model-actions-width))}}
 #configured-model-table tbody .icon-btn{opacity:0;pointer-events:none}
 #configured-model-table tbody tr:is(:hover,:focus-within,[data-editing=true]) .icon-btn{opacity:1;pointer-events:auto}
 #configured-model-table tbody tr:is(:focus-within,[data-editing=true]){background:color-mix(in srgb,var(--fg) 3%,transparent)}
 @media(hover:none),(pointer:coarse){
+ #configured-model-table{--model-actions-width:148px}
  #configured-model-table tbody .icon-btn{opacity:1;pointer-events:auto;min-width:44px;min-height:44px}
- #configured-model-table th.actions-col{width:112px}
+ #configured-model-table .model-actions .icon-btn{width:44px;min-width:44px;height:44px}
+ #configured-model-table .copyable-value,#configured-model-table .mobile-model-id{line-height:44px}
 }
 #configured-model-table .mobile-model-id .copy-model-value{display:none}
 #model-copy-feedback{caption-side:bottom;text-align:left;color:var(--fg-2);font-size:12px;overflow-wrap:anywhere}
 #model-copy-feedback:not(:empty){padding:6px 12px;border-top:1px solid var(--border-soft)}
 @media(max-width:600px){
- #configured-model-table .mobile-model-id{display:flex;align-items:center;gap:4px;min-width:0}
+ #configured-model-table .mobile-model-id{display:flex;align-items:flex-start;gap:4px;min-width:0;line-height:24px}
  #configured-model-table .mobile-model-id>code{min-width:0;overflow-wrap:anywhere}
  #configured-model-table .mobile-model-id .copy-model-value{display:inline-grid}
 }
+@media(max-width:600px) and (pointer:coarse){#configured-model-table .mobile-model-id{line-height:44px}}

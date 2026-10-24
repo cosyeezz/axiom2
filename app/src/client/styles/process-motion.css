@@ -39,6 +39,9 @@
 /* Match both sides of a process row without stacking the message's default gaps. */
 .thread-content .log-row:has(.reply-body):has(+ .process-live) { padding-bottom: 0; margin-bottom: 8px; }
 .thread-content .process-live + .log-row:has(.reply-body) { padding-top: 0; }
+/* Virtual rows must preserve the same compact narration/process spacing. */
+.thread-content .timeline-row:has(> .log-row .reply-body):has(+ .timeline-row > .process-live) > .log-row { padding-bottom: 0; margin-bottom: 8px; }
+.thread-content .timeline-row:has(> .process-live) + .timeline-row > .log-row:has(.reply-body) { padding-top: 0; }
 .tool-activity .tool-call { border: 0; }
 .tool-activity .tool-call > .tool-header { min-height: 28px; padding-block: 2px; }
 @media (hover: none), (pointer: coarse) { .tool-activity .tool-call > .tool-header, .tool-activity.process-live > summary { min-height: 32px; } }

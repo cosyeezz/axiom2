@@ -1,18 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useScope } from "../transport.js";
+import { Icon } from "../Icon.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { Capabilities } from "./Capabilities.js";
 import { Compression } from "./Compression.js";
 import { TaskSettings } from "../tasks/TaskSettings.js";
 import { AnnotationToggle } from "./ReplyAnnotations.js";
-import { OriginalConversationToggle } from "./OriginalConversation.js";
 import { durationTooltip, formatDuration, sessionDuration } from "./duration.js";
 import { CostsPopover } from "../pages/Costs.js";
-import { costAmount, costTokens } from "../../shared/costs.js";
-import { CacheUsageIcon } from "./UsageIcons.js";
+import { costAmount, costTokens, sumCosts } from "../../shared/costs.js";
+import { CacheUsageIcon, CostUsageIcon } from "./UsageIcons.js";
+import { costLevel, costLevelLabels } from "./cost-level.js";
+import { useCostReport } from "../useCostReport.js";
 import { ContextMemoryIcon, cacheRatio, validRatio } from "../DataIcons.js";
-import { Icon } from "../Icon.js";
 import { SessionReload } from "./SessionReload.js";
 import { MetricDetail } from "./MetricDetail.js";
 import "../styles/data-icons.css";
@@ -31,6 +32,16 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
     setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer);
   }, [info.run?.id, info.run?.status]);
   const elapsed = sessionDuration(info, now), context = usage?.context, request = usage?.lastRequest;
+  const costs = useCostReport(scope);
+  const sessionCosts = useMemo(() => costs.report && scope
+    ? sumCosts(costs.report.rows.filter(row => row.sessionId === scope.sessionId)) : null, [costs.report, scope?.sessionId]);
+  // Known spending is a lower bound when some records have unknown prices.
+  const dollars = sessionCosts && sessionCosts.records > 0 && (!sessionCosts.unknownCost || sessionCosts.knownCost > 0) ? sessionCosts.knownCost : null;
+  const measuredLevel = scope ? costLevel(dollars, elapsed) : null;
+  const completeCost = !!sessionCosts?.records && !sessionCosts.unknownCost && !costs.error && costs.connected;
+  // An incomplete price ledger can prove a warning, never a low-cost/green state.
+  const level = !completeCost && measuredLevel === 0 ? null : measuredLevel;
+  const costLabel = `${label}累计预计费用（pi 定价）：${sessionCosts ? costAmount(sessionCosts) : costs.loading && costs.connected ? "读取中…" : "未知"}；${durationTooltip(info)}：${formatDuration(elapsed)}；${level == null ? "等级待统计" : `${completeCost ? "" : "至少"}${costLevelLabels[level]}`}（费用美元或运行分钟先达阈值）${!completeCost ? "；费用数据不完整，仅按已知下限分档" : ""}${costs.error ? "；费用读取失败，已显示金额可能尚未更新" : !costs.connected ? "；连接已断开，费用可能尚未更新" : ""}`;
   const percent = validRatio(context?.tokens, context?.window), cache = cacheRatio(request);
   const estimate = context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算";
   const contextLabel = percent == null ? "上下文占用率未知" : `上下文占用率 ${Math.round(percent)}%（${estimate}）`;
@@ -48,12 +59,12 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
       <button className="usage-metric action-icon" data-od-id="cache-tokens" data-tooltip={`${cacheLabel}；点击查看输入统计`} {...metric("cache", cacheLabel)}>
         <CacheUsageIcon active={running(info.run)} percent={cache} />
       </button>
-      <button type="button" className="usage-metric cost-trigger action-icon" aria-label="查看费用明细" aria-description="包含当前会话耗时" aria-haspopup="dialog" aria-expanded={!!costWindow} disabled={!scope}
-        onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${label}累计预计费用（pi 定价） · ${durationTooltip(info)}：${formatDuration(elapsed)}；点击查看费用与耗时明细`}>
-        <Icon name="chart-column-increasing" />
+      <button type="button" className="usage-metric cost-trigger action-icon" aria-label="查看费用明细" aria-description={costLabel} aria-haspopup="dialog" aria-expanded={!!costWindow} disabled={!scope}
+        onClick={event => { setDetail(null); setCostWindow(costWindow || !scope ? null : { scope, trigger: event.currentTarget }); }} data-od-id="estimated-cost" data-tooltip={`${costLabel}；点击查看费用与耗时明细`}>
+        <CostUsageIcon level={level} />
       </button>
       <SessionReload key={scopeKey} scope={scope} />
-      {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} sessionSummary={totals => <section className="cost-session-duration" aria-label="当前会话用量"><dl className="cost-session-facts"><div><dt>当前{label}预计费用</dt><dd>{totals ? costAmount(totals) : "读取中…"}</dd></div><div><dt>当前{label}调用 Token</dt><dd>{totals ? costTokens(totals) : "读取中…"}</dd></div><div><dt>运行耗时</dt><dd data-od-id="run-duration" data-tooltip={durationTooltip(info)}>{formatDuration(elapsed)}</dd></div></dl><p>{durationTooltip(info)}；不叠加子会话耗时。</p></section>} />}
+      {costWindow && costWindow.scope.workspaceId === scope?.workspaceId && costWindow.scope.sessionId === scope?.sessionId && <CostsPopover scope={costWindow.scope} costs={costs} trigger={costWindow.trigger} onClose={() => setCostWindow(null)} sessionSummary={totals => <section className="cost-session-duration" aria-label="当前会话用量"><dl className="cost-session-facts"><div><dt>当前{label}预计费用</dt><dd>{totals ? costAmount(totals) : "读取中…"}</dd></div><div><dt>当前{label}调用 Token</dt><dd>{totals ? costTokens(totals) : "读取中…"}</dd></div><div><dt>运行耗时</dt><dd data-od-id="run-duration" data-tooltip={durationTooltip(info)}>{formatDuration(elapsed)}</dd></div></dl><p>{durationTooltip(info)}；不叠加子会话耗时。</p></section>} />}
       {detail && detail.scope === scopeKey && <MetricDetail trigger={detail.trigger} className={detail.key === "cache" ? "cache-detail" : ""} title={{ context: "上下文占用", cache: "缓存命中率" }[detail.key]} subtitle={`当前${label} · ${detail.key === "cache" ? "最近一次请求" : "实时容量"}`} onClose={() => setDetail(null)}>
         {detail.key === "context" ? contextDetail : <>
           <div className="cache-summary"><span>缓存命中率</span><strong>{cache == null ? "—" : `${cache.toFixed(1)}%`}</strong></div>
@@ -65,6 +76,6 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
         </>}
       </MetricDetail>}
     </div>
-    <div className="usage-settings" role="group" aria-label="会话工具"><AnnotationToggle scope={scope} /><OriginalConversationToggle scope={scope} />{!info.task && <Capabilities key={scopeKey} scope={scope} />}<TaskSettings /><Compression key={scope?.sessionId ?? "empty"} scope={scope} />{tools?.global}</div>
+    <div className="usage-settings" role="group" aria-label="会话工具"><AnnotationToggle scope={scope} />{!info.task && <Capabilities key={scopeKey} scope={scope} />}<TaskSettings /><Compression key={scope?.sessionId ?? "empty"} scope={scope} />{tools?.global}</div>
   </div>;
 }

@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { atomicReaJson, readReaConfig, reaConfigPath, reaDirectory, type ReaConfig } from "../src/server/integrations/rea-runtime.js";
 import { removeRea } from "../src/server/integrations/rea-removal.js";
 import { ReaService } from "../src/server/integrations/rea.js";
+import { beginBuiltinOperation } from "../src/server/integrations/builtin-operation.js";
 function fixture() {
   const root = fs.mkdtempSync(join(tmpdir(), "axiom-rea-remove-"));
   const version = `v6.7.0-${randomUUID()}`, engine = `java-${randomUUID()}`;
@@ -73,6 +74,30 @@ test("REA engine deletion failure preserves pending cleanup and revokes the owne
     assert.equal(readReaConfig(f.root).removalPending, undefined); assert.equal(fs.existsSync(f.directory), false);
   } finally { mock.mock.restore(); syncBuiltinESMExports(); f.cleanup(); }
 });
+for (const replaced of [false, true]) test(`global engine removal ${replaced ? "rejects a substituted directory" : "accepts the original directory"} from a scoped installation`, () => {
+  const f = fixture();
+  const install = beginBuiltinOperation(f.root, "rea", undefined, "java");
+  install.trackDirectory(f.directory); install.finish(); install.close();
+  const before = fs.readFileSync(reaConfigPath(f.root), "utf8"), moved = join(f.root, "original-installation");
+  if (replaced) {
+    fs.renameSync(f.directory, moved); fs.mkdirSync(f.directory);
+    fs.writeFileSync(join(f.directory, "sentinel"), "replacement must survive");
+  }
+  const removal = beginBuiltinOperation(f.root, "rea");
+  try {
+    if (replaced) {
+      assert.throws(() => removal.run(() => removeRea(f.root, f.config.revision, "java")), { code: "stop-unconfirmed" });
+      assert.equal(fs.readFileSync(reaConfigPath(f.root), "utf8"), before);
+      assert.equal(fs.readFileSync(join(f.directory, "sentinel"), "utf8"), "replacement must survive");
+      assert.ok(fs.existsSync(join(moved, "jdk", "sentinel")));
+    } else {
+      removal.run(() => removeRea(f.root, f.config.revision, "java"));
+      assert.equal(fs.existsSync(f.directory), false); assert.equal(readReaConfig(f.root).managedEngines?.java, undefined);
+    }
+    removal.finish();
+  } finally { removal.close(); f.cleanup(); }
+});
+
 test("REA uninstall command requires confirmation and runs under the removal barrier", async () => {
   const f = fixture(); let called = false;
   const s = new ReaService(f.root, () => {}, { removal: async work => { called = true; return work(); } });

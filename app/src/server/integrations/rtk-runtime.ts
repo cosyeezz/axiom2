@@ -1,3 +1,4 @@
+import { withCommandAdmission } from "../command-admission.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -114,10 +115,13 @@ export async function filterRtkResult(root: string, role: "main" | "subagent", e
   const bytes = Buffer.byteLength(text), version = config.installation?.version ?? "";
   let filter = "";
   const current = () => { try { return readRtkConfig(root).revision === config.revision; } catch { return false; } };
-  const record = (reason: RtkReason, outputBytes = bytes) => {
+  const recordUnlocked = (reason: RtkReason, outputBytes = bytes) => {
     if (!current()) return;
     const value: RtkEvent = { id, at: Date.now(), role, level: config.level, filter, reason, inputBytes: bytes, outputBytes, durationMs: performance.now() - start, version };
     try { recordRtkEvent(root, value); } catch { /* Bookkeeping must never break or retry the tool. */ }
+  };
+  const record = (reason: RtkReason, outputBytes = bytes) => {
+    try { withCommandAdmission(root, () => recordUnlocked(reason, outputBytes)); } catch { /* Cleanup owns admission; do not recreate cleared data. */ }
   };
   const skip = (reason: RtkReason) => { record(reason); return undefined; };
   if (signal?.aborted) return skip("cancelled");
@@ -134,7 +138,10 @@ export async function filterRtkResult(root: string, role: "main" | "subagent", e
   const executable = rtkExecutable(root, config);
   if (!executable || !existsSync(executable)) return skip("missing");
   try {
-    const buffer = await run(executable, ["pipe", "--filter", filter], { root, input: text, signal });
+    const buffer = await run(executable, ["pipe", "--filter", filter], { root, input: text, signal, admissionCheck: () => {
+      const fresh = readRtkConfig(root);
+      if (fresh.revision !== config.revision || !fresh.enabled || (role === "subagent" && !fresh.subagents) || rtkExecutable(root, fresh) !== executable) throw Error("RTK 配置已变化，未启动旧程序。");
+    } });
     if (!current()) return;
     if (signal?.aborted) return skip("cancelled");
     const output = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
@@ -142,10 +149,13 @@ export async function filterRtkResult(root: string, role: "main" | "subagent", e
     const result = `${output.trimEnd()}\n\n[RTK 已过滤工具文本；可能省略细节。原文（7 天内、最多保留 200 条）：${path}]`;
     const size = Buffer.byteLength(result);
     if (!output.trim() || size > bytes * (1 - policy.saving)) return skip("unchanged");
-    try { saveRtkOriginal(root, id, text); } catch { return skip("storage"); }
-    record("filtered", size);
-    // Keep structured programmatic output and exit status intact. Nested calls are bypassed above.
-    return { content: [{ type: "text", text: result }], details: event.details, structuredContent: event.structuredContent };
+    return withCommandAdmission(root, () => {
+      if (!current() || signal?.aborted) return;
+      try { saveRtkOriginal(root, id, text); } catch { recordUnlocked("storage"); return; }
+      recordUnlocked("filtered", size);
+      // Keep structured programmatic output and exit status intact.
+      return { content: [{ type: "text" as const, text: result }], details: event.details, structuredContent: event.structuredContent };
+    });
   } catch { return skip(signal?.aborted ? "cancelled" : "failed"); }
 }
 export function rtkExtension(root: string, role: "main" | "subagent"): ExtensionFactory {

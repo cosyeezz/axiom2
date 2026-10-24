@@ -13,6 +13,8 @@ import bash from "highlight.js/lib/languages/bash.js";
 import sql from "highlight.js/lib/languages/sql.js";
 import { canTransformCode, codeLanguage, sqlDialect, transformCode, type CodeTransform } from "./code-transform.js";
 import { MermaidDiagram } from "./MermaidDiagram.js";
+import { hasAsciiDiagramLayout, parseAsciiDiagram } from "../../shared/ascii-diagram.js";
+import { AsciiDiagramPreview, DiagramRenderingContext } from "./AsciiDiagram.js";
 import "../styles/code-block.css";
 for (const [name, grammar] of Object.entries({
   javascript,
@@ -44,6 +46,13 @@ export const CodeBlock = memo(
     const revision = useRef(0);
     const displayed = converted?.source === text && converted.language === language ? converted.text : text;
     const isMermaid = codeLanguage(language) === "mermaid";
+    const diagramsEnabled = useContext(DiagramRenderingContext);
+    const diagramLanguage = ["", "text", "txt", "plaintext", "plain", "ascii"].includes(codeLanguage(language));
+    const literalDiagram = useMemo(() => diagramsEnabled && diagramLanguage && hasAsciiDiagramLayout(text), [text, diagramLanguage, diagramsEnabled]);
+    const diagram = useMemo(() => {
+      if (!diagramsEnabled || !diagramLanguage) return;
+      try { return parseAsciiDiagram(text); } catch { return; }
+    }, [text, diagramLanguage, diagramsEnabled]);
     const transformable = canTransformCode(language);
     const cache = useContext(DerivedContext);
     useEffect(() => {
@@ -81,8 +90,9 @@ export const CodeBlock = memo(
     return (
       <div className="code-card">
         <div className="code-head">
-          <span className="code-language">{language || "代码"}</span>
+          <span className="code-language" title={diagram?.alignment && !showSource ? `仅美化视图对齐了 ${diagram.alignment.rows} 行缩进（最多 ${diagram.alignment.maxShift} 格）；原文和复制保持不变。` : undefined}>{diagram ? diagram.alignment && !showSource ? "字符图 · 已对齐" : "字符图" : language || "代码"}</span>
           <div className="code-actions">
+          {diagram && <button type="button" className="code-action" aria-pressed={showSource} onClick={() => setShowSource(value => !value)}>{showSource ? "美化" : "原文"}</button>}
           {isMermaid && <button type="button" className="code-action" aria-pressed={showSource} onClick={() => setShowSource(value => !value)}>{showSource ? "图表" : "源码"}</button>}
           {transformable && <>
             <button type="button" className="code-action" disabled={busy || displayed.length > 200_000} onClick={() => void convert("format")}>格式化</button>
@@ -112,7 +122,7 @@ export const CodeBlock = memo(
           <span className="screen-reader" role="status" aria-live="polite">{copied}</span>
         </div>
         {error && <div className="code-notice" role="status">{error}</div>}
-        {isMermaid && !showSource ? <MermaidDiagram text={text} /> : <pre aria-busy={busy}>
+        {diagram && !showSource ? <AsciiDiagramPreview diagram={diagram} source={text} /> : isMermaid && !showSource ? <MermaidDiagram text={text} /> : <pre aria-busy={busy} className={diagram || literalDiagram ? "ascii-diagram-source" : undefined}>
           <code>{highlighted}</code>
         </pre>}
       </div>

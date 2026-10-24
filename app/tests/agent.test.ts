@@ -118,7 +118,7 @@ test(
               },
             },
             { index: 1, id: "start-memory", type: "function", function: { name: "write", arguments: JSON.stringify({ path: memoryPath,
-              content: "# 文件工具验证\n\n## 验证\n- [进行中] 验证真实文件工具与进度更新\n",
+              content: "# [进行中] 文件工具验证\n## [进行中] 验证真实文件工具与进度更新\n",
             }) } },
           ],
         });
@@ -153,7 +153,7 @@ test(
               },
             },
             { index: 2, id: "complete-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath,
-              oldText: "- [进行中] 验证真实文件工具与进度更新", newText: "- [已完成] 验证真实文件工具与进度更新",
+              oldText: "# [进行中] 文件工具验证\n## [进行中] 验证真实文件工具与进度更新", newText: "# [已完成] 文件工具验证\n## [已完成] 验证真实文件工具与进度更新",
             }) } },
           ],
         });
@@ -337,11 +337,12 @@ test(
       const assertMemoryPrompt = (request: any, path: string) => {
         const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
         assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
-        assert.match(system, /主动维护本会话记忆文件/);
-        assert.match(system, /最终回复、压缩或交接前，核对状态和详情与实际一致/);
-        assert.match(system, /任务使用 Markdown 标题组织/);
-        assert.match(system, /失败：本次任务或尝试已结束/);
-        assert.match(system, /memory_detail/);
+        assert.match(system, /Actively maintain this session's memory/);
+        assert.match(system, /Before a final response, compaction, or handoff, check that statuses and details match reality/);
+        assert.match(system, /Each task tree consists only of nested headings with statuses/);
+        assert.match(system, /Failed: this task or independent attempt has ended/);
+        assert.doesNotMatch(system, /memory_detail/);
+        assert.match(system, /Detail files follow the task hierarchy/);
         assert.doesNotMatch(system, /RULES\.md/);
       };
       assertMemoryPrompt(requests[0], memoryPath);

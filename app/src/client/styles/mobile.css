@@ -9,20 +9,20 @@
   .mobile-reading-toggle{display:grid;flex-shrink:0;color:var(--muted)}.mobile-reading-toggle svg{width:22px;height:22px}
   .app.history-open .sidebar{display:flex;position:fixed;left:0;width:min(360px,calc(100vw - 32px));max-width:none;top:0;bottom:0;border-radius:0 20px 20px 0;padding:calc(18px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));box-shadow:16px 0 64px #0008;z-index:70}
   .app.history-open .backdrop{display:block;position:fixed;inset:0;z-index:60;backdrop-filter:blur(5px);background:#0009}.sidebar .brand{padding-bottom:18px}.sidebar .new-chat{min-height:46px;border-radius:10px}.sidebar .search{margin-top:6px}.sidebar .history-item{min-height:64px;border-radius:10px}.sidebar .workspace-picker>summary{min-height:56px;border-radius:12px}.sidebar-foot{padding-bottom:0}
-  .thread-shell .thread-navigation{display:none}.thread-shell .thread-content{padding-inline:16px}
-  .workspace .container,.thread-content{max-width:100%;width:100%}.thread-content{padding:20px 16px 72px}.thread{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}.message-body{font-size:15px;line-height:1.85}.thread-content .log-row{padding-bottom:28px}.log-row:has(.user-text){max-width:96%}.user-text{padding:12px 14px;border-radius:14px 14px 4px 14px}.user-text.editable-user-message:not(.is-editing){padding-inline-end:52px}.markdown :is(pre,.table-scroll){max-width:100%}.markdown .code-card pre{font-size:12px}
+  .thread-shell .thread-content{padding-inline:16px}
+  .workspace .container,.thread-content{max-width:100%;width:100%}.thread-content{padding:20px 16px 72px}.thread{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}.message-body{font-size:15px;line-height:1.85}.thread-content .log-row{padding-bottom:28px}.log-row:has(.user-text){max-width:96%}.user-text{padding:12px 14px;border-radius:14px 14px 4px 14px}.user-text.editable-user-message{padding-inline:14px}.markdown :is(pre,.table-scroll){max-width:100%}.markdown .code-card pre{font-size:12px}
   .composer-area{max-height:62%;overflow-y:auto;overscroll-behavior:contain;padding:8px 12px max(8px,env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border-soft)}.composer-area>.container{width:100%;max-width:none}.composer{border-radius:20px;padding:5px 8px;column-gap:4px}.composer textarea{font-size:16px;max-height:min(140px,25dvh)}.composer-tools>.row>.btn{grid-column:1/4;grid-row:2;justify-self:start;max-width:100%;text-align:left}.composer-foot{padding:0}.model-picker>summary span{max-width:min(150px,42vw)}.usage-row{gap:3px 8px;min-height:44px;flex-wrap:wrap}.usage{font-size:10px}.context-controls{gap:0}
   .model-picker .model-popover{position:fixed;left:12px;right:12px;bottom:calc(120px + env(safe-area-inset-bottom));width:auto;max-width:none;max-height:max(80px,calc(var(--visual-height,100dvh) - 144px - env(safe-area-inset-bottom)));overflow:auto;border-radius:16px}.model-picker .model-list{flex-shrink:1;max-height:360px}.model-footer{flex-wrap:wrap}
   :is(.compression-settings,.memory-dialog) .model-picker .model-popover{position:static;inset:auto;width:100%;max-width:100%;max-height:min(440px,55dvh);border-radius:var(--radius-md)}
   .subagent-dialog{width:100%;height:var(--visual-height,100dvh);max-height:none;max-width:none;margin:0;border:0;border-radius:0;padding-top:env(safe-area-inset-top)}.subagent-dialog .container{width:100%}.subagent-dialog .topnav{padding-left:16px!important}.subagent-dialog .composer-area{padding-inline:12px}.subagent-dialog-head{min-height:56px}
   .compression-page{max-width:100%}.workspace-dialog,.confirm-dialog{max-width:calc(100vw - 24px);max-height:calc(var(--visual-height,100dvh) - 24px);padding:20px;border-radius:18px}
   .mobile-connection{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 16px;background:#32271c;color:#edc09c;font-size:11px;flex-shrink:0}.mobile-connection a{color:inherit;white-space:nowrap;min-height:32px;display:grid;place-items:center}
-  @container (max-height:300px){.thread-navigation{display:none}.thread-shell .thread-content{padding-right:16px;padding-bottom:8px}.thread-content>div>.log-row:last-child{padding-bottom:0}}
+  @container (max-height:300px){.thread-shell .thread-content{padding-right:16px;padding-bottom:8px}.thread-content>div>.log-row:last-child{padding-bottom:0}}
   @media(prefers-reduced-motion:no-preference){.app.history-open .sidebar{animation:mobile-drawer-in .2s ease-out}.mobile-expand{animation:mobile-control-in .18s ease-out}}
 }
-/* Keep the mobile input and its controls at the fixed single-row size. */
-.app:is(.mobile-workbench,.android-workbench) .composer{--display-font-scale:1;grid-template-columns:44px minmax(0,1fr) auto 44px;grid-template-rows:44px;align-items:center;gap:4px;padding:5px 8px}
-.app:is(.mobile-workbench,.android-workbench) .composer textarea{grid-column:2;grid-row:1;height:40px!important;min-height:40px;max-height:40px;font-size:14px;line-height:22px;padding:8px 4px;white-space:pre;overflow-wrap:normal;word-break:normal;overflow-x:auto;overflow-y:auto;scrollbar-width:none}
+/* Start compact, then grow the mobile input as its text wraps. */
+.app:is(.mobile-workbench,.android-workbench) .composer{--display-font-scale:1;grid-template-columns:44px minmax(0,1fr) auto auto;grid-template-rows:minmax(44px,auto);align-items:center;gap:4px;padding:5px 8px}
+.app:is(.mobile-workbench,.android-workbench) .composer textarea{grid-column:2;grid-row:1;height:40px;min-height:40px;max-height:min(140px,25dvh);min-width:0;font-size:16px;line-height:22px;padding:8px 4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
 .app:is(.mobile-workbench,.android-workbench) .composer .model-picker{grid-column:3;grid-row:1;min-width:0;max-width:80px;margin:0;justify-self:end}
 .app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary{min-width:44px;max-width:80px;padding-inline:6px;gap:4px}
 .app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary>span{max-width:50px}
@@ -34,15 +34,32 @@
 .app:is(.mobile-workbench,.android-workbench) .usage :is(.usage-metric,.compression-trigger,.memory-todo-toggle,.memory-global){min-height:44px;height:44px;gap:6px;white-space:nowrap;flex-shrink:0}
 .app:is(.mobile-workbench,.android-workbench) .usage :is(.compression-trigger,.memory-todo-toggle,.memory-global){min-width:44px;padding-inline:8px}.app:is(.mobile-workbench,.android-workbench) .usage .memory-global{width:44px}
 .app:is(.mobile-workbench,.android-workbench) .usage :is(.usage-metric,.compression-trigger,.memory-todo-toggle,.memory-global)>svg{width:16px;height:16px;flex-basis:16px}
-.android-workbench .thread-shell .thread-navigation{display:none}.android-workbench .thread-shell .thread-content{padding-inline:16px;max-width:100%;width:100%}.android-workbench .mobile-reading-toggle{display:grid}
+.android-workbench .thread-shell .thread-content{padding-inline:16px;max-width:100%;width:100%}.android-workbench .mobile-reading-toggle{display:grid}
 .app.reading-mode{grid-template-columns:minmax(0,1fr);height:var(--visual-height,100dvh);overflow:hidden}.reading-mode .workspace{position:relative;overflow:hidden}
-.reading-mode .sidebar,.reading-mode .backdrop,.reading-mode #content>.topnav,.reading-mode #content>.composer-area,.reading-mode #content>.mobile-connection,.reading-mode #content>.execution-alert,.reading-mode .context-panel,.reading-mode .thread-navigation{display:none!important}
+.reading-mode .sidebar,.reading-mode .backdrop,.reading-mode #content>.topnav,.reading-mode #content>.composer-area,.reading-mode #content>.mobile-connection,.reading-mode #content>.execution-alert,.reading-mode .context-panel{display:none!important}
 .reading-mode .composer-area,.reading-mode .compression-page{display:none!important}.reading-mode .thread-shell .thread-content{max-width:100%;width:100%;padding:16px 16px 72px}.reading-mode .session-init{display:none}.reading-mode .mobile-expand{display:flex;position:absolute;bottom:max(12px,env(safe-area-inset-bottom));right:12px;z-index:40;gap:7px;align-items:center;min-height:44px;padding:0 14px;border:1px solid #ffffff24;border-radius:24px;background:#202224eb;color:var(--fg-2);box-shadow:0 4px 20px #0005;backdrop-filter:blur(12px);font-size:12px}.mobile-expand svg{width:18px;height:18px}
+/* User scrolling briefly reveals one centered overlay: up at the top, down at
+   the bottom. Neither arrow reserves a row or a conversation side gutter. */
+.app:is(.mobile-workbench,.android-workbench) .thread-shell{min-height:96px}
+.app:is(.mobile-workbench,.android-workbench) .composer-area{flex-shrink:1}
+.app:is(.mobile-workbench,.android-workbench) .thread-shell .thread-navigation{position:absolute;inset:auto auto max(12px,env(safe-area-inset-bottom)) 50%;transform:translateX(-50%);display:none;flex-direction:column;gap:0;width:44px;padding:0;pointer-events:none}
+.app:is(.mobile-workbench,.android-workbench) .thread-shell .thread-navigation[data-visible=true]:not([data-empty=true]){display:flex}
+.app:is(.mobile-workbench,.android-workbench) .thread-shell .thread-navigation[data-direction=up]{top:max(12px,env(safe-area-inset-top));bottom:auto}
+.app:is(.mobile-workbench,.android-workbench) .thread-navigation button{display:none;flex-shrink:0;margin:0;border:1px solid var(--border-soft);border-radius:50%;background:var(--surface);color:var(--fg-2);box-shadow:0 2px 10px #0002;pointer-events:auto}
+.app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-direction=up] [data-scroll=up],.app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-direction=down] [data-scroll=down]{display:grid}
+.app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-empty=true]{display:none}
+@media (max-height:400px) {
+  /* In a keyboard-sized viewport, keep typing and sending before the scrollable
+     attachment, clear-draft and tool rows rather than pushing the form below it. */
+  .app:is(.mobile-workbench,.android-workbench) .composer-area>.container{display:flex;flex-direction:column}
+  .app:is(.mobile-workbench,.android-workbench) .composer-area .composer{order:-1;flex-shrink:0}
+}
 @media (pointer:coarse) {
-  .sidebar :is(.search input,.session-title-input,.workspace-name-input),.model-search input,.annotation-editor textarea,.memory-dialog :is(input:not([type=radio]):not([type=checkbox]),textarea,select),.auth-browser-step .input { font-size:16px; }
+  .sidebar :is(.search input,.session-title-input,.workspace-name-input),.model-search input,:is(.annotation-editor,.annotation-supplement) textarea,.memory-dialog :is(input:not([type=radio]):not([type=checkbox]),textarea,select),.auth-browser-step .input,.auto-compression-field input,.processing-filters :is(input,select) { font-size:max(16px,calc(16px * var(--display-font-scale,1))); }
+  .processing-filters :is(input,select) { min-height:44px; }
   .sidebar :is(.session-title-input,.workspace-name-input) { height:auto;min-height:28px;line-height:1.5; }
 }
-/* Desktop reflows with enlarged text; mobile keeps its single-row composer. */
+/* Desktop reflows controls with enlarged text independently of mobile. */
 .app:not(.mobile-workbench):not(.android-workbench) .composer-area > .container { container-name: desktop-composer; }
 @container desktop-composer (max-width:24em) {
   .composer-area .container .composer { grid-template-columns:minmax(0,1fr) auto auto; grid-template-rows:auto auto; }

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../Icon.js";
-import { useAnchoredPopup } from "../useAnchoredPopup.js";
+import { revealPopupOption, useAnchoredPopup } from "../useAnchoredPopup.js";
 
 type Option = { value: string; label: string };
 
@@ -18,7 +18,7 @@ export function MemoryFilter({ label, value, options, onChange }: {
   const active = Math.max(0, options.findIndex((option) => option.value === activeValue));
   const optionKeys = JSON.stringify(options.map((option) => option.value));
   const { panel, host } = useAnchoredPopup(expanded ? trigger.current : null, { maxWidth: 520, maxHeight: 320, matchWidth: true, preferBelow: true });
-  const show = () => { setActiveValue(value); search.current = { text: "", at: 0 }; setOpen(true); };
+  const show = () => { trigger.current?.focus({ preventScroll: true }); setActiveValue(value); search.current = { text: "", at: 0 }; setOpen(true); };
   const close = () => { setOpen(false); };
   const choose = (option: Option) => {
     // Restore focus before a workspace change can replace this filter instance.
@@ -28,7 +28,7 @@ export function MemoryFilter({ label, value, options, onChange }: {
   };
 
   useLayoutEffect(() => {
-    if (expanded) panel.current?.querySelectorAll<HTMLElement>('[role="option"]')[active]?.scrollIntoView({ block: "nearest" });
+    if (expanded) revealPopupOption(panel.current, active);
   }, [expanded, active, optionKeys, panel]);
   useEffect(() => {
     if (!expanded) return;

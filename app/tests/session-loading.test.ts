@@ -75,15 +75,18 @@ test("transcript ownership accepts Windows short names in either cwd position wi
 test("six background sessions never cold-read display history and retain terminal deltas until persistence", (t) => {
   const f = fixture(); t.after(f.close);
   const sessions = Array.from({ length: 6 }, f.create);
-  const spy = t.mock.method(SessionManager, "open");
-  const views = new AgentViews(f.store, () => assert.fail("unobserved display should not publish"), () => false);
+  const spy = t.mock.method(SessionManager.prototype, "setSessionFile");
+  const published: string[] = [];
+  const views = new AgentViews(f.store, scope => published.push(scope), () => false);
   for (let i = 0; i < 60; i++) {
     const { scope } = sessions[i % 6];
     views.messageChanged(scope, { id: "pending", role: "assistant", text: `delta ${i}`, streaming: true }); views.flush(scope);
   }
   assert.equal(spy.mock.callCount(), 0); assert.equal(views.messages.size, 0);
+  assert.deepEqual(published, sessions.map(({ scope }) => `sessions:${scope.workspaceId}`), "only first-seen message counts invalidate session summaries, never background display");
   const { scope, manager } = sessions[0];
   views.messageChanged(scope, { id: "pending", role: "assistant", text: "terminal before disk", streaming: false, status: "completed" }); views.flush(scope);
+  assert.equal(published.length, 6, "terminal updates do not increment message counts");
   assert.equal(views.transcript(scope).get("pending")?.text, "terminal before disk");
   views.messages.delete(scope.sessionId);
   assert.equal(views.transcript(scope).get("pending")?.text, "terminal before disk", "eviction cannot discard pre-persistence terminal data");
@@ -98,7 +101,7 @@ test("archive-only edits advance context revision, full reads share a same-sourc
   manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "current" }], stopReason: "stop", timestamp: 4 } as any);
   const views = new AgentViews(f.store, () => {}, () => false);
   const first = views.thread(scope);
-  const spy = t.mock.method(SessionManager, "open");
+  const spy = t.mock.method(SessionManager.prototype, "setSessionFile");
   assert.equal(views.message(scope, archive, true)?.text, "archive");
   assert.equal(views.message(scope, archive, true)?.text, "archive"); assert.equal(spy.mock.callCount(), 1);
   manager.appendContextEdit(archive, { content: "replacement" }); views.refresh(scope);

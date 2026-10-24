@@ -3,6 +3,18 @@ import { test } from "node:test";
 import { SessionManager, type AgentSession, type BoundaryState } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { CompressionMemory, compressionMemoryPrompt } from "../src/server/compression-memory.js";
+import { memoryInstruction } from "../src/shared/memory-instruction.js";
+import { compressionMemoryRead } from "./compression-memory-fixture.js";
+
+test("loopback memory reader locates current and historical memory instructions", () => {
+  const path = "/tmp/session with spaces/MEMORY.md";
+  for (const instruction of [memoryInstruction(path), `你需要主动维护本会话记忆文件 ${path}，保留进展。`]) {
+    const response = compressionMemoryRead({ tools: [{}], messages: [
+      { role: "system", content: instruction }, { role: "system", content: compressionMemoryPrompt },
+    ] });
+    assert.deepEqual(JSON.parse(response!.tool_calls[0].function.arguments), { path });
+  }
+});
 
 function fixture() {
   const memory = new CompressionMemory(), manager = SessionManager.inMemory();

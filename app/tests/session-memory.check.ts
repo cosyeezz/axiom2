@@ -7,6 +7,7 @@ import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { memoryTemplate, memoryScope } from "../src/shared/memory.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
+import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 // Session/document regressions. Global browsing uses the current tree contract;
@@ -51,11 +52,12 @@ try {
   const closePanel = async () => { await page.getByRole("button", { name: "关闭记忆", exact: true }).click(); };
   const progress = async (text: string) => wait(async () => (await toggle.getAttribute("data-tooltip"))?.includes(text) === true);
   await progress("30%"); await toggle.click();
+  await todo.locator('.memory-context-summary > summary').click();
   assert.match(await todo.locator(".memory-context-detail").innerText(), /64,000 \/ 128,000/);
   assert.match(await todo.locator(".memory-progress-summary").innerText(), /约 30%/);
   assert.equal(await toggle.innerText(), "");
   assert.equal(await todo.locator("pre").count(), 0);
-  assert.equal(await todo.locator('li[data-state="进行中"] .bubble-loading').count(), 1);
+  assert.equal(await todo.locator('li[data-state="进行中"] .memory-state-icon animateTransform').count(), 1);
   const contextArc = await toggle.locator(".context-ring.data-filled").getAttribute("d");
   await closeTodo();
 
@@ -139,15 +141,15 @@ try {
   assert.equal(await chat.inputValue(), "保留主聊天草稿");
 
   // Current global tree retains source navigation even after source-session deletion.
-  writeFileSync(join(memoryDirectory(root, deleted.sessionId), "MEMORY.md"), "## 目标与范围\n保留历史记录\n");
+  (app.agents.memories as any).scheduleOrganization = () => {};
+  writeFileSync(join(memoryDirectory(root, deleted.sessionId), "MEMORY.md"), "# [Completed] 保留历史记录\n");
   app.agents.memories.scan();
-  app.agents.memories.pipeline.tree.publish(workspace.id, { sessionId: deleted.sessionId, path: "MEMORY.md", revision: app.agents.memories.read(deleted).revision, records: [], dependencies: [] }, [], [
-    { topic: "历史资料", section: "来源", item: "已删除会话", content: "保留历史记录" },
-  ], app.agents.memories.pipeline.tree.signature(workspace.id));
+  const tree = app.agents.memories.pipeline.tree, batch = tree.batch(workspace.id, Date.now() + memoryBatchWaitMs);
+  tree.publish(workspace.id, batch, tree.classify(JSON.stringify([{ name: "历史资料", children: batch.map(p => ({ purposeId: p.id })) }]), batch), tree.snapshot(workspace.id).version);
   app.store.execute({ requestId: randomUUID(), op: "session.delete", ...deleted, params: { confirmed: true } }); app.agents.memories.scan();
   await page.getByRole("button", { name: "全局记忆", exact: true }).click();
   await global.getByRole("textbox", { name: "搜索记忆" }).fill("保留历史记录");
-  await global.locator('.memory-tree-node[data-kind="Item"]').click();
+  await global.locator('.memory-tree-node[data-kind="Purpose"]').click();
   await global.locator(".memory-tree-source").click();
   await panel.getByText("来源会话已从普通列表移除，记忆仍保留。").waitFor();
   await panel.getByRole("button", { name: "返回全局记忆", exact: true }).click();
@@ -175,7 +177,22 @@ try {
   await progress("100%"); await toggle.click();
   assert.equal(await todo.getByRole("progressbar", { name: "任务整体进度" }).getAttribute("value"), "100");
   assert.equal(await toggle.locator(".context-ring.data-filled").getAttribute("d"), contextArc);
-  assert.equal(await todo.locator("animate,animateTransform").count(), 0); await closeTodo();
+  assert.equal(await todo.locator('animate[repeatCount="indefinite"],animateTransform').count(), 0);
+  const completedIcons = todo.locator('.memory-state-icon[data-state="已完成"]');
+  assert.equal(await completedIcons.count(), 2);
+  for (const icon of await completedIcons.all()) {
+    // The completed double-check glyph animates each of its two strokes once.
+    assert.equal(await icon.locator("path > animate").count(), 2);
+    for (const stroke of await icon.locator("path > animate").all()) {
+      assert.equal(await stroke.getAttribute("attributeName"), "stroke-dashoffset");
+      assert.equal(await stroke.getAttribute("from"), "1");
+      assert.equal(await stroke.getAttribute("to"), "0");
+      assert.equal(await stroke.getAttribute("dur"), "0.45s");
+      assert.equal(await stroke.getAttribute("fill"), "freeze");
+      assert.equal(await stroke.getAttribute("repeatCount"), null);
+    }
+  }
+  await closeTodo();
   setEntry(memoryTemplate); await progress("暂无记录"); await toggle.click();
   await todo.getByText("还没有任务记录", { exact: true }).waitFor();
   assert.equal(await todo.locator("progress").count(), 0);

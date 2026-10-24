@@ -1,8 +1,10 @@
+import { withCommandAdmission } from "../command-admission.js";
 import { currentMaintenance } from "../maintenance.js";
 import { MaintenanceError } from "../../shared/maintenance.js";
-import { createWindowsCommandLease, ownWindowsPackageTree, windowsCommandLeaseLive } from "../pi-package-windows.js";
-import { forkLinuxOwned, monotonicMilliseconds } from "../owned-process-linux.js";
-import { fork } from "node:child_process";
+import { createWindowsCommandLease, windowsCommandLeaseLive } from "../pi-package-windows.js";
+import { monotonicMilliseconds } from "../owned-process-linux.js";
+import { forkMaintenanceProcess, maintenanceProcessSupported, maintenanceProcessSupportError, type MaintenanceProcess } from "../maintenance-process.js";
+import type { ChildProcess } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readdirSync, readlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { createProcessOwner, processOwnerIsLive, recoverProcessOwner, type CommandLeaseIdentity } from "../process-owner-record.js";
@@ -10,9 +12,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolProcessReply, ToolProcessRequest } from "./tool-process-worker.js";
 
-export type ToolRunOptions = { root: string; cwd?: string; input?: string; signal?: AbortSignal; timeout?: number; limit?: number; errorLimit?: number; env?: NodeJS.ProcessEnv; output?: "structured" | "tail"; errorOutput?: "structured" | "tail"; beforeStart?: (owner: string) => void; onStopped?: (proof: "not-started" | "tree-cleaned") => void };
+export type ToolRunOptions = { root: string; cwd?: string; input?: string; signal?: AbortSignal; timeout?: number; limit?: number; errorLimit?: number; env?: NodeJS.ProcessEnv; output?: "structured" | "tail"; errorOutput?: "structured" | "tail"; admissionCheck?: () => void; beforeStart?: (owner: string) => void; onStopped?: (proof: "not-started" | "tree-cleaned") => void };
 export type ToolRun = (file: string, args: string[], options: ToolRunOptions) => Promise<{ code: number; stdout: Buffer; stderr: Buffer; stdoutTruncated?: boolean; stderrTruncated?: boolean }>;
-function commandLease(root: string, ownerPath: string): { id: CommandLeaseIdentity; close(): void } {
+function commandLease(root: string, ownerPath: string): { id?: CommandLeaseIdentity; close(): void } {
+  // PID owners use a revocable in-host registry, not Linux /proc descriptors.
+  if (process.platform === "darwin") return { close() {} };
   const windows = createWindowsCommandLease(ownerPath);
   if (windows) return windows;
   // The descriptor keeps this never-reused inode alive after unlink. Closing it
@@ -28,8 +32,10 @@ function commandLease(root: string, ownerPath: string): { id: CommandLeaseIdenti
     return { id, close() { if (!closed) { closed = true; closeSync(fd); } } };
   } catch (error) { closeSync(fd); throw error; }
 }
-export const toolProcessSupported = (platform: string = process.platform) => ["win32", "linux"].includes(platform);
-export const toolProcessSupportError = "当前后台平台尚不支持可靠的维护进程监督，托管安装与程序检查暂不可用。";
+export const toolProcessSupported = maintenanceProcessSupported;
+export const toolProcessSupportError = maintenanceProcessSupportError;
+/** 代理线路不依赖托管进程监督：内核由后台直接启动并记录 PID。 */
+export const proxyLaunchSupported = () => ["win32", "linux", "darwin"].includes(process.platform);
 const activeOwners = new Set<string>();
 export function assertToolProcessesStopped(root: string) {
   let names: string[];
@@ -40,7 +46,7 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
   const execution = currentMaintenance();
   const signal = options.signal && execution ? AbortSignal.any([options.signal, execution.signal]) : options.signal ?? execution?.signal;
   if (signal?.aborted) { options.onStopped?.("not-started"); reject(signal.reason); return; }
-  if (!toolProcessSupported()) { options.onStopped?.("not-started"); reject(new MaintenanceError("operation", "此平台尚不支持可靠的命令进程隔离，未执行程序。")); return; }
+  if (!toolProcessSupported()) { options.onStopped?.("not-started"); reject(new MaintenanceError("operation", toolProcessSupportError)); return; }
   const started = Date.now();
   const remaining = () => execution?.remainingBudget() ?? { remainingMs: (options.timeout ?? 2000) - (Date.now() - started), code: "total-timeout" as const };
   const deadline = () => monotonicMilliseconds() + remaining().remainingMs;
@@ -52,19 +58,27 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     }
   }
   const owner = join(options.root, `.axiom-command-${randomUUID()}.json`);
-  const lease = commandLease(options.root, owner);
-  let journal: ReturnType<typeof createProcessOwner>;
-  try { journal = createProcessOwner(owner, lease.id); }
-  catch (error) { lease.close(); options.onStopped?.("not-started"); reject(error); return; }
+  let lease: ReturnType<typeof commandLease>, journal: ReturnType<typeof createProcessOwner>;
+  try {
+    ({ lease, journal } = withCommandAdmission(options.root, () => {
+      signal?.throwIfAborted();
+      // Revalidate the selected executable/configuration under the same gate used
+      // by removal, before publishing the owner that protects the command tree.
+      options.admissionCheck?.();
+      const lease = commandLease(options.root, owner);
+      try { return { lease, journal: createProcessOwner(owner, lease.id) }; }
+      catch (error) { lease.close(); throw error; }
+    }));
+  } catch (error) { options.onStopped?.("not-started"); reject(error); return; }
   activeOwners.add(owner);
   const source = import.meta.url.endsWith(".ts");
-  let child: ReturnType<typeof fork>, linux: ReturnType<typeof forkLinuxOwned> | undefined;
+  let child: ChildProcess, owned: MaintenanceProcess;
   try {
     options.beforeStart?.(owner);
     const entry = fileURLToPath(new URL(`./tool-process-worker.${source ? "ts" : "js"}`, import.meta.url));
     const forkOptions = { cwd: options.cwd ?? options.root, execArgv: source ? ["--import", import.meta.resolve("tsx")] : [], serialization: "advanced" as const };
-    if (process.platform === "linux") { linux = forkLinuxOwned(entry, forkOptions, deadline(), timeoutError, identity => journal.arm(identity)); child = linux.child; }
-    else child = fork(entry, [], { ...forkOptions, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+    owned = forkMaintenanceProcess(entry, forkOptions, deadline(), timeoutError, identity => journal.arm(identity));
+    child = owned.child;
   } catch (error) {
     activeOwners.delete(owner);
     try { options.onStopped?.("not-started"); journal.confirmed(); }
@@ -73,22 +87,17 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
   }
   const chunks: Buffer[] = []; let stderr = Buffer.alloc(0), bytes = 0, errorBytes = 0, stdoutTruncated = false, failure: unknown, commandSent = false, admissionLost = false;
   let result: ToolProcessReply | undefined, stopping: Promise<void> | undefined;
-  let job: ReturnType<typeof ownWindowsPackageTree>, stopTimer: ReturnType<typeof setTimeout> | undefined;
-  const cleanup = () => stopping ??= (async () => {
-    if (linux) return linux.close();
-    if (job) return job.close();
-    if (!child.pid) return;
-    child.kill(); // Windows: no command is sent before Job Object assignment.
-  })();
+  let stopTimer: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = () => stopping ??= owned.close();
   const uncertain = () => new MaintenanceError("stop-unconfirmed", "程序退出未能确认，文件已保留；请核实后台进程后重试。");
   const stop = (reason?: unknown) => {
     failure ??= reason;
     void cleanup().catch(() => {});
-    stopTimer ??= setTimeout(() => { admissionLost = true; lease.close(); clearInterval(timer); activeOwners.delete(owner); reject(uncertain()); }, 7000);
+    stopTimer ??= setTimeout(() => { admissionLost = true; journal.revoke(); lease.close(); clearInterval(timer); activeOwners.delete(owner); reject(uncertain()); }, 7000);
   };
   const abort = () => stop(signal?.reason ?? new MaintenanceError("cancelled", "操作已取消。"));
   const timer = setInterval(() => {
-    linux?.setDeadline(deadline());
+    owned.setDeadline(deadline());
     if (remaining().remainingMs <= 0) stop(timeoutError());
   }, 100);
   signal?.addEventListener("abort", abort, { once: true });
@@ -117,7 +126,7 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     clearInterval(timer); signal?.removeEventListener("abort", abort);
     try {
       await cleanup();
-      const nativeFailure = linux?.failure();
+      const nativeFailure = owned.failure();
       if (nativeFailure instanceof MaintenanceError && nativeFailure.code === "stop-unconfirmed") throw nativeFailure;
       failure ??= nativeFailure;
       if (!admissionLost) {
@@ -128,16 +137,9 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
       else if (result?.type !== "exit") reject(Error("程序执行失败，请检查输入和安装状态。"));
       else resolve({ code: result.code ?? -1, stdout: Buffer.concat(chunks), stderr, ...(stdoutTruncated ? { stdoutTruncated: true } : {}), ...(errorBytes > (options.errorLimit ?? 64 * 1024) ? { stderrTruncated: true } : {}) });
     } catch { reject(uncertain()); }
-    finally { lease.close(); activeOwners.delete(owner); clearTimeout(stopTimer); }
+    finally { journal.revoke(); lease.close(); activeOwners.delete(owner); clearTimeout(stopTimer); }
   });
-  try {
-    if (child.pid) {
-      job = ownWindowsPackageTree(child.pid);
-      if (job) journal.arm({ platform: "win32", workerPid: child.pid });
-    }
-  }
-  catch (error) { stop(error); return; }
-  void (linux?.ready ?? Promise.resolve()).then(() => {
+  void owned.ready.then(() => {
     if (stopping) return;
     if (signal?.aborted) { abort(); return; }
     const request: ToolProcessRequest = { file, args, cwd: options.cwd ?? options.root, input: options.input ?? "", env: options.env ?? process.env };

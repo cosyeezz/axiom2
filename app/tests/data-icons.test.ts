@@ -39,6 +39,18 @@ test("context capacity and task thirds remain independent; only 100% lights all 
   }
 });
 
+test("chapter task states animate only the three original checklist strokes, independently of capacity", () => {
+  for (const state of ["未开始", "进行中", "已完成", "等待", "失败", "已放弃", "阻塞"] as const) {
+    const svg = renderToStaticMarkup(createElement(ContextMemoryIcon, { percent: 95, taskPercent: 100, taskState: state }));
+    assert.match(svg, /data-icon-capacity-warning/);
+    assert.ok(svg.includes(`data-state="${state === "阻塞" ? "等待" : state}"`));
+    assert.doesNotMatch(svg, /data-progress=|memory-progress-lit|memory-progress-pending/);
+    assert.equal((svg.match(/class="memory-progress-state"/g) ?? []).length, 3);
+    assert.equal((svg.match(/<animate /g) ?? []).length, state === "进行中" ? 3 : 0);
+    assert.equal((svg.match(/<path /g) ?? []).length, 5, "only the context ring and the original checklist geometry");
+  }
+});
+
 test("cache color thresholds govern breathing only during active work", () => {
   for (const [percent, tone] of [[0, "danger"], [70, "danger"], [70.01, "warning"], [90, "warning"], [90.01, "success"], [100, "success"], [null, "unknown"], [NaN, "unknown"]] as const) {
     for (const active of [false, true]) {

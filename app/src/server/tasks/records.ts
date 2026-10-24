@@ -75,6 +75,34 @@ export class TaskRecords {
     if (!(store.db.prepare("PRAGMA table_info(task_notification_attempts)").all() as { name: string }[]).some((column) => column.name === "runId"))
       store.db.exec("ALTER TABLE task_notification_attempts ADD COLUMN runId TEXT");
     store.db.exec("INSERT OR IGNORE INTO task_model_preferences(id,selection) VALUES(1,NULL)");
+    // Stable model-facing references; UUIDs remain the storage and delivery identities.
+    store.db.exec(`CREATE TABLE IF NOT EXISTS task_model_refs(
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskId TEXT UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+      resultId TEXT UNIQUE REFERENCES task_results(id) ON DELETE CASCADE,
+      CHECK ((taskId IS NULL) != (resultId IS NULL)));
+      INSERT INTO task_model_refs(taskId) SELECT id FROM tasks
+        WHERE NOT EXISTS (SELECT 1 FROM task_model_refs WHERE taskId=tasks.id) ORDER BY rowid;
+      INSERT INTO task_model_refs(resultId) SELECT id FROM task_results
+        WHERE NOT EXISTS (SELECT 1 FROM task_model_refs WHERE resultId=task_results.id) ORDER BY rowid;`);
+  }
+  modelRef(kind: "task" | "result", id: string) {
+    const column = kind === "task" ? "taskId" : "resultId";
+    let row = this.store.db.prepare(`SELECT seq FROM task_model_refs WHERE ${column}=?`).get(id);
+    if (!row) {
+      this.store.db.prepare(`INSERT INTO task_model_refs(${column}) VALUES(?)`).run(id);
+      row = this.store.db.prepare(`SELECT seq FROM task_model_refs WHERE ${column}=?`).get(id);
+    }
+    return `${kind === "task" ? "t" : "r"}${row!.seq}`;
+  }
+  modelId(kind: "task" | "result", value: unknown) {
+    const ref = text(value, kind === "task" ? "子任务标识" : "结果标识");
+    const match = (kind === "task" ? /^t([1-9]\d*)$/ : /^r([1-9]\d*)$/).exec(ref);
+    if (!match) return ref; // Historical tools continue to accept complete UUIDs.
+    const column = kind === "task" ? "taskId" : "resultId";
+    const row = this.store.db.prepare(`SELECT ${column} AS id FROM task_model_refs WHERE seq=?`).get(match[1]);
+    // A resolved reference still has to pass the existing ownership/pair checks.
+    return row?.id ? String(row.id) : ref;
   }
   rows(where = "", ...params: (string | number)[]) {
     return this.store.db
@@ -108,6 +136,9 @@ export class TaskRecords {
     this.store.session(scope.workspaceId, scope.sessionId);
     const row = this.store.prepare("SELECT * FROM task_parents WHERE sessionId=?").get(scope.sessionId);
     const rows = this.rows("WHERE workspaceId=? AND parentSessionId=? ORDER BY createdAt,rowid", scope.workspaceId, scope.sessionId);
+    const refs = new Map(this.store.prepare(`SELECT ref.taskId,ref.seq FROM task_model_refs ref
+      JOIN tasks t ON t.id=ref.taskId WHERE t.workspaceId=? AND t.parentSessionId=?`).all(scope.workspaceId, scope.sessionId)
+      .map(entry => [String(entry.taskId), `t${entry.seq}`]));
     const inputs = new Map<string, TaskInputReceipt[]>(), results = new Map<string, Task["results"]>();
     for (const entry of this.store.prepare(`SELECT i.taskId,i.inputId,i.runId,i.state,i.error FROM task_input_receipts i
       JOIN tasks t ON t.id=i.taskId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY i.updatedAt,i.rowid`).all(scope.workspaceId, scope.sessionId)) {
@@ -124,7 +155,7 @@ export class TaskRecords {
       WHERE t.workspaceId=? AND t.parentSessionId=? GROUP BY tr.taskId`).all(scope.workspaceId, scope.sessionId)
       .map((entry) => [String(entry.taskId), Number(entry.ms)]));
     return {
-      tasks: rows.map((task) => ({ ...task, budgets: this.budgets(task.budgets),
+      tasks: rows.map((task) => ({ ...task, ref: refs.get(task.id) ?? this.modelRef("task", task.id), budgets: this.budgets(task.budgets),
         inputs: inputs.get(task.id) ?? [], results: results.get(task.id) ?? [], elapsedMs: elapsed.get(task.id) ?? 0 })),
       frozen: !!row?.frozen,
       defaultModel: this.settings().selection,
@@ -271,6 +302,7 @@ export class TaskRecords {
             JSON.stringify(budgets),
             Date.now(),
           );
+        this.modelRef("task", id);
         this.store.db.prepare("INSERT INTO task_queue_order(taskId) VALUES(?)").run(id);
         this.queue(
           id,

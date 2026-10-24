@@ -1,3 +1,5 @@
+import type { ServiceRecovery } from "../service-recovery-records.js";
+import { assertServiceRecovery } from "../service-recovery.js";
 import { rewriteTarget } from "../session-rewrite.js";
 import { randomUUID } from "node:crypto";
 import type { Agents } from "../agents.js";
@@ -137,7 +139,7 @@ export class TaskScheduler {
     for (const timer of this.timers.values()) clearTimeout(timer);
     const rows = this.records.rows();
     for (const row of rows) this.records.freeze(parent(row));
-    await Promise.all([this.stop(rows, "服务正在退出", "shutdown"), this.agents.close()]);
+    await Promise.all([this.stop(rows.filter(row => row.status !== "queued"), "服务正在退出", "shutdown"), this.agents.close()]);
     await Promise.allSettled(this.jobs);
     this.flushViews();
   }
@@ -241,6 +243,37 @@ export class TaskScheduler {
     const receipt = this.store.db.prepare("SELECT state,error,runId FROM task_input_receipts WHERE inputId=?").get(id)!;
     if (receipt.state === "failed") throw new AppError("INPUT_NOT_DELIVERED", String(receipt.error));
     return { taskId: row.id, inputId: id, runId: receipt.runId, status: receipt.state };
+  }
+  recover(row: Row, recovery: ServiceRecovery) {
+    if (this.closing) throw new AppError("SHUTTING_DOWN", "服务正在退出");
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      assertServiceRecovery(this.agents, recovery);
+      const inputs = JSON.parse(recovery.payload) as Array<{ id: string; taskId: string; body: string; mode: string; createdAt: number; images: string | null; skills: string | null }>;
+      if (recovery.kind === "resume") {
+        this.agents.assertContinuation(target(row), recovery.runId);
+        const id = `service-resume-${recovery.runId}`;
+        const createdAt = Math.min(Date.now(), ...inputs.map(input => input.createdAt)) - 1;
+        this.store.db.prepare("INSERT OR IGNORE INTO task_inputs VALUES(?,?,?,'resume','queued',NULL,?)").run(id, row.id, recovery.runId, createdAt);
+        this.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'queued',NULL,?) ON CONFLICT(inputId) DO UPDATE SET runId=NULL,state='queued',error=NULL,updatedAt=excluded.updatedAt")
+          .run(id, row.id, Date.now());
+      }
+      for (const input of inputs) {
+          if (recovery.kind === "resume" && input.mode === "resume") continue;
+          if (input.taskId !== row.id) throw new AppError("INVALID_INPUT", "恢复队列归属无效");
+          this.store.db.prepare("INSERT OR IGNORE INTO task_inputs VALUES(?,?,?,?,'queued',NULL,?)")
+            .run(input.id, row.id, input.body, input.mode, input.createdAt);
+          this.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'queued',NULL,?) ON CONFLICT(inputId) DO UPDATE SET runId=NULL,state='queued',error=NULL,updatedAt=excluded.updatedAt")
+            .run(input.id, row.id, Date.now());
+          if (input.images) this.store.db.prepare("INSERT OR REPLACE INTO task_input_images VALUES(?,?)").run(input.id, input.images);
+          if (input.skills) this.store.db.prepare("INSERT OR REPLACE INTO task_input_skills VALUES(?,?)").run(input.id, input.skills);
+      }
+      this.store.db.prepare("INSERT OR IGNORE INTO task_queue_order(taskId) VALUES(?)").run(row.id);
+      this.store.db.prepare("UPDATE tasks SET status='queued',error=NULL WHERE id=?").run(row.id);
+      this.store.db.exec("COMMIT");
+    } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+    this.changed(row);
+    this.kick();
   }
   resume(row: Row, expectedRunId: string, requestId: string) {
     if (this.closing || this.cancelling.has(row.id))
@@ -346,6 +379,7 @@ export class TaskScheduler {
     }
   }
   private async start(row: Row) {
+    const recovery = this.store.recoveries.get(row.sessionId);
     const queued = this.records.inputs(row, "queued");
     // Keep the initial delegation distinct from queued appends so its durable
     // input identity can display the original brief without hiding later work.
@@ -384,6 +418,7 @@ export class TaskScheduler {
             budget: budgetContext,
           },
           beforeStart: () => {
+            if (recovery) assertServiceRecovery(this.agents, recovery);
             if (
               this.closing || this.recalling.has(row.id) ||
               this.records.rows("WHERE id=?", row.id)[0]?.status !== "queued" ||
@@ -398,12 +433,16 @@ export class TaskScheduler {
             if (active + earlier >= this.records.preferences().concurrency)
               throw new AppError("TASK_CAPACITY_DEFERRED", "等待可用子任务容量");
           },
-          onStart: (run) => {
+          onCommit: (run) => {
             this.store.db
               .prepare(
                 "UPDATE tasks SET status='starting',runId=?,error=NULL,workStartedAt=?,workDeadlineAt=?,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1 WHERE id=?",
               )
               .run(run.id, run.startedAt, run.startedAt + this.records.preferences().workMs, row.id);
+            // Restart recovery retains the original deadlines, including summary
+            // mode. Repeated service restarts must not grant an unlimited budget.
+            if (recovery) this.store.db.prepare("UPDATE tasks SET workDeadlineAt=?,summaryDeadlineAt=? WHERE id=?")
+              .run(row.workDeadlineAt ?? run.startedAt + this.records.budgets(row.budgets).workMs, row.summaryDeadlineAt ?? null, row.id);
             this.store.db.prepare("DELETE FROM task_stops WHERE taskId=?").run(row.id);
             for (const input of inputs) {
               this.records.receipt(input.id, "queued", null, run.id);
@@ -418,6 +457,8 @@ export class TaskScheduler {
             const budgets = JSON.stringify(this.records.preferences());
             this.store.db.prepare("UPDATE tasks SET budgets=? WHERE id=?").run(budgets, row.id);
             Object.assign(budgetContext, this.budget(this.records.rows("WHERE id=?", row.id)[0]));
+          },
+          onStart: (run) => {
             this.syncBudget(this.records.rows("WHERE id=?", row.id)[0]);
             this.arm(this.records.rows("WHERE id=?", row.id)[0], run);
             this.changed(row);
@@ -425,7 +466,7 @@ export class TaskScheduler {
         },
       );
     } catch (e) {
-      if (e instanceof AppError && e.code === "TASK_CAPACITY_DEFERRED") return;
+      if (this.closing || e instanceof AppError && e.code === "TASK_CAPACITY_DEFERRED") return;
       const current = this.records.rows("WHERE id=?", row.id)[0];
       if (!current) return;
       const run = this.agents.info(target(current)).run;
@@ -504,6 +545,7 @@ export class TaskScheduler {
       ? "用户或主代理请求停止"
       : text(p.reason, "停止原因", 2000);
     const current = this.records.rows("WHERE id=?", row.id)[0];
+    if (source !== "shutdown") this.store.recoveries.remove(current.sessionId);
     row = current;
     if (!taskActive(current.status))
       return { taskId: row.id, status: current.status };

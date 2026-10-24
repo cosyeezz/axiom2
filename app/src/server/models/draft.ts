@@ -6,6 +6,10 @@ import {
   modelApis,
   reasoningLevels,
   samplingKeys,
+  assignModelConfigIds,
+  bodyOverrideType,
+  validBodyOverrideKey,
+  editableBodyOverride,
   modelCostKeys,
   validModelPricing,
   type ReasoningLevel,
@@ -120,19 +124,27 @@ function headersInput(
   return Object.fromEntries(result);
 }
 function bodyInput(input: unknown): Json {
-  const result: [string, number][] = [],
+  const result: [string, string | number][] = [],
     seen = new Set<string>();
   for (const [index, row] of list(input, 30).entries()) {
     atConfig(`请求体覆盖第 ${index + 1} 行`, () => {
       const r = object(row),
         key = text(r.key, "请求体字段", 100);
       if (seen.has(key)) invalid(`字段 ${key} 重复；请删除重复项`);
-      if (!samplingKeys.includes(key as any))
-        invalid("请求体字段不支持；请选择列表中的数值采样参数");
+      if (!validBodyOverrideKey(key)) invalid("请求体字段名称无效");
       atConfig(`字段 ${key}`, () => {
-        if (typeof r.value !== "string" || !r.value.trim())
-          invalid("请求体值必须为数值");
-        const value = Number(r.value);
+        const valueType = r.valueType ?? bodyOverrideType(key);
+        if (valueType !== "string" && valueType !== "number") invalid("请求体值类型无效");
+        const inputValue = r.value;
+        if (typeof inputValue !== "string" || inputValue.length > 8192)
+          return invalid("请求体值必须为不超过 8192 字符的文本");
+        if (valueType === "string") {
+          seen.add(key);
+          result.push([key, inputValue]);
+          return;
+        }
+        if (!inputValue.trim()) invalid("请求体值必须为数值");
+        const value = Number(inputValue);
         if (!Number.isFinite(value)) invalid("请求体值必须为有限数值");
         if (["top_p", "min_p"].includes(key) && (value < 0 || value > 1))
           invalid("top_p / min_p 必须在 0–1 之间");
@@ -235,36 +247,92 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
         previousModels = entries(original),
         modelIds = new Set<string>(),
         modelOriginals = new Set<string>();
+      // Normalize legacy/new drafts too; callers need these identities for validation after loading.
+      const modelInputs = assignModelConfigIds(list(p.models, 1000).map((entry, modelIndex) =>
+        atConfig(configLabel("模型", entry, modelIndex), () => {
+          const m = object(entry);
+          return { ...m, id: id(m.id, "模型 ID"),
+            ...(m.configId === undefined ? {} : { configId: id(m.configId, "模型配置 ID") }) };
+        }),
+      ));
+      p.models = modelInputs;
       next.models = [];
       next.modelOverrides = {};
-      for (const [modelIndex, entry] of list(p.models, 1000).entries()) {
+      for (const [modelIndex, entry] of modelInputs.entries()) {
         atConfig(configLabel("模型", entry, modelIndex), () => {
           const m = object(entry),
-            modelId = id(m.id, "模型 ID");
-          if (modelIds.has(modelId)) invalid("同一供应商的模型 ID 重复");
+            requestModelId = id(m.id, "模型 ID"),
+            modelId = m.configId === undefined ? requestModelId : id(m.configId, "模型配置 ID");
+          if (modelIds.has(modelId)) invalid("模型配置标识重复，请重新读取配置后重试");
           modelIds.add(modelId);
           const oldId =
             m.originalId === undefined ? undefined : id(m.originalId, "原模型 ID");
           if (oldId && (!previousModels.has(oldId) || modelOriginals.has(oldId)))
             invalid("原模型引用失效或重复");
           if (oldId) modelOriginals.add(oldId);
-          const old = oldId ? previousModels.get(oldId)! : {},
-            model = structuredClone(old);
+          const copyFromId = m.copyFromId === undefined ? undefined : id(m.copyFromId, "复制来源模型 ID");
+          if (copyFromId && (oldId || !previousModels.has(copyFromId)))
+            invalid("复制来源模型失效，请重新读取配置");
+          const sourceId = oldId ?? copyFromId;
+          const old = sourceId ? previousModels.get(sourceId)! : {};
+          const body = bodyInput(m.body ?? []);
+          const requestTarget = body.model ?? common.model ??
+            (m.bodyVersion === 2 ? undefined : old.samplingParams?.model);
+          // A user-created alias can name its upstream model in the request body.
+          // Resolve within this provider; never infer a protocol from an unrelated first model.
+          const source = runtime.getModel(providerId, sourceId ?? requestModelId);
+          const target = oauth && typeof requestTarget === "string" ? runtime.getModel(providerId, requestTarget) : undefined;
+          if (oauth && requestTarget !== undefined && !target)
+            invalid("请求体 model：请指定该供应商目录中有效的原生模型 ID");
+          // Existing configurations retain their transport. A cross-protocol body override
+          // cannot safely change that transport; a fresh alias can inherit the target instead.
+          if (source && target && source.api !== target.api)
+            invalid("请求体 model：目标模型的接口协议与当前配置不同；请新建模型配置并填写目标模型 ID");
+          const resolved = source ?? target;
+          const native = !oauth && !sourceId && resolved?.api !== next.api ? undefined : resolved;
+          const copySourceId = copyFromId ?? (native &&
+            ((!oldId && modelId !== requestModelId) || (oauth && modelId !== native.id)) ? native.id : undefined);
+          const model = structuredClone(old);
+          if (copySourceId) {
+            // Preserve arbitrary fields in both layers, including future Pi settings.
+            Object.assign(model, structuredClone(original.modelOverrides?.[copySourceId] ?? {}));
+            // Materialize effective native metadata as well as fields hidden from the editor.
+            const effective = runtime.getModel(providerId, copySourceId);
+            for (const key of ["api", "baseUrl", "reasoning", "thinkingLevelMap", "input", "inputLimits", "cost", "promptCache", "contextWindow", "maxTokens", "samplingParams", "samplingParamsByThinkingLevel", "compat"] as const) {
+              // Automatically derived custom variants use the endpoint selected on this
+              // provider. Explicit copies keep their source's model-level endpoint.
+              if (key === "baseUrl" && !oauth && !copyFromId) continue;
+              if (effective?.[key] !== undefined) model[key] = structuredClone(effective[key]);
+            }
+            if (!oauth && !copyFromId) delete model.baseUrl;
+          }
+          if (modelId !== requestModelId) model.axiomRequestModelId = requestModelId;
+          else delete model.axiomRequestModelId;
           model.name = text(m.name || modelId, "模型名称", 160);
           model.headers = headersInput(
             m.headers,
             old.headers,
             draft.allowCommands === true,
           );
-          const body = bodyInput(m.body ?? []),
-            sampling = Object.fromEntries(
-              Object.entries(old.samplingParams ?? {}).filter(
-                ([key, val]) =>
-                  !samplingKeys.includes(key as any) || typeof val !== "number",
+          if (copySourceId && (oauth || copyFromId)) {
+            const nativeHeaders = runtime.getModel(providerId, copySourceId)?.headers ?? {};
+            // Header names are case-insensitive; explicit configuration wins over native defaults.
+            model.headers = Object.fromEntries(new Map(
+              [...Object.entries(nativeHeaders), ...Object.entries(model.headers as Record<string, string>)]
+                .map(([key, value]) => [key.toLowerCase(), [key, value]] as const),
+            ).values());
+          }
+          const sampling = Object.fromEntries(
+              Object.entries(model.samplingParams ?? {}).filter(
+                ([key, val]) => m.bodyVersion === 2
+                  ? !editableBodyOverride(key, val)
+                  : !samplingKeys.includes(key as any) || typeof val !== "number",
               ),
             );
           model.samplingParams = { ...sampling, ...common, ...body };
-          const api = model.api ?? (oauth ? runtime.getModel(providerId, oldId ?? modelId)?.api : next.api);
+          const api = model.api ?? (oauth ? native?.api : next.api);
+          if (oauth && !api)
+            invalid("接口协议：无法识别此模型的原生协议；请填写该供应商目录中的模型 ID，或在请求体 model 字段指定有效的原生模型 ID");
           if (
             Object.keys(model.samplingParams).length &&
             ![
@@ -274,7 +342,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             ].includes(api)
           )
             invalid(
-              `请求体覆盖：接口协议 ${api} 不支持采样参数覆盖；请移除供应商及该模型的请求体覆盖项，或选择支持的接口协议`,
+              `请求体覆盖：接口协议 ${api} 不支持请求体覆盖；请移除供应商及该模型的请求体覆盖项，或选择支持的接口协议`,
             );
           const levels = list(m.levels, 7) as ReasoningLevel[];
           if (
@@ -283,7 +351,6 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             levels.some((l) => !reasoningLevels.includes(l))
           )
             invalid("至少选择一个有效思考等级");
-          const native = runtime.getModel(providerId, oldId ?? modelId);
           // A newly imported endpoint model can share an ID with a native model
           // while using a different protocol. Save its own definition and capabilities.
           const existing = !oldId && !oauth && native?.api !== next.api ? undefined : native;
@@ -292,7 +359,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
             if (!validModelPricing(pricing)) return invalid("计费设置：四项单价必须为大于或等于 0 的有限数值（美元 / 百万 Token）");
             // Preserve catalog inheritance and existing tiers when base rates are unchanged.
             if (modelCostKeys.some(key => pricing[key] !== existing?.cost[key]))
-              model.cost = { ...old.cost, ...Object.fromEntries(modelCostKeys.map(key => [key, pricing[key]])) };
+              model.cost = { ...model.cost, ...Object.fromEntries(modelCostKeys.map(key => [key, pricing[key]])) };
           }
           if (m.input !== undefined) {
             if (!Array.isArray(m.input) || !m.input.includes("text") ||
@@ -329,10 +396,10 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
               }),
             );
           }
-          const wasOverride = oldId
+          const wasOverride = !copyFromId && modelId === requestModelId && (oldId
             ? Object.hasOwn(original.modelOverrides ?? {}, oldId) &&
               !(original.models ?? []).some((item: Json) => item.id === oldId)
-            : !!existing;
+            : !!existing && existing.id === modelId);
           if (wasOverride && (!oldId || oldId === modelId)) {
             if (
               !oauth && existing?.api !== next.api &&
@@ -457,13 +524,13 @@ export function validateDraft(
             ].includes(actual.api)
           )
             invalid(
-              `请求体覆盖：模型实际接口协议 ${actual.api} 不支持采样参数覆盖；请移除供应商及该模型的请求体覆盖项`,
+              `请求体覆盖：模型实际接口协议 ${actual.api} 不支持请求体覆盖；请移除供应商及该模型的请求体覆盖项`,
             );
           const inputProvider = (draft.providers as Json[]).find(
             (v) => v.providerId.trim() === providerId,
           )!;
           const inputModel = inputProvider.models.find(
-            (m: Json) => m.id.trim() === modelId,
+            (m: Json) => (m.configId ?? m.id).trim() === modelId,
           );
           if (inputModel.input !== undefined &&
               (actual.input.length !== inputModel.input.length ||

@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { command } from "../transport.js";
 import type { MemoryDocument } from "../../shared/memory.js";
 import type { Scope } from "../../shared/protocol.js";
-import { memoryBody } from "../../shared/memory.js";
-import { detailFile, memoryOutline, type MemoryNode, type MemoryState } from "../../shared/memory-outline.js";
+import { memoryOutline, type MemoryNode } from "../../shared/memory-outline.js";
+import { memoryDetailPaths } from "../../shared/memory-detail-paths.js";
 import { Markdown } from "../chat/Markdown.js";
 import { Icon } from "../Icon.js";
 import { BubbleLoadingIcon } from "../StatusIcons.js";
+import { MemoryStateIcon } from "./MemoryStateIcon.js";
+import { MemoryTaskTitle, memoryTitleLabel } from "./MemoryTaskTitle.js";
+import { reconcileMemoryTree, type MemoryTreeItem as TreeItem } from "./memory-task-tree.js";
+export { MemoryStateIcon } from "./MemoryStateIcon.js";
 
-const stateIcons: Record<MemoryState, string> = { 未开始: "circle", 进行中: "circle-dot", 已完成: "circle-check", 等待: "clock", 已放弃: "circle-slash", 失败: "circle-x", 阻塞: "clock" };
-export function MemoryStateIcon({ state }: { state: MemoryState }) { return <Icon name={stateIcons[state]} />; }
-
-/** Read only this numbered block, including on pagination. Never fall back to the whole file. */
-function InlineDetail({ scope, id }: { scope: Scope; id: number }) {
-  const path = `${detailFile}#detail:${id}`;
+/** Read only the selected independent file, with revision-safe pagination. */
+function InlineDetail({ scope, path }: { scope: Scope; path: string }) {
   const [document, setDocument] = useState<MemoryDocument | null>(null);
   const [busy, setBusy] = useState(true), [error, setError] = useState("");
   const generation = useRef(0);
@@ -29,37 +29,78 @@ function InlineDetail({ scope, id }: { scope: Scope; id: number }) {
     finally { if (current === generation.current) setBusy(false); }
   };
   useEffect(() => { void read(); return () => { generation.current++; }; }, [path, scope.workspaceId, scope.sessionId]);
-  return <section className="memory-inline-detail" aria-label={`详情 ${id}`}>
-    <h4>详情 {id}</h4>
+  return <section className="memory-inline-detail" aria-label="详情内容">
     {busy && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在读取此条详情…</p>}
     {error && <p className="memory-error" role="alert">{error} <button type="button" className="memory-text-button" disabled={busy} onClick={() => { setDocument(null); void read(); }}>重新读取</button></p>}
-    {document && <div className="markdown"><Markdown text={document.content} pathScope={scope} pathBase="memory" sourceFile={detailFile} /></div>}
+    {document && <div className="markdown"><Markdown text={document.content} pathScope={scope} pathBase="memory" sourceFile={path} /></div>}
     {!error && document?.nextOffset != null && <button type="button" className="memory-text-button" disabled={busy} onClick={() => void read(document)}>继续读取此条详情</button>}
   </section>;
 }
-function TaskRow({ node, scope, revision }: { node: MemoryNode; scope: Scope; revision: string }) {
-  const [expanded, setExpanded] = useState(false), [selected, setSelected] = useState(node.details[0]);
-  const content = <><span className="memory-task-marker" aria-hidden="true">{node.state && <MemoryStateIcon state={node.state} />}</span>
-    <span className="memory-task-title">{node.title}</span>{node.state && <span className="memory-task-state">{node.state}</span>}
-    {!!node.details.length && <><span className="memory-task-refs">{node.details.map(id => `〔${id}〕`).join("")}</span><Icon name="chevron-right" className="memory-task-chevron" /></>}</>;
-  return node.details.length ? <details className="memory-task-disclosure" onToggle={event => { if (event.target === event.currentTarget) setExpanded(event.currentTarget.open); }}>
-    <summary className="memory-task-row">{content}</summary>
-    {expanded && <div className="memory-task-details">{node.details.length > 1 && <div className="memory-detail-choices" aria-label="选择详情">{node.details.map(id => <button type="button" className="memory-text-button" key={id} aria-pressed={selected === id} onClick={() => setSelected(id)}>详情 {id}</button>)}</div>}<InlineDetail key={`${scope.workspaceId}:${scope.sessionId}:${revision}:${selected}`} scope={scope} id={selected} /></div>}
-  </details> : <div className="memory-task-row">{content}</div>;
+type OpenDetail = (item: TreeItem, trigger: HTMLButtonElement) => void;
+function TaskBranch({ item, goal, paths, openDetail }: { item: TreeItem; goal: boolean; paths: Map<MemoryNode, string>; openDetail: OpenDetail }) {
+  const { node, children } = item, id = useId(), path = paths.get(node);
+  const defaultOpen = !node.abandoned && node.state !== "已完成";
+  const [expanded, setExpanded] = useState(defaultOpen), [visited, setVisited] = useState(defaultOpen);
+  const previousState = useRef(node.state);
+  useEffect(() => {
+    if (node.state !== previousState.current && node.state === "进行中" && !node.abandoned) { setExpanded(true); setVisited(true); }
+    previousState.current = node.state;
+  }, [node.state, node.abandoned]);
+  return <li data-state={node.state} data-abandoned={node.abandoned || undefined} data-kind={node.kind} data-goal={goal || undefined}>
+    <div className="memory-task-row">
+      <span className="memory-task-marker">{node.state && <MemoryStateIcon state={node.state} motion={!node.abandoned} />}</span>
+      {!!children.length && <button type="button" className="memory-branch-toggle memory-branch-disclosure" aria-label={`${expanded ? "收起" : "展开"}：${memoryTitleLabel(node.title)}`} aria-expanded={expanded} aria-controls={id} onClick={() => { setVisited(true); setExpanded(!expanded); }}><Icon name="chevron-right" className="memory-task-chevron" /></button>}
+      <span className="memory-task-title"><MemoryTaskTitle text={node.title} path={path} onOpen={(_path, event) => openDetail(item, event.currentTarget)} /></span>
+      {node.state && <span className="memory-task-state">{node.state === "阻塞" ? "等待" : node.state}</span>}
+      {path && <button type="button" className="memory-task-detail-button" aria-label={`查看详情：${memoryTitleLabel(node.title)}`} data-task-key={item.key} onClick={event => openDetail(item, event.currentTarget)}><Icon name="file-text" /></button>}
+    </div>
+    {!!children.length && <div id={id} hidden={!expanded} className="memory-branch">
+      {goal && <div className="memory-execution-label">执行树 <span>{children.length} 个步骤</span></div>}
+      {visited && <ul>{children.map(child => <TaskBranch key={child.key} item={child} goal={false} paths={paths} openDetail={openDetail} />)}</ul>}
+    </div>}
+  </li>;
 }
-export function MemoryTaskTree({ nodes, scope, revision }: { nodes: MemoryNode[]; scope: Scope; revision: string }) {
-  const children = new Map<number | null, Array<{ node: MemoryNode; index: number }>>();
-  nodes.forEach((node, index) => children.set(node.parent, [...children.get(node.parent) ?? [], { node, index }]));
-  const branch = (parent: number | null) => <ul>{children.get(parent)?.map(({ node, index }) => <li key={node.line} data-state={node.state} data-abandoned={node.abandoned || undefined} data-kind={node.kind}>
-    <TaskRow key={`${scope.workspaceId}:${scope.sessionId}:${node.title}:${node.details.join(",")}`} node={node} scope={scope} revision={revision} />
-    {children.has(index) && branch(index)}
-  </li>)}</ul>;
-  return branch(null);
+export function MemoryTaskTree({ nodes, files = [], scope, revision, goals = true, onDetailChange, openLink }: { nodes: MemoryNode[]; files?: ReadonlyArray<{ path: string }>; scope: Scope; revision: string; goals?: boolean; onDetailChange?: (open: boolean) => void; openLink?: (path: string) => void }) {
+  const container = useRef<HTMLDivElement>(null), returnTo = useRef<{ top: number; key: string } | null>(null), back = useRef<HTMLButtonElement>(null);
+  const [detail, setDetail] = useState<string | null>(null);
+  const previous = useRef<TreeItem[]>([]), sequence = useRef(0);
+  const roots = reconcileMemoryTree(nodes, previous.current, () => `task-${++sequence.current}`);
+  previous.current = roots;
+  const paths = new Map<MemoryNode, string>(), existing = new Set(files.map(file => file.path.normalize("NFC")));
+  try { memoryDetailPaths(nodes).forEach((path, index) => { if (existing.has(path)) paths.set(nodes[index], path); }); } catch { /* Invalid trees never acquire speculative detail actions. */ }
+  const find = (items: TreeItem[], key: string): TreeItem | undefined => {
+    for (const item of items) { if (item.key === key) return item; const child = find(item.children, key); if (child) return child; }
+  };
+  const current = detail ? find(roots, detail) : null, selected = current ? paths.get(current.node) : undefined;
+  const openDetail: OpenDetail = (item) => {
+    const path = paths.get(item.node); if (!path) return;
+    if (openLink) { openLink(path); return; }
+    returnTo.current = { top: container.current?.closest(".toolbar-detail-body")?.scrollTop ?? 0, key: item.key };
+    setDetail(item.key); onDetailChange?.(true);
+  };
+  const closeDetail = () => { setDetail(null); onDetailChange?.(false); };
+  useLayoutEffect(() => {
+    const body = container.current?.closest(".toolbar-detail-body");
+    if (body) body.scrollTop = detail ? 0 : returnTo.current?.top ?? body.scrollTop;
+    if (detail) back.current?.focus({ preventScroll: true });
+    else if (returnTo.current) {
+      const target = container.current?.querySelector<HTMLButtonElement>(`[data-task-key="${returnTo.current.key}"]`);
+      if (target?.getClientRects().length) target.focus({ preventScroll: true }); else container.current?.focus({ preventScroll: true });
+    }
+  }, [!!detail]);
+  return <div ref={container} className="memory-execution-view" tabIndex={-1} aria-label="目标与执行树">
+    <div hidden={!!detail}>
+      <div className="memory-section-head"><h3>{goals ? "目标" : "执行树"}</h3><span className="memory-task-count">{roots.length} {goals ? "个目标" : "个步骤"}</span></div>
+      <ul className="memory-goals">{roots.map(item => <TaskBranch key={item.key} item={item} goal={goals} paths={paths} openDetail={openDetail} />)}</ul>
+    </div>
+    {detail && <section className="memory-detail-page" aria-label="任务详情">
+      <button ref={back} type="button" className="memory-text-button memory-detail-back" onClick={closeDetail}><Icon name="arrow-left" />返回执行树</button>
+      {current && <div className="memory-detail-heading"><span className="memory-task-marker">{current.node.state && <MemoryStateIcon state={current.node.state} motion={false} />}</span><h3><MemoryTaskTitle text={current.node.title} /></h3></div>}
+      {current && selected ? <InlineDetail key={`${scope.workspaceId}:${scope.sessionId}:${revision}:${selected}`} scope={scope} path={selected} /> : <p role="status">此项或其详情文件已移除，可返回查看最新执行树。</p>}
+    </section>}
+  </div>;
 }
-/** Preserve source Markdown; inherited cancellation is presentation, never a rewrite. */
-export function MemoryEntry({ text, scope, navigate }: { text: string; scope: Scope; navigate: (path: string) => void }) {
-  const body = memoryBody(text), semanticLines = body.split(/\r?\n/), outline = memoryOutline(body), lines = text.split(/\r?\n/);
-  // Parse one document so footnotes and reference links retain their global scope.
-  const linked = lines.map((line, index) => semanticLines[index]?.trim() ? line.replace(/〔([1-9]\d*)〕/g, `[$&](${detailFile}#detail:$1)`) : line).join("\n");
-  return <div className="memory-entry"><Markdown text={linked} abandonedLines={outline.abandonedLines} pathScope={scope} pathBase="memory" sourceFile="MEMORY.md" onLocalLink={navigate} /></div>;
+/** Main memory has no links: file metadata supplies all detail actions. */
+export function MemoryEntry({ text, files = [], scope, navigate }: { text: string; files?: ReadonlyArray<{ path: string }>; scope: Scope; navigate: (path: string) => void }) {
+  return <div className="memory-entry"><MemoryTaskTree nodes={memoryOutline(text).nodes} files={files} scope={scope} revision={text} openLink={navigate} /></div>;
 }

@@ -1,7 +1,7 @@
 import { commitPiPackage, finishPiPackageRemoval, lockPiPackage, piPackagePlan } from "./pi-package-storage.js";
 import { createProcessOwner, type ProcessOwner } from "./process-owner-record.js";
-import { ownWindowsPackageTree } from "./pi-package-windows.js";
-import { forkLinuxOwned, monotonicMilliseconds } from "./owned-process-linux.js";
+import { forkMaintenanceProcess, maintenanceProcessSupported, maintenanceProcessSupportError, type MaintenanceProcess } from "./maintenance-process.js";
+import { monotonicMilliseconds } from "./owned-process-linux.js";
 import { currentMaintenance } from "./maintenance.js";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,7 @@ async function executePiPackage(request: PiPackageRequest, signal: AbortSignal, 
     await commitPiPackage(request, plan.initialIdentity, signal);
     finishPiPackageRemoval(request); return {};
   }
-  if (!["win32", "linux"].includes(process.platform)) throw new MaintenanceError("operation", "此平台尚不支持可靠的安装进程隔离，未执行资源包操作。");
+  if (!maintenanceProcessSupported()) throw new MaintenanceError("operation", maintenanceProcessSupportError);
   const execution = currentMaintenance(), started = Date.now();
   const remaining = () => execution?.remainingBudget() ?? { remainingMs: 1200000 - (Date.now() - started), code: "total-timeout" as const };
   const deadline = () => monotonicMilliseconds() + remaining().remainingMs;
@@ -50,28 +50,24 @@ async function executePiPackage(request: PiPackageRequest, signal: AbortSignal, 
   const result = await new Promise<PiPackageResult>((resolve, reject) => {
     const options = { cwd: request.cwd, env: { ...process.env, npm_config_fetch_timeout: "86400000", npm_config_fetch_retries: "2" },
       execArgv: source ? ["--import", import.meta.resolve("tsx")] : [] };
-    let linux: ReturnType<typeof forkLinuxOwned> | undefined, child: ReturnType<typeof fork>;
+    let owned: MaintenanceProcess, child: ReturnType<typeof fork>;
     ownership.confirmed = false;
     try {
-      linux = process.platform === "linux" ? forkLinuxOwned(fileURLToPath(entry), options, deadline(), timeoutError, identity => journal.arm(identity)) : undefined;
-      child = linux?.child ?? fork(fileURLToPath(entry), [], { ...options, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+      owned = forkMaintenanceProcess(fileURLToPath(entry), options, deadline(), timeoutError, identity => journal.arm(identity));
+      child = owned.child;
     } catch (error) { ownership.confirmed = true; reject(error); return; }
     let reply: PiPackageReply | undefined, spawnError: Error | undefined;
     let preparation: Promise<void> = Promise.resolve();
-    let job: ReturnType<typeof ownWindowsPackageTree>, stopping: Promise<void> | undefined;
+    let stopping: Promise<void> | undefined;
     let stopTimer: ReturnType<typeof setTimeout> | undefined;
-    const cleanup = () => stopping ??= (async () => {
-      if (linux) return linux.close();
-      if (job) return job.close();
-      if (!child.pid) return;
-      child.kill(); // Windows: no work was sent if Job Object assignment failed.
-    })();
+    let admissionLost = false;
+    const cleanup = () => stopping ??= owned.close();
     const abort = () => {
       void cleanup().catch(() => {});
-      stopTimer ??= setTimeout(() => reject(new MaintenanceError("stop-unconfirmed", uncertain())), 7000);
+      stopTimer ??= setTimeout(() => { admissionLost = true; journal.revoke(); reject(new MaintenanceError("stop-unconfirmed", uncertain())); }, 7000);
     };
     const budgetTimer = setInterval(() => {
-      linux?.setDeadline(deadline());
+      owned.setDeadline(deadline());
       if (remaining().remainingMs <= 0) { spawnError ??= timeoutError(); abort(); }
     }, 100);
     signal.addEventListener("abort", abort, { once: true });
@@ -83,7 +79,9 @@ async function executePiPackage(request: PiPackageRequest, signal: AbortSignal, 
       try {
         await preparation;
         await cleanup();
-        spawnError ??= linux?.failure();
+        const failure = owned.failure();
+        if (admissionLost || failure instanceof MaintenanceError && failure.code === "stop-unconfirmed") throw new MaintenanceError("stop-unconfirmed", uncertain());
+        spawnError ??= failure;
         if (spawnError instanceof MaintenanceError && spawnError.code === "stop-unconfirmed") throw spawnError;
         ownership.confirmed = true;
         if (signal.aborted) reject(signal.reason);
@@ -93,14 +91,7 @@ async function executePiPackage(request: PiPackageRequest, signal: AbortSignal, 
       } catch { reject(new MaintenanceError("stop-unconfirmed", uncertain())); }
       finally { clearTimeout(stopTimer); }
     });
-    try {
-      if (child.pid) {
-        job = ownWindowsPackageTree(child.pid);
-        if (job) journal.arm({ platform: "win32", workerPid: child.pid });
-      }
-    }
-    catch (error) { spawnError = error as Error; abort(); return; }
-    preparation = (linux?.ready ?? Promise.resolve()).then(async () => {
+    preparation = owned.ready.then(async () => {
       if (stopping) throw spawnError ?? new MaintenanceError("cancelled", "启动许可已撤销。");
       signal.throwIfAborted();
       if (request.action === "remove") { await commitPiPackage(request, plan.initialIdentity, signal); withdrawn = true; }

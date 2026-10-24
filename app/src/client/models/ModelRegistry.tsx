@@ -8,6 +8,7 @@ import { Icon } from "../components.js";
 import { DeleteButton } from "../DeleteButton.js";
 import { ModelEditor } from "./ModelEditor.js";
 import { ModelCatalogPicker } from "./ModelCatalogPicker.js";
+import { copyModelDraft } from "./copy-model.js";
 export function ModelRegistry({
   p,
   revision,
@@ -52,6 +53,13 @@ export function ModelRegistry({
   }) => void;
 }) {
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [duplicateFeedback, setDuplicateFeedback] = useState("");
+  const duplicate = (source: Model) => {
+    const copy = copyModelDraft(source, p.models);
+    const index = p.models.findIndex(model => model.key === source.key);
+    patch({ models: [...p.models.slice(0, index + 1), copy, ...p.models.slice(index + 1)] });
+    setDuplicateFeedback(`已复制为「${copy.name}」，保存后生效。`);
+  };
   const search = useRef<HTMLInputElement>(null);
   const catalogTrigger = useRef<HTMLButtonElement>(null);
   const closeCatalog = () => {
@@ -127,6 +135,7 @@ export function ModelRegistry({
           {...{ editor, setEditor, p, stageEditor, discardEditor, feedback }}
         />
       )}
+      <p className="model-duplicate-feedback" role="status">{duplicateFeedback}</p>
       <div className="card model-table">
         <table
           className="ds-table"
@@ -182,6 +191,15 @@ export function ModelRegistry({
                 </td>
                 <td>
                   <div className="model-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`复制模型配置：${m.name}`}
+                      title="复制模型配置"
+                      onClick={() => duplicate(m)}
+                    >
+                      <Icon name="copy" />
+                    </button>
                     <button
                       className="icon-btn"
                       aria-label={`编辑模型：${m.name}`}

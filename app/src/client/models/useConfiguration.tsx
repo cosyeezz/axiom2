@@ -6,8 +6,9 @@ import type {
   ModelDraft as Model,
   ProviderDraft as Provider,
   ModelConfiguration,
+  ProviderProxy,
 } from "../../shared/models.js";
-import { validModelPricing } from "../../shared/models.js";
+import { assignModelConfigIds, validModelPricing } from "../../shared/models.js";
 const empty: Configuration = {
   revision: "",
   providerCount: 0,
@@ -32,6 +33,7 @@ export function useConfiguration() {
   const [login, setLogin] = useState<{
     providerId: string;
     type: "api_key" | "oauth";
+    proxy?: ProviderProxy;
   } | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]),
     [selected, setSelected] = useState("");
@@ -68,9 +70,9 @@ export function useConfiguration() {
   const stageEditor = (): Provider[] | null => {
     if (!editor || !p) return providers;
     const id = editor.id.trim();
-    if (!id || p.models.some((m) => m.key !== editor.key && m.id === id)) {
+    if (!id) {
       setFeedback(
-        `供应商「${p.name || p.providerId}」（${p.providerId}）→ 模型「${editor.name || id || "新增模型"}」→ ${id ? `模型 ID「${id}」重复；请使用该供应商下唯一的模型 ID。` : "模型 ID 为空；请填写供应商提供的模型 ID。"}`,
+        `供应商「${p.name || p.providerId}」（${p.providerId}）→ 模型「${editor.name || "新增模型"}」→ 模型 ID 为空；请填写供应商提供的模型 ID。`,
         true,
       );
       setTab("models");
@@ -84,9 +86,9 @@ export function useConfiguration() {
       return null;
     }
     const model = { ...editor, id, name: editor.name.trim() || id };
-    const models = p.models.some((m) => m.key === model.key)
+    const models = assignModelConfigIds(p.models.some((m) => m.key === model.key)
       ? p.models.map((m) => (m.key === model.key ? model : m))
-      : [...p.models, model];
+      : [...p.models, model]);
     const next = providers.map((item) =>
       item.id === p.id ? { ...item, models } : item,
     );

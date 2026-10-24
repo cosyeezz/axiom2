@@ -6,10 +6,12 @@ import { tmpdir } from "./temporary.js";
 import { createAgentSession, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { previewEnvironment, runtimeEnvironment } from "../src/server/session-environment.js";
 import { environmentResourceOptions } from "../src/server/environment-resources.js";
+import { installAxiomPrompt } from "../src/server/axiom-prompt.js";
+import { memoryInstruction } from "../src/shared/memory.js";
 import { createInstalledResourceLoader } from "../src/server/installed-resource-loader.js";
 import { discoverCapabilities, capabilityRuntime } from "../src/server/capability-resources.js";
 import { taskTools } from "../src/server/task-tools.js";
-import { memoryQueryTool, memoryDetailTool } from "../src/server/memory-tool.js";
+import { memoryQueryTool } from "../src/server/memory-tool.js";
 import { ensureTopicSnapshot } from "../src/server/memory-topics.js";
 import { Agents } from "../src/server/agents.js";
 import { Store } from "../src/server/storage.js";
@@ -23,9 +25,25 @@ function fixture() {
   writeFileSync(join(cwd, ".pi", "skills", "guide", "SKILL.md"), "---\nname: guide\ndescription: A fixture skill\n---\nSkill body is loaded on demand.");
   writeFileSync(join(cwd, "AGENTS.md"), "LOCAL_PROJECT_CONTEXT");
   writeFileSync(join(cwd, ".pi", "APPEND_SYSTEM.md"), "LOCAL_APPEND_CONTEXT");
-  const memoryTopics = { version: 1 as const, workspaceId: "fixture", text: '<记忆Topic目录>\n[{"id":"topic-fixture","name":"Test topic"}]\n</记忆Topic目录>' };
+  const memoryTopics = { version: 2 as const, workspaceId: "fixture", text: '<记忆关键词目录>\nTest keyword\n</记忆关键词目录>' };
   return { root, cwd, pi, memoryTopics, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test("memory instruction is replaced as a whole without altering other appended policies", () => {
+  const base = ["BASE_APPEND_POLICY"], input = { root: "/tmp/fixture", cwd: "/tmp/fixture/project" };
+  const append = (extra: { memoryPath?: string; task?: unknown }) => environmentResourceOptions({ ...input, ...extra }, () => ({}), "CHILD_POLICY").appendSystemPromptOverride!(base);
+  const withoutMemory = append({}), path = "/tmp/fixture/memory/MEMORY.md";
+  const withMemory = append({ memoryPath: path }), instruction = memoryInstruction(path);
+  assert.equal(withMemory.filter(text => text === instruction).length, 1);
+  assert.deepEqual(withMemory.filter(text => text !== instruction), withoutMemory);
+  assert.equal(withMemory[0], base[0]);
+  const linkInstruction = "When referencing files, use Markdown links: [filename](path)";
+  assert.ok(withMemory.includes(linkInstruction));
+  assert.doesNotMatch(withMemory.join("\n"), /When referencing local files/);
+  assert.ok(withMemory.some(text => text.startsWith("Split work suitable for delegation")));
+  assert.deepEqual(append({ task: {}, memoryPath: path }), [...base, linkInstruction, "CHILD_POLICY"]);
+  assert.doesNotMatch(withMemory.join("\n"), /\p{Script=Han}/u);
+});
 
 test("session-free preview uses native prompt generation and identical execution resource rules", async () => {
   const f = fixture();
@@ -44,7 +62,11 @@ test("session-free preview uses native prompt generation and identical execution
       assert.equal(preview.source, "preview");
       assert.match(preview.systemPrompt!, /LOCAL_APPEND_CONTEXT/);
       assert.match(preview.systemPrompt!, /LOCAL_PROJECT_CONTEXT/);
-      assert.match(preview.systemPrompt!, /MEMORY.md/);
+      assert.ok(preview.systemPrompt!.includes(memoryInstruction(input.memoryPath)), "preview includes the entire current memory instruction");
+      assert.match(preview.systemPrompt!, /When referencing files, use Markdown links: \[filename\]\(path\)/);
+      assert.doesNotMatch(preview.systemPrompt!, /When referencing local files/);
+      assert.doesNotMatch(preview.systemPrompt!, /\p{Script=Han}/u, "host instructions are English in an English-only user fixture");
+      assert.doesNotMatch(JSON.stringify(preview.toolDefinitions), /\p{Script=Han}/u, "model-visible tool descriptions and schemas are English");
       assert.equal(preview.skillDetails?.find(skill => skill.name === "guide")?.automatic, !custom);
       assert.equal(preview.memory?.topics, f.memoryTopics.text);
       const settingsManager = SettingsManager.create(f.cwd, f.pi, { projectTrusted: true });
@@ -54,9 +76,10 @@ test("session-free preview uses native prompt generation and identical execution
         () => assert.fail("fixture resources must already be installed"));
       await loader.reload();
       const { session } = await createAgentSession({ cwd: f.cwd, agentDir: f.pi, settingsManager, resourceLoader: loader,
-        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute), memoryDetailTool(() => input.memoryPath)],
+        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute)],
         ...(process.platform === "win32" && !settingsManager.getSettings().defaultTools ? { tools: ["-bash", "+powershell"] } : {}) });
       try {
+        installAxiomPrompt(session);
         session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query", "memory_detail"])]);
         ensureTopicSnapshot(session.sessionManager, f.memoryTopics);
         const actual = runtimeEnvironment(session, input);

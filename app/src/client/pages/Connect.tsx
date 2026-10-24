@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../theme.js";
 import { Icon } from "../Icon.js";
 import DesktopUpdates from "./DesktopUpdates.js";
+import DesktopEnvironment from "./DesktopEnvironment.js";
 import { BrandMark } from "../BrandMark.js";
 import type { ConnectionHealth } from "../transport.js";
 import SetupWizard, { type PreparationDetection } from "./SetupWizard.js";
@@ -196,6 +197,7 @@ export default function Connect() {
           </section>}
         </div>
         {mode === "local" && <details className="startup-maintenance"><summary><Icon name="sliders-horizontal" />版本与更新 · Pi 引擎<span>{updateAvailable ? "发现新版本" : "按需查看"}</span><Icon name="chevron-down" /></summary>{!service ? <p className="connect-update-detail">正在读取本地服务状态…</p> : <DesktopUpdates service={service} serviceBusy={!!busy || installing || remoteBusy} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} />}{service?.log && <p className="connect-log">服务日志：<code>{service.log}</code></p>}</details>}
+        {mode === "local" && <details className="startup-maintenance"><summary><Icon name="search" />卸载与环境清理<span>安装前检查</span><Icon name="chevron-down" /></summary><DesktopEnvironment /></details>}
         {detection.attention && <div className="maintenance-warning startup-recovery-notice" role="status"><Icon name="circle-help" /><span>安装结果待核实，请先查看记录并检查实际状态。</span><button className="maintenance-text-button" onClick={() => { setPreparation(true); requestAnimationFrame(() => document.getElementById("setup-recovery")?.focus()); }}>查看安装记录<Icon name="chevron-right" /></button></div>}
         <details className="startup-preparation" open={preparation || installing} onToggle={event => setPreparation(event.currentTarget.open)}><summary><ConnectionIcon name="package" />安装与准备<span className="preparation-tags">{preparationTags.map(tag => <span key={tag.name} className="preparation-tag" data-state={detectionUnknown ? "unknown" : tag.ready ? "ready" : "missing"} aria-label={tag.name + (detection.checking ? "：检测中" : detectionUnknown ? "：待核实" : tag.ready ? "：已检测到" : "：未就绪")}><Icon name={detectionUnknown ? "circle-help" : tag.ready ? "check" : "minus"} />{tag.name}</span>)}</span><Icon name="chevron-down" /></summary>
           <SetupWizard remote={mode === "remote"} service={service} blocked={!!busy || updating || remoteBusy} onBusy={setInstalling} onComplete={() => void act("status")} onDetection={setDetection}>

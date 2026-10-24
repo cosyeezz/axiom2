@@ -18,6 +18,9 @@ for (const kind of ["skill", "mcp"] as const) test(`${kind} uninstall deletes it
   process.env.PI_CODING_AGENT_DIR = pi; process.env.AXIOM_PI_DIR = pi;
   const skillDir = join(root, "pi", "skills", "uninstall-fixture");
   mkdirSync(skillDir, { recursive: true }); mkdirSync(pi, { recursive: true });
+  // Establish model-file watcher baselines before startup; SDK initialization
+  // otherwise creates these files and can deliver an unrelated late invalidate.
+  for (const name of ["auth.json", "models-store.json"]) writeFileSync(join(pi, name), "{}");
   writeFileSync(join(skillDir, "SKILL.md"), "---\nname: uninstall-fixture\ndescription: isolated uninstall regression\n---\nGuide\n");
   writeFileSync(join(skillDir, "attachment.txt"), "owned attachment");
   writeFileSync(join(pi, "mcp.json"), JSON.stringify({ mcpServers: { "uninstall-fixture": { command: "never-launched" }, keep: { command: "also-never-launched" } } }));

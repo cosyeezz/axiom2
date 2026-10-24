@@ -1,3 +1,4 @@
+import { ForkButton } from "./ForkButton.js";
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -37,10 +38,11 @@ export function CopyReply({ message, scope }: { message: ChatMessage; scope: Sco
     }
   }
   return <div className="message-actions reply-actions" data-feedback={feedback || undefined}>
-    <button type="button" className="action-icon" aria-label="复制回复的 Markdown 原文" aria-busy={copying}
+    <button type="button" className="action-icon copy-reply" aria-label="复制回复的 Markdown 原文" aria-busy={copying}
       data-tooltip={label || "复制回复"} onClick={() => void copy()}>
       <Icon name={feedback === "copied" ? "check" : feedback === "failed" ? "close" : "copy"} />
     </button>
+    <ForkButton scope={scope} messageId={message.id} />
     <span className="screen-reader" role="status" aria-live="polite">{label}</span>
     {feedback === "failed" && <span className="message-copy-error" aria-hidden="true">复制失败，点击重试</span>}
   </div>;

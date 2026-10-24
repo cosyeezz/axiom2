@@ -96,7 +96,10 @@ try {
   await page.locator("#prompt").fill("草稿保留在原会话");
   const composerBefore = await page.locator(".composer").boundingBox();
   const originalUrl = page.url();
-  assert.ok(!operations.includes("costs.get"), "closed cost popover never scans transcripts");
+  await page.waitForFunction(() => document.querySelector('[data-od-id="estimated-cost"]')?.getAttribute('aria-description')?.includes('$1.0500 + 未知'));
+  await page.waitForFunction(() => (window as any).__costInFlight === 0);
+  assert.ok(operations.includes("costs.get"), "the closed toolbar reads its current-session ledger");
+  const readsBeforeOpen = await page.evaluate(() => (window as any).__costReads);
   await link.focus();
   console.log("cost UI: opening cost popover");
   await page.keyboard.press("Enter");
@@ -108,6 +111,7 @@ try {
   assert.deepEqual(await page.locator(".composer").boundingBox(), composerBefore, "popover styles do not change the composer");
   await detail.locator(".cost-total > .cost-number").filter({ hasText: "$1.5500 + 未知" }).waitFor();
   console.log("cost UI: totals loaded");
+  assert.equal(await page.evaluate(() => (window as any).__costReads), readsBeforeOpen, "opening the popover shares the toolbar report without another query");
   assert.equal(await dialog.locator('.cost-session-facts dd').first().textContent(), '$1.0500 + 未知', 'current-session summary uses the same ledger and retains unknown costs');
   assert.equal(await dialog.locator('.cost-session-facts dd').nth(1).textContent(), '10,200', 'current-session tokens include main, tool and compression usage');
   assert.deepEqual(await dialog.locator('.cost-token-facts dd').allTextContents(), ['13,600', '8,000', '1,600', '3,200', '800']);
@@ -198,16 +202,19 @@ try {
   const readsAfterClose = await page.evaluate(() => (window as any).__costReads);
   app.agents.publish(agentScope(scope));
   await page.waitForTimeout(350);
-  assert.equal(await page.evaluate(() => (window as any).__costReads), readsAfterClose, "closed popover stops cost queries");
-  await page.evaluate(() => { (window as any).__costDelay = 400; });
+  assert.equal(await page.evaluate(() => (window as any).__costReads), readsAfterClose, "unchanged progress does not reread the closed toolbar ledger");
+  const heldBeforeRefresh = await page.evaluate(() => { (window as any).__costDelay = 400; return (window as any).__costHeld; });
   await link.click();
   await dialog.waitFor();
-  assert.equal(await dialog.locator('.cost-total > .cost-number').textContent(), '$2.0250 + 未知', 'reopening immediately renders its cached report');
-  await page.waitForFunction(() => (window as any).__costHeld > 0);
+  assert.equal(await dialog.locator('.cost-total > .cost-number').textContent(), '$2.0250 + 未知', 'reopening immediately renders the live shared report');
+  await page.waitForTimeout(200);
+  assert.equal(await page.evaluate(() => (window as any).__costReads), readsAfterClose, 'reopening does not duplicate the live subscription query');
+  await dialog.getByRole('button', { name: '刷新费用', exact: true }).click();
+  await page.waitForFunction(before => (window as any).__costHeld > before, heldBeforeRefresh);
   assert.match(await dialog.locator('.cost-status').innerText(), /上次读取的记录/);
   await page.evaluate(() => { (window as any).__costDelay = 0; });
   await dialog.locator('.cost-status').filter({hasText:'用量变化时自动更新'}).waitFor();
-  assert.ok(await page.evaluate((before) => (window as any).__costReads > before, readsAfterClose), 'cached report is always revalidated');
+  assert.ok(await page.evaluate((before) => (window as any).__costReads > before, readsAfterClose), 'explicit refresh revalidates the shared report');
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
   assert.ok(await link.evaluate((el) => el === document.activeElement), "Escape restores trigger focus");
@@ -221,12 +228,13 @@ try {
   views.messageChanged(scope, { id: "cost-child-launcher", role: "assistant", text: "费用子会话验证", calls: [{ id: "fixture", name: "delegate", input: "{}" }] });
   views.flush(scope);
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));
-  // Delegation cards are visible directly in the conversation.
+  // Delegation cards are visible directly in the conversation. Hold the child's
+  // first toolbar query, which starts as soon as its conversation mounts.
+  const heldBeforeChild = await page.evaluate(() => { (window as any).__costDelay = 400; return (window as any).__costHeld; });
   await page.getByRole("button", { name: "打开子会话：调查数据来源", exact: true }).click();
   const childDialog = page.getByRole("dialog", { name: "子代理会话", exact: true });
-  await page.evaluate(() => { (window as any).__costDelay = 400; });
   await childDialog.getByRole("button", { name: "查看费用明细", exact: true }).click();
-  await page.waitForFunction(() => (window as any).__costHeld > 0);
+  await page.waitForFunction(before => (window as any).__costHeld > before, heldBeforeChild);
   assert.equal(await dialog.locator('.cost-total').count(), 0, 'parent cache is never reused for a child request');
   await page.evaluate(() => { (window as any).__costDelay = 0; });
   await dialog.locator(".cost-total > .cost-number").filter({ hasText: "$2.0250 + 未知" }).waitFor();

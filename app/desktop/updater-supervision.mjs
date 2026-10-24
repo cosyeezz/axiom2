@@ -1,4 +1,5 @@
 // Private desktop adapter for the release-owned bootstrap supervision runtime.
+import { prepareLinuxHelper } from './desktop-native.mjs';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -41,7 +42,7 @@ export async function loadUpdaterRuntime(directory) {
   const owned = await import(pathToFileURL(join(runtime, 'bootstrap/main.mjs')).href);
   return { runtime, owned };
 }
-export function createUpdaterSupervisor({ root, execution, token = execution.task.id, fetcher = fetch, log, gate = true }) {
+export function createUpdaterSupervisor({ root, execution, token = execution.task.id, fetcher = fetch, log, gate = true, offline = false }) {
   const directory = join(root, 'updates', 'tasks', execution.task.id), taskPath = join(directory, 'task.json');
   let manifest;
   const recoveryRunners = new Set();
@@ -53,6 +54,10 @@ export function createUpdaterSupervisor({ root, execution, token = execution.tas
     try {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     ({ runtime, owned } = await loadUpdaterRuntime(directory));
+    if (offline && process.platform === 'linux') {
+      await prepareLinuxHelper({ runtime, offline: true });
+      helperReady = true;
+    }
     if (gate) {
       try { owner = owned.createProcessOwner(updaterOwnerPath(root)); }
       catch (error) { if (error.code === 'EEXIST') throw uncertain('已有更新进程或父提交尚未确认，已保留归属记录，请先核实原任务。'); throw error; }
@@ -103,7 +108,7 @@ export function createUpdaterSupervisor({ root, execution, token = execution.tas
     if (commandUncertain || parentUncertain || serviceUncertain && !(options.recovery && serviceRequestStopped)) throw uncertain('先前命令退出尚未确认，未启动新的更新命令。');
     if (!helperReady && process.platform === 'linux') {
       const previous = { phase: execution.task.phase, message: execution.task.message, capabilities: { ...execution.task.capabilities }, phaseStart: execution.phaseStart };
-      await owned.downloadLinuxHelper(execution, runtime, fetcher);
+      await prepareLinuxHelper({ runtime, offline, download: () => owned.downloadLinuxHelper(execution, runtime, fetcher) });
       Object.assign(execution.task, { phase: previous.phase, message: previous.message, capabilities: previous.capabilities });
       execution.phaseStart = previous.phaseStart; delete execution.task.transfer; await execution.update();
     }
@@ -167,7 +172,7 @@ export function createUpdaterSupervisor({ root, execution, token = execution.tas
     execution.signal.throwIfAborted();
     if (!prepared) throw uncertain('更新监督器尚未就绪，未发起启动请求。');
     if (commandUncertain || parentUncertain || serviceUncertain && !serviceRequestStopped) throw uncertain('先前启动请求退出尚未确认，未发起新的启动。');
-    if (!['linux', 'win32'].includes(process.platform) || args.length !== 3 || !isAbsolute(args[0]) || args[1] !== 'start' || args[2] !== '--json') throw uncertain('后台启动请求不支持可靠身份登记。');
+    if (!['linux', 'win32', 'darwin'].includes(process.platform) || args.length !== 3 || !isAbsolute(args[0]) || args[1] !== 'start' || args[2] !== '--json') throw uncertain('后台启动请求不支持可靠身份登记。');
     const request = { id: randomUUID(), protocol: 1, nonce: randomUUID(), state: 'prepared', requestStopped: false };
     const requestDirectory = join(directory, `service-${request.id}`);
     await mkdir(requestDirectory, { mode: 0o700 });
@@ -188,9 +193,15 @@ export function createUpdaterSupervisor({ root, execution, token = execution.tas
           preparationSignal.throwIfAborted();
           if (!Number.isSafeInteger(pid) || pid <= 1) throw uncertain('后台启动请求身份无效。');
           request.pid = pid;
-          lease.arm(process.platform === 'linux'
-            ? { platform: 'linux', initPid: pid, startTime: owned.linuxProcessStart(pid) }
-            : { platform: 'win32', workerPid: pid });
+          if (process.platform === 'darwin') {
+            const row = owned.pidSnapshot().find(row => row.pid === pid);
+            if (!row || row.zombie || row.parent !== process.pid || !row.started) throw uncertain('后台启动请求的 PID 身份尚未确认。');
+            lease.arm({ platform: 'darwin', workerPid: pid, started: row.started, members: [{ pid, started: row.started }] });
+          } else {
+            lease.arm(process.platform === 'linux'
+              ? { platform: 'linux', initPid: pid, startTime: owned.linuxProcessStart(pid) }
+              : { platform: 'win32', workerPid: pid });
+          }
           if (process.platform === 'win32') {
             const witnessPath = join(requestDirectory, 'parent-request.json');
             owned.atomicJSON(witnessPath, { nonce: request.nonce, parentPid: pid });

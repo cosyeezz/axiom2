@@ -250,7 +250,14 @@ test("notification retry uses fresh real Store.external receipt and lost ack rec
       requests.push(command.requestId);
       if (!available) throw new AppError("MODEL_UNAVAILABLE", "model unavailable");
       internal?.beforeStart?.();
-      for (const item of internal!.notification!.items!) manager.appendCustomMessageEntry("axiom-result", item.content, true, { axiomInput: item.id });
+      for (const item of internal!.notification!.items!) {
+        const payload = JSON.parse(item.content);
+        assert.deepEqual(payload, { notice: "内部子代理结果通知，并非用户输入或新的任务请求", taskId: f.records.modelRef("task", f.row().id), resultId: f.records.modelRef("result", id), status: "completed" });
+        assert.equal(f.records.modelId("task", payload.taskId), f.row().id);
+        assert.equal(f.records.modelId("result", payload.resultId), id);
+        assert.equal(item.id, id);
+        manager.appendCustomMessageEntry("axiom-result", item.content, true, { axiomInput: item.id });
+      }
       return { status: "accepted" };
     });
     delivery.notify(f.scope); await tick(); await tick();

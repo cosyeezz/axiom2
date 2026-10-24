@@ -46,6 +46,8 @@ export interface TaskInputReceipt {
 export interface TaskStop { source: StopSource; reason: string; requestedAt: number }
 export interface Task {
   id: string;
+  /** Persistent model-facing alias; internal and UI commands retain the UUID. */
+  ref?: string;
   workspaceId: string;
   parentSessionId: string;
   sessionId: string;

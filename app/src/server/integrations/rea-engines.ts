@@ -1,10 +1,12 @@
 import { MaintenanceError } from "../../shared/maintenance.js";
-import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, win32, posix } from "node:path";
 import { reaEngineIds, type ReaEngineId, type ReaEnginePaths, type ReaEngineState } from "../../shared/rea-engines.js";
-import { inspectReaProgram, type ReaConfig } from "./rea-runtime.js";
+import { inspectReaProgram, reaEngineRevision, type ReaConfig } from "./rea-runtime.js";
 import { runEngine, type EngineRun } from "./rea-engine-process.js";
+import { maintenanceProcessSupported } from "../maintenance-process.js";
+import { engineContractVersion, engineVersionPolicy, ghidraVersion, installedEngineVersion, managedEngineVersion, verifiedJadxVersion, wabtVersion } from "./rea-engine-policy.js";
 
 export type EngineHost = { platform: string; arch: string };
 export const engineHost = (): EngineHost => ({ platform: process.platform, arch: process.arch });
@@ -24,7 +26,7 @@ export function engineEnvironment(paths: ReaEnginePaths = {}): Record<string, st
 export function engineInstallable(id: ReaEngineId, host = engineHost()) {
   const key = `${host.platform}-${host.arch}`;
   if (id === "hopper") return false; // Commercial installation and licensing remain user-managed.
-  if (id === "ghidra") return ["win32-x64", "linux-x64"].includes(key); // Other platforms need user-built native binaries.
+  if (id === "ghidra") return ["win32-x64", "linux-x64", "darwin-x64", "darwin-arm64"].includes(key); // macOS builds its native components in the managed candidate.
   if (id === "java") return ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64", "win32-arm64"].includes(key);
   if (id === "wabt") return ["darwin-arm64", "linux-arm64", "linux-x64", "win32-x64"].includes(key);
   return ["darwin", "linux"].includes(host.platform) && ["x64", "arm64"].includes(host.arch) || host.platform === "win32" && host.arch === "x64";
@@ -46,6 +48,10 @@ export function discoverEnginePaths(config: ReaEnginePaths = {}): ReaEnginePaths
       } catch { /* Ignore missing PATH entries and OS launch stubs. */ }
     }
   }
+  if (!paths.ghidra) {
+    const directories = [join(homedir(), "Applications"), ...(process.platform === "darwin" ? ["/Applications"] : process.platform === "linux" ? ["/opt"] : [])];
+    paths.ghidra = directories.map(directory => join(directory, `ghidra_${ghidraVersion}_PUBLIC`)).find(path => existsSync(join(path, "Ghidra", "application.properties")));
+  }
   if (!paths.hopper && process.platform === "darwin") paths.hopper = found("/Applications/Hopper Disassembler.app/Contents/MacOS/hopper") || found(join(homedir(), "Applications/Hopper Disassembler.app/Contents/MacOS/hopper"));
   if (!paths.hopper && process.platform === "linux") paths.hopper = found("/opt/hopper/bin/Hopper");
   if (!paths.wabt) {
@@ -54,22 +60,30 @@ export function discoverEnginePaths(config: ReaEnginePaths = {}): ReaEnginePaths
   }
   return paths;
 }
+export function engineValidationRevision(config: ReaConfig, id: ReaEngineId, paths = discoverEnginePaths(config.engines)) {
+  return `${reaEngineRevision(config, id)}:${["ghidra", "jadx"].includes(id) ? paths.java ?? "" : ""}`;
+}
 export function listEngines(config: ReaConfig, previous: ReaEngineState[] = [], host = engineHost()): ReaEngineState[] {
   const paths = discoverEnginePaths(config.engines);
   return reaEngineIds.map(id => {
     const path = paths[id] || "", configured = !!config.engines?.[id];
-    const installable = ["win32", "linux"].includes(host.platform) && config.installation?.version === "6.7.0" && engineInstallable(id, host);
+    const installable = maintenanceProcessSupported(host.platform) && config.installation?.version === engineContractVersion && engineInstallable(id, host);
     const unsupported = !["darwin", "linux", "win32"].includes(host.platform) || !["arm64", "x64"].includes(host.arch) || id === "hopper" && host.platform === "win32" || ["ghidra", "jadx"].includes(id) && host.platform === "win32" && host.arch !== "x64";
-    const old = previous.find(item => item.id === id && item.path === path && item.configured === configured);
-    const owned = { managed: !!config.managedEngines?.[id]?.length, removalPending: !!config.removalPending?.some(name => name.startsWith(`${id}-`)) };
-    if (old && !unsupported) return { ...old, installable, ...owned };
-    return { id, path, configured, installable, ...owned, status: unsupported ? "unsupported" : path ? "unchecked" : "missing", detail: unsupported ? "当前 REA 平台不支持此引擎。" : id === "ghidra" ? "Windows/Linux x64 可托管安装；macOS/Linux arm64 需接入含对应原生反编译组件的完整安装。" : id === "hopper" ? "只检测已有启动程序，不自动启动 GUI，也不验证商业许可。" : "按需配置或安装，点击检测后才运行版本检查。" };
+    const revision = reaEngineRevision(config, id), validationRevision = engineValidationRevision(config, id, paths);
+    const old = previous.find(item => item.id === id && item.path === path && item.configured === configured && item.validationRevision === validationRevision);
+    const owned = { revision, validationRevision, managed: !!config.managedEngines?.[id]?.length, activeManaged: !!config.managedEngines?.[id]?.some(record => record.path === path), removalPending: !!config.removalPending?.some(name => name.startsWith(`${id}-`)) };
+    const present = !!path && existsSync(path);
+    const version = present ? installedEngineVersion(id, path) ?? (old?.checkedAt ? old.version : managedEngineVersion(config.managedEngines?.[id]?.find(record => record.path === path)) ?? old?.version) : undefined;
+    const policy = engineVersionPolicy(id, version, config.installation?.version);
+    if (old && !unsupported && present) return { ...old, version, ...policy, installable, ...owned };
+    return { id, path, version, ...policy, configured, installable, ...owned, status: unsupported ? "unsupported" : present ? "unchecked" : "missing", detail: unsupported ? "当前 REA 平台不支持此引擎。" : "点击检查更新以验证本地组件。" };
   });
 }
-export async function checkEngines(root: string, config: ReaConfig, packageRoot: string | undefined, signal: AbortSignal, run: EngineRun = runEngine): Promise<ReaEngineState[]> {
+export async function checkEngines(root: string, config: ReaConfig, packageRoot: string | undefined, signal: AbortSignal, run: EngineRun = runEngine, only?: ReaEngineId): Promise<ReaEngineState[]> {
   const paths = discoverEnginePaths(config.engines), env = engineEnvironment(paths), items = listEngines(config);
   const binary = (home: string, name: string) => join(home, process.platform === "win32" ? `${name}.exe` : name);
   for (const item of items) {
+    if (only && item.id !== only) continue;
     signal.throwIfAborted(); item.checkedAt = Date.now();
     if (item.status === "unsupported" || !item.path) continue;
     try {
@@ -77,32 +91,35 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
       if (item.id === "hopper") {
         accessSync(item.path, constants.X_OK);
         if (!statSync(item.path).isFile()) throw Error("Hopper 路径必须指向可执行文件。");
-        try { item.version = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(readFileSync(join(dirname(dirname(item.path)), "Info.plist"), "utf8"))?.[1]; } catch { /* Version is informational, not a licensing check. */ }
+        item.version = installedEngineVersion(item.id, item.path);
         item.status = "detected"; item.detail = "启动程序存在；未启动 GUI，版本、许可及实际桥接需在使用时验证。";
       } else if (item.id === "java") {
         const executable = binary(join(item.path, "bin"), "java");
         const version = await run(executable, ["-XshowSettings:properties", "-version"], { cwd: root, env, signal });
         const modules = await run(executable, ["--list-modules"], { cwd: root, env, signal });
-        item.version = /java.version\s*=\s*([^\s]+)/.exec(version.stderr + version.stdout)?.[1];
+        item.version = installedEngineVersion(item.id, item.path) ?? /java.version\s*=\s*([^\s]+)/.exec(version.stderr + version.stdout)?.[1];
         if (version.code || modules.code || !/^jdk.compiler@/m.test(modules.stdout) || !item.version || Number(item.version.split(".")[0]) < 17) throw Error("需要 JDK 17+ 且包含 jdk.compiler；推荐 JDK 21。Ghidra 另按安装声明验证 Java 范围。");
         item.status = "ready"; item.detail = "Java 属性与编译模块检查通过；Ghidra 兼容性请同时查看其检测结果。";
       } else if (item.id === "wabt") {
         for (const name of ["wasm-validate", "wasm-objdump", "wasm2wat"]) {
           const result = await run(binary(item.path, name), ["--version"], { cwd: root, env, signal });
-          if (result.code || result.stderr.trim() || result.stdout.trim() !== "1.0.42") throw Error(`${name} 需为 1.0.42 且匹配后台系统架构。`);
+          if (name === "wasm-validate") item.version = /^\d+\.\d+\.\d+$/.test(result.stdout.trim()) ? result.stdout.trim() : undefined;
+          if (result.code || result.stderr.trim() || result.stdout.trim() !== wabtVersion) throw Error(`${name} 需为 ${wabtVersion} 且匹配后台系统架构。`);
         }
-        item.version = "1.0.42"; item.status = "ready"; item.detail = "三个 WASM 工具的版本检查通过，未加载分析目标。";
+        item.version = wabtVersion; item.status = "ready"; item.detail = "三个 WASM 工具的版本检查通过，未加载分析目标。";
       } else {
-        if (!packageRoot || config.installation?.version !== "6.7.0") throw Error("当前检测契约验证于 REA 6.7.0；请先安装该版本或等待适配新版本。");
+        if (!packageRoot || config.installation?.version !== engineContractVersion) throw Error(`当前检测契约验证于 REA ${engineContractVersion}；请先安装该版本或等待适配新版本。`);
         const { entry } = inspectReaProgram(packageRoot, config.installation.version);
         const result = await run(process.execPath, [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, signal, timeout: 60_000 });
         const report = JSON.parse(result.stdout);
         if (![0, 1].includes(result.code) || !Array.isArray(report.scope_checks) || !report.scope_checks.length || typeof report.healthy !== "boolean") throw Error("REA 未返回有效的组件检查报告。");
         const failed = report.scope_checks.filter((check: { ok?: boolean }) => check.ok !== true);
         item.status = report.healthy && !failed.length ? "ready" : "incompatible";
+        if (item.id === "jadx" && item.status === "ready") item.version = await verifiedJadxVersion(item.path, signal);
         item.detail = failed.length ? failed.map((check: { name?: string; detail?: string }) => `${check.name}: ${check.detail ?? "未通过"}`).join("\n").slice(0, 4000) : item.status === "ready" ? "REA 环境检查通过；未加载目标，不代表实际分析桥接已通过。" : "REA 检查未通过，请检查引擎与 Java 配置。";
       }
     } catch (error) { signal.throwIfAborted(); if (error instanceof MaintenanceError) throw error; item.status = "error"; item.detail = error instanceof Error ? error.message : "组件检测失败。"; }
+    Object.assign(item, engineVersionPolicy(item.id, item.version, config.installation?.version));
   }
   return items;
 }

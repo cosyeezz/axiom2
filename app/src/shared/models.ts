@@ -26,11 +26,21 @@ export const samplingKeys = [
   "max_completion_tokens",
   "max_output_tokens",
 ] as const;
+export type BodyOverrideType = "string" | "number";
+export const bodyOverrideType = (key: string): BodyOverrideType =>
+  samplingKeys.includes(key as (typeof samplingKeys)[number]) ? "number" : "string";
+export const validBodyOverrideKey = (key: string) =>
+  !!key && key.length <= 100 && !/[\x00-\x20\x7f]/.test(key) &&
+  !["__proto__", "prototype", "constructor"].includes(key);
+export const editableBodyOverride = (key: string, value: unknown) =>
+  validBodyOverrideKey(key) &&
+  ((typeof value === "string" && value.length <= 8192) || (typeof value === "number" && Number.isFinite(value)));
 export interface OverrideRow {
   id: string;
   key: string;
   value: string;
-  // Saved values are never returned. This reference preserves an unchanged value on the server.
+  valueType?: BodyOverrideType;
+  // Saved header values are never returned. This reference preserves an unchanged value on the server.
   source?: string;
   keep?: boolean;
 }
@@ -47,6 +57,9 @@ export function validModelPricing(value: unknown): value is ModelPricing {
 export interface ModelDraft {
   key: string;
   originalId?: string;
+  // Configurations may share an upstream id while retaining distinct local identities.
+  configId?: string;
+  copyFromId?: string;
   id: string;
   name: string;
   levels: ReasoningLevel[];
@@ -57,6 +70,27 @@ export interface ModelDraft {
   costTiered?: boolean;
   headers: OverrideRow[];
   body: OverrideRow[];
+  // Version 2 exposes all editable strings/numbers; omitted by legacy clients.
+  bodyVersion?: 2;
+}
+// Preserve an existing configuration's identity when new rows share its upstream ID.
+export function assignModelConfigIds<T extends { id: string; configId?: string; originalId?: string }>(models: T[]): T[] {
+  const owners = new Map<string, T>();
+  const reserved = new Set(models.map(model => model.configId ?? model.id));
+  for (const model of models) {
+    const identity = model.configId ?? model.id, previous = owners.get(identity);
+    if (!previous || (model.configId !== undefined && previous.configId === undefined) ||
+        (model.configId === undefined && previous.configId === undefined && model.originalId === identity && previous.originalId !== identity)) owners.set(identity, model);
+  }
+  return models.map(model => {
+    if (model.configId !== undefined || owners.get(model.id) === model) return model;
+    let configId = model.originalId;
+    if (!configId || reserved.has(configId)) {
+      do { configId = `axiom-model-${crypto.randomUUID()}`; } while (reserved.has(configId));
+    }
+    reserved.add(configId);
+    return { ...model, configId };
+  });
 }
 export type ProviderProxy = { mode: "direct" } | { mode: "external"; url: string; keepUrl?: boolean } | { mode: "builtin"; profileId: string };
 export interface ProviderDraft {

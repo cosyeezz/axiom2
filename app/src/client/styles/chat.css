@@ -25,13 +25,14 @@
 .log-row:hover .message-actions > button, .message-actions:focus-within > button, .message-actions[data-feedback] > button { opacity: 1; pointer-events: auto; }
 .message-actions > button:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
 .message-actions > button:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -3px; }
-.message-actions[data-feedback="copied"] > button { color: var(--success); }
-.message-actions[data-feedback="failed"] > button { color: var(--danger-icon); }
+.message-actions[data-feedback="copied"] > .copy-reply { color: var(--success); }
+.message-actions[data-feedback="failed"] > .copy-reply { color: var(--danger-icon); }
+.fork-action:disabled { cursor: not-allowed; }
 .message-copy-error { position: absolute; top: 100%; right: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font-size: 11px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
 @media (hover: none), (pointer: coarse) { .message-actions > button { opacity: 1; pointer-events: auto; } }
 @media (prefers-reduced-motion: reduce) { .message-actions > button { transition: none; } }
 /* Reply copy: compact row after the output, aligned with the text edge. */
-.message-actions.reply-actions { position: static; display: flex; align-items: center; gap: 8px; margin: 4px 0 0 -6px; }
+.message-actions.reply-actions { position: static; display: flex; align-items: center; gap: 0; margin: 4px 0 0 -6px; }
 .reply-actions > button { width: 28px; height: 28px; }
 .reply-actions svg { width: 14px; height: 14px; }
 .reply-actions .message-copy-error { position: static; }
@@ -275,6 +276,10 @@
   max-height: none;
   overflow: visible;
 }
+.composer-draft-actions { display: flex; justify-content: flex-end; padding: 0 2px 4px; }
+.composer-clear { min-height: 44px; padding: 4px 8px; gap: 6px; color: var(--muted); font-size: 12px; }
+.composer-clear:hover:not(:disabled) { color: var(--fg); }
+.composer-clear svg { width: 16px; height: 16px; }
 .composer { position: relative; }
 .attachment-picker { grid-column: 1; grid-row: 1; position: relative; display: grid; width: 44px; height: 44px; }
 .file-completion {

@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { lstatSync, opendirSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 /** Only a recorded direct child of a fixed private directory can be removed. */
@@ -20,7 +20,17 @@ export function removeManagedDirectory(root: string, parents: string[], name: st
 }
 export function managedChildren(root: string, parents: string[], container: string, pattern: RegExp): string[] {
   const directory = managedDirectory(root, parents, container, new RegExp(`^${container}$`));
-  const names = directory ? readdirSync(directory).filter(name => pattern.test(name)) : [];
+  const names: string[] = [];
+  if (directory) {
+    const entries = opendirSync(directory);
+    try {
+      let entry, count = 0;
+      while ((entry = entries.readSync())) {
+        if (++count > 1024) throw Error("托管目录条目超过核实上限，未执行清理。");
+        if (pattern.test(entry.name)) names.push(entry.name);
+      }
+    } finally { entries.closeSync(); }
+  }
   for (const name of names) managedDirectory(root, [...parents, container], name, pattern);
   return names;
 }

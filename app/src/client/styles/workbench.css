@@ -18,6 +18,7 @@
 .history-row .history-item small{font-variant-numeric:tabular-nums}
 .history-row .history-item small{display:flex;align-items:center;gap:5px;margin-top:0;line-height:16px}
 .history-row .session-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-row .session-message-count{flex-shrink:0;white-space:nowrap}
 .history-item .session-state{width:8px;height:8px;margin:0;flex-shrink:0}
 .session-state.running{color:var(--success)}
 .session-state.unread{color:#6db6ff;overflow:visible}
@@ -341,8 +342,8 @@ svg{stroke-width:1.8}
 .compression-error strong{font-size:13px;color:var(--danger-text)}.compression-error p{margin-top:4px;white-space:pre-wrap;color:var(--fg-2)}
 .compression-steps strong{display:block;font-size:13px;font-weight:510;line-height:22px;color:var(--fg-2)}.compression-steps small{display:block;font-size:12px;line-height:1.65;color:var(--muted);margin-top:4px}
 .compression-preview{margin-top:12px;padding:20px;background:color-mix(in srgb,var(--surface) 55%,var(--bg));border:1px solid var(--border);border-radius:10px}.compression-preview article+article{border-top:1px solid var(--border);margin-top:16px;padding-top:16px}.compression-preview .compression-preview-label{font-size:11px;font-weight:400;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid var(--border);color:var(--muted);overflow-wrap:anywhere}
-.auto-compression-toggle{display:flex;align-items:center;gap:8px;min-height:44px;font-size:13px;cursor:pointer}.auto-compression-toggle input{width:16px;height:16px;accent-color:var(--success)}
-.auto-compression-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:16px 0}.auto-compression-field{min-width:0}.auto-compression-field label{display:block;font-size:13px;margin-bottom:8px}.auto-compression-field input{width:100%;min-width:0;min-height:44px}.auto-compression-settings p:empty{display:none}.compression-body p.auto-compression-effective{color:var(--fg);margin-bottom:8px}
+.auto-compression-settings>.row-between{flex-wrap:wrap;gap:8px 16px}.auto-compression-toggle{display:flex;align-items:center;gap:8px;min-height:44px;font-size:13px;cursor:pointer;flex-shrink:0}.auto-compression-toggle input{width:18px;height:18px;flex:none;margin:0;accent-color:var(--success)}
+.auto-compression-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:16px;margin:16px 0}.auto-compression-field{min-width:0}.auto-compression-field label{display:block;font-size:13px;margin-bottom:8px}.auto-compression-field input{width:100%;min-width:0;min-height:44px}.auto-compression-settings p:empty{display:none}.compression-body p.auto-compression-effective{color:var(--fg);margin-bottom:8px}
 .compression-page>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px max(16px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0}.compression-page footer small{font-size:12px;color:var(--muted)}.compression-page footer button{font-size:13px;flex-shrink:0}
 @media(max-width:640px){.context-controls{gap:4px}.compression-page{border:0}.compression-body{padding:20px}.compression-page>header,.compression-page>footer{padding-inline:20px}}
 /* Tight viewBoxes include strokes; fit each glyph proportionally into an 18px box.

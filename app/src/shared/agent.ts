@@ -140,6 +140,8 @@ export interface ChatMessage {
   textRevision?: string;
   thinkingLength?: number;
   thinkingRevision?: string;
+  /** Bounded live tail for the collapsed scrolling preview; thinking keeps its original prefix. */
+  thinkingTail?: string;
   detailsRevision?: string;
   preview?: string;
   toolName?: string;
@@ -169,6 +171,8 @@ export interface ThreadIndex {
     id: string;
     ids: string[];
     activity: boolean;
+    /** A finished final-answer body; available even while its virtual row is unmounted. */
+    delivery?: boolean;
     /** A confirmed final reply folds all preceding process content in this segment. */
     folded?: boolean;
     /** These messages contribute only thinking before their body. */

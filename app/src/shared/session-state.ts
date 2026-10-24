@@ -4,9 +4,9 @@ export const canContinue = (run: Run | null | undefined) =>
   !!run && ["failed", "cancelled", "interrupted"].includes(run.status);
 
 const phaseLabels: Record<RunPhase, string> = {
-  initializing: "正在初始化", requesting: "正在请求模型", generating: "正在生成回复",
-  executing_tools: "正在执行工具", retry_wait: "等待重试", retrying: "正在重试",
-  compacting: "正在压缩上下文", settling: "正在结算",
+  initializing: "初始化", requesting: "请求中", generating: "生成中",
+  executing_tools: "执行工具", retry_wait: "等待重试", retrying: "重试中",
+  compacting: "压缩中", settling: "收尾中",
 };
 /** Sidebar state; unread never hides activity. */
 export function sessionState(value: {
@@ -15,7 +15,7 @@ export function sessionState(value: {
 }) {
   const active = activeStatus(value.runStatus) || !!value.activeTasks || !!value.activeTaskCount;
   const label = value.runStatus === "stopping" ? runLabels.stopping
-    : value.runStatus === "starting" ? runLabels.starting
+    : value.runStatus === "starting" ? phaseLabels.initializing
     : value.runStatus === "running"
       ? value.phase ? phaseLabels[value.phase] : runLabels.running
       : value.activeTasks || value.activeTaskCount

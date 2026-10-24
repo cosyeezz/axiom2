@@ -7,8 +7,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ProxyInstallation } from "../../shared/model-proxy.js";
 import { atomicProxyJson, proxyDirectory, proxyExecutable, type ProxyEndpoint, type StoredProxyProfile } from "./model-proxy-config.js";
-import { runRtk } from "./rtk-process.js";
-import { ProxyGuardian } from "./model-proxy-guardian.js";
+import { clearKernelRecord, pidAlive, readKernelRecord, spawnKernel, terminateInstalledKernels, terminatePid, writeKernelRecord } from "./model-proxy-kernel.js";
 import { assertProxyCanStart } from "./model-proxy-removal.js";
 import { toolEnvironment } from "./model-proxy-env.js";
 
@@ -57,20 +56,23 @@ async function listening(port: number) {
 }
 export class ProxyProcess {
   readonly endpoint: ProxyEndpoint = { status: "starting", generation: randomUUID() };
-  private validationUnconfirmed = false;
   private stopping = false;
   private stopped?: Promise<void>;
-  private guardian?: ProxyGuardian;
+  private pid?: number;
+  private executable?: string;
   private directory: string;
-  constructor(readonly root: string, readonly profile: StoredProxyProfile, private changed: () => void) {
+  constructor(readonly root: string, readonly profile: StoredProxyProfile, private changed: () => void,
+    /** 同服务内其他存活的线路 PID；启动与停止时保护它们，避免兜底清理误杀。 */
+    private siblings: () => number[] = () => []) {
     this.directory = join(proxyDirectory(root), "runs", this.endpoint.generation);
   }
+  get processId() { return this.pid; }
   async start(installation: ProxyInstallation, signal: AbortSignal) {
     try {
       const port = await reserveProxyPort(), token = randomBytes(32).toString("hex");
       signal.throwIfAborted();
       if (this.stopping) throw Error("线路启动已取消。");
-      assertProxyCanStart(this.root, this.profile.kernel);
+      await assertProxyCanStart(this.root, this.profile.kernel, this.siblings());
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
       const source = join(this.directory, "provider.yaml"), config = join(this.directory, "config.json");
       const value = coreConfiguration(this.profile, port, token, source);
@@ -81,38 +83,30 @@ export class ProxyProcess {
       atomicProxyJson(config, value);
       const executable = proxyExecutable(this.root, this.profile.kernel, installation);
       const args = this.profile.kernel === "xray" ? ["run", "-config", config] : ["-d", this.directory, "-f", config];
-      const owner = join(this.directory, "owner.json");
-      atomicProxyJson(owner, { kernel: this.profile.kernel, directory: installation.directory });
-      // Never publish raw core diagnostics: they may echo the supplied node credentials.
-      try { await runRtk(executable, this.profile.kernel === "xray" ? ["run", "-test", "-config", config] : ["-t", ...args], { root: this.root, signal, timeout: 10_000 }); }
-      catch (error) {
-        if (error instanceof MaintenanceError) { this.validationUnconfirmed = error.code === "stop-unconfirmed"; throw error; }
-        throw Error("内核配置校验失败，请检查原生线路格式和节点参数。");
-      }
-      signal.throwIfAborted();
-      if (this.stopping) throw Error("线路启动已取消。");
-      const execution = currentMaintenance(), started = Date.now();
-      this.guardian = new ProxyGuardian(owner, () => execution?.remainingBudget() ?? { remainingMs: 15_000 - (Date.now() - started), code: "total-timeout" }, signal);
-      void this.guardian.closed.then(() => {
-        if (!this.stopping) {
-          this.endpoint.status = "error"; delete this.endpoint.port; delete this.endpoint.token;
-          this.endpoint.message = "代理内核已退出，请检查线路后重新启动。";
-          this.changed();
-        }
+      // 内核由后台直接托管：只记录 PID，不做进程树/命名空间监督。
+      const child = spawnKernel(executable, args, this.directory, toolEnvironment(process.env));
+      if (!child.pid) throw Error("代理内核未能启动，请检查安装。");
+      this.pid = child.pid; this.executable = executable;
+      writeKernelRecord(this.directory, { pid: child.pid, kernel: this.profile.kernel, executable, startedAt: new Date().toISOString(), profileId: this.profile.id });
+      child.once("exit", () => {
+        if (this.stopping) return;
+        this.endpoint.status = "error"; delete this.endpoint.port; delete this.endpoint.token;
+        this.endpoint.message = "代理内核已退出，请检查线路后重新启动。";
+        clearKernelRecord(this.directory);
+        this.changed();
       });
-      await this.guardian.start({ executable, args, cwd: this.directory, env: toolEnvironment(process.env) });
       const abort = () => { void this.stop().catch(() => {}); };
       signal.addEventListener("abort", abort, { once: true });
       try {
-        const deadline = currentMaintenance() ? Infinity : Date.now() + 15_000;
+        const deadline = Date.now() + 15_000;
         while (Date.now() < deadline && this.endpoint.status === "starting") {
           signal.throwIfAborted();
+          if (!pidAlive(child.pid)) throw Error("代理内核启动后立即退出，请检查线路配置。");
           if (await listening(port)) {
             signal.throwIfAborted();
             if (this.stopping || this.endpoint.status !== "starting") throw Error("线路启动已取消。");
             // Provider cache files inherit the private directory; tighten existing ones too.
             try { if (process.platform !== "win32") chmodSync(source, 0o600); } catch { /* Remote subscription may not yet be downloaded. */ }
-            this.guardian.promoteToService();
             Object.assign(this.endpoint, { port, token, status: "running" }); this.changed(); return;
           }
           await delay(100, undefined, { signal });
@@ -120,7 +114,7 @@ export class ProxyProcess {
         throw Error("代理入口未能就绪，请检查内核和线路配置。");
       } finally { signal.removeEventListener("abort", abort); }
     } catch (error) {
-      await this.stop();
+      await this.stop().catch(() => {});
       rmSync(this.directory, { recursive: true, force: true });
       this.endpoint.status = "error"; this.endpoint.message = error instanceof Error ? error.message : "启动失败。";
       this.changed(); throw error;
@@ -132,8 +126,11 @@ export class ProxyProcess {
     this.endpoint.status = "stopped"; delete this.endpoint.port; delete this.endpoint.token;
     this.changed();
     this.stopped = (async () => {
-      if (this.validationUnconfirmed) throw new MaintenanceError("stop-unconfirmed", "内核校验进程退出未确认，运行目录及程序文件已保留。");
-      await this.guardian?.stop();
+      // 先停记录的 PID，再按安装目录兜底清掉同内核进程，避免残留占住资源；
+      // 其他线路的 PID 不在兜底范围，否则多线路共存时会互相误杀。
+      if (this.pid) await terminatePid(this.pid);
+      if (this.executable) await terminateInstalledKernels(this.executable, this.siblings());
+      clearKernelRecord(this.directory);
       rmSync(this.directory, { recursive: true, force: true });
     })().catch(error => {
       this.stopped = undefined;

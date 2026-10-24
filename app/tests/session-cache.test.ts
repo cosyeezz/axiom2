@@ -30,7 +30,7 @@ test("transcript uses native compacted entries, complete retained messages and n
   for (let i = 0; i < 125; i++) user(`new-${i}`);
   const rows = transcriptMessages(manager);
   assert.equal(rows.length, 127);
-  assert.equal(rows[0].compression?.title, "会话性能优化");
+  assert.equal(rows[0].compression?.title, "上下文已压缩");
   assert.equal(rows[0].compression?.number, 1);
   assert.ok(rows[0].compression!.after! > 0);
   assert.ok(!rows.some((row) => row.text === "OLD_HIDDEN"));
@@ -40,7 +40,9 @@ test("transcript uses native compacted entries, complete retained messages and n
   const next = transcriptMessages(manager);
   assert.equal(next.length, 1);
   assert.equal(next[0].compression?.number, 2);
-  assert.equal(Array.from(next[0].compression!.title).length, 100);
+  assert.equal(next[0].compression!.title, "上下文已压缩");
+  assert.equal(Array.from(compactionShortSummary("<axiom-summary>" + "很长的摘要".repeat(30) + "</axiom-summary>")).length, 100);
   assert.equal(manager.getBranch().filter((e) => e.type === "message").length, 127, "raw history is never deleted");
-  assert.match(compactionInstructions, /不得.*替代完整摘要/);
+  assert.match(compactionInstructions, /保留原生完整交接摘要结构和所有必要上下文/);
+  assert.match(compactionInstructions, /无需额外生成卡片标题或短摘要/);
 });

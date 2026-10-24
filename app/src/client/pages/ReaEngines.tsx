@@ -1,50 +1,74 @@
 import { Icon } from "../Icon.js";
+import { revealLocalPath } from "../LocalPath.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
-import { useEffect, useState } from "react";
-import { reaEngineDescriptions, reaEngineLabels, reaEnginePathLabels, reaEngineStatusLabels, type ReaEngineState } from "../../shared/rea-engines.js";
+import { useState } from "react";
+import { compareEngineVersions, engineDownloadSatisfied, engineRecommendationSatisfied, reaEngineContractVersion, reaEngineLabels, reaEngineStatusLabels, type ReaEngineReleaseState, type ReaEngineState } from "../../shared/rea-engines.js";
 import type { ReaState } from "../../shared/rea.js";
 
+export type ReaFeedback = { text: string; error?: boolean; jobId?: string };
 type Action = (op: string, params?: Record<string, unknown>) => Promise<void>;
-export function ReaEngines({ state, busy, action, reportedErrorResource }: { state: ReaState; busy: boolean; action: Action; reportedErrorResource?: string }) {
+export function ReaEngines({ state, busy, blocked, sending, feedback, action, reportedErrorResources }: { state: ReaState; busy: boolean; blocked: boolean; sending: string[]; feedback: Record<string, ReaFeedback>; action: Action; reportedErrorResources: string[] }) {
   return <section className="section tools-section rea-engines-section" aria-labelledby="rea-engines-heading">
-    <div className="section-heading"><h3 id="rea-engines-heading">分析引擎与配套组件</h3><p>按需安装、用时加载，不做预热。</p></div>
-    <p className="field-help">后台系统：{state.engineHost ? `${({ win32: "Windows", darwin: "macOS", linux: "Linux" } as Record<string, string>)[state.engineHost.platform] ?? state.engineHost.platform} / ${state.engineHost.arch}` : "等待读取"}。下载和路径均以运行 Axiom 后台的电脑为准，与当前浏览器或手机系统无关。</p>
-    <div className="tools-actions"><button className="btn" disabled={busy || !!state.supportError} onClick={() => void action("rea.engines-check")}>检测配套组件</button></div>
-    <p className="field-help tools-help">只检查文件、Java 模块与工具版本，不打开 GUI 或分析目标。环境通过不代表实际桥接或许可已验证。Windows 原生分析还受 REA 的 x64、本地 NTFS 和原生控制模块限制。</p>
-    {state.engines?.map(engine => <Engine key={engine.id} engine={engine} state={state} busy={busy} action={action} reportedErrorResource={reportedErrorResource} />)}
-    <p className="field-help tools-help">安装到 Axiom 私有目录，下载校验并检测通过后才切换路径；失败或取消保留原配置。不会修改系统 Java、全局 PATH 或其他 MCP 配置。路径保存后请重新检测；已有会话须重新加载技能与 MCP。清空路径恢复环境变量和常用路径发现，不删除已安装文件。</p>
+    <div className="section-heading"><h3 id="rea-engines-heading">分析引擎与配套组件</h3><p>REA {state.version ?? "未安装"}{state.engineHost && ` · ${({ win32: "Windows", darwin: "macOS", linux: "Linux" } as Record<string, string>)[state.engineHost.platform] ?? state.engineHost.platform} ${state.engineHost.arch}`}</p></div>
+    {state.engines?.map(engine => <Engine key={engine.id} engine={engine} state={state} uninstallBusy={busy} blocked={blocked} sending={sending.includes(`rea:${engine.id}`)} feedback={feedback[`rea:${engine.id}`]} action={action} reportedError={reportedErrorResources.includes(`rea:${engine.id}`)} />)}
   </section>;
 }
-function Engine({ engine, state, busy, action, reportedErrorResource }: { engine: ReaEngineState; state: ReaState; busy: boolean; action: Action; reportedErrorResource?: string }) {
-  const saved = engine.configured ? engine.path : "";
-  const [draft, setDraft] = useState<{ path: string; revision: string }>();
-  const path = draft?.path ?? saved;
-  const conflict = !!draft && draft.revision !== state.revision && draft.path !== saved;
-  useEffect(() => { if (draft && draft.path === saved) setDraft(undefined); }, [draft, saved]);
+function installLabel(engine: ReaEngineState) {
+  if (!engine.version) return "安装";
+  const comparison = engine.available ? compareEngineVersions(engine.available.version, engine.version) : undefined;
+  return comparison === 0 ? "修复" : comparison === -1 ? "切换推荐版" : "更新";
+}
+function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, action, reportedError }: { engine: ReaEngineState; state: ReaState; uninstallBusy: boolean; blocked: boolean; sending: boolean; feedback?: ReaFeedback; action: Action; reportedError: boolean }) {
+  const job = (state.jobs ?? (state.job ? [state.job] : [])).find(job => job.engine === engine.id);
+  const busy = blocked || sending || !!job?.running || !!engine.pendingOperation;
+  const revision = engine.revision ?? state.revision;
+  const [openError, setOpenError] = useState("");
+  const error = openError || (feedback?.error ? feedback.text : !feedback ? job?.error : undefined);
   const [uninstall, setUninstall] = useState<string>();
-  const [confirm, setConfirm] = useState<string>();
-  const unsupported = engine.status === "unsupported";
-  return <BackendMaintenance resource={`rea:${engine.id}`} label={reaEngineLabels[engine.id]} showError={reportedErrorResource !== `rea:${engine.id}`} location={`所连接后台 · 应用级 · ${engine.id === "hopper" ? "外部管理" : "兼容组件"}`}>
-    <div className="section-heading row-between"><h4>{reaEngineLabels[engine.id]}{engine.version ? ` · ${engine.version}` : ""}</h4><span className="tag">{reaEngineStatusLabels[engine.status]}</span></div>
-    <p className="field-help">{reaEngineDescriptions[engine.id]}</p>
-    <p className={engine.status === "error" || engine.status === "incompatible" ? "tools-error" : "field-help rea-engine-result"}>{engine.detail}</p>
-    {engine.checkedAt && <p className="field-help">检测时间：{new Date(engine.checkedAt).toLocaleString()}</p>}
-    <div className="field"><label htmlFor={`rea-path-${engine.id}`}>{reaEnginePathLabels[engine.id]}</label><input className="input" id={`rea-path-${engine.id}`} value={path} placeholder={engine.path || "输入后台电脑上的绝对路径"} disabled={busy || unsupported} onChange={event => setDraft({ path: event.target.value, revision: draft?.revision ?? state.revision })} autoComplete="off" spellCheck={false} /></div>
-    {conflict && <div className="tools-conflict"><p>配置已由其他操作更新，当前草稿已保留；请重新载入后编辑。</p><button className="btn" disabled={busy} onClick={() => setDraft(undefined)}>放弃草稿并载入最新路径</button></div>}
-    <div className="tools-actions">
-      <button className="btn" disabled={busy || unsupported || conflict} onClick={() => void action("rea.engineSave", { engine: engine.id, path, revision: draft?.revision ?? state.revision })}>保存{reaEngineLabels[engine.id]}路径</button>
-      {engine.installable && <button className="btn" disabled={busy} onClick={() => setConfirm(state.revision)}>安装{reaEngineLabels[engine.id]}</button>}
-      {(engine.managed || engine.removalPending) && <button className="btn" disabled={busy} onClick={() => setUninstall(state.revision)}><Icon name="trash-2" />{engine.removalPending ? "清理残留文件" : "卸载托管组件"}</button>}
+  const [confirm, setConfirm] = useState<{ revision: string; version: string; operation: "install" | "download" | "open"; release?: ReaEngineReleaseState; downloadPath?: string; recommendedVersion?: string }>();
+  const unsupported = engine.status === "unsupported", label = reaEngineLabels[engine.id];
+  const manual = !engine.installable && (engine.id === "ghidra" || engine.id === "hopper" && state.engineHost?.platform === "darwin");
+  const downloadable = engine.installable || manual;
+  const unavailable = busy || !state.supported || !!state.supportError || unsupported || state.version !== reaEngineContractVersion;
+  const current = engineRecommendationSatisfied(engine), downloaded = engineDownloadSatisfied(engine);
+  const recommended = engine.available?.version ?? engine.recommendedVersion;
+  const cachedInstall = !!engine.download && (engine.installable || engine.id === "hopper" && state.engineHost?.platform === "darwin") && (downloaded || !recommended);
+  const stale = !!confirm && (confirm.revision !== revision || (confirm.release ? confirm.release.token !== engine.available?.token : confirm.downloadPath !== engine.download?.path || confirm.version !== engine.download?.version || confirm.recommendedVersion !== recommended));
+  const installerOpened = job?.kind === "engine-open-installer" && !job.running && !job.error && job.message.startsWith("已打开");
+  const status = current ? engine.id === "hopper" ? "已安装 · 待许可验证" : "已是推荐版本" : installerOpened ? "待完成系统安装" : downloaded ? "已下载 · 待安装" : reaEngineStatusLabels[engine.status];
+  const selectRelease = (operation: "install" | "download") => engine.available && setConfirm({ revision, version: engine.available.version, release: engine.available, operation });
+  return <BackendMaintenance resource={`rea:${engine.id}`} label={label} activeOnly showError={!reportedError} location="">
+    <div className="rea-engine-summary">
+      <dl className="rea-engine-versions"><div><dt>当前版本</dt><dd>{engine.version ?? (engine.path ? "待检测" : "未安装")}</dd></div><div><dt>{engine.id === "hopper" ? "官方版本" : "推荐版本"}</dt><dd>{recommended ?? (engine.id === "java" && state.version === reaEngineContractVersion ? "21 · 待检查修订" : "待检查")}</dd></div></dl>
+      <span className="tag">{status}</span>
     </div>
-    {!engine.installable && !unsupported && <p className="field-help tools-help">{state.supportError ? state.supportError : engine.id === "hopper" ? "仅接入已有完整安装；Hopper 许可由用户自行管理。" : state.version !== "6.7.0" ? "托管安装兼容策略当前验证于 REA 6.7.0，请先安装推荐版本。" : engine.id === "ghidra" ? "当前平台需接入含对应原生反编译组件的完整 Ghidra；不自动编译。" : "当前后台系统/架构暂无受支持的托管发行包，可配置已有兼容版本。"}</p>}
-    {!engine.managed && !engine.removalPending && engine.path && <p className="field-help tools-help">当前路径没有 Axiom 托管记录。如需卸载，请通过原安装方式移除文件。</p>}
-    {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label={`确认卸载${reaEngineLabels[engine.id]}`}>
-      <p>移除 Axiom 托管的{reaEngineLabels[engine.id]}及指向这些文件的路径。外部安装和其他组件保留；依赖此组件的分析功能需重新安装或配置后使用。</p>
-      <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rea.engine-uninstall", { engine: engine.id, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button></div>
+    {error && <div className="tools-feedback" aria-live="polite"><p className="tools-error" role="alert">{error}</p></div>}
+    {!error && !job?.running && job?.message.includes("已取消") && <p className="field-help" role="status">{job.kind === "engine-open-installer" ? job.message : "操作已取消。"}</p>}
+    {!error && installerOpened && !current && <p className="field-help" role="status">{job.message}</p>}
+    {engine.pendingOperation && !job?.running && <div className="tools-conflict" role="group" aria-label={`核实${label}中断任务`}><p>上次任务中断，请先核实。</p><button className="btn" disabled={blocked || sending} onClick={() => void action("rea.reconcile", { engine: engine.id, operationId: engine.pendingOperation })}><Icon name="refresh-cw" />核实中断任务</button></div>}
+    <div className="tools-actions">
+      <button className="btn" disabled={unavailable} onClick={() => void action("rea.engine-check", { engine: engine.id })}><Icon name="refresh-cw" />{downloadable ? `检查${label}更新` : `检测${label}`}</button>
+      {cachedInstall && !current && <button className="btn" disabled={unavailable} onClick={() => setConfirm({ revision, version: engine.download!.version, downloadPath: engine.download!.path, recommendedVersion: recommended, operation: engine.id === "hopper" ? "open" : "install" })}><Icon name="package" />安装{label}</button>}
+      {downloadable && !current && !cachedInstall && !(manual && downloaded) && <button className="btn" disabled={unavailable || !engine.available} onClick={() => selectRelease(manual ? "download" : "install")}><Icon name="download" />{manual ? `下载${label}安装包` : `${installLabel(engine)}${label}`}</button>}
+      {engine.id === "ghidra" && engine.installable && !current && !downloaded && <button className="btn btn-ghost" disabled={unavailable || !engine.available} onClick={() => selectRelease("download")}><Icon name="download" />下载{label}安装包</button>}
+      {engine.download && <button className="btn" onClick={() => { setOpenError(""); void revealLocalPath({ path: engine.download!.path }).catch(error => setOpenError(error.message)); }}><Icon name="folder-open" />查看安装包</button>}
+      {(engine.managed || engine.removalPending) && <button className="btn" disabled={uninstallBusy} onClick={() => setUninstall(revision)}><Icon name="trash-2" />{engine.removalPending ? "清理残留文件" : "卸载托管组件"}</button>}
+      {manual && downloaded && <a className="btn btn-ghost" href={engine.id === "ghidra" ? "https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_12.1.4_build/GhidraDocs/GettingStarted.md#building-native-components" : "https://www.hopperapp.com/download.html"} target="_blank" rel="noreferrer">安装说明</a>}
+    </div>
+    {!error && ["error", "incompatible"].includes(engine.status) && <details className="tools-diagnostic"><summary>检测详情</summary><pre>{engine.detail}</pre></details>}
+    {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label={`确认卸载${label}`}>
+      <p>卸载 Axiom 安装的 {label}？</p>
+      {uninstall !== revision && <p role="alert">此组件已变化，请重新确认。</p>}
+      <div className="tools-actions"><button className="btn" disabled={uninstallBusy || uninstall !== revision} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rea.engine-uninstall", { engine: engine.id, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button></div>
     </div>}
-    {confirm && <div className="tools-conflict" role="group" aria-label={`确认安装${reaEngineLabels[engine.id]}`}>
-      <p>将从{engine.id === "java" ? "Eclipse Adoptium" : "官方 GitHub Release"}下载{reaEngineLabels[engine.id]}到后台电脑，可能占用数百 MB。保留上游许可文件，组件使用须遵循各自许可。{["jadx", "ghidra"].includes(engine.id) && "请先配置可用 JDK（推荐 21）；否则验证失败不会切换路径。"}</p>
-      <div className="tools-actions"><button className="btn btn-primary" disabled={busy} onClick={() => { const revision = confirm; setConfirm(undefined); void action("rea.engine-install", { engine: engine.id, revision }); }}>确认下载安装</button><button className="btn" onClick={() => setConfirm(undefined)}>暂不安装</button></div>
+    {confirm && <div className="tools-conflict" role="group" aria-label={`确认${confirm.operation === "download" ? "下载" : "安装"}${label}`}>
+      <p>{confirm.operation === "download" ? "下载" : "安装"} {label} {confirm.version}？{confirm.operation === "open" ? "将在后台 Mac 打开安装映像，请在系统窗口完成安装。" : confirm.downloadPath ? "将使用已下载的安装包。" : confirm.operation === "download" ? "下载后可继续安装。" : ""}</p>
+      {confirm.operation === "install" && engine.id === "ghidra" && state.engineHost?.platform === "darwin" && <p>需要 JDK 21 和 Xcode 命令行工具；会自动准备 Gradle 并构建本机组件。</p>}
+      {stale && <p role="alert">此组件或安装版本已变化，请重新确认。</p>}
+      <div className="tools-actions"><button className="btn btn-primary" disabled={busy || stale} onClick={() => {
+        const selection = confirm; setConfirm(undefined);
+        void action(selection.operation === "open" ? "rea.engine-open-installer" : selection.operation === "download" ? "rea.engine-download" : "rea.engine-install", { engine: engine.id, revision: selection.revision, token: selection.release?.token, version: selection.version, ...(selection.downloadPath ? { downloaded: true, confirm: true } : {}) });
+      }}>{confirm.operation === "download" ? "确认下载" : confirm.operation === "open" ? "打开安装程序" : confirm.downloadPath ? "确认安装" : "确认下载安装"}</button><button className="btn" onClick={() => setConfirm(undefined)}>暂不{confirm.operation === "download" ? "下载" : "安装"}</button></div>
     </div>}
   </BackendMaintenance>;
 }

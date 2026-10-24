@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { PathActions } from "../LocalPath.js";
 import { FilePickerButton } from "../FilePicker.js";
 import { DeleteIcon } from "../DeleteIcon.js";
-import { getDraft, updateDraft } from "../drafts.js";
+import { getComposerDraft as getDraft, updateComposerDraft as updateDraft, captureComposerDraft } from "./composer-edit.js";
 import { command } from "../transport.js";
 import { attachmentLimits, type Attachment, type Draft, type ImageAttachment, type Scope } from "../../shared/protocol.js";
 import { insertImageReferences, removeImageReferences } from "./image-placeholders.js";
@@ -40,29 +40,28 @@ export function AttachmentPicker({ scope, nested, input, onBusy, onError }: {
     inFlight.current = false;
     if (mounted.current) { setReading(false); onBusy(false); }
   }
-  function checkCount(owner: Scope, count: number) {
-    const draft = getDraft(owner);
+  function checkCount(draft: Draft, count: number) {
     if (count + (draft.attachments?.length ?? 0) + (draft.attachment ? 1 : 0) + (draft.images?.length ?? 0) > attachmentLimits.count)
       throw Error("每份草稿最多选择 50 个附件。");
   }
   async function select() {
     if (!start()) return;
-    const owner = { ...scope }, original = getDraft(owner), node = input.current;
+    const owner = { ...scope }, slot = captureComposerDraft(owner), original = slot.get(), node = input.current;
     const startAt = node?.selectionStart ?? original.text.length, endAt = node?.selectionEnd ?? original.text.length;
     const controller = new AbortController(); request.current = controller;
     setSelecting(true);
     try {
       const items = await openFileDialog({ purpose: "attachment", kind: "mixed", multiple: true, scope: owner }, controller.signal);
       if (!items.length) return;
-      checkCount(owner, items.length);
-      const current = getDraft(owner);
+      checkCount(slot.get(), items.length);
+      const current = slot.get();
       const added = assignReferences(current.text, [...(current.attachments ?? []), ...(current.images ?? [])], items);
       // If typing continued while the native dialog was open, append rather than replacing a stale selection.
       const unchanged = current.text === original.text;
       const insertion = insertImageReferences(current.text, unchanged ? startAt : current.text.length,
         unchanged ? endAt : current.text.length, added.map((a) => a.id!));
       if (insertion.text.length > 12000) throw Error("附件占位符加入后消息超过 12000 字符，请缩短正文。");
-      flushSync(() => updateDraft(owner, { text: insertion.text, attachments: [...(current.attachments ?? []), ...added] }));
+      flushSync(() => slot.update({ text: insertion.text, attachments: [...(current.attachments ?? []), ...added] }));
       if (mounted.current && node === input.current) { node?.focus(); node?.setSelectionRange(insertion.cursor, insertion.cursor); }
     } catch (error) {
       if (mounted.current) onError(controller.signal.aborted
@@ -77,16 +76,16 @@ export function AttachmentPicker({ scope, nested, input, onBusy, onError }: {
   // Clipboard images have no filesystem path: save a scoped copy, then reference its path too.
   async function paste(selected: File[]) {
     if (!start()) return;
-    const owner = { ...scope }, original = getDraft(owner), node = input.current;
+    const owner = { ...scope }, slot = captureComposerDraft(owner), original = slot.get(), node = input.current;
     let reserved: Attachment[] = [], insertion: ReturnType<typeof insertImageReferences> | undefined;
     try {
-      checkCount(owner, selected.length);
+      checkCount(slot.get(), selected.length);
       if (selected.some((file) => file.size > attachmentLimits.uploadBytes)) throw Error("粘贴图片每张最多 10 MiB。");
       reserved = assignReferences(original.text, [...(original.attachments ?? []), ...(original.images ?? [])], selected.map((file) => ({ name: file.name, path: "", kind: "image" })));
       insertion = insertImageReferences(original.text, node?.selectionStart ?? original.text.length,
         node?.selectionEnd ?? original.text.length, reserved.map((a) => a.id!));
       if (insertion.text.length > 12000) throw Error("附件占位符加入后消息超过 12000 字符，请缩短正文。");
-      flushSync(() => updateDraft(owner, { text: insertion!.text }));
+      flushSync(() => slot.update({ text: insertion!.text }));
       node?.focus(); node?.setSelectionRange(insertion.cursor, insertion.cursor);
       const added: Attachment[] = [];
       for (let i = 0; i < selected.length; i++) {
@@ -94,13 +93,13 @@ export function AttachmentPicker({ scope, nested, input, onBusy, onError }: {
         const uploaded = await command<Attachment>("files.upload", { name: file.name, data: await base64(file), id: reserved[i].id, kind: "image" }, owner);
         added.push(uploaded);
       }
-      checkCount(owner, added.length);
-      const current = getDraft(owner);
-      updateDraft(owner, { attachments: [...(current.attachments ?? []), ...added] });
+      checkCount(slot.get(), added.length);
+      const current = slot.get();
+      slot.update({ attachments: [...(current.attachments ?? []), ...added] });
     } catch (error) {
       if (insertion) {
-        const latest = getDraft(owner);
-        updateDraft(owner, { text: latest.text === insertion.text ? original.text : removeAttachmentReferences(latest.text, reserved.map((a) => a.id!)) });
+        const latest = slot.get();
+        slot.update({ text: latest.text === insertion.text ? original.text : removeAttachmentReferences(latest.text, reserved.map((a) => a.id!)) });
       }
       if (mounted.current) onError(`${(error as Error).message} 本次选择未加入草稿。`);
     } finally { finish(); }

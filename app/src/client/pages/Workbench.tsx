@@ -1,3 +1,4 @@
+import { ForkConversation } from "../chat/ForkButton.js";
 import { FilePreviewHost } from "../chat/FilePreviewHost.js";
 import { guardFileNavigation } from "../file-edit-guard.js";
 import { MemoryToolbar } from "../memory/MemoryToolbar.js";
@@ -94,6 +95,18 @@ export default function Workbench() {
   const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
   const select = (next: Scope) => {
     navigate(() => { selectView(next); closeMobileHistory(); });
+  };
+  const forking = useRef(false);
+  const [forkBusy, setForkBusy] = useState(false);
+  const fork = async (scope: Scope, params: Record<string, unknown>, requestId: string, openAfterCreate: boolean) => {
+    if (forking.current) return;
+    forking.current = true; setForkBusy(true); setError("");
+    const startedAt = navigation.current;
+    try {
+      const session = await command<Session>("agent.fork", params, scope, requestId);
+      if (openAfterCreate && navigation.current === startedAt) select({ workspaceId: session.workspaceId, sessionId: session.id });
+    } catch (cause) { setError((cause as Error).message); throw cause; }
+    finally { forking.current = false; setForkBusy(false); }
   };
   const creatingSessions = useRef(new Set<string>());
   const create = async (id = workspace?.id) => {
@@ -213,6 +226,7 @@ export default function Workbench() {
           <Icon className="config-chevron" name="chevron-right" />
         </a>
       </aside>
+      <ForkConversation.Provider value={{ busy: forkBusy, fork }}>
       <TaskViews
         key={view ? scopeKey(view) : "empty"}
         scope={view}
@@ -293,6 +307,7 @@ export default function Workbench() {
           )}
         </main>
       </TaskViews>
+      </ForkConversation.Provider>
     </div>
   );
 }

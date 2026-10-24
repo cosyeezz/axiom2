@@ -1,3 +1,5 @@
+import { clearRtkData, rtkDataScope } from "./rtk-data.js";
+import { withCommandAdmission } from "../command-admission.js";
 import { toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { runMaintenance, maintenanceCancelled, maintenanceFailure, maintenancePhase } from "../maintenance.js";
 import { randomUUID } from "node:crypto";
@@ -5,8 +7,10 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultRtkSettings, type RtkJob, type RtkState } from "../../shared/rtk.js";
-import { managedChildren, managedDirectory, removeManagedDirectory, type IntegrationRemoval } from "./managed-removal.js";
-import { atomicRtkJson, newerRtk, readRtkConfig, rtkConfigPath, rtkDirectory, rtkDirectoryPattern, rtkExecutable, validRtkSettings } from "./rtk-config.js";
+import type { IntegrationRemoval } from "./managed-removal.js";
+import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
+import { removeRtk, rtkRemovalDirectories } from "./rtk-removal.js";
+import { atomicRtkJson, newerRtk, readRtkConfig, rtkConfigPath, rtkDirectory, rtkExecutable, validRtkSettings } from "./rtk-config.js";
 import { diagnoseRtk, installRtk, latestRtk, rtkTarget, type RtkDownload, type RtkRelease } from "./rtk-install.js";
 import { assertToolProcessesStopped, type RtkRun } from "./rtk-process.js";
 import { cleanRtkOriginals, cleanRtkStats, clearRtkStats, rtkStats } from "./rtk-stats.js";
@@ -25,7 +29,7 @@ export class RtkService {
     this.load();
     try {
       const job: RtkJob = JSON.parse(readFileSync(this.jobPath, "utf8"));
-      if (job && typeof job.id === "string" && ["check", "install", "doctor", "uninstall"].includes(job.kind)) {
+      if (job && typeof job.id === "string" && ["check", "install", "doctor", "uninstall", "cleanupStats", "cleanupOriginals"].includes(job.kind)) {
         this.state.job = job;
         if (job.running) { job.running = false; job.message = "上次操作被服务退出中断"; job.error = "请重新检查当前安装；不会自动重试。"; }
       }
@@ -35,7 +39,7 @@ export class RtkService {
       for (const clean of [cleanRtkOriginals, cleanRtkStats]) try { clean(root); } catch { /* Explicit clearing surfaces storage errors. */ }
       if (this.pending) return;
       try { if (!cleanRtkVersions(root, true)) return; } catch { return; }
-      const versions = () => { if (!this.closed) { assertToolProcessesStopped(root); cleanRtkVersions(root); } };
+      const versions = () => withCommandAdmission(root, () => { if (!this.closed) { assertToolProcessesStopped(root); cleanRtkVersions(root); } });
       this.pending = runMaintenance(root, { id: randomUUID(), resource: "rtk", label: "RTK 旧版本清理", action: "cleanup", cancel: false, controllable: false, steps: ["removing"] }, new AbortController(), async () => {
         maintenancePhase("removing");
         if (dependencies.removal) await dependencies.removal(versions); else versions();
@@ -58,7 +62,23 @@ export class RtkService {
       if (this.state.executable && !existsSync(this.state.executable)) this.state.error = "托管的 RTK 程序缺失，运行时会保留原文；请重新安装。";
     } catch (error) { this.state.error = errorMessage(error, "无法读取 RTK 配置。"); }
   }
-  snapshot(): RtkState { return structuredClone(this.state); }
+  private cleanup() { return cleanupScope(rtkRemovalDirectories(this.root, readRtkConfig(this.root)).map(name => join(rtkDirectory(this.root), "versions", name))); }
+  snapshot(): RtkState {
+    const value = structuredClone(this.state);
+    try { value.cleanup = this.cleanup(); value.cleanupPaths = value.cleanup.paths; }
+    catch (error) { value.error = errorMessage(error, "无法核实 RTK 卸载目录。"); }
+    try {
+      withCommandAdmission(this.root, () => {
+        value.dataCleanup = {}; value.dataCleanupErrors = {};
+        for (const kind of ["stats", "originals"] as const) {
+          try { value.dataCleanup[kind] = rtkDataScope(this.root, kind); }
+          catch (error) { value.dataCleanupErrors[kind] = errorMessage(error, "无法核实保留数据范围。"); }
+        }
+      });
+    }
+    catch (error) { value.dataCleanupError = errorMessage(error, "无法核实保留数据范围。"); }
+    return value;
+  }
   private notify(message?: string) {
     if (message && this.state.job) this.state.job.message = message;
     if (this.state.job) atomicRtkJson(this.jobPath, this.state.job);
@@ -75,10 +95,31 @@ export class RtkService {
     }
     if (c.op === "rtk.cancel") {
       if (!this.state.job?.running || p.jobId !== this.state.job.id) throw new AppError("NOT_RUNNING", "此任务已结束，请读取最新状态。");
-      if (this.state.job?.kind === "uninstall") throw new AppError("NOT_CANCELLABLE", "卸载已开始，正在等待程序退出并清理文件。");
+      if (["uninstall", "cleanupStats", "cleanupOriginals"].includes(this.state.job!.kind)) throw new AppError("NOT_CANCELLABLE", "卸载已开始，正在等待程序退出并清理文件。");
       this.controller!.abort(); await this.pending; return this.snapshot();
     }
     if (this.pending) throw new AppError("BUSY", "请等待当前 RTK 操作完成。");
+    if (c.op === "rtk.cleanupStats" || c.op === "rtk.cleanupOriginals") {
+      const kind = c.op === "rtk.cleanupStats" ? "stats" : "originals";
+      if (p.confirm !== true || typeof p.cleanupRevision !== "string" || !/^[a-f0-9]{64}$/.test(p.cleanupRevision) || p.revision !== readRtkConfig(this.root).revision) throw new AppError("CONFIRM_REQUIRED", "请读取当前保留数据范围并确认。");
+      const before = withCommandAdmission(this.root, () => rtkDataScope(this.root, kind));
+      if (before.revision !== p.cleanupRevision) throw new AppError("CONFIGURATION_CONFLICT", "数据清理范围已变化，请重新确认。");
+      this.state.job = { id: randomUUID(), kind: kind === "stats" ? "cleanupStats" : "cleanupOriginals", running: true, message: "正在核实数据清理范围并等待任务退出…" };
+      this.controller = new AbortController();
+      try { this.notify(); } catch { this.state.job.running = false; throw new AppError("STORAGE_ERROR", "无法保存清理记录，尚未执行。"); }
+      const work = () => withCommandAdmission(this.root, () => {
+        assertToolProcessesStopped(this.root);
+        clearRtkData(this.root, kind, p.cleanupRevision);
+      });
+      this.pending = Promise.resolve().then(() => runMaintenance(this.root, { id: this.state.job!.id, resource: "rtk", label: "RTK 保留数据", action: this.state.job!.kind, cancel: false, steps: ["checking", "removing", "validating"] }, this.controller!, async () => {
+        maintenancePhase("removing");
+        if (this.dependencies.removal) await this.dependencies.removal(work); else work();
+        maintenancePhase("validating");
+        this.state.job!.message = kind === "stats" ? "已清空选定效果记录；数据库文件保留，后续运行仍会产生记录。" : "已删除选定原文；旧回查路径将失效，未识别文件保留。";
+      })).catch(error => { this.state.job!.error = errorMessage(error, "数据清理未完成。"); this.state.job!.message = "数据清理未完成"; })
+        .finally(() => { this.state.job!.running = false; this.pending = undefined; this.load(); try { this.notify(); } catch { this.state.error = "清理结果保存失败，请重新核实。"; } });
+      return this.snapshot();
+    }
     if (c.op === "rtk.clearStats" || c.op === "rtk.clearOriginals") {
       if (p.confirm !== true) throw new AppError("CONFIRM_REQUIRED", "请确认清理范围。");
       try { if (c.op === "rtk.clearStats") clearRtkStats(this.root); else cleanRtkOriginals(this.root, true); }
@@ -120,23 +161,11 @@ export class RtkService {
           atomicRtkJson(rtkConfigPath(this.root), { ...fresh, revision: randomUUID(), installation: prepared });
           prepared = undefined;
         } else if (kind === "uninstall") {
-          const remove = () => {
-            signal.throwIfAborted();
-            assertToolProcessesStopped(this.root);
-            const fresh = readRtkConfig(this.root);
-            if (fresh.revision !== current.revision) throw Error("配置已变化，请重新确认卸载。");
-            const parents = ["integrations", "rtk", "versions"];
-            const directories = [...new Set([...managedChildren(this.root, parents.slice(0, -1), "versions", rtkDirectoryPattern), ...(fresh.removalPending ?? []), ...(fresh.installation ? [fresh.installation.directory] : [])])];
-            for (const directory of directories) managedDirectory(this.root, parents, directory, rtkDirectoryPattern);
-            maintenancePhase("removing");
-            const next = { ...fresh, revision: randomUUID(), installation: undefined, removalPending: directories };
-            atomicRtkJson(rtkConfigPath(this.root), next);
-            try { for (const directory of directories) removeManagedDirectory(this.root, parents, directory, rtkDirectoryPattern); }
-            catch { throw Error("RTK 已停用，部分程序文件未能删除；请解除文件占用后重试清理。设置和效果记录已保留。"); }
-            maintenancePhase("validating");
-            atomicRtkJson(rtkConfigPath(this.root), { ...next, removalPending: undefined });
+          assertCleanupScope(p.cleanupRevision, this.cleanup());
+          const remove = () => withCommandAdmission(this.root, () => {
+            removeRtk(this.root, current.revision, () => { signal.throwIfAborted(); assertCleanupScope(p.cleanupRevision, this.cleanup()); assertToolProcessesStopped(this.root); }, maintenancePhase);
             delete this.state.diagnostic;
-          };
+          });
           if (this.dependencies.removal) await this.dependencies.removal(remove); else remove();
         } else {
           const executable = rtkExecutable(this.root, current);

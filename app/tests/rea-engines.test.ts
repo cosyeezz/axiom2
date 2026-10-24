@@ -16,7 +16,7 @@ import { atomicReaJson, reaConfigPath, readReaConfig, type ReaConfig } from "../
 import { ReaService } from "../src/server/integrations/rea.js";
 import { runEngine } from "../src/server/integrations/rea-engine-process.js";
 import { reaResources } from "../src/server/integrations/rea-resources.js";
-import { writeReaPackage } from "./rea-fixture.js";
+import { fixtureEngineRelease, writeReaPackage } from "./rea-fixture.js";
 
 const signal = () => new AbortController().signal;
 const temporary = () => mkdtempSync(join(tmpdir(), "axiom-rea-engines-"));
@@ -32,7 +32,7 @@ test("host matrix explicitly separates Windows x64/arm64, macOS and Linux", () =
   for (const platform of ["win32", "darwin", "linux"]) for (const arch of ["x64", "arm64"]) {
     const host = { platform, arch };
     assert.equal(engineInstallable("java", host), true);
-    assert.equal(engineInstallable("ghidra", host), ["win32", "linux"].includes(platform) && arch === "x64");
+    assert.equal(engineInstallable("ghidra", host), platform === "darwin" || ["win32", "linux"].includes(platform) && arch === "x64");
     assert.equal(engineInstallable("hopper", host), false);
     assert.equal(engineInstallable("jadx", host), platform !== "win32" || arch === "x64");
     assert.equal(engineInstallable("wabt", host), !(platform === "win32" && arch === "arm64" || platform === "darwin" && arch === "x64"));
@@ -59,7 +59,7 @@ test("release selection verifies OS/architecture, fixed versions and official UR
     assert.match(ghidra.url, /NationalSecurityAgency\/ghidra\/releases\/download\/Ghidra_12\.1\.4_build\//);
     assert.equal(ghidra.sha256, "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db");
   }
-  await assert.rejects(engineRelease("ghidra", signal(), { platform: "darwin", arch: "arm64" }));
+  assert.equal((await engineRelease("ghidra", signal(), { platform: "darwin", arch: "arm64" })).version, "12.1.4");
   const wabt = await engineRelease("wabt", signal(), { platform: "win32", arch: "x64" }, async url => { assert.match(url, /windows-x64.tar.gz.sha256$/); return new Response("a".repeat(64) + "  wabt-1.0.42-windows-x64.tar.gz\n"); });
   assert.match(wabt.url, /windows-x64/);
   await assert.rejects(engineRelease("wabt", signal(), { platform: "darwin", arch: "x64" }));
@@ -128,21 +128,25 @@ test("refresh is passive, paths persist with revision guard and only REA MCP rec
 test("managed install commits only verified components; failure and revision races clean staging", async () => {
   for (const mode of ["success", "failure", "conflict", "cancel"] as const) {
     const root = temporary(), initial = config(root), directory = join(root, "integrations", "rea", "engines", `java-${randomUUID()}`);
-    let verify: (() => void) | undefined;
+    let verify: (() => void) | undefined, prepared = false;
     const service = new ReaService(root, () => {}, {
-      prepareEngine: async () => { mkdirSync(directory, { recursive: true }); return { directory, path: join(directory, "jdk") }; },
+      engineRelease: fixtureEngineRelease,
+      prepareEngine: async (_root, _id, _signal, _notify, _fetcher, release) => { assert.equal(release?.version, "21.0.13+8"); prepared = true; mkdirSync(directory, { recursive: true }); return { directory, path: join(directory, "jdk") }; },
       checkEngines: async (_root, value, _package, sig) => {
-        if (mode === "conflict") atomicReaJson(reaConfigPath(root), { ...initial, revision: "other-writer" });
+        if (!prepared) return listEngines(value);
+        if (mode === "conflict") atomicReaJson(reaConfigPath(root), { ...initial, revision: "other-writer", engines: { java: join(root, "external-change") } });
         if (mode === "cancel") await new Promise<void>(resolve => { verify = resolve; sig.addEventListener("abort", resolve as () => void, { once: true }); });
         sig.throwIfAborted();
         return listEngines(value).map(item => ({ ...item, status: item.id === "java" && mode !== "failure" ? "ready" : "missing" }));
       },
     });
     try {
-      await call(service, "rea.engine-install", { revision: initial.revision, engine: "java" });
+      await call(service, "rea.engine-check", { engine: "java" });
+      const available = (await settle(service)).engines!.find(item => item.id === "java")!.available!;
+      await call(service, "rea.engine-install", { revision: initial.revision, engine: "java", token: available.token, version: available.version });
       if (mode === "cancel") { while (!verify) await new Promise(resolve => setTimeout(resolve, 5)); await call(service, "rea.cancel", { jobId: service.snapshot().job!.id }); }
       const state = await settle(service);
-      assert.equal(!!readReaConfig(root).engines?.java, mode === "success"); assert.equal(existsSync(directory), mode === "success");
+      assert.equal(readReaConfig(root).engines?.java, mode === "success" ? join(directory, "jdk") : mode === "conflict" ? join(root, "external-change") : undefined); assert.equal(existsSync(directory), mode === "success");
       assert.equal(readReaConfig(root).managedEngines?.java?.length ?? 0, mode === "success" ? 1 : 0);
       if (mode === "failure" || mode === "conflict") assert.ok(state.job?.error); else assert.equal(state.job?.error, undefined);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
@@ -177,6 +181,8 @@ test("Ghidra and JADX require healthy scoped doctor reports, never merely a zero
       });
       assert.deepEqual(providers, ["ghidra", "jadx"]);
       for (const id of providers) assert.equal(items.find(item => item.id === id)!.status, fixture.status);
+      assert.equal(items.find(item => item.id === "jadx")!.version, undefined, "healthy doctor output alone cannot identify an unknown JAR version");
+      assert.equal(items.find(item => item.id === "jadx")!.compatibility, "unknown");
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

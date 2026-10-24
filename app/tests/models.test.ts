@@ -295,7 +295,7 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
         p.models[0].levels = [];
       },
       (p: ProviderDraft) => {
-        p.models[0].body = [{ id: "b", key: "tools", value: "1" }];
+        p.models[0].body = [{ id: "b", key: "__proto__", value: "1" }];
       },
       (p: ProviderDraft) => {
         p.api = "anthropic-messages";

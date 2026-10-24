@@ -4,8 +4,8 @@
   z-index: 1000;
   box-sizing: border-box;
   width: max-content;
-  max-width: min(340px, calc(100vw - 20px));
-  max-height: min(320px, calc(100dvh - 20px));
+  max-width: min(340px, var(--tooltip-viewport-width, calc(100vw - 20px)));
+  max-height: min(320px, var(--tooltip-viewport-height, calc(100dvh - 20px)));
   margin: 0;
   padding: 8px 11px;
   overflow: auto;

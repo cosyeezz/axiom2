@@ -3,7 +3,10 @@ import { closeSync, constants, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { dirname } from "node:path";
 import { linuxProcessGone, linuxProcessStart, linuxProcessView, sameLinuxView, type LinuxProcessView } from "./process-owner-linux-identity.js";
 
-export type ProcessOwnerIdentity = { platform: "linux"; initPid: number; startTime: string; view?: LinuxProcessView } | { platform: "win32"; workerPid: number };
+import { pidGroupGone, pidIdentityGone, pidSnapshot, type PidProcessIdentity } from "./maintenance-process-pid.js";
+
+export type ProcessOwnerIdentity = { platform: "linux"; initPid: number; startTime: string; view?: LinuxProcessView } | { platform: "win32"; workerPid: number } | PidProcessIdentity;
+const activePidOwners = new Map<string, string>();
 
 /** Persist the gate state before permitting any business IPC. Unknown records are
  * deliberately retained across restarts: PID liveness alone is not tree proof. */
@@ -12,7 +15,8 @@ export type CommandLeaseIdentity = string | { fd: number; path: string; dev: str
 export function createProcessOwner(path: string, commandLease?: CommandLeaseIdentity) {
   let host: { view: LinuxProcessView; startTime: string } | undefined;
   try { host = { view: linuxProcessView(), startTime: linuxProcessStart(process.pid) }; } catch { /* Explicitly unrecoverable; still require the durable gate. */ }
-  const record = { format: 1, id: randomUUID(), state: "intent" as "intent" | "armed", hostPid: process.pid, host, commandLease, createdAt: Date.now(), identity: undefined as ProcessOwnerIdentity | undefined };
+  const hostStarted = process.platform === "darwin" ? pidSnapshot().find(row => row.pid === process.pid)?.started : undefined;
+  const record = { format: 1, id: randomUUID(), state: "intent" as "intent" | "armed", hostPid: process.pid, host, hostStarted, commandLease, createdAt: Date.now(), identity: undefined as ProcessOwnerIdentity | undefined };
   let removed = false;
   function syncDirectory() {
     // Windows does not support fsync on directory descriptors. File contents are
@@ -40,9 +44,13 @@ export function createProcessOwner(path: string, commandLease?: CommandLeaseIden
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || JSON.parse(readFileSync(path, "utf8")).id !== record.id) throw Error("进程归属记录已改变，未执行程序或清除记录。");
   }
   persist(true);
+  if (process.platform === "darwin") activePidOwners.set(path, record.id);
   return {
+    revoke() { activePidOwners.delete(path); },
     arm(identity: ProcessOwnerIdentity) {
-      if (removed || record.state !== "intent") throw Error("进程启动许可已失效。");
+      // macOS refreshes its observed descendants under the same worker identity.
+      const update = identity.platform === "darwin" && record.identity?.platform === "darwin" && identity.workerPid === record.identity.workerPid && identity.started === record.identity.started;
+      if (removed || record.state !== "intent" && !update) throw Error("进程启动许可已失效。");
       assertSameRecord();
       if (identity.platform === "linux") {
         if (!Number.isSafeInteger(identity.initPid) || identity.initPid <= 1 || !/^[1-9]\d*$/.test(identity.startTime)) throw Error("Linux 进程归属身份无效。");
@@ -52,6 +60,8 @@ export function createProcessOwner(path: string, commandLease?: CommandLeaseIden
           if (host && sameLinuxView(host.view, current) && linuxProcessStart(identity.initPid) === identity.startTime) view = current;
         } catch { /* Do not infer later cleanup when visibility cannot be verified. */ }
         identity = { ...identity, view };
+      } else if (identity.platform === "darwin") {
+        if (!validPidIdentity(identity)) throw Error("维护进程 PID 身份无效。");
       } else if (!Number.isSafeInteger(identity.workerPid) || identity.workerPid < 1) throw Error("Windows 进程归属身份无效。");
       record.state = "armed"; record.identity = identity;
       persist(false);
@@ -59,7 +69,7 @@ export function createProcessOwner(path: string, commandLease?: CommandLeaseIden
     confirmed() {
       if (removed) return;
       assertSameRecord();
-      rmSync(path); syncDirectory(); removed = true;
+      rmSync(path); syncDirectory(); removed = true; activePidOwners.delete(path);
     },
   };
 }
@@ -82,7 +92,9 @@ export function processOwnerIsLive(path: string, windowsLeaseLive?: (id: string,
     const bytes = readFileSync(path, "utf8"), record = JSON.parse(bytes);
     if (record?.format !== 1 || !/^[a-f0-9-]{36}$/.test(record.id) || !["intent", "armed"].includes(record.state) || !Number.isSafeInteger(record.hostPid) || record.hostPid < 1) return false;
     let live = false;
-    if (process.platform === "win32") {
+    if (process.platform === "darwin") {
+      live = record.hostPid === process.pid && activePidOwners.get(path) === record.id;
+    } else if (process.platform === "win32") {
       live = typeof record.commandLease === "string" && /^[a-f0-9-]{36}$/.test(record.commandLease) && windowsLeaseLive?.(record.commandLease, record.hostPid, path) === true;
     } else if (process.platform === "linux" && /^[1-9]\d*$/.test(record.host?.startTime ?? "") && record.host?.view) {
       const view = linuxProcessView(), lease = record.commandLease;
@@ -99,7 +111,23 @@ export function processOwnerIsLive(path: string, windowsLeaseLive?: (id: string,
 
 /** Caller holds its resource lock, or uses a never-reused UUID record path.
  * Require the host to be gone too: an alive host may still commit configuration. */
+function validPidIdentity(value: PidProcessIdentity) {
+  return value?.platform === "darwin" && Number.isSafeInteger(value.workerPid) && value.workerPid > 1 && typeof value.started === "string" && value.started.length > 0 && Array.isArray(value.members) && value.members.length > 0 && value.members.every(member => Number.isSafeInteger(member.pid) && member.pid > 1 && typeof member.started === "string" && member.started.length > 0);
+}
+function canRecoverPidOwner(path: string) {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 1024 * 1024) return false;
+    const bytes = readFileSync(path, "utf8"), record = JSON.parse(bytes);
+    if (record.format !== 1 || !/^[a-f0-9-]{36}$/.test(record.id) || record.state !== "armed" || !Number.isSafeInteger(record.hostPid) || record.hostPid <= 1 || typeof record.hostStarted !== "string" || !record.hostStarted || !validPidIdentity(record.identity)) return false;
+    const rows = pidSnapshot();
+    if (!pidIdentityGone({ pid: record.hostPid, started: record.hostStarted }, rows) || !pidGroupGone(record.identity, rows)) return false;
+    const current = lstatSync(path);
+    return current.isFile() && !current.isSymbolicLink() && current.nlink === 1 && current.dev === stat.dev && current.ino === stat.ino && readFileSync(path, "utf8") === bytes;
+  } catch { return false; }
+}
 export function canRecoverProcessOwner(path: string): boolean {
+  if (process.platform === "darwin") return canRecoverPidOwner(path);
   if (process.platform !== "linux") return false;
   try {
     const stat = lstatSync(path);

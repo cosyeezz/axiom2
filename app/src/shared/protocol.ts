@@ -12,6 +12,9 @@ export interface Session {
   id: string;
   workspaceId: string;
   title: string;
+  /** User and assistant messages on the current branch, including compressed history. */
+  messageCount?: number;
+  forkParentSessionId?: string | null;
   pinned: boolean;
   unread: boolean;
   resultVersion?: number;
@@ -89,6 +92,7 @@ export interface Draft {
 }
 export interface ModelSummary {
   provider: string;
+  providerName?: string;
   id: string;
   name: string;
   levels: import("./agent.js").Thinking[];

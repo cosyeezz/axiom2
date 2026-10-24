@@ -148,7 +148,7 @@ export function command<T>(
     );
   const sendingSocket = socket;
   const cancelRead = () => {
-    if (!["agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document"].includes(op) ||
+    if (!["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document"].includes(op) ||
       socket !== sendingSocket || sendingSocket?.readyState !== WebSocket.OPEN) return;
     try { sendingSocket.send(JSON.stringify({ op: "read.cancel", requestId: crypto.randomUUID(), params: { requestId } })); } catch { /* Connection already closed. */ }
   };
@@ -194,7 +194,7 @@ export function command<T>(
   });
 }
 export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), parseMs = 0) {
-  if ((sessionKey(event.scope) || /^(memory-tree|memory-catalog|memory-organization):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
+  if ((sessionKey(event.scope) || /^(memory-tree|memory-catalog):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
   if (event.scope.startsWith("message:")) {
     const collection = cache.get(event.scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:"));
     if (collection?.streamId === event.streamId && event.seq <= collection.seq) return;
@@ -248,13 +248,13 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
 }
 function optionalMemorySubscription(scope: string) {
   const [kind, workspaceId, sessionId] = scope.split(":");
-  if (kind !== "memory" && kind !== "memory-tree" && kind !== "memory-catalog" && kind !== "memory-organization") return false;
+  if (kind !== "memory" && kind !== "memory-tree" && kind !== "memory-catalog") return false;
   const previous = cache.get(scope);
   cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
     generation: connection.generation, received: ++received,
     // Optional memory subscription failures must not affect the connection, but
     // callers still need to distinguish an unavailable source from a missing one.
-    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-tree" ? { topics: [], nameChars: 0, unavailable: true } : kind === "memory-organization" ? null : [] });
+    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-tree" ? { version: 0, roots: [], purposes: [], nameChars: 0, pending: 0, failed: 0, unavailable: true } : [] });
   listeners.get(scope)?.forEach((fn) => fn());
   return true;
 }

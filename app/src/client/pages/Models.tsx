@@ -149,8 +149,9 @@ export default function Models() {
               ) : adding ? (
                 <AddProvider
                   templates={templates}
+                  connections={providers}
                   blocked={dirty || !!editor || busy || needsReconcile}
-                  login={(providerId) => { setAdding(false); setLogin({ providerId, type: "oauth" }); }}
+                  login={(providerId, proxy) => { setAdding(false); setLogin({ providerId, type: "oauth", proxy }); }}
                   close={() => { setAdding(false); document.getElementById("add-supplier")?.focus(); }}
                 />
               ) : !p ? (

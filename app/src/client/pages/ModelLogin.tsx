@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Select } from "../Select.js";
 import { Dialog } from "../components.js";
 import { command, useConnection, useScope } from "../transport.js";
-import type { AuthState } from "../../shared/models.js";
+import type { AuthState, ProviderProxy } from "../../shared/models.js";
 
 export function ModelLogin({
   providerId,
   type,
   revision,
+  proxy,
   inline = false,
   onComplete,
   close,
@@ -15,6 +16,7 @@ export function ModelLogin({
   providerId: string;
   type: "api_key" | "oauth";
   revision: string;
+  proxy?: ProviderProxy;
   inline?: boolean;
   onComplete: () => void;
   close: () => void;
@@ -47,7 +49,7 @@ export function ModelLogin({
     let flow = "";
     started.current = command<{ id: string }>(
       "auth.start",
-      { providerId, type, revision },
+      { providerId, type, revision, ...(proxy ? { proxy } : {}) },
       {},
       startRequest.current,
     );
@@ -147,7 +149,7 @@ export function ModelLogin({
             }}>复制授权链接</button>
           </div>
           <p className="field-help" role="status">{browserMessage || "正在准备浏览器登录…"}</p>
-          <p className="field-help">完成浏览器授权后将自动回填；未完成时按下方提示手动提交。</p>
+          <p className="field-help">完成浏览器授权后，后台会继续获取并保存凭据。若浏览器无法打开本机回调页，可按下方提示粘贴完整回调地址；请在运行 Axiom 后台的电脑上打开授权链接。</p>
         </div>
       )}
       {state?.userCode && canInteract && (

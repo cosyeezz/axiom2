@@ -40,11 +40,11 @@ try {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   await page.goto(app.origin);
-  const groups = page.locator('#messages > .tool-activity');
+  const groups = page.locator('#messages .timeline-row > .tool-activity');
   const group = groups.first();
   const title = group.locator(':scope > summary .activity-title');
   const request = page.locator('.process-requesting');
-  await request.getByText('调用工具', { exact: true }).waitFor();
+  await request.getByText('正在思考', { exact: true }).waitFor();
   assert.equal(await groups.count(), 0, 'initial request needs no fabricated activity or message');
   assert.equal(await request.locator('.process-ellipsis').count(), 1);
   for (const width of [1440, 390]) {
@@ -54,7 +54,7 @@ try {
     await page.screenshot({ path: join(artifacts, `${width}-requesting.png`) });
   }
   await page.reload();
-  await request.getByText('调用工具', { exact: true }).waitFor();
+  await request.getByText('正在思考', { exact: true }).waitFor();
   for (const status of ['stopping', 'completed', 'failed', 'cancelled']) {
     setRequest('run', status);
     await request.waitFor({ state: 'detached' });
@@ -65,7 +65,7 @@ try {
   clearRequest(); publish(first);
   await request.waitFor({ state: 'detached' });
   await title.filter({ hasText: '正在思考' }).waitFor();
-  assert.equal(await title.evaluate(n => getComputedStyle(n).fontWeight), '400');
+  assert.equal(await title.evaluate(n => getComputedStyle(n).fontWeight), '700', 'live thinking title uses the bold running weight');
   assert.equal(await groups.count(), 1);
   assert.equal(await group.getAttribute('open'), null);
   assert.equal(await page.locator('.thinking-block, .tool-call, .tool-batch').count(), 0);
@@ -138,14 +138,125 @@ try {
   assert.equal(await group.locator('.thinking-header > .process-icon-think').count(), 0, 'expanded thought rows have no leading glyph');
   assert.equal(await group.locator('.thinking-label').evaluate(n => getComputedStyle(n).fontStyle), 'italic', 'Think stays italic while running');
   assert.equal(await group.locator('.thinking-label').evaluate(n => getComputedStyle(n).fontWeight), '400');
-  assert.equal(await group.locator('.thinking-text').innerText(), '核对环境。');
+  assert.equal((await group.locator('.thinking-scroll-line').first().innerText()).trim(), '核对环境。');
   publish({ ...first, thinking: '**继续核对环境。**\n\n读取配置并确认依赖。' });
-  await group.locator('.thinking-text').getByText('继续核对环境。', { exact: true }).waitFor();
+  await group.locator('.thinking-scroll-line').getByText('继续核对环境。', { exact: true }).waitFor();
   assert.ok(await group.getAttribute('open') !== null, 'streaming thought text updates without closing the process');
   publish(first);
-  await group.locator('.thinking-text').getByText('核对环境。', { exact: true }).waitFor();
+  await group.locator('.thinking-scroll-line').getByText('核对环境。', { exact: true }).waitFor();
   assert.equal(await group.locator('.thinking-label .process-ellipsis').count(), 1);
   assert.match(await group.locator('.thinking-label').evaluate(n => getComputedStyle(n).backgroundImage), /rgb\(230, 216, 163\)/, 'Think sweep uses pale yellow');
+
+  // Only the running, collapsed thought follows the newest visual line.
+  const scroll = group.locator('.thinking-scroll');
+  const scrollBody = group.locator('.thinking-scroll-content');
+  const checkLatestVisible = async () => {
+    await scrollBody.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+    await page.waitForFunction(() => {
+      const viewport = document.querySelector('.thinking-scroll')!.getBoundingClientRect();
+      const content = document.querySelector('.thinking-scroll-content')!.getBoundingClientRect();
+      return Math.abs(viewport.bottom - content.bottom) < 1;
+    });
+    assert.equal(await scroll.evaluate(n => n.getBoundingClientRect().height), 20);
+    assert.notEqual(await scrollBody.evaluate(n => getComputedStyle(n).webkitTextFillColor), 'rgba(0, 0, 0, 0)', 'translated glyphs paint independently of the ancestor gradient clip');
+    assert.deepEqual(await group.locator('.thinking-label').evaluate(n => ({ clip: getComputedStyle(n).backgroundClip, size: getComputedStyle(n).backgroundSize })), { clip: 'border-box', size: '0px 0px' }, 'the ancestor never ghost-paints clipped glyphs behind the moving preview');
+    assert.match(await group.locator('.thinking-label .process-ellipsis').evaluate(n => getComputedStyle(n).backgroundImage), /linear-gradient/, 'the dots retain their original inherited gradient');
+    assert.equal(await group.locator('.thinking-block[open], .thinking-body').count(), 0);
+    assert.ok(await group.getAttribute('open') !== null);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  };
+  await checkLatestVisible();
+  assert.ok(await scrollBody.evaluate(n => n.getBoundingClientRect().top < n.parentElement!.getBoundingClientRect().top), 'old first line is above the one-line window');
+  await page.evaluate(() => {
+    (window as any).thinkingRolls = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (...args: Parameters<Element['animate']>) {
+      if (this.classList.contains('thinking-scroll-content')) (window as any).thinkingRolls.push(args[0]);
+      return animate.apply(this, args);
+    };
+  });
+  const rolling = '**核对环境。**\r\n\r\n读取配置并确认依赖。\r\n最新进展正在生成。';
+  publish({ ...first, thinking: rolling });
+  await scroll.getByText('最新进展正在生成。', { exact: true }).waitFor();
+  await checkLatestVisible();
+  const frames = await page.evaluate(() => (window as any).thinkingRolls.at(-1));
+  assert.ok(frames && parseFloat(frames[0].transform.slice(11)) > parseFloat(frames[1].transform.slice(11)), 'new rows animate upward');
+  const rollCount = await page.evaluate(() => (window as any).thinkingRolls.length);
+  publish({ ...first, thinking: rolling + '继续。' });
+  await scroll.getByText('最新进展正在生成。继续。', { exact: true }).waitFor();
+  await checkLatestVisible();
+  assert.equal(await page.evaluate(() => (window as any).thinkingRolls.length), rollCount, 'tokens within one visual line do not restart the roll');
+  publish({ ...first, thinking: rolling + '继续。\n连续换行一。' });
+  await scroll.getByText('连续换行一。', { exact: true }).waitFor();
+  const painted = await scrollBody.evaluate(n => {
+    const animation = n.getAnimations()[0];
+    animation.pause(); animation.currentTime = 80;
+    return new DOMMatrixReadOnly(getComputedStyle(n).transform).m42;
+  });
+  publish({ ...first, thinking: rolling + '继续。\n连续换行一。\n连续换行二。' });
+  await scroll.getByText('连续换行二。', { exact: true }).waitFor();
+  const continuedFrames = await page.evaluate(() => (window as any).thinkingRolls.at(-1));
+  assert.ok(Math.abs(parseFloat(continuedFrames[0].transform.slice(11)) - painted) < 1, 'rapid new lines resume from the currently painted position');
+  await checkLatestVisible();
+  publish({ ...first, thinking: rolling + '继续。' });
+  await scroll.getByText('最新进展正在生成。继续。', { exact: true }).waitFor();
+  await group.locator('.thinking-header').click();
+  await group.locator('.thinking-body').getByText('最新进展正在生成。继续。', { exact: true }).waitFor();
+  assert.equal(await scroll.count(), 0, 'expanded thinking keeps the existing full-text view');
+  await group.locator('.thinking-header').click();
+  await checkLatestVisible();
+  for (const length of [767, 768, 1023, 1024]) {
+    const text = '尾段切换边界。\n' + 'x'.repeat(length - 8);
+    const count = await page.evaluate(() => (window as any).thinkingRolls.length);
+    const height = await scrollBody.evaluate(n => n.getBoundingClientRect().height);
+    publish({ ...first, thinking: text });
+    await page.waitForFunction(expected => Array.from(document.querySelectorAll('.thinking-scroll-line')).map(n => n.textContent?.trim()).join('\n') === expected, text);
+    await checkLatestVisible();
+    assert.deepEqual((await group.locator('.thinking-scroll-line').allTextContents()).map(line => line.trim()), text.split('\n'), 'chunk shifts preserve the buffer origin and natural wrapping');
+    if (length === 768 || length === 1024) {
+      const nextHeight = await scrollBody.evaluate(n => n.getBoundingClientRect().height);
+      if (nextHeight === height) assert.equal(await page.evaluate(() => (window as any).thinkingRolls.length), count, 'transport chunk shifts alone never trigger a roll');
+    }
+  }
+  publish({ ...first, thinking: '切换测试段。' });
+  await scroll.getByText('切换测试段。', { exact: true }).waitFor();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const long = '首行保持原样。\n' + '不含换行的长段落自动折行，展示实时最新内容。'.repeat(100) + '当前尾部标记';
+    publish({ ...first, thinking: long });
+    await scrollBody.getByText(/当前尾部标记/).waitFor();
+    await checkLatestVisible();
+    assert.ok((await scrollBody.innerText()).length < 800, 'long thoughts use a bounded live tail, not the stale 320-character prefix or the full transcript');
+    const geometry = await scrollBody.evaluate(n => {
+      const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+      let last: Node | null = null;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.textContent?.trim()) last = node;
+      const range = document.createRange(); range.setStart(last!, last!.textContent!.length - 1); range.setEnd(last!, last!.textContent!.length);
+      const glyph = range.getBoundingClientRect(), viewport = n.parentElement!.getBoundingClientRect();
+      return { visible: glyph.bottom <= viewport.bottom + 2 && glyph.top >= viewport.top - 2, wrapped: n.getBoundingClientRect().height > 20 };
+    });
+    assert.deepEqual(geometry, { visible: true, wrapped: true }, 'the newest character, including natural paragraph wrapping, is visible');
+    await page.screenshot({ path: join(artifacts, `${width}-thinking-scroll.png`) });
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reducedCount = await page.evaluate(() => (window as any).thinkingRolls.length);
+  publish({ ...first, thinking: rolling + '\n减少动效时仍能看到最新内容。' });
+  await scroll.getByText('减少动效时仍能看到最新内容。', { exact: true }).waitFor();
+  await checkLatestVisible();
+  assert.equal(await page.evaluate(() => (window as any).thinkingRolls.length), reducedCount);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  for (const status of ['failed', 'cancelled'] as const) {
+    publish({ ...first, thinkingActive: false, streaming: false, status });
+    await group.locator('.thinking-text').getByText(status === 'failed' ? '思考失败' : '思考已停止', { exact: true }).waitFor();
+    assert.equal(await scroll.count(), 0);
+  }
+  publish({ ...first, thinkingActive: false, streaming: false, status: 'completed' });
+  await group.locator('.thinking-text').getByText('核对环境。', { exact: true }).waitFor();
+  assert.equal(await scroll.count(), 0, 'completed thinking restores the existing first-line preview');
+  await group.locator(':scope > summary').click();
+  await group.locator(':scope > summary').click();
+  assert.equal(await group.locator('.thinking-block[open]').count(), 0, 'outer disclosure retains its reset behavior');
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   publish({ ...first, thinkingActive: false, streaming: false, status: 'completed' }, tool,
     { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: '', status: 'running', toolStartedAt: Date.now() });
@@ -169,10 +280,11 @@ try {
   publish({ ...tool, streaming: false, status: 'completed' },
     { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: 'ready', status: 'completed', durationMs: 1500 });
   setRequest();
-  await title.filter({ hasText: '调用工具' }).waitFor();
+  await title.filter({ hasText: '正在思考' }).waitFor();
+  assert.equal(await title.innerText(), '正在思考', 'tool continuation requesting reuses the thinking label');
   assert.equal(await request.count(), 0, 'tool continuation reuses the existing process title');
   assert.equal(await group.locator('.tool-call[open]').count(), 1, 'requesting preserves expanded tool details');
-  assert.equal(await title.getAttribute('data-thinking'), null);
+  assert.ok(await title.getAttribute('data-thinking') !== null);
   clearRequest(); publish(thought);
   await title.filter({ hasText: '正在思考' }).waitFor();
   assert.equal(await group.locator('.tool-result-state .process-outcome').count(), 0, 'successful tool rows have no checkmark or icon placeholder');
@@ -205,7 +317,7 @@ try {
     { id: 'tool-task-call', role: 'toolResult', toolCallId: 'task-call', text: '{}', status: 'completed' });
   await title.filter({ hasText: '执行完成' }).waitFor();
   assert.equal(await group.locator('.process-counts').count(), 0, 'successful calls do not show counters');
-  await page.locator('#messages > .task-operation').waitFor();
+  await page.locator('#messages .timeline-row > .task-operation').waitFor();
   setRequest();
   await request.waitFor();
   assert.equal(await title.innerText(), '执行完成', 'request after a task card leaves the preceding segment settled');
@@ -242,10 +354,10 @@ try {
   assert.equal(await title.innerText(), '执行完成');
   assert.equal(await group.locator('.process-status-text.is-active, .thinking-indicator').count(), 0, 'no stale intermediate display above prose');
   publish({ id: 'next', role: 'assistant', runId: 'run', text: '', thinking: '核对配置内容。', thinkingActive: true, streaming: true, status: 'running' });
-  await page.waitForFunction(() => document.querySelectorAll('#messages > .tool-activity').length === 2);
+  await page.waitForFunction(() => document.querySelectorAll('#messages .timeline-row > .tool-activity').length === 2);
   const next = groups.last();
   await next.locator(':scope > summary .activity-title').filter({ hasText: '正在思考' }).waitFor();
-  assert.deepEqual(await page.locator('#messages > .tool-activity, #messages > .log-row:has(.reply-body)').evaluateAll(nodes => nodes.map(n => n.matches('details') ? 'process' : 'body')), ['process', 'body', 'process']);
+  assert.deepEqual(await page.locator('#messages .timeline-row > .tool-activity, #messages .timeline-row > .log-row:has(.reply-body)').evaluateAll(nodes => nodes.map(n => n.matches('details') ? 'process' : 'body')), ['process', 'body', 'process']);
   await group.locator(':scope > summary').click();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -272,7 +384,10 @@ try {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const spacing = await next.evaluate(node => {
-      const before = node.previousElementSibling!, after = node.nextElementSibling!;
+      const row = node.closest('.timeline-row');
+      const before = node.previousElementSibling ?? row?.previousElementSibling?.querySelector('.log-row');
+      const after = node.nextElementSibling ?? row?.nextElementSibling?.querySelector('.log-row');
+      if (!before || !after) throw Error('Expected narration rows around the process');
       const rect = node.getBoundingClientRect();
       return { above: rect.top - before.getBoundingClientRect().bottom,
         below: after.getBoundingClientRect().top - rect.bottom,
@@ -284,7 +399,7 @@ try {
   await page.evaluate(() => {
     (window as any).foldFrames = [];
     const observer = new MutationObserver(() => {
-      const card = document.querySelector('#messages > .tool-activity[data-folding="true"]');
+      const card = document.querySelector('#messages .timeline-row > .tool-activity[data-folding="true"]');
       if (!card) return;
       (window as any).foldFrames = card.getAnimations().flatMap(animation => (animation.effect as KeyframeEffect).getKeyframes().map(frame => frame.height));
       observer.disconnect();
@@ -292,7 +407,7 @@ try {
     observer.observe(document.querySelector('#messages')!, { subtree: true, childList: true, attributes: true });
   });
   publish(final);
-  await page.waitForFunction(() => document.querySelectorAll('#messages > .tool-activity').length === 1 && !document.querySelector('#messages > .tool-activity[open]'));
+  await page.waitForFunction(() => document.querySelectorAll('#messages .timeline-row > .tool-activity').length === 1 && !document.querySelector('#messages .timeline-row > .tool-activity[open]'));
   assert.ok(await page.evaluate(() => {
     const heights = (window as any).foldFrames.map(parseFloat);
     return heights.length === 2 && heights[0] > heights[1];
@@ -313,7 +428,7 @@ try {
   await group.locator(':scope > summary').click();
   assert.equal(await group.locator('.tool-detail, .thinking-body').count(), 0);
   assert.equal(await group.getByText(final.text, { exact: true }).count(), 0);
-  assert.equal(await page.locator('#messages > .task-operation').count(), 0, 'final folding keeps tasks in their original timeline inside the card');
+  assert.equal(await page.locator('#messages .timeline-row > .task-operation').count(), 0, 'final folding keeps tasks in their original timeline inside the card');
   assert.equal(await group.locator(':scope > .activity-content > .task-operation').count(), 1);
   assert.equal(await group.evaluate(n => getComputedStyle(n).borderTopWidth), '1px', 'only the final aggregate uses the card surface');
   assert.deepEqual(await group.locator(':scope > .activity-content > .tool-activity, :scope > .activity-content > .log-row, :scope > .activity-content > .task-operation').evaluateAll(nodes => nodes.map(node => node.matches('.task-operation') ? 'task' : node.matches('details') ? node.querySelector('.activity-title')?.textContent : node.textContent?.trim())),
@@ -365,7 +480,7 @@ try {
   publish({ id: 'path-user', role: 'user', runId: 'path-run', text: '检查工具路径显示' },
     { id: 'path-tools', role: 'assistant', runId: 'path-run', text: '', calls: pathCalls, status: 'completed' },
     ...pathCalls.map(call => ({ id: `tool-${call.id}`, role: 'toolResult' as const, toolCallId: call.id, text: 'done', status: 'completed' as const, durationMs: 1500 })));
-  const pathGroup = page.locator('#messages > .tool-activity[data-call-count="4"]');
+  const pathGroup = page.locator('#messages .timeline-row > .tool-activity[data-call-count="4"]');
   await pathGroup.waitFor();
   await pathGroup.locator(':scope > summary').click();
   const pathRows = pathGroup.locator('.tool-call');

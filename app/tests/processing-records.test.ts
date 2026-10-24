@@ -8,7 +8,9 @@ import { Store } from "../src/server/storage.js";
 import { ProcessingRecords } from "../src/server/processing-records.js";
 import { Memories } from "../src/server/memories.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
-import { topicId } from "../src/server/memory-tree.js";
+import { classification, navigation } from "./memory-purpose-fixture.js";
+import { memoryDetails } from "../src/shared/memory-detail-paths.js";
+import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import type { ProcessingList, ProcessingRecord } from "../src/shared/processing.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
@@ -95,29 +97,32 @@ test("compression cancellation stays pending until acknowledged, application can
 test("pre-request source failures and query errors remain linked to their records", async () => {
   const f = fixture(), memories = new Memories(f.store, () => {}); clearInterval((memories as any).timer); (memories as any).watcher?.close();
   try {
-    const file = join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"); writeFileSync(file, "当前事实"); memories.scan(f.scope);
+    const file = join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"); writeFileSync(file, "# [Completed] 验证事实\n"); memories.scan(f.scope);
+    const batch = memories.pipeline.tree.batch(f.scope.workspaceId, Date.now() + memoryBatchWaitMs);
     let calls = 0; memories.runner = { close: async () => {}, execute: async () => { calls++; throw Error("must not call"); } };
     await memories.command({ requestId: randomUUID(), op: "memory.configure", ...f.scope, params: { organizerModel: selection } });
     rmSync(file);
-    await memories.command({ requestId: randomUUID(), op: "memory.organize", ...f.scope });
-    const end = Date.now() + 5000;
-    while (memories.organization(f.scope.workspaceId)?.status === "running") { assert.ok(Date.now() < end); await new Promise((resolve) => setTimeout(resolve, 10)); }
+    await memories.pipeline.organize(batch, selection, new AbortController().signal);
     const record = f.get(f.list({ kind: "memory.organize" }).items[0]!.id); assert.equal(record.state, "failed"); assert.equal(record.calls.length, 0); assert.equal(calls, 0);
-    assert.equal(memories.catalog(f.scope.workspaceId)[0]?.processingId, record.id);
+    assert.equal(memories.pipeline.tree.entries(f.scope.workspaceId)[0].blocked, true);
+    assert.equal(record.sessionId, f.scope.sessionId);
     const query = await memories.query(f.scope, "缺失Topic"); assert.ok(query.processingId); assert.equal(f.get(query.processingId).state, "failed");
   } finally { await memories.close(); f.close(); }
 });
 test("natural-language organization output records a successful call and a failed parse; query links both stages", async () => {
   const f = fixture(), memories = new Memories(f.store, () => {}); clearInterval((memories as any).timer); (memories as any).watcher?.close();
   try {
-    writeFileSync(join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"), "当前事实"); memories.scan(f.scope);
+    const entry = join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"); writeFileSync(entry, "# [Completed] 验证事实\n");
+    const path = join(memoryDirectory(f.root, f.scope.sessionId), memoryDetails(memories.read(f.scope).content)[0].path);
+    mkdirSync(join(memoryDirectory(f.root, f.scope.sessionId), "details"), { recursive: true }); writeFileSync(path, "当前事实"); memories.scan(f.scope);
+    const tree = memories.pipeline.tree, batch = tree.batch(f.scope.workspaceId, Date.now() + memoryBatchWaitMs);
     memories.runner = { close: async () => {}, execute: async () => ({ answer: "我会完整读取会话记忆", incomplete: false }) };
-    await assert.rejects(memories.pipeline.organize(f.scope, selection, new AbortController().signal, () => {}), /整理输出格式错误/);
-    const failed = f.get(f.list({ kind: "memory.organize" }).items[0]!.id); assert.equal(failed.state, "failed"); assert.match(failed.stage, /解析输出/); assert.equal(failed.calls[0]!.state, "completed"); assert.match(failed.calls[0]!.output!.text, /我会完整读取/);
-    const tree = memories.pipeline.tree; tree.publish(f.scope.workspaceId, { sessionId: f.scope.sessionId, path: "MEMORY.md", revision: memories.read(f.scope).revision, records: [], dependencies: [] }, [], [{ topic: "事实", section: "依据", item: "结论", content: "当前事实" }], tree.signature(f.scope.workspaceId));
-    memories.runner = { close: async () => {}, execute: async ({ prompt }) => { const data = JSON.parse(prompt); return { answer: data.sections ? JSON.stringify(data.sections.map((s: any) => s.id)) : "当前事实", incomplete: false }; } };
-    await memories.pipeline.query(f.scope, topicId("事实"), "当前事实", selection, new AbortController().signal, Date.now() + 10000);
-    const query = f.get(f.list({ kind: "memory.query" }).items[0]!.id); assert.equal(query.state, "completed"); assert.deepEqual(query.calls.map((c) => c.stage), ["匹配Section", "归纳答案"]); assert.ok(query.calls.every((c) => c.state === "completed"));
+    await assert.rejects(memories.pipeline.organize(batch, selection, new AbortController().signal));
+    const failed = f.get(f.list({ kind: "memory.organize" }).items[0]!.id); assert.equal(failed.state, "failed"); assert.match(failed.stage, /批量语义分类/); assert.equal(failed.calls[0]!.state, "completed"); assert.match(failed.calls[0]!.output!.text, /我会完整读取/);
+    tree.publish(f.scope.workspaceId, batch, tree.classify(classification({ prompt: JSON.stringify({ purposes: batch }) }).answer, batch), tree.snapshot(f.scope.workspaceId).version);
+    memories.runner = { close: async () => {}, execute: async input => navigation(input, "当前事实") };
+    await memories.pipeline.query(f.scope, "当前事实", selection, new AbortController().signal, Date.now() + 10000);
+    const query = f.get(f.list({ kind: "memory.query" }).items[0]!.id); assert.equal(query.state, "completed"); assert.deepEqual(query.calls.map((c) => c.stage), ["directories", "directories", "details", "归纳原文答案"]); assert.ok(query.calls.every((c) => c.state === "completed"));
     assert.equal(query.result?.truncated, false);
   } finally { await memories.close(); f.close(); }
 });

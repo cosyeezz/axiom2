@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { ReaService } from "../src/server/integrations/rea.js";
 import { reaConfigPath, reaPackageRoot, reaSkillName, readReaConfig } from "../src/server/integrations/rea-runtime.js";

@@ -82,7 +82,7 @@ test("model tool schemas keep required fields and prose limits; runtime validati
     assert.deepEqual(Object.keys(delegate.properties.tasks.items.properties), ["title", "task"]);
     assert.ok(delegate.properties.tasks.items.required.includes("title"));
     assert.equal(delegate.properties.tasks.items.properties.title.maxLength, undefined);
-    assert.match(delegate.properties.tasks.items.properties.title.description, /30字/);
+    assert.match(delegate.properties.tasks.items.properties.title.description, /30 characters/);
     assert.ok(append.required.includes("summary"));
     assert.equal(append.properties.summary.maxLength, undefined);
     for (const tool of tools) assert.doesNotMatch(JSON.stringify(tool.parameters), /"(?:minLength|maxLength|minItems|maxItems|pattern|minimum|maximum)"/);

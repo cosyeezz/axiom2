@@ -1,0 +1,18 @@
+{
+  "scope": "执行树六态已选方案；已接入Axiom会话记忆界面",
+  "constraints": [
+    "动态效果只作用于图标原有图形，不添加外围圆环、光晕、背景或装饰",
+    "参考系统StatusIcons.tsx和DataIcons.tsx，采用SVG animate/animateTransform时间轴",
+    "prefers-reduced-motion: reduce时状态动效仍播放，兼顾Windows关闭系统动画设置",
+    "已完成使用中性灰白色",
+    "完成动画仅入场或状态切换时播放一次，普通tab切换不重播"
+  ],
+  "selection": [
+    {"state":"pending","name":"未开始","code":"P02","id":"lucide:clock","motion":"none","description":"静态"},
+    {"state":"active","name":"进行中","code":"A22","id":"tabler:loader-4","motion":"rotate","description":"原有分段图形自身旋转","duration":"1.6s"},
+    {"state":"done","name":"已完成","code":"D07","id":"lucide:check-check","motion":"reveal","description":"双勾原有路径描画一次后保持","duration":"0.45s"},
+    {"state":"waiting","name":"等待","code":"W37","id":"ph:pause","motion":"breathe","description":"暂停图形自身透明度缓慢呼吸","duration":"2.6s"},
+    {"state":"failed","name":"失败","code":"F25","id":"ph:warning-light","motion":"none","description":"静态"},
+    {"state":"abandoned","name":"已放弃","code":"X26","id":"tabler:hand-stop","motion":"none","description":"静态"}
+  ]
+}

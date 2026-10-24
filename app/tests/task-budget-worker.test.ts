@@ -90,7 +90,8 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     assert.equal(initial.messages[0].role, "system");
     assert.match(JSON.stringify(initial.messages[1]), /本次工作预算：600000ms/);
     assert.match(JSON.stringify(initial.messages[2]), /Investigate evidence\./);
-    assert.match(JSON.stringify(initial.messages[0]), /最终交付不超过2000字/);
+    assert.match(JSON.stringify(initial.messages[0]), /Keep the final report within 2000 characters/);
+    assert.doesNotMatch(JSON.stringify(initial.messages[0]), /\p{Script=Han}/u, "the actual subagent system payload is English");
     const deadlineAt = Date.now() + 10_000;
     const update = { type: "budget", runId: firstRun, workMs: 60_000, deadlineAt };
     send(update); send(update);

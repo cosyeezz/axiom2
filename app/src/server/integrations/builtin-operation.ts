@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { isReaEngineId, reaEngineIds, type ReaEngineId } from "../../shared/rea-engines.js";
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -11,8 +12,21 @@ import { runTool, type ToolRunOptions } from "./tool-process.js";
 type Tool = "opencli" | "rea";
 type Entry = { path: string; ownerId: string; state: "registered" | "cleaned" };
 type Identity = { dev: string; ino: string };
-type Record = { format: 1; id: string; tool: Tool; root: string; rootIdentity: Identity; controlIdentity: Identity; state: "active" | "complete" | "interrupted"; commands: Entry[]; task?: MaintenanceTask; directories: { path: string; dev: string; ino: string }[]; removals?: string[] };
+type Record = { format: 1; id: string; tool: Tool; scope?: ReaEngineId; root: string; rootIdentity: Identity; controlIdentity: Identity; state: "active" | "complete" | "interrupted"; commands: Entry[]; task?: MaintenanceTask; directories: { path: string; dev: string; ino: string }[]; removals?: string[] };
 const contexts = new AsyncLocalStorage<ReturnType<typeof beginBuiltinOperation>>();
+const reaWriters = new Map<string, { users: number; release: () => void }>();
+// Tasks share one maintenance journal in the backend. Components may overlap
+// within that writer; a second backend must not overwrite its task history.
+function acquireReaWriter(root: string, tool: Tool) {
+  if (tool !== "rea") return () => {};
+  let writer = reaWriters.get(root);
+  if (!writer) {
+    writer = { users: 0, release: lockResourcePaths([join(controlDirectory(root, tool), "writer")]) };
+    reaWriters.set(root, writer);
+  }
+  writer.users++;
+  return () => { if (--writer.users === 0) { reaWriters.delete(root); writer.release(); } };
+}
 const unknown = () => new MaintenanceError("stop-unconfirmed", "安装进程退出尚未确认或父提交尚未完成，已保留文件与记录。请核实内置工具任务后重试。");
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
 function identity(path: string): Identity {
@@ -49,40 +63,70 @@ function sameOwner(entry: Entry, optional = false) {
 }
 // The OS lock is held throughout validation, configuration publication and both
 // terminal records. An available lock never proves a registered child is gone.
-export function builtinPendingOperation(root: string, tool: Tool): string | undefined {
+function controlDirectory(root: string, tool: Tool, scope?: ReaEngineId) {
+  if (scope !== undefined && (tool !== "rea" || !isReaEngineId(scope))) throw unknown();
+  return join(root, "integrations", ".maintenance", tool, ...(scope ? ["engines", scope] : []));
+}
+export function builtinPendingOperation(root: string, tool: Tool, scope?: ReaEngineId): string | undefined {
   root = realpathSync(root);
   let previous: Record;
-  try { previous = read(join(root, "integrations", ".maintenance", tool, "current.json")); }
+  try { previous = read(join(controlDirectory(root, tool, scope), "current.json")); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw unknown(); }
-  if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || !["active", "complete", "interrupted"].includes(previous.state)) throw unknown();
+  if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || previous.scope !== scope || !["active", "complete", "interrupted"].includes(previous.state)) throw unknown();
   return previous.state === "complete" ? undefined : previous.id;
 }
-function managedPath(root: string, tool: Tool, path: unknown): path is string {
+function managedPath(root: string, tool: Tool, path: unknown, scope?: ReaEngineId): path is string {
   if (typeof path !== "string") return false;
   const parent = dirname(path), name = basename(path);
+  if (scope && !name.startsWith(`${scope}-`)) return false;
   return parent === join(root, "integrations", tool, "versions") && /^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/.test(name)
-    || tool === "rea" && parent === join(root, "integrations", "rea", "engines") && /^(java|ghidra|jadx|wabt)-[a-f0-9-]{36}$/.test(name);
+    || tool === "rea" && (parent === join(root, "integrations", "rea", "engines") && /^(java|ghidra|jadx|wabt)-[a-f0-9-]{36}$/.test(name)
+      || parent === join(root, "integrations", "rea", "downloads") && /^(ghidra|hopper)-[a-f0-9-]{36}$/.test(name));
 }
 // This read only exposes a cleanup affordance; deletion still requires the
 // locked operation's original identities, including originally absent paths.
-export function builtinPendingRemovals(root: string, tool: Tool): string[] {
+export function builtinPendingRemovals(root: string, tool: Tool, scope?: ReaEngineId): string[] {
   root = realpathSync(root);
   let record: Record;
-  try { record = read(join(root, "integrations", ".maintenance", tool, "current.json")); }
+  try { record = read(join(controlDirectory(root, tool, scope), "current.json")); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw unknown(); }
-  if (record.format !== 1 || record.root !== root || record.tool !== tool || !uuid(record.id) ||
-      record.removals !== undefined && (!Array.isArray(record.removals) || record.removals.some(path => !managedPath(root, tool, path)))) throw unknown();
+  if (record.format !== 1 || record.root !== root || record.tool !== tool || record.scope !== scope || !uuid(record.id) ||
+      record.removals !== undefined && (!Array.isArray(record.removals) || record.removals.some(path => !managedPath(root, tool, path, scope)))) throw unknown();
   return [...record.removals ?? []];
 }
-export function reconcileBuiltinOperation(root: string, tool: Tool, operationId: unknown) {
+/** Read-only affordance check. Never imports or creates directory ownership. */
+export function inspectBuiltinDirectoryOwnership(root: string, tool: Tool, path: string) {
+  const unavailable = () => Error("下载目录缺少有效的原始维护归属证明或任务尚未结束，已保留文件；请先核实维护记录，不会自动重新登记目录。");
+  root = realpathSync(root);
+  if (!managedPath(root, tool, path)) throw unavailable();
+  const named = lstatSync(path, { bigint: true });
+  if (!named.isDirectory() || named.isSymbolicLink() || realpathSync(path) !== path) throw unavailable();
+  const engine = tool === "rea" && dirname(path) === join(root, "integrations", "rea", "downloads") ? basename(path).split("-")[0] : undefined;
+  let owned = false;
+  for (const scope of [undefined, ...(isReaEngineId(engine) ? [engine] : [])]) {
+    const directory = controlDirectory(root, tool, scope);
+    let record: Record;
+    try { record = read(join(directory, "current.json")); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw unavailable(); }
+    if (record.format !== 1 || !uuid(record.id) || record.root !== root || record.tool !== tool || record.scope !== scope || record.state !== "complete" ||
+        !Array.isArray(record.directories) || realpathSync(directory) !== directory || !matches(record.rootIdentity, identity(root)) || !matches(record.controlIdentity, identity(directory))) throw unavailable();
+    const proof = record.directories.find(item => item?.path === path);
+    if (proof) {
+      if (!matches(proof, { dev: String(named.dev), ino: String(named.ino) })) throw unavailable();
+      owned = true;
+    }
+  }
+  if (!owned) throw unavailable();
+}
+export function reconcileBuiltinOperation(root: string, tool: Tool, operationId: unknown, scope?: ReaEngineId) {
   if (!uuid(operationId)) throw unknown();
-  const operation = beginBuiltinOperation(root, tool, operationId);
+  const operation = beginBuiltinOperation(root, tool, operationId, scope);
   try { operation.finish(); } finally { operation.close(); }
 }
-export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: string) {
+export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: string, scope?: ReaEngineId) {
   const maintenanceRoot = root;
   root = realpathSync(root);
-  const directory = join(root, "integrations", ".maintenance", tool);
+  const directory = controlDirectory(root, tool, scope);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   if (realpathSync(directory) !== directory) throw unknown();
   const rootIdentity = identity(root), controlIdentity = identity(directory);
@@ -91,7 +135,7 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
   };
   const directoryOwned = (item: Record["directories"][number]) => {
     if (!item || typeof item.path !== "string" || typeof item.dev !== "string" || typeof item.ino !== "string" || !/^\d+$/.test(item.dev) || !/^\d+$/.test(item.ino)) throw unknown();
-    if (!managedPath(root, tool, item.path)) throw unknown();
+    if (!managedPath(root, tool, item.path, scope)) throw unknown();
     try {
       const stat = lstatSync(item.path, { bigint: true });
       if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(item.path) !== item.path || !matches(identity(item.path), item)) throw unknown();
@@ -101,7 +145,7 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     if (removals === undefined) return;
     if (!Array.isArray(removals) || new Set(removals).size !== removals.length) throw unknown();
     for (const path of removals) {
-      if (!managedPath(root, tool, path)) throw unknown();
+      if (!managedPath(root, tool, path, scope)) throw unknown();
       if (directories.some(item => item.path === path)) continue;
       // A path absent when removal was recorded must remain absent. Its old
       // configuration must never authorize adoption of a newly created inode.
@@ -115,9 +159,16 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
       if (path !== registering && !commands.some(entry => entry.path === path)) throw unknown();
     }
   };
-  const release = lockResourcePaths([join(directory, "parent")]), path = join(directory, "current.json");
+  // Admission is short and shared by the program and its components. The
+  // operation itself holds only its own lock, including across process exit.
+  const admit = lockResourcePaths([join(controlDirectory(root, tool), "admission")]);
+  let release = () => {}, releaseWriter = () => {};
+  const path = join(directory, "current.json");
   let record: Record, task: MaintenanceTask | undefined, closed = false;
   try {
+    releaseWriter = acquireReaWriter(root, tool);
+    if (scope && builtinPendingOperation(root, tool) || !scope && tool === "rea" && reaEngineIds.some(id => builtinPendingOperation(root, tool, id))) throw unknown();
+    release = lockResourcePaths([join(directory, "parent")]);
     let previous: Record | undefined;
     let observed: string | undefined, observedIdentity: Identity | undefined;
     const checkPrevious = () => {
@@ -126,7 +177,7 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     };
     try { previous = read(path); observed = JSON.stringify(previous); observedIdentity = identity(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     if (previous) {
-      if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || !["active", "complete", "interrupted"].includes(previous.state) || !Array.isArray(previous.commands) || !Array.isArray(previous.directories)) throw unknown();
+      if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || previous.scope !== scope || !["active", "complete", "interrupted"].includes(previous.state) || !Array.isArray(previous.commands) || !Array.isArray(previous.directories)) throw unknown();
       if (previous.state !== "complete" && reconcileId !== previous.id || reconcileId && (previous.id !== reconcileId || previous.state === "complete")) throw unknown();
       if (!matches(previous.rootIdentity, rootIdentity) || !matches(previous.controlIdentity, controlIdentity)) throw unknown();
       previous.directories.forEach(directoryOwned); assertRemovals(previous.directories, previous.removals); inventory(previous.commands);
@@ -140,7 +191,7 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
           const task = previous.task;
           if (!uuid(task.id) || !uuid(task.attemptId) || !validMaintenanceBudgets(task.budgets) || !Array.isArray(task.steps) || task.steps.some(step => !["queued", "checking", "downloading", "verifying", "installing", "validating", "removing"].includes(step)) ||
             ![task.resource, task.label, task.action, task.scope].every(value => typeof value === "string") || task.endpoint !== "backend" ||
-            !(task.resource === tool || tool === "rea" && /^rea:(java|ghidra|jadx|wabt|hopper)$/.test(task.resource)) ||
+            !(scope ? task.resource === `rea:${scope}` : task.resource === tool || tool === "rea" && /^rea:(java|ghidra|jadx|wabt|hopper)$/.test(task.resource)) ||
             !["running", "cancelling", "succeeded", "failed", "cancelled", "interrupted", "unknown"].includes(task.status) ||
             !["queued", "checking", "downloading", "verifying", "installing", "validating", "removing"].includes(task.phase) || !Number.isSafeInteger(task.completedSteps) ||
             !Number.isFinite(task.createdAt) || !Number.isFinite(task.updatedAt) || typeof task.capabilities?.cancel !== "boolean" || typeof task.capabilities?.extend !== "boolean") throw unknown();
@@ -157,9 +208,10 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     }
     if (!previous && reconcileId) throw unknown();
     checkPrevious(); inventory([]);
-    record = { format: 1, id: randomUUID(), tool, root, rootIdentity, controlIdentity, state: "active", commands: [], directories: previous?.directories ?? [], ...(previous?.removals?.length ? { removals: previous.removals } : {}) };
+    record = { format: 1, id: randomUUID(), tool, ...(scope ? { scope } : {}), root, rootIdentity, controlIdentity, state: "active", commands: [], directories: previous?.directories ?? [], ...(previous?.removals?.length ? { removals: previous.removals } : {}) };
     durable(path, record);
-  } catch (error) { release(); throw error; }
+  } catch (error) { release(); releaseWriter(); throw error; }
+  finally { admit(); }
   let parentIdentity = identity(path);
   const assertRecord = () => {
     assertRoots();
@@ -175,7 +227,10 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     root, tool, directory,
     bindTask() {
       task = currentMaintenance()?.task;
-      if (task) save({ ...record, task: structuredClone(task) });
+      if (task) {
+        if (scope && task.resource !== `rea:${scope}`) throw unknown();
+        save({ ...record, task: structuredClone(task) });
+      }
     },
     trackDirectory(path: string) {
       safe(); const stat = lstatSync(path, { bigint: true });
@@ -186,6 +241,23 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     },
     assertDirectory(path: string, declared = false) {
       safe();
+      // Component installs keep their inode proofs in a scoped journal. Global
+      // removal must verify that proof before adopting a declared installation.
+      const engine = tool === "rea" && !scope && ["engines", "downloads"].some(container => dirname(path) === join(root, "integrations", "rea", container)) ? basename(path).split("-")[0] : undefined;
+      if (isReaEngineId(engine)) {
+        const scopedDirectory = controlDirectory(root, tool, engine);
+        let previous: Record | undefined;
+        try { previous = read(join(scopedDirectory, "current.json")); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw unknown(); }
+        if (previous) {
+          if (previous.format !== 1 || !uuid(previous.id) || previous.root !== root || previous.tool !== tool || previous.scope !== engine || previous.state !== "complete" || !Array.isArray(previous.directories) || realpathSync(scopedDirectory) !== scopedDirectory || !matches(previous.rootIdentity, rootIdentity) || !matches(previous.controlIdentity, identity(scopedDirectory))) throw unknown();
+          const proof = previous.directories.find(item => item.path === path);
+          if (proof) {
+            directoryOwned(proof);
+            if (!record.directories.some(item => item.path === path)) save({ ...record, directories: [...record.directories, { ...proof }] });
+          }
+        }
+      }
       if (!record.directories.some(item => item.path === path)) {
         if (!declared) throw unknown();
         handle.trackDirectory(path);
@@ -228,7 +300,7 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
     retain() {
       if (task) recordMaintenanceUnconfirmed(maintenanceRoot, task, unknown().message);
     },
-    close() { if (!closed) { closed = true; release(); } },
+    close() { if (!closed) { closed = true; try { release(); } finally { releaseWriter(); } } },
     run<T>(work: () => T): T { return contexts.run(handle, work); },
   };
   return handle;
@@ -240,8 +312,8 @@ export function assertBuiltinFilesSafe() { contexts.getStore()?.assertSafe(); }
 export function builtinRemovalDirectories() { return contexts.getStore()?.removalDirectories() ?? []; }
 export function markBuiltinRemovals(paths: string[]) { contexts.getStore()?.markRemovals(paths); }
 export function forgetBuiltinDirectory(path: string) { contexts.getStore()?.forgetDirectory(path); }
-export function withBuiltinConfiguration<T>(root: string, tool: Tool, work: () => T): T {
-  const operation = beginBuiltinOperation(root, tool);
+export function withBuiltinConfiguration<T>(root: string, tool: Tool, work: () => T, scope?: ReaEngineId): T {
+  const operation = beginBuiltinOperation(root, tool, undefined, scope);
   try { return operation.run(work); }
   finally { try { operation.finish(); } finally { operation.close(); } }
 }

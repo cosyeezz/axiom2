@@ -18,6 +18,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+Session memory execution states: Lucide clock and check-check (ISC), Tabler loader-4 and hand-stop (MIT), Phosphor pause and warning-light (MIT), original geometry in memory/MemoryStateIcon.tsx. Loader rotation, pause opacity and one-shot completion stroke use intrinsic SVG animation without additional geometry. The Lucide/Tabler notices below and assets/PHOSPHOR-LICENSE.txt apply.
+Sources: https://icon-sets.iconify.design/lucide/clock/ https://icon-sets.iconify.design/lucide/check-check/ https://icon-sets.iconify.design/tabler/loader-4/ https://icon-sets.iconify.design/tabler/hand-stop/ https://icon-sets.iconify.design/ph/pause/ https://icon-sets.iconify.design/ph/warning-light/
+
+Conversation fork: Lucide git-branch, original geometry in icons.svg (ISC notice below).
+Source: https://lucide.dev/icons/git-branch
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/git-branch.svg
+
 Skill references: user-selected Lucide book-open-check (S01), shared original paths in icons.svg (ISC notice below).
 Source: https://lucide.dev/icons/book-open-check
 SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/book-open-check.svg

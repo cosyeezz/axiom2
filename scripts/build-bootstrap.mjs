@@ -14,7 +14,7 @@ export function payload() {
     // -File in Windows PowerShell 5.1 requires a BOM to detect UTF-8.
     files[file] = file.endsWith('.ps1') ? '\uFEFF' + source : source;
   }
-  for (const file of ['server/process-owner-record', 'server/process-owner-linux-identity', 'server/owned-process-linux', 'shared/maintenance']) {
+  for (const file of ['server/process-owner-record', 'server/maintenance-process-pid', 'server/process-owner-linux-identity', 'server/owned-process-linux', 'shared/maintenance']) {
     const source = readFileSync(join(root, 'app/src', file + '.ts'), 'utf8');
     const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, newLine: ts.NewLineKind.LineFeed }, fileName: file + '.ts', reportDiagnostics: true });
     assert.equal(compiled.diagnostics?.length || 0, 0, `Bootstrap transpilation failed: ${file}`);

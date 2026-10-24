@@ -1,3 +1,4 @@
+import type { CleanupScope } from "./cleanup-scope.js";
 export type OpenCliSettings = {
   enabled: boolean;
   profile: string;
@@ -23,6 +24,7 @@ export type OpenCliState = {
   packageRoot?: string;
   configured: boolean;
   managed?: boolean;
+  cleanup?: CleanupScope;
   removalPending?: boolean;
   pendingOperation?: string;
   revision: string;

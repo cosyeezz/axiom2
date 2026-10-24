@@ -83,7 +83,7 @@ export function OfficeFile({ parts }: { parts: OfficePart[] }) {
   if (result.error) return <div className="file-empty" role="alert"><strong>无法解析 Office 文档</strong><p>{result.error}</p></div>;
   const pages = result.pages ?? [], page = pages[Math.min(selected, Math.max(0, pages.length - 1))];
   return <div className="file-office"><p className="file-format-notice">内容阅读模式，不执行宏、公式或外链；不还原图片、图表与原版排版。最多100页／表、每表200行×50列、正文20万字符，超出部分不展示。</p>
-    {pages.length > 1 && <label>页／工作表 <select aria-label="Office 页或工作表" value={selected} onChange={e => setSelected(Number(e.target.value))}>{pages.map((page, i) => <option key={i} value={i}>{page.title}</option>)}</select></label>}
+    {pages.length > 1 && <label><span>页／工作表</span><select aria-label="Office 页或工作表" value={selected} onChange={e => setSelected(Number(e.target.value))}>{pages.map((page, i) => <option key={i} value={i}>{page.title}</option>)}</select></label>}
     <article>{page?.blocks.map((block, i) => "text" in block ? <p key={i}>{block.text || "\u00a0"}</p> : <div className="file-office-table" key={i}><table><tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c}>{cell}</td>)}</tr>)}</tbody></table></div>) ?? <p>没有可展示的内容</p>}</article>
   </div>;
 }

@@ -1,5 +1,6 @@
-import { toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
+import { proxyLaunchSupported, toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { checkXrayImporter, prepareXrayImporter, xrayImporterRelease, xrayImporterVersion } from "./model-proxy-xray-installer.js";
+import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
 import { assertProxyStopped, proxyImporterRemovalPlan, proxyRemovalPlan } from "./model-proxy-removal.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
 import { runMaintenance, maintenanceCancelled, maintenanceFailure, maintenancePhase } from "../maintenance.js";
@@ -46,6 +47,7 @@ export class ModelProxyService {
     this.importerPending = this.useImporter(() => runMaintenance(this.root, { id: c.requestId, resource: "proxy:xray-knife", label: "Xray 分享导入组件", action: removing ? "uninstall" : c.op === "modelProxy.importerCheck" ? "check" : "install", params: p, cancel: !removing, steps: removing ? ["checking", "removing", "validating"] : undefined }, controller, async () => {
       if (removing) {
         const plan = proxyImporterRemovalPlan(this.root, this.config);
+        assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
         this.importerVersion = undefined;
         this.save({ ...this.config, removalPending: [...new Set([...(this.config.removalPending ?? []), ...plan.names])] });
         maintenancePhase("removing");
@@ -81,7 +83,7 @@ export class ModelProxyService {
     this.publishRuntime();
   }
   async initialize() {
-    if (this.closed || this.error || !toolProcessSupported()) return;
+    if (this.closed || this.error || !proxyLaunchSupported()) return;
     if (this.pending || this.mutation) throw new AppError("BUSY", "模型代理正在准备。");
     this.controller = new AbortController(); const signal = this.controller.signal;
     this.pending = Promise.resolve().then(async () => {
@@ -97,7 +99,7 @@ export class ModelProxyService {
   }
   private scheduleRefresh(delay = 3_600_000) {
     clearTimeout(this.refreshTimer);
-    if (this.closed || !toolProcessSupported()) return;
+    if (this.closed || !proxyLaunchSupported()) return;
     this.refreshTimer = setTimeout(() => this.refreshSubscriptions(), delay); this.refreshTimer.unref();
   }
   private refreshSubscriptions() {
@@ -111,7 +113,7 @@ export class ModelProxyService {
       for (const profile of profiles) {
         if (controller.signal.aborted || this.closed) break;
         const id = randomUUID();
-        this.job = { id, running: true, message: "正在刷新订阅；验证失败时保留当前线路。" }; this.changed();
+        this.job = { id, running: true, profileId: profile.id, message: "正在刷新订阅；验证失败时保留当前线路。" }; this.changed();
         try {
           await runMaintenance(this.root, { id, resource: "proxy:mihomo", label: "mihomo 订阅刷新", action: "refresh", cancel: true, steps: ["checking", "downloading", "validating"] }, controller, () => this.start(profile, controller.signal, true));
           this.job.message = "订阅刷新完成；验证通过后已应用。";
@@ -125,12 +127,22 @@ export class ModelProxyService {
   }
   snapshot(): ModelProxyState {
     let filesPresent = false, supported = false, importerError = this.importerError;
+    let importerCleanup: ReturnType<typeof cleanupScope> | undefined;
+    const cleanup: ModelProxyState["cleanup"] = {};
+    let cleanupError: string | undefined;
     try { xrayImporterRelease(); supported = toolProcessSupported(); } catch { /* No pinned release for this platform. */ }
-    try { filesPresent = proxyImporterRemovalPlan(this.root, this.config, false).names.length > 0; }
+    try { const plan = proxyImporterRemovalPlan(this.root, this.config, false); filesPresent = plan.names.length > 0; importerCleanup = cleanupScope(plan.paths); }
     catch { importerError ??= "无法核实导入组件目录，请检查安装路径。"; }
-    return { revision: this.config.revision, platform: `${process.platform}/${process.arch}`, supported: toolProcessSupported() && !!proxyAsset("xray", "0.0.0"), supportError: toolProcessSupported() ? undefined : toolProcessSupportError,
+    try { for (const kernel of ["xray", "mihomo"] as const) cleanup[kernel] = cleanupScope(proxyRemovalPlan(this.root, kernel, this.config).paths); }
+    catch { cleanupError = "无法核实内核卸载目录，请检查安装路径。"; }
+    // 线路启停只需记录 PID，任何平台都可用；内核安装、检查与订阅导入仍需进程监督能力，用 managed 单独表达。
+    const managed = toolProcessSupported();
+    const launchable = proxyLaunchSupported() && (!!this.config.installations.xray || !!this.config.installations.mihomo);
+    return { revision: this.config.revision, platform: `${process.platform}/${process.arch}`, supported: launchable, managed,
+      supportError: launchable ? undefined : managed ? "请先安装此线路需要的内核。" : toolProcessSupportError,
       installations: structuredClone(this.config.installations), latest: Object.fromEntries([...this.releases].map(([kernel, release]) => [kernel, release.version])),
-      importer: { supported, pinnedVersion: xrayImporterVersion, verifiedVersion: this.importerVersion, filesPresent, removalPending: !!this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name)), busy: this.importerBusy, error: importerError },
+      cleanup, cleanupError,
+      importer: { cleanup: importerCleanup, supported, pinnedVersion: xrayImporterVersion, verifiedVersion: this.importerVersion, filesPresent, removalPending: !!this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name)), busy: this.importerBusy, error: importerError },
       removalPending: Object.fromEntries((["xray", "mihomo"] as const).map(kernel => [kernel, !!this.config.removalPending?.some(name => !proxyImporterDirectoryPattern.test(name) && name.startsWith(`${kernel}-`))])),
       profiles: this.config.profiles.map(({ id, name, kernel, node }) => { const endpoint = this.processes.get(id)?.endpoint; return { id, name, kernel, node, status: endpoint?.status ?? "stopped", message: endpoint?.message }; }),
       bindings: { ...this.config.bindings }, job: this.job && { ...this.job }, inspection: this.inspection && structuredClone(this.inspection), error: this.error };
@@ -145,7 +157,7 @@ export class ModelProxyService {
     this.config = value; this.changed();
   }
   private async start(profile: Profile, signal: AbortSignal, refresh = false) {
-    if (!toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
+    if (!proxyLaunchSupported()) throw new AppError("UNSUPPORTED_PLATFORM", "此平台尚不能启动代理线路。");
     const install = this.config.installations[profile.kernel];
     if (!install) throw new AppError("NOT_INSTALLED", "请先安装此线路需要的内核。");
     let source = profile.source;
@@ -159,7 +171,10 @@ export class ModelProxyService {
     signal.throwIfAborted();
     if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
     maintenancePhase("validating", "正在验证代理入口；就绪后切换线路。" );
-    const candidate = new ProxyProcess(this.root, { ...profile, source }, this.notify);
+    // 同服务内其他线路的 PID：它们的存活不应被本线路的启动/停止兜底清理影响。
+    const siblings = () => [...this.processes.entries()].filter(([id]) => id !== profile.id)
+      .flatMap(([, process]) => process.processId ? [process.processId] : []);
+    const candidate = new ProxyProcess(this.root, { ...profile, source }, this.notify, siblings);
     try {
       await candidate.start(install, signal); signal.throwIfAborted();
       if (this.closed || this.processes.get(profile.id) !== previous) throw Error("线路状态已变化，未应用订阅刷新。");
@@ -240,7 +255,7 @@ export class ModelProxyService {
       this.notify(); return this.snapshot();
     }
     if (!["modelProxy.start", "modelProxy.check", "modelProxy.install", "modelProxy.inspect", "modelProxy.uninstall"].includes(c.op)) throw new AppError("UNKNOWN_OPERATION", "不支持此代理操作。");
-    if (c.op !== "modelProxy.uninstall" && !toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
+    if (c.op !== "modelProxy.uninstall" && !["modelProxy.start", "modelProxy.stop"].includes(c.op) && !toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
     const inspecting = c.op === "modelProxy.inspect";
     const kernel = (inspecting ? p.kernel ?? "mihomo" : p.kernel) as ProxyKernel;
     const source = inspecting && typeof p.source === "string" ? p.source.trim() : "";
@@ -263,7 +278,8 @@ export class ModelProxyService {
     const removing = c.op === "modelProxy.uninstall";
     if (removing && p.confirm !== true) throw new AppError("CONFIRM_REQUIRED", "请确认卸载内核并停止使用它的线路；订阅和供应商绑定会保留。");
     this.controller = new AbortController(); const signal = this.controller.signal;
-    this.job = { id: c.requestId, running: true, cancellable: !removing, message: removing ? "正在准备卸载内核…" : inspecting ? "正在识别节点…" : c.op === "modelProxy.start" ? "正在启动线路…" : c.op === "modelProxy.check" ? "正在检查官方版本…" : "正在下载并校验内核…" };
+    // profileId 让界面把「启动中」显示在对应线路卡片上，而不是只留一条全局提示。
+    this.job = { id: c.requestId, running: true, cancellable: !removing, ...(profile ? { profileId: profile.id } : {}), message: removing ? "正在准备卸载内核…" : inspecting ? "正在识别节点…" : c.op === "modelProxy.start" ? "正在启动线路…" : c.op === "modelProxy.check" ? "正在检查官方版本…" : "正在下载并校验内核…" };
     this.changed();
     this.pending = Promise.resolve().then(() => runMaintenance(this.root, { id: this.job!.id, resource: `proxy:${kernel ?? profile?.kernel}`, label: `代理 ${kernel ?? profile?.kernel}`, action: c.op.slice("modelProxy.".length), params: p, cancel: !removing, steps: removing ? ["checking", "removing", "validating"] : c.op === "modelProxy.install" || inspecting ? undefined : c.op === "modelProxy.start" ? ["checking", "downloading", "validating"] : ["checking"] }, this.controller!, async () => {
       let prepared: { directory: string; version: string } | undefined, skipped = 0;
@@ -271,10 +287,12 @@ export class ModelProxyService {
         if (removing) {
           if (readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
           const plan = proxyRemovalPlan(this.root, kernel, this.config);
+          assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
           await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop()));
-          assertProxyStopped(this.root, kernel);
+          assertProxyStopped(this.root, kernel, plan.paths);
           signal.throwIfAborted();
           if (readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，线路已停止，请重新读取后卸载。");
+          assertCleanupScope(p.cleanupRevision, cleanupScope(proxyRemovalPlan(this.root, kernel, this.config).paths));
           const installations = { ...this.config.installations }; delete installations[kernel];
           maintenancePhase("removing");
           this.save({ ...this.config, installations, profiles: this.config.profiles.map(item => item.kernel === kernel ? { ...item, enabled: false } : item), removalPending: [...new Set([...(this.config.removalPending ?? []), ...plan.names])] });

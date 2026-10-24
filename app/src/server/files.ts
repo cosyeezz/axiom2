@@ -1,5 +1,6 @@
 import { staticSvg } from "./svg-preview.js";
 import { DocumentFiles } from "./document-files.js";
+import { previewFilePath } from "./preview-path.js";
 import type { FilePreview, FileSaveResult } from "../shared/file-preview.js";
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -67,7 +68,8 @@ export class Files {
       typeof p.path !== "string" || !isAbsolute(p.path) || p.path.length > 4096 ||
       /[\x00-\x1f\x7f]/.test(p.path) || p.path.split(/[\\/]/).includes(".."))
       throw new AppError("INVALID_INPUT", "图片预览需要有效绝对路径与 img1 等图片编号");
-    const path = resolve(p.path), key = pathKey(path);
+    let path = resolve(p.path);
+    const key = pathKey(path);
     const dir = resolve(this.store.root, "attachments", scope.workspaceId, scope.sessionId);
     let name = reference ? reference() : this.store.db.prepare("SELECT name FROM picked_images WHERE sessionId=? AND path=?").get(scope.sessionId, key)?.name;
     let uploaded = false;
@@ -86,6 +88,8 @@ export class Files {
     if (this.previewing >= 4) throw new AppError("LIMIT", "图片预览请求过多，请稍后重试");
     this.previewing++;
     try {
+      // Provenance above is checked against the original, explicitly granted path.
+      if (!uploaded) path = await previewFilePath(path);
       const checkPath = async () => {
         if (uploaded) {
           // Trust the configured root, but no symlinks/junctions below it (including ancestors).
@@ -95,7 +99,7 @@ export class Files {
             if ((await lstat(current)).isSymbolicLink()) throw denied();
           }
           if (pathKey(await realpath(path)) !== pathKey(current)) throw denied();
-        } else if (pathKey(await realpath(path)) !== key) throw denied();
+        } else if (pathKey(await realpath(path)) !== pathKey(path)) throw denied();
         const info = await lstat(path);
         if (info.isSymbolicLink() || !info.isFile() || info.nlink !== 1) throw denied();
         return info;

@@ -2,7 +2,7 @@ import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import { memoryTopicMessageType, memoryTopicSnapshotType, type MemoryTopicSnapshot } from "../shared/memory-tree.js";
 export function validTopicSnapshot(value: unknown): value is MemoryTopicSnapshot {
   const item = value as MemoryTopicSnapshot | undefined;
-  return item?.version === 1 && typeof item.workspaceId === "string" && typeof item.text === "string";
+  return item?.version === 2 && typeof item.workspaceId === "string" && typeof item.text === "string";
 }
 /** Restore only the selected branch: abandoned compactions must never advance this snapshot. */
 export function topicSnapshot(manager: Pick<SessionManager, "getBranch">, workspaceId: string) {

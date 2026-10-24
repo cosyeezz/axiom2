@@ -41,8 +41,8 @@
 }
 .usage .action-icon > svg, .usage .annotation-count { color: inherit; }
 .execution-alert .icon-btn > svg { color: inherit; }
-.message-actions[data-feedback="copied"] { --action-rest: var(--success); --action-highlight: var(--success); }
-.message-actions[data-feedback="failed"] { --action-rest: var(--danger-icon); --action-highlight: var(--danger-icon); }
+.message-actions[data-feedback="copied"] > .copy-reply { --action-rest: var(--success); --action-highlight: var(--success); }
+.message-actions[data-feedback="failed"] > .copy-reply { --action-rest: var(--danger-icon); --action-highlight: var(--danger-icon); }
 @media (prefers-reduced-motion: reduce) {
   :root :is(button, a)[class]:is(.icon-btn, .action-icon) { transition: none; }
 }

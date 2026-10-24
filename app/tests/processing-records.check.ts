@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
+import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import type { Workspace, Session, Command } from "../src/shared/protocol.js";
 const root = mkdtempSync(join(tmpdir(), "axiom-processing-ui-")), project = join(root, "project"); mkdirSync(project);
 const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -16,7 +17,12 @@ try {
   const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
   const scope = { workspaceId: workspace.id, sessionId: session.id }, memory = app.agents.memories, records = memory.records;
-  writeFileSync(join(memoryDirectory(root, session.id), "MEMORY.md"), "# 当前依据\n记录来源"); memory.scan(scope);
+  (memory as any).scheduleOrganization = () => {};
+  writeFileSync(join(memoryDirectory(root, session.id), "MEMORY.md"), "# [Completed] 处理记录来源\n"); memory.scan(scope);
+  // Organization errors are derived from failed purposes, not arbitrary catalog body fields.
+  const tree = memory.pipeline.tree, batch = tree.batch(workspace.id, Date.now() + memoryBatchWaitMs);
+  assert.equal(batch.length, 1);
+  tree.failure(batch, Error("旧请求格式错误，缺少原始响应")); memory.publishTree(workspace.id);
   for (let i = 0; i < 53; i++) { const id = records.start(scope, "memory.query", `查询 ${i}`); records.finish(id, "completed"); }
   const id = records.start(scope, "memory.organize", "模型完成但解析失败"), call = records.callStart(id, "整理文件：MEMORY.md", "输入正文");
   records.callSent(id, call); records.callFinish(id, call, "我会完整读取会话记忆\n" + "长响应".repeat(2000)); records.stage(id, "解析输出：MEMORY.md"); records.finish(id, "failed", "整理输出格式错误：模型应直接返回JSON数组");

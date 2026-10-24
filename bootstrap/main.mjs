@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DesktopExecution, desktopTask, validBudgets } from '../app/desktop/maintenance.mjs';
 import { createProcessOwner, canRecoverProcessOwner, recoverProcessOwner } from '../app/dist/server/process-owner-record.mjs';
+import { forkPidProcess, pidSnapshot, pidIdentityGone } from '../app/dist/server/maintenance-process-pid.mjs';
 import { forkLinuxOwned, monotonicMilliseconds } from '../app/dist/server/owned-process-linux.mjs';
 import { bootstrapHistory, validateTask } from './records.mjs';
 import { bootstrapCurrent, createBootstrapRegistry } from './registry.mjs';
@@ -68,13 +69,50 @@ const expiration = execution => Math.min(execution.task.startedAt + execution.ta
 const remaining = execution => expiration(execution) - Date.now();
 const deadlineError = execution => failure(execution.task.phase === 'installing' && execution.phaseStart + execution.task.budgets.installMs <= execution.task.startedAt + execution.task.budgets.totalMs ? 'install-timeout' : 'total-timeout', '安装达到执行期限，正在确认进程树退出。');
 
-export { createProcessOwner, canRecoverProcessOwner, recoverProcessOwner };
+export { createProcessOwner, canRecoverProcessOwner, recoverProcessOwner, pidSnapshot };
 export { linuxProcessStart } from '../app/dist/server/process-owner-linux-identity.mjs';
 
 // The global installer retains npm's normal cwd, prefix and lifecycle behavior.
 // Desktop installation supplies an explicit executable and fixed argument array.
 async function worker(requestPath) {
   const request = json(requestPath), directory = dirname(requestPath);
+  if (process.platform === 'darwin') {
+    // forkPidProcess creates this worker as its group leader. Wait for the
+    // durable owner.arm commit before starting any business command.
+    const stopGroup = (reason = 'host-disconnected') => {
+      // This records the reason only; the coordinator still verifies group exit.
+      try { atomicJSON(join(directory, 'worker-stop.json'), { nonce: request.nonce, reason }); } catch {}
+      try {
+        const record = json(join(directory, 'pid-members.json'), true), rows = pidSnapshot();
+        const leader = rows.find(row => row.pid === process.pid);
+        if (record?.nonce === request.nonce && record.identity?.workerPid === process.pid && record.identity.started === leader?.started) {
+          const members = new Map(record.identity.members.filter(member => !pidIdentityGone(member, rows)).map(member => [member.pid, member]));
+          // Include descendants of observed detached members before they reparent.
+          let changed = true;
+          while (changed) { changed = false; for (const row of rows) if (!members.has(row.pid) && members.has(row.parent)) { members.set(row.pid, row); changed = true; } }
+          for (const member of members.values()) if (member.pid !== process.pid && member.pid > 1 && !pidIdentityGone(member)) {
+            try { process.kill(member.pid, 'SIGKILL'); } catch {}
+          }
+        }
+      } catch { /* Keep the owner's durable record for later exit verification. */ }
+      try { process.kill(-process.pid, 'SIGKILL'); } finally { process.exit(1); }
+    };
+    if (!process.connected) throw Error('维护协调进程已断开，未执行命令。');
+    process.once('disconnect', stopGroup);
+    let admitted = false;
+    const check = () => {
+      if (!process.connected) return stopGroup();
+      const control = json(join(directory, 'owner-control.json'), true);
+      if (control && (control.nonce !== request.nonce || control.stop)) return stopGroup('revoked');
+      const deadline = control?.deadline ?? request.deadline;
+      if (!Number.isFinite(deadline)) return stopGroup('invalid-deadline');
+      if (Date.now() >= deadline) return stopGroup('deadline');
+      admitted = control?.go === true;
+    };
+    while (!admitted) { check(); if (!admitted) await delay(25); }
+    // This worker also observes host loss/deadlines when the host is paused.
+    setInterval(() => { try { check(); } catch { stopGroup(); } }, 100).unref();
+  }
   let total = 0, tail = Buffer.alloc(0), lastWrite = 0, logError;
   const publish = () => {
     if (!logError) {
@@ -177,7 +215,7 @@ function validateCommand(command) {
 // The caller owns the existing task and journal. Keep the journal until its
 // parent commit and terminal task have both been persisted, even after cleanup.
 export async function runOwnedCommand({ directory, execution, owner, ownership, taskPath, file, args, cwd = process.cwd(), env = {}, capture = false }) {
-  if (!['win32', 'linux'].includes(process.platform)) throw Error('此平台尚无可靠的安装进程监督器。');
+  if (!['win32', 'linux', 'darwin'].includes(process.platform)) throw Error('此平台尚无可靠的安装进程监督器。');
   const command = { file, args, capture };
   validateCommand(command);
   if (!isAbsolute(cwd)) throw Error('安装命令工作目录必须为绝对路径。');
@@ -243,6 +281,19 @@ async function supervise(directory, execution, owner, ownership, command) {
         await delay(50);
       }
       if (!sent) throw spawnError || Error(`安装监督器未就绪。${diagnostic}${diagnosticTail(`${requestPath}.stderr`)}`);
+    } else if (process.platform === 'darwin') {
+      native = forkPidProcess(entry, { cwd, env: { ...env, AXIOM_BOOTSTRAP_REQUEST: requestPath }, execArgv: [] }, identity => {
+        // Cleanup may discover descendants after cancellation. Keep persisting
+        // their identities; the separate check below still gates business GO.
+        owner.arm(identity);
+        atomicJSON(join(directory, 'pid-members.json'), { nonce, identity });
+      });
+      child = native.child; child.on('close', () => { closed = true; });
+      execution.signal.addEventListener('abort', stop, { once: true });
+      if (execution.signal.aborted) stop();
+      await native.ready;
+      execution.signal.throwIfAborted();
+      writeControl({ nonce, go: true, deadline: expiration(execution) }); sent = true;
     } else {
       native = forkLinuxOwned(entry, { cwd, env: { ...env, AXIOM_BOOTSTRAP_REQUEST: requestPath }, execArgv: [] }, monotonicMilliseconds() + remaining(execution), () => deadlineError(execution), identity => { execution.signal.throwIfAborted(); owner.arm(identity); execution.signal.throwIfAborted(); });
       child = native.child; child.on('close', () => { closed = true; });
@@ -256,7 +307,7 @@ async function supervise(directory, execution, owner, ownership, command) {
       if (execution.signal.aborted) { stop(); break; }
       const left = remaining(execution);
       if (left <= 0) { const error = deadlineError(execution); execution.abort(error.code, error.message); stop(); break; }
-      if (native) native.setDeadline(monotonicMilliseconds() + left);
+      if (native && process.platform !== 'darwin') native.setDeadline(monotonicMilliseconds() + left);
       else writeControl({ nonce, go: true, deadline: expiration(execution) });
       // Ordinary diagnostics are optional. A corrupt, inaccessible or missing
       // tail must not stop the command; result and cleanup receipts stay strict.
@@ -280,6 +331,10 @@ async function supervise(directory, execution, owner, ownership, command) {
       if (native.failure()?.code === 'stop-unconfirmed') throw native.failure();
       ownership.confirmed = true;
       uncertain ||= native.failure();
+      if (process.platform === 'darwin') {
+        const stopped = json(join(directory, 'worker-stop.json'), true);
+        if (stopped?.nonce === nonce && stopped.reason === 'deadline') uncertain ||= deadlineError(execution);
+      }
     } else if (child) {
       try {
         if (!closed) stop();

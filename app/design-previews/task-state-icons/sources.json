@@ -1,0 +1,92 @@
+[
+  {
+    "collection": "mingcute",
+    "name": "MingCute Icon",
+    "author": {
+      "name": "MingCute Design",
+      "url": "https://github.com/Richard9394/MingCute"
+    },
+    "license": {
+      "title": "Apache 2.0",
+      "spdx": "Apache-2.0",
+      "url": "https://github.com/Richard9394/MingCute/blob/main/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/mingcute.json",
+    "snapshotSha256": "2e7e3f9ad787f2dda87dbeb9f1fa83aaa1335dc5226d63e8cef18853ec60e7bc"
+  },
+  {
+    "collection": "lucide",
+    "name": "Lucide",
+    "author": {
+      "name": "Lucide Contributors",
+      "url": "https://github.com/lucide-icons/lucide"
+    },
+    "license": {
+      "title": "ISC",
+      "spdx": "ISC",
+      "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/lucide.json",
+    "snapshotSha256": "bcf5691ce5db582f7810db9009d5821050c67dbab78f126e92de218732fb8863"
+  },
+  {
+    "collection": "tabler",
+    "name": "Tabler Icons",
+    "author": {
+      "name": "Paweł Kuna",
+      "url": "https://github.com/tabler/tabler-icons"
+    },
+    "license": {
+      "title": "MIT",
+      "spdx": "MIT",
+      "url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/tabler.json",
+    "snapshotSha256": "814d9457602a791daa87add663f251a40a39a254054eeec276224ed97e31636e"
+  },
+  {
+    "collection": "ph",
+    "name": "Phosphor",
+    "author": {
+      "name": "Phosphor Icons",
+      "url": "https://github.com/phosphor-icons/core"
+    },
+    "license": {
+      "title": "MIT",
+      "spdx": "MIT",
+      "url": "https://github.com/phosphor-icons/core/blob/main/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/ph.json",
+    "snapshotSha256": "c530113dab503dae58492e46cad79c7bb3e4d6fbe85b1c181e7c6208cbfa28f8"
+  },
+  {
+    "collection": "heroicons",
+    "name": "HeroIcons",
+    "author": {
+      "name": "Refactoring UI Inc",
+      "url": "https://github.com/tailwindlabs/heroicons"
+    },
+    "license": {
+      "title": "MIT",
+      "spdx": "MIT",
+      "url": "https://github.com/tailwindlabs/heroicons/blob/master/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/heroicons.json",
+    "snapshotSha256": "fca0072086b18fbdf36fb61eeb6c58eacaa37209268cc7754c0c01762df721e7"
+  },
+  {
+    "collection": "iconoir",
+    "name": "Iconoir",
+    "author": {
+      "name": "Luca Burgio",
+      "url": "https://github.com/iconoir-icons/iconoir"
+    },
+    "license": {
+      "title": "MIT",
+      "spdx": "MIT",
+      "url": "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE"
+    },
+    "dataSource": "https://raw.githubusercontent.com/iconify/icon-sets/master/json/iconoir.json",
+    "snapshotSha256": "2b1afec43b57fde9c8513865ba0df74ff8e980a3461bafb911cf015f76cec431"
+  }
+]

@@ -48,6 +48,22 @@ test("RTK startup cleanup runs after the application's removal gate is initializ
   try { ready = true; await turn(); assert.equal(calls, 1); assert.equal(fs.existsSync(old), false); }
   finally { await s.close(); f.cleanup(); }
 });
+test("RTK stale path confirmation is rejected before the worker removal gate", async () => {
+  const f = fixture(); let calls = 0;
+  const s = new RtkService(f.root, () => {}, { removal: async work => { calls++; return work(); } });
+  try {
+    await turn(); calls = 0;
+    const before = s.snapshot(), bytes = fs.readFileSync(rtkConfigPath(f.root), 'utf8');
+    assert.deepEqual(before.cleanup!.paths, f.names.map(name => join(rtkDirectory(f.root), 'versions', name)).sort());
+    const extra = join(rtkDirectory(f.root), 'versions', name()); fs.mkdirSync(extra);
+    await s.command({ op: 'rtk.uninstall', requestId: randomUUID(), params: { confirm: true, revision: before.revision, cleanupRevision: before.cleanup!.revision } });
+    const deadline = Date.now() + 5000;
+    while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); }
+    assert.match(s.snapshot().job!.error!, /范围已变化/);
+    assert.equal(calls, 0); assert.equal(fs.readFileSync(rtkConfigPath(f.root), 'utf8'), bytes);
+    assert.ok(fs.existsSync(extra));
+  } finally { await s.close(); f.cleanup(); }
+});
 test("RTK uninstall revokes before deletion and retries partial failure after service restart", async t => {
   const f = fixture(); let s = new RtkService(f.root, () => {});
   const originalRm = fs.rmSync;

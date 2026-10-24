@@ -78,6 +78,7 @@ export function toolSummary(call: ToolCall): { label: string; icon: ToolIcon; ta
     if (path && target !== path) detail = path;
   }
   if (icon === "web") target = text("url") || list("urls") || target;
+  if (name === "memory_query") target = text("question") || target;
   if (name === "read") {
     const image = path && /\.(?:png|jpe?g|gif|webp|bmp)$/i.test(path);
     if (!image) {

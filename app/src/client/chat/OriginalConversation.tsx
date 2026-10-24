@@ -1,36 +1,30 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type SetStateAction } from "react";
 import { command, useConnectionState, useScope } from "../transport.js";
 import { messageScope, type ChatMessage, type ThreadIndex } from "../../shared/agent.js";
-import { AppError, type Scope } from "../../shared/protocol.js";
-import { Icon } from "../Icon.js";
-import { OriginalStore } from "./original-store.js";
+import type { Scope } from "../../shared/protocol.js";
+import type { HistoryIndex, HistoryRead } from "../../shared/history.js";
+import { HistoryStore } from "./history-store.js";
 
-type OriginalMode = { scope: Scope | null; enabled: boolean; setEnabled: Dispatch<SetStateAction<boolean>> };
-const OriginalModeContext = createContext<OriginalMode | null>(null);
-
-/** One provider per viewing instance, keyed by scope, shared by its thread and toolbar. */
-export function OriginalConversationProvider({ scope, children }: { scope: Scope | null; children: ReactNode }) {
-  const [enabled, setEnabled] = useState(false);
-  const value = useMemo(() => ({ scope, enabled, setEnabled }), [scope?.workspaceId, scope?.sessionId, enabled]);
-  return <OriginalModeContext.Provider value={value}>{children}</OriginalModeContext.Provider>;
+const Disclosures = createContext<Map<string, boolean> | null>(null);
+/** Viewing state is isolated between main and child sessions; recycled rows remember disclosures. */
+export function OriginalConversationProvider({ children }: { scope: Scope | null; children: ReactNode }) {
+  const memory = useRef(new Map<string, boolean>());
+  return <Disclosures.Provider value={memory.current}>{children}</Disclosures.Provider>;
 }
-function useOriginalMode(scope: Scope | null | undefined) {
-  const mode = useContext(OriginalModeContext);
-  return mode?.scope?.workspaceId === scope?.workspaceId && mode?.scope?.sessionId === scope?.sessionId ? mode : null;
+export function useRememberedDisclosure(key: string, initial = false) {
+  const memory = useContext(Disclosures);
+  const [open, update] = useState(() => memory?.get(key) ?? initial);
+  const setOpen = useCallback((next: SetStateAction<boolean>) => update(previous => {
+    const value = typeof next === "function" ? next(previous) : next;
+    memory?.set(key, value); return value;
+  }), [memory, key]);
+  return [open, setOpen] as const;
 }
-export function OriginalConversationToggle({ scope }: { scope?: Scope }) {
-  const mode = useOriginalMode(scope);
-  return <button type="button" className="compression-trigger original-conversation-toggle action-icon"
-    aria-label="原始会话" aria-pressed={mode?.enabled ?? false}
-    data-tooltip={mode?.enabled ? "关闭原始会话" : "查看原始会话"}
-    disabled={!scope?.sessionId || !mode} onClick={() => mode?.setEnabled((enabled) => !enabled)}>
-    <Icon name="history" />
-  </button>;
+export interface MessageStore {
+  get: (id: string) => ChatMessage | null;
+  subscribeMessage: (id: string, fn: () => void) => () => void;
 }
-
-export const OriginalMessages = createContext<OriginalStore | null>(null);
-
-/** Archived changes notify only their message ID; status changes preserve the store identity. */
+export const OriginalMessages = createContext<MessageStore | null>(null);
 export function useThreadMessage(scope: Scope, id: string) {
   const original = useContext(OriginalMessages);
   const live = useScope<ChatMessage | null>(messageScope(scope, id), null);
@@ -38,26 +32,25 @@ export function useThreadMessage(scope: Scope, id: string) {
   const archived = useSyncExternalStore(subscribe, () => original?.get(id) ?? null);
   return live ?? archived;
 }
-
-export function useOriginalConversation(scope: Scope | null, index: ThreadIndex) {
-  const enabled = useOriginalMode(scope)?.enabled ?? false;
+export function useHistoryConversation(scope: Scope | null, index: ThreadIndex) {
   const connection = useConnectionState();
-  const store = useMemo(() => new OriginalStore((signal) => command<ChatMessage[]>("agent.original", {}, scope ?? {}, crypto.randomUUID(), signal),
-    (error) => error instanceof AppError && error.code === "UNKNOWN_OPERATION"
-      ? "当前后台尚未支持原始会话。请在任务结束后重启后台服务，再刷新页面；仅刷新页面无法更新后台。"
-      : error.message), [enabled, scope?.workspaceId, scope?.sessionId]);
+  const store = useMemo(() => new HistoryStore(
+    signal => command<HistoryIndex>("agent.history.index", {}, scope ?? {}, crypto.randomUUID(), signal),
+    (segmentId, groupId, signal) => command<HistoryRead>("agent.history.read", { segmentId, ...(groupId === undefined ? {} : { groupId }) }, scope ?? {}, crypto.randomUUID(), signal)),
+  [scope?.workspaceId, scope?.sessionId]);
   const state = useSyncExternalStore(store.subscribe, store.snapshot);
-  // Older backends retain the structural fallback. Rebuild revisions cover archive-only edits.
-  const revision = JSON.stringify([index.ids, index.groups, index.runId, index.runStatus, index.contextRevision, connection.generation]);
   useEffect(() => {
-    if (enabled && scope?.sessionId && connection.connected) store.request(revision);
+    if (scope?.sessionId && connection.connected) void store.refresh();
     else store.pause();
-  }, [store, enabled, revision, connection.connected, scope?.sessionId]);
+  }, [store, scope?.sessionId, index.contextRevision, connection.generation, connection.connected]);
   useEffect(() => () => store.dispose(), [store]);
-  return { enabled, messages: store, groups: state.groups,
-    showing: enabled && state.hasData,
-    loading: enabled && (state.loading || !state.hasData && !state.error),
-    error: enabled ? state.error : "",
-    ready: !enabled || state.hasData && state.revision === revision && !state.loading && !state.error && connection.connected,
-    retry: () => store.retry() };
+  return { ...state, store, ready: !!state.index && !state.loading && !state.error && connection.connected, retry: () => void store.refresh() };
+}
+export function useHistoryRange(store: HistoryStore, segmentId: string, groupId?: string, enabled = true) {
+  const key = store.key(segmentId, groupId);
+  const revision = useSyncExternalStore(store.subscribe, store.snapshot).index?.revision;
+  const subscribe = useCallback((notify: () => void) => store.subscribeRange(key, notify), [store, key]);
+  const state = useSyncExternalStore(subscribe, () => store.range(key));
+  useEffect(() => enabled ? store.acquire(segmentId, groupId) : undefined, [store, key, enabled, revision]);
+  return { ...state, retry: () => void store.load(segmentId, groupId) };
 }

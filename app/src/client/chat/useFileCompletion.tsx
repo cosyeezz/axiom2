@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { PathActions } from "../LocalPath.js";
 import { command } from "../transport.js";
-import { updateDraft } from "../drafts.js";
+import { updateComposerDraft as updateDraft } from "./composer-edit.js";
 import type { Scope } from "../../shared/protocol.js";
 import { FileCompletionPopup } from "./FileCompletionPopup.js";
 import { atFileToken, insertFileSuggestion, type FileSuggestions, type FileSuggestion } from "./file-completion.js";

@@ -58,7 +58,7 @@ export async function inspectProxySource(root: string, installation: ProxyInstal
     maintenancePhase("validating", "正在使用本机内核验证订阅节点…");
     const port = await reserveProxyPort(), token = randomBytes(32).toString("hex");
     signal.throwIfAborted();
-    assertProxyCanStart(root, "mihomo");
+    await assertProxyCanStart(root, "mihomo");
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const sourcePath = join(directory, "provider.yaml"), config = join(directory, "config.json");
     const value = coreConfiguration({ id: "import", name: "import", kernel: "mihomo", node: "unselected", source }, 0, token, sourcePath);

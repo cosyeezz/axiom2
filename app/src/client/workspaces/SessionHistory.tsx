@@ -5,7 +5,7 @@ import { SessionStatusIcon } from "../StatusIcons.js";
 import { DeleteButton } from "../DeleteButton.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
 import { sessionState } from "../../shared/session-state.js";
-import { compareSessions, isPrioritySession, isTopSession } from "./session-order.js";
+import { compareSessions, isPrioritySession, isTopSession, sessionFamilies } from "./session-order.js";
 import type { Scope, Session, Workspace } from "../../shared/protocol.js";
 import { useSessionAttention } from "./useSessionAttention.js";
 const noSessions: Session[] = [];
@@ -59,8 +59,17 @@ export function History({
     ].map((s) => [s.id, s])).values()]
       .filter((s) => s.title.toLowerCase().includes(query.toLowerCase())).sort(compareSessions);
   }, [sessions, pinnedSessions, heldRows, query, workspaceOrder, pinnedOrder]);
-  const groups = useMemo(() => [true, false].map((pinned) => filtered.filter((s) =>
-    (heldRows[s.id]?.top ?? isTopSession(s)) === pinned && (pinned || s.workspaceId === workspace?.id))), [filtered, heldRows, workspace?.id]);
+  const groups = useMemo(() => {
+    const result: [Session[], Session[]] = [[], []];
+    for (const family of sessionFamilies(filtered)) {
+      // Keep related titles together even when one member is pinned/active/unread.
+      // This only changes presentation; individual saved pin flags stay intact.
+      const held = family.map(s => heldRows[s.id]).find(Boolean);
+      const top = held?.top ?? family.some(isTopSession);
+      result[top ? 0 : 1].push(...family.filter(s => top || s.workspaceId === workspace?.id));
+    }
+    return result;
+  }, [filtered, heldRows, workspace?.id]);
   const run = useCallback(async (
     op: string,
     params: Record<string, unknown>,
@@ -270,9 +279,12 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
         <span className="session-detail">
           {new Date(s.updatedAt).toLocaleString("zh-CN", {
             month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
-          })}{" "}·{" "}
-          {state.label}
+          })}
         </span>
+        <span className="session-message-count" data-tooltip={s.messageCount === undefined ? "消息数量暂不可用" : "用户与助手消息，包含压缩前历史，不含工具结果"}>
+          · {s.messageCount ?? "—"} 条消息
+        </span>
+        <span className="session-detail">· {state.label}</span>
       </small>
       {workspacePath && (
         <small className="session-workspace-path" data-tooltip={workspacePath}>

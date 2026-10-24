@@ -9,10 +9,6 @@
 .thread-navigation button:not(:disabled):active { transform: scale(.94); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .thread-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .thread-navigation button:disabled { opacity: .25; cursor: default; }
-.compression-trigger.original-conversation-toggle { min-width: 44px; justify-content: center; }
-.compression-trigger.original-conversation-toggle svg { width: 20px; height: 20px; flex-basis: 20px; fill: currentColor; stroke: none; }
-.original-conversation-toggle[aria-pressed="true"] { color: var(--accent-hover); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
-.original-conversation-status { margin: 12px 0 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 @container (max-height: 300px) {
   .thread-navigation { top: 8px; transform: none; flex-direction: row; }
   .thread-navigation button:nth-child(3) { margin-top: 0; margin-left: 6px; }
@@ -49,3 +45,41 @@
 }
 @media (prefers-reduced-motion: reduce) { .compaction-card > summary, .compaction-chevron { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .thread-navigation button { transition: none; } }
+
+/* History ranges reuse the page's quiet gutters; the rail itself is never clickable. */
+.virtual-timeline { min-width: 0; }
+.timeline-row { position: relative; display: flow-root; min-width: 0; }
+.timeline-spacer { pointer-events: none; overflow-anchor: none; }
+.history-range-row::before, .history-range-row::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--accent) 24%, var(--border)); pointer-events: none; }
+.history-range-row::before { left: -12px; }
+.history-range-row::after { right: -8px; }
+.history-range-collapse { position: absolute; z-index: 2; top: 2px; left: -56px; width: 40px; min-height: 44px; padding: 7px 3px; border: 0; border-radius: 7px; color: var(--muted); background: var(--bg); font-size: 10px; cursor: pointer; }
+.history-range-collapse:hover { color: var(--accent-hover); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.history-range-collapse:focus-visible, .history-disclosure:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.history-card { margin: 14px 0 28px; overflow: hidden; }
+.history-card-heading { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 18px 18px 12px; }
+.history-card-number { color: var(--fg-2); font-size: 13px; font-weight: 550; }
+.history-card-number > span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: 3px; }
+.history-card-range { color: var(--muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.history-card-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0 18px 10px 58px; }
+.history-disclosure { display: inline-flex; gap: 6px; align-items: center; min-height: 36px; border: 0; border-radius: 6px; padding: 6px 4px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+.history-disclosure:hover, .history-disclosure[aria-expanded="true"] { color: var(--accent-hover); }
+.history-disclosure svg { width: 13px; height: 13px; transition: transform 160ms; transform: rotate(-90deg); }
+.history-disclosure[aria-expanded="true"] svg { transform: rotate(0); }
+.history-loading { margin: 0; min-height: 56px; padding: 16px 0; font-size: 12px; color: var(--muted); }
+@container (max-width: 1100px) {
+  .history-range-row::before { left: -10px; }
+  .history-range-row::after { right: -10px; }
+  .history-range-collapse { left: -8px; top: 0; transform: translateY(-100%); width: auto; padding-inline: 6px; min-height: 28px; }
+}
+@media (max-width: 700px) {
+  .history-card-heading { grid-template-columns: 26px minmax(0, 1fr); gap: 8px 10px; padding: 14px 12px 6px; }
+  .history-card .compaction-icon { width: 26px; height: 26px; }
+  .history-card .compaction-tokens { grid-column: 2; display: flex; flex-wrap: wrap; align-items: baseline; justify-items: start; gap: 4px 10px; font-size: 10px; }
+  .history-card-actions { padding: 0 8px 8px 44px; gap: 0 8px; }
+  .history-disclosure { min-height: 44px; font-size: 11px; }
+  .history-range-row::after { display: none; }
+  .history-range-row::before { opacity: .5; left: -8px; }
+  .history-range-collapse { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .history-disclosure svg { transition: none; } }

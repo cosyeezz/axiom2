@@ -1,7 +1,8 @@
+import type { RewriteTarget } from "../../shared/rewrite.js";
 import { useCallback, useSyncExternalStore } from "react";
 import { scopeKey, type Scope, type Draft } from "../../shared/protocol.js";
 import type { ChatMessage } from "../../shared/agent.js";
-export type PendingMessage = { id: string; draft: Draft; message: ChatMessage; inputId?: string; queued?: boolean; state: "sending" | "accepted" | "uncertain" | "failed"; confirmation?: string };
+export type PendingMessage = { id: string; draft: Draft; rewrite?: RewriteTarget; message: ChatMessage; inputId?: string; queued?: boolean; state: "sending" | "accepted" | "uncertain" | "failed"; confirmation?: string };
 const entries = new Map<string, PendingMessage[]>();
 const listeners = new Map<string, Set<() => void>>();
 const empty: PendingMessage[] = [];
@@ -12,10 +13,10 @@ function update(scope: Scope, fn: (list: PendingMessage[]) => PendingMessage[]) 
   if (next.length) entries.set(key, next); else entries.delete(key);
   listeners.get(key)?.forEach((fn) => fn());
 }
-export function optimisticStart(scope: Scope, id: string, draft: Draft, queued = false) {
+export function optimisticStart(scope: Scope, id: string, draft: Draft, queued = false, rewrite?: RewriteTarget) {
   const images = (draft.attachments ?? (draft.attachment ? [draft.attachment] : []))
     .filter((a) => a.kind === "image").map((a) => ({ id: a.id!, name: a.name, path: a.path!, mimeType: "image/png" }));
-  update(scope, (list) => [...list, { id, draft, queued, state: "sending", message: { id, role: "user", text: draft.text, images, skills: draft.skills } }]);
+  update(scope, (list) => [...list, { id, draft, rewrite, queued, state: "sending", message: { id, role: "user", text: draft.text, images, skills: draft.skills } }]);
 }
 export function optimisticState(scope: Scope, id: string, state: PendingMessage["state"], inputId?: string, queued?: boolean) {
   const seen = observed.get(scopeKey(scope));

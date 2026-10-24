@@ -4,7 +4,7 @@ import {
   createReadToolDefinition, createBashToolDefinition, createPowerShellToolDefinition,
   createEditToolDefinition, createWriteToolDefinition, createGrepToolDefinition,
   createFindToolDefinition, createLsToolDefinition,
-  type AgentSession, type BuildSystemPromptOptions, type ResourceLoader, type ToolDefinition,
+  type AgentSession, type ResourceLoader, type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionEnvironment } from "../shared/agent.js";
 import type { MemoryTopicSnapshot } from "../shared/memory-tree.js";
@@ -13,14 +13,11 @@ import { environmentResourceOptions, type EnvironmentResourceInput } from "./env
 import { openCliResources } from "./integrations/opencli-resources.js";
 import { reaResources } from "./integrations/rea-resources.js";
 import { taskTools } from "./task-tools.js";
-import { memoryQueryTool, memoryDetailTool } from "./memory-tool.js";
+import { memoryQueryTool } from "./memory-tool.js";
 import { resourceWarnings } from "./reload-resources.js";
 import { topicSnapshot } from "./memory-topics.js";
 
-// Pi 1.1.0 uses this same pure builder in AgentSession. Keep the version-bound
-// bridge here: constructing a SessionManager/AgentSession is NOT a preview.
-const promptModule = import(new URL("./core/system-prompt.js", import.meta.resolve("@earendil-works/pi-coding-agent")).href) as
-  Promise<{ buildSystemPrompt(input: BuildSystemPromptOptions): string }>;
+import { buildAxiomSystemPrompt } from "./axiom-prompt.js";
 
 function resources(loader: ResourceLoader, capabilities?: CapabilityRuntime) {
   const skills = loader.getSkills().skills;
@@ -69,20 +66,19 @@ export async function previewEnvironment(input: EnvironmentResourceInput & { mem
     createReadToolDefinition(input.cwd), createBashToolDefinition(input.cwd), createPowerShellToolDefinition(input.cwd),
     createEditToolDefinition(input.cwd), createWriteToolDefinition(input.cwd), createGrepToolDefinition(input.cwd),
     createFindToolDefinition(input.cwd), createLsToolDefinition(input.cwd), ...taskTools(unavailable), memoryQueryTool(unavailable),
-    memoryDetailTool(() => input.memoryPath),
   ];
   const configured = settings.getDefaultTools();
   const defaults = configured ?? (process.platform === "win32"
     ? ["read", "edit", "write", "powershell"]
     : ["read", "bash", "edit", "write"]);
-  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query", "memory_detail"];
+  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query"];
   const names = [...new Set([...defaults, ...hostNames])].filter(name => definitions.some(tool => tool.name === name));
   const tools = definitions.filter(tool => names.includes(tool.name));
   const toolSnippets = Object.fromEntries(definitions.filter(tool => tool.promptSnippet?.trim()).map(tool =>
     [tool.name, tool.promptSnippet!.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim()]));
   const toolGuidelines = Object.fromEntries(definitions.filter(tool => tool.promptGuidelines?.length).map(tool =>
     [tool.name, [...new Set(tool.promptGuidelines!.map(text => text.trim()).filter(Boolean))]]));
-  const systemPrompt = (await promptModule).buildSystemPrompt({ cwd: input.cwd,
+  const systemPrompt = buildAxiomSystemPrompt({ cwd: input.cwd,
     customPrompt: loader.getSystemPrompt(), appendSystemPrompt: loader.getAppendSystemPrompt().join("\n\n"),
     skills: loader.getSkills().skills, contextFiles: loader.getAgentsFiles().agentsFiles,
     selectedTools: names, toolSnippets, toolGuidelines,

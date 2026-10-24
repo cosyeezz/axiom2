@@ -1,115 +1,84 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
-import { tmpdir } from "./temporary.js";
-import { Store } from "../src/server/storage.js";
-import { Memories } from "../src/server/memories.js";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { memoryDirectory } from "../src/server/memory-files.js";
-import { topicId } from "../src/server/memory-tree.js";
-import type { Session, Workspace } from "../src/shared/protocol.js";
+import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
+import { purposeFixture, selection, classification, navigation } from "./memory-purpose-fixture.js";
 
-const minute = 60_000;
-const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-const completed = "## 目标与范围\n改进记忆浏览\n\n## 任务进度\n整体状态：已完成\n整体进度：100%\n- [已完成] 改进浏览\n";
-const record = { topic: "会话记忆浏览", section: "资料查找", item: "浏览验证", content: "关联资料验证通过" };
-function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "axiom-memory-summary-")), project = join(root, "project"); mkdirSync(project);
-  const store = new Store(root);
-  const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
-  const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
-  const scope = { workspaceId: workspace.id, sessionId: session.id }, memories = new Memories(store, () => {}), directory = memoryDirectory(root, session.id);
-  clearInterval((memories as any).timer); (memories as any).watcher?.close();
-  const configure = (params: Record<string, unknown>) => memories.command({ requestId: randomUUID(), op: "memory.configure", ...scope, params });
-  const model = (target = memories) => {
-    let calls = 0;
-    target.runner = { close: async () => {}, execute: async (input) => {
-      calls++; assert.equal(input.kind, "organize"); assert.ok(JSON.parse(input.prompt).currentFile.content);
-      return { answer: JSON.stringify([record]), incomplete: false };
-    } }; return () => calls;
-  };
-  const entry = () => memories.catalog(scope.workspaceId).find((item) => item.sessionId === scope.sessionId)!;
-  const write = async (suffix = "") => { writeFileSync(join(directory, "MEMORY.md"), completed + suffix); await memories.scanAsync(); };
-  return { root, store, scope, memories, directory, configure, model, entry, write,
-    async close() { await memories.close(); store.close(); rmSync(root, { recursive: true, force: true }); } };
-}
-
-test("legacy summaries migrate to tree contributions without resetting source stability", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.now() }); const f = fixture();
-  try {
-    await f.configure({ organizerModel: selection }); await f.write(); const original = f.entry();
-    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...original, status: "ready", summary: "旧摘要", summaryVersion: 1 }), f.scope.sessionId);
-    const calls = f.model(); t.mock.timers.tick(31 * minute); await f.memories.organize();
-    assert.equal(calls(), 1); assert.equal(f.entry().status, "ready"); assert.equal(f.entry().updatedAt, original.updatedAt);
-    const raw = JSON.parse(String(f.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(f.scope.sessionId)!.body));
-    assert.equal(raw.treeVersion, 1); assert.equal(raw.summary, ""); assert.equal("treeVersion" in f.entry(), false);
-    assert.equal(f.memories.tree(f.scope.workspaceId).topics[0].name, record.topic);
-    await f.memories.scanAsync(); t.mock.timers.tick(31 * minute); await f.memories.organize(); assert.equal(calls(), 1);
+test("purpose classification does not generate summaries, change raw source timing, or repeat on detail changes/rename", async () => {
+  const f = purposeFixture(); try {
+    await f.configure({ organizerModel: selection }); const scope = f.create(); const d = f.detail(scope, "原始结论"); f.memories.scan(scope);
+    const before = f.memories.catalog(f.workspace.id)[0], queuedAt = f.tree.entries(f.workspace.id)[0].queuedAt; let calls = 0;
+    f.memories.runner = { close: async () => {}, execute: async input => { calls++; return classification(input); } };
+    await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, queuedAt + memoryBatchWaitMs), selection, new AbortController().signal);
+    const indexed = f.memories.catalog(f.workspace.id)[0]; assert.equal(indexed.updatedAt, before.updatedAt); assert.equal(indexed.status, "ready"); assert.equal(indexed.summary, ""); assert.deepEqual(indexed.keywords, []);
+    const detail = f.memories.read(scope, d.path); f.memories.save(scope, d.path, detail.revision, "新的结论");
+    f.store.execute({ requestId: "rename", op: "session.rename", ...scope, params: { title: "新会话名称" } }); f.memories.rename(scope); f.memories.scan(scope);
+    await f.memories.organize(); assert.equal(calls, 1); assert.equal(f.tree.entries(f.workspace.id).length, 1); assert.equal(f.tree.entries(f.workspace.id)[0].queuedAt, queuedAt);
   } finally { await f.close(); }
 });
-test("entry and detail changes each restart quiet time while ordinary scans do not", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.now() }); const f = fixture();
-  try {
-    await f.configure({ organizerModel: selection, intervalMs: 1000 }); await f.write(); const start = f.entry().updatedAt, calls = f.model();
-    t.mock.timers.tick(30 * minute); await f.memories.scanAsync(); assert.equal(f.entry().updatedAt, start);
-    await f.memories.organize(); assert.equal(calls(), 0, "strictly more than thirty minutes");
-    t.mock.timers.tick(1001); await f.memories.organize(); assert.equal(calls(), 1);
-    await f.write("新增要求"); const changed = f.entry().updatedAt;
-    t.mock.timers.tick(29 * minute); mkdirSync(join(f.directory, "references")); writeFileSync(join(f.directory, "references/detail.md"), "新增验证结果");
-    await f.memories.scanAsync(); assert.ok(f.entry().updatedAt > changed);
-    t.mock.timers.tick(minute); await f.memories.organize(); assert.equal(calls(), 1);
-    t.mock.timers.tick(29 * minute + 1001); await f.memories.organize(); assert.equal(calls(), 3, "entry and detail each get one request");
+test("old persisted settings/summary tables remain untouched but never drive new classification", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope); const row = f.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(scope.sessionId)!;
+    f.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), title: "旧模型标题", sourceTitle: "真实来源", summary: "旧生成摘要", keywords: ["旧关键词"], dependencies: [{ path: "forged" }] }), scope.sessionId);
+    f.store.db.prepare("INSERT INTO memory_preferences VALUES(1,?)").run(JSON.stringify({ intervalMs: 1, topicNameReviewThresholdChars: 1, readChars: 64000 }));
+    assert.ok(!("intervalMs" in f.memories.preferences())); assert.ok(!("topicNameReviewThresholdChars" in f.memories.preferences())); assert.equal(f.memories.catalog(f.workspace.id)[0].summary, "");
+    assert.deepEqual(f.memories.catalog(f.workspace.id)[0].keywords, []); assert.ok(!("dependencies" in f.memories.catalog(f.workspace.id)[0]));
+    for (const patch of [{ intervalMs: 1 }, { topicNameReviewThresholdChars: 1 }]) await assert.rejects(f.configure(patch), { code: "INVALID_INPUT" });
+    assert.equal(JSON.parse(String(f.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(scope.sessionId)!.body)).summary, "旧生成摘要", "no unauthorized data migration or clearing");
   } finally { await f.close(); }
 });
-test("quiet time and activity survive restart and offline changes restart stability", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.now() }); const f = fixture();
-  try {
-    await f.configure({ organizerModel: selection, intervalMs: 1000 }); await f.write(); const start = f.entry().updatedAt;
-    t.mock.timers.tick(20 * minute); f.memories.touch(f.scope); await f.memories.close(); t.mock.timers.tick(11 * minute);
-    const restarted = new Memories(f.store, () => {}); clearInterval((restarted as any).timer); (restarted as any).watcher?.close();
-    try {
-      await restarted.scanAsync(); assert.equal(restarted.catalog(f.scope.workspaceId)[0].updatedAt, start);
-      const calls = f.model(restarted); await restarted.organize(); assert.equal(calls(), 0);
-      t.mock.timers.tick(20 * minute); await restarted.organize(); assert.equal(calls(), 1);
-    } finally { await restarted.close(); }
-    writeFileSync(join(f.directory, "MEMORY.md"), completed + "停服变化");
-    const changed = new Memories(f.store, () => {}); clearInterval((changed as any).timer); (changed as any).watcher?.close();
-    try { await changed.scanAsync(); assert.equal(changed.catalog(f.scope.workspaceId)[0].updatedAt, Date.now()); } finally { await changed.close(); }
+test("unorganized sources never report classification errors, including missing memory and empty templates", async () => {
+  const f = purposeFixture(); try {
+    const missing = f.create(); rmSync(join(memoryDirectory(f.root, missing.sessionId), "MEMORY.md"));
+    const empty = f.create(""), active = f.create("# [In progress] 尚未完成\n"), pending = f.create();
+    for (const scope of [missing, empty, active, pending]) f.memories.scan(scope);
+    const catalog = f.memories.catalog(f.workspace.id), missingEntry = catalog.find(entry => entry.sessionId === missing.sessionId)!;
+    assert.equal(missingEntry.reason, "missing"); assert.equal(missingEntry.error, "记忆读取失败");
+    assert.equal(catalog.find(entry => entry.sessionId === pending.sessionId)?.status, "pending");
+    assert.ok(catalog.every(entry => entry.organizationError === undefined));
+    assert.equal(f.tree.tree(f.workspace.id).pending, 1); assert.equal(f.tree.tree(f.workspace.id).failed, 0);
   } finally { await f.close(); }
 });
-test("scanning eligible sources never starts organization outside its periodic cycle", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.now() }); const f = fixture();
-  try {
-    await f.configure({ organizerModel: selection }); await f.write(); const calls = f.model(); t.mock.timers.tick(31 * minute);
-    await f.memories.scanAsync(); await new Promise((resolve) => setImmediate(resolve)); assert.equal(calls(), 0);
-    await f.memories.organize(); assert.equal(calls(), 1);
+test("classification errors remain separate from missing sources and clear after a successful retry", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope);
+    f.memories.runner = { close: async () => {}, execute: async () => { throw Error("classification fixture failed"); } };
+    const batch = f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs);
+    await assert.rejects(f.memories.pipeline.organize(batch, selection, new AbortController().signal), /classification fixture failed/);
+    let entry = f.memories.catalog(f.workspace.id).find(entry => entry.sessionId === scope.sessionId)!;
+    assert.equal(entry.organizationError, "classification fixture failed"); assert.equal(entry.error, entry.organizationError);
+    rmSync(join(memoryDirectory(f.root, scope.sessionId), "MEMORY.md")); f.memories.scan(scope);
+    entry = f.memories.catalog(f.workspace.id).find(entry => entry.sessionId === scope.sessionId)!;
+    assert.equal(entry.reason, "missing"); assert.equal(entry.error, "记忆读取失败");
+    assert.equal(entry.organizationError, "classification fixture failed", "source failure must not replace an actual classification error");
+    f.write(scope, "# [Completed] 验证目的\n## [Completed] 验证结果\n"); f.memories.scan(scope);
+    f.memories.runner = { close: async () => {}, execute: async input => classification(input) };
+    await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal);
+    entry = f.memories.catalog(f.workspace.id).find(entry => entry.sessionId === scope.sessionId)!;
+    assert.equal(entry.status, "ready"); assert.equal(entry.error, undefined); assert.equal(entry.organizationError, undefined);
+    assert.equal(f.tree.tree(f.workspace.id).failed, 0);
   } finally { await f.close(); }
 });
-test("four-field content has no legacy 200-character summary restriction", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.now() }); const f = fixture();
-  try {
-    await f.configure({ organizerModel: selection }); await f.write(); t.mock.timers.tick(31 * minute);
-    f.memories.runner = { close: async () => {}, execute: async () => ({ answer: JSON.stringify([{ ...record, content: "😀".repeat(300) }]), incomplete: false }) };
-    await f.memories.organize(); assert.equal(f.entry().status, "ready");
-    assert.equal(f.memories.tree(f.scope.workspaceId).topics[0].sections[0].items[0].contents[0].text, "😀".repeat(300));
+test("oversized classification refuses before any model request without dropping IDs or prior index", async () => {
+  const f = purposeFixture(); try {
+    await f.configure({ readChars: 16000 }); const scope = f.create(); f.memories.scan(scope); f.publish(); const old = f.tree.snapshot(f.workspace.id);
+    f.write(scope, "# [Completed] 验证目的\n" + Array.from({ length: 49 }, (_, i) => `# [Completed] 新目的${i}${"长".repeat(59)}`).join("\n")); f.memories.scan(scope); let calls = 0;
+    f.memories.runner = { close: async () => {}, execute: async () => { calls++; throw Error("must not call"); } };
+    await assert.rejects(f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal), { code: "MEMORY_LIMIT" });
+    assert.equal(calls, 0); assert.equal(f.tree.entries(f.workspace.id).length, 50); assert.deepEqual(f.tree.snapshot(f.workspace.id), old); assert.equal(f.tree.tree(f.workspace.id).failed, 49);
   } finally { await f.close(); }
 });
-test("query requires a single explicit Topic and passes full linked sources without the organization budget", async () => {
-  const f = fixture(); try {
-    await f.configure({ queryModel: selection, readChars: 16000 }); await f.write("[详情](references/result.md)");
-    mkdirSync(join(f.directory, "references")); writeFileSync(join(f.directory, "references/result.md"), "验证通过。".repeat(4000));
-    const tree = f.memories.pipeline.tree;
-    tree.publish(f.scope.workspaceId, { sessionId: f.scope.sessionId, path: "MEMORY.md", revision: f.memories.read(f.scope).revision, records: [], dependencies: [] }, [], [record], tree.signature(f.scope.workspaceId));
-    const missingTopic = await f.memories.query(f.scope, "进展"); assert.equal(missingTopic.incomplete, true); assert.equal(missingTopic.answer, "");
-    let calls = 0;
-    f.memories.runner = { close: async () => {}, execute: async (input) => {
-      calls++; const data = JSON.parse(input.prompt);
-      if (data.sections) return { answer: JSON.stringify([data.sections[0].id]), incomplete: false };
-      assert.equal(data.documents.length, 2); assert.equal(data.documents.find((d: any) => d.path === "references/result.md").content.length, 20000);
-      assert.equal(input.readChars, undefined); return { answer: "修复已验证通过。", incomplete: false };
+test("query reads complete selected details and direct explicit text links without classification read budget", async () => {
+  const f = purposeFixture(); try {
+    await f.configure({ queryModel: selection, readChars: 16000 }); const scope = f.create(); f.detail(scope, "查询结果 [详细依据](../references/result.md)");
+    const directory = memoryDirectory(f.root, scope.sessionId); mkdirSync(join(directory, "references"), { recursive: true }); writeFileSync(join(directory, "references/result.md"), "验证通过。".repeat(4000)); f.memories.scan(scope); f.publish();
+    let calls = 0; f.memories.runner = { close: async () => {}, execute: async input => {
+      calls++; const data = JSON.parse(input.prompt); assert.equal(input.readChars, undefined);
+      if (data.evidence) assert.equal(data.evidence.find((e: any) => e.content.startsWith("验证通过")).content.length, 20000);
+      return navigation(input, "修复已验证通过。");
     } };
-    const result = await f.memories.query(f.scope, "资料浏览的进展", undefined, undefined, topicId(record.topic));
-    assert.equal(calls, 2); assert.equal(result.answer, "修复已验证通过。"); assert.equal(result.readDocuments?.length, 2);
+    const result = await f.memories.query(scope, "资料浏览进展"); assert.equal(result.answer, "修复已验证通过。"); assert.equal(calls, 4); assert.equal(result.readDocuments?.length, 3);
   } finally { await f.close(); }
 });

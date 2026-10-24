@@ -1,6 +1,7 @@
 import { ProviderProxyFields } from "./ProviderProxyFields.js";
 import { LocalPath } from "../LocalPath.js";
 import { Select } from "../Select.js";
+import { ComboInput } from "../ComboInput.js";
 import { Icon } from "../Icon.js";
 import { useEffect, useRef } from "react";
 import type {
@@ -85,37 +86,15 @@ export function ProviderConnection({
             <div className="grid-2">
             <div className="field">
               <label htmlFor="provider-id">供应商 ID</label>
-              <input
-                className="input num"
-                id="provider-id"
-                ref={providerIdInput}
-                list="provider-templates"
-                value={p.providerId}
-                readOnly={!!p.originalId}
-                maxLength={160}
-                onChange={(e) => {
-                  const template = templates.find(
-                    (t) => t.id === e.target.value,
-                  );
-                  patch({
-                    providerId: e.target.value,
-                    ...(template
-                      ? {
-                          name: template.name,
-                          api: template.api,
-                          url: template.url,
-                        }
-                      : {}),
-                  });
-                }}
-              />
-              <datalist id="provider-templates">
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </datalist>
+              {p.originalId ? <input className="input num" id="provider-id" value={p.providerId} readOnly /> :
+                <ComboInput id="provider-id" inputRef={providerIdInput} className="num" label="供应商 ID"
+                  value={p.providerId} maxLength={160} options={templates.map(template => template.id)}
+                  optionLabel={id => { const template = templates.find(item => item.id === id); return template ? `${id} · ${template.name}` : id; }}
+                  onChange={providerId => {
+                    const template = templates.find(item => item.id === providerId);
+                    patch({ providerId, ...(template ? { name: template.name, api: template.api, url: template.url } : {}) });
+                  }} />}
+
               <span className="field-help">
                 选择内置 ID 或自定义；保存后不可修改。
               </span>

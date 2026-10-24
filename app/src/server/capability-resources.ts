@@ -13,6 +13,7 @@ import { openCliResources } from "./integrations/opencli-resources.js";
 import { addReaServer, reaResources } from "./integrations/rea-resources.js";
 import { builtinCapability, resolveBuiltinSkills } from "./builtin-capabilities.js";
 import { reaConfigPath } from "./integrations/rea-runtime.js";
+import { piDevelopmentSkillPath } from "./axiom-prompt.js";
 
 type McpConfig = ReturnType<NonNullable<McpExtensionOptions["loadConfig"]>>;
 // Pi 1.1.0 exports the extension, but not its config reader. Keep the version-bound
@@ -71,7 +72,7 @@ export async function discoverCapabilities(root: string, cwd: string, sharedPiDi
       if (item.enabled && !known.has(id)) { skillPaths.push(path); known.add(id); }
     }
   }
-  const loaded = loadSkills({ cwd, agentDir, skillPaths, includeDefaults: false });
+  const loaded = loadSkills({ cwd, agentDir, skillPaths: [...skillPaths, piDevelopmentSkillPath], includeDefaults: false });
   const opencli = openCliResources(root, cwd), rea = reaResources(root, cwd);
   const builtinSkills = [...opencli.skills, ...rea.skills];
   const skills = resolveBuiltinSkills(loaded.skills, builtinSkills);

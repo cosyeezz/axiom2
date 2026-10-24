@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { isReaEngineId, type ReaEngineId, type ReaEnginePaths } from "../../shared/rea-engines.js";
+import { compareEngineVersions, isReaEngineId, type ReaEngineDownload, type ReaEngineId, type ReaEnginePaths } from "../../shared/rea-engines.js";
 import { validEnginePaths } from "./rea-engines.js";
 
 export const reaSkillName = "reverse-engineer-anything";
@@ -14,12 +14,30 @@ export function reaSupportedNode(version = process.versions.node) {
 }
 export const reaProgramDirectoryPattern = /^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/;
 export const reaEngineDirectoryPattern = /^(java|ghidra|jadx|wabt)-[a-f0-9-]{36}$/;
-export type ManagedReaEngine = { directory: string; path: string };
-export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; managedEngines?: Partial<Record<ReaEngineId, ManagedReaEngine[]>>; removalPending?: string[]; installation?: { directory: string; version: string } };
+export const reaDownloadDirectoryPattern = /^(ghidra|hopper)-[a-f0-9-]{36}$/;
+export type ManagedReaEngine = { directory: string; path: string; version?: string };
+export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; downloads?: Partial<Record<ReaEngineId, ReaEngineDownload>>; managedEngines?: Partial<Record<ReaEngineId, ManagedReaEngine[]>>; downloadRemovalPending?: string[]; removalPending?: string[]; installation?: { directory: string; version: string } };
+// Component confirmations survive commits by other components. Program changes
+// still invalidate every confirmation because they change the REA contract.
+export function reaEngineRevision(config: ReaConfig, id: ReaEngineId) {
+  return createHash("sha256").update(JSON.stringify([
+    config.installation?.directory ?? null, config.installation?.version ?? null,
+    config.engines?.[id] ?? null,
+    (config.managedEngines?.[id] ?? []).map(item => [item.directory, item.path, item.version ?? null]),
+    config.downloads?.[id] ? [config.downloads[id]!.directory, config.downloads[id]!.filename, config.downloads[id]!.version] : null,
+    (config.removalPending ?? []).filter(name => name.startsWith(`${id}-`)).sort(),
+    (config.downloadRemovalPending ?? []).filter(name => name.startsWith(`${id}-`)).sort(),
+  ])).digest("hex");
+}
 function validManagedEngines(value: unknown): boolean {
   return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([id, records]) =>
     isReaEngineId(id) && id !== "hopper" && Array.isArray(records) && records.every(record => record && typeof record.directory === "string" &&
-      reaEngineDirectoryPattern.test(record.directory) && record.directory.startsWith(`${id}-`) && validEnginePaths({ [id]: record.path }) && !!record.path));
+      reaEngineDirectoryPattern.test(record.directory) && record.directory.startsWith(`${id}-`) && validEnginePaths({ [id]: record.path }) && !!record.path &&
+      (record.version === undefined || typeof record.version === "string" && record.version.length <= 80 && compareEngineVersions(record.version, record.version) === 0)));
+}
+function validDownloads(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([id, record]) =>
+    ["ghidra", "hopper"].includes(id) && record && typeof record.directory === "string" && reaDownloadDirectoryPattern.test(record.directory) && record.directory.startsWith(`${id}-`) && validReaVersion(record.version) && record.filename === (id === "ghidra" ? "package.zip" : "package.dmg"));
 }
 export function readReaConfig(root: string): ReaConfig {
   try {
@@ -28,7 +46,9 @@ export function readReaConfig(root: string): ReaConfig {
         value.skillInstalled !== undefined && typeof value.skillInstalled !== "boolean" ||
         value.mcpInstalled !== undefined && typeof value.mcpInstalled !== "boolean" ||
         value.engines !== undefined && !validEnginePaths(value.engines) ||
+        value.downloads !== undefined && !validDownloads(value.downloads) ||
         value.managedEngines !== undefined && !validManagedEngines(value.managedEngines) ||
+        value.downloadRemovalPending !== undefined && (!Array.isArray(value.downloadRemovalPending) || value.downloadRemovalPending.some((name: unknown) => typeof name !== "string" || !reaDownloadDirectoryPattern.test(name))) ||
         value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some((name: unknown) => typeof name !== "string" || !reaProgramDirectoryPattern.test(name) && !reaEngineDirectoryPattern.test(name))) ||
         value.installation && (!validReaVersion(value.installation.version) || typeof value.installation.directory !== "string" ||
           !reaProgramDirectoryPattern.test(value.installation.directory))) throw Error();

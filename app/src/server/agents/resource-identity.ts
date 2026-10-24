@@ -4,6 +4,7 @@ import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { openCliConfigPath, openCliSkillNames, readOpenCliConfig } from "../integrations/opencli-runtime.js";
 import { reaConfigPath, reaPackageRoot, reaSkillName, readReaConfig } from "../integrations/rea-runtime.js";
+import { piDevelopmentSkillPath } from "../axiom-prompt.js";
 
 type Resource = { path: string; kind: "missing" | "directory" | "file"; revision?: string };
 const revision = (stat?: BigIntStats) => stat
@@ -91,6 +92,7 @@ function* resources(cwd: string, agentDir: string, witnesses?: Map<string, Witne
     for (const name of names) yield* visit(join(directory, name));
   }
   const root = dirname(agentDir);
+  yield* visit(dirname(piDevelopmentSkillPath));
   yield* visit(openCliConfigPath(root));
   const opencli = readOpenCliConfig(root);
   if (opencli && !opencli.detached) {

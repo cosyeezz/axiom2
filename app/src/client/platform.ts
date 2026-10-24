@@ -9,14 +9,29 @@ if (!crypto.randomUUID) Object.defineProperty(crypto, "randomUUID", { value: () 
 if (!navigator.clipboard) Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => {
   const previous = document.activeElement as HTMLElement | null;
   const field = document.createElement("textarea"); field.value = text;
-  field.style.cssText = "position:fixed;inset:0 auto auto 0;width:1px;height:1px;opacity:0";
-  document.body.append(field); field.select();
-  const copied = document.execCommand("copy"); field.remove(); previous?.focus({ preventScroll: true });
-  if (!copied) throw Error("无法复制，请长按文字手动复制。");
+  field.style.cssText = "position:fixed;inset:0 auto auto 0;width:1px;height:1px;opacity:0;font-size:16px";
+  // A body child is inert while a native modal is open: execCommand may report
+  // success without copying. Keep the fallback inside the active dialog instead.
+  const dialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]");
+  const host = previous?.closest("dialog[open]") ?? dialogs[dialogs.length - 1] ?? document.body;
+  host.append(field);
+  try {
+    field.focus({ preventScroll: true }); field.select();
+    if (!document.execCommand("copy")) throw Error("无法复制，请长按文字手动复制。");
+  } finally { field.remove(); previous?.focus({ preventScroll: true }); }
 } } });
 const viewport = window.visualViewport;
 if (viewport) {
-  const resize = () => { if (viewport.scale === 1) document.documentElement.style.setProperty("--visual-height", `${viewport.height}px`); };
-  viewport.addEventListener("resize", resize); resize();
+  let frame = 0;
+  const apply = () => {
+    frame = 0;
+    // Preserve pinch zoom. Mobile inputs stay >=16px so focus need not zoom.
+    if (viewport.scale !== 1) return;
+    const height = `${Math.round(viewport.height)}px`;
+    if (document.documentElement.style.getPropertyValue("--visual-height") !== height)
+      document.documentElement.style.setProperty("--visual-height", height);
+  };
+  viewport.addEventListener("resize", () => { if (!frame) frame = requestAnimationFrame(apply); });
+  apply();
 }
 export {};

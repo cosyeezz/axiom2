@@ -5,22 +5,27 @@ import { chatMessage, transcriptMessages } from "../src/server/transcript.js";
 import { thinkingDisplay } from "../src/server/thinking-display.js";
 import { optimisticStart, optimisticState, pendingMessages, reconcileOptimistic, clearOptimistic } from "../src/client/chat/optimistic.js";
 
-test("task notices project terminal states without changing native payloads or user JSON", () => {
+test("internal task notifications stay native but never project into live or historical UI", () => {
   const manager = SessionManager.inMemory();
-  for (const [status, label] of Object.entries({ completed: "子代理已完成", cancelled: "子代理已取消", failed: "子代理执行失败", interrupted: "子代理执行中断" })) {
-    const content = JSON.stringify({ taskId: "private-task", runId: "private-run", resultId: status, status });
-    const native = { role: "custom", customType: "axiom-result", display: true, content };
-    const original = structuredClone(native);
-    const view = chatMessage(native, status)!;
-    assert.equal(view.text, label); assert.equal(view.taskNotice, status);
-    assert.deepEqual(native, original);
-    assert.equal(chatMessage({ role: "user", content }, "user")!.text, content);
-    manager.appendCustomMessageEntry("axiom-result", content, true);
+  const payloads: string[] = [];
+  for (const status of ["completed", "cancelled", "failed", "interrupted", "future-state"]) {
+    for (const identity of [{}, { notice: "内部子代理结果通知，并非用户输入或新的任务请求" }]) {
+      const content = JSON.stringify({ ...identity, taskId: "private-task", runId: "private-run", resultId: status, status });
+      const native = { role: "custom", customType: "axiom-result", display: true, content };
+      const original = structuredClone(native);
+      assert.equal(chatMessage(native, status), null);
+      assert.deepEqual(native, original);
+      assert.equal(chatMessage({ role: "user", content }, "user")!.text, content);
+      manager.appendCustomMessageEntry("axiom-result", content, true);
+      payloads.push(content);
+    }
   }
-  assert.deepEqual(transcriptMessages(manager).map((m) => m.text), ["子代理已完成", "子代理已取消", "子代理执行失败", "子代理执行中断"]);
-  assert.ok(JSON.stringify(manager.getEntries()).includes("private-task"));
-  for (const content of ["not JSON", "null", '{"status":"__proto__"}', '{"status":"future-state"}'])
-    assert.equal(chatMessage({ role: "custom", customType: "axiom-result", display: true, content }, "bad")!.text, "收到子代理状态通知");
+  assert.deepEqual(transcriptMessages(manager), []);
+  assert.deepEqual(transcriptMessages(manager, true), []);
+  assert.deepEqual(manager.getEntries().filter(e => e.type === "custom_message").map(e => e.content), payloads);
+  for (const content of ["not JSON", "null", '{"status":"__proto__"}'])
+    assert.equal(chatMessage({ role: "custom", customType: "axiom-result", display: true, content }, "bad"), null);
+  assert.equal(chatMessage({ role: "custom", customType: "extension-notice", display: true, content: "ordinary notice" }, "other")!.text, "ordinary notice");
 });
 
 test("thinking projection handles native, leading tagged, partial and historical blocks", () => {

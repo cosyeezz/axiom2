@@ -49,10 +49,11 @@ test("independent titles: real worker cadence, memory and details, no main-conte
   };
   const state = (scope: Scope) => app!.store.db.prepare("SELECT title,titleState FROM sessions WHERE id=?").get(scope.sessionId)!;
   const writeMemory = (scope: Scope) => {
-    const dir = memoryDirectory(root, scope.sessionId); mkdirSync(join(dir, "references"), { recursive: true });
+    const dir = memoryDirectory(root, scope.sessionId); mkdirSync(join(dir, "details/修复布局"), { recursive: true });
     // Keep the independent-title fixture out of the unfinished-task auto-continuation flow.
-    writeFileSync(join(dir, "MEMORY.md"), "# 修复布局\n## [已完成] 窄屏修复 〔1〕");
-    writeFileSync(join(dir, "references/details.md"), "<!-- detail:1:start -->\nDETAIL_ONE_SENTINEL\n<!-- detail:1:end -->\n<!-- detail:2:start -->\nUNRELATED_DETAIL_TWO\n<!-- detail:2:end -->\n");
+    writeFileSync(join(dir, "MEMORY.md"), "# [已完成] 修复布局\n## [已完成] 窄屏修复");
+    writeFileSync(join(dir, "details/修复布局/窄屏修复.md"), "DETAIL_ONE_SENTINEL");
+    writeFileSync(join(dir, "details/无关文件.md"), "UNRELATED_DETAIL_TWO");
   };
   const main = () => requests.filter(r => !r.title), titles = () => requests.filter(r => r.title);
   const nextMain = async (index: number) => { await wait(() => main().length > index, "main request missing"); return main()[index]; };

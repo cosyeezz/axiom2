@@ -45,7 +45,7 @@ try {
         const search = await page.getByRole("searchbox", { name: "搜索当前供应商的模型" }).boundingBox();
         assert.ok(search && search.width >= width - 40, `model search must have its own row at ${width}`);
       }
-      assert.equal(await page.locator('.topnav button').count(), 0, 'configuration actions must not be in the header');
+      assert.equal(await page.locator('.topnav button:not(.maintenance-launcher)').count(), 0, 'configuration actions must not be in the header');
       assert.equal(await page.locator('.configuration-actions button').count(), 3);
       assert.equal(await page.locator('.config-reload').innerText(), '', 'reload uses only an SVG');
       const panel = page.getByRole('tabpanel');
@@ -69,6 +69,7 @@ try {
   let seq = 0, opens = 0, loggedIn = false, configReads = 0, legacyCapabilities = true, failNext = false;
   const reads = new Set<string>();
   const startedProviders: string[] = [];
+  const startedProxies: unknown[] = [];
   let supportedProviders: { id: string; name: string }[] = [];
   await page.routeWebSocket("**/ws", (route) => {
     const server = route.connectToServer();
@@ -82,6 +83,7 @@ try {
         assert.equal(c.params!.type, "oauth");
         flow.providerId = c.params!.providerId as string;
         startedProviders.push(flow.providerId);
+        startedProxies.push(c.params!.proxy);
         reply({ id: flow.id }); auth(flow);
       }
       else if (c.op === "auth.open") {
@@ -246,6 +248,11 @@ try {
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
   await chooseSelect(page, providerSelect, "openai");
+  const proxyMode = setup.getByRole("combobox", { name: "授权与模型代理", exact: true });
+  await chooseSelect(page, proxyMode, "builtin");
+  await setup.getByRole("combobox", { name: "内置线路", exact: true }).waitFor();
+  await chooseSelect(page, proxyMode, "external");
+  await setup.locator("#provider-proxy-url").fill("http://127.0.0.1:17890");
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   const login = page.locator(".oauth-login-panel");
   assert.equal(await page.getByRole("dialog").count(), 0);
@@ -278,6 +285,7 @@ try {
   await setup.getByRole("button", { name: "浏览器登录", exact: true }).click();
   await login.locator("#auth-answer").waitFor();
   assert.deepEqual(startedProviders, ["openai", "openai"]);
+  assert.deepEqual(startedProxies, [{ mode: "external", url: "http://127.0.0.1:17890" }, { mode: "direct" }]);
   await login.getByRole("button", { name: "取消登录", exact: true }).click();
   await login.waitFor({ state: "detached" });
   failNext = true;

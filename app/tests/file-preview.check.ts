@@ -43,6 +43,7 @@ try {
     window.previewUnsafe = true;
     try { parent.document.body.dataset.unsafe = 'true'; } catch { document.body.dataset.parentBlocked = 'true'; }
     try { localStorage.setItem('unsafe', 'true'); } catch { document.body.dataset.storageBlocked = 'true'; }
+    fetch('https://preview-network.invalid/allowed').then(() => document.body.dataset.networkAllowed = 'true', () => document.body.dataset.networkAllowed = 'false');
     fetch('/api/status').then(() => document.body.dataset.networkBlocked = 'false', () => document.body.dataset.networkBlocked = 'true');
     let clicks = 0; document.querySelector('#counter').onclick = event => event.target.textContent = '点击 ' + ++clicks;
   </script></body></html>`);
@@ -70,6 +71,8 @@ try {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   const externalRequests: string[] = [];
   await page.route("https://preview-egress.invalid/**", route => { externalRequests.push(route.request().url()); return route.abort(); });
+  let allowedRequests = 0;
+  await page.route("https://preview-network.invalid/**", route => { allowedRequests++; return route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": "*" }, body: "allowed" }); });
   let hold = false, held: (() => void) | undefined;
   const requests = new Map<string, string>(); let revealRequest: any;
   let previewStarts = 0;
@@ -189,18 +192,19 @@ try {
   await open("HTML 文件");
   const html = page.frameLocator(".file-html-frame").frameLocator("iframe");
   await html.getByRole("heading", { name: "HTML 页面已显示" }).waitFor();
-  assert.equal(await page.locator(".file-html-frame").getAttribute("sandbox"), "");
-  assert.equal(await page.frameLocator(".file-html-frame").locator("iframe").getAttribute("sandbox"), "");
-  assert.equal(await html.locator("body").getAttribute("data-companion"), null, "scripts are disabled by default");
-  await page.screenshot({ path: join(artifacts, "html-static-1440.png") });
+  assert.equal(await page.locator(".file-html-frame").getAttribute("sandbox"), "allow-scripts");
+  assert.equal(await page.frameLocator(".file-html-frame").locator("iframe").getAttribute("sandbox"), "allow-scripts");
+  await html.locator('body[data-companion="loaded"][data-network-allowed="true"]').waitFor();
+  assert.ok(allowedRequests > 0, "network requests succeed without confirmation");
+  assert.equal(await page.getByRole("button", { name: "禁止普通联网", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.screenshot({ path: join(artifacts, "html-default-1440.png") });
   await html.locator("#local-image").evaluate((node: HTMLImageElement) => node.decode());
-  assert.equal(await html.locator("body").evaluate(node => getComputedStyle(node).backgroundColor), "rgb(235, 245, 250)", "static CSS remains visible without scripts");
+  assert.equal(await html.locator("body").evaluate(node => getComputedStyle(node).backgroundColor), "rgb(235, 245, 250)");
   const enableScripts = async () => {
     await page.getByRole("button", { name: "启用页面脚本", exact: true }).click();
     await html.locator('body[data-companion="loaded"]').waitFor();
   };
-  await enableScripts();
-  assert.equal(await html.locator("body").getAttribute("data-companion"), "loaded");
+  assert.equal(await html.locator("body").getAttribute("data-companion"), "loaded", "scripts run by default");
   assert.equal(await html.locator("body").getAttribute("data-literal"), "<link rel='stylesheet' href='page.css'>");
   assert.equal(await html.locator("textarea").inputValue(), "<link rel='stylesheet' href='page.css'>");
   assert.equal(await html.locator("body").getAttribute("data-parent-blocked"), "true");
@@ -248,7 +252,7 @@ try {
     await page.screenshot({ path: join(artifacts, `html-${width}.png`) });
   }
   await page.getByRole("button", { name: "重新加载文件", exact: true }).click();
-  await enableScripts();
+  await html.locator('body[data-companion="loaded"][data-network-allowed="true"]').waitFor();
   await html.getByRole("button", { name: "点击 0", exact: true }).waitFor();
   for (const method of ["script", "link", "refresh"]) {
     const wrapper = (await (await page.locator(".file-html-frame").elementHandle())!.contentFrame())!;
@@ -262,27 +266,33 @@ try {
     await frame.waitForURL("chrome-error://chromewebdata/");
     assert.deepEqual(externalRequests, []);
     await page.getByRole("button", { name: "重新加载文件", exact: true }).click();
-    await enableScripts();
+    await html.locator('body[data-companion="loaded"][data-network-allowed="true"]').waitFor();
     await html.getByRole("button", { name: "点击 0", exact: true }).waitFor();
   }
   await page.getByRole("button", { name: "停用页面脚本", exact: true }).click();
   await html.locator('body:not([data-companion])').waitFor();
   assert.equal(await page.locator(".file-html-frame").getAttribute("sandbox"), "");
   await enableScripts();
+  await page.getByRole("button", { name: "停用页面脚本", exact: true }).click();
+  await page.getByRole("button", { name: "禁止普通联网", exact: true }).click();
   await close();
   await open("HTML 文件");
-  await html.getByRole("heading", { name: "HTML 页面已显示" }).waitFor();
-  assert.equal(await html.locator("body").getAttribute("data-companion"), null, "closing and reopening resets script permission");
-  assert.equal(await page.frameLocator(".file-html-frame").locator("iframe").getAttribute("sandbox"), "");
+  await html.locator('body[data-companion="loaded"][data-network-allowed="true"]').waitFor();
+  assert.equal(await page.frameLocator(".file-html-frame").locator("iframe").getAttribute("sandbox"), "allow-scripts", "reopening restores scripts");
   const networkDialog = page.getByRole("dialog", { name: "允许页面联网？", exact: true });
+  assert.equal(await page.getByRole("button", { name: "禁止普通联网", exact: true }).getAttribute("aria-pressed"), "true", "reopening restores networking");
+  await page.getByRole("button", { name: "禁止普通联网", exact: true }).click();
+  await html.locator('body[data-network-allowed="false"]').waitFor();
   const allowNetwork = page.getByRole("button", { name: "允许联网", exact: true });
-  await allowNetwork.click(); await networkDialog.waitFor();
-  await networkDialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(await allowNetwork.getAttribute("aria-pressed"), "false");
-  await allowNetwork.click(); await networkDialog.getByRole("button", { name: "允许联网", exact: true }).click();
-  await networkDialog.waitFor({ state: "detached" });
+  const requestsBeforeEnabling = allowedRequests;
+  await allowNetwork.click();
+  await html.locator('body[data-network-allowed="true"]').waitFor();
+  assert.ok(allowedRequests > requestsBeforeEnabling, "reenabling networking takes effect immediately");
+  assert.equal(await networkDialog.count(), 0, "network toggle needs no confirmation");
   assert.equal(await page.getByRole("button", { name: "禁止普通联网", exact: true }).getAttribute("aria-pressed"), "true");
   await page.getByRole("button", { name: "禁止普通联网", exact: true }).click();
+  await page.getByRole("button", { name: "停用页面脚本", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 900 });
   await htmlGeometry(); await geometry();
   await page.screenshot({ path: join(artifacts, "html-static-390.png") });
@@ -320,7 +330,6 @@ try {
   for (let i = 0; i < 30; i++) { try { await fetch(projectUrl); await page.waitForTimeout(50); } catch { break; } } await assert.rejects(fetch(projectUrl));
   if (process.env.AXIOM_HTML_FIXTURE) {
     await open("实际页面");
-    await page.getByRole("button", { name: "启用页面脚本", exact: true }).click();
     const draft = page.frameLocator(".file-html-frame").frameLocator("iframe");
     await draft.locator("#device").waitFor();
     assert.deepEqual(await draft.locator(".sprite").evaluate(node => { const style = getComputedStyle(node); return [style.position, style.width, style.height]; }), ["absolute", "0px", "0px"]);

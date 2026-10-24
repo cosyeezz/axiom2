@@ -163,6 +163,7 @@ export class TaskDelivery {
         .prepare("UPDATE tasks SET status=?,error=? WHERE id=? AND runId=?")
         .run(status, result.reason, row.id, run.id);
       if (inserted) {
+        this.records.modelRef("result", result.id);
         this.store.recordResult(row.sessionId, run.id, "run");
         this.store.recordResult(row.parentSessionId, result.id, "task");
       }
@@ -217,7 +218,7 @@ export class TaskDelivery {
     )
       return;
     this.notifying.add(scope.sessionId);
-    this.track(
+    return this.track(
       (async () => {
         try {
           const list = this.store.db
@@ -228,7 +229,7 @@ export class TaskDelivery {
           if (run && running(run) && run.status !== "running") return;
           const items = list.map((row) => {
             const result: TaskResult = JSON.parse(String(row.body));
-            return { id: result.id, content: JSON.stringify({ taskId: result.taskId, runId: result.runId, resultId: result.id, status: result.status }) };
+            return { id: result.id, content: JSON.stringify({ notice: "内部子代理结果通知，并非用户输入或新的任务请求", taskId: this.records.modelRef("task", result.taskId), resultId: this.records.modelRef("result", result.id), status: result.status }) };
           });
           const attemptId = randomUUID();
           this.store.db.exec("BEGIN IMMEDIATE");

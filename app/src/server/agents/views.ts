@@ -1,4 +1,6 @@
 import { statSync } from "node:fs";
+import { historyProjection, type HistoryProjection } from "../history-projection.js";
+import type { HistoryRead } from "../../shared/history.js";
 import { AppError, scopeKey, type Scope } from "../../shared/protocol.js";
 import {
   agentScope,
@@ -19,6 +21,7 @@ import {
   boundedMessage,
   openTranscript,
   transcriptMessages,
+  transcriptEntries,
   transcriptImage,
 } from "../transcript.js";
 export class AgentViews {
@@ -35,6 +38,9 @@ export class AgentViews {
   private layouts = new WeakMap<Map<string, ChatMessage>, Pick<ThreadIndex, "ids" | "groups">>();
   private originals = new Lru<string, { source: string; messages: Map<string, ChatMessage>; bytes: number }>(5);
   private originalCleanup?: NodeJS.Immediate;
+  private histories = new Lru<string, { source: string; projection: HistoryProjection }>(5);
+  private counts = new Lru<string, { source: string; ids: Set<string> }>(256);
+  private countChanges = new Set<string>();
   private timers = new Map<string, NodeJS.Timeout>();
   private changedMessages = new Map<string, Map<string, ChatMessage>>();
   readonly queues = new Map<string, NonNullable<AgentInfo["queue"]>>();
@@ -96,27 +102,9 @@ export class AgentViews {
         .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
         .get(scope.sessionId);
       const manager = row?.file
-        ? openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path)
+        ? openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path, { readOnly: true })
         : null;
       const list = manager ? transcriptMessages(manager) : [];
-      // Compaction can remove both a task's card and its result notice. Keep the
-      // actual unread notices in the display projection so the client can render
-      // and acknowledge them; a summary alone is not proof of reading a result.
-      // Only recover notices from this session's current branch, never agent input.
-      if (manager && list.some((message) => message.compression)) {
-        const missing = new Set(this.store.db.prepare(
-          "SELECT sourceId FROM session_results WHERE sessionId=? AND kind='task' AND version>(SELECT readVersion FROM sessions WHERE id=?)",
-        ).all(scope.sessionId, scope.sessionId).map((row) => String(row.sourceId)));
-        for (const message of [...list, ...(this.transient.get(scope.sessionId)?.values() ?? [])])
-          if (message.taskNotice && message.resultId) missing.delete(message.resultId);
-        if (missing.size) {
-          const notices = transcriptMessages(manager, true).filter((message) =>
-            message.taskNotice && message.resultId && missing.delete(message.resultId));
-          // Recovered history belongs below its summary, not above the current context.
-          const compressionIndex = list.findIndex(message => message.compression);
-          list.splice(compressionIndex + 1, 0, ...notices);
-        }
-      }
       messages = new Map(list.map((m) => [m.id, m]));
       for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
       this.messages.set(scope.sessionId, messages);
@@ -148,6 +136,26 @@ export class AgentViews {
       return { ids: [], groups: [], error: (e as Error).message };
     }
   }
+  messageCount(scope: Scope): number | undefined {
+    try {
+      const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
+      const file = row?.file ? String(row.file) : null;
+      const stat = file ? statSync(file, { bigint: true }) : null;
+      const source = `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
+      let saved = this.counts.get(scope.sessionId);
+      if (saved?.source !== source) {
+        const entries = file ? transcriptEntries(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), true) : [];
+        const ids = new Set(entries.filter(({ message }) => message.role === "user" || message.role === "assistant" ||
+          message.role === "custom" && message.customType === "axiom-append").map(entry => entry.id));
+        saved = { source, ids };
+        this.counts.set(scope.sessionId, saved);
+      }
+      let count = saved.ids.size;
+      for (const [id, message] of this.transient.get(scope.sessionId) ?? [])
+        if (!saved.ids.has(id) && (message.role === "user" || message.role === "assistant")) count++;
+      return count;
+    } catch { return undefined; } // Unreadable history is unknown, not an empty conversation.
+  }
   original(scope: Scope) {
     this.owner(scope);
     const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
@@ -156,7 +164,7 @@ export class AgentViews {
     const source = `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
     let saved = this.originals.get(scope.sessionId);
     if (saved?.source !== source) {
-      const list = file ? transcriptMessages(openTranscript(file, this.store.workspace(scope.workspaceId).path), true) : [];
+      const list = file ? transcriptMessages(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), true) : [];
       const bytes = list.reduce((total, message) => total + 256 + 2 * (message.id.length + message.text.length +
         (message.thinking?.length ?? 0) + (message.error?.length ?? 0) + (message.calls?.reduce((sum, call) => sum + call.input.length, 0) ?? 0)), 0);
       saved = { source, messages: new Map(list.map((message) => [message.id, message])), bytes };
@@ -176,8 +184,43 @@ export class AgentViews {
     for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
     return messages;
   }
+  private history(scope: Scope) {
+    this.owner(scope);
+    const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
+    const file = row?.file ? String(row.file) : null;
+    if (!file) return { index: { revision: "empty", segments: [] }, messages: new Map<string, ChatMessage>(), bytes: 0 } satisfies HistoryProjection;
+    const stat = statSync(file, { bigint: true });
+    const source = `${file}:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
+    let saved = this.histories.get(scope.sessionId);
+    if (saved?.source !== source) {
+      saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source) };
+      this.histories.delete(scope.sessionId);
+      if (saved.projection.bytes <= 32 * 1024 * 1024) {
+        while ([...this.histories.values()].reduce((sum, value) => sum + value.projection.bytes, saved.projection.bytes) > 32 * 1024 * 1024)
+          this.histories.delete(this.histories.keys().next().value!);
+        this.histories.set(scope.sessionId, saved);
+      }
+    }
+    return saved.projection;
+  }
+  historyIndex(scope: Scope) { return this.history(scope).index; }
+  historyRead(scope: Scope, segmentId: string, groupId?: string): HistoryRead {
+    const projection = this.history(scope);
+    const segment = projection.index.segments.find(segment => segment.id === segmentId);
+    if (!segment) throw new AppError("NOT_FOUND", "历史区间已变化，请重新加载");
+    const group = groupId === undefined ? undefined : segment.groups.find(group => group.id === groupId);
+    if (groupId !== undefined && !group) throw new AppError("NOT_FOUND", "对话分组不属于此区间");
+    const ids = new Set(group?.ids ?? [segment.id]);
+    for (const id of [...ids]) for (const call of projection.messages.get(id)?.calls ?? []) ids.add(`tool-${call.id}`);
+    return { revision: projection.index.revision, messages: [...ids].flatMap(id => {
+      // IDs are already validated against this segment's calls; a result delta can precede disk persistence.
+      const value = this.current(scope, id) ?? projection.messages.get(id);
+      return value ? [boundedMessage(value)] : [];
+    }) };
+  }
   message(scope: Scope, id: string, full = false) {
-    const value = this.transcript(scope).get(id) ?? (full ? this.original(scope).get(id) : undefined);
+    this.owner(scope);
+    const value = this.current(scope, id) ?? this.transcript(scope).get(id) ?? (full ? this.history(scope).messages.get(id) : undefined);
     if (!value) {
       if (id.startsWith("tool-")) return null;
       throw new AppError("NOT_FOUND", "消息不存在或不属于此会话");
@@ -191,7 +234,7 @@ export class AgentViews {
     const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
     if (!row?.file) throw new AppError("NOT_FOUND", "此会话没有已保存图片");
     // No bytes in view caches, subscriptions or persisted command receipts.
-    return transcriptImage(openTranscript(String(row.file), workspace.path), messageId, imageId, true);
+    return transcriptImage(openTranscript(String(row.file), workspace.path, { readOnly: true }), messageId, imageId, true);
   }
   changed(scope: Scope) {
     if (this.observed(threadScope(scope))) this.publish(threadScope(scope), this.thread(scope));
@@ -207,6 +250,7 @@ export class AgentViews {
     // message_end precedes native persistence. Retain terminal deltas until a complete disk record acknowledges them.
     const active = this.transient.get(scope.sessionId) ?? new Map<string, ChatMessage>();
     active.set(message.id, message); this.transient.set(scope.sessionId, active);
+    if (!previous && (message.role === "user" || message.role === "assistant")) this.countChanges.add(scope.sessionId);
     const fresh = !messages?.has(message.id),
       layoutChanged =
         previous?.phase !== message.phase ||
@@ -239,6 +283,7 @@ export class AgentViews {
         ...boundedMessage(message), ...(message.deliveryTiming ? { deliveryTiming: message.deliveryTiming } : {}),
       });
     this.changedMessages.delete(scope.sessionId);
+    if (this.countChanges.delete(scope.sessionId)) this.publish(`sessions:${scope.workspaceId}`);
   }
   publishMessages(scope: Scope) {
     const key = `messages:${scope.workspaceId}:${scope.sessionId}`;
@@ -258,8 +303,9 @@ export class AgentViews {
   forget(scope: Scope) {
     clearTimeout(this.timers.get(scope.sessionId));
     this.timers.delete(scope.sessionId); this.changedMessages.delete(scope.sessionId);
-    this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId);
+    this.transient.delete(scope.sessionId); this.originals.delete(scope.sessionId); this.histories.delete(scope.sessionId);
     this.contextRevision.delete(scope.sessionId); this.messages.delete(scope.sessionId); this.queues.delete(scope.sessionId);
+    this.counts.delete(scope.sessionId); this.countChanges.delete(scope.sessionId);
   }
   recoverRequestUsage(scope: Scope) {
     this.owner(scope);
@@ -281,6 +327,7 @@ export class AgentViews {
     this.flush(scope); // Old deltas must precede the compaction/reset snapshot.
     this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
     this.originals.delete(scope.sessionId);
+    this.histories.delete(scope.sessionId);
     this.transient.delete(scope.sessionId);
     this.messages.delete(scope.sessionId);
     this.publishMessages(scope);

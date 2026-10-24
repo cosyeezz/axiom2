@@ -2,14 +2,17 @@ export type MemoryState = "未开始" | "进行中" | "已完成" | "等待" | "
 export interface MemoryNode {
   kind: "heading" | "task"; title: string; state?: MemoryState;
   depth: number; line: number; endLine: number; parent: number | null;
-  abandoned: boolean; waiting: boolean; details: number[];
+  abandoned: boolean; waiting: boolean;
 }
 export interface MemoryOutline { title: string; titleLine: number | null; nodes: MemoryNode[]; abandonedLines: boolean[] }
-export const detailFile = "references/details.md";
-export const detailIds = (text: string) => [...new Set([...text.matchAll(/〔([1-9]\d*)〕/g)].map(match => Number(match[1])).filter(Number.isSafeInteger))];
-const states = /^(?:~~)?\[(未开始|进行中|已完成|等待|已放弃|失败|已删除|阻塞|[xX ])\]\s*/;
-const stateOf = (value: string): MemoryState => value === "x" || value === "X" ? "已完成" : value === " " ? "未开始" : value === "已删除" ? "已放弃" : value as MemoryState;
-const clean = (value: string) => value.replace(states, "").replace(/〔[1-9]\d*〕/g, "").replace(/^~~|~~$/g, "").replace(/\s+#+\s*$/, "").trim();
+// Normalize English headings to the existing persisted/UI states; legacy Chinese and checkboxes remain valid.
+const englishStates: Record<string, MemoryState> = {
+  "not started": "未开始", "in progress": "进行中", completed: "已完成",
+  waiting: "等待", abandoned: "已放弃", failed: "失败",
+};
+const states = /^(?:~~)?\[(未开始|进行中|已完成|等待|已放弃|失败|已删除|阻塞|not started|in progress|completed|waiting|abandoned|failed|[x ])\]\s*/i;
+const stateOf = (value: string): MemoryState => englishStates[value.toLowerCase()] ?? (value === "x" || value === "X" ? "已完成" : value === " " ? "未开始" : value === "已删除" ? "已放弃" : value as MemoryState);
+const clean = (value: string) => value.replace(/\s+#+\s*$/, "").replace(states, "").replace(/^~~|~~$/g, "").trim();
 /** `body` has fences, comments and footnote definitions blanked without changing line numbers. */
 export function memoryOutline(body: string): MemoryOutline {
   const lines = body.split(/\r?\n/), nodes: MemoryNode[] = [], abandonedLines: boolean[] = [];
@@ -40,33 +43,11 @@ export function memoryOutline(body: string): MemoryOutline {
     if (!firstTitle && (heading || list && state)) {
       const node: MemoryNode = { kind: heading ? "heading" : "task", title: clean(content), state,
         depth: inherited ? inherited.depth + 1 : 0, line: number, endLine: lines.length, parent,
-        abandoned, waiting: !!inherited?.waiting || state === "等待" || state === "阻塞", details: detailIds(content) };
+        abandoned, waiting: !!inherited?.waiting || state === "等待" || state === "阻塞" };
       const index = nodes.push(node) - 1;
       if (heading) headings.push({ index, level: heading[1].length });
       else lists.push({ index, indent });
     }
   });
   return { title, titleLine, nodes, abandonedLines };
-}
-
-export interface DetailBlock { id: number; content: string; start: number; end: number }
-/** Fail closed: never return the remainder of a damaged file as a detail. */
-export function parseDetailBlocks(document: string): DetailBlock[] {
-  const blocks: DetailBlock[] = [], seen = new Set<number>();
-  let open: { id: number; start: number; body: number } | undefined;
-  for (const match of document.matchAll(/^<!-- detail:([1-9]\d*):(start|end) -->\r?$/gm)) {
-    const id = Number(match[1]);
-    if (!Number.isSafeInteger(id)) throw Error("详情编号无效");
-    if (match[2] === "start") {
-      if (open || seen.has(id)) throw Error("详情边界重复或嵌套");
-      open = { id, start: match.index, body: match.index + match[0].length };
-      seen.add(id);
-    } else {
-      if (!open || open.id !== id) throw Error("详情边界不匹配");
-      blocks.push({ id, content: document.slice(open.body, match.index).replace(/^\r?\n/, "").replace(/\r?\n$/, ""), start: open.start, end: match.index + match[0].length });
-      open = undefined;
-    }
-  }
-  if (open || (document.match(/<!--\s*detail:/g)?.length ?? 0) !== blocks.length * 2) throw Error("详情边界缺失或损坏");
-  return blocks;
 }

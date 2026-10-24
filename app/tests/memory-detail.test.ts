@@ -1,78 +1,86 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "node:test";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { assertMemoryEdit, guardMemoryEdit, memoryDetail } from "../src/server/memory-detail.js";
-import { digest } from "../src/server/memory-files.js";
-import { pendingMemoryRead, recordMemoryRead } from "../src/server/memory-recovery.js";
-
-function fixture(body = "# 固定目标\n## [进行中] 实现\n- [未开始] 验证\n") {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-detail-"))), entry = join(root, "MEMORY.md"), details = join(root, "references", "details.md");
-  writeFileSync(entry, body);
-  return { root, entry, details, revision: () => digest(readFileSync(entry)), close: () => rmSync(root, { recursive: true, force: true }) };
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { createEditToolDefinition, createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
+import { tmpdir } from "./temporary.js";
+import { assertMemoryTreeEdit, memoryDetails, memoryTitleSegment } from "../src/shared/memory-detail-paths.js";
+import { guardMemoryWrite, memoryFileOperations } from "../src/server/memory-write-guard.js";
+import { availableMemoryDetails } from "../src/server/memory-detail-files.js";
+const tree = "# [In progress] Goal\n## [Not started] Verify\n# [Completed] Other\n## [Completed] Verify\n";
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), "axiom-title-details-")), entry = join(root, "memory/session/MEMORY.md");
+  mkdirSync(dirname(entry), { recursive: true }); writeFileSync(entry, tree);
+  const operations = memoryFileOperations(() => entry);
+  return { root, entry, operations, close: () => rmSync(root, { recursive: true, force: true }) };
 }
-test("single-detail lifecycle allocates monotonic IDs and associates exactly one main line", () => {
+test("full title ancestry isolates same-named steps and ignores status/strikethrough", () => {
+  assert.deepEqual(memoryDetails(tree).map(d => d.path), ["details/Goal.md", "details/Goal/Verify.md", "details/Other.md", "details/Other/Verify.md"]);
+  const cancelled = tree.replace("[In progress] Goal", "~~[Abandoned] Goal~~ #");
+  assert.deepEqual(memoryDetails(cancelled).map(d => d.path), memoryDetails(tree).map(d => d.path));
+  assert.doesNotThrow(() => assertMemoryTreeEdit(tree, cancelled));
+  assert.doesNotThrow(() => assertMemoryTreeEdit(tree, tree + "# [Not started] Next\n"));
+});
+test("existing headings cannot be renamed, deleted or moved; literal numeric text remains identity", () => {
+  for (const next of [tree.replace("Goal", "Renamed"), tree.replace("## [Not started] Verify\n", ""), tree.replace("## [Not started] Verify", "# [Not started] Verify")])
+    assert.throws(() => assertMemoryTreeEdit(tree, next), /不能改名/);
+  assert.throws(() => assertMemoryTreeEdit("# [Waiting] A〔1〕", "# [Waiting] A〔2〕"), /不能改名/);
+  assert.doesNotThrow(() => assertMemoryTreeEdit("", "# [Waiting] (验收)\n## [Not started] [客户确认]"));
+});
+test("main tree rejects prose, links, comments, footnotes and invalid nesting", () => {
+  for (const text of ["# Goal", tree + "正文", tree + "<!-- hidden -->", "# [Waiting] A[^x]", "# [Waiting] [A](a.md)", "## [Waiting] A", "# [Waiting] A\n### [Waiting] B", tree + "\u0000"])
+    assert.throws(() => assertMemoryTreeEdit("", text));
+});
+test("file-safe titles reject aliases, unsafe filenames and title-path collisions", () => {
+  for (const title of [".", "..", "a/b", "a\\b", "NUL", "COM¹.txt", "LPT2", "a.", "a ", "a:b", "a.md", "A.MD", "\ud800", "\udc00", "字".repeat(67)]) assert.throws(() => memoryTitleSegment(title));
+  for (const [a, b] of [["Goal", "goal"], ["é", "e\u0301"], ["Ａ", "A"], ["ß", "SS"]])
+    assert.throws(() => memoryDetails(`# [Waiting] ${a}\n# [Waiting] ${b}`), /重名/);
+  for (const text of ["# [Waiting] A\n# [Waiting] A.md\n## [Waiting] B", "# [Waiting] A.md\n## [Waiting] B\n# [Waiting] A"])
+    assert.throws(() => memoryDetails(text), /文件名|路径冲突/);
+});
+test("native multi-edit validates the final original-snapshot candidate, preserves BOM/CRLF and literal dollars", async () => {
   const f = fixture(); try {
-    const one = memoryDetail(f.entry, { action: "write", anchor: "## [进行中] 实现", entryRevision: f.revision(), content: "第一次失败\n随后修复" });
-    assert.equal(one.id, 1); assert.equal(one.linked, true);
-    assert.match(readFileSync(f.entry, "utf8"), /## \[进行中\] 实现 〔1〕/);
-    assert.equal(memoryDetail(f.entry, { action: "read", id: 1 }).content, "第一次失败\n随后修复");
-    const two = memoryDetail(f.entry, { action: "write", anchor: "# 固定目标", entryRevision: f.revision(), content: "整体范围" });
-    assert.equal(two.id, 2); assert.match(readFileSync(f.entry, "utf8"), /^# 固定目标 〔2〕/);
-    const before = memoryDetail(f.entry, { action: "read", id: 1 });
-    const updated = memoryDetail(f.entry, { action: "write", id: 1, revision: before.revision, oldText: "随后修复", newText: "随后修复并验证" });
-    assert.equal(updated.content, "第一次失败\n随后修复并验证");
-    assert.throws(() => memoryDetail(f.entry, { action: "write", id: 1, revision: before.revision, content: "覆盖" }), /修订冲突/);
-    assert.equal(memoryDetail(f.entry, { action: "read", id: 2 }).content, "整体范围");
-    const link = memoryDetail(f.entry, { action: "write", id: 1, revision: updated.revision, anchor: "- [未开始] 验证", entryRevision: f.revision() });
-    assert.equal(link.content, updated.content); assert.match(readFileSync(f.entry, "utf8"), /验证 〔1〕/);
+    const entry = "\ufeff" + tree.replaceAll("\n", "\r\n"); writeFileSync(f.entry, entry);
+    const tool = createEditToolDefinition(f.root, { operations: f.operations });
+    await tool.execute("edit", { path: f.entry, edits: [
+      { oldText: "[Not started] Verify", newText: "[In progress] Verify" },
+      { oldText: "# [Completed] Other", newText: "# [Waiting] Other" },
+    ] }, undefined, undefined, {} as never);
+    assert.equal(readFileSync(f.entry, "utf8"), entry.replace("[Not started] Verify", "[In progress] Verify").replace("# [Completed] Other", "# [Waiting] Other"));
+    const path = join(dirname(f.entry), "details/Goal.md"); mkdirSync(dirname(path)); writeFileSync(path, "one\ntwo\n");
+    await tool.execute("dollars", { path, edits: [{ oldText: "one", newText: "$& two" }, { oldText: "two", newText: "last" }] }, undefined, undefined, {} as never);
+    assert.equal(readFileSync(path, "utf8"), "$& two\nlast\n");
+    const before = readFileSync(f.entry);
+    await assert.rejects(tool.execute("rename", { path: f.entry, edits: [{ oldText: "Goal", newText: "Changed" }] }, undefined, undefined, {} as never), /不能改名/);
+    assert.deepEqual(readFileSync(f.entry), before);
+    await assert.rejects(tool.execute("overlap", { path, edits: [{ oldText: "$& two", newText: "x" }, { oldText: "two", newText: "y" }] }, undefined, undefined, {} as never));
   } finally { f.close(); }
 });
-test("unique line association cannot hit an earlier substring and preserves CRLF/BOM revisions", () => {
-  const f = fixture("\uFEFF# 固定目标\r\n说明：## [进行中] 实现\r\n## [进行中] 实现\r\n"); try {
-    const first = memoryDetail(f.entry, { action: "write", anchor: "## [进行中] 实现", entryRevision: f.revision(), content: "正文" });
-    assert.equal(first.entryRevision, f.revision());
-    assert.equal(readFileSync(f.entry, "utf8"), "\uFEFF# 固定目标\r\n说明：## [进行中] 实现\r\n## [进行中] 实现 〔1〕\r\n");
-    writeFileSync(f.details, "\uFEFF" + readFileSync(f.details, "utf8").replaceAll("\n", "\r\n"));
-    const read = memoryDetail(f.entry, { action: "read", id: 1 });
-    const next = memoryDetail(f.entry, { action: "write", id: 1, revision: read.revision, content: "第二版" });
-    assert.equal(next.revision, digest(readFileSync(f.details)));
-    assert.doesNotThrow(() => memoryDetail(f.entry, { action: "write", id: 1, revision: next.revision, content: "第三版" }));
-  } finally { f.close(); }
-});
-test("reject invalid input, anchors, partial edits, damaged bounds, locks and aborted writes", () => {
+test("native write creates details on demand, rejects orphan/NUL details and foreign memory", async () => {
   const f = fixture(); try {
-    for (const input of [{ action: "read", id: 1 }, { action: "write", content: "无主项" }, { action: "write", anchor: "不存在", content: "无主项", entryRevision: f.revision() }] as const) assert.throws(() => memoryDetail(f.entry, input));
-    const one = memoryDetail(f.entry, { action: "write", anchor: "# 固定目标", entryRevision: f.revision(), content: "重复 重复" });
-    assert.throws(() => memoryDetail(f.entry, { action: "write", id: 1, revision: one.revision, oldText: "重复", newText: "新" }), /唯一原文/);
-    assert.throws(() => memoryDetail(f.entry, { action: "write", id: 1, revision: one.revision, content: "<!-- detail:2:start -->" }), /受管标记/);
-    assert.throws(() => memoryDetail(f.entry, { action: "write", id: 1, revision: one.revision, content: "新" }, AbortSignal.abort()));
-    writeFileSync(join(f.root, ".memory-detail.lock"), "locked");
-    assert.throws(() => memoryDetail(f.entry, { action: "write", id: 1, revision: one.revision, content: "新" }), /占用/);
-    rmSync(join(f.root, ".memory-detail.lock"));
-    writeFileSync(f.details, "<!-- detail-next:2 -->\n<!-- detail:1:start -->\n破坏");
-    assert.throws(() => memoryDetail(f.entry, { action: "read", id: 1 }), /边界/);
+    assert.deepEqual(availableMemoryDetails(dirname(f.entry), tree), []);
+    const tool = createWriteToolDefinition(f.root, { operations: f.operations }), path = join(dirname(f.entry), "details/Goal/Verify.md");
+    await tool.execute("detail", { path, content: "evidence" }, undefined, undefined, {} as never);
+    assert.equal(readFileSync(path, "utf8"), "evidence");
+    assert.equal(readFileSync(f.entry, "utf8"), tree);
+    assert.deepEqual(availableMemoryDetails(dirname(f.entry), tree).map(d => d.path), ["details/Goal/Verify.md"]);
+    await assert.rejects(tool.execute("orphan", { path: join(dirname(path), "Missing.md"), content: "no" }, undefined, undefined, {} as never), /现有标题/);
+    assert.throws(() => guardMemoryWrite(f.entry, path, "a\u0000b"), /NUL/);
+    const foreign = join(f.root, "memory/foreign/MEMORY.md"); mkdirSync(dirname(foreign)); writeFileSync(foreign, tree);
+    await assert.rejects(tool.execute("foreign", { path: foreign, content: tree }, undefined, undefined, {} as never), /其他来源记忆只读/);
   } finally { f.close(); }
 });
-test("controlled edits enforce immutable title, existing references and managed file boundary", () => {
+test("discovery distinguishes genuinely absent directories from damaged ancestor links", () => {
   const f = fixture(); try {
-    assert.throws(() => guardMemoryEdit(f.entry, "write", { path: f.details, content: "覆盖" }), /memory_detail/);
-    assert.throws(() => guardMemoryEdit(f.entry, "edit", { path: f.entry, edits: [{ oldText: "固定目标", newText: "改标题" }] }), /不能修改/);
-    assert.throws(() => assertMemoryEdit(f.entry, readFileSync(f.entry, "utf8"), "# 固定目标\n- [未开始] 引用 〔99〕"), /不存在/);
-    assert.doesNotThrow(() => guardMemoryEdit(f.entry, "edit", { path: f.entry, edits: [{ oldText: "[未开始] 验证", newText: "[已完成] 验证" }] }));
+    assert.deepEqual(availableMemoryDetails(dirname(f.entry), tree), []);
+    symlinkSync(join(f.root, "missing"), join(dirname(f.entry), "details"));
+    assert.throws(() => availableMemoryDetails(dirname(f.entry), tree), /链接/);
   } finally { f.close(); }
 });
-test("recovery confirms complete paginated reads only within one revision", () => {
-  const f = fixture("首行\n第二行\n尾行"); try {
-    const manager = SessionManager.inMemory(f.root);
-    manager.appendMessage({ role: "user", content: "任务", timestamp: Date.now() });
-    manager.appendCompaction("摘要", manager.getLeafId()!, 1000);
-    const read = (offset: number, text: string, parentToolCallId?: string) => recordMemoryRead(manager, f.entry, f.root, { toolName: "read", input: { path: f.entry, offset, limit: 1 }, isError: false, content: [{ type: "text", text }], parentToolCallId });
-    assert.equal(read(1, "首行\n"), false); assert.equal(read(3, "尾行", "child"), false);
-    writeFileSync(f.entry, "改首行\n第二行\n尾行");
-    assert.equal(read(2, "第二行\n"), false); assert.equal(read(3, "尾行"), false);
-    assert.ok(pendingMemoryRead(manager)); assert.equal(read(1, "改首行\n"), true); assert.equal(pendingMemoryRead(manager), null);
+test("dangling detail links cannot create an outside file", async () => {
+  const f = fixture(); try {
+    const path = join(dirname(f.entry), "details/Goal.md"), outside = join(f.root, "outside.md"); mkdirSync(dirname(path)); symlinkSync(outside, path);
+    assert.throws(() => guardMemoryWrite(f.entry, path, "unsafe"));
+    await assert.rejects(f.operations.writeFile(path, "unsafe")); assert.equal(existsSync(outside), false);
   } finally { f.close(); }
 });

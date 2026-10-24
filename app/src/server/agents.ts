@@ -1,3 +1,4 @@
+import { forkSession } from "./session-fork.js";
 import { SessionTitles } from "./session-titles.js";
 import { SessionReloads } from "./session-reloads.js";
 import { Capabilities } from "./capabilities.js";
@@ -92,6 +93,9 @@ export class Agents {
   thread(scope: Scope) {
     return this.views.thread(scope);
   }
+  messageCount(scope: Scope) {
+    return this.views.messageCount(scope);
+  }
   messages(scope: Scope) {
     return [...this.views.transcript(scope).values()].map(boundedMessage);
   }
@@ -160,6 +164,7 @@ export class Agents {
     if (notify) this.changed(scope);
   }
   async stop(scope: Scope, source: StopSource = "user") {
+    if (source !== "shutdown") this.store.recoveries.remove(scope.sessionId);
     this.continuations.cancel(scope, true);
     this.titles.cancel(scope);
     const start = this.starts.get(scope.sessionId);
@@ -206,7 +211,6 @@ export class Agents {
     this.profiles = new ExecutionProfiles(store.root);
     this.unwatchConfiguration = models.watchConfiguration(() => { void this.pool.invalidate().catch(() => {}); });
     this.memories = new Memories(store, publish, openMemoryFile, undefined, undefined, observed);
-    this.memories.isActive = (scope) => this.active(scope) || this.starts.has(scope.sessionId) || this.store.db.prepare("SELECT 1 FROM tasks WHERE parentSessionId=? AND status IN ('queued','starting','running','stopping','summarizing')").get(scope.sessionId) !== undefined;
     this.memories.runner = new ColdMemoryRunner(this.memories, models, this.pool, this.profiles);
     this.titles = new SessionTitles(this.memories, scope => this.changed(scope));
     this.views = new AgentViews(store, publish, observed);
@@ -218,7 +222,6 @@ export class Agents {
       if (event.type === "provider_request") this.titles.request(scope, run);
       this.reloads.event(scope, run.id, event);
       this.compressions.event(scope, run.id, event);
-      if (["input-accepted", "input-persisted", "queue", "provider_request"].includes(event.type)) this.memories.touch(scope);
       if (event.type === "memory-cancel") this.memoryQueries.get(event.key)?.controller.abort();
       if (event.type === "memory-call") {
         const controller = new AbortController();
@@ -228,10 +231,10 @@ export class Agents {
             this.store.session(scope.workspaceId, scope.sessionId);
             const params = object(event.params);
             const question = text(params.question, "查询问题", Number.MAX_SAFE_INTEGER);
-            const topic = text(params.topic, "Topic标识", 256);
+            if (Object.keys(params).some(key => key !== "question")) throw new AppError("INVALID_INPUT", "记忆查询仅接受question");
             const parentLease = this.runs.lease(scope, run.id);
             if (!parentLease) throw new AppError("AGENT_STOPPED", "父执行已经结束");
-            const data = await this.memories.query(scope, question, controller.signal, parentLease, topic);
+            const data = await this.memories.query(scope, question, controller.signal, parentLease);
             if (!controller.signal.aborted) this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: true, data });
           } catch (error) {
             this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: false, error: errorMessage(error, "记忆查询失败") });
@@ -246,7 +249,6 @@ export class Agents {
       for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
       this.compressions.settled(scope, run.id);
       // Agent 工具可直接写入记忆目录；结算后定向刷新而不阻塞后续 HTTP/WS 事件。
-      this.memories.touch(scope);
       this.memories.refresh(scope);
       this.externalSettled?.(scope, run);
       this.continuations.settled(scope, run);
@@ -268,6 +270,7 @@ export class Agents {
       memoryContinuation?: { expectedRunId: string; validate: () => void };
       compressionPreparation?: { id: string; validate: () => void; signal: AbortSignal };
       beforeStart?: () => void;
+      onCommit?: (run: Run) => void;
       onStart?: (run: Run) => void;
     } = {},
   ) {
@@ -299,6 +302,7 @@ export class Agents {
       throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
     const rewrite = p.rewrite === undefined ? undefined : rewriteTarget(p.rewrite);
     if (rewrite && c.op !== "prompt") throw new AppError("INVALID_INPUT", "仅消息重发可以回滚对话。");
+    if (c.op === "agent.fork") return this.serialCommand(scope, async () => forkSession(this, c));
     if (c.op === "agent.editable") {
       if (Object.keys(p).some((key) => key !== "messageId")) throw new AppError("INVALID_INPUT", "消息读取参数无效");
       return this.editable(scope, text(p.messageId, "消息标识"));
@@ -332,6 +336,14 @@ export class Agents {
           receipt: taskReceipt?.state === "unknown" ? { status: "uncertain", data: { message: taskReceipt.error } }
             : taskReceipt?.state === "failed" ? { status: "failed", data: { message: taskReceipt.error } } : receipt };
       });
+    }
+    if (c.op === "agent.history.index") {
+      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "历史索引不接受额外参数");
+      return this.views.historyIndex(scope);
+    }
+    if (c.op === "agent.history.read") {
+      if (Object.keys(p).some(key => !["segmentId", "groupId"].includes(key))) throw new AppError("INVALID_INPUT", "历史读取参数无效");
+      return this.views.historyRead(scope, text(p.segmentId, "压缩点标识"), p.groupId === undefined ? undefined : text(p.groupId, "分组标识"));
     }
     if (c.op === "agent.original") {
       if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "原始会话读取不接受额外参数");
@@ -611,12 +623,17 @@ export class Agents {
             run.phase!,
             run.resumedFromRunId ?? null,
           );
+        // Task ownership/input handoff must commit with the run, not after it.
+        internal.onCommit?.(run);
+        // Atomically hand the recovery intention to this new durable run. A second
+        // crash will recover the new run, never dispatch the original intention twice.
+        this.store.recoveries.remove(scope.sessionId);
         this.store.db
           .prepare("UPDATE sessions SET updatedAt=?,autoPinUntil=NULL WHERE id=?")
           .run(run.startedAt, scope.sessionId);
         this.store.db.exec("COMMIT");
         } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
-        if (!internal.task) { this.memories.touch(scope); this.titles.start(scope, run.id); }
+        if (!internal.task) this.titles.start(scope, run.id);
         if (capabilities) this.capabilities.changed(scope);
         this.publish(threadScope(scope), this.thread(scope));
         // Invoke now: launch installs pending synchronously before its first await.
@@ -647,7 +664,7 @@ export class Agents {
             images,
             skills,
             task: internal.task ? { ...internal.task, budget: internal.task.budget ? { ...internal.task.budget,
-              deadlineAt: run.startedAt + internal.task.budget.workMs } : undefined } : undefined,
+              deadlineAt: internal.task.budget.deadlineAt ?? run.startedAt + internal.task.budget.workMs } : undefined } : undefined,
             notification: internal.notification,
           }, lease, internal.onStart);
         } catch (error) {

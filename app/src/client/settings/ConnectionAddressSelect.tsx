@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../Icon.js";
-import { useAnchoredPopup } from "../useAnchoredPopup.js";
+import { revealPopupOption, useAnchoredPopup } from "../useAnchoredPopup.js";
 
 const family = (address: string) => address.includes("[") ? "IPv6" : "IPv4";
 
@@ -19,13 +19,13 @@ export function ConnectionAddressSelect({ value, options, onChange }: {
       if (button && document.activeElement === button) button.closest(".phone-connect-details")?.querySelector<HTMLButtonElement>(".phone-connect-actions button")?.focus({ preventScroll: true });
     };
   }, []);
-  const show = () => { setActive(Math.max(0, options.indexOf(value))); setOpen(true); };
+  const show = () => { trigger.current?.focus({ preventScroll: true }); setActive(Math.max(0, options.indexOf(value))); setOpen(true); };
   const choose = (index: number) => {
     if (options[index]) onChange(options[index]);
     setOpen(false); trigger.current?.focus({ preventScroll: true });
   };
   useLayoutEffect(() => {
-    if (open) panel.current?.querySelectorAll<HTMLElement>('[role="option"]')[active]?.scrollIntoView({ block: "nearest" });
+    if (open) revealPopupOption(panel.current, active);
   }, [open, active, options, panel]);
   useEffect(() => {
     if (!open) return;

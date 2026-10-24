@@ -239,7 +239,7 @@ fn script(action: &str) -> Result<Command, String> {
     let helper = dir.join(concat!("setup-service-", env!("CARGO_PKG_VERSION"), ".mjs"));
     let helper_source = include_str!("setup-service.mjs");
     if fs::read_to_string(&helper).ok().as_deref() != Some(helper_source) { fs::write(&helper, helper_source).map_err(|e| e.to_string())?; }
-    for (name, source) in [("maintenance.mjs", include_str!("maintenance.mjs")), ("service-start.mjs", include_str!("service-start.mjs")), ("setup-runtime.json", include_str!("setup-runtime.json"))] {
+    for (name, source) in [("service-admission.mjs", include_str!("service-admission.mjs")), ("service-removal.mjs", include_str!("service-removal.mjs")), ("pi-removal.mjs", include_str!("pi-removal.mjs")), ("maintenance.mjs", include_str!("maintenance.mjs")), ("service-start.mjs", include_str!("service-start.mjs")), ("setup-runtime.json", include_str!("setup-runtime.json"))] {
         let path = dir.join(name);
         if fs::read_to_string(&path).ok().as_deref() != Some(source) { fs::write(path, source).map_err(|e| e.to_string())?; }
     }

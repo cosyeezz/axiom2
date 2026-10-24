@@ -13,6 +13,7 @@ import { compactionDisplay } from "./compaction-display.js";
 import { thinkingDisplay } from "./thinking-display.js";
 import { outputTruncated } from "./execution-outcome.js";
 import { modelRequestError } from "./error-message.js";
+import { taskDisplayText } from "./task-output.js";
 
 function displayPhase(message: any, content: any[], streaming: boolean): ChatMessage["phase"] {
   if (message.role !== "assistant" || content.some(c => c.type === "toolCall") ||
@@ -57,31 +58,16 @@ export function chatMessage(
     typeof message.content === "string"
       ? [{ type: "text", text: message.content }]
       : (message.content ?? []);
-  const text =
+  const text = taskDisplayText(message.role === "toolResult" ? message.toolName : "", message.details, message.isError) ?? (
     content
       .filter((c: any) => c.type === "text")
       .map((c: any) => c.text)
       .join("\n") ||
     message.summary ||
-    "";
-  // Display-only projection: keep native JSON and delivery identifiers untouched for the agent.
-  if (message.role === "custom" && message.customType === "axiom-result") {
-    const labels = {
-      completed: "子代理已完成",
-      cancelled: "子代理已取消",
-      failed: "子代理执行失败",
-      interrupted: "子代理执行中断",
-    };
-    let state: NonNullable<ChatMessage["taskNotice"]> = "unknown";
-    let resultId: string | undefined;
-    try {
-      const payload = JSON.parse(text), status = payload?.status;
-      if (typeof payload?.resultId === "string" && payload.resultId.length <= 200) resultId = payload.resultId;
-      if (typeof status === "string" && Object.hasOwn(labels, status))
-        state = status as keyof typeof labels;
-    } catch { /* Legacy or malformed notices must never leak their raw payload. */ }
-    return { id, role: "notice", text: state === "unknown" ? "收到子代理状态通知" : labels[state], taskNotice: state, ...(resultId ? { resultId } : {}) };
-  }
+    "");
+  // Internal result notifications remain in the native transcript for the agent,
+  // including legacy payloads, but are not conversation UI messages.
+  if (message.role === "custom" && message.customType === "axiom-result") return null;
   const imageBlocks = content.filter((c: any) => c.type === "image");
   const metadata = message.axiomImages ?? message.details?.images;
   const images: NonNullable<ChatMessage["images"]> = imageBlocks.map((c: any, i: number) => ({
@@ -179,10 +165,20 @@ export function boundedMessage(message: ChatMessage): ChatMessage {
     calls?.some((call) => call.input.length < call.inputLength);
   const textRevision = hash(message.text), thinkingRevision = hash(message.thinking ?? "");
   const { deliveryTiming: _timing, ...projection } = message;
+  let thinkingTail: string | undefined;
+  if (message.thinkingActive && message.streaming && (message.thinking?.length ?? 0) > 320) {
+    let start = Math.max(0, Math.floor((message.thinking!.length - 512) / 256) * 256);
+    const code = message.thinking!.charCodeAt(start);
+    if (code >= 0xdc00 && code <= 0xdfff) start++;
+    thinkingTail = message.thinking!.slice(start);
+  }
   return {
     ...projection,
     text: message.text.slice(0, textCap), textLength: message.text.length, textRevision,
     thinking: message.thinking?.slice(0, 320), thinkingLength: message.thinking?.length, thinkingRevision,
+    // Advance in chunks so streaming appends do not reflow the tail's start on every token.
+    // At most 767 code units; completed/history previews retain their existing prefix only.
+    thinkingTail,
     calls,
     ...(message.role === "toolResult" ? { preview: toolPreview(message) } : {}),
     // Detect same-length edits beyond the preview and invalidate detail pages on live updates.
@@ -232,7 +228,7 @@ export function openTranscript(file: string, cwd: string, options: { readOnly?: 
   }
 }
 // One identity adapter for both metadata views and on-demand native image lookup.
-function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string; entryId: string }[] {
+export function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string; entryId: string }[] {
   // Ignore compaction boundaries for reading, while retaining native retry/context edits.
   // Only the active branch is eligible; abandoned branches and system records stay private.
   const projection = original
@@ -261,6 +257,14 @@ export function transcriptInput(manager: SessionManager, messageId: string) {
   if (!input || !(input.message.role === "user" || input.message.role === "custom" && input.message.customType === "axiom-append"))
     throw new AppError("NOT_EDITABLE", "消息不存在、已离开当前对话，或不是可编辑的用户消息。");
   return input;
+}
+export function transcriptForkPoint(manager: SessionManager, messageId: string) {
+  const entry = transcriptEntries(manager, true).find(({ id }) => id === messageId);
+  const view = entry && chatMessage(entry.message, entry.id);
+  if (!entry || !view || !(view.role === "user" || view.role === "assistant" &&
+      view.phase === "final_answer" && view.status === "completed" && !view.calls?.length && !view.error))
+    throw new AppError("NOT_FORKABLE", "消息不存在、已离开当前对话，或不是已完成的回复或用户消息。");
+  return { entryId: entry.entryId, before: view.role === "user" };
 }
 export function transcriptMessages(manager: SessionManager, original = false): ChatMessage[] {
   return transcriptEntries(manager, original).flatMap(({ message, id }) => {

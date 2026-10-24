@@ -188,6 +188,6 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     </div>
     {editing && notice && <p className="file-editor-notice" role="status">{notice}</p>}
     <div className="file-preview-body" aria-busy={loading}>{body}</div>
-    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice || file?.resourceNotice}>{notice || file?.editReason || file?.resourceNotice || (html ? "默认静态预览 · 模块与项目可单独确认运行" : file?.encoding ?? "只读预览")}</span></footer>
+    <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice || file?.resourceNotice}>{notice || file?.editReason || file?.resourceNotice || (html ? "默认允许脚本与联网 · 模块与项目可单独确认运行" : file?.encoding ?? "只读预览")}</span></footer>
   </aside>;
 }

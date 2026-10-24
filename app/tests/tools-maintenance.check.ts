@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { openCliConfigPath } from "../src/server/integrations/opencli-runtime.js";
-import { reaConfigPath } from "../src/server/integrations/rea-runtime.js";
+import { atomicReaJson, reaConfigPath } from "../src/server/integrations/rea-runtime.js";
 import { listEngines } from "../src/server/integrations/rea-engines.js";
 import { openCliFixture } from "./fixtures/opencli.js";
 import { reaFixture } from "./rea-fixture.js";
@@ -14,6 +14,8 @@ const opencli = openCliFixture(), rea = reaFixture(), root = opencli.root;
 const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/tools-maintenance");
 mkdirSync(artifacts, { recursive: true });
 opencli.install("1.8.7");
+const external = join(root, "external-java"); mkdirSync(external); writeFileSync(join(external, "preserved"), "external");
+atomicReaJson(reaConfigPath(root), { format: 1, revision: randomUUID(), enabled: true, engines: { java: external } });
 let release!: () => void, active = true, engineDirectory = "", engineFails = false;
 opencli.hold(new Promise<void>(done => { release = done; }));
 rea.dependencies.checkEngines = async (_root, config) => listEngines(config).map(engine => ({ ...engine, checkedAt: Date.now(), status: engine.path ? "ready" : engine.status, detail: engine.path ? "Fixture environment passed; no target loaded" : engine.detail }));
@@ -78,12 +80,10 @@ try {
   await section.getByRole("button", { name: "安装 Skill", exact: true }).click();
   await section.getByText("Skill 已安装；已有会话请在技能与 MCP 面板调整选择并重新加载。", { exact: true }).waitFor();
   assert.equal(rea.calls.filter(args => args[1] === "install").length, 1, "local component toggles do not install again");
-  const external = join(root, "external-java"); mkdirSync(external); writeFileSync(join(external, "preserved"), "external");
-  await section.locator("#rea-path-java").fill(external);
-  await section.getByRole("button", { name: "保存JDK 21路径", exact: true }).click();
-  await section.getByText("组件路径已保存，请检测配套组件；已有会话需重新加载技能与 MCP。", { exact: true }).waitFor();
+  assert.equal(await section.locator("#rea-path-java").count(), 0, "default component locations need no path input");
   const java = section.getByRole("region", { name: "JDK 21维护", exact: true });
   assert.equal(await java.getByRole("button", { name: "卸载托管组件", exact: true }).count(), 0);
+  await java.getByRole("button", { name: "检查JDK 21更新", exact: true }).click();
   await java.getByRole("button", { name: "安装JDK 21", exact: true }).click();
   await java.getByRole("button", { name: "暂不安装", exact: true }).click(); assert.equal(engineDirectory, "");
   await java.getByRole("button", { name: "安装JDK 21", exact: true }).click();
@@ -96,8 +96,11 @@ try {
   await java.getByRole("button", { name: "确认卸载", exact: true }).click();
   await java.getByRole("button", { name: "卸载托管组件", exact: true }).waitFor({ state: "detached" });
   assert.equal(existsSync(engineDirectory), false); assert.ok(existsSync(join(external, "preserved")));
+  assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).engines.java, undefined);
   engineFails = true;
-  await java.getByRole("button", { name: "安装JDK 21", exact: true }).click();
+  await java.getByRole("button", { name: "检查JDK 21更新", exact: true }).click();
+  // The host may still have a discovered JDK after the managed installation is removed.
+  await java.getByRole("button", { name: /^(安装|更新|切换推荐版|修复)JDK 21$/ }).click();
   await java.getByRole("button", { name: "确认下载安装", exact: true }).click();
   await section.getByRole("alert").filter({ hasText: "fixture engine failure" }).waitFor();
   assert.equal(await section.locator('[role="alert"]:visible').count(), 1, "one visible alert for an engine failure");
@@ -115,10 +118,15 @@ try {
   rea.fail(); await panel.getByRole("button", { name: "更新 REA", exact: true }).click();
   await section.locator('[role="alert"]').filter({ hasText: "network failure" }).first().waitFor();
   await page.screenshot({ path: join(artifacts, "rea-update-failed.png"), fullPage: true });
-  assert.equal(await section.locator('[role="alert"]:visible').count(), 1, "one visible alert for a failed update, including generic maintenance errors");
+  const assertIndependentErrors = async () => {
+    assert.equal(await section.locator('[role="alert"]:visible').count(), 2, "the failed engine and failed REA update retain separate feedback");
+    assert.equal(await section.getByRole("alert").filter({ hasText: "network failure" }).count(), 1, "REA failure appears once, including generic maintenance errors");
+    assert.equal(await java.getByRole("alert").filter({ hasText: "fixture engine failure" }).count(), 1, "the earlier engine failure stays on its own card");
+  };
+  await assertIndependentErrors();
   await page.reload();
-  await section.locator('[role="alert"]').filter({ hasText: "network failure" }).first().waitFor();
-  assert.equal(await section.locator('[role="alert"]:visible').count(), 1);
+  await section.getByRole("alert").filter({ hasText: "network failure" }).waitFor();
+  await assertIndependentErrors();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
   assert.ok(!(await section.innerText()).includes("secret-value"));
   await panel.getByRole("button", { name: "卸载 REA", exact: true }).click();
@@ -126,5 +134,5 @@ try {
   await panel.getByRole("button", { name: "安装 REA", exact: true }).waitFor();
   assert.ok(existsSync(join(external, "preserved")));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, artifacts, checks: ["OpenCLI private update during active Agent", "cancel/reload", "external files retained", "REA local skill", "managed engine confirmations", "REA cancel/remove", "single failure alert", "dark/light 320/390/1200"] }));
+  console.log(JSON.stringify({ passed: true, artifacts, checks: ["OpenCLI private update during active Agent", "cancel/reload", "external files retained", "REA local skill", "managed engine confirmations", "REA cancel/remove", "independent failure feedback without duplicate alerts", "dark/light 320/390/1200"] }));
 } finally { active = false; release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }

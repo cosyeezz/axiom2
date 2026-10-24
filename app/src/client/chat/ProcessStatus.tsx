@@ -7,7 +7,7 @@ export function ProcessTitle({ label, active = false, thinking = false }: { labe
 }
 
 export function ModelRequestStatus() {
-  return <div className="process-live process-requesting" role="status"><ProcessTitle label="调用工具" active /></div>;
+  return <div className="process-live process-requesting" role="status"><ProcessTitle label="正在思考" active thinking /></div>;
 }
 
 /** The dot mask receives the same gradient at the same coordinates as its label. */

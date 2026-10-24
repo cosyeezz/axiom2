@@ -16,18 +16,29 @@ try {
   const history = page.getByRole("region", { name: "消息记录", exact: true });
   await history.getByText("之后的问题", { exact: true }).waitFor();
   await page.locator("#prompt").fill("独立草稿保持不变");
-  await history.getByText("最初的问题 [file1]", { exact: true }).click();
-  const editor = page.getByRole("textbox", { name: "修改消息", exact: true });
-  await editor.waitFor();
+  const edit = page.getByRole("button", { name: "修改并重新发送", exact: true }).first();
+  await page.mouse.move(0, 0);
+  assert.equal(await edit.evaluate(node => getComputedStyle(node).opacity), "0");
+  await edit.focus(); await page.keyboard.press("Enter");
+  const editor = page.locator("#prompt");
+  await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "最初的问题 [file1]");
   assert.equal(await editor.inputValue(), "最初的问题 [file1]");
-  assert.match(await page.getByLabel("保留的附件").innerText(), /notes.txt/);
+  assert.equal(await page.locator(".message-editor").count(), 0);
+  assert.equal(await page.locator(".editable-user-message.is-editing").count(), 1);
+  assert.equal(await history.getByText("之后的问题", { exact: true }).count(), 1);
+  assert.match(await page.getByLabel("待发送附件", { exact: true }).innerText(), /notes.txt/);
+  await page.waitForFunction(() => {
+    const target = document.querySelector(".editable-user-message.is-editing")!.getBoundingClientRect();
+    const thread = document.querySelector("#thread")!.getBoundingClientRect();
+    return target.top >= thread.top - 1 && target.top < thread.bottom;
+  });
   await editor.fill("取消的修改"); await editor.press("Escape");
-  assert.equal(await editor.count(), 0);
+  assert.equal(await page.locator(".editable-user-message.is-editing").count(), 0);
   assert.equal(await page.locator("#prompt").inputValue(), "独立草稿保持不变");
   assert.equal(f.requests.length, 2);
   assert.equal(await history.getByText("之后的问题", { exact: true }).count(), 1);
-  const edit = page.getByRole("button", { name: "修改并重新发送", exact: true }).first();
-  await edit.focus(); await page.keyboard.press("Enter"); await editor.waitFor();
+  await edit.focus(); await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "最初的问题 [file1]");
   await editor.fill("新的问题 [file1]");
   await editor.press("Shift+Enter"); assert.match(await editor.inputValue(), /\n$/);
   await editor.dispatchEvent("keydown", { key: "Enter", code: "Enter", isComposing: true });
@@ -50,10 +61,18 @@ try {
   assert.equal(await page.locator("#prompt").inputValue(), "独立草稿保持不变");
   assert.doesNotMatch(JSON.stringify(f.requests.at(-1).messages), /之后的问题|最初的问题|REWRITE_ANSWER_1|REWRITE_ANSWER_2/);
   assert.match(JSON.stringify(f.requests.at(-1).messages), /notes.txt/);
-  await page.reload(); await history.getByText("新的问题 [file1]", { exact: true }).waitFor();
+  await page.reload();
+  const rewritten = f.app.agents.messages(f.scope).find(message => message?.role === "user" && message.text === "新的问题 [file1]")!;
+  // Attachment references render as labelled chips, so visible text does not contain literal brackets.
+  try { await page.locator(`[data-edit-message-id="${rewritten.id}"]`).waitFor(); }
+  catch (error) {
+    await page.screenshot({ path: join(artifacts, "reload-failure.png") });
+    console.error("RELOAD DOM", await page.locator("body").innerText(), "PAGE ERRORS", errors, "VIEW", await page.evaluate(() => sessionStorage.getItem("view")), "SERVER MESSAGES", f.app.agents.messages(f.scope));
+    throw error;
+  }
   assert.equal(await history.getByText("之后的问题", { exact: true }).count(), 0);
   assert.equal(await page.locator("#prompt").inputValue(), "独立草稿保持不变");
   await page.screenshot({ path: join(artifacts, "rewritten.png") });
   assert.deepEqual(errors, []);
-  console.log("PASS: click and keyboard edit, original attachment, cancel and draft isolation, Shift+Enter/IME, real Enter rewrite, model context, reload, 1440/820/390 responsive screenshots");
+  console.log("PASS: hover/keyboard pencil; composer refill and highlighted scroll target; later history retained; original attachment; cancel and draft isolation; Shift+Enter/IME; real Enter rewrite; model context; reload; 1440/820/390 responsive screenshots");
 } finally { await browser.close(); await f.close(); }

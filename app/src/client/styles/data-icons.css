@@ -15,9 +15,25 @@ svg.data-icon{display:block;width:20px;height:20px;flex:0 0 20px;overflow:visibl
 .usage .data-icon .data-track{opacity:.4}
 .usage .data-icon .context-ring.data-track{opacity:1;stroke:currentColor}
 .usage [data-od-id="estimated-cost"]>svg{stroke:currentColor}
+/* Cost tiers color only the bars; axes and unused bars retain toolbar interaction.
+   The highest bar uses a local, saturated red instead of the shared muted error pink. */
+svg.cost-usage-icon{--cost-danger:#ef5350}
+:root[data-theme="light"] svg.cost-usage-icon{--cost-danger:#b42323}
+svg.cost-usage-icon .cost-bar{stroke:currentColor}
+svg.cost-usage-icon .cost-bar[data-tone="success"]{color:var(--success)}
+svg.cost-usage-icon .cost-bar[data-tone="warning"]{color:var(--accent)}
+svg.cost-usage-icon .cost-bar[data-tone="danger"]{color:var(--cost-danger)}
+svg.cost-usage-icon .cost-bar[data-pulse="true"]{animation:cost-bar-pulse 1.8s ease-in-out infinite}
+@keyframes cost-bar-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){svg.cost-usage-icon .cost-bar[data-pulse="true"]{animation:none}}
 .cost-session-duration{padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:16px}
 .cost-session-duration h2{font-size:14px;margin:0}.cost-session-duration h2 strong{margin-left:8px;font-variant-numeric:tabular-nums}.cost-session-duration p{font-size:12px;line-height:1.6;color:var(--fg-2)}
 .memory-progress-bars .memory-progress-pending{color:inherit}
+.memory-progress-bars[data-state] .memory-progress-state{stroke:currentColor;color:var(--muted);opacity:.4}
+.memory-progress-bars[data-state="进行中"] .memory-progress-state{color:var(--accent-hover,#fcbc7c);opacity:1}
+.memory-progress-bars[data-state="等待"] .memory-progress-state{color:var(--warn);opacity:1}
+.memory-progress-bars[data-state="失败"] .memory-progress-state{color:var(--danger-icon,#d99595);opacity:1}
+.memory-progress-bars[data-state="已完成"] .memory-progress-state{color:var(--fg-2);opacity:1}
 .usage [data-od-id="context-capacity"] svg,.usage [data-od-id="cache-tokens"]>svg,.usage [data-od-id="estimated-cost"]>svg{color:inherit}
 :root .usage[data-od-id="token-usage"]>.usage-row{display:grid;grid-template-columns:repeat(4,44px);gap:0;flex:0 0 auto;width:max-content;max-width:none}
 :root .usage[data-od-id="token-usage"]>.usage-row :is(.usage-metric,.memory-todo-toggle){display:flex;justify-content:center;align-items:center;gap:0;width:44px;min-width:44px;padding:0!important}

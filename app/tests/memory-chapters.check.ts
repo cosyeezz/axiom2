@@ -2,28 +2,28 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, realpathSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
-import { memoryDirectory, digest } from "../src/server/memory-files.js";
-import { memoryDetail } from "../src/server/memory-detail.js";
+import { memoryDirectory } from "../src/server/memory-files.js";
 import type { Workspace, Session } from "../src/shared/protocol.js";
 
-const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-memory-chapters-ui-"))), project = join(root, "project");
-mkdirSync(project);
+const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-memory-chapters-ui-"))), project = realpathSync(mkdtempSync(join(tmpdir(), "axiom-memory-chapters-project-")));
 const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
 const app = await startServer({ root, port: 0, dev: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
   const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
-  const scope = { workspaceId: workspace.id, sessionId: session.id };
-  const entry = join(memoryDirectory(root, session.id), "MEMORY.md");
-  writeFileSync(entry, "# 章节记忆验证\n# [已放弃] 旧方案\n## 旧探索\n### [未开始] 废弃实现[^依据]\n#### [进行中] 废弃验证\n# [进行中] 新方案\n## [已完成] 设计\n## [进行中] 修复取消按钮\n## [等待] 外部设备\n### [未开始] 真机验证\n## [失败] 验证失败\n\n[^依据]: 放弃是因为旧方案不可行。\n");
-  const detail = (anchor: string, content: string) => memoryDetail(entry, { action: "write", anchor, entryRevision: digest(readFileSync(entry)), content });
-  detail("## [进行中] 修复取消按钮", "ONLY_DETAIL_ONE：保留修复依据与验证结果。");
-  detail("## [进行中] 修复取消按钮 〔1〕", "DETAIL_TWO_START\n\n" + "第二段正文。".repeat(2800) + "\n\nDETAIL_TWO_END");
-  detail("## [已完成] 设计", "UNRELATED_DETAIL_THREE");
+  const scope = { workspaceId: workspace.id, sessionId: session.id }, directory = memoryDirectory(root, session.id), entry = join(directory, "MEMORY.md");
+  const originalEntry = "# [已放弃] 旧方案\n## [失败] 旧探索\n### [未开始] 废弃实现\n#### [进行中] 废弃验证\n# [已完成] 已交付目标\n## [已完成] 交付步骤\n# [进行中] 新方案\n## [已完成] 明确卸载范围\n### [未开始] 标题关联验证\n## [进行中] 修复取消按钮\n## [等待] 外部设备\n### [未开始] 真机验证\n## [失败] 验证失败\n## [未开始] 长详情验证\n";
+  writeFileSync(entry, originalEntry);
+  const shortPath = "details/新方案/修复取消按钮.md", longPath = "details/新方案/长详情验证.md", linkedPath = "details/新方案/明确卸载范围.md";
+  const detail = (path: string, content: string) => { mkdirSync(dirname(join(directory, path)), { recursive: true }); writeFileSync(join(directory, path), content); };
+  detail(shortPath, "ONLY_DETAIL_ONE：保留修复依据与验证结果。");
+  detail(longPath, "DETAIL_TWO_START\n\n" + "第二段正文。".repeat(2800) + "\n\nDETAIL_TWO_END");
+  detail(linkedPath, "LINKED_CLEANUP_CONTENT");
+  detail("details/无关文件.md", "UNRELATED_DETAIL_SENTINEL");
   app.agents.memories.scan();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   const errors: string[] = [], reads: Array<{ path: string; offset?: number }> = [];
@@ -31,52 +31,116 @@ try {
   page.on("websocket", socket => socket.on("framesent", frame => { try { const value = JSON.parse(String(frame.payload)); if (value.op === "memory.read") reads.push(value.params); } catch {} }));
   await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   await page.goto(app.origin);
-  await page.getByRole("button", { name: "上下文与会话记忆", exact: true }).click();
+  const entryIcon = page.getByRole("button", { name: "上下文与会话记忆", exact: true });
+  for (const state of ["未开始", "进行中", "已完成", "等待", "失败", "已放弃"] as const) {
+    writeFileSync(entry, `# [${state}] 入口状态验证\n`); app.agents.memories.scan();
+    const bars = entryIcon.locator(`.memory-progress-bars[data-state="${state}"]`); await bars.waitFor();
+    assert.equal(await bars.locator("path").count(), 3);
+    assert.equal(await bars.locator("animate").count(), state === "进行中" ? 3 : 0);
+    assert.equal(await bars.getAttribute("data-progress"), null);
+    assert.match(await entryIcon.getAttribute("data-tooltip") ?? "", new RegExp(`任务状态 · ${state}`));
+    if (state === "进行中") for (const reducedMotion of ["no-preference", "reduce"] as const) {
+      await page.emulateMedia({ reducedMotion });
+      const stroke = bars.locator("path").first(), before = await stroke.evaluate(node => getComputedStyle(node).opacity);
+      await page.waitForTimeout(220); assert.notEqual(await stroke.evaluate(node => getComputedStyle(node).opacity), before);
+    }
+  }
+  const treeCases = [
+    { body: "# [进行中] 父任务\n## [等待] 外部条件", state: "等待", tasks: [] },
+    { body: "# [进行中] 父任务\n## [失败] 已结束尝试", state: "失败", tasks: [] },
+    { body: "# [失败] 父任务\n## [进行中] 不得恢复子项", state: "失败", tasks: [] },
+    { body: "# [已完成] 父任务\n## [未开始] 遗留子项", state: "等待", tasks: [] },
+    { body: "# [进行中] 收尾任务\n## [已完成] 实现步骤", state: "进行中", tasks: ["收尾任务"] },
+    { body: "# [进行中] 当前目标\n## [等待] 外部设备\n### [进行中] 真机验证\n## [失败] 旧尝试\n### [未开始] 旧后代\n## [进行中] 独立检查", state: "进行中", tasks: ["独立检查"] },
+  ];
+  for (const scenario of treeCases) {
+    writeFileSync(entry, scenario.body); app.agents.memories.scan();
+    const analysis = app.agents.memories.snapshot(scope)!.progress.analysis!;
+    assert.equal(analysis.displayState, scenario.state); assert.deepEqual(analysis.actionable.map(task => task.title), scenario.tasks);
+    await entryIcon.locator(`.memory-progress-bars[data-state="${scenario.state}"]`).waitFor();
+  }
+  writeFileSync(entry, originalEntry); app.agents.memories.scan();
+  await entryIcon.locator('.memory-progress-bars[data-state="进行中"]').waitFor(); await entryIcon.click();
   const todo = page.getByRole("dialog", { name: "上下文与会话记忆", exact: true });
-  await todo.getByText("章节记忆验证", { exact: true }).waitFor();
-  assert.doesNotMatch(await todo.innerText(), /进度待评估|\d+%/);
+  await todo.getByText("新方案", { exact: true }).waitFor();
+  assert.equal(await todo.locator(".memory-goals > li").count(), 3);
+  const toggle = (name: string) => todo.getByRole("button", { name: new RegExp(`^(展开|收起)：${name}$`) });
+  assert.equal(await toggle("旧方案").getAttribute("aria-expanded"), "false");
+  assert.equal(await toggle("已交付目标").getAttribute("aria-expanded"), "false");
+  assert.equal(await toggle("新方案").getAttribute("aria-expanded"), "true");
+  assert.equal(await todo.getByText("交付步骤", { exact: true }).count(), 0);
+  assert.equal(await todo.getByRole("button", { name: "新方案", exact: true }).count(), 0, "no file means no clickable title");
+  assert.equal(await todo.getByRole("button", { name: "查看详情：新方案", exact: true }).count(), 0);
+  assert.equal(await todo.locator("button button, button a").count(), 0);
+  assert.equal(await todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true }).count(), 1);
+  for (const name of ["旧方案", "旧探索", "废弃实现"]) await toggle(name).click();
   assert.ok(await todo.locator('li[data-abandoned="true"]').count() >= 4);
-  assert.ok(await todo.locator("li > ul > li").count() > 0);
-  for (const icon of ["circle", "circle-dot", "circle-check", "clock", "circle-slash", "circle-x"]) assert.ok(await todo.locator(`use[href="#i-${icon}"]`).count(), icon);
+  assert.equal(await todo.locator('li[data-abandoned="true"] animateTransform').count(), 0);
+  for (const state of ["未开始", "进行中", "已完成", "等待", "已放弃", "失败"]) assert.ok(await todo.locator(`svg.memory-state-icon[data-state="${state}"]`).count(), state);
+  const active = todo.locator('li:not([data-abandoned]) > .memory-task-row svg[data-state="进行中"]').first();
+  const waiting = todo.locator('svg.memory-state-icon[data-state="等待"]').first();
+  const done = todo.locator('li:not([data-goal]) > .memory-task-row svg[data-state="已完成"]').first();
+  const doneNode = await done.elementHandle(); assert.ok(doneNode);
+  assert.equal(await done.evaluate(node => { const sample = document.createElement("span"); sample.style.color = "var(--fg-2)"; node.parentElement!.append(sample); const same = getComputedStyle(sample).color === getComputedStyle(node).color; sample.remove(); return same; }), true);
+  for (const mode of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion: mode });
+    const sample = async () => ({ rotate: await active.evaluate(node => (node.querySelector("path") as SVGPathElement).transform.animVal.getItem(0).matrix.a), opacity: await waiting.evaluate(node => getComputedStyle(node.querySelector("path")!).opacity) });
+    const before = await sample(); await page.waitForTimeout(180); const after = await sample();
+    assert.notEqual(before.rotate, after.rotate); assert.notEqual(before.opacity, after.opacity);
+    const stroke = await done.evaluate(async node => { const svg = node as SVGSVGElement; svg.setCurrentTime(0); const first = getComputedStyle(svg.querySelector("path")!).strokeDashoffset; await new Promise(resolve => setTimeout(resolve, 550)); return [first, getComputedStyle(svg.querySelector("path")!).strokeDashoffset]; });
+    assert.notEqual(stroke[0], stroke[1]); assert.equal(stroke[1], "0px");
+  }
+  assert.equal(await done.locator('[repeatCount="indefinite"]').count(), 0);
   assert.equal(reads.length, 0, "closed details must not prefetch");
-  const summary = todo.locator("summary.memory-task-row").filter({ hasText: "修复取消按钮" });
-  await summary.focus(); await page.keyboard.press("Enter");
+  await toggle("新方案").click(); await toggle("新方案").click();
+  assert.equal(await done.evaluate((node, previous) => node === previous, doneNode), true);
+  const detailButton = todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true });
+  await detailButton.focus(); const scrollTop = await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop); await page.keyboard.press("Enter");
   await todo.getByText("ONLY_DETAIL_ONE：保留修复依据与验证结果。", { exact: true }).waitFor();
-  assert.deepEqual(reads.map(read => read.path), ["references/details.md#detail:1"]);
-  assert.doesNotMatch(await todo.innerText(), /DETAIL_TWO_START|UNRELATED_DETAIL_THREE/);
-  assert.ok(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open));
+  assert.deepEqual(reads.map(read => read.path), [shortPath]); assert.doesNotMatch(await todo.innerText(), /DETAIL_TWO_START|UNRELATED_DETAIL_SENTINEL/);
+  assert.equal(await todo.locator(".memory-goals").isVisible(), false);
+  await todo.getByRole("button", { name: "返回执行树", exact: true }).click();
+  assert.equal(await detailButton.evaluate(node => node === document.activeElement), true);
+  assert.equal(await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop), scrollTop);
+  assert.equal(await done.evaluate((node, previous) => node === previous, doneNode), true);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await todo.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, `tree overflow at ${width}`);
-    const decoration = await todo.locator('li[data-abandoned="true"] .memory-task-title').first().evaluate(node => getComputedStyle(node).textDecorationLine);
-    assert.match(decoration, /line-through/);
+    assert.match(await todo.locator('li[data-abandoned="true"] .memory-task-title').first().evaluate(node => getComputedStyle(node).textDecorationLine), /line-through/);
     if (width !== 320) await page.screenshot({ path: `/tmp/axiom-memory-chapters-${width}.png` });
   }
-  await todo.getByRole("button", { name: "详情 2", exact: true }).click();
-  await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
-  assert.doesNotMatch(await todo.innerText(), /ONLY_DETAIL_ONE|DETAIL_TWO_END|UNRELATED_DETAIL_THREE/);
-  await todo.getByRole("button", { name: "继续读取此条详情", exact: true }).click();
-  await todo.getByText("DETAIL_TWO_END", { exact: true }).waitFor();
-  assert.deepEqual(reads.map(read => read.path), ["references/details.md#detail:1", "references/details.md#detail:2", "references/details.md#detail:2"]);
-  assert.ok(reads[2].offset! > 0);
+  // The title is the same action as the document icon, not the disclosure control.
+  await todo.getByRole("button", { name: "长详情验证", exact: true }).click(); await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
+  assert.doesNotMatch(await todo.innerText(), /ONLY_DETAIL_ONE|DETAIL_TWO_END|UNRELATED_DETAIL_SENTINEL/);
+  await todo.getByRole("button", { name: "继续读取此条详情", exact: true }).click(); await todo.getByText("DETAIL_TWO_END", { exact: true }).waitFor();
+  assert.deepEqual(reads.map(read => read.path), [shortPath, longPath, longPath]); assert.ok(reads.at(-1)!.offset! > 0);
   assert.equal(await todo.getByRole("button", { name: "编辑", exact: true }).count(), 0);
-  await summary.focus(); await page.keyboard.press("Space");
-  await todo.locator(".memory-inline-detail").waitFor({ state: "detached" });
-  assert.ok(await todo.getByText("真机验证", { exact: true }).isVisible(), "folding details does not hide descendants");
-  // Markdown source retains inherited strikes and single-document footnotes.
+  await todo.getByRole("button", { name: "返回执行树", exact: true }).focus(); await page.keyboard.press("Space");
+  await todo.locator(".memory-inline-detail").waitFor({ state: "detached" }); assert.ok(await todo.getByText("真机验证", { exact: true }).isVisible());
+  await detailButton.click(); await todo.getByText("ONLY_DETAIL_ONE：保留修复依据与验证结果。", { exact: true }).waitFor();
+  rmSync(join(directory, shortPath)); app.agents.memories.scan();
+  await todo.getByText("此项或其详情文件已移除，可返回查看最新执行树。", { exact: true }).waitFor();
+  await todo.getByRole("button", { name: "返回执行树", exact: true }).click();
+  assert.equal(await todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true }).count(), 0);
+  assert.equal(await todo.getByRole("button", { name: "修复取消按钮", exact: true }).count(), 0);
+  assert.equal(await todo.locator(".memory-execution-view").evaluate(node => node === document.activeElement), true);
   await todo.getByRole("button", { name: "查看完整记忆" }).click();
-  const panel = page.getByRole("dialog", { name: "会话记忆", exact: true });
-  await panel.locator(".memory-entry").waitFor();
+  const panel = page.getByRole("dialog", { name: "会话记忆", exact: true }); await panel.locator(".memory-entry").waitFor();
   assert.ok(await panel.locator(".memory-entry [data-abandoned]").count() > 0);
-  await panel.locator(".memory-entry [data-footnote-target]").click();
-  await panel.getByText("放弃是因为旧方案不可行。", { exact: true }).waitFor();
+  await panel.getByRole("button", { name: "明确卸载范围", exact: true }).click(); await panel.getByText("LINKED_CLEANUP_CONTENT", { exact: true }).waitFor();
+  assert.equal(reads.at(-1)?.path, linkedPath);
+  await panel.getByRole("button", { name: "返回上一级", exact: true }).click();
+  await panel.locator(".memory-entry").waitFor();
   await panel.getByRole("button", { name: "编辑", exact: true }).click();
-  const original = await panel.getByRole("textbox", { name: "记忆内容" }).inputValue();
-  assert.match(original, /# \[已放弃\] 旧方案/); assert.doesNotMatch(original, /~~/);
+  const source = panel.getByRole("textbox", { name: "记忆内容" }), original = await source.inputValue(); assert.equal(original, originalEntry);
+  await source.fill(original.replace("修复取消按钮", "改名不允许")); await panel.getByRole("button", { name: "保存", exact: true }).click();
+  const rejection = panel.locator(".memory-error").first(); await rejection.waitFor();
+  assert.match(await rejection.innerText(), /已有记忆标题不能改名/);
+  assert.equal(readFileSync(entry, "utf8"), originalEntry);
   assert.deepEqual(errors, []);
-  console.log("任务树UI通过：六态、桌面/390/320、Enter/Space、单编号懒加载/切换/分页隔离、整支划线、原文编辑。");
+  console.log("标题路径任务树UI通过：六态/有效前沿、独立折叠、存在才可点、标题与图标同路、懒加载分页隔离、DOM/焦点/滚动、1440/390/320、文件消失降级、完整详情导航与改名拒绝。");
 } finally {
   await browser.close(); await app.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true });
 }

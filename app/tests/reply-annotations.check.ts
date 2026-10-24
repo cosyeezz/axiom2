@@ -58,6 +58,9 @@ try {
     });
   });
   const clickText = async (locator: Locator, fragment: string) => {
+    // These targets belong to the first reply. Use actual thread navigation to
+    // stop tail-following and mount its virtual row before resolving a locator.
+    await page.getByRole("button", { name: "回到最上", exact: true }).dispatchEvent("click");
     await locator.scrollIntoViewIfNeeded();
     const point = await locator.evaluate((el, text) => {
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -78,13 +81,13 @@ try {
   assert.equal(await toggle.getAttribute("aria-pressed"), "false");
   assert.equal(await page.locator(".annotation-tray,.annotation-block").count(), 0);
   const position = await page.locator(".usage-settings > button").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label")));
-  assert.deepEqual(position.slice(0, 3), ["开启批注", "原始会话", "子代理设置"]);
+  assert.deepEqual(position.slice(0, 3), ["开启批注", "技能与 MCP", "子代理设置"]);
   await page.locator("#prompt").fill("保留输入框里的草稿");
   // Switching mode must preserve mounted image/code state, not refetch/recreate it.
   await reply.locator(".markdown-image").scrollIntoViewIfNeeded();
   const image = reply.locator(".markdown-image img"); await image.waitFor();
   await image.evaluate((el) => { (window as any).annotationImageNode = el; });
-  await reply.getByRole("button", { name: "复制代码", exact: true }).click();
+  await reply.locator(".code-head").getByRole("button", { name: "复制代码", exact: true }).click();
   await toggle.click(); await toggle.click(); await toggle.click();
   assert.ok(await image.evaluate((el) => el === (window as any).annotationImageNode));
   assert.equal(imageRequests, 1, "mode toggling must not request the same image again");
@@ -231,7 +234,7 @@ try {
   await clickText(reply.locator(".annotation-source pre"), "retry");
   await page.getByRole("textbox", { name: "批注意见", exact: true }).fill("检查这一行的重试开关");
   await page.getByRole("button", { name: "保存批注", exact: true }).click();
-  await reply.getByRole("button", { name: "复制代码", exact: true }).click();
+  await reply.locator(".code-head").getByRole("button", { name: "复制代码", exact: true }).click();
   assert.ok(await page.evaluate(() => [...CSS.highlights.get("reply-annotation")!].some((range) => range.toString() === "const retry = true;")));
   await page.getByRole("button", { name: "删除批注 3", exact: true }).click();
   assert.equal(await page.getByRole("textbox", { name: "批注意见", exact: true }).count(), 0);
@@ -309,7 +312,8 @@ try {
   if (process.env.AXIOM_TEST_BUILT !== "1") {
     for (let i = 0; i < 40; i++) views.messageChanged(scope, { id: `long-${i}`, role: "assistant", text: Array.from({ length: 12 }, (_, j) => `长回复 ${i}，第 ${j} 段。正文保持稳定，批注输入不能重新解析整篇会话。`).join("\n\n") });
     views.flush(scope);
-    await page.waitForFunction(() => document.querySelectorAll('[aria-label="助手回复"]').length >= 42);
+    // Virtualization intentionally does not mount the whole conversation.
+    await page.waitForFunction(() => Number(document.querySelector("#thread .virtual-timeline")?.getAttribute("data-total-rows")) >= 42);
     await clickText(first.locator(".annotation-source"), "接口采用逐条提交");
     await page.getByRole("textbox", { name: "批注意见", exact: true }).waitFor();
     const modulePath = `/@fs/${resolve("src/shared/markdown.ts").replaceAll("\\", "/")}`;

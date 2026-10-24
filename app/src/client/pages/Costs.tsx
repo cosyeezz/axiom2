@@ -1,16 +1,11 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { Lru } from "../../shared/lru.js";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../Icon.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
-import { command, useConnectionState, useScope } from "../transport.js";
-import { costAmount, costTokens, costCategories, costLabels, costPartLabels, costParts, costsScope, sumCosts, type CostReport, type CostRow, type CostTotals } from "../../shared/costs.js";
-import { AppError, type Scope } from "../../shared/protocol.js";
+import { useCostReport, type CostReportState } from "../useCostReport.js";
+import { costAmount, costTokens, costCategories, costLabels, costPartLabels, costParts, sumCosts, type CostReport, type CostRow, type CostTotals } from "../../shared/costs.js";
+import type { Scope } from "../../shared/protocol.js";
 import "../styles/costs.css";
-
-const emptyRevision = { revision: 0 };
-// Reopening may show the last report immediately; every mount still revalidates.
-const recentReports = new Lru<string, CostReport>(5);
 const number = (value: number) => value.toLocaleString("zh-CN");
 function Breakdown({ row, title, description }: { row: CostRow; title?: ReactNode; description?: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -93,70 +88,32 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
   </>;
 });
 type SessionSummary = (totals: CostTotals | null) => ReactNode;
-function CostPage({ scope, closeControl, sessionSummary }: { scope: Scope; closeControl?: ReactNode; sessionSummary?: SessionSummary }) {
-  const revision = useScope(costsScope(scope), emptyRevision);
-  const connection = useConnectionState();
-  const cacheKey = JSON.stringify([connection.generation, scope.workspaceId, scope.sessionId]);
-  const [report, setReport] = useState<CostReport | null>(() => recentReports.get(cacheKey) ?? null), [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const refresh = useRef<((visible?: boolean) => void) | null>(null);
-  useEffect(() => {
-    if (!connection.connected) return;
-    let active = true, inFlight = false, dirty = false, visiblePending = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Keep the first deadline under continuous notifications. Serialize reads and
-    // remember invalidations received while a query is in flight.
-    const schedule = (visible = false, delay = 150) => {
-      dirty = true;
-      visiblePending ||= visible;
-      if (visible) setLoading(true);
-      if (!active || inFlight || timer !== undefined) return;
-      timer = setTimeout(() => {
-        timer = undefined;
-        dirty = false;
-        inFlight = true;
-        const showLoading = visiblePending;
-        visiblePending = false;
-        if (showLoading) setLoading(true);
-        void command<CostReport>("costs.get", {}, scope).then((value) => {
-          if (active) { recentReports.set(cacheKey, value); setReport(value); setError(""); }
-        }).catch((reason: Error) => {
-          if (active) setError(reason instanceof AppError && reason.code === "UNKNOWN_OPERATION" ? "当前后台尚未支持费用明细，请在任务结束后重启后台服务。" : reason.message);
-        }).finally(() => {
-          inFlight = false;
-          if (!active) return;
-          if (showLoading && !visiblePending) setLoading(false);
-          if (dirty) schedule();
-        });
-      }, delay);
-    };
-    refresh.current = schedule;
-    schedule(true, 0);
-    return () => { active = false; clearTimeout(timer); refresh.current = null; };
-  }, [scope.workspaceId, scope.sessionId, connection.connected, connection.generation]);
-  useEffect(() => { if (revision.revision > 0) refresh.current?.(); }, [revision.revision]);
+function CostPage({ scope, closeControl, sessionSummary, costs }: { scope: Scope; closeControl?: ReactNode; sessionSummary?: SessionSummary; costs?: CostReportState }) {
+  const ownCosts = useCostReport(costs ? undefined : scope);
+  const { report, error, loading, connected, refresh } = costs ?? ownCosts;
+  const sessionTotals = useMemo(() => report ? sumCosts(report.rows.filter(row => row.sessionId === scope.sessionId)) : null, [report, scope.sessionId]);
   return <div className="cost-page">
     <header className="cost-topbar"><div className="cost-heading"><span>用量与账单</span><strong>费用明细</strong></div><div className="cost-actions">
-      <button className="cost-refresh" type="button" aria-label="刷新费用" data-tooltip="刷新费用" aria-busy={loading} disabled={!connection.connected || loading} onClick={() => refresh.current?.(true)}>
+      <button className="cost-refresh" type="button" aria-label="刷新费用" data-tooltip="刷新费用" aria-busy={loading} disabled={!connected || loading} onClick={refresh}>
         <Icon name="rotate-cw" />
       </button>{closeControl ?? <a className="cost-back" href="/">返回工作台</a>}
     </div></header>
     <div className="cost-content">
       {!closeControl && <div className="cost-title"><p>会话费用</p><h1>{report?.title ?? "费用明细"}</h1><span>主 Agent、子 Agent 与模型调用的累计明细</span></div>}
-      <p className="cost-status" role="status">{!connection.connected ? "连接已断开或正在连接，显示的费用可能尚未更新。" : loading ? report ? "正在更新，暂时显示上次读取的记录…" : "正在读取费用记录…" : report ? "用量变化时自动更新 · 金额以供应商账单为准" : "尚未读取费用"}</p>
-      {error && <div className="cost-warning" role="alert"><p>{error}</p><button className="cost-refresh" type="button" disabled={!connection.connected || loading} onClick={() => refresh.current?.(true)}>重新加载</button></div>}
-      {sessionSummary?.(report ? sumCosts(report.rows.filter(row => row.sessionId === scope.sessionId)) : null)}
+      <p className="cost-status" role="status">{!connected ? "连接已断开或正在连接，显示的费用可能尚未更新。" : loading ? report ? "正在更新，暂时显示上次读取的记录…" : "正在读取费用记录…" : report ? "用量变化时自动更新 · 金额以供应商账单为准" : "尚未读取费用"}</p>
+      {error && <div className="cost-warning" role="alert"><p>{error}</p><button className="cost-refresh" type="button" disabled={!connected || loading} onClick={refresh}>重新加载</button></div>}
+      {sessionSummary?.(sessionTotals)}
       {report && <Report report={report} />}
     </div>
   </div>;
 }
-export function CostsPopover({ scope, trigger, onClose, sessionSummary }: { scope: Scope; trigger: HTMLButtonElement; onClose: () => void; sessionSummary?: SessionSummary }) {
+export function CostsPopover({ scope, trigger, onClose, sessionSummary, costs }: { scope: Scope; trigger: HTMLButtonElement; onClose: () => void; sessionSummary?: SessionSummary; costs?: CostReportState }) {
   const { panel, close, host } = useSettingsPopover(trigger, onClose, "anchored");
   return createPortal(<dialog ref={panel} open popover="auto" className="cost-popover" aria-label="费用明细" onKeyDown={(event) => {
     event.stopPropagation();
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") event.preventDefault();
   }}>
-    <CostPage scope={scope} sessionSummary={sessionSummary} closeControl={<button ref={close} type="button" className="cost-close action-icon" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
+    <CostPage scope={scope} costs={costs} sessionSummary={sessionSummary} closeControl={<button ref={close} type="button" className="cost-close action-icon" aria-label="关闭费用明细" data-tooltip="关闭（Esc）" onClick={onClose}>
       <Icon name="close" />
     </button>} />
   </dialog>, host);

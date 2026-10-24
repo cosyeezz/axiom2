@@ -12,6 +12,30 @@ import type { Workspace, Session } from "../src/shared/protocol.js";
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZkAAAAASUVORK5CYII=";
 const reply = (text: string) => ({ role: "assistant", content: [{ type: "text", text }], stopReason: "stop", timestamp: Date.now() }) as any;
 
+test("segmented tool reads include cross-boundary results before native persistence", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-history-transient-"));
+  const cwd = join(root, "project"); mkdirSync(cwd);
+  const store = new Store(root);
+  try {
+    const workspace = store.execute({ op: "workspace.open", requestId: crypto.randomUUID(), params: { path: cwd, authorized: true } }) as Workspace;
+    const session = store.execute({ op: "session.create", workspaceId: workspace.id, requestId: crypto.randomUUID() }) as Session;
+    const scope = { workspaceId: workspace.id, sessionId: session.id };
+    const manager = SessionManager.create(cwd, join(root, "native"));
+    manager.appendMessage({ ...reply(""), content: [{ type: "toolCall", id: "late-tool", name: "read", arguments: { path: "late.ts" } }] });
+    const segmentId = manager.appendCompaction("summary", null, 1000);
+    const file = manager.getSessionFile()!;
+    store.db.prepare("INSERT INTO agent_sessions(sessionId,file) VALUES(?,?)").run(session.id, file);
+    const before = readFileSync(file, "utf8"), views = new AgentViews(store, () => {});
+    const group = views.historyIndex(scope).segments[0].groups[0];
+    views.messageChanged(scope, { id: "tool-late-tool", role: "toolResult", text: "not yet on disk", toolCallId: "late-tool" });
+    assert.equal(views.historyRead(scope, segmentId, group.id).messages.find(message => message.id === "tool-late-tool")?.text, "not yet on disk");
+    assert.equal(views.message(scope, "tool-late-tool", true)?.text, "not yet on disk");
+    assert.throws(() => views.historyRead(scope, segmentId, "not-owned"), /不属于/);
+    views.flush(scope);
+    assert.equal(readFileSync(file, "utf8"), before);
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test("original view crosses every compaction, omits summaries and preserves native context edits and branch ownership", () => {
   const manager = SessionManager.inMemory();
   const user = (content: string) => manager.appendMessage({ role: "user", content, timestamp: Date.now() });

@@ -1,7 +1,8 @@
 import type { Run } from "../shared/agent.js";
 import type { Scope } from "../shared/protocol.js";
 import { legacyMemoryTemplate, memoryBody } from "../shared/memory.js";
-import { detailFile, detailIds } from "../shared/memory-outline.js";
+import { availableMemoryDetails } from "./memory-detail-files.js";
+import { memoryDirectory } from "./memory-files.js";
 import type { Memories } from "./memories.js";
 import { validSessionTitle } from "./session-title.js";
 
@@ -51,7 +52,8 @@ export class SessionTitles {
       const entry = read("MEMORY.md");
       const body = memoryBody(entry).trim();
       if (!body || !body.split(/\r?\n/).some(line => line.trim() && !placeholderLines.has(line.trim()))) return;
-      const details = detailIds(memoryBody(entry)).map(id => ({ id, content: read(`${detailFile}#detail:${id}`) }));
+      const details = availableMemoryDetails(memoryDirectory(store.root, scope.sessionId), entry)
+        .map(({ node, path }) => ({ heading: node.title, content: read(path) }));
       for (const file of captured) if (this.memories.read(scope, file.path, 0, 1).revision !== file.revision) throw Error("标题资料已变化");
       controller.signal.throwIfAborted();
       state.attempts++;

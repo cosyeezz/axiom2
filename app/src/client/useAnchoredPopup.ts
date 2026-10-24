@@ -1,11 +1,20 @@
 import { useLayoutEffect, useRef } from "react";
 import { openPopover, popoverHost } from "./popover.js";
 
+/** Reveal only inside the options layer; scrollIntoView can move its page/dialog too. */
+export function revealPopupOption(panel: HTMLElement | null, index: number) {
+  const option = panel?.querySelectorAll<HTMLElement>('[role="option"]')[index];
+  if (!panel || !option) return;
+  const menuBox = panel.getBoundingClientRect(), optionBox = option.getBoundingClientRect();
+  if (optionBox.top < menuBox.top) panel.scrollTop -= menuBox.top - optionBox.top + 4;
+  else if (optionBox.bottom > menuBox.bottom) panel.scrollTop += optionBox.bottom - menuBox.bottom + 4;
+}
+
 /** Position a portalled layer in the visible viewport while retaining a modal's ownership.
  * Popovers are opened before measuring so the first frame uses their actual height. */
 export function useAnchoredPopup(anchor: HTMLElement | null, {
-  maxWidth = 400, maxHeight = 520, matchWidth = false, fillMobile = false, preferBelow = false,
-}: { maxWidth?: number; maxHeight?: number; matchWidth?: boolean; fillMobile?: boolean; preferBelow?: boolean } = {}) {
+  maxWidth = 400, minWidth = 0, maxHeight = 520, matchWidth = false, fillMobile = false, preferBelow = false,
+}: { maxWidth?: number; minWidth?: number; maxHeight?: number; matchWidth?: boolean; fillMobile?: boolean; preferBelow?: boolean } = {}) {
   const panel = useRef<HTMLDivElement>(null);
   const host = anchor ? popoverHost(anchor) : document.body;
   useLayoutEffect(() => {
@@ -23,7 +32,7 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
         ? availableBelow < Math.min(200, availableAbove)
         : availableAbove >= Math.min(200, availableBelow);
       const limit = fillMobile && matchMedia("(max-width:640px), (pointer:coarse) and (max-height:500px)").matches ? width - gutter * 2 : maxWidth;
-      const panelWidth = Math.max(0, Math.min(limit, matchWidth ? rect.width : limit, width - gutter * 2));
+      const panelWidth = Math.max(0, Math.min(limit, matchWidth ? Math.max(minWidth, rect.width) : limit, width - gutter * 2));
       node.style.width = `${panelWidth}px`;
       node.style.maxHeight = `${Math.max(0, Math.min(maxHeight, height - gutter * 2, above ? availableAbove : availableBelow))}px`;
       node.style.left = `${Math.max(left + gutter, Math.min(rect.left, left + width - gutter - panelWidth))}px`;
@@ -49,6 +58,6 @@ export function useAnchoredPopup(anchor: HTMLElement | null, {
       window.visualViewport?.removeEventListener("scroll", position);
       disposePopover?.();
     };
-  }, [anchor, maxWidth, maxHeight, matchWidth, fillMobile, preferBelow]);
+  }, [anchor, maxWidth, minWidth, maxHeight, matchWidth, fillMobile, preferBelow]);
   return { panel, host };
 }

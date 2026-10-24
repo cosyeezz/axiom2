@@ -23,7 +23,7 @@ export function ModelEditor({
   discardEditor: (proceed: () => void) => void;
   feedback: string;
 }) {
-  const idError = !editor.id.trim() ? "请填写供应商提供的模型 ID。" : p.models.some((model) => model.key !== editor.key && model.id === editor.id.trim()) ? "模型 ID 重复，请使用该供应商下唯一的模型 ID。" : "";
+  const idError = !editor.id.trim() ? "请填写供应商提供的模型 ID。" : "";
   return (
     <section
       className="inline-model-editor"
@@ -58,6 +58,7 @@ export function ModelEditor({
               onChange={(e) => setEditor({ ...editor, id: e.target.value })}
             />
             {idError && <span id="model-id-error" className="field-help">{idError}</span>}
+            <span className="field-help">填写接口使用的模型 ID；可添加多个同 ID 配置，用不同名称和参数区分。</span>
           </div>
           <div className="field">
             <label htmlFor="new-model-name">显示名称</label>

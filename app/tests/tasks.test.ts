@@ -104,10 +104,11 @@ test(
               typeof m.content === "string"
                 ? m.content
                 : (m.content ?? []).map((c: any) => c.text ?? "").join("\n");
-            const match = s?.match(
-              /\{"taskId":"[^"]+","runId":"[^"]+","resultId":"[^"]+","status":"[^"]+"\}/,
-            );
-            return match ? [JSON.parse(match[0])] : [];
+            // Notices are JSON objects; identity metadata and field order may vary.
+            try {
+              const payload = JSON.parse(s);
+              return payload?.taskId && payload?.resultId && payload?.status ? [payload] : [];
+            } catch { return []; }
           })
           .at(-1);
         const called = body.messages.some((m: any) =>
@@ -281,6 +282,30 @@ test(
           ),
         "parent did not read completed result",
       );
+      await wait(() => requests.some(body => body.messages.some((m: any) => {
+        if (m.role !== "tool") return false;
+        try { return typeof JSON.parse(m.content).report === "string"; } catch { return false; }
+      })), "parent did not receive compact result content");
+      for (const body of requests) {
+        if (!(body.tools ?? []).some((tool: any) => tool.function.name === "delegate")) continue;
+        for (const message of body.messages) {
+          let value: any;
+          try { value = JSON.parse(message.content); } catch { continue; }
+          if (value?.notice) {
+            assert.match(value.taskId, /^t[1-9]\d*$/);
+            assert.match(value.resultId, /^r[1-9]\d*$/);
+            assert.equal("runId" in value, false);
+          }
+          if (message.role === "tool" && typeof value?.report === "string") {
+            for (const field of ["id", "taskId", "runId", "taskRef", "resultRef", "startedAt", "endedAt", "elapsedMs"])
+              assert.equal(field in value, false, `model result must not repeat ${field}`);
+          }
+          if (message.role === "tool" && Array.isArray(value?.taskIds)) {
+            assert.ok(value.taskIds.every((id: string) => /^t[1-9]\d*$/.test(id)));
+            assert.equal("budgets" in value, false);
+          }
+        }
+      }
       const cancelId = randomUUID();
       await call(
         "task.cancel",

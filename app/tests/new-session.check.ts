@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { startServer as startSourceServer } from "../src/server/index.js";
+import { memoryDirectory } from "../src/server/memory-files.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-new-session-ui-"));
@@ -54,8 +55,24 @@ try {
   await page.waitForFunction(id => JSON.parse(sessionStorage.getItem("view")!).sessionId === id, first);
   assert.equal(app.store.sessions(workspace.id).length, 2);
   assert.equal(app.store.db.prepare("SELECT COUNT(*) AS count FROM runs").get()?.count, 0);
+  // A real new session must open the first toolbar icon before any model call.
+  const memoryToggle = page.getByRole("button", { name: "上下文与会话记忆", exact: true });
+  assert.equal(await memoryToggle.isEnabled(), true);
+  await memoryToggle.click();
+  const memoryPanel = page.getByRole("dialog", { name: "上下文与会话记忆", exact: true });
+  await memoryPanel.getByText("还没有任务记录", { exact: true }).waitFor();
+  assert.equal(await memoryToggle.getAttribute("aria-expanded"), "true");
+  const scope = { workspaceId: workspace.id, sessionId: first };
+  writeFileSync(join(memoryDirectory(root, first), "MEMORY.md"), "# 新会话入口验证\n\n## [进行中] 新会话任务\n");
+  await app.agents.memories.scanAsync(scope);
+  await memoryPanel.locator(".memory-task-title").filter({ hasText: "新会话任务" }).waitFor();
+  assert.ok(await memoryPanel.locator('svg.memory-state-icon[data-state="进行中"] animateTransform').count());
+  await memoryPanel.getByRole("button", { name: "关闭统计详情", exact: true }).click();
+  assert.equal(await memoryToggle.getAttribute("aria-expanded"), "false");
+  assert.equal(await page.locator("#prompt").inputValue(), "新会话草稿应当保留");
+  assert.equal(app.store.db.prepare("SELECT COUNT(*) AS count FROM runs").get()?.count, 0);
   assert.deepEqual(errors, []);
-  console.log(`PASS (${buildRoot ? "compiled production" : "source dev"}): rapid clicks and two viewers share one new session; button and shortcut reuse; navigation back, draft preservation and refresh; no Agent run`);
+  console.log(`PASS (${buildRoot ? "compiled production" : "source dev"}): rapid clicks and two viewers share one new session; button and shortcut reuse; navigation back, draft preservation and refresh; context-memory icon opens before first prompt, empty state and live chapter tree; no Agent run`);
 } finally {
   await browser.close(); await app.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

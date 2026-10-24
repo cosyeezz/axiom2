@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SessionManager, type CompactionEntry } from "@earendil-works/pi-coding-agent";
-import { ensureTopicSnapshot, injectTopicSnapshot, topicSnapshot } from "../src/server/memory-topics.js";
+import { ensureTopicSnapshot, injectTopicSnapshot, topicSnapshot, validTopicSnapshot } from "../src/server/memory-topics.js";
 import { applyCompression, captureCompression } from "../src/server/compression-context.js";
 import { memoryTopicBlock, type MemoryTopicSnapshot } from "../src/shared/memory-tree.js";
-const snapshot = (text = memoryTopicBlock([])): MemoryTopicSnapshot => ({ version: 1, workspaceId: "workspace", text });
+const snapshot = (text = memoryTopicBlock([])): MemoryTopicSnapshot => ({ version: 2, workspaceId: "workspace", text });
 const native = (topics: MemoryTopicSnapshot): CompactionEntry => ({ type: "compaction", id: "native", parentId: null, timestamp: new Date().toISOString(), summary: "历史任务摘要", firstKeptEntryId: "native", tokensBefore: 100, details: { axiomMemoryTopics: topics } });
+test("old Topic-ID snapshots are refused without changing old branch entries", () => {
+  const manager = SessionManager.inMemory(), legacy = { version: 1, workspaceId: "workspace", text: '<记忆Topic目录>旧ID目录</记忆Topic目录>' };
+  manager.appendCustomEntry("axiom-memory-topic-snapshot", legacy); const oldLeaf = manager.getLeafId()!;
+  assert.equal(validTopicSnapshot(legacy), false); assert.equal(topicSnapshot(manager, "workspace"), undefined);
+  const latest = snapshot(memoryTopicBlock([{ name: "数据库" }])); assert.deepEqual(ensureTopicSnapshot(manager, latest), latest);
+  manager.branch(oldLeaf); assert.equal(topicSnapshot(manager, "workspace"), undefined);
+  assert.deepEqual((manager.getBranch().at(-1) as any).data, legacy, "no old data deletion or branch rewrite");
+});
 test("initial empty directory stays fixed across requests and first-input rewrites", () => {
   const manager = SessionManager.inMemory(), initial = snapshot(); ensureTopicSnapshot(manager, initial);
   const root = manager.getLeafId()!;

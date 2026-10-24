@@ -78,7 +78,7 @@ export function AnnotatedReply({ scope, messageId, text, streaming }: {
       {children}
     </AnnotationBlock>
   ), [owner, messageId, streaming]);
-  return <Markdown text={text} images={images} renderBlock={renderBlock} />;
+  return <Markdown text={text} images={images} renderBlock={renderBlock} streaming={streaming} />;
 }
 const markedRanges = new Map<HTMLElement, Range[]>();
 function paintAnnotations() {
@@ -103,16 +103,27 @@ function AnnotationPopover({ scope, item, root, onClose }: {
   useEffect(() => {
     const place = () => {
       const rect = (noteRange(root, item)?.getBoundingClientRect()) ?? root.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop ?? 0, viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportWidth = viewport?.width ?? innerWidth, viewportHeight = viewport?.height ?? innerHeight;
+      if (panel.current) {
+        panel.current.style.maxWidth = `${Math.max(0, viewportWidth - 24)}px`;
+        panel.current.style.setProperty("--annotation-viewport-height", `${Math.max(0, viewportHeight - 24)}px`);
+      }
       const height = panel.current?.offsetHeight ?? 260, width = panel.current?.offsetWidth ?? 400;
-      const below = rect.bottom + 8;
-      const top = Math.max(12, Math.min(innerHeight - height - 12, below + height <= innerHeight - 12 ? below : rect.top - height - 8));
-      const left = Math.max(12, Math.min(innerWidth - width - 12, rect.left));
+      const below = rect.bottom + 8, bottom = viewportTop + viewportHeight - 12;
+      const top = Math.max(viewportTop + 12, Math.min(bottom - height, below + height <= bottom ? below : rect.top - height - 8));
+      const left = Math.max(viewportLeft + 12, Math.min(viewportLeft + viewportWidth - width - 12, rect.left));
       setPosition((old) => old.top === top && old.left === left && old.ready ? old : { top, left, ready: true });
     };
     place();
     const observer = new ResizeObserver(place); if (panel.current) observer.observe(panel.current);
     window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
-    return () => { observer.disconnect(); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+    window.visualViewport?.addEventListener("resize", place); window.visualViewport?.addEventListener("scroll", place);
+    return () => {
+      observer.disconnect(); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true);
+      window.visualViewport?.removeEventListener("resize", place); window.visualViewport?.removeEventListener("scroll", place);
+    };
   }, [root, item.id, item.start, item.end]);
   useEffect(() => { if (position.ready) panel.current?.querySelector("textarea")?.focus({ preventScroll: true }); }, [position.ready]);
   return createPortal(<div ref={panel} className="annotation-popover" role="dialog" aria-label="内容批注"

@@ -1,123 +1,150 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Store } from "./storage.js";
-import type { MemoryRecord, MemorySource, MemoryTree, MemoryTreeTopic } from "../shared/memory-tree.js";
-import { AppError } from "../shared/protocol.js";
-export interface MemoryFileContribution extends MemorySource { records: MemoryRecord[]; dependencies: MemorySource[] }
-export interface ExistingMemoryRecord { file: MemoryFileContribution; index: number; record: MemoryRecord }
-const id = (...parts: string[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 24);
-export const topicId = (name: string) => `t-${id(name)}`;
-export const sectionId = (topic: string, section: string) => `s-${id(topic, section)}`;
+import { emptyMemoryTree, memoryBatchSize, memoryBatchWaitMs, memoryContextPurposeLimit, memoryTopicBlock,
+  type MemoryPurpose, type MemoryIndexNode, type MemoryTree } from "../shared/memory-tree.js";
+import { memoryPurposes } from "../shared/memory-purposes.js";
+import { AppError, type Scope } from "../shared/protocol.js";
+
+export interface QueuedPurpose extends MemoryPurpose {
+  workspaceId: string; queuedAt: number; processedAt: number | null; retryAfter: number; blocked: boolean; error?: string;
+  context: Array<{ text: string; state: string }>;
+}
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
 export class MemoryTreeStore {
   constructor(private store: Store) {
-    store.db.exec(`CREATE TABLE IF NOT EXISTS memory_file_contributions(
-      sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, path TEXT NOT NULL, revision TEXT NOT NULL, body TEXT NOT NULL,
-      PRIMARY KEY(sessionId,path));
-      CREATE TABLE IF NOT EXISTS memory_topic_routes(workspaceId TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      topicId TEXT NOT NULL,sectionId TEXT NOT NULL,PRIMARY KEY(workspaceId,topicId,sectionId));
-      CREATE TABLE IF NOT EXISTS memory_activity(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
-      updatedAt INTEGER NOT NULL,version INTEGER NOT NULL);`);
+    // No old-format migration, deletion or dual writes. Old tables remain untouched.
+    store.db.exec(`CREATE TABLE IF NOT EXISTS memory_purposes(
+      id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,sourceKey TEXT NOT NULL,
+      queuedAt INTEGER NOT NULL,processedAt INTEGER,retryAfter INTEGER NOT NULL DEFAULT 0,
+      blocked INTEGER NOT NULL DEFAULT 0,error TEXT,body TEXT NOT NULL,UNIQUE(sessionId,sourceKey));
+      CREATE INDEX IF NOT EXISTS memory_purposes_pending ON memory_purposes(workspaceId,processedAt,blocked,retryAfter,queuedAt);
+      CREATE TABLE IF NOT EXISTS memory_purpose_indexes(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,body TEXT NOT NULL);`);
   }
-  files(workspaceId: string): MemoryFileContribution[] {
-    return this.store.db.prepare(`SELECT c.body FROM memory_file_contributions c JOIN sessions s ON s.id=c.sessionId
-      WHERE s.workspaceId=? AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id) ORDER BY c.sessionId,c.path`).all(workspaceId)
-      .map((row) => JSON.parse(String(row.body)) as MemoryFileContribution);
+  enqueue(scope: Scope, entry: string, now = Date.now()) {
+    const headings = memoryPurposes(entry);
+    const existing = this.entries(scope.workspaceId).filter(purpose => purpose.source.sessionId === scope.sessionId);
+    const insert = this.store.db.prepare(`INSERT OR IGNORE INTO memory_purposes(id,workspaceId,sessionId,sourceKey,queuedAt,body) VALUES(?,?,?,?,?,?)`);
+    let added = 0;
+    for (const [index, heading] of headings.entries()) {
+      if (!heading.complete) continue;
+      const prior = existing.find(purpose => purpose.source.key === heading.key);
+      if (prior) {
+        // Explicit correction or a temporarily invalid locator keeps the same ID.
+        if (prior.blocked && prior.processedAt === null) this.store.db.prepare("UPDATE memory_purposes SET blocked=0,error=NULL,retryAfter=0 WHERE id=?").run(prior.id);
+        continue;
+      }
+      const context = headings.map((other, position) => ({ other, distance: Math.abs(position - index), position }))
+        .filter(({ position }) => position !== index).sort((a, b) => a.distance - b.distance || a.position - b.position)
+        .slice(0, memoryContextPurposeLimit).sort((a, b) => a.position - b.position)
+        .map(({ other }) => ({ text: other.title, state: other.state }));
+      // IDs are independent of labels, file paths and model output. Stable source
+      // bindings survive state changes and descendant additions and service restarts. Goal titles
+      // are immutable in the task-tree contract; no rename guessing is attempted.
+      const purpose = { id: `p-${randomUUID()}`, text: heading.title,
+        source: { sessionId: scope.sessionId, path: "MEMORY.md" as const, key: heading.key }, context };
+      added += Number(insert.run(purpose.id, scope.workspaceId, scope.sessionId, heading.key, now, JSON.stringify(purpose)).changes);
+    }
+    return added;
   }
-  signature(workspaceId: string) { return id(JSON.stringify(this.files(workspaceId))); }
-  activity(sessionId: string) {
-    const row = this.store.db.prepare("SELECT updatedAt,version FROM memory_activity WHERE sessionId=?").get(sessionId);
-    return { updatedAt: Number(row?.updatedAt ?? 0), version: Number(row?.version ?? 0) };
+  entries(workspaceId: string): QueuedPurpose[] {
+    return this.store.db.prepare(`SELECT p.* FROM memory_purposes p JOIN sessions s ON s.id=p.sessionId
+      WHERE p.workspaceId=? AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id) ORDER BY p.queuedAt,p.rowid`).all(workspaceId)
+      .map(row => ({ ...JSON.parse(String(row.body)), workspaceId, queuedAt: Number(row.queuedAt),
+        processedAt: row.processedAt === null ? null : Number(row.processedAt), retryAfter: Number(row.retryAfter),
+        blocked: !!row.blocked, ...(row.error ? { error: String(row.error) } : {}) }));
   }
-  touch(sessionId: string) {
-    this.store.db.prepare(`INSERT INTO memory_activity VALUES(?,?,1) ON CONFLICT(sessionId) DO UPDATE SET updatedAt=excluded.updatedAt,version=version+1`).run(sessionId, Date.now());
+  batch(workspaceId: string, now = Date.now()): QueuedPurpose[] {
+    const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null && !purpose.blocked && purpose.retryAfter <= now);
+    if (pending.length < memoryBatchSize && (!pending.length || now - pending[0].queuedAt < memoryBatchWaitMs)) return [];
+    return pending.slice(0, memoryBatchSize);
+  }
+  snapshot(workspaceId: string): MemoryTree {
+    const row = this.store.db.prepare("SELECT body FROM memory_purpose_indexes WHERE workspaceId=?").get(workspaceId);
+    return row ? JSON.parse(String(row.body)) as MemoryTree : emptyMemoryTree();
   }
   tree(workspaceId: string): MemoryTree {
-    const topics = new Map<string, MemoryTreeTopic>();
-    for (const file of this.files(workspaceId)) for (const record of file.records) {
-      const tid = topicId(record.topic), sid = sectionId(record.topic, record.section);
-      let topic = topics.get(tid);
-      if (!topic) { topic = { id: tid, name: record.topic, sections: [] }; topics.set(tid, topic); }
-      let section = topic.sections.find((entry) => entry.id === sid);
-      if (!section) { section = { id: sid, name: record.section, items: [] }; topic.sections.push(section); }
-      const iid = `i-${id(tid, sid, record.item)}`;
-      let item = section.items.find((entry) => entry.id === iid);
-      if (!item) { item = { id: iid, name: record.item, contents: [] }; section.items.push(item); }
-      const cid = `c-${id(iid, record.content)}`;
-      let content = item.contents.find((entry) => entry.id === cid);
-      if (!content) { content = { id: cid, text: record.content, sources: [] }; item.contents.push(content); }
-      const { sessionId, path, revision } = file;
-      if (!content.sources.some((source) => source.sessionId === sessionId && source.path === path)) content.sources.push({ sessionId, path, revision });
-    }
-    const result = [...topics.values()].sort((a, b) => a.name.localeCompare(b.name));
-    for (const topic of result) {
-      topic.sections.sort((a, b) => a.name.localeCompare(b.name));
-      for (const section of topic.sections) section.items.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return { topics: result, nameChars: result.reduce((sum, topic) => sum + Array.from(topic.name).length, 0) };
+    const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null && !purpose.blocked);
+    return { ...this.snapshot(workspaceId), pending: pending.length, failed: pending.filter(purpose => purpose.error).length };
   }
-  sections(workspaceId: string, topic: string) {
-    const tree = this.tree(workspaceId), routes = new Set(this.store.db.prepare("SELECT sectionId FROM memory_topic_routes WHERE workspaceId=? AND topicId=?").all(workspaceId, topic).map((row) => String(row.sectionId)));
-    const sections = tree.topics.flatMap((entry) => entry.sections.filter((section) => entry.id === topic || routes.has(section.id)).map((section) => ({ ...section, topic: entry.name })));
-    if (!sections.length) throw new AppError("MEMORY_UNAVAILABLE", "Topic范围已失效，请使用最新目录");
-    return sections;
-  }
-  publish(workspaceId: string, file: MemoryFileContribution, existing: ExistingMemoryRecord[], output: MemoryRecord[], expected: string) {
-    if (this.signature(workspaceId) !== expected) throw new AppError("REVISION_CONFLICT", "记忆树已变化，未发布旧整理结果");
-    if (output.length < existing.length) throw Error("既有记录返回不完整");
-    const changed = new Map<string, MemoryFileContribution>();
-    const routes = new Map<string, Set<string>>();
-    const moves = new Map<string, Set<string>>();
-    const move = (record: MemoryRecord, next: MemoryRecord) => {
-      const previousSection = sectionId(record.topic, record.section), nextSection = sectionId(next.topic, next.section);
-      const targets = routes.get(topicId(record.topic)) ?? new Set<string>(); targets.add(nextSection); routes.set(topicId(record.topic), targets);
-      const successors = moves.get(previousSection) ?? new Set<string>(); successors.add(nextSection); moves.set(previousSection, successors);
+  /** Validate the whole proposed tree and bind every leaf ourselves. No lossy truncation. */
+  classify(answer: string, purposes: MemoryPurpose[]): MemoryIndexNode[] {
+    const value: unknown = JSON.parse(answer), remaining = new Map(purposes.map(purpose => [purpose.id, purpose]));
+    let count = 0;
+    const visit = (input: unknown, path: string[], depth: number): MemoryIndexNode => {
+      if (++count > 100_000 || depth > 64 || !input || typeof input !== "object" || Array.isArray(input)) throw Error("分类树结构无效或过深");
+      const node = input as Record<string, unknown>, keys = Object.keys(node).sort().join(",");
+      if (keys === "purposeId") {
+        if (!depth || typeof node.purposeId !== "string" || !remaining.has(node.purposeId)) throw Error("目的ID缺失、重复或越界");
+        const purpose = remaining.get(node.purposeId)!; remaining.delete(purpose.id);
+        return { id: purpose.id, name: purpose.text, purposeId: purpose.id, children: [] };
+      }
+      if (keys !== "children,name" || typeof node.name !== "string" || !node.name.trim() || /[\r\n<>]/.test(node.name) ||
+        ["其他", "通用", "未分类", "优化", "处理", "开发"].includes(node.name.trim()) || !Array.isArray(node.children) || !node.children.length)
+        throw Error("目录必须名称具体且包含子节点；不能返回来源信息或四字段记录");
+      const name = node.name.trim(), current = [...path, name];
+      const children = node.children.map(child => visit(child, current, depth + 1));
+      if (new Set(children.filter(child => !child.purposeId).map(child => child.name)).size !== children.filter(child => !child.purposeId).length) throw Error("同级目录名称重复");
+      return { id: `d-${hash(current)}`, name, children };
     };
-    const previous = this.files(workspaceId).find((value) => value.sessionId === file.sessionId && value.path === file.path);
-    const replacements = output.slice(existing.length);
-    for (const record of previous?.records ?? []) {
-      const matches = replacements.filter((next) => next.item === record.item);
-      // A file can rename its items too. Keep its old directory usable until the next compaction.
-      for (const next of matches.length ? matches : replacements) move(record, next);
-    }
-    for (let index = 0; index < existing.length; index++) {
-      const old = existing[index], next = output[index];
-      if (old.record.item !== next.item || old.record.content !== next.content) throw Error("既有记录的内容或顺序被修改");
-      const key = JSON.stringify([old.file.sessionId, old.file.path]);
-      let update = changed.get(key);
-      if (!update) { update = { ...old.file, records: [...old.file.records] }; changed.set(key, update); }
-      update.records[old.index] = next;
-      move(old.record, next);
-    }
+    if (!Array.isArray(value) || (!value.length && purposes.length)) throw Error("分类结果必须是完整目录JSON数组");
+    const roots = value.map(node => visit(node, [], 0));
+    if (new Set(roots.map(root => root.name)).size !== roots.length || remaining.size) throw Error("分类结果遗漏目的或目录重复");
+    memoryTopicBlock(roots);
+    return roots;
+  }
+  modelTree(roots: MemoryIndexNode[]): unknown[] {
+    return roots.map(node => node.purposeId ? { purposeId: node.purposeId } : { name: node.name, children: this.modelTree(node.children) });
+  }
+  publish(workspaceId: string, batch: QueuedPurpose[], roots: MemoryIndexNode[], expectedVersion: number) {
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
-      const save = this.store.db.prepare(`INSERT INTO memory_file_contributions VALUES(?,?,?,?) ON CONFLICT(sessionId,path) DO UPDATE SET revision=excluded.revision,body=excluded.body`);
-      for (const value of [...changed.values(), { ...file, records: output.slice(existing.length) }]) save.run(value.sessionId, value.path, value.revision, JSON.stringify(value));
-      const liveSections = new Set(this.tree(workspaceId).topics.flatMap((topic) => topic.sections.map((section) => section.id)));
-      // Carry older snapshots through repeated splits/merges without reading any successor bodies.
-      for (const row of this.store.db.prepare("SELECT topicId,sectionId FROM memory_topic_routes WHERE workspaceId=?").all(workspaceId)) {
-        const successors = moves.get(String(row.sectionId));
-        if (!successors) continue;
-        if (!liveSections.has(String(row.sectionId)))
-          this.store.db.prepare("DELETE FROM memory_topic_routes WHERE workspaceId=? AND topicId=? AND sectionId=?").run(workspaceId,row.topicId,row.sectionId);
-        const targets = routes.get(String(row.topicId)) ?? new Set<string>();
-        for (const target of successors) targets.add(target);
-        routes.set(String(row.topicId), targets);
-      }
-      const route = this.store.db.prepare("INSERT OR IGNORE INTO memory_topic_routes VALUES(?,?,?)");
-      for (const [topic, targets] of routes) for (const target of targets) route.run(workspaceId, topic, target);
+      const previous = this.snapshot(workspaceId);
+      if (previous.version !== expectedVersion) throw new AppError("REVISION_CONFLICT", "记忆索引已变化，未发布旧分类");
+      const live = new Map(this.entries(workspaceId).map(purpose => [purpose.id, purpose]));
+      if (batch.some(purpose => !live.has(purpose.id) || live.get(purpose.id)!.processedAt !== null || live.get(purpose.id)!.blocked))
+        throw new AppError("REVISION_CONFLICT", "目的队列已失效，未发布旧分类");
+      const purposes = [...previous.purposes, ...batch.map(({ id, text, source }) => ({ id, text, source }))];
+      const tree: MemoryTree = { version: previous.version + 1, roots, purposes,
+        nameChars: Array.from(roots.map(root => root.name).join("\n")).length, pending: 0, failed: 0 };
+      this.store.db.prepare(`INSERT INTO memory_purpose_indexes VALUES(?,?,?) ON CONFLICT(workspaceId) DO UPDATE SET version=excluded.version,body=excluded.body`)
+        .run(workspaceId, tree.version, JSON.stringify(tree));
+      const update = this.store.db.prepare("UPDATE memory_purposes SET processedAt=?,error=NULL,retryAfter=0 WHERE id=? AND processedAt IS NULL AND blocked=0");
+      for (const purpose of batch) if (!update.run(Date.now(), purpose.id).changes) throw new AppError("REVISION_CONFLICT", "目的已被其他整理领取");
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
   }
-  prune(sessionId: string, paths: Set<string>) {
-    let changed = false;
-    for (const row of this.store.db.prepare("SELECT path FROM memory_file_contributions WHERE sessionId=?").all(sessionId))
-      if (!paths.has(String(row.path))) {
-        this.store.db.prepare("DELETE FROM memory_file_contributions WHERE sessionId=? AND path=?").run(sessionId, row.path);
-        changed = true;
-      }
-    return changed;
+  failure(batch: QueuedPurpose[], error: unknown) {
+    const update = this.store.db.prepare("UPDATE memory_purposes SET error=?,retryAfter=? WHERE id=? AND processedAt IS NULL AND blocked=0");
+    for (const purpose of batch) update.run(error instanceof Error ? error.message.slice(0, 1000) : "批分类失败", Date.now() + 60_000, purpose.id);
   }
-  clear(workspaceId: string) {
-    this.store.db.prepare("DELETE FROM memory_file_contributions WHERE sessionId IN(SELECT id FROM sessions WHERE workspaceId=?)").run(workspaceId);
-    this.store.db.prepare("DELETE FROM memory_topic_routes WHERE workspaceId=?").run(workspaceId);
+  suspend(purpose: QueuedPurpose, error: unknown) {
+    this.store.db.prepare("UPDATE memory_purposes SET blocked=1,error=? WHERE id=? AND processedAt IS NULL")
+      .run(error instanceof Error ? error.message : "目的定位失效", purpose.id);
+  }
+  /** Revoke affected derived leaves atomically before correcting raw bytes.
+   * A crash cannot leave a stale published leaf; a later valid scan reuses IDs. */
+  revoke(sessionId: string, keys?: string[]) {
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      const rows = this.store.db.prepare("SELECT DISTINCT workspaceId FROM memory_purposes WHERE sessionId=?").all(sessionId);
+      for (const row of rows) {
+        const workspaceId = String(row.workspaceId), old = this.snapshot(workspaceId);
+        const affected = this.entries(workspaceId).filter(purpose => purpose.source.sessionId === sessionId && (!keys || keys.includes(purpose.source.key)));
+        if (!affected.length) continue;
+        const ids = new Set(affected.map(purpose => purpose.id));
+        const update = this.store.db.prepare("UPDATE memory_purposes SET blocked=1,processedAt=NULL,error=NULL WHERE id=?");
+        for (const id of ids) update.run(id);
+        const prune = (nodes: MemoryIndexNode[]): MemoryIndexNode[] => nodes.flatMap(node => {
+          if (node.purposeId) return ids.has(node.purposeId) ? [] : [node];
+          const children = prune(node.children); return children.length ? [{ ...node, children }] : [];
+        });
+        const roots = prune(old.roots), next = { ...old, version: old.version + 1, roots,
+          purposes: old.purposes.filter(purpose => !ids.has(purpose.id)), nameChars: Array.from(roots.map(root => root.name).join("\n")).length };
+        this.store.db.prepare(`INSERT INTO memory_purpose_indexes VALUES(?,?,?) ON CONFLICT(workspaceId) DO UPDATE SET version=excluded.version,body=excluded.body`).run(workspaceId, next.version, JSON.stringify(next));
+      }
+      this.store.db.exec("COMMIT");
+    } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
   }
 }

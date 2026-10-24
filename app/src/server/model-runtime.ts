@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir, ModelRuntime, readStoredCredential } from "@earendil-works/pi-coding-agent";
+import { installModelCopies } from "./model-copies.js";
 import type { ModelConfiguration } from "../shared/models.js";
 
 type Template = ModelConfiguration["templates"][number];
@@ -77,5 +78,6 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
       : options.signal;
     await runtime.refresh({ allowNetwork, signal });
   }
+  installModelCopies(runtime, options.modelsPath === undefined ? join(getAgentDir(), "models.json") : options.modelsPath);
   return runtime;
 }

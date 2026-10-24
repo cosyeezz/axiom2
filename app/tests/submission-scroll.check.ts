@@ -39,6 +39,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [], sends: Command[] = [];
   page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/@vite/client", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("async function handleMessage(payload) {", "async function handleMessage(payload) { return;") });
+  });
   await page.addInitScript(scope => sessionStorage.setItem("view", JSON.stringify(scope)), scopes[0]);
   const selection = { provider: "fixture", id: "fixture", thinking: "off" };
   let active = false, socket: WebSocketRoute, seq = 0;
@@ -122,13 +126,20 @@ try {
     await page.getByText(marker, { exact: true }).waitFor();
     await bottom(page, `streaming after plain ${target} click`);
   }
-  // The bottom navigation keeps its animation instead of snapping on its first scroll event.
+  // First the down arrow reaches the last delivery start; clicking it again
+  // reaches the bottom smoothly, rather than skipping that delivery.
   const thread = page.locator("#thread");
   const box = (await thread.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -1000);
   await page.waitForFunction(() => { const el = document.querySelector("#thread")!; return el.scrollHeight - el.clientHeight - el.scrollTop > 900; });
   await frames(page);
+  await page.locator('.thread-navigation [data-scroll="down"]').click();
+  await page.waitForFunction(() => {
+    const body = document.querySelector('[data-delivery-start="click-output-blank"]')!, thread = document.querySelector("#thread")!;
+    return Math.abs(body.getBoundingClientRect().top - thread.getBoundingClientRect().top - 24) < 2;
+  });
+  await page.waitForTimeout(120);
   const firstNavigationGap = await page.evaluate<number>(`new Promise(resolve => {
     const el = document.querySelector("#thread");
     const start = el.scrollTop;
@@ -138,12 +149,34 @@ try {
       requestAnimationFrame(() => resolve(el.scrollHeight - el.clientHeight - el.scrollTop));
     };
     el.addEventListener("scroll", sample);
-    document.querySelector('[aria-label="回到最下"]').click();
+    document.querySelector('.thread-navigation [data-scroll="down"]').click();
   })`);
   assert.ok(firstNavigationGap > 2, `bottom navigation preserves intermediate animation frames: ${JSON.stringify({ gap: firstNavigationGap, reducedMotion: await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches) })}`);
   await bottom(page, "smooth navigation returns to tail");
+  // A new submission wins even when a delivery reveal still has positioning
+  // frames/observers pending. Both actions intentionally happen in one event turn.
+  // The preceding loop ends with an active run, where form submission means
+  // stop rather than send. Explicitly enter idle before testing requestSubmit.
+  active = false; publish(scopes[1]);
+  await page.waitForFunction(() => !document.querySelector("button.send")!.classList.contains("is-running"));
+  const beforeRaceSend = sends.length;
+  const raceText = "交付定位尚未结束时发送，必须恢复跟随";
+  await page.locator("#prompt").fill(raceText);
+  await page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('.thread-navigation [data-scroll="up"]')!.click();
+    document.querySelector<HTMLFormElement>("form.composer")!.requestSubmit();
+  });
+  await page.waitForFunction(() => !(document.querySelector("#prompt") as HTMLTextAreaElement).value);
+  assert.equal(sends.length, beforeRaceSend + 1);
+  await page.waitForTimeout(300); await bottom(page, "submission cancels unfinished delivery positioning");
+  const raceCommand = sends.at(-1)!;
+  views.messageChanged(scopes[1], { id: `input-${raceCommand.requestId}`, role: "user", text: raceText, inputIds: [raceCommand.requestId] }); views.flush(scopes[1]);
+  await page.getByText(raceText, { exact: true }).waitFor(); await bottom(page, "race submission reconciles at tail");
   // Keyboard reading is also an explicit interruption, and reaching the tail restores following.
-  await page.locator("#thread .reply-actions button").last().focus();
+  const keyboardTarget = page.locator("#thread .reply-actions .copy-reply").last();
+  assert.equal(await keyboardTarget.isEnabled(), true);
+  await keyboardTarget.focus();
+  assert.equal(await keyboardTarget.evaluate(node => node === document.activeElement), true, "keyboard reading starts from an enabled reply action");
   const beforeKeyboard = await thread.evaluate(el => el.scrollTop);
   await page.keyboard.press("PageUp");
   await page.waitForFunction(before => document.querySelector("#thread")!.scrollTop < before - 100, beforeKeyboard, { timeout: 3000 });

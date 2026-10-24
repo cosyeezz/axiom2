@@ -1,6 +1,6 @@
 import { ProcessingRecords } from "./processing-records.js";
 import { MemoryPipeline } from "./memory-pipeline.js";
-import { memoryTopicBlock, memoryTreeScope, type MemoryTopicSnapshot } from "../shared/memory-tree.js";
+import { emptyMemoryTree, memoryTopicBlock, memoryTreeScope, type MemoryTopicSnapshot } from "../shared/memory-tree.js";
 import { thinkingLevels } from "../shared/agent.js";
 import type { LeaseRef } from "./execution-protocol.js";
 import { statSync, lstatSync, mkdirSync, watch, existsSync, type FSWatcher } from "node:fs";
@@ -10,10 +10,11 @@ import { Worker } from "node:worker_threads";
 import type { Store } from "./storage.js";
 import type { Selection } from "../shared/agent.js";
 import { AppError, object, text, type Scope, type Command } from "../shared/protocol.js";
-import { emptyMemoryView, emptyMemoryDocument, memoryScope, memoryCatalogScope, memoryOrganizationScope, type MemoryOrganization, memoryExcerpt, parseMemory, memoryComplete, memoryTitleMaxChars, memorySummaryMaxChars, memorySummaryVersion, validMemorySummary, type MemoryView, type MemoryCatalogEntry, type MemoryDocument, type MemoryQueryResult, type MemoryReason } from "../shared/memory.js";
-import { assertMemoryEdit } from "./memory-detail.js";
-import { detailFile, parseDetailBlocks } from "../shared/memory-outline.js";
-import { memoryTitleIndex, compactOrganizerProjection, digest, memoryDirectory, memoryFiles, memoryPath, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, textFile, referencedPaths, within, readMemoryBytes, readMemoryTextSnapshot, replaceMemoryFile } from "./memory-files.js";
+import { emptyMemoryView, emptyMemoryDocument, memoryScope, memoryCatalogScope, memoryExcerpt, parseMemory, type MemoryView, type MemoryCatalogEntry, type MemoryDocument, type MemoryQueryResult, type MemoryReason } from "../shared/memory.js";
+import { guardMemoryWrite } from "./memory-write-guard.js";
+import { memoryPurposes } from "../shared/memory-purposes.js";
+import { MemoryValidationError } from "../shared/memory-detail-paths.js";
+import { digest, memoryDirectory, memoryFiles, memoryPath, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, textFile, referencedPaths, within, readMemoryBytes, readMemoryTextSnapshot, replaceMemoryFile } from "./memory-files.js";
 import { memoryRoot, legacyMemoryRoot } from "./memory-storage.js";
 import { realpathSync } from "node:fs";
 import { openMemoryFile, type OpenMemoryFile } from "./memory-open.js";
@@ -40,16 +41,8 @@ type StoredMemoryCatalogEntry = MemoryCatalogEntry & {
   summaryVersion?: number;
   dependencies?: { sessionId: string; path: string; revision: string }[];
 };
-type MemoryDependency = NonNullable<StoredMemoryCatalogEntry["dependencies"]>[number];
-type ScanWorkerResult =
-  | { kind: "scan"; files: MemoryView["files"]; entry: string }
-  | { kind: "verify"; verified: { key: string; revision: string }[] };
-type DependencyVerification = { signature: string; valid: boolean };
-type OrganizationWork = { controller: AbortController; done?: Promise<void>; workspaces: Set<string>; job?: MemoryOrganization };
-const dependencySignature = (dependencies: readonly MemoryDependency[]) => JSON.stringify([...dependencies]
-  .map(({ sessionId, path, revision }) => [sessionId, path, revision] as const)
-  .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
-const ORGANIZER_QUIET_MS = 30 * 60_000;
+type ScanWorkerResult = { kind: "scan"; files: MemoryView["files"]; entry: string };
+type OrganizationWork = { controller: AbortController; done?: Promise<void> };
 export class Memories {
   private timer: ReturnType<typeof setInterval>;
   private watcher?: FSWatcher;
@@ -66,25 +59,26 @@ export class Memories {
   private completedGenerations = new Map<string, number>();
   private scanWaiters = new Map<string, Map<number, Set<{ resolve: () => void; reject: (error: Error) => void }>>>();
   private scannerRetry?: ReturnType<typeof setTimeout>;
-  private organizerUnknownCursor = 0;
   private organizationWork?: OrganizationWork;
-  private startedAt = Date.now();
-  private lastOrganized = 0;
-  private attempt = 0;
-  private attempts = new Map<string, number>();
+  private organizerScheduled?: ReturnType<typeof setImmediate>;
   private closed = false;
   private controller = new AbortController();
   runner?: MemoryRunner;
   private opening = false;
   readonly records: ProcessingRecords;
   readonly pipeline: MemoryPipeline;
-  isActive: (scope: Scope) => boolean = () => false;
-  touch(scope: Scope) { if (this.readableOwner(scope)) this.pipeline.tree.touch(scope.sessionId); }
   tree(workspaceId: string) { this.organizationOwner(workspaceId); return this.pipeline.tree.tree(workspaceId); }
   topicSnapshot(workspaceId: string): MemoryTopicSnapshot {
-    return { version: 1, workspaceId, text: memoryTopicBlock(this.tree(workspaceId).topics) };
+    return { version: 2, workspaceId, text: memoryTopicBlock(this.tree(workspaceId).roots) };
   }
-  publishTree(workspaceId: string) { this.publish(memoryTreeScope(workspaceId), this.tree(workspaceId)); }
+  publishTree(workspaceId: string) {
+    // Revocation can happen while a model is in flight. Clear subscribers rather
+    // than throwing from failure handling or exposing an unauthorized snapshot.
+    this.publish(memoryTreeScope(workspaceId), this.store.workspace(workspaceId).authorized ? this.pipeline.tree.tree(workspaceId) : emptyMemoryTree());
+    // The catalog projects classification errors too; update it with the tree
+    // so failures and successful retries do not require reopening the page.
+    this.publishCatalog(workspaceId);
+  }
   constructor(
     readonly store: Store,
     readonly publish: (scope: string, data?: unknown) => void,
@@ -102,15 +96,9 @@ export class Memories {
       CREATE TABLE IF NOT EXISTS memory_preferences(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS memory_corrections(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL,target TEXT NOT NULL,createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS memory_usage(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,kind TEXT NOT NULL,provider TEXT,model TEXT,usage TEXT,createdAt INTEGER NOT NULL);
-      CREATE INDEX IF NOT EXISTS memory_usage_session ON memory_usage(sessionId);
-      CREATE TABLE IF NOT EXISTS memory_organizations(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,body TEXT NOT NULL);`);
+      CREATE INDEX IF NOT EXISTS memory_usage_session ON memory_usage(sessionId);`);
     this.records = ProcessingRecords.for(store);
     this.pipeline = new MemoryPipeline(this);
-    for (const row of store.db.prepare("SELECT workspaceId,body FROM memory_organizations").all()) {
-      const job = JSON.parse(String(row.body)) as MemoryOrganization;
-      if (job.status === "running") store.db.prepare("UPDATE memory_organizations SET body=? WHERE workspaceId=?")
-        .run(JSON.stringify({ ...job, status: "interrupted", endedAt: Date.now(), error: "服务已重启，整理未完成，请重新整理" }), row.workspaceId);
-    }
     const root = memoryRoot(store.root);
     try { mkdirSync(root, { recursive: true, mode: 0o700 }); }
     catch { /* Memory storage is optional; background reads can retry later. */ }
@@ -126,7 +114,9 @@ export class Memories {
         this.lastSafetySweep = Date.now();
         this.scheduleScan();
       }
-      if (Date.now() - this.startedAt >= this.preferences().intervalMs) void this.organize().catch(() => {});
+      // Fallback for runner availability and bounded failure retries, not a
+      // waiting period for newly completed or revised sources.
+      this.scheduleOrganization();
     }, 1500);
     this.timer.unref();
   }
@@ -148,12 +138,11 @@ export class Memories {
         ? inherited.filter((value) => !value.startsWith("--input-type"))
         : undefined;
       const worker = new Worker(entry, execArgv ? { execArgv } : undefined);
-      worker.on("message", (value: { id: number; ok: boolean; kind?: ScanWorkerResult["kind"]; files?: MemoryView["files"]; entry?: string; verified?: { key: string; revision: string }[]; error?: string; code?: string }) => {
+      worker.on("message", (value: { id: number; ok: boolean; kind?: ScanWorkerResult["kind"]; files?: MemoryView["files"]; entry?: string; error?: string; code?: string }) => {
         const request = this.scanRequests.get(value.id);
         if (!request) return;
         this.scanRequests.delete(value.id);
         if (value.ok && value.kind === "scan" && value.files && value.entry !== undefined) request.resolve({ kind: "scan", files: value.files, entry: value.entry });
-        else if (value.ok && value.kind === "verify" && value.verified) request.resolve({ kind: "verify", verified: value.verified });
         else {
           const error = Error(value.error ?? "记忆读取失败");
           if (value.code) Object.assign(error, { code: value.code });
@@ -182,7 +171,7 @@ export class Memories {
     }
   }
 
-  private scannerRequest(request: { kind: "scan"; directory: string } | { kind: "verify"; dependencies: { key: string; path: string }[] }) {
+  private scannerRequest(request: { kind: "scan"; directory: string }) {
     this.startScanner();
     const worker = this.scanner;
     if (!worker) return Promise.reject(Error("记忆扫描工作线程不可用"));
@@ -200,12 +189,6 @@ export class Memories {
     const result = await this.scannerRequest({ kind: "scan", directory });
     if (result.kind !== "scan") throw Error("记忆扫描响应类型无效");
     return result;
-  }
-  private async verifyDependencyPaths(dependencies: { key: string; path: string }[]) {
-    if (!dependencies.length) return [] as { key: string; revision: string }[];
-    const result = await this.scannerRequest({ kind: "verify", dependencies });
-    if (result.kind !== "verify") throw Error("记忆依赖核验响应类型无效");
-    return result.verified;
   }
 
   private watchSources(root: string) {
@@ -281,14 +264,7 @@ export class Memories {
                 this.queuedScopes.set(scope.sessionId, scope);
                 continue;
               }
-              const dependencies = await this.verifyDependenciesInWorker(scope, view);
-              if (this.closed) return;
-              if (generation !== this.generation(scope)) {
-                // 依赖 worker 在途时来源也可能更新；同样只能重排新代次。
-                this.queuedScopes.set(scope.sessionId, scope);
-                continue;
-              }
-              this.applyScan(scope, view, changedCatalogs, dependencies);
+              this.applyScan(scope, view, changedCatalogs);
             } catch {
               // An invalid source must neither retain usable stale content nor
               // reject another source's scan. Never replace a foreign cache entry.
@@ -426,7 +402,8 @@ export class Memories {
   }
   preferences(): MemoryPreferences {
     const row = this.store.db.prepare("SELECT body FROM memory_preferences WHERE id=1").get();
-    return row ? { ...defaultMemoryPreferences, ...JSON.parse(String(row.body)) } : { ...defaultMemoryPreferences };
+    const saved = row ? JSON.parse(String(row.body)) : {};
+    return Object.fromEntries(Object.entries(defaultMemoryPreferences).map(([key, fallback]) => [key, saved[key] ?? fallback])) as unknown as MemoryPreferences;
   }
   scopes(): Scope[] {
     return this.store.db.prepare("SELECT s.id,s.workspaceId FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE w.archived=0 AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.sessionId=s.id)").all().map((r) => ({ workspaceId: String(r.workspaceId), sessionId: String(r.id) }));
@@ -468,53 +445,6 @@ export class Memories {
       return { ...scope, revision: "error", entry: "", progress: parseMemory(""), files: [], deleted: owner.deletedAt !== null, error: "记忆读取失败", reason: this.memoryReason(error) };
     }
   }
-  /**
-   * A source revision alone cannot cover external evidence consumed by a
-   * summary. Authorize every dependency on the main thread, then have the
-   * scanner worker read its current bytes. The signature binds that async
-   * result to the exact persisted dependency triples seen before dispatch.
-   */
-  private async verifyDependenciesInWorker(scope: Scope, view: MemoryView): Promise<DependencyVerification> {
-    const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
-    const previous = old ? JSON.parse(String(old.body)) as StoredMemoryCatalogEntry : undefined;
-    const dependencies = previous?.dependencies ?? [], signature = dependencySignature(dependencies);
-    if (old?.revision !== view.revision || previous?.deleted !== view.deleted) return { signature, valid: false };
-    try {
-      const requests = dependencies.map((dependency, index) => ({
-        // Include the entire persisted triple, so a reply for a different
-        // source/path/revision cannot validate this round by position alone.
-        key: JSON.stringify([index, dependency.sessionId, dependency.path, dependency.revision]),
-        path: this.localPath({ workspaceId: scope.workspaceId, sessionId: dependency.sessionId }, dependency.path),
-      }));
-      const verified = await this.verifyDependencyPaths(requests);
-      return {
-        signature,
-        valid: verified.length === requests.length && verified.every((item, index) =>
-          item.key === requests[index]?.key && item.revision === dependencies[index]?.revision),
-      };
-    } catch {
-      // A removed, re-linked, unreadable, or worker-unavailable dependency
-      // must invalidate the derived summary, while keeping the source view.
-      return { signature, valid: false };
-    }
-  }
-  /** The legacy synchronous test/migration entry point keeps deterministic strict behavior. */
-  private verifyDependenciesSynchronously(scope: Scope, view: MemoryView): DependencyVerification {
-    const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
-    const previous = old ? JSON.parse(String(old.body)) as StoredMemoryCatalogEntry : undefined;
-    const dependencies = previous?.dependencies ?? [], signature = dependencySignature(dependencies);
-    if (old?.revision !== view.revision || previous?.deleted !== view.deleted) return { signature, valid: false };
-    try {
-      const revisions = new Map<string, string>();
-      const valid = dependencies.every((dependency) => {
-        const path = this.localPath({ workspaceId: scope.workspaceId, sessionId: dependency.sessionId }, dependency.path);
-        let revision = revisions.get(path);
-        if (!revision) { revision = digest(readMemoryBytes(path)); revisions.set(path, revision); }
-        return revision === dependency.revision;
-      });
-      return { signature, valid };
-    } catch { return { signature, valid: false }; }
-  }
   private publishCatalogs(workspaces: Iterable<string>) {
     for (const workspaceId of new Set(workspaces)) this.publishCatalog(workspaceId);
   }
@@ -527,24 +457,19 @@ export class Memories {
     // catalog() 会读完整持久目录；没有接收者时延后到订阅的首次 snapshot。
     if (this.observed(scope)) this.publish(scope, this.catalog(workspaceId));
   }
-  private applyScan(scope: Scope, view: MemoryView, changedCatalogs?: Set<string>, dependencyVerification?: DependencyVerification) {
+  private applyScan(scope: Scope, view: MemoryView, changedCatalogs?: Set<string>) {
     const cached = this.cachedViews.get(scope.sessionId);
     this.cachedViews.set(scope.sessionId, view);
+    if (!view.error && this.pipeline.tree.enqueue(scope, view.entry)) this.publishTree(scope.workspaceId);
+    this.scheduleOrganization();
     const sourceTitle = view.progress.title || String(this.owner(scope).title);
     const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
     const previous = old ? JSON.parse(String(old.body)) as StoredMemoryCatalogEntry : undefined;
-    // A changed source can never retain its old derived summary. Stable
-    // sources retain one only when the worker validated this exact dependency
-    // triple set after main-thread ownership and link authorization.
+    // Source catalog tracks raw revisions only. Purpose classification status
+    // and retry timing live exclusively in the persistent purpose queue.
     const sourceStable = old?.revision === view.revision && previous?.deleted === view.deleted;
-    const dependencies = previous?.dependencies ?? [];
-    const dependenciesValid = sourceStable && dependencyVerification?.signature === dependencySignature(dependencies) && dependencyVerification.valid;
-    // 会话标题只是来源投影；模型主题和正文有效性均不应受改名影响。
-    // 摘要/整理错误属于目录状态，不是文件读取错误；同一修订的重扫必须保留它，
-    // 否则后台监视会把可诊断的失败悄悄重置为 pending。
-    const summaryFits = !previous?.summary || validMemorySummary(previous);
-    const unchanged = sourceStable && dependenciesValid && summaryFits;
-    const excerpt = memoryExcerpt(view.entry), hasContent = !!excerpt || view.files.some((file) => file.path !== "MEMORY.md" && file.size > 0);
+    const unchanged = sourceStable && previous?.error === view.error;
+    const excerpt = memoryExcerpt(view.entry) || memoryPurposes(view.entry)[0]?.title || "", hasContent = !!excerpt || view.files.some((file) => file.path !== "MEMORY.md" && file.size > 0);
     const entryChars = view.error ? null : [...view.entry].length;
     if (unchanged && previous?.hasContent === hasContent && previous?.excerpt === excerpt && previous?.entryChars === entryChars) {
       if (previous.sourceTitle !== sourceTitle)
@@ -556,11 +481,11 @@ export class Memories {
       return;
     }
     const entry: StoredMemoryCatalogEntry = unchanged && previous ? { ...previous, sourceTitle, excerpt, hasContent, entryChars, reason: view.reason } : { ...scope, id: scope.sessionId, title: sourceTitle, sourceTitle, summary: "", excerpt, hasContent, entryChars, keywords: [],
-      revision: view.revision, updatedAt: sourceStable && dependenciesValid && previous ? previous.updatedAt : Date.now(), indexedAt: null, status: view.error ? "error" : "pending", deleted: view.deleted, error: view.error, reason: view.reason };
+      revision: view.revision, updatedAt: sourceStable && previous ? previous.updatedAt : Date.now(), indexedAt: null, status: view.error ? "error" : "pending", deleted: view.deleted, error: view.error, reason: view.reason };
     // Every changed source invalidates old semantic content immediately, including deletions.
     this.store.db.prepare("INSERT INTO memory_sources(sessionId,revision,body) VALUES(?,?,?) ON CONFLICT(sessionId) DO UPDATE SET revision=excluded.revision,body=excluded.body")
       .run(scope.sessionId, view.revision, JSON.stringify(entry));
-    // Persist the latest revision now; model work waits for the periodic quiet-window check.
+    // Persist first; the coalesced scheduler runs after this scan yields.
     this.publishMemory(memoryScope(scope), view.error ? this.unavailableView(scope, view.reason ?? new AppError("MEMORY_READ_FAILED", "记忆读取失败")) : view);
     if (changedCatalogs) changedCatalogs.add(scope.workspaceId);
     else this.publishCatalogs([scope.workspaceId]);
@@ -573,7 +498,7 @@ export class Memories {
       if (!this.readableOwner(current)) continue;
       this.generations.set(current.sessionId, this.generation(current) + 1);
       const view = this.readView(current);
-      this.applyScan(current, view, changedCatalogs, this.verifyDependenciesSynchronously(current, view));
+      this.applyScan(current, view, changedCatalogs);
       this.completeGeneration(current, this.generation(current));
     }
     this.publishCatalogs(changedCatalogs);
@@ -597,18 +522,12 @@ export class Memories {
     const row = this.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
     if (!row) return;
     const entry = JSON.parse(String(row.body)) as StoredMemoryCatalogEntry, sourceTitle = this.cachedViews.get(scope.sessionId)?.progress.title || String(this.owner(scope).title);
-    // 已整理条目显示模型主题；未整理条目仍以会话标题作为临时展示文本。
-    const title = this.cachedViews.get(scope.sessionId)?.progress.title || (entry.status === "ready" ? entry.title : sourceTitle);
+    const title = sourceTitle;
     if (entry.title === title && entry.sourceTitle === sourceTitle) return;
     this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...entry, title, sourceTitle }), scope.sessionId);
     this.publishCatalog(scope.workspaceId);
   }
-  private cachedView(scope: Scope): MemoryView {
-    const view = this.cachedViews.get(scope.sessionId);
-    if (!view || view.workspaceId !== scope.workspaceId) throw new AppError("MEMORY_UNAVAILABLE", "记忆快照正在加载，请稍后重试");
-    return view;
-  }
-  /** 持久目录包含整理器复核所需的私有来源标题和读取依赖。 */
+  /** 原始来源目录；旧语义生成字段仅保留在磁盘，不参与新索引。 */
   private storedCatalog(workspaceId: string): StoredMemoryCatalogEntry[] {
     try {
       if (!this.store.workspace(workspaceId).authorized) return [];
@@ -624,10 +543,15 @@ export class Memories {
   }
   /** 前端目录与订阅只发布既有公共字段，绝不泄露服务端整理元数据。 */
   catalog(workspaceId: string): MemoryCatalogEntry[] {
-    return this.catalogEntries(workspaceId).map(({ dependencies: _dependencies, treeVersion: _treeVersion, summaryVersion, ...entry }) =>
-      entry.summary && !validMemorySummary({ ...entry, summaryVersion })
-        ? { ...entry, summary: "", keywords: [], status: "pending" as const, indexedAt: null }
-        : entry);
+    const purposes = this.pipeline.tree.entries(workspaceId);
+    return this.catalogEntries(workspaceId).map(({ dependencies: _dependencies, treeVersion: _treeVersion, summaryVersion: _summaryVersion, ...entry }) => {
+      const source = purposes.filter(purpose => purpose.source.sessionId === entry.sessionId && !purpose.blocked);
+      const failed = source.find(purpose => purpose.error), pending = source.some(purpose => purpose.processedAt === null);
+      return { ...entry, title: entry.sourceTitle ?? entry.title, summary: "", keywords: [],
+        status: entry.reason || failed ? "error" as const : pending ? "pending" as const : "ready" as const,
+        error: entry.reason ? entry.error : failed?.error, organizationError: failed?.error,
+        indexedAt: pending ? null : Math.max(0, ...source.map(purpose => purpose.processedAt ?? 0)) || null };
+    });
   }
   private localPath(scope: Scope, input: string, links?: MemoryLinkCache): string {
     this.owner(scope);
@@ -656,8 +580,7 @@ export class Memories {
   }
   read(scope: Scope, input = "MEMORY.md", offset = 0, limit = 16000, options: { includeImage?: boolean } = {}): MemoryDocument {
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 16000) throw new AppError("INVALID_INPUT", "读取分页范围无效");
-    const detail = /^references\/details\.md#detail:([1-9]\d*)$/.exec(input);
-    const path = this.localPath(scope, detail ? detailFile : input), directory = memoryDirectory(this.store.root, scope.sessionId);
+    const path = this.localPath(scope, input), directory = memoryDirectory(this.store.root, scope.sessionId);
     const stat = statSync(path);
     if (/\.(png|jpg|jpeg|gif|webp)$/i.test(path)) {
       if (stat.size > 5 * 1024 * 1024) throw new AppError("MEMORY_LIMIT", "图片超过 5 MiB 预览预算");
@@ -668,11 +591,8 @@ export class Memories {
     const data = readMemoryBytes(path), content = new TextDecoder("utf-8", { fatal: true }).decode(data);
     if (within(directory, path) && this.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId).some((c) => content.includes(String(c.target))))
       throw new AppError("MEMORY_CORRECTION_PENDING", "资料包含待清理的明确否定条目，旧内容暂不可查询");
-    const block = detail ? parseDetailBlocks(content).find(block => block.id === Number(detail[1])) : undefined;
-    if (detail && !block) throw new AppError("MEMORY_READ_FAILED", "详情不存在");
-    const selected = block?.content ?? content;
-    return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: selected.slice(offset, offset + limit), offset,
-      nextOffset: selected.length > offset + limit ? offset + limit : null };
+    return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: content.slice(offset, offset + limit), offset,
+      nextOffset: content.length > offset + limit ? offset + limit : null };
   }
   private readCached(scope: Scope, input: string, offset: number | undefined, limit: number | undefined, cache: MemoryTextCache, links: MemoryLinkCache): MemoryDocument {
     const pageOffset = offset ?? 0, pageLimit = limit ?? 16000;
@@ -704,12 +624,14 @@ export class Memories {
   save(scope: Scope, path: string, revision: string, content: string) {
     this.owner(scope);
     if (typeof content !== "string" || Buffer.byteLength(content) > 180000) throw new AppError("MEMORY_LIMIT", "编辑内容超过 180 KB");
-    if (path !== "MEMORY.md" && !/^references\/.+\.(md|txt)$/i.test(path)) throw new AppError("MEMORY_PATH", "只能编辑入口或详细文档");
+    if (path !== "MEMORY.md" && !/^(?:references|details)\/.+\.(md|txt)$/i.test(path)) throw new AppError("MEMORY_PATH", "只能编辑入口或详细文档");
     const target = memoryPath(memoryDirectory(this.store.root, scope.sessionId), path);
     if (digest(readMemoryBytes(target)) !== revision) throw new AppError("REVISION_CONFLICT", "资料已被修改；保留当前编辑，请重新读取后合并");
-    const directory = memoryDirectory(this.store.root, scope.sessionId);
-    if (target === join(directory, detailFile)) throw new AppError("MEMORY_PATH", "详情文件由memory_detail维护，不能整文件编辑");
-    if (target === join(directory, "MEMORY.md")) assertMemoryEdit(target, textFile(target), content);
+    try { guardMemoryWrite(join(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md"), target, content); }
+    catch (error) {
+      if (error instanceof MemoryValidationError) throw new AppError("MEMORY_STRUCTURE", error.message);
+      throw error;
+    }
     // Synchronous compare/write: no server task can interleave between them.
     this.generations.set(scope.sessionId, this.generation(scope) + 1);
     this.replaceFile(target, revision, content);
@@ -732,7 +654,9 @@ export class Memories {
     if (failures.length) throw new AppError("MEMORY_CORRECTION_PENDING", `部分记忆资料尚未清理：${failures.join("；")}`);
     return { id };
   }
-  private async applyCorrections(workspaceId: string) {
+  private async applyCorrections(workspaceId: string, organizationSignal?: AbortSignal) {
+    const signal = organizationSignal ? AbortSignal.any([this.controller.signal, organizationSignal]) : this.controller.signal;
+    signal.throwIfAborted();
     if (!this.store.workspace(workspaceId).authorized) return [] as string[];
     const targets = this.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(workspaceId).map((r) => String(r.target));
     // 没有待办纠正时不读取任何入口或详情，避免后台周期性同步 I/O。
@@ -740,24 +664,34 @@ export class Memories {
     // 首次恢复或刚写入纠正时缓存可能为空；只刷新当前工作空间，随后才用已验证的
     // 文件清单清理，不能让单个纠正升级为全局扫描。
     const scopes = this.scopes().filter((scope) => scope.workspaceId === workspaceId);
-    await this.scanTargetsAsync(scopes, this.controller.signal);
+    await this.scanTargetsAsync(scopes, signal);
+    signal.throwIfAborted();
     const failures: string[] = [];
     const changed = new Map<string, Scope>();
     for (const scope of scopes) {
       const files = this.cachedViews.get(scope.sessionId)?.files ?? [];
-      for (const file of files.filter((f) => f.path === "MEMORY.md" || /^references\/.*\.(md|txt)$/i.test(f.path))) {
+      for (const file of files.filter((f) => f.path === "MEMORY.md" || /^(?:references|details)\/.*\.(md|txt)$/i.test(f.path))) {
+        signal.throwIfAborted();
         try {
           this.owner(scope);
           const path = memoryPath(memoryDirectory(this.store.root, scope.sessionId), file.path);
           // 保存竞争时重读一次再重试，且只影响当前文件，不拖住其他来源。
           for (let attempt = 0; attempt < 2; attempt++) {
+            signal.throwIfAborted();
             const snapshot = this.readCorrectionSnapshot(path);
             const next = targets.reduce((body, target) => body.split(target).join(""), snapshot.content);
             if (next === snapshot.content) break;
             try {
+              signal.throwIfAborted();
               this.generations.set(scope.sessionId, this.generation(scope) + 1);
+              const main = file.path === "MEMORY.md" ? snapshot.content : readMemoryTextSnapshot(memoryPath(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md")).content;
+              const headings = memoryPurposes(main);
+              const keys = file.path === "MEMORY.md" ? headings.filter(heading => targets.some(target => heading.content.includes(target))).map(heading => heading.key)
+                : file.path.startsWith("details/") ? headings.filter(heading => heading.detailPaths.includes(file.path)).map(heading => heading.key) : undefined;
+              // Revoke before writing: if the process exits between these two
+              // operations, no stale derived leaf can survive the correction.
+              this.pipeline.tree.revoke(scope.sessionId, keys);
               this.replaceFile(path, snapshot.revision, next);
-              this.store.db.prepare("DELETE FROM memory_file_contributions WHERE sessionId=? AND path=?").run(scope.sessionId, file.path);
               this.publishTree(workspaceId);
               changed.set(scope.sessionId, scope);
               break;
@@ -766,18 +700,20 @@ export class Memories {
             }
           }
         } catch (error) {
+          signal.throwIfAborted();
           // 纠正记录保留；下一轮会只重试当前失败资料，其他来源继续推进。
           failures.push(`${scope.sessionId}:${file.path}: ${error instanceof Error ? error.message : "清理失败"}`);
         }
-        // 纠正可能涉及很多资料；单次文件操作后让 HTTP/WS 回调先被处理。
+        // 纠正可能涉及很多资料；让出后必须重新确认取消，不能继续写下一文件。
         await new Promise<void>((resolve) => setImmediate(resolve));
+        signal.throwIfAborted();
       }
     }
     // 只有实际写入的来源再入队复扫；失败或未命中的资料不扩大本轮 I/O。
-    if (changed.size) await this.scanTargetsAsync([...changed.values()], this.controller.signal);
+    if (changed.size) await this.scanTargetsAsync([...changed.values()], signal);
     return failures;
   }
-  async query(scope: Scope, question: string, signal?: AbortSignal, parentLease?: LeaseRef, topic?: string): Promise<MemoryQueryResult> {
+  async query(scope: Scope, question: string, signal?: AbortSignal, parentLease?: LeaseRef): Promise<MemoryQueryResult> {
     const timeoutMs = this.preferences().timeoutMs;
     const deadlineAt = Date.now() + timeoutMs;
     const timeout = AbortSignal.timeout(timeoutMs);
@@ -786,8 +722,8 @@ export class Memories {
     const processingId = this.records.start(scope, "memory.query", `记忆查询：${question.slice(0, 160)}`);
     try {
       querySignal.throwIfAborted();
-      if (!topic) throw new AppError("INVALID_INPUT", "请提供目录中的单个Topic标识");
-      const result = await this.awaitWithSignal(this.pipeline.query(scope, topic, question, this.preferences().queryModel ?? this.selection(scope), querySignal, deadlineAt, parentLease, processingId), querySignal);
+      if (!question.trim()) throw new AppError("INVALID_INPUT", "请提供查询问题");
+      const result = await this.awaitWithSignal(this.pipeline.query(scope, question, this.preferences().queryModel ?? this.selection(scope), querySignal, deadlineAt, parentLease, processingId), querySignal);
       this.records.finish(processingId, result.incomplete ? "failed" : "completed", result.incomplete ? "查询结果不完整" : undefined, result);
       return { ...result, processingId };
     } catch (error) {
@@ -798,6 +734,7 @@ export class Memories {
       const code = error instanceof AppError ? error.code : "";
       const reason: MemoryQueryResult["reason"] = timeout.aborted ? "timeout"
         : code === "REVISION_CONFLICT" ? "revision_conflict"
+        : code === "MEMORY_LOCATOR_INVALID" ? "locator_invalid"
         : code === "MEMORY_READ_FAILED" ? "read_failed" : "unavailable";
       return { answer: "", scope, incomplete: true, sources: [], reason, processingId };
     }
@@ -807,240 +744,47 @@ export class Memories {
     if (!row?.selection) throw new AppError("MODEL_REQUIRED", "请先选择记忆模型或来源会话模型");
     return JSON.parse(String(row.selection));
   }
+  private scheduleOrganization() {
+    if (this.closed || this.organizationWork || this.organizerScheduled || !this.runner) return;
+    this.organizerScheduled = setImmediate(() => {
+      this.organizerScheduled = undefined;
+      void this.organize().catch(() => {});
+    });
+    this.organizerScheduled.unref();
+  }
   async organize() {
-    if (this.closed || this.organizationWork || !this.runner || Date.now() - this.lastOrganized < this.preferences().intervalMs) return;
-    const work: OrganizationWork = { controller: new AbortController(), workspaces: new Set(this.store.workspaces().map((workspace) => workspace.id)) };
-    this.organizationWork = work; this.lastOrganized = Date.now();
+    if (this.closed || this.organizationWork || !this.runner) return;
+    // Count and timer triggers share this slot, reserved synchronously before
+    // the first await. A running batch stays pending until atomic publication,
+    // so a restart needs no recovery of model-owned or half-published state.
+    const work: OrganizationWork = { controller: new AbortController() };
+    this.organizationWork = work;
     work.done = (async () => {
       for (const workspace of this.store.workspaces()) {
         work.controller.signal.throwIfAborted();
-        await this.applyCorrections(workspace.id);
-      }
-      const pending = this.organizerCandidates();
-      let submitted = 0;
-      for (const target of pending) {
-        if (submitted >= 4 || this.closed || work.controller.signal.aborted) break;
-        // Watch events may still be queued, or an earlier model call may have
-        // overlapped a save. Recheck disk before spending a model request.
-        await this.scanAsync(target, work.controller.signal);
-        const source = this.storedCatalog(target.workspaceId).find((entry) => entry.sessionId === target.sessionId);
-        if (this.closed || work.controller.signal.aborted || !source || !this.cachedViews.has(source.sessionId) || !this.organizerReady(source)) continue;
-        this.attempts.set(source.sessionId, ++this.attempt);
-        submitted++;
-        try { await this.organizeSource(source, work.controller.signal, true); }
-        catch { if (work.controller.signal.aborted) break; }
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (!workspace.authorized) continue;
+        await this.applyCorrections(workspace.id, work.controller.signal);
+        const batch = this.pipeline.tree.batch(workspace.id);
+        if (!batch.length) continue;
+        try {
+          const scope = { workspaceId: workspace.id, sessionId: batch[0].source.sessionId };
+          await this.pipeline.organize(batch, this.preferences().organizerModel ?? this.selection(scope), work.controller.signal);
+        } catch (error) {
+          this.pipeline.tree.failure(batch, error);
+          this.publishTree(workspace.id);
+          if (work.controller.signal.aborted) break;
+        }
       }
     })().finally(() => {
       if (this.organizationWork === work) this.organizationWork = undefined;
-      // Changes during a batch remain pending; do not immediately launch another batch.
-      this.lastOrganized = Date.now();
+      // Never drain a sub-threshold fresh queue immediately: its oldest enqueue
+      // time (persisted across restart), not last edit or last model call, is the clock.
+      if (!this.closed && this.store.workspaces().some(workspace => workspace.authorized && this.pipeline.tree.batch(workspace.id).length)) this.scheduleOrganization();
     });
     await work.done;
   }
   private organizationOwner(workspaceId: string) {
     if (!this.store.workspace(workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
-  }
-  organization(workspaceId: string): MemoryOrganization | null {
-    this.organizationOwner(workspaceId);
-    const row = this.store.db.prepare("SELECT body FROM memory_organizations WHERE workspaceId=?").get(workspaceId);
-    return row ? JSON.parse(String(row.body)) as MemoryOrganization : null;
-  }
-  private publishOrganization(work: OrganizationWork, patch: Partial<MemoryOrganization> = {}) {
-    if (!work.job) return;
-    const job = work.job = { ...work.job, ...patch };
-    this.store.db.prepare("INSERT INTO memory_organizations(workspaceId,body) VALUES(?,?) ON CONFLICT(workspaceId) DO UPDATE SET body=excluded.body")
-      .run(job.workspaceId, JSON.stringify(job));
-    this.publishMemory(memoryOrganizationScope(job.workspaceId), job);
-  }
-  private startOrganization(workspaceId: string, sessionId?: string) {
-    this.organizationOwner(workspaceId);
-    if (sessionId) this.owner({ workspaceId, sessionId });
-    if (this.closed || !this.runner) throw new AppError("MEMORY_UNAVAILABLE", "记忆整理暂不可用");
-    if (this.organizationWork) throw new AppError("MEMORY_BUSY", "已有记忆正在整理，请完成后重试");
-    const targets = sessionId ? [{ workspaceId, sessionId }] : this.scopes().filter((scope) => scope.workspaceId === workspaceId);
-    const work: OrganizationWork = { controller: new AbortController(), workspaces: new Set([workspaceId]), job: {
-      id: randomUUID(), workspaceId, ...(sessionId ? { sessionId } : {}), status: "running", total: targets.length,
-      processed: 0, succeeded: 0, failed: 0, skipped: 0, startedAt: Date.now(), endedAt: null,
-    } };
-    // Reserve the same slot as the periodic organizer before any async work.
-    this.organizationWork = work;
-    try { this.publishOrganization(work); }
-    catch (error) { this.organizationWork = undefined; throw error; }
-    const accepted = work.job!;
-    work.done = Promise.resolve().then(async () => {
-      for (const target of targets) {
-        work.controller.signal.throwIfAborted();
-        const processingId = this.records.start(target, "memory.organize", "手动整理记忆");
-        this.records.stage(processingId, "扫描来源");
-        let result: "succeeded" | "failed" | "skipped" = "skipped", error: string | undefined;
-        try {
-          this.owner(target);
-          await this.scanAsync(target, work.controller.signal);
-          work.controller.signal.throwIfAborted();
-          const source = this.storedCatalog(workspaceId).find((entry) => entry.sessionId === target.sessionId);
-          if (!source || source.reason || source.revision === "error") throw new AppError("MEMORY_READ_FAILED", "来源记忆不可读，未生成摘要");
-          // A source button explicitly regenerates that source. Workspace requests
-          // process all pending sources once, and retain current valid summaries.
-          if ((source.hasContent || this.pipeline.tree.files(workspaceId).some((file) => file.sessionId === source.sessionId)) && (sessionId || this.needsOrganization(source))) {
-            await this.organizeSource(source, work.controller.signal, false, !!sessionId, processingId);
-            result = "succeeded";
-          }
-        } catch (failure) {
-          this.records.failure(processingId, failure, work.controller.signal);
-          this.linkProcessing(target, processingId);
-          work.controller.signal.throwIfAborted();
-          result = "failed"; error = failure instanceof Error ? failure.message.slice(0, 1000) : "整理失败";
-        }
-        this.records.finish(processingId, "completed", undefined, result === "skipped" ? "来源无需重新整理，未发起模型请求" : undefined);
-        this.publishOrganization(work, { processed: work.job!.processed + 1, [result]: work.job![result] + 1, ...(error ? { error } : {}) });
-        await new Promise<void>((resolve) => setImmediate(resolve));
-      }
-      work.controller.signal.throwIfAborted();
-      const job = work.job!;
-      this.publishOrganization(work, { status: job.failed ? job.succeeded ? "partial" : "failed" : "completed", endedAt: Date.now() });
-    }).catch((error) => {
-      this.publishOrganization(work, { status: work.controller.signal.aborted ? this.closed ? "interrupted" : "cancelled" : "failed", endedAt: Date.now(),
-        error: work.controller.signal.aborted ? this.closed ? "服务正在退出，整理未完成" : "整理已取消" : error instanceof Error ? error.message.slice(0, 1000) : "整理失败" });
-    }).finally(() => {
-      if (this.organizationWork === work) this.organizationWork = undefined;
-      // Cancellation/failure must not be retried by the next 1.5-second tick.
-      this.lastOrganized = Date.now();
-    });
-    // The accepted task belongs to the service, not the lifetime of this socket.
-    void work.done.catch(() => {});
-    return accepted;
-  }
-  private cancelOrganization(workspaceId: string, id: string) {
-    const job = this.organization(workspaceId);
-    if (!job || job.id !== id) throw new AppError("NOT_FOUND", "整理任务不存在");
-    if (this.organizationWork?.job?.id === id) this.organizationWork.controller.abort();
-    return job;
-  }
-  private clearSummaries(workspaceId: string) {
-    this.organizationOwner(workspaceId);
-    // Abort before clearing. Both late successes and failures must lose write authority.
-    if (this.organizationWork?.workspaces.has(workspaceId)) this.organizationWork.controller.abort();
-    const entries = this.storedCatalog(workspaceId);
-    let cleared = 0, updated = 0;
-    this.store.db.exec("BEGIN IMMEDIATE");
-    try {
-      for (const entry of entries) {
-        const title = this.cachedViews.get(entry.sessionId)?.progress.title || String(this.owner(entry).title);
-        const next: StoredMemoryCatalogEntry = { ...entry, title, sourceTitle: title, summary: "", summaryVersion: undefined,
-          keywords: [], dependencies: [], indexedAt: null, status: entry.reason ? "error" : "pending", error: entry.reason ? entry.error : undefined };
-        if (JSON.stringify(next) === JSON.stringify(entry)) continue;
-        this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=? AND revision=?")
-          .run(JSON.stringify(next), entry.sessionId, entry.revision);
-        if (entry.summary) cleared++;
-        updated++;
-      }
-      this.pipeline.tree.clear(workspaceId);
-      this.store.db.exec("COMMIT");
-    } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
-    this.publishTree(workspaceId);
-    for (const entry of entries) this.invalidate(entry);
-    this.publishCatalog(workspaceId);
-    return { workspaceId, cleared, updated };
-  }
-  private needsOrganization(source: StoredMemoryCatalogEntry) {
-    return source.status !== "ready" || source.treeVersion !== 1;
-  }
-  private organizerReady(source: StoredMemoryCatalogEntry) {
-    const progress = this.cachedViews.get(source.sessionId)?.progress;
-    const activity = this.pipeline.tree.activity(source.sessionId);
-    return source.revision !== "error" && !source.reason && this.needsOrganization(source) &&
-      (source.hasContent || this.pipeline.tree.files(source.workspaceId).some((file) => file.sessionId === source.sessionId)) &&
-      !!progress && memoryComplete(progress) &&
-      !this.isActive(source) && Date.now() - Math.max(source.updatedAt, activity.updatedAt) > ORGANIZER_QUIET_MS;
-  }
-  /**
-   * Empty templates have persisted state too. Only genuinely unknown sources
-   * need a targeted scan; a known empty template is never allowed to occupy a
-   * model slot ahead of a pending source with real content.
-   */
-  private organizerCandidates() {
-    const scopes = this.scopes();
-    const entries = new Map([...new Set(scopes.map((scope) => scope.workspaceId))]
-      .flatMap((workspaceId) => this.storedCatalog(workspaceId).map((entry) => [entry.sessionId, entry] as const)));
-    const known = scopes
-      .filter((scope) => {
-        const entry = entries.get(scope.sessionId);
-        return !!entry && this.organizerReady(entry);
-      })
-      .sort((a, b) => (this.attempts.get(a.sessionId) ?? 0) - (this.attempts.get(b.sessionId) ?? 0) || (entries.get(a.sessionId)?.updatedAt ?? 0) - (entries.get(b.sessionId)?.updatedAt ?? 0));
-    const unknown = scopes.filter((scope) => !entries.has(scope.sessionId));
-    // Startup can contain thousands of untouched template sessions. They are
-    // discovery work, not organizer submissions: inspect a rotating bounded
-    // slice only after all persisted, usable pending sources.
-    const limit = Math.min(4, unknown.length), start = unknown.length ? this.organizerUnknownCursor % unknown.length : 0;
-    const discovery = Array.from({ length: limit }, (_, offset) => unknown[(start + offset) % unknown.length]!);
-    this.organizerUnknownCursor = unknown.length ? (start + limit) % unknown.length : 0;
-    return [...known, ...discovery];
-  }
-  private linkProcessing(scope: Scope, processingId: string) {
-    const row = this.store.db.prepare("SELECT m.body FROM memory_sources m JOIN sessions s ON s.id=m.sessionId WHERE m.sessionId=? AND s.workspaceId=?").get(scope.sessionId, scope.workspaceId);
-    if (!row) return;
-    this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=? AND body=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), processingId }), scope.sessionId, row.body);
-    this.publishCatalog(scope.workspaceId);
-  }
-  private async organizeSource(source: StoredMemoryCatalogEntry, signal: AbortSignal, automatic = false, force = false, recordId?: string) {
-    const processingId = recordId ?? this.records.start(source, "memory.organize", `记忆整理：${source.sourceTitle ?? source.title}`);
-    this.linkProcessing(source, processingId);
-    try {
-      await this.organizeSourceWork(source, signal, automatic, force, processingId);
-      this.records.finish(processingId, "completed");
-    } catch (error) { this.records.failure(processingId, error, signal); throw error; }
-  }
-  private async organizeSourceWork(source: StoredMemoryCatalogEntry, signal: AbortSignal, automatic: boolean, force: boolean, processingId: string) {
-    signal.throwIfAborted();
-    const activity = this.pipeline.tree.activity(source.sessionId).version;
-    const guard = () => {
-      signal.throwIfAborted(); this.owner(source);
-      if (activity !== this.pipeline.tree.activity(source.sessionId).version || automatic && (!this.organizerReady({ ...source, status: "pending" }) || !memoryComplete(this.view(source).progress)))
-        throw new AppError("REVISION_CONFLICT", "会话已恢复活动，旧整理结果已作废");
-    };
-    guard();
-    const view = this.cachedView(source);
-    if (view.error) throw new AppError("MEMORY_READ_FAILED", "来源记忆不可读，未生成摘要");
-    const publish = (patch: Partial<StoredMemoryCatalogEntry>) => {
-      signal.throwIfAborted(); this.owner(source);
-      const row = this.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=? AND revision=?").get(source.sessionId, source.revision);
-      if (!row) throw new AppError("REVISION_CONFLICT", "来源已变化，未提交旧摘要");
-      // Merge derived fields into the latest projection so concurrent renames survive.
-      const current = JSON.parse(String(row.body)) as StoredMemoryCatalogEntry;
-      const fixedTitle = this.cachedViews.get(source.sessionId)?.progress.title;
-      const entry = { ...current, ...patch, ...(fixedTitle ? { title: fixedTitle } : {}), sourceTitle: fixedTitle || String(this.owner(source).title) };
-      const updated = this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=? AND revision=? AND body=?")
-        .run(JSON.stringify(entry), source.sessionId, source.revision, row.body);
-      if (!updated.changes) throw new AppError("REVISION_CONFLICT", "来源已变化，未提交旧摘要");
-      this.publishCatalog(source.workspaceId);
-    };
-    publish({ status: "indexing", error: undefined, processingId });
-    try {
-      await this.pipeline.organize(source, this.preferences().organizerModel ?? this.selection(source), signal, guard, force, processingId);
-      guard();
-      await this.scanAsync(source, signal);
-      if (this.cachedView(source).revision !== view.revision) throw new AppError("REVISION_CONFLICT", "来源已变化，文件贡献保留，待下次整理");
-      const dependencies = this.pipeline.tree.files(source.workspaceId).filter((file) => file.sessionId === source.sessionId).flatMap((file) => file.dependencies);
-      publish({ title: String(this.owner(source).title), treeVersion: 1, summary: "", summaryVersion: undefined, keywords: [], status: "ready", indexedAt: Date.now(), error: undefined, dependencies });
-    } catch (error) {
-      if (signal.aborted) {
-        const row = this.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=? AND revision=?").get(source.sessionId, source.revision);
-        const current = row ? JSON.parse(String(row.body)) as StoredMemoryCatalogEntry : undefined;
-        // A clear has already made this pending. Never restore its removed fields.
-        if (current?.status === "indexing") {
-          this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=? AND body=?")
-            .run(JSON.stringify({ ...current, status: "pending" }), source.sessionId, row!.body);
-          this.publishCatalog(source.workspaceId);
-        }
-      } else if (!this.closed) {
-        try { publish({ title: String(this.owner(source).title), summary: "", summaryVersion: undefined, keywords: [], dependencies: [], indexedAt: null,
-          status: "error", error: error instanceof Error ? error.message.slice(0, 1000) : "整理失败" }); }
-        catch { /* A removed, changed or unauthorized source must not be overwritten. */ }
-      }
-      throw error;
-    }
   }
   async command(c: Command, signal?: AbortSignal) {
     const p = object(c.params ?? {}), workspaceId = text(c.workspaceId, "工作空间");
@@ -1062,24 +806,15 @@ export class Memories {
       catch (error) { signal?.throwIfAborted(); return this.unavailableDocument(path, error); }
     }
     this.store.workspace(workspaceId);
-    if (c.op === "memory.organize.get") return this.organization(workspaceId);
-    if (["memory.organize", "memory.organize.cancel", "memory.summaries.clear"].includes(c.op)) {
-      signal?.throwIfAborted();
-      return this.store.external(c, async () => {
-        if (c.op === "memory.organize") return this.startOrganization(workspaceId, c.sessionId === undefined ? undefined : text(c.sessionId, "会话"));
-        if (c.op === "memory.organize.cancel") return this.cancelOrganization(workspaceId, text(p.id, "整理任务"));
-        if (p.confirmed !== true) throw new AppError("CONFIRMATION_REQUIRED", "请明确确认清除当前工作空间的整理结果");
-        return this.clearSummaries(workspaceId);
-      });
-    }
     if (c.op === "memory.preferences") return this.preferences();
     if (c.op === "memory.configure") {
+      if (Object.keys(p).some(key => !(key in defaultMemoryPreferences))) throw new AppError("INVALID_INPUT", "未知记忆设置");
       const value = { ...this.preferences(), ...p };
       for (const key of ["queryModel", "organizerModel"] as const) if (value[key] !== null) {
         const model = object(value[key]); text(model.provider, "供应商"); text(model.id, "模型");
         if (!thinkingLevels.includes(model.thinking as Selection["thinking"])) throw Error("思考等级无效");
       }
-      for (const [key, min, max] of [["topicNameReviewThresholdChars", 1, 1000000], ["intervalMs", 1000, 86400000], ["timeoutMs", memoryBudgetLimits.timeoutMs.min, memoryBudgetLimits.timeoutMs.max], ["readChars", memoryBudgetLimits.readChars.min, memoryBudgetLimits.readChars.max], ["maxTurns", memoryBudgetLimits.maxTurns.min, memoryBudgetLimits.maxTurns.max], ["concurrency", 1, 32], ["queue", 0, 128]] as const)
+      for (const [key, min, max] of [["timeoutMs", memoryBudgetLimits.timeoutMs.min, memoryBudgetLimits.timeoutMs.max], ["readChars", memoryBudgetLimits.readChars.min, memoryBudgetLimits.readChars.max], ["maxTurns", memoryBudgetLimits.maxTurns.min, memoryBudgetLimits.maxTurns.max], ["concurrency", 1, 32], ["queue", 0, 128]] as const)
         if (!Number.isSafeInteger(value[key]) || value[key] < min || value[key] > max) throw new AppError("INVALID_INPUT", `${key} 超出范围`);
       this.store.db.prepare("INSERT INTO memory_preferences VALUES(1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(JSON.stringify(value));
       return this.preferences();
@@ -1101,6 +836,7 @@ export class Memories {
   async close() {
     this.closed = true;
     clearInterval(this.timer);
+    if (this.organizerScheduled) clearImmediate(this.organizerScheduled);
     if (this.scanDelay) clearTimeout(this.scanDelay);
     if (this.scannerRetry) clearTimeout(this.scannerRetry);
     this.watcher?.close();

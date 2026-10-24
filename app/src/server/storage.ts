@@ -1,3 +1,4 @@
+import { ServiceRecoveryRecords } from "./service-recovery-records.js";
 import { initializeMemory } from "./memory-files.js";
 import { initializeMemoryStorage } from "./memory-storage.js";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -25,6 +26,7 @@ export type SessionRestorePosition = Pick<Session, "updatedAt" | "pinned" | "unr
 
 export class Store {
   readonly db: DatabaseSync;
+  readonly recoveries: ServiceRecoveryRecords;
   private statements = new Map<string, StatementSync>();
   prepare(sql: string) {
     let statement = this.statements.get(sql);
@@ -75,10 +77,9 @@ export class Store {
       CREATE INDEX IF NOT EXISTS runs_session_started ON runs(sessionId,startedAt);
       CREATE INDEX IF NOT EXISTS tasks_parent_status ON tasks(parentSessionId,status);
       CREATE INDEX IF NOT EXISTS task_results_task ON task_results(taskId);
-      UPDATE tasks SET status='interrupted',error='服务中断；队列保留，未自动续跑。' WHERE status IN ('queued','starting','running','wrapping','stopping','summarizing');
-      UPDATE task_parents SET frozen=1;
-      DELETE FROM task_inputs;
     `);
+    if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "forkParentSessionId"))
+      this.db.exec("ALTER TABLE sessions ADD COLUMN forkParentSessionId TEXT");
     if (!this.db.prepare("PRAGMA table_info(sessions)").all().some((c) => c.name === "deletedAt"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN deletedAt INTEGER");
     this.db.exec(`CREATE TABLE IF NOT EXISTS session_restore_positions(
@@ -91,6 +92,7 @@ export class Store {
       this.db.exec("ALTER TABLE session_restore_positions ADD COLUMN autoPinUntil INTEGER");
     if (!this.db.prepare("PRAGMA table_info(compression_preferences)").all().some((c) => c.name === "auto"))
       this.db.exec("ALTER TABLE compression_preferences ADD COLUMN auto TEXT");
+    this.recoveries = new ServiceRecoveryRecords(this.db);
     // Read versions migrate once; the boolean remains a derived compatibility column.
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -105,9 +107,16 @@ export class Store {
         sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
         sourceId TEXT NOT NULL,kind TEXT NOT NULL,version INTEGER NOT NULL,
         PRIMARY KEY(sessionId,sourceId),UNIQUE(sessionId,version));`);
+      this.recoveries.capture();
+      this.db.exec(`UPDATE tasks SET status='interrupted',error=CASE
+          WHEN sessionId IN (SELECT sessionId FROM service_recoveries WHERE state='pending') THEN '服务中断；等待自动恢复。'
+          ELSE '服务中断；未自动续跑。' END
+        WHERE status IN ('queued','starting','running','wrapping','stopping','summarizing');
+        UPDATE task_parents SET frozen=1;
+        DELETE FROM task_inputs;`);
       for (const row of this.db.prepare("SELECT id,sessionId,retry FROM runs WHERE status IN ('starting','running','stopping')").all()) {
         const retry = row.retry ? { ...JSON.parse(String(row.retry)), state: "cancelled", nextRetryAt: undefined } : null;
-        this.finishRun(String(row.id), "interrupted", "服务中断；未自动重做。", "SERVICE_INTERRUPTED", retry);
+        this.finishRun(String(row.id), "interrupted", "服务中断；可恢复的任务将在服务就绪后自动续跑。", "SERVICE_INTERRUPTED", retry);
       }
       this.db.exec("COMMIT");
     } catch (error) { this.db.exec("ROLLBACK"); throw error; }
@@ -404,7 +413,7 @@ export class Store {
     }
   }
   // Synchronous SQLite transaction: mutation and receipt commit together before acknowledgement.
-  execute(command: Command, deletionPosition?: SessionRestorePosition): unknown {
+  execute(command: Command, deletionPosition?: SessionRestorePosition, mutation?: () => unknown): unknown {
     const id = text(command.requestId, "请求标识");
     if (this.db.prepare("SELECT 1 FROM external_requests WHERE id=?").get(id))
       throw new AppError("REQUEST_CONFLICT", "请求标识已用于其他操作");
@@ -421,7 +430,7 @@ export class Store {
     }
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const result = this.mutate(command, deletionPosition);
+      const result = mutation ? mutation() : this.mutate(command, deletionPosition);
       this.db
         .prepare("INSERT INTO requests(id,hash,response,scope) VALUES(?,?,?,?)")
         .run(id, hash, JSON.stringify(result), this.requestScope(command));

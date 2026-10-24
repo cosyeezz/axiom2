@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { memoryQueryTool } from "../src/server/memory-tool.js";
+import * as memoryTools from "../src/server/memory-tool.js";
 import { chatMessage } from "../src/server/transcript.js";
 import type { MemoryQueryResult } from "../src/shared/memory.js";
 
-const params = { topic: "topic-fixture", question: "如何修复配置加载？" };
+const params = { question: "如何修复配置加载？" };
 // This tool never reads the host context.
 const context = {} as Parameters<ReturnType<typeof memoryQueryTool>["execute"]>[4];
 function result(patch: Partial<MemoryQueryResult> = {}): MemoryQueryResult {
@@ -47,7 +48,7 @@ test("empty successful answers do not dump the list of read sources", async () =
 
 for (const [reason, expected] of [
   ["unavailable", "查询暂不可用"], ["timeout", "查询超时"],
-  ["revision_conflict", "来源已变化"], ["read_failed", "资料读取失败"],
+  ["revision_conflict", "来源已变化"], ["read_failed", "资料读取失败"], ["locator_invalid", "目的定位已失效"],
 ] as const) test(`memory tool distinguishes ${reason} from no match`, async () => {
   const output = await execute(result({ answer: "", incomplete: true, reason }));
   assert.ok(output.content[0].type === "text");
@@ -70,6 +71,10 @@ for (const incompleteReason of [undefined, "read_limit", "turn_limit", "output_l
 test("query text preserves necessary detail instead of silently cutting it at a fixed length", async () => {
   const answer = `${"配置项与适用条件。".repeat(250)}\n关键限制：仅适用于 v2。`;
   assert.deepEqual((await execute(result({ answer }))).content, [{ type: "text", text: answer }]);
+});
+
+test("only historical query is exposed; details use native file tools", () => {
+  assert.deepEqual(Object.keys(memoryTools), ["memoryQueryTool"]);
 });
 
 test("invalid responses and execution failures cannot look like an empty match", async () => {

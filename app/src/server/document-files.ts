@@ -1,4 +1,5 @@
 import { saveTextFile, textRevision } from "./file-edit.js";
+import { previewFilePath } from "./preview-path.js";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { basename, extname, isAbsolute, resolve } from "node:path";
@@ -78,7 +79,7 @@ export class DocumentFiles {
       return workspace;
     };
     const workspace = authorize();
-    const path = resolve(workspace.path, ref.path);
+    let path = resolve(workspace.path, ref.path);
     if (!isAbsolute(path) || path.startsWith("\\\\") || (process.platform === "win32" && path.split(/[\\/]/).some(part => /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i.test(part)))) throw forbidden();
     const inspect = async () => {
       if (key(await realpath(path)) !== key(path)) throw forbidden();
@@ -89,6 +90,7 @@ export class DocumentFiles {
     if (this.reading >= 4) throw new AppError("LIMIT", "文件预览请求过多，请稍后重试");
     this.reading++;
     try {
+      path = await previewFilePath(path);
       const before = await inspect();
       signal.throwIfAborted();
       authorize();

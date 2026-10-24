@@ -135,11 +135,16 @@ export function TooltipLayer() {
     const disposePopover = openPopover(node);
     const position = () => {
       const rect = tip.anchor.getBoundingClientRect();
-      const { width, height } = node.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft ?? 0, viewportTop = viewport?.offsetTop ?? 0;
+      const viewportWidth = viewport?.width ?? innerWidth, viewportHeight = viewport?.height ?? innerHeight;
       const gutter = 10, gap = 8;
-      const left = Math.max(gutter, Math.min(rect.left + (rect.width - width) / 2, innerWidth - width - gutter));
+      node.style.setProperty("--tooltip-viewport-width", `${Math.max(0, viewportWidth - gutter * 2)}px`);
+      node.style.setProperty("--tooltip-viewport-height", `${Math.max(0, viewportHeight - gutter * 2)}px`);
+      const { width, height } = node.getBoundingClientRect();
+      const left = Math.max(viewportLeft + gutter, Math.min(rect.left + (rect.width - width) / 2, viewportLeft + viewportWidth - width - gutter));
       const above = rect.top - height - gap;
-      const top = above >= gutter ? above : Math.max(gutter, Math.min(rect.bottom + gap, innerHeight - height - gutter));
+      const top = Math.max(viewportTop + gutter, Math.min(above >= viewportTop + gutter ? above : rect.bottom + gap, viewportTop + viewportHeight - height - gutter));
       node.style.left = `${left}px`;
       node.style.top = `${top}px`;
       node.style.visibility = "visible";
@@ -148,10 +153,14 @@ export function TooltipLayer() {
     const resize = new ResizeObserver(position);
     resize.observe(node);
     resize.observe(tip.anchor);
+    window.visualViewport?.addEventListener("resize", position);
+    window.visualViewport?.addEventListener("scroll", position);
     const previous = tip.anchor.getAttribute("aria-describedby")?.split(/\s+/).filter(Boolean) ?? [];
     tip.anchor.setAttribute("aria-describedby", [...new Set([...previous, id])].join(" "));
     return () => {
       resize.disconnect();
+      window.visualViewport?.removeEventListener("resize", position);
+      window.visualViewport?.removeEventListener("scroll", position);
       disposePopover();
       const remaining = tip.anchor.getAttribute("aria-describedby")?.split(/\s+/).filter(value => value && value !== id);
       if (remaining?.length) tip.anchor.setAttribute("aria-describedby", remaining.join(" "));

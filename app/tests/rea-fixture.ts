@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReaDependencies } from "../src/server/integrations/rea.js";
+import type { ReaEngineId } from "../src/shared/rea-engines.js";
+import type { EngineRelease } from "../src/server/integrations/rea-engine-install.js";
 import { reaSkillName } from "../src/server/integrations/rea-runtime.js";
 
 export function writeReaPackage(packageRoot: string, version: string, serverVersion = version) {
@@ -27,10 +29,15 @@ lines.on('line', line => {
 lines.on('close', () => process.exit(0));
 `);
 }
+export async function fixtureEngineRelease(id: ReaEngineId): Promise<EngineRelease> {
+  if (id === "hopper") return { version: "6.6.0", url: "https://www.hopperapp.com/downloader/public/Hopper-6.6.0-demo.dmg", format: "dmg", sha1: "a".repeat(40), minimumSystem: "macOS 12.4+" };
+  return { version: ({ java: "21.0.13+8", ghidra: "12.1.4", jadx: "0.7.1", wabt: "1.0.42" })[id], url: "https://github.com/fixture/engine", sha256: "a".repeat(64), format: id === "ghidra" ? "zip" : id === "jadx" ? "jar" : "tar.gz" };
+}
 export function reaFixture() {
   const calls: string[][] = [];
   let latest = "6.7.0", failure = false, mismatch = false, invalidSkill = false, gate: Promise<void> | undefined;
   const dependencies: ReaDependencies = {
+    engineRelease: fixtureEngineRelease,
     locateNpm: () => "npm-cli-fixture.js",
     execute: async (args, options) => {
       calls.push(args);

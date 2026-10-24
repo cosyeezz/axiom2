@@ -85,7 +85,7 @@ try {
   await option.click(); assert.equal(await input.inputValue(), "@hello.txt ");
   await input.fill("保留草稿");
   await page.locator("#model-picker > summary").click();
-  const popup = page.locator("#model-picker .model-popover");
+  const popup = page.locator('.model-popover[data-floating="true"]');
   const box = (await popup.boundingBox())!;
   assert.ok(box.y >= 0 && box.y + box.height <= 320, `short-screen model menu: ${JSON.stringify(box)}`);
   await popup.getByRole("button", { name: "取消模型设置" }).scrollIntoViewIfNeeded();
@@ -101,17 +101,18 @@ try {
 
   const description = "检查跨平台布局，保持长任务描述可读和消息区域可用。".repeat(15);
   const records = new TaskRecords(app.store);
-  const { taskIds: [taskId] } = records.create(scope, "layout-child", "UI fixture", [{ task: description }], { ...selection, thinking: "off" });
+  const { taskIds: [taskId] } = records.create(scope, "layout-child", "UI fixture", [{ title: description, task: description }], { ...selection, thinking: "off" });
   app.store.db.prepare("UPDATE tasks SET status='completed' WHERE id=?").run(taskId);
   views.messageChanged(scope, { id: "child-call", role: "assistant", text: "", calls: [{ id: "layout-child", name: "delegate", input: "{}" }] }); views.flush(scope);
   app.agents.publish(tasksScope(scope), app.tasks.list(scope));
-  await page.locator(".tool-activity > summary").click();
-  await page.getByRole("button", { name: `打开子会话：${description}`, exact: true }).click();
+  // Delegations are standalone cards, not ordinary-tool disclosures.
+  await page.locator(`.subagent-card[data-task-id="${taskId}"]`).getByRole("button", { name: `打开子会话：${description}`, exact: true }).click();
   const child = page.getByRole("dialog", { name: "子代理会话", exact: true });
   await page.setViewportSize({ width: 390, height: 600 });
   assert.ok((await child.locator(".thread").boundingBox())!.height >= 100, "long task title must leave a readable conversation");
   await child.locator(".task-results > details > summary").click();
-  assert.equal(await child.locator(".task-description").textContent(), description);
+  await child.getByRole("button", { name: "展开任务说明", exact: true }).click();
+  assert.equal(await child.locator(".task-brief section").filter({ has: page.getByRole("heading", { name: "任务目标", exact: true }) }).locator("p").textContent(), description);
   await child.locator(".task-results > details > summary").click();
   const childInput = child.locator("textarea"); await childInput.fill("@hel"); await option.waitFor();
   assert.ok(await visibleHit(option), "child completion must remain clickable within the modal");

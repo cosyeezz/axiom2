@@ -1,3 +1,5 @@
+import { serviceAdmission } from './service-admission.mjs';
+import { serviceRemovalPending } from './service-removal.mjs';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, stat, writeFile, rename, rm, open } from 'node:fs/promises';
 import { join, dirname, delimiter, isAbsolute, resolve } from 'node:path';
@@ -44,7 +46,7 @@ const [major, minor] = process.versions.node.split(".").map(Number);
 if (major < 22 || major === 22 && minor < 19) throw Error("请先安装 Node.js 22.19.0+ 和 npm。");
 const taskDir = process.env.AXIOM_SETUP_TASK_DIR;
 const task = taskDir ? JSON.parse(await readFile(join(taskDir, 'task.json'), 'utf8')) : desktopTask('service', 'install');
-let failure, owner, runtime, owned, serviceRequested = false;
+let failure, owner, runtime, owned, releaseAdmission, serviceRequested = false;
 const ownership = { confirmed: true };
 const execution = new DesktopExecution(task, async value => {
   if (!taskDir) return;
@@ -84,6 +86,8 @@ async function get(url, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 try {
+  releaseAdmission = await serviceAdmission(root);
+  if (await serviceRemovalPending(root)) throw Error('后台卸载尚未完成，请先在环境清理中重新预览并完成清理。');
   if (!runner) owned = await loadRuntime();
   await execution.update();
   if (!runner && !['win32', 'linux'].includes(process.platform)) throw Error('此平台尚无可靠的后台安装进程监督器，尚未执行 npm。');
@@ -135,8 +139,10 @@ try {
 finally {
   if (owner && !ownership.confirmed) failure = Object.assign(Error(`尚未确认安装进程树退出，归属记录已保留。${failure ? ` ${failure.message}` : ''}`), { code: 'stop-unconfirmed' });
   // A publication failure retains the journal: release only after this write.
-  await execution.finish(failure);
-  if (ownership.confirmed && failure?.code !== 'stop-unconfirmed') owner?.confirmed();
+  try {
+    await execution.finish(failure);
+    if (ownership.confirmed && failure?.code !== 'stop-unconfirmed') owner?.confirmed();
+  } finally { releaseAdmission?.(); }
 }
 
 if (failure) throw failure;

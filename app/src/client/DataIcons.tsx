@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import type { MemoryState } from "../shared/memory-outline.js";
 
 export function validRatio(value: number | null | undefined, total: number | null | undefined): number | null {
   const ratio = value != null && total != null && Number.isFinite(value) && value >= 0 && Number.isFinite(total) && total > 0 ? value / total * 100 : null;
@@ -29,15 +30,17 @@ function contextArc(percent: number) {
   const angle = percent / 100 * Math.PI * 2;
   return `M10 1.5A8.5 8.5 0 ${percent > 50 ? 1 : 0} 1 ${10 + 8.5 * Math.sin(angle)} ${10 - 8.5 * Math.cos(angle)}`;
 }
-export function ContextMemoryIcon({ percent, taskPercent = null, label }: { percent: number | null; taskPercent?: number | null; label?: string }) {
+export function ContextMemoryIcon({ percent, taskPercent = null, taskState, label }: { percent: number | null; taskPercent?: number | null; taskState?: MemoryState; label?: string }) {
   const valid = percent != null && Number.isFinite(percent) && percent >= 0;
   const fill = valid ? Math.min(100, percent) : 0;
   const validTask = taskPercent != null && Number.isFinite(taskPercent) && taskPercent >= 0 && taskPercent <= 100;
   return <Frame kind={valid && percent >= 90 ? "capacity-warning" : "context-memory"} label={label} value={valid ? percent : null} viewBox="0 0 20 20">
     <path className="data-track context-ring" d={contextArc(100)} />
     {valid && fill > 0 && <path className="data-filled context-ring" d={contextArc(fill)} strokeLinecap="butt" />}
-    <g className="memory-progress-bars" data-progress={validTask ? taskPercent : "unknown"}>
-      {[0, 1, 2].map(i => <path key={i} d={`M5.5 ${5.5 + i * 4}l1 1 1.5-2M9 ${5.5 + i * 4}h5`} className={validTask && taskPercent >= (i + 1) * 100 / 3 ? "memory-progress-lit" : "memory-progress-pending"} />)}
+    <g className="memory-progress-bars" data-state={taskState === "阻塞" ? "等待" : taskState} data-progress={taskState ? undefined : validTask ? taskPercent : "unknown"}>
+      {[0, 1, 2].map(i => <path key={i} d={`M5.5 ${5.5 + i * 4}l1 1 1.5-2M9 ${5.5 + i * 4}h5`} className={taskState ? "memory-progress-state" : validTask && taskPercent >= (i + 1) * 100 / 3 ? "memory-progress-lit" : "memory-progress-pending"}>
+        {taskState === "进行中" && <animate attributeName="opacity" values=".3;1;.3" keyTimes="0;.5;1" dur="1.8s" begin={`${i * -.6}s`} repeatCount="indefinite" />}
+      </path>)}
     </g>
   </Frame>;
 }

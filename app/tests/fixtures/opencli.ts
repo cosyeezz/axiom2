@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "../temporary.js";
 import { join, dirname } from "node:path";
 import { executeOpenCli, type OpenCliExecute } from "../../src/server/integrations/opencli.js";
 import { openCliSkillNames } from "../../src/server/integrations/opencli-runtime.js";

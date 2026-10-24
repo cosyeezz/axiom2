@@ -1,4 +1,5 @@
 import type { Agents } from "./agents.js";
+import type { ServiceRecovery } from "./service-recovery-records.js";
 import { AppError, type Scope, type Command } from "../shared/protocol.js";
 import { running, type Run } from "../shared/agent.js";
 import { tasksScope, taskToolNames } from "../shared/tasks.js";
@@ -40,10 +41,11 @@ export class Tasks {
       else this.delivery.parentSettled(scope, run);
       this.scheduler.kick();
     };
-    // Restart restores reports only; no worker launch or input replay.
+    // Recoverable children are settled by recover() before entering the normal queue.
     for (const row of this.records.rows(
       "WHERE tasks.runId IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s JOIN workspaces w ON w.id=s.workspaceId WHERE s.id=tasks.sessionId AND s.deletedAt IS NULL AND w.archived=0)",
     )) {
+      if (this.store.recoveries.get(row.sessionId)) continue;
       const run = agents.info(target(row)).run;
       if (
         run &&
@@ -54,6 +56,28 @@ export class Tasks {
       )
         this.scheduler.settle(row, run, true);
     }
+  }
+  async recover(scope: Scope, recovery: ServiceRecovery): Promise<string | undefined> {
+    const row = this.records.child(scope);
+    if (row) {
+      if (recovery.kind === "resume") {
+        const run = this.agents.info(scope).run;
+        if (!run || run.id !== recovery.runId) throw new AppError("RUN_MISMATCH", "恢复对象已变化");
+        this.scheduler.settle(row, run, true);
+      }
+      this.scheduler.recover(row, recovery);
+      return;
+    }
+    // The coordinator keeps parents frozen until all child recoveries have settled.
+    this.delivery.reconcilePending(scope);
+    this.store.db.prepare("UPDATE task_parents SET frozen=0 WHERE sessionId=?").run(scope.sessionId);
+    await this.delivery.notify(scope);
+    const runId = this.agents.info(scope).run?.id;
+    if ((runId ?? null) === recovery.runId && this.store.db.prepare(`SELECT 1 FROM task_results r JOIN tasks t ON t.id=r.taskId
+      WHERE t.parentSessionId=? AND r.delivery NOT IN ('delivered','discarded') LIMIT 1`).get(scope.sessionId))
+      throw new AppError("RECOVERY_BLOCKED", "子任务结果通知未能确认启动；请检查会话与模型配置。");
+    this.store.recoveries.remove(scope.sessionId, recovery);
+    return runId !== recovery.runId ? runId : undefined;
   }
   list(scope: Scope) {
     return this.records.list(scope);
@@ -120,12 +144,13 @@ export class Tasks {
       }
     }
   }
-  command(c: Command) {
-    return this.commands.command(c);
+  command(c: Command, recovery?: ServiceRecovery) {
+    return this.commands.command(c, recovery);
   }
   async stopParent(scope: Scope) {
     this.store.session(scope.workspaceId, scope.sessionId);
     this.records.freeze(scope);
+    this.store.db.prepare("DELETE FROM service_recoveries WHERE sessionId=? OR sessionId IN (SELECT sessionId FROM tasks WHERE parentSessionId=?)").run(scope.sessionId, scope.sessionId);
     const owned = this.records.rows("WHERE parentSessionId=?", scope.sessionId);
     const outcomes = await Promise.allSettled([
       this.agents.stop(scope),

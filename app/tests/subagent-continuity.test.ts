@@ -74,7 +74,8 @@ test("one child retains permissions and bound context across reuse, eviction, ha
       assert.ok(events.some(e => e.runId === runId && e.event.type === "tool" && e.event.name === "write" && e.event.status === "failed"));
       const systemPrompt = app!.agents.info(child).environment!.systemPrompt;
       assert.ok(typeof systemPrompt === "string");
-      assert.match(systemPrompt, /调研与测试子代理/);
+      assert.match(systemPrompt, /You are a research and testing subagent\./);
+      assert.match(systemPrompt, /Do not modify project source code/);
       assert.equal(existsSync(join(project, "forbidden.txt")), false);
     };
     scheduler.kick(); await Promise.all(ids.map(id => idle(id)));

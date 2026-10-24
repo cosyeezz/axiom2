@@ -58,6 +58,7 @@ export class Logins {
     provider: unknown,
     type: unknown,
     revision: unknown,
+    proxy?: unknown,
   ) {
     if (this.models.authActive)
       throw new AppError("AUTH_BUSY", "已有认证流程，请先完成或取消");
@@ -85,6 +86,12 @@ export class Logins {
           : runtime.getProvider(providerId)?.auth.apiKey;
       if (!method?.login)
         throw new AppError("AUTH_UNSUPPORTED", "该供应商不支持所选认证方式");
+      if (proxy !== undefined) {
+        if (type !== "oauth") throw new AppError("INVALID_INPUT", "仅 OAuth 登录支持在授权时选择代理。");
+        await this.models.configureLoginProxy(providerId, proxy, current);
+      }
+      if (this.disconnected.has(owner))
+        throw new AppError("AUTH_CANCELLED", "连接已关闭，未启动认证");
       const id = randomUUID(),
         controller = new AbortController();
       const flow: Flow = {
@@ -148,6 +155,7 @@ export class Logins {
           };
           send();
         });
+      let exchangingTokens = false;
       const notify = (event: AuthEvent) => {
         if (controller.signal.aborted) return;
         if (event.type === "auth_url") flow.state.url = safeUrl(event.url);
@@ -155,9 +163,12 @@ export class Logins {
           flow.state.url = safeUrl(event.verificationUri);
           flow.state.userCode = event.userCode.slice(0, 200);
         }
-        // Provider errors/progress can include credential material. Do not forward arbitrary text.
-        flow.state.message =
-          "按 pi 认证提示完成登录；关闭或取消会终止当前流程。";
+        // Only recognize a known native stage; arbitrary provider text may contain secrets.
+        if (providerId === "openai" && event.type === "progress" && event.message === "Exchanging authorization code for tokens...")
+          exchangingTokens = true;
+        flow.state.message = exchangingTokens
+          ? "已收到授权回调，正在通过所选网络获取并保存凭据…"
+          : "按 pi 认证提示完成登录；关闭或取消会终止当前流程。";
         send();
       };
       const operation = this.network(this.models.root, this.models.dir, providerId, join(this.models.dir, "models.json"), "login", { type },
@@ -176,7 +187,11 @@ export class Logins {
               ? "认证已改变，但目录同步失败；请重新读取，勿重复登录。"
               : controller.signal.aborted
                 ? "认证已取消或超时；若供应商刚完成回调，请重新读取确认认证状态。"
-                : "pi 认证未完成；请检查供应商配置后重试。";
+                : error instanceof AppError && error.code === "PROXY_UNAVAILABLE"
+                  ? "所选内置代理不可用，请检查线路是否存在并已启动，再重新登录。请求未改为直连。"
+                  : exchangingTokens
+                    ? "已收到授权回调，但获取或保存凭据未完成。请检查所选代理能否连接 OpenAI 认证服务，再重新读取认证状态。"
+                    : "认证未完成。若浏览器已授权，请检查此供应商的代理能否连接认证服务；若本机回调页无法打开，请重新登录并按提示提交完整回调地址。";
         })
         .finally(async () => {
           clearTimeout(timeout);

@@ -104,6 +104,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     assert.equal(state.status, "completed", JSON.stringify(state)); assert.equal(state.resumed, true);
     assert.equal(agents.info(scope).run!.id, runId);
     assert.equal(requests.length, 2, "one continuation, no replay or synthetic run");
+    for (const request of requests) {
+      const prompt = JSON.stringify(request.messages);
+      assert.match(prompt, /You are an AI assistant in Axiom/);
+      assert.match(prompt, /<tools>/);
+      assert.match(prompt, /<rules>/);
+      assert.match(prompt, /Read file contents/);
+      assert.match(prompt, /Be concise in your responses/);
+      assert.doesNotMatch(prompt, /<docs>|Pi documentation \(read only/);
+    }
     assert.match(JSON.stringify(requests[0].messages), /InstructionMarkerV1/);
     assert.match(JSON.stringify(requests[1].messages), /InstructionMarkerV2/);
     assert.match(JSON.stringify(requests[1].messages), /SkillMarkerV2/);

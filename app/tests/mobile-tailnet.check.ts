@@ -19,7 +19,7 @@ const ip = tailscaleAddresses().find((ip) => !ip.includes(":")) || "127.0.0.2";
 const reserve = createServer(); reserve.listen(0, ip); await once(reserve, "listening"); const port = (reserve.address() as any).port; await new Promise<void>((resolve) => reserve.close(() => resolve()));
 const gateway = new RemoteAccess(app.origin, () => [ip], port); await gateway.initialize(); const origin = `http://${ip}:${port}`;
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
-const artifacts = resolve("test-results/mobile-tailnet"); mkdirSync(artifacts, { recursive: true });
+const artifacts = resolve(process.env.AXIOM_MOBILE_ARTIFACTS ?? "test-results/mobile-tailnet"); mkdirSync(artifacts, { recursive: true });
 try {
   const status = await (await fetch(app.origin + "/api/remote")).json();
   assert.equal(status.error, "");
@@ -36,6 +36,11 @@ try {
   views.messageChanged(scope, { id: "a1", role: "assistant", text: "## 工作，随时接续\n\n电脑上的项目已经准备好。你可以在手机查看对话、管理任务，或继续刚才的工作。\n\n- 支持在 **Tailscale 内网** 中访问\n- 收起界面后，专注阅读内容\n- 展开后，继续输入和切换会话\n\n```typescript\nconst connection = await connect();\nconsole.log(connection.status);\n```\n\n| 设备 | 状态 |\n| --- | --- |\n| 手机界面 | 验证夹具 |\n| 会话内容 | 保留 |" });
   views.flush(scope);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  // Keep unrelated development HMR from resetting an in-progress mobile regression.
+  await context.route("**/@vite/client", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("async function handleMessage(payload) {", "async function handleMessage(payload) { return;") });
+  });
   const page = await context.newPage(); const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript((scope) => sessionStorage.setItem("view", JSON.stringify(scope)), scope);
   await page.goto(origin);
@@ -60,7 +65,8 @@ try {
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await page.waitForFunction(() => (document.querySelector("#prompt") as HTMLTextAreaElement)?.value === "");
   assert.equal(sent, 1, "mobile send button must issue a real websocket command");
-  const draft = "这是一份保留中的手机草稿。";
+  assert.equal(await page.locator(".thread-navigation").isVisible(), false, "normal sending does not show a mobile navigation arrow");
+  const draft = "草稿";
   await page.locator("#prompt").fill(draft);
   for (const [width, height] of [[360,800],[390,844],[430,932],[600,960],[844,390],[390,480],[390,320]]) {
     await page.setViewportSize({ width, height });
@@ -72,15 +78,27 @@ try {
     });
     assert.ok(geometry.height > 30, `thread must stay visible ${width}x${height}: ${JSON.stringify(geometry)}`);
     assert.ok(geometry.bottom <= geometry.visible + 1 && geometry.top >= 0, `send must stay visible: ${JSON.stringify(geometry)}`);
-    assert.equal(await page.locator(".thread-navigation").isVisible(), false, "mobile scroll controls must stay hidden");
+    const scrollable = await page.locator("#thread").evaluate(node => node.scrollHeight - node.clientHeight > 2);
+    if (scrollable) {
+      await page.locator("#thread").dispatchEvent("wheel", { deltaY: -1 });
+      await page.locator("#thread").evaluate(node => { node.scrollTop += node.scrollTop > 2 ? -80 : 80; });
+      await page.locator(".thread-navigation").waitFor({ state: "visible" });
+    }
+    assert.equal(await page.locator(".thread-navigation").isVisible(), scrollable, "only actual scrolling reveals mobile navigation");
+    assert.equal(await page.locator('.thread-navigation button').count(), 4);
+    assert.equal(await page.locator('.thread-navigation button:visible').count(), scrollable ? 1 : 0, "only the current reading direction floats on mobile");
     const padding = await page.locator(".thread-content").evaluate((node) => ({ left: getComputedStyle(node).paddingLeft, right: getComputedStyle(node).paddingRight }));
-    assert.deepEqual(padding, { left: "16px", right: "16px" }, "mobile content must not reserve a navigation gutter");
+    assert.deepEqual(padding, { left: "16px", right: "16px" }, "floating navigation reserves no conversation gutter");
+    if (scrollable) assert.ok(await page.locator('.thread-navigation').evaluate(nav => {
+      const bounds = nav.getBoundingClientRect(), shell = nav.closest('.thread-shell')!.getBoundingClientRect();
+      return getComputedStyle(nav).position === 'absolute' && Math.abs(bounds.left + bounds.width / 2 - shell.left - shell.width / 2) < 1;
+    }), "mobile arrow is centered and out of layout flow");
     const compact = await page.locator(".composer-area").evaluate((area) => {
       const input = area.querySelector("textarea")!, usage = area.querySelector(".usage")!, row = usage.querySelector(".usage-row")!, tools = usage.querySelector(".usage-settings")!;
       const a = row.getBoundingClientRect(), b = tools.getBoundingClientRect();
       return { inputHeight: input.getBoundingClientRect().height, composerHeight: area.querySelector(".composer")!.getBoundingClientRect().height, font: getComputedStyle(input).fontSize, wrap: getComputedStyle(usage).flexWrap, aligned: Math.abs(a.top + a.height / 2 - b.top - b.height / 2) < 1 };
     });
-    assert.deepEqual(compact, { inputHeight: 40, composerHeight: 56, font: "14px", wrap: "nowrap", aligned: true }, "single-line input and one uninterrupted toolbar row");
+    assert.deepEqual(compact, { inputHeight: 40, composerHeight: 56, font: "16px", wrap: "nowrap", aligned: true }, "single-line input and one uninterrupted toolbar row");
     await page.screenshot({ animations: "disabled", path: join(artifacts, `${width}x${height}-expanded.png`) });
     await page.getByRole("button", { name: "收起工作台，只看对话" }).click();
     assert.equal(await page.locator("#prompt").isVisible(), false);
@@ -133,6 +151,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   await page.screenshot({ animations: "disabled", path: join(artifacts, "1440-desktop.png") });
   assert.equal(await page.locator(".thread-navigation").isVisible(), true, "desktop navigation remains available");
+  assert.equal(await page.locator(".thread-navigation button:visible").count(), 4, "desktop retains all four original icons");
   const native = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const nativePage = await native.newPage(); nativePage.on("pageerror", (error) => errors.push(error.message));
   await nativePage.addInitScript((scope) => { sessionStorage.setItem("view", JSON.stringify(scope)); localStorage.setItem("axiom.mobile.reading", "false"); }, scope);
@@ -144,7 +163,7 @@ try {
     assert.equal(await nativePage.locator("#app").evaluate((node) => node.classList.contains("reading-mode")), true, "Android opens in reading mode even after an earlier expanded session");
     assert.equal(await nativePage.locator("#content>.topnav").isVisible(), false);
     assert.equal(await nativePage.locator("#prompt").isVisible(), false);
-    assert.equal(await nativePage.locator(".thread-navigation").isVisible(), false);
+    assert.equal(await nativePage.locator(".thread-navigation").isVisible(), false, "opening or resizing Android conversation does not reveal an arrow");
     const bounds = await nativePage.locator("#content>.thread-shell").boundingBox();
     assert.ok(bounds && Math.abs(bounds.x) <= 1 && Math.abs(bounds.y) <= 1 && Math.abs(bounds.width - width) <= 1 && Math.abs(bounds.height - height) <= 1, `Android conversation fills viewport: ${JSON.stringify(bounds)}`);
     assert.ok(await nativePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -163,8 +182,12 @@ try {
   await nativePage.locator(".model-picker > summary").click();
   await nativePage.locator(".model-picker .model-popover").waitFor({ state: "visible" });
   await nativePage.keyboard.press("Escape");
-  await nativePage.locator("#prompt").fill("这是一行足够长的输入，用来确认文字横向滚动而不会自动换行。".repeat(8));
-  assert.equal(await nativePage.locator("#prompt").evaluate((node) => node.scrollWidth > node.clientWidth && node.getBoundingClientRect().height === 40 && node.scrollHeight <= node.clientHeight + 2), true, "long input stays on one line");
+  await nativePage.locator("#prompt").fill("这是一段足够长的输入，用来确认文字真正自动换行并增高。".repeat(8));
+  assert.equal(await nativePage.locator("#prompt").evaluate((node) => node.scrollWidth <= node.clientWidth + 1 && node.getBoundingClientRect().height > 40 && node.scrollHeight > node.clientHeight), true, "long Android input wraps, grows and scrolls vertically at its height limit");
+  await nativePage.getByRole("button", { name: "清空输入", exact: true }).click();
+  assert.equal(await nativePage.locator("#prompt").inputValue(), "");
+  assert.equal(await nativePage.getByRole("button", { name: "清空输入", exact: true }).count(), 0);
+  assert.equal(await nativePage.locator("#prompt").evaluate((node) => node.getBoundingClientRect().height), 40, "clearing shrinks Android input");
   await nativePage.locator(".usage").evaluate((node) => { node.scrollLeft = node.scrollWidth; });
   const lastTool = await nativePage.locator(".usage .memory-global").boundingBox();
   assert.ok(lastTool && lastTool.x >= 0 && lastTool.x + lastTool.width <= 390, "last toolbar icon is reachable by horizontal scrolling");
@@ -174,7 +197,7 @@ try {
   await nativePage.getByRole("button", { name: "收起工作台，只看对话" }).click();
   await nativePage.getByRole("button", { name: "展开工作台", exact: true }).click();
   assert.equal(await nativePage.locator("#prompt").inputValue(), "全屏切换保留草稿");
-  assert.equal(await nativePage.locator(".thread-navigation").isVisible(), false);
+  assert.equal(await nativePage.locator(".thread-navigation").isVisible(), false, "expanding Android without scrolling does not reveal an arrow");
   await native.close();
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, tailnetInterface: ip !== "127.0.0.2", viewports: 7, checks: ["direct entry without credentials", "HTTP UUID", "websocket prompt send", "no prompt replay", "touch geometry", "short-screen navigation", "long draft with attachment", "reading mode", "draft retention", "drawer focus", "remote file selection", "reconnect", "reload", "desktop"], artifacts }));

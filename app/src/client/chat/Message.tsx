@@ -6,6 +6,7 @@ import { useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
 import { FoldIcon } from "../StatusIcons.js";
 import { type ChatMessage } from "../../shared/agent.js";
+import { threadDelivery } from "../../shared/thread-layout.js";
 import type { Scope } from "../../shared/protocol.js";
 import { TaskCards } from "../tasks/TaskCards.js";
 import { TaskOperation } from "../tasks/TaskOperation.js";
@@ -15,7 +16,6 @@ import { Markdown } from "./Markdown.js";
 import { CompressionSummary } from "./CompressionSummary.js";
 import { MessageImages } from "./MessageImages.js";
 import { ActivityExpanded, ActivityGroup, Tool } from "./ToolActivity.js";
-import { TaskNotice } from "./TaskNotice.js";
 import { Thinking } from "./Thinking.js";
 import { CopyReply } from "./CopyReply.js";
 function FullMessageControl({ loading, error, load }: { loading?: boolean; error?: string; load: () => Promise<void> }) {
@@ -36,7 +36,6 @@ function CompactionCard({ m, scope, id }: { m: ChatMessage; scope: Scope; id: st
       </span>
       <span className="compaction-heading">
         <span className="compaction-number">上下文压缩 <span>#{String(compression.number).padStart(2, "0")}</span></span>
-        <span className="compaction-title">{compression.title}</span>
       </span>
       <span className="compaction-tokens" data-tooltip="pi 内容估算，不是计费用量">
         <span className="compaction-token-values"><span>≈{compression.before.toLocaleString()}</span><span className="compaction-arrow" aria-label="压缩至">→</span><span className="compaction-token-after">{compression.after == null ? "—" : `≈${compression.after.toLocaleString()}`}</span></span>
@@ -93,7 +92,7 @@ export const Message = memo(function Message({
   // initial delegation. Never suppress legacy or batched input messages.
   if (m.role === "user" && initialTaskInputId && m.inputIds?.length === 1 && m.inputIds[0] === initialTaskInputId) return null;
   if (!thinkingOnly && m.compression) return <CompactionCard m={m} scope={scope} id={id} />;
-  if (!thinkingOnly && m.taskNotice) return <TaskNotice message={m} />;
+  if (m.taskNotice) return null;
   // Body and process slices subscribe to the same message without moving text
   // when a later tool call or a disclosure toggle arrives.
   const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive || m.calls?.length));
@@ -121,10 +120,11 @@ export const Message = memo(function Message({
         {hasProcess && (inActivity ? process(groupOpen, "thinking") : <ActivityGroup inline scope={scope} messageIds={[m.id]} awaitingMore={!!activeRunId && m.runId === activeRunId}>{(open) => process(open)}</ActivityGroup>)}
         {!thinkingOnly && !callsOnly && (!inActivity || groupOpen) && <>{m.role === "user" ? <EditableUserMessage key={`${scope.workspaceId}:${scope.sessionId}:${id}`} message={m} scope={scope} /> : (m.text || m.images?.length) ? <div
           className={`message-body${m.role === "assistant" && m.text ? " reply-body" : ""}${m.images?.length ? " has-image-attachments" : ""}`}
+          data-delivery-start={!inActivity && threadDelivery(m) ? m.id : undefined}
         >
           {m.text && <div className="markdown">{m.role === "assistant" && !inActivity ?
             <AnnotatedReply scope={scope} messageId={id} text={m.text} streaming={m.streaming} /> :
-            <Markdown text={m.text} images={m.role === "assistant" ? { scope, messageId: id } : undefined} />}</div>}
+            <Markdown text={m.text} images={m.role === "assistant" ? { scope, messageId: id } : undefined} streaming={m.streaming} />}</div>}
           <MessageImages key={`${scope.workspaceId}:${scope.sessionId}:${id}`} images={m.images} scope={scope} messageId={id} />
         </div> : null}
         {!inActivity && m.error && (

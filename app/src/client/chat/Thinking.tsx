@@ -1,7 +1,9 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect } from "react";
+import { useRememberedDisclosure } from "./OriginalConversation.js";
 import { ProcessDots, ProcessOutcome } from "./ProcessStatus.js";
 import { ActivityExpanded, ActivitySettled } from "./ToolActivity.js";
 import { Markdown } from "./Markdown.js";
+import { ThinkingPreview } from "./ThinkingPreview.js";
 import { MessagePartBody } from "./MessagePartBody.js";
 import type { ChatMessage } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -10,7 +12,7 @@ export function Thinking({ text, active, scope, message }: { text: string; activ
   const groupOpen = useContext(ActivityExpanded);
   const settled = useContext(ActivitySettled);
   active = active && !settled;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRememberedDisclosure(`thinking:${message.id}`);
   const trimmed = text.trim();
   const firstLine = trimmed.split(/\r\n|\r|\n/, 1)[0];
   const incomplete = message.thinkingLength !== undefined ? message.thinkingLength > text.length : !!message.truncated;
@@ -20,7 +22,7 @@ export function Thinking({ text, active, scope, message }: { text: string; activ
   const label = status === "failed" ? "思考失败" : status === "cancelled" ? "思考已停止" : firstLine;
   const inline = open && !!trimmed && (status === "completed" || active);
   const header = <>
-    <span className={`thinking-label process-status-text${active ? " is-active" : ""}`}><span className="thinking-text" aria-hidden={inline || undefined}>{status === "completed" || active ? <Markdown text={firstLine || (active ? "" : "思考记录")} compact /> : label}</span>{active && <ProcessDots />}</span>
+    <span className={`thinking-label process-status-text${active ? " is-active" : ""}`}><span className="thinking-text" aria-hidden={inline || undefined}>{active && !open ? <ThinkingPreview text={message.thinkingTail ?? text} start={message.thinkingTail !== undefined ? (message.thinkingLength ?? text.length) - message.thinkingTail.length : 0} /> : status === "completed" || active ? <Markdown text={firstLine || (active ? "" : "思考记录")} compact /> : label}</span>{active && <ProcessDots />}</span>
     {!active && status !== "completed" && <ProcessOutcome status={status} />}
   </>;
   return <details className="thinking-block" open={open} data-status={status} data-inline={inline || undefined}>

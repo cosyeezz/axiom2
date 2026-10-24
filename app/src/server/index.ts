@@ -3,6 +3,7 @@ import { assetCacheControl } from "./asset-cache.js";
 import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
 import { MaintenanceService } from "./maintenance.js";
+import { stopMaintenanceProcesses } from "./maintenance-process.js";
 import { Resources } from "./resources.js";
 import { SkillFiles } from "./skill-files.js";
 import { OutgoingQueue } from "./outgoing.js";
@@ -36,6 +37,7 @@ import { Agents } from "./agents.js";
 import type { OpenMemoryFile } from "./memory-open.js";
 import { Costs } from "./costs.js";
 import { Tasks } from "./tasks.js";
+import { ServiceRecoveryCoordinator } from "./service-recovery.js";
 import { Preferences } from "./preferences.js";
 import { ModelProxyService } from "./integrations/model-proxy.js";
 import { closeModelNetworks } from "./model-network.js";
@@ -111,13 +113,16 @@ export async function startServer(
   const sockets = new WebSocketServer({ noServer: true, maxPayload: imagePayloadLimit });
   const subscriptions = new Map<WebSocket, Set<string>>();
   const subscriptionLifetimes = new WeakMap<WebSocket, Map<string, object>>();
+  const sessionCounts = (sessions: import("../shared/protocol.js").Session[]) => sessions.map(session => ({
+    ...session, messageCount: agents.messageCount({ workspaceId: session.workspaceId, sessionId: session.id }),
+  }));
   const snapshots = (scope: string): unknown => {
     if (scope === "workspaces") return store.workspaces();
     if (scope === "workspace-preferences") return { ...store.workspacePreferences(), view: store.lastSession() };
     if (scope === "session-preferences") return { view: store.lastSession() };
     if (scope === compressionPreferencesScope) return store.compressionPreferences();
     if (scope === taskPreferencesScope) return tasks.settings();
-    if (scope === "pinned-sessions") return store.pinnedSessions();
+    if (scope === "pinned-sessions") return sessionCounts(store.pinnedSessions());
     // Invalidation only: deleted summaries are fetched in bounded, searchable pages.
     if (scope === "deleted-sessions") return { revision: seq };
     if (scope === "favorites") return preferences.favorites();
@@ -133,9 +138,8 @@ export async function startServer(
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "memory-tree") return agents.memories.tree(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
-    if (parts.length === 2 && parts[0] === "memory-organization") return agents.memories.organization(parts[1]);
     if (parts.length === 2 && parts[0] === "sessions")
-      return store.sessions(parts[1]);
+      return sessionCounts(store.sessions(parts[1]));
     if (parts.length === 3 && parts[0] === "session")
       return store.session(parts[1], parts[2]);
     const target = { workspaceId: parts[1], sessionId: parts[2] };
@@ -294,6 +298,7 @@ export async function startServer(
   const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {});
   const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);
   const tasks = new Tasks(agents);
+  const recovery = new ServiceRecoveryCoordinator(agents, tasks);
   attention = new SessionAttention(store, publish);
   store.beforeArchiveWorkspace = (workspaceId) => {
     if (workspaceOperations.get(workspaceId))
@@ -406,7 +411,7 @@ export async function startServer(
           subscriptionReads.get(subscribing)?.abort();
           subscriptionIntent = {}; intents.set(subscribing, subscriptionIntent);
         }
-        const historyRead = ["agent.original", "agent.editable", "message.get", "message.part", "files.document", "message.image"].includes(c.op) ||
+        const historyRead = ["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "files.document", "message.image"].includes(c.op) ||
           c.op === "subscribe" && /^(messages|thread):/.test(String(c.params!.scope));
         if (historyRead) {
           const controller = new AbortController(); reads.set(requestId, controller);
@@ -510,6 +515,7 @@ export async function startServer(
               c.params!.providerId,
               c.params!.type,
               c.params!.revision,
+              c.params!.proxy,
             ),
           );
         else if (c.op === "auth.open")
@@ -955,6 +961,7 @@ export async function startServer(
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   remoteAccess = new RemoteAccess(origin);
   await remoteAccess.initialize();
+  recovery.start();
   return {
     origin,
     accessUrl: `${origin}/`,
@@ -964,13 +971,13 @@ export async function startServer(
     tasks,
     close: async () => {
       shuttingDown = true;
+      recovery.pause();
       clearTimeout(proxyRefreshTimer);
       clearTimeout(costTimer); costWorkspaces.clear();
       await previews.close();
       await remoteAccess?.close();
       attention.close();
       await resources.close();
-      maintenance.close();
       await opencli.close();
       await rea.close();
       await rtk.close();
@@ -982,9 +989,15 @@ export async function startServer(
       sockets.close();
       await Promise.allSettled(inFlight);
       await logins.close();
+      store.db.exec("BEGIN IMMEDIATE");
+      try { store.recoveries.capture(); store.db.exec("COMMIT"); }
+      catch (error) { store.db.exec("ROLLBACK"); throw error; }
       await tasks.close();
+      await recovery.close();
       await closeModelNetworks(store.root);
       await modelProxy.close();
+      await stopMaintenanceProcesses(store.root);
+      maintenance.close();
       await vite?.close();
       await new Promise<void>((r) => {
         server.close(() => r());

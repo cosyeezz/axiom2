@@ -5,7 +5,7 @@ import { capabilityPreferencesScope, capabilitiesScope, type CapabilityCatalog, 
 import { reloadScope, type ReloadState } from "../../shared/reload.js";
 import { command, useConnectionState, useScope } from "../transport.js";
 import { reloadSessionAndPage } from "../session-page-reload.js";
-import { getDraft, updateDraft, useDraft } from "../drafts.js";
+import { getComposerDraft as getDraft, updateComposerDraft as updateDraft, useComposerDraft as useDraft } from "./composer-edit.js";
 import { LocalPath, isLocalPath } from "../LocalPath.js";
 import { SkillFileActions } from "./SkillCards.js";
 import { BuiltinMark } from "../BuiltinMark.js";

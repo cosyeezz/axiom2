@@ -3,11 +3,10 @@ import { taskToolName } from "./tasks.js";
 
 export type CallReference = { messageId: string; callId: string };
 export type ProcessEntry =
-  | { kind: "thinking"; id: string }
+  | { kind: "thinking" | "outcome"; id: string }
   | { kind: "tool"; id: string; call: CallReference };
 export type ProcessSlice =
   | { kind: "task"; id: string; call: CallReference }
-  | { kind: "task-notices"; id: string; ids: string[] }
   | { kind: "body" | "notice"; id: string }
   | { kind: "process"; id: string; calls: CallReference[]; entries: ProcessEntry[] };
 
@@ -21,14 +20,8 @@ export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[]
     entries = [];
   };
   for (const message of messages) {
-    if (message.role === "toolResult") continue;
-    if (message.taskNotice) {
-      flush();
-      const previous = slices.at(-1);
-      if (previous?.kind === "task-notices") previous.ids.push(message.id);
-      else slices.push({ kind: "task-notices", id: message.id, ids: [message.id] });
-      continue;
-    }
+    // Ignore legacy UI projections without splitting adjacent execution segments.
+    if (message.role === "toolResult" || message.taskNotice) continue;
     if (message.compression || message.role !== "assistant") {
       flush();
       slices.push({ kind: "notice", id: message.id });
@@ -36,9 +29,14 @@ export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[]
     }
     if (!callsOnlyIds.includes(message.id)) {
       if (message.thinking || message.thinkingActive) entries.push({ kind: "thinking", id: message.id });
-      if (!thinkingOnlyIds.includes(message.id) && (message.text.trim() || message.images?.length || message.error || message.status === "cancelled")) {
-        flush();
-        slices.push({ kind: "body", id: message.id });
+      if (!thinkingOnlyIds.includes(message.id)) {
+        if (message.text.trim() || message.images?.length) {
+          flush();
+          slices.push({ kind: "body", id: message.id });
+        } else if (message.error || message.status === "failed" || message.status === "cancelled") {
+          // A terminal attempt is a detail of this process, not a second card.
+          entries.push({ kind: "outcome", id: message.id });
+        }
       }
     }
     if (thinkingOnlyIds.includes(message.id)) continue;

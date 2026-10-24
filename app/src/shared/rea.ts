@@ -1,6 +1,7 @@
+import type { CleanupScope } from "./cleanup-scope.js";
 import type { ReaEngineId, ReaEngineState } from "./rea-engines.js";
 export const reaVersion = "6.7.0";
-export type ReaJob = { id: string; kind: "check" | "install" | "doctor" | "engines-check" | "engine-install" | "uninstall" | "engine-uninstall"; engine?: ReaEngineId; running: boolean; message: string; error?: string };
+export type ReaJob = { id: string; kind: "check" | "install" | "doctor" | "engines-check" | "engine-check" | "engine-install" | "engine-download" | "engine-open-installer" | "uninstall" | "engine-uninstall" | "clearDownloads"; engine?: ReaEngineId; running: boolean; message: string; error?: string; startedAt?: number; recommendation?: { version: string; reaVersion: string; platform: string; arch: string } };
 export type ReaState = {
   revision: string;
   enabled: boolean;
@@ -14,9 +15,13 @@ export type ReaState = {
   version?: string;
   latest?: string;
   packageRoot?: string;
+  cleanup?: CleanupScope;
+  downloadCleanup?: Partial<Record<"ghidra" | "hopper", CleanupScope>>;
+  downloadCleanupErrors?: Partial<Record<"ghidra" | "hopper", string>>;
   removalPending?: boolean;
   pendingOperation?: string;
   job?: ReaJob;
+  jobs?: ReaJob[];
   diagnostic?: { text: string; toolCount: number; at: number };
   engines?: ReaEngineState[];
   engineHost?: { platform: string; arch: string };

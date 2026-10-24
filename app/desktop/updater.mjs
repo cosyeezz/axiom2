@@ -1,4 +1,8 @@
 // Bundled with the desktop client; uses only Node.js built-ins so old backends can update.
+import { inspectArchives, removeArchive, archiveWorker } from './archive-cleanup.mjs';
+import { serviceAdmission } from './service-admission.mjs';
+import { inspectServiceRemoval, removeManagedService, serviceRemovalPending, verifyServiceRemoval } from './service-removal.mjs';
+import { inspectPiRemoval, verifyPiRemoval } from './pi-removal.mjs';
 import { DesktopExecution, desktopTask, budgetsDefault, validBudgets } from './maintenance.mjs';
 import { createUpdaterReconciler } from './updater-reconciliation.mjs';
 import { createUpdaterSupervisor, updaterOwnerPresent, updaterTaskSnapshot } from './updater-supervision.mjs';
@@ -54,7 +58,7 @@ export async function execute(node, args, options = {}) {
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) abort();
   try {
-    supervisor = createUpdaterSupervisor({ root, execution, log: options.log });
+    supervisor = createUpdaterSupervisor({ root, execution, log: options.log, fetcher: options.fetcher });
     await supervisor.prepare();
     await execution.phase("checking", "正在核实安装状态…");
     output = await supervisor.command(node, args, { timeoutMs: 60000, ...options, cwd: options.cwd ?? process.cwd() });
@@ -77,6 +81,9 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   const journalFile = join(directory, "transaction.json");
   const log = join(directory, "update.log");
   const piReleaseFile = join(directory, "pi-release.json");
+  const piRemovalFile = join(directory, 'pi-removal.json');
+  const archivePreviewFile = join(directory, 'archive-cleanup.json');
+  const serviceRemovalFile = join(directory, 'service-removal.json');
   const piPackage = "@earendil-works/pi-coding-agent";
   async function piEnvironment() {
     const installed = await installation(true) ?? { node: runtimeNode };
@@ -125,7 +132,9 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     // Keep the latest version visible, but require a new confirmation after the
     // inspected installation changes, including a partially completed install.
     if (release && cli?.identity !== release.identity) release = { ...release, token: null };
-    return { runtimeVersion, cli, release };
+    let removal = null;
+    try { removal = await json(piRemovalFile); } catch { /* A new preview replaces invalid optional data. */ }
+    return { runtimeVersion, cli, release, removal };
   }
   async function piRefresh() { return runJob("pi-refresh"); }
   async function piCheck() {
@@ -267,10 +276,10 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       if (old && JSON.parse(old.body).reconciliation?.state === "release-pending") throw Error("中断核实尚未提交完成，请再次核实原任务。");
       const servicePending = !!(old && (JSON.parse(old.body).servicePending || JSON.parse(old.body).reconciliation?.servicePending));
       if (servicePending && kind !== "recover") throw Error("服务启动结果仍需核实，请先恢复旧版本。");
-      if (old && (JSON.parse(old.body).task?.status === "unknown" || JSON.parse(old.body).supervised && JSON.parse(old.body).running && !isAlive(old.pid))) throw Error("上次更新退出尚未确认，请先核实已有任务。");
+      if (old && (JSON.parse(old.body).task?.status === "unknown" || (JSON.parse(old.body).supervised || ['archive-preview', 'archive-remove'].includes(JSON.parse(old.body).kind)) && JSON.parse(old.body).running && !isAlive(old.pid))) throw Error("上次更新退出尚未确认，请先核实已有任务。");
       if (old && JSON.parse(old.body).running && isAlive(old.pid)) throw Error("已有更新正在进行，请等待完成。");
       if (old) archiveJob(db, { ...old, body: JSON.stringify(projectJob(old, false)) });
-      const value = { kind, version, servicePending, task: desktopTask(kind, kind === "client" ? "download" : "update", budgets), phase: "queued", running: true, message: "正在准备更新…", updatedAt: Date.now() };
+      const value = { kind, version, ...(['archive-remove'].includes(kind) ? { archiveCommit: 'not-started' } : {}), servicePending, task: desktopTask(kind, ['archive-remove', 'pi-uninstall', 'service-uninstall'].includes(kind) ? "uninstall" : ['archive-preview', 'pi-remove-preview', 'service-remove-preview'].includes(kind) ? "check" : kind === "client" ? "download" : "update", budgets), phase: "queued", running: true, message: "正在准备更新…", updatedAt: Date.now() };
       db.prepare("DELETE FROM maintenance_control").run();
       const body = JSON.stringify(value);
       db.prepare("INSERT OR REPLACE INTO job VALUES(1,?,?,?)").run(token, process.pid, body);
@@ -279,7 +288,47 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       return { token, pid: process.pid, ...value };
     });
   }
+  async function reconcileArchive(payload) {
+    const row = await database(db => {
+      const current = db.prepare('SELECT token,pid,body FROM job WHERE id=1').get();
+      return [current, ...db.prepare('SELECT token,pid,body FROM maintenance_history').all()].find(row => row && JSON.parse(row.body).task?.id === payload.id);
+    });
+    if (!row) return false;
+    const value = JSON.parse(row.body);
+    if (!['archive-preview', 'archive-remove'].includes(value.kind)) return false;
+    if (value.reconciliation?.state === 'complete') return true;
+    const release = await serviceAdmission(root);
+    try {
+      if (isAlive(row.pid) && value.running || updaterOwnerPresent(root)) throw Error('原任务或其他维护进程尚未退出，不能核实归档任务。');
+      // No arbitrary commands are launched by archive jobs. The commit worker's
+      // kernel lock proves it has exited even if its Node parent was killed.
+      const receipt = value.kind === 'archive-remove' && value.archiveCommit !== 'not-started' ? archiveWorker({ root, taskId: value.task.id, op: 'inspect', directory: value.archiveDirectory, executable: env.AXIOM_DESKTOP_EXECUTABLE }) : { writerStopped: true, quarantine: false };
+      if (!receipt.writerStopped) throw Error('归档执行器退出尚未确认。');
+      const preview = await json(archivePreviewFile);
+      if (preview) await atomic(archivePreviewFile, { ...preview, token: null });
+      let retainedPath;
+      if (value.kind === 'archive-remove' && value.archiveCommit !== 'not-started') {
+        const id = JSON.parse(value.version || '{}').id;
+        if (!/^[a-f0-9]{64}-axiom2\.tgz$/.test(id ?? '')) throw Error('原归档任务选择无效，请保留记录。');
+        retainedPath = await lstat(join(directory, id)).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
+      }
+      value.running = false; value.phase = 'error';
+      value.message = receipt.quarantine ? '中断任务已停止；隔离文件已保留，需单独核实，未宣称删除完成。' : retainedPath === false ? '中断任务已停止；原归档路径未发现，无法确认删除过程，请重新扫描。' : '中断任务已停止；未确认删除成功，请重新预览。';
+      value.reconciliation = { state: 'complete', quarantine: receipt.quarantine, retainedPath };
+      Object.assign(value.task, { status: 'failed', finishedAt: Date.now(), message: value.message, capabilities: { cancel: false, extend: false }, error: { code: 'operation', phase: value.task.phase, message: value.message } });
+      await database(db => {
+        db.exec('BEGIN IMMEDIATE');
+        const latest = db.prepare('SELECT body FROM maintenance_history WHERE token=?').get(row.token);
+        if (!latest || latest.body !== row.body) throw Error('原任务记录已变化，请重新读取。');
+        const body = JSON.stringify(value);
+        db.prepare('UPDATE job SET body=? WHERE id=1 AND token=?').run(body, row.token);
+        archiveJob(db, { ...row, body }); db.exec('COMMIT');
+      });
+    } finally { release(); }
+    return true;
+  }
   async function reconcile(payload = {}) {
+    if (await reconcileArchive(payload)) return status();
     const installed = await installation(true);
     const reconciler = await createUpdaterReconciler(root);
     const persist = (db, row, value) => {
@@ -326,7 +375,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function progress(phase, message, extra = {}) {
     if (execution) {
       const mapped = ({ preparing: "installing", stopping: "installing", switching: "installing", starting: "validating", restoring: "installing", ready: "verifying", complete: "validating" })[phase] ?? phase;
-      const safe = !["stopping", "switching", "starting", "restoring", "complete", "ready", "error"].includes(phase);
+      const safe = !["stopping", "switching", "starting", "restoring", "removing", "complete", "ready", "error"].includes(phase);
       if (!["complete", "ready", "error"].includes(phase)) await execution.phase(mapped, message, safe);
       execution.task.message = message;
     }
@@ -399,16 +448,21 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     return content.length === asset.size && createHash("sha256").update(content).digest("hex") === asset.sha256;
   }
   async function status() {
-    const installed = await installation(true);
-    const release = await json(releaseFile);
     const current = await job();
+    let installed, installationError;
+    try { installed = await installation(true); }
+    catch (error) {
+      if (!['archive-preview', 'archive-remove'].includes(current?.kind)) throw error;
+      installationError = error.message;
+    }
+    const release = await json(releaseFile);
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
     if (current?.task && current.phase === "interrupted") { if (current.task.status !== "unknown") current.task.status = "interrupted"; current.task.capabilities = { cancel: false, extend: false }; }
     if (current) { delete current.pid; delete current.token; delete current.installer; delete current.reconciliation; }
-    const pi = await piStatus();
+    const pi = ['archive-preview', 'archive-remove'].includes(current?.kind) ? null : await piStatus();
     if (current?.kind === "pi" && ["failed", "cancelled", "unknown", "interrupted"].includes(current.task?.status) && pi.release && pi.release.token === current.version) pi.release.token = null;
-    return { pi, serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
+    return { installationError, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
       job: current, budgets: await json(join(directory, "budgets.json"), budgetsDefault), recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
   async function npmCli(node) {
@@ -548,16 +602,80 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     }
   }
   async function perform(kind, version) {
-    if (["check", "pi-check", "pi-refresh"].includes(kind)) { await progress("checking", kind === "pi-refresh" ? "正在读取 Pi 安装状态…" : "正在查询发布版本…"); await (kind === "check" ? check() : kind === "pi-check" ? piCheck() : piStatus(true)); await progress("complete", kind === "pi-refresh" ? "Pi 安装状态读取完成。" : "版本检查完成。", { running: false }); return; }
-    if (kind === "pi") {
-      await progress("checking", "正在核实终端 pi 安装位置和版本…");
-      const release = await json(piReleaseFile);
-      if (!release || version !== release.token || !versionPattern.test(release.version)) throw Error("请先检查 pi 版本，再确认升级。");
-      version = release.version;
+    if (kind === 'archive-preview') {
+      await progress('checking', '正在核实后台下载归档…');
+      await rm(archivePreviewFile, { force: true });
+      const preview = await inspectArchives(root, { signal: execution.signal });
+      await execution.tick(); execution.signal.throwIfAborted();
+      await atomic(archivePreviewFile, { ...preview, taskId: execution.task.id, token: randomBytes(24).toString('hex'), checkedAt: Date.now() });
+      await progress('complete', '归档清理范围已生成，请逐项确认。', { running: false }); return;
+    }
+    if (kind === 'archive-remove') {
+      let consent;
+      try { consent = JSON.parse(version); } catch { throw Error('请重新预览并确认归档清理。'); }
+      const preview = await json(archivePreviewFile);
+      if (!preview?.token || consent?.token !== preview.token || consent.confirm !== true || typeof consent.id !== 'string' || !preview.targets.some(item => item.id === consent.id)) throw Error('请重新预览并确认所选归档。');
+      if (!(await history()).tasks.some(task => task.id === preview.taskId && task.resource === 'archive-preview' && task.status === 'succeeded')) throw Error('原归档预览未成功完成，请重新预览。');
+      execution.signal.throwIfAborted();
+      // Persist the directory binding before spawning any commit worker. Recovery
+      // must lock and revoke in this same directory, never a replacement path.
+      await writeJob({ archiveDirectory: preview.directory, archiveCommit: 'prepared' });
+      await atomic(archivePreviewFile, { ...preview, token: null });
+      const cleanup = await removeArchive({ root, preview, id: consent.id, taskId: execution.task.id, executable: env.AXIOM_DESKTOP_EXECUTABLE, signal: execution.signal, checkpoint: () => execution.tick(), progress });
+      await writeJob({ cleanup });
+      if (!cleanup.complete) throw Error('所选归档路径仍存在，请查看结果并重新核实。');
+      await progress('complete', '所选下载归档已清理，其他残留见保留项。', { running: false }); return;
+    }
+    if (kind === 'service-remove-preview') {
+      await progress('checking', '正在核实托管后台卸载范围…');
+      await rm(serviceRemovalFile, { force: true });
+      if (await json(journalFile)) throw Error('有未完成的后台更新，请先恢复旧版本。');
+      const preview = await inspectServiceRemoval(root);
+      await atomic(serviceRemovalFile, { ...preview, token: randomBytes(24).toString('hex'), checkedAt: Date.now() });
+      await progress('complete', '后台卸载范围已生成，请确认后执行。', { running: false }); return;
+    }
+    if (kind === 'service-uninstall') {
+      let consent;
+      try { consent = JSON.parse(version); } catch { throw Error('请重新预览并确认后台卸载。'); }
+      const preview = await json(serviceRemovalFile);
+      if (!preview?.token || consent?.token !== preview.token || consent.confirm !== true) throw Error('请重新预览并确认后台卸载。');
+      if (await json(journalFile)) throw Error('有未完成的后台更新，请先恢复旧版本。');
+      if ((await inspectServiceRemoval(root)).identity !== preview.identity) throw Error('后台安装已变化，请重新预览。');
+      await atomic(serviceRemovalFile, { ...preview, token: null });
+      execution.signal.throwIfAborted();
+      const cleanup = await removeManagedService({ root, preview, stop: stopService, reserve: reserveService, release: releaseService, progress });
+      await writeJob({ cleanup });
+      await progress('complete', '选定后台程序和入口已移除；数据及未核实残留见清理结果。', { running: false }); return;
+    }
+    if (kind === 'pi-remove-preview') {
+      await progress('checking', '正在核实 Pi 卸载范围…');
+      await rm(piRemovalFile, { force: true });
       const info = await piEnvironment();
-      if (info.identity !== release.identity) throw Error("终端安装位置或版本已改变，请重新检查 pi 更新。");
-      if (info.legacy) throw Error("检测到旧命名空间的 pi 安装，请先用原安装方式迁移，避免覆盖同名命令。");
-      if (info.version && info.version !== version && !newer(version, info.version)) throw Error("当前 pi 高于已检查版本，未执行降级。");
+      const preview = await inspectPiRemoval(info, await installation(true));
+      await atomic(piRemovalFile, { ...preview, token: randomBytes(24).toString('hex'), checkedAt: Date.now() });
+      await progress('complete', 'Pi 卸载预览已生成；确认前不会删除程序。', { running: false });
+      return;
+    }
+    if (["check", "pi-check", "pi-refresh"].includes(kind)) { await progress("checking", kind === "pi-refresh" ? "正在读取 Pi 安装状态…" : "正在查询发布版本…"); await (kind === "check" ? check() : kind === "pi-check" ? piCheck() : piStatus(true)); await progress("complete", kind === "pi-refresh" ? "Pi 安装状态读取完成。" : "版本检查完成。", { running: false }); return; }
+    if (kind === "pi" || kind === 'pi-uninstall') {
+      const removing = kind === 'pi-uninstall';
+      await progress("checking", "正在核实终端 pi 安装位置和版本…");
+      const info = await piEnvironment();
+      let removal;
+      if (removing) {
+        let confirmation;
+        try { confirmation = JSON.parse(version); } catch { throw Error('请重新预览并确认 Pi 卸载。'); }
+        removal = await json(piRemovalFile);
+        if (!removal?.token || confirmation?.token !== removal.token || confirmation.confirm !== true || confirmation.sessionsClosed !== true) throw Error('请重新预览并确认已关闭相关终端会话。');
+        if ((await inspectPiRemoval(info, await installation(true))).identity !== removal.identity) throw Error('Pi 安装或命令入口已改变，请重新预览。');
+      } else {
+        const release = await json(piReleaseFile);
+        if (!release || version !== release.token || !versionPattern.test(release.version)) throw Error("请先检查 pi 版本，再确认升级。");
+        version = release.version;
+        if (info.identity !== release.identity) throw Error("终端安装位置或版本已改变，请重新检查 pi 更新。");
+        if (info.legacy) throw Error("检测到旧命名空间的 pi 安装，请先用原安装方式迁移，避免覆盖同名命令。");
+        if (info.version && info.version !== version && !newer(version, info.version)) throw Error("当前 pi 高于已检查版本，未执行降级。");
+      }
       const parent = dirname(info.packageRoot);
       await mkdir(parent, { recursive: true });
       const lock = join(await realpath(parent), ".axiom-pi-update.lock");
@@ -580,6 +698,23 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       if (process.platform !== "win32") { const dir = await open(dirname(lock), "r"); try { await dir.sync(); } finally { await dir.close(); } }
       {
         if ((await piEnvironment()).identity !== info.identity) throw Error("终端 pi 在准备期间改变，请重新检查。");
+        if (removing) {
+          if ((await inspectPiRemoval(info, await installation(true))).identity !== removal.identity) throw Error('Pi 安装或命令入口已改变，请重新预览。');
+          // Consume confirmation before npm. A lost response must never replay a deletion.
+          await atomic(piRemovalFile, { ...removal, token: null });
+          await rm(piReleaseFile, { force: true });
+          await atomic(join(directory, 'pi-installation.json'), { error: 'Pi 卸载已开始，安装状态待核实。' });
+          execution.signal.throwIfAborted();
+          await progress('removing', '正在卸载已确认的终端 Pi…');
+          await runCommand(info.installed.node, [info.npm, 'uninstall', '--global', '--prefix', info.prefix, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', piPackage], { ...installOptions(), cwd: info.prefix });
+          await progress('validating', '正在复查程序和命令入口…');
+          const cleanup = await verifyPiRemoval(removal);
+          await writeJob({ cleanup });
+          await piStatus(true);
+          if (!cleanup.complete) throw Error('npm 已结束，但仍有程序或命令残留；请查看清理结果并重新预览。');
+          await progress('complete', '所选终端 Pi 程序已卸载；设置、共享缓存及未核实项目见清理结果。', { running: false });
+          return;
+        }
         await progress("installing", `正在安装终端 pi ${version}…`);
         await runCommand(info.installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--loglevel=http", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], installOptions());
         const actual = await piEnvironment();
@@ -624,14 +759,44 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function runJob(kind, version, claimed) {
     owner = claimed || await claim(kind, version);
     execution = new DesktopExecution(owner.task, task => writeJob({ task }), () => database(db => { const value = db.prepare("SELECT body FROM maintenance_control WHERE token=?").get(owner.token); return value ? JSON.parse(value.body) : null; }));
-    let failure;
+    let failure, releaseAdmission;
     try {
-      if (command === execute) { supervisor = createUpdaterSupervisor({ root, execution, token: owner.token, fetcher, log }); await supervisor.prepare(); await writeJob({ supervised: true }); }
+      if (['archive-preview', 'archive-remove', 'service', 'recover', 'service-remove-preview', 'service-uninstall'].includes(kind)) {
+        releaseAdmission = await serviceAdmission(root);
+        if (await exists(join(root, 'setup/service-owner.json'))) throw Error('后台安装归属尚未解除，请先核实安装任务。');
+        if (!['service-remove-preview', 'service-uninstall'].includes(kind) && await serviceRemovalPending(root)) throw Error('后台卸载尚未完成，请重新预览并完成清理。');
+      }
+      if (['archive-preview', 'archive-remove'].includes(kind)) {
+        const records = await history();
+        if (records.error || records.tasks.some(task => task.id !== execution.task.id && ['running', 'cancelling', 'unknown', 'interrupted'].includes(task.status))) throw Error('仍有维护任务结果未核实，请先处理维护记录后清理归档。');
+      }
+      if (command === execute && !['archive-preview', 'archive-remove'].includes(kind)) { supervisor = createUpdaterSupervisor({ root, execution, token: owner.token, fetcher, log, offline: ['pi-remove-preview', 'pi-uninstall', 'service-remove-preview', 'service-uninstall'].includes(kind) }); await supervisor.prepare(); await writeJob({ supervised: true }); }
       await writeFile(log, "", { mode: 0o600 });
       await perform(kind, version);
     }
     catch (error) {
       failure = error.code === "stop-unconfirmed" ? error : execution.signal.aborted ? execution.signal.reason : error;
+      if (kind === 'service-uninstall') {
+        try {
+          const preview = await json(serviceRemovalFile);
+          if (preview) {
+            await atomic(serviceRemovalFile, { ...preview, token: null });
+            const journal = await json(join(directory, 'service-removal-journal.json'));
+            const quarantine = /^[a-f0-9]{32}$/.test(journal?.id) ? join(root, 'service', `.axiom2-remove-${journal.id}`) : undefined;
+            await writeJob({ cleanup: await verifyServiceRemoval({ root, quarantine }) });
+          }
+        } catch { /* Preserve primary failure; no successful cleanup claim. */ }
+      }
+      if (kind === 'pi-uninstall') {
+        try {
+          const removal = await json(piRemovalFile);
+          if (removal) {
+            await atomic(piRemovalFile, { ...removal, token: null });
+            if (!supervisor?.uncertain()) await writeJob({ cleanup: await verifyPiRemoval(removal) });
+            if (!supervisor?.uncertain() && !execution.signal.aborted) await piStatus(true);
+          }
+        } catch (error) { supervisor?.retain(); failure = Object.assign(Error(`Pi 清理结果未能保存：${error.message}`), { code: 'stop-unconfirmed' }); }
+      }
       if (kind === "pi") {
         try { const release = await json(piReleaseFile); if (release && release.token === owner.version) await atomic(piReleaseFile, { ...release, token: null }); }
         catch (error) { supervisor?.retain(); failure = Object.assign(Error(`Pi 更新确认状态未能保存：${error.message}`), { code: "stop-unconfirmed" }); }
@@ -641,7 +806,12 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     }
     finally {
       try {
-        await execution.finish(failure); await writeJob({ running: false });
+        await execution.finish(failure);
+        if (kind === 'archive-preview' && execution.task.status !== 'succeeded') {
+          const preview = await json(archivePreviewFile);
+          if (preview) await atomic(archivePreviewFile, { ...preview, token: null });
+        }
+        await writeJob({ running: false });
         if (!supervisor?.uncertain() && execution.task.status !== "unknown") { await releasePiLock(); await supervisor?.release(); }
       } catch (error) {
         supervisor?.retain();
@@ -650,14 +820,14 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
         await writeJob({ running: false, task: structuredClone(execution.task) }).catch(() => {});
         throw error;
       }
-      finally { execution = undefined; supervisor = undefined; pendingPiLock = undefined; await releaseService(); }
+      finally { execution = undefined; supervisor = undefined; pendingPiLock = undefined; try { await releaseService(); } finally { releaseAdmission?.(); } }
     }
     return status();
   }
   async function start(kind, version) {
-    if (!["service", "client", "recover", "pi", "check", "pi-check", "pi-refresh"].includes(kind)) throw Error("不支持的更新任务");
+    if (!["archive-preview", "archive-remove", "service", "service-remove-preview", "service-uninstall", "client", "recover", "pi", "pi-uninstall", "pi-remove-preview", "check", "pi-check", "pi-refresh"].includes(kind)) throw Error("不支持的更新任务");
     if (kind === "pi") await piEnvironment();
-    else if (!["pi-check", "pi-refresh", "check"].includes(kind)) await installation();
+    else if (!["archive-preview", "archive-remove", "service-remove-preview", "service-uninstall", "pi-check", "pi-refresh", "pi-uninstall", "pi-remove-preview", "check"].includes(kind)) await installation();
     const reserved = await claim(kind, version);
     let child, transferred = false;
     try {
@@ -731,12 +901,12 @@ if (process.argv[1] && resolve(process.argv[1]) === script) {
     const updater = createUpdater({ root: process.env.AXIOM_DATA_DIR });
     const [action, argument] = process.argv.slice(2);
     let value;
-    if (action === "pi-refresh") value = await updater.start("pi-refresh");
+    if (["archive-preview", "pi-refresh", "pi-remove-preview", "service-remove-preview"].includes(action)) value = await updater.start(action);
     else if (action === "reconcile") value = await updater.reconcile(JSON.parse(argument || "{}"));
     else if (["cancel", "extend", "defaults"].includes(action)) value = await updater.maintenanceControl(action, JSON.parse(argument || "{}"));
     else if (["check", "pi-check"].includes(action)) value = await updater.start(action);
     else if (["status", "history", "installer", "busy"].includes(action)) value = await updater[action]();
-    else if (["service", "client", "recover", "pi"].includes(action)) value = await updater.start(action, argument);
+    else if (["archive-remove", "service", "service-uninstall", "client", "recover", "pi", "pi-uninstall"].includes(action)) value = await updater.start(action, argument);
     else if (action === "worker") { await updater.worker(argument); process.exit(0); }
     else throw Error("不支持的更新操作");
     console.log(JSON.stringify(value));

@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useId, useMemo, useRef, type ReactNode } from "react";
+import { createContext, Fragment, memo, useContext, useId, useMemo, useRef, type ReactNode } from "react";
 import { LocalPath, isLocalPath } from "../LocalPath.js";
 import { pathRelativeToFile } from "../../shared/local-paths.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -8,6 +8,8 @@ import { FileLink } from "./FileLink.js";
 import { localFileLink } from "../../shared/file-preview.js";
 import { CodeBlock } from "./CodeBlock.js";
 import { InlineCode } from "./InlineCode.js";
+import { asciiDiagramBlocks } from "../../shared/ascii-diagram.js";
+import { DiagramRenderingContext } from "./AsciiDiagram.js";
 import { markdown, markdownTokens, markdownImagePath, type FootnoteDefinition } from "../../shared/markdown.js";
 import { AttachmentReference, type AttachmentReferenceInfo } from "./AttachmentSymbol.js";
 import { MarkdownImage, type MarkdownImageOwner } from "./MarkdownImage.js";
@@ -54,6 +56,25 @@ function InlinePath({ path, images }: { path: string; images?: MarkdownImageOwne
   const context = useContext(MarkdownContext);
   return <LocalPath path={pathRelativeToFile(path, context?.sourceFile)} scope={images?.scope ?? context?.pathScope} base={context?.pathBase} showActions={false}><code>{path}</code></LocalPath>;
 }
+function DiagramParagraph({ raw, images, children, plain }: { raw: string; images?: MarkdownImageOwner; children: ReactNode; plain: boolean }) {
+  // Never split across inline code, emphasis, links, HTML, or references. Their
+  // original AST can span multiple lines or depend on global definitions.
+  const enabled = useContext(DiagramRenderingContext) && plain;
+  const blocks = useMemo(() => {
+    if (!enabled) return [];
+    try { return asciiDiagramBlocks(raw); } catch { return []; }
+  }, [raw, enabled]);
+  if (!blocks.length) return <p>{children}</p>;
+  const parts: ReactNode[] = [];
+  let end = 0;
+  for (const block of blocks) {
+    if (block.start > end) parts.push(<Fragment key={`text-${end}`}>{tokens(markdown.lexer(raw.slice(end, block.start)), images)}</Fragment>);
+    parts.push(<CodeBlock key={`diagram-${block.start}`} text={block.text} language="text" />);
+    end = block.end;
+  }
+  if (end < raw.length && raw.slice(end).trim()) parts.push(<Fragment key={`text-${end}`}>{tokens(markdown.lexer(raw.slice(end)), images)}</Fragment>);
+  return <>{parts}</>;
+}
 type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
 function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false, source?: { line: number; abandoned: boolean[] }): ReactNode {
   let line = source?.line ?? 0;
@@ -84,7 +105,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
         return <Tag key={i}>{inner()}</Tag>;
       }
       case "paragraph":
-        return <p key={i}>{inner()}</p>;
+        return <DiagramParagraph key={i} raw={t.raw} images={images} plain={!!t.tokens?.every((token: Token) => (token.type === "text" && !(token as any).tokens) || token.type === "br")}>{inner()}</DiagramParagraph>;
       case "strong":
         return <strong key={i}>{inner()}</strong>;
       case "em":
@@ -185,7 +206,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink, pathScope, pathBase, sourceFile, attachments, abandonedLines }: { abandonedLines?: boolean[]; text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
+export const Markdown = memo(({ text, images, renderBlock, compact = false, streaming = false, onLocalLink, pathScope, pathBase, sourceFile, attachments, abandonedLines }: { abandonedLines?: boolean[]; text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; streaming?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
   const cache = useContext(DerivedContext), prefix = useId(), returns = useRef(new Map<string, string>());
   const ast = useMemo(() => cache ? cache.get(`markdown:footnotes-v2:breaks:${text}`, () => markdownTokens(text)) : markdownTokens(text), [cache, text]);
   const notes = useMemo(() => {
@@ -201,7 +222,7 @@ export const Markdown = memo(({ text, images, renderBlock, compact = false, onLo
     }
     return result;
   }, [ast]);
-  return <MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink, pathScope, pathBase, sourceFile, attachments }}>
+  return <DiagramRenderingContext.Provider value={!streaming && !compact}><MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink, pathScope, pathBase, sourceFile, attachments }}>
     {tokens(ast, images, renderBlock, compact, abandonedLines ? { line: 0, abandoned: abandonedLines } : undefined)}
     {!compact && notes.size > 0 && <section aria-label="引用"><hr /><ol>{[...notes.values()].map((note) => {
       const target = `${prefix}-note-${note.number}`;
@@ -209,5 +230,5 @@ export const Markdown = memo(({ text, images, renderBlock, compact = false, onLo
         event.preventDefault(); focusNote(returns.current.get(note.id) ?? document.querySelector<HTMLAnchorElement>(`[data-footnote-target="${CSS.escape(target)}"]`)?.id);
       }}>↩</a></li>;
     })}</ol></section>}
-  </MarkdownContext.Provider>;
+  </MarkdownContext.Provider></DiagramRenderingContext.Provider>;
 });

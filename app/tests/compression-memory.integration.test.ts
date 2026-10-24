@@ -52,7 +52,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     if (reminder && (mode === "cancel" || mode === "cancelRejected")) { held = response; return; }
     if (reminder && mode === "edit") {
       stream(response, { role: "assistant", tool_calls: [{ index: 0, id: "save-compression-memory", type: "function",
-        function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, oldText: "## 目标与范围\n尚未记录", newText: "## 目标与范围\n压缩前保存的关键决定" }) } }] }, "tool_calls");
+        function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, oldText: "# [已完成] 压缩前保存的关键决定", newText: "# [已完成] 压缩前保存的关键决定\n## [已完成] 核对关键决定" }) } }] }, "tool_calls");
       return;
     }
     if (!reminder && mode === "edit" && body.messages.at(-1)?.role === "user") {
@@ -63,7 +63,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     if (reminder && mode !== "ignore") {
       stream(response, { role: "assistant", tool_calls: [{ index: 0, id: "save-compression-memory", type: "function",
         function: { name: "write", arguments: JSON.stringify({ path: mode === "failedWrite" ? join(memoryPath, "invalid") : memoryPath,
-          content: "# 会话记忆\n\n## 目标与范围\n压缩前保存的关键决定\n\n## 任务进度\n整体状态：已完成\n整体进度：100%\n当前进展：验证完成\n- [已完成] 保留关键决定\n" }) } }] }, "tool_calls");
+          content: "# [已完成] 压缩前保存的关键决定\n" }) } }] }, "tool_calls");
       return;
     }
     stream(response, { role: "assistant", content: "done" });
@@ -77,6 +77,13 @@ test("precompression reminder: optional memory work, safe points and cancellatio
   writeFileSync(join(project, ".pi", "extensions", "settle.ts"),
     `export default function(pi) { pi.on("agent_settled", async () => { await fetch("http://127.0.0.1:${(provider.address() as any).port}/settled"); }); }`);
   const app = await startServer({ root, port: 0 });
+  // Background title/organization requests are independent of this conversation
+  // and must not race its request ordering or compression-summary counter.
+  // Real reminder delivery, memory tools, Pi compression and cancellation remain unmocked.
+  app.agents.memories.runner!.execute = async input => {
+    assert.ok(input.kind === "organize" || input.kind === "title");
+    return { answer: input.kind === "organize" ? "[]" : "压缩前记忆验证", incomplete: false };
+  };
   const compressionEvents: string[] = [];
   const warnings: string[] = [], compressionEvent = app.agents.compressions.event.bind(app.agents.compressions);
   t.mock.method(app.agents.compressions, "event", (scope: Scope, runId: string, event: any) => {
@@ -102,7 +109,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     await agent("agent.model", { selection: { provider: "fixture", id: "fixture", thinking: "off" } });
     if (scenario === "edit") {
       mkdirSync(memoryDirectory(root, session.id), { recursive: true });
-      writeFileSync(memoryPath, "# 会话记忆\n\n## 目标与范围\n尚未记录\n");
+      writeFileSync(memoryPath, "# [已完成] 压缩前保存的关键决定\n");
     }
     await agent("prompt", { text: "保留这个关键决定" });
     if (scenario === "handoff") await until(() => !!settled, "seed did not enter its settlement window");
@@ -128,7 +135,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       if (scenario === "handoff") assert.ok(compressionEvents.includes("compression-deferred"), "unsent reminder is handed off after settlement");
       assert.equal(job.state, "completed", job.error ?? "");
       if (scenario === "ignore" || scenario === "failedWrite") assert.equal(readFileSync(memoryPath, "utf8"), before);
-      else assert.match(readFileSync(memoryPath, "utf8"), /压缩前保存的关键决定/);
+      else assert.match(readFileSync(memoryPath, "utf8"), scenario === "edit" ? /核对关键决定/ : /压缩前保存的关键决定/);
       assert.ok(summaries > previousSummaries);
       const firstMaintenance = requests.find(request => JSON.stringify(request.messages.at(-1)).includes(compressionMemoryPrompt));
       assert.ok(firstMaintenance);
@@ -145,7 +152,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
         assert.ok(compactIndex >= 0);
       } else {
         assert.ok(writeIndex >= 0 && compactIndex > writeIndex);
-        if (scenario === "failedWrite") assert.equal(entries[writeIndex].message.isError, true, "tool errors do not gate compression");
+        assert.equal(entries[writeIndex].message.isError, scenario === "failedWrite", "valid tree mutations succeed; tool errors do not gate compression");
       }
     } else {
       assert.equal(job.state, scenario === "cancel" || scenario === "cancelRejected" ? "cancelled" : "failed", job.error ?? "");

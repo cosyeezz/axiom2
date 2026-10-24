@@ -165,13 +165,30 @@ export function readMemoryTextSnapshot(path: string, maxBytes = 4 * 1024 * 1024)
 }
 export function replaceMemoryFile(path: string, revision: string, content: string) {
   const before = lstatSync(path);
-  const original = readMemoryBytes(path);
-  if (digest(original) !== revision) throw new AppError("REVISION_CONFLICT", "资料已改变，请重新读取后合并");
-  const fd = openSync(path, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+  if (realpathSync(path) !== resolve(path) || !before.isFile() || before.nlink !== 1) throw new AppError("MEMORY_PATH", "只能保存无链接的普通资料文件");
+  const fd = openSync(path, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
-    const held = fstatSync(fd), named = lstatSync(path);
-    if (realpathSync(path) !== resolve(path) || !held.isFile() || held.nlink !== 1 || held.dev !== before.dev || held.ino !== before.ino || held.mtimeMs !== before.mtimeMs || held.ctimeMs !== before.ctimeMs || named.ino !== held.ino || named.dev !== held.dev)
-      throw new AppError("REVISION_CONFLICT", "保存期间资料改变，未覆盖新版本");
+    const identity = () => {
+      const held = fstatSync(fd), named = lstatSync(path);
+      if (realpathSync(path) !== resolve(path) || !held.isFile() || held.nlink !== 1 || held.dev !== before.dev || held.ino !== before.ino || !named.isFile() || named.nlink !== 1 || named.ino !== held.ino || named.dev !== held.dev)
+        throw new AppError("REVISION_CONFLICT", "保存期间文件身份或链接改变，未写入");
+      return held;
+    };
+    const currentBytes = () => {
+      const held = identity(), maxBytes = 4 * 1024 * 1024;
+      if (held.size > maxBytes) throw new AppError("MEMORY_LIMIT", `文件超过单次读取预算 ${maxBytes} 字节`);
+      const bytes = Buffer.alloc(held.size + 1); let length = 0;
+      while (length < bytes.length) { const count = readSync(fd, bytes, length, bytes.length - length, length); if (!count) break; length += count; }
+      if (identity().size !== held.size || length !== held.size) throw new AppError("REVISION_CONFLICT", "保存期间正文已改变，请重新读取后合并");
+      return bytes.subarray(0, length);
+    };
+    // Verify bytes on the actual write descriptor, not timestamps or a separately
+    // opened path. Metadata-only changes do not invalidate an unchanged document.
+    const original = currentBytes();
+    if (digest(original) !== revision) throw new AppError("REVISION_CONFLICT", "资料正文已改变，请重新读取后合并");
+    if (!currentBytes().equals(original)) throw new AppError("REVISION_CONFLICT", "保存期间正文已改变，请重新读取后合并");
+    // Cooperating detail writers hold their lock across this check and the write.
+    // This is not an OS-level atomic CAS against arbitrary external writers.
     // TextDecoder hides a leading UTF-8 BOM from editors. Preserve it on a
     // no-op or local edit so byte-based revisions and on-disk encoding agree.
     const bytes = original.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) && !content.startsWith("\ufeff")

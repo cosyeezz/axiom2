@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { once } from "node:events";
+import { WebSocket } from "ws";
+import type { LatencyRecord } from "../src/shared/latency.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { rewriteFixture, until } from "./rewrite-fixture.js";
+import { rewriteFixture as baseFixture, until } from "./rewrite-fixture.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
 import { running, type Run } from "../src/shared/agent.js";
 import type { TaskRecords } from "../src/server/tasks/records.js";
@@ -12,6 +15,19 @@ import type { AgentRuns } from "../src/server/agents/runs.js";
 const pending = "## 目标与范围\n完成用户授权的行为验证\n\n## 任务进度\n整体状态：进行中\n整体进度：约 50%\n当前进展：功能已实现\n- [已完成] 实现功能\n- [进行中] 完成行为验证\n";
 const complete = pending.replace("整体状态：进行中", "整体状态：已完成").replace("约 50%", "100%").replace("[进行中]", "[已完成]");
 function gate() { let resolve!: () => void; const promise = new Promise<void>((r) => { resolve = r; }); return { promise, resolve }; }
+
+async function rewriteFixture() {
+  const f = await baseFixture();
+  // These integration tests count conversation requests, not independent title
+  // or organizer calls. Completion now starts organization immediately, so let
+  // it succeed deterministically without racing the shared provider counter.
+  // Real conversation workers and continuation cancellation remain unmocked.
+  f.app.agents.memories.runner!.execute = async input => {
+    assert.ok(input.kind === "organize" || input.kind === "title", "unexpected memory request in continuation test");
+    return { answer: input.kind === "organize" ? "[]" : "接续行为验证", incomplete: false };
+  };
+  return f;
+}
 
 async function quiescent(f: Awaited<ReturnType<typeof rewriteFixture>>) {
   for (;;) {
@@ -209,5 +225,74 @@ test("a parenthesized waiting condition prevents automatic execution", { timeout
     writeFileSync(join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"), pending.replace("整体状态：进行中", "整体状态：进行中（等待用户确认）"));
     await f.call("prompt", { text: "记录当前等待条件。" }); await quiescent(f);
     assert.equal(f.requests.length, 1);
+  } finally { await f.close(); }
+});
+
+async function decisionDiagnostics(f: Awaited<ReturnType<typeof rewriteFixture>>) {
+  // Diagnostics are a server transport operation, not an Agent/task command.
+  const ws = new WebSocket(f.app.origin.replace("http:", "ws:") + "/ws", { origin: f.app.origin, handshakeTimeout: 5000 });
+  try {
+    await once(ws, "open");
+    return await new Promise<{ records: LatencyRecord[] }>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("diagnostics receipt timed out")), 5000);
+      ws.on("error", error => { clearTimeout(timeout); reject(error); });
+      ws.on("message", raw => {
+        const receipt = JSON.parse(raw.toString());
+        if (receipt.requestId !== "continuation-diagnostics") return;
+        clearTimeout(timeout);
+        if (receipt.ok) resolve(receipt.data); else reject(new Error(JSON.stringify(receipt)));
+      });
+      ws.send(JSON.stringify({ requestId: "continuation-diagnostics", op: "diagnostics.latency", params: {} }));
+    });
+  } finally { ws.close(); }
+}
+
+function hostMessages(f: Awaited<ReturnType<typeof rewriteFixture>>) {
+  const file = String(f.app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(f.scope.sessionId)!.file);
+  return readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line))
+    .filter(entry => entry.type === "custom_message" && entry.customType === "axiom-memory-continuation");
+}
+
+test("real mixed tree continues only the independent execution frontier", { timeout: 60000 }, async () => {
+  const f = await rewriteFixture();
+  try {
+    writeFileSync(join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"), `# [进行中] 原授权目标
+## [等待] 外部设备
+### [进行中] 分组
+#### [进行中] 受阻真机步骤
+## [失败] 已结束的尝试
+### [未开始] 旧后代
+## [进行中] 独立验证
+`);
+    await f.call("prompt", { text: "继续原授权任务中当前能推进的部分。" }); await quiescent(f);
+    assert.equal(f.requests.length, 2);
+    const hosts = hostMessages(f); assert.equal(hosts.length, 1); assert.equal(hosts[0].display, false);
+    const data = JSON.parse(hosts[0].content.split("\n").at(-1));
+    assert.equal(data.mode, "execute");
+    assert.deepEqual(data.actionable.map((task: any) => task.title), ["独立验证"]);
+    assert.deepEqual(data.actionable[0].path.map((task: any) => task.title), ["原授权目标", "独立验证"]);
+    assert.equal(f.app.agents.messages(f.scope).filter(message => message.role === "user").length, 1);
+    const diagnostics = await decisionDiagnostics(f);
+    assert.ok(diagnostics.records.some(record => record.stage === "memory.continuation.decision" && record.code === "no_progress"));
+  } finally { await f.close(); }
+});
+
+test("real parent-child conflict produces one hidden memory-only reconciliation and stops", { timeout: 60000 }, async () => {
+  const f = await rewriteFixture();
+  try {
+    writeFileSync(join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md"), "# [已完成] 原目标\n## [未开始] 遗留步骤");
+    await f.call("prompt", { text: "检查已有记忆状态与实际完成情况。" }); await quiescent(f);
+    assert.equal(f.requests.length, 2, "one memory-only check, no unlimited retries");
+    const hosts = hostMessages(f); assert.equal(hosts.length, 1);
+    assert.match(hosts[0].content, /仅核对记忆/); assert.match(hosts[0].content, /不启动业务操作、测试、构建或失败重试/);
+    const data = JSON.parse(hosts[0].content.split("\n").at(-1));
+    assert.equal(data.mode, "reconcile"); assert.deepEqual(data.actionable, []);
+    assert.equal(data.diagnostics[0].code, "completed_parent_unfinished");
+    assert.equal(f.app.agents.messages(f.scope).filter(message => message.role === "user").length, 1);
+    const runs = f.app.store.db.prepare("SELECT * FROM runs WHERE sessionId=? ORDER BY rowid").all(f.scope.sessionId);
+    assert.equal(runs.length, 2); assert.equal(runs[1].resumedFromRunId, runs[0].id);
+    assert.equal(f.app.store.receipt(`memory-continue-${runs[0].id}`, f.scope).status, "committed");
+    const diagnostics = await decisionDiagnostics(f);
+    assert.ok(diagnostics.records.some(record => record.stage === "memory.continuation.decision" && record.code === "conflict_exhausted"));
   } finally { await f.close(); }
 });

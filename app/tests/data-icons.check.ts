@@ -104,7 +104,10 @@ try {
   await show({...base,input:100,cost:12.9876});
   await page.waitForFunction(()=>document.querySelector('[data-od-id="estimated-cost"]')?.textContent==='');
   assert.equal(await color('[data-od-id="estimated-cost"] svg'),'rgb(138, 143, 152)');
-  assert.equal(await cost.locator('use').getAttribute('href'),'#i-chart-column-increasing');
+  await page.waitForFunction(()=>document.querySelector('[data-od-id="estimated-cost"] svg')?.getAttribute('data-level')==='1');
+  assert.equal(await cost.locator('.cost-axis').getAttribute('d'),'M3 3v16a2 2 0 0 0 2 2h16');
+  assert.equal(await cost.locator('.cost-bar').count(),3);
+  assert.equal(await cost.locator('.cost-bar[data-pulse="true"]').getAttribute('data-tone'),'warning');
   assert.equal(await cost.locator('[data-od-id="run-duration"]').count(),0);
   assert.equal(await page.locator('.usage-row > button').count(),4);
   await cost.click();

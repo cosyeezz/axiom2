@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir } from "./temporary.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { ModelProxyService } from "../src/server/integrations/model-proxy.js";
+import childProcess from "node:child_process";
+import { once } from "node:events";
 import { ProxyProcess } from "../src/server/integrations/model-proxy-process.js";
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, readProxyConfig, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -104,12 +106,21 @@ test("importer uninstall preserves running kernels and retries its own pending r
 
 test("proxy refuses deletion after an unconfirmed historical kernel exit", async () => {
   const f = fixture(), run = join(proxyDirectory(f.root), "runs", randomUUID());
-  fs.mkdirSync(run, { recursive: true }); fs.writeFileSync(join(run, "owner.json"), JSON.stringify({ kernel: "xray", directory: f.config.installations.xray!.directory }));
+  fs.mkdirSync(run, { recursive: true });
+  // 直接托管以存活进程为事实依据：伪造一个仍存活的“内核”进程阻止删除。
+  const versions = join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory);
+  fs.mkdirSync(versions, { recursive: true });
+  const kernelPath = join(versions, "xray");
+  fs.writeFileSync(kernelPath, "#!/bin/sh\nsleep 60\n"); fs.chmodSync(kernelPath, 0o755);
+  const { spawn } = await import("node:child_process");
+  const kernel = spawn(kernelPath, ["run", "-config", "/dev/null"], { stdio: "ignore" });
+  fs.writeFileSync(join(run, "kernel.json"), JSON.stringify({ pid: kernel.pid, kernel: "xray", executable: kernelPath, startedAt: new Date().toISOString() }));
+  await new Promise(resolve => setTimeout(resolve, 300));
   const s = new ModelProxyService(f.root, () => {});
   try {
     await uninstall(s); assert.match((await settle(s)).job!.error!, /尚有代理进程未确认退出/);
     assert.deepEqual(readProxyConfig(f.root), f.config); assert.ok(fs.existsSync(f.importer));
-  } finally { await s.close(); f.cleanup(); }
+  } finally { kernel.kill("SIGKILL"); await s.close(); f.cleanup(); }
 });
 test("unrelated kernel junction does not block target uninstall", async () => {
   const f = fixture(), versions = join(proxyDirectory(f.root), "versions"), outside = join(f.root, "other-kernel");
@@ -120,4 +131,66 @@ test("unrelated kernel junction does not block target uninstall", async () => {
     await uninstall(s); assert.equal((await settle(s)).job?.error, undefined);
     assert.ok(fs.existsSync(join(outside, "sentinel"))); assert.equal(readProxyConfig(f.root).installations.xray, undefined);
   } finally { await s.close(); f.cleanup(); }
+});
+for (const [configured, argument] of [[true, 'run'], [false, 'run'], [true, '-config']] as const) test(`proxy removal refuses running old versions with ${configured ? 'current' : 'no'} installation configured (${argument})`, { skip: process.platform === "win32" }, async () => {
+  const f = fixture();
+  const old = join(proxyDirectory(f.root), "versions", `xray-0.9.0-${randomUUID()}`);
+  fs.mkdirSync(old); const executable = join(old, "xray");
+  fs.writeFileSync(executable, `#!${process.execPath}\nprocess.stdout.write('ready\\n'); setInterval(() => {}, 1000);\n`); fs.chmodSync(executable, 0o755);
+  if (!configured) { delete f.config.installations.xray; atomicProxyJson(proxyConfigPath(f.root), f.config); }
+  const kernel = childProcess.spawn(executable, [argument], { stdio: ["ignore", "pipe", "ignore"] });
+  const exited = once(kernel, "exit"); await once(kernel.stdout!, "data");
+  const s = new ModelProxyService(f.root, () => {});
+  try {
+    const before = fs.readFileSync(proxyConfigPath(f.root), "utf8"), state = s.snapshot();
+    assert.ok(state.cleanup!.xray!.paths.includes(old));
+    await s.command({ op: "modelProxy.uninstall", requestId: randomUUID(), params: { kernel: "xray", revision: state.revision, confirm: true, cleanupRevision: state.cleanup!.xray!.revision } });
+    assert.match((await settle(s)).job!.error!, /尚有代理进程未确认退出/);
+    assert.equal(fs.readFileSync(proxyConfigPath(f.root), "utf8"), before);
+    assert.ok(fs.existsSync(executable));
+  } finally { kernel.kill("SIGKILL"); await exited; await s.close(); f.cleanup(); }
+});
+test("proxy removal fails closed when process enumeration is unavailable", { skip: process.platform === "win32" }, async t => {
+  const f = fixture(), s = new ModelProxyService(f.root, () => {}), execute = childProcess.execFileSync;
+  const mock = t.mock.method(childProcess, "execFileSync", ((file, ...args) => { if (file === "ps") throw Error("fixture process scan unavailable"); return (execute as Function)(file, ...args); }) as typeof execute); syncBuiltinESMExports();
+  try {
+    const before = fs.readFileSync(proxyConfigPath(f.root), "utf8");
+    await uninstall(s); assert.match((await settle(s)).job!.error!, /无法核实代理内核进程/);
+    assert.equal(fs.readFileSync(proxyConfigPath(f.root), "utf8"), before);
+    assert.ok(fs.existsSync(join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory)));
+  } finally { mock.mock.restore(); syncBuiltinESMExports(); await s.close(); f.cleanup(); }
+});
+test("stopping one route does not kill another route sharing the same kernel", { skip: process.platform === "win32" }, async () => {
+  // 直接托管按可执行文件兜底清理；同一内核的多条线路必须互不误杀，否则第二条线路会被第一条的停止操作带走。
+  const f = fixture(), install = f.config.installations.xray!;
+  const versions = join(proxyDirectory(f.root), "versions", install.directory);
+  const kernelPath = join(versions, "xray");
+  // 假内核：读取生成的 config.json，监听其入站端口，使 start 的就绪探测通过。
+  fs.writeFileSync(kernelPath, `#!${process.execPath}
+const fs = require("node:fs"), net = require("node:net");
+const config = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
+net.createServer(socket => socket.destroy()).listen(config.inbounds[0].port, "127.0.0.1");
+setTimeout(() => process.exit(0), 120000);
+`);
+  fs.chmodSync(kernelPath, 0o755);
+  const { installedKernelPids } = await import("../src/server/integrations/model-proxy-kernel.js");
+  const profile = (id: string) => ({ id, name: id, kernel: "xray" as const, node: "node", source: JSON.stringify({ protocol: "vless", settings: {} }) });
+  const live: ProxyProcess[] = [];
+  const siblings = (self: () => ProxyProcess | undefined) => () => live.filter(item => item !== self()).flatMap(item => item.processId ? [item.processId] : []);
+  let a: ProxyProcess, b: ProxyProcess;
+  a = new ProxyProcess(f.root, profile("aaaaaaaa-0000-4000-8000-000000000001"), () => {}, siblings(() => a));
+  b = new ProxyProcess(f.root, profile("bbbbbbbb-0000-4000-8000-000000000002"), () => {}, siblings(() => b));
+  live.push(a, b);
+  try {
+    await a.start(install, new AbortController().signal);
+    await b.start(install, new AbortController().signal);
+    const pidA = a.processId!, pidB = b.processId!;
+    assert.equal(a.endpoint.status, "running"); assert.equal(b.endpoint.status, "running");
+    assert.equal(installedKernelPids(kernelPath).length, 2);
+    await a.stop();
+    const afterA = installedKernelPids(kernelPath);
+    assert.equal(afterA.includes(pidA), false, "停止的线路 PID 应退出");
+    assert.ok(afterA.includes(pidB), "另一条线路的 PID 不应被兜底清理误杀");
+    assert.equal(b.endpoint.status, "running");
+  } finally { await Promise.allSettled([a.stop(), b.stop()]); f.cleanup(); }
 });

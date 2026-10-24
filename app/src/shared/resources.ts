@@ -9,8 +9,15 @@ export type ResourceItem = {
   version?: string;
   managed: boolean;
   removable: boolean;
+  renamable?: boolean;
+  renameBlockedReason?: string;
+  /** Permanently removes the skill files, including a shared source. */
+  deletable?: boolean;
+  deleteCleanup?: string[];
   removalPending?: boolean;
   movable?: boolean;
+  copyable?: boolean;
+  copyBlockedReason?: string;
   moveBlockedReason?: string;
   cleanup: string[];
   note?: string;

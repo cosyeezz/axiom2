@@ -85,6 +85,7 @@ export async function configuration(root: string): Promise<Configuration> {
       .filter((m) => allowed.has(`${m.provider}/${m.id}`))
       .map((m) => ({
         provider: m.provider,
+        providerName: config.providers[m.provider]?.name || runtime.getProvider(m.provider)?.name || m.provider,
         id: m.id,
         name: m.name,
         levels: getSupportedThinkingLevels(m),

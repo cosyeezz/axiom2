@@ -1,3 +1,4 @@
+import type { CleanupScope } from "./cleanup-scope.js";
 export const rtkLevels = ["conservative", "balanced", "aggressive"] as const;
 export type RtkLevel = typeof rtkLevels[number];
 export type RtkSettings = { enabled: boolean; level: RtkLevel; subagents: boolean };
@@ -16,9 +17,16 @@ export type RtkReason = keyof typeof rtkReasons;
 export type RtkEvent = { id: string; at: number; role: "main" | "subagent"; level: RtkLevel; filter: string; reason: RtkReason; inputBytes: number; outputBytes: number; durationMs: number; version: string };
 export type RtkStats = { days: number; count: number; filtered: number; inputBytes: number; outputBytes: number; durationMs: number; reasons: { reason: RtkReason; count: number }[]; recent: RtkEvent[]; error?: string };
 export const emptyRtkStats: RtkStats = { days: 7, count: 0, filtered: 0, inputBytes: 0, outputBytes: 0, durationMs: 0, reasons: [], recent: [] };
-export type RtkJob = { id: string; kind: "check" | "install" | "doctor" | "uninstall"; running: boolean; message: string; error?: string };
+export type RtkDataScope = CleanupScope & { count: number; retained: string[] };
+export type RtkJob = { id: string; kind: "check" | "install" | "doctor" | "uninstall" | "cleanupStats" | "cleanupOriginals"; running: boolean; message: string; error?: string };
 export type RtkState = {
   revision: string; settings: RtkSettings; version?: string; executable?: string; latest?: string; platform: string; supported: boolean; supportError?: string;
   job?: RtkJob; diagnostic?: { text: string; at: number }; error?: string; removalPending?: boolean;
+  /** Exact desktop offline preview; its revision also binds directory identities. */
+  cleanup?: CleanupScope;
+  cleanupPaths?: string[]; offline?: boolean;
+  offlineUninstall?: { allowed: false; reason: string };
+  dataCleanup?: Partial<Record<"stats" | "originals", RtkDataScope>>;
+  dataCleanupErrors?: Partial<Record<"stats" | "originals", string>>; dataCleanupError?: string;
 };
 export const emptyRtkState: RtkState = { revision: "", settings: defaultRtkSettings, platform: "", supported: false };

@@ -17,10 +17,10 @@
 body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .connect-page { color: #eef1f2; background: #111315; min-height: 100dvh; display: flex; flex-direction: column; justify-content: safe center; padding: 28px max(24px, calc((100% - 760px) / 2)); font: 13px/1.6 var(--font-body); box-sizing: border-box; --icon-stroke: 1.35px; }
 .connect-page > * { flex-shrink: 0; }
-.connect-page *, .connect-dialog * { box-sizing: border-box; }
-.connect-page button, .connect-dialog button { font: inherit; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-.connect-page button:disabled { cursor: not-allowed; opacity: .4; }
-.connect-page :is(button, summary, a, input):focus-visible { outline: 2px solid #d2ad7e; outline-offset: 3px; }
+.connect-page *, .connect-dialog *, .device-menu * { box-sizing: border-box; }
+.connect-page button, .connect-dialog button, .device-menu button { font: inherit; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.connect-page button:disabled, .device-menu button:disabled { cursor: not-allowed; opacity: .4; }
+.connect-page :is(button, summary, a, input):focus-visible, .device-menu button:focus-visible { outline: 2px solid #d2ad7e; outline-offset: 3px; }
 .connect-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .connect-brand { display: inline-flex; align-items: center; gap: 10px; color: #eef1f2; font-size: 15px; font-weight: 550; letter-spacing: 2px; }
 .startup-brand-version { color: #d4b473; font-size: 11px; padding-left: 4px; }
@@ -87,8 +87,8 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .device-name small, .device-option small { display: block; font-size: 11px; font-weight: 400; color: #a8b2b9; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .device-kind { color: #8b9395; font: 9px var(--font-mono); letter-spacing: .06em; }
 .device-trigger > svg { width: 8px; height: 8px; color: #a8b2b9; margin-left: 4px; }
-.device-menu { position: absolute; top: calc(100% + 7px); left: 0; right: 0; padding: 6px; background: #24292d; border: 1px solid #3b4349; border-radius: 9px; box-shadow: 0 16px 36px #0008, 0 1px 0 #ffffff05 inset; max-height: min(360px, var(--device-menu-space)); overflow-y: auto; overscroll-behavior: contain; }
-.device-menu[data-above="true"] { top: auto; bottom: calc(100% + 7px); }
+.device-menu { position: fixed; inset: auto; margin: 0; box-sizing: border-box; z-index: 100; padding: 6px; font: 13px/1.6 var(--font-body); --icon-stroke: 1.35px; color: #eef1f2; background: #24292d; border: 1px solid #3b4349; border-radius: 9px; box-shadow: 0 16px 36px #0008, 0 1px 0 #ffffff05 inset; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
+.device-menu::backdrop { background: transparent; pointer-events: none; }
 .device-menu-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px 10px; color: #a4a8a6; font-size: 10px; }
 .device-menu-caption span { display: block; margin-top: 3px; color: #858d90; }
 .device-menu-caption .startup-icon-button { color: #a8b2b9; }
@@ -126,8 +126,6 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .startup-icon-button { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #989f9f; text-decoration: none; }
 .startup-icon-button svg { width: 17px; height: 17px; }
 .startup-icon-button:hover:not(:disabled) { color: #e0c59d; background: #ffffff06; }
-.startup-icon-button[data-tooltip]::after { content: attr(data-tooltip); position: absolute; z-index: 10; top: calc(100% + 6px); right: 0; padding: 5px 9px; border: 1px solid #45423b; border-radius: 4px; background: #292925; color: #dfd9cc; white-space: nowrap; font: 11px/1.5 var(--font-body); opacity: 0; pointer-events: none; transform: translateY(-2px); transition: opacity .12s .25s, transform .12s .25s; }
-.startup-icon-button[data-tooltip]:is(:hover, :focus-visible)::after { opacity: 1; transform: translateY(0); }
 .startup-icon-button.startup-open { background: #c9ac78; color: #1d1e1a; border-color: #dfc591; width: 64px; flex-basis: 64px; }
 .startup-icon-button.startup-open:hover:not(:disabled) { background: #ddbf8d; }
 .startup-open svg { width: 21px; height: 21px; }

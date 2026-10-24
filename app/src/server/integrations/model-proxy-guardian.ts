@@ -1,11 +1,11 @@
 import { MaintenanceError } from "../../shared/maintenance.js";
-import { fork, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createProcessOwner } from "../process-owner-record.js";
-import { forkLinuxOwned, monotonicMilliseconds } from "../owned-process-linux.js";
-import { ownWindowsPackageTree } from "../pi-package-windows.js";
+import { monotonicMilliseconds } from "../owned-process-linux.js";
+import { forkMaintenanceProcess, type MaintenanceProcess } from "../maintenance-process.js";
 
 type Limits = () => { remainingMs: number; code: "total-timeout" | "install-timeout" };
 type Start = { executable: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
@@ -13,7 +13,7 @@ const activeOwners = new Set<string>();
 export const activeProxyOwner = (path: string) => activeOwners.has(path);
 const uncertain = () => new MaintenanceError("stop-unconfirmed", "代理进程树尚未确认全部退出；归属记录与文件已保留，请核实后台进程后重试。");
 
-/** The supervisor reports kernel lifecycle only. Job/CLEANED is the tree proof. */
+/** Temporary subscription checks use the same maintenance lifecycle as installers. */
 export class ProxyGuardian {
   readonly child: ChildProcess;
   readonly ready: Promise<void>;
@@ -23,22 +23,20 @@ export class ProxyGuardian {
   private service = false;
   private confirmed = false;
   private failure?: Error;
-  private linux?: ReturnType<typeof forkLinuxOwned>;
-  private job?: ReturnType<typeof ownWindowsPackageTree>;
+  private owned: MaintenanceProcess;
   private timer?: ReturnType<typeof setInterval>;
   private abort: () => void;
   private journal: ReturnType<typeof createProcessOwner>;
 
   constructor(private owner: string, private limits: Limits, private signal: AbortSignal) {
     signal.throwIfAborted();
-    if (!["win32", "linux"].includes(process.platform)) throw new MaintenanceError("operation", "此平台尚不支持可靠的代理进程隔离，未启动内核。");
     this.journal = createProcessOwner(join(dirname(owner), "process-owner.json"));
     const source = import.meta.url.endsWith(".ts");
     const entry = fileURLToPath(new URL(`./model-proxy-supervisor.${source ? "ts" : "js"}`, import.meta.url));
     const options = { execArgv: source ? ["--import", import.meta.resolve("tsx")] : [] };
     try {
-      this.linux = process.platform === "linux" ? forkLinuxOwned(entry, options, this.deadline(), () => this.timeoutError(), identity => this.journal.arm(identity)) : undefined;
-      this.child = this.linux?.child ?? fork(entry, [], { ...options, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+      this.owned = forkMaintenanceProcess(entry, options, this.deadline(), () => this.timeoutError(), identity => this.journal.arm(identity), dirname(owner));
+      this.child = this.owned.child;
     } catch (error) { this.journal.confirmed(); throw error; }
     activeOwners.add(owner);
     this.abort = () => { void this.stop().catch(() => {}); };
@@ -49,7 +47,7 @@ export class ProxyGuardian {
         clearInterval(this.timer); this.signal.removeEventListener("abort", this.abort);
         try {
           await this.cleanup();
-          const failure = this.linux?.failure();
+          const failure = this.owned.failure();
           if (failure instanceof MaintenanceError && failure.code === "stop-unconfirmed") throw failure;
           this.failure ??= failure;
           this.journal.confirmed(); rmSync(this.owner, { force: true }); this.confirmed = true;
@@ -59,21 +57,15 @@ export class ProxyGuardian {
       });
     });
     this.timer = setInterval(() => {
-      this.linux?.setDeadline(this.deadline());
+      this.owned.setDeadline(this.deadline());
       if (!this.service && this.limits().remainingMs <= 0) {
         this.failure ??= this.timeoutError(); this.abort();
       }
     }, 250);
     this.signal.addEventListener("abort", this.abort, { once: true });
-    try {
-      if (this.child.pid) {
-        this.job = ownWindowsPackageTree(this.child.pid);
-        if (this.job) this.journal.arm({ platform: "win32", workerPid: this.child.pid });
-      }
-    } catch (error) { this.failure = error as Error; this.abort(); }
-    this.ready = (this.linux?.ready ?? Promise.resolve()).then(() => {
+    this.ready = this.owned.ready.then(() => {
       if (this.requestedStop || this.signal.aborted || this.failure) throw this.failure ?? this.signal.reason ?? Error("代理启动已取消。");
-    });
+    }).catch(error => { this.failure ??= error; this.abort(); throw error; });
     void this.ready.catch(() => {});
     if (signal.aborted) this.abort();
   }
@@ -84,12 +76,7 @@ export class ProxyGuardian {
   }
   private cleanup() {
     this.requestedStop = true;
-    return this.closing ??= (async () => {
-      if (this.linux) return this.linux.close();
-      if (this.job) return this.job.close();
-      // An unassigned Windows supervisor has never received business IPC.
-      if (this.child.pid) this.child.kill();
-    })();
+    return this.closing ??= this.owned.close();
   }
   async start(request: Start) {
     await this.ready;
@@ -104,7 +91,7 @@ export class ProxyGuardian {
     if (this.limits().remainingMs <= 0) throw this.timeoutError();
     this.service = true;
     this.signal.removeEventListener("abort", this.abort);
-    this.linux?.setDeadline(this.deadline());
+    this.owned.setDeadline(this.deadline());
   }
   async stop(timeoutMs = 8000) {
     this.requestedStop = true;

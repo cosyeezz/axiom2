@@ -29,7 +29,8 @@ async function fixture(t: TestContext, options: { source?: boolean; brokenContro
   await writeFile(join(root, "installation.json"), JSON.stringify({ node: process.execPath, cli }));
   await writeFile(join(root, "user-data"), "preserve projects and sessions");
   const bytes: Record<string, Buffer> = { "axiom2.tgz": Buffer.from("verified service fixture"), "Axiom2.msi": Buffer.from("verified installer fixture") };
-  const release = { tag_name: `v${nextVersion}`, draft: false, prerelease: false, assets: Object.entries(bytes).map(([name, value]) => ({ name, size: value.length, digest: `sha256:${digest(value)}`, browser_download_url: `${base}v${nextVersion}/${name}` })) };
+  if (process.platform === "linux") bytes[`axiom-owner-linux-${process.arch}`] = await readFile(new URL(`../../bin/native/linux-${process.arch}/axiom-owner`, import.meta.url));
+  const release = { tag_name: `v${nextVersion}`, draft: false, prerelease: false, assets: Object.entries(bytes).map(([name, value]) => ({ name, state: "uploaded", size: value.length, digest: `sha256:${digest(value)}`, browser_download_url: `${base}v${nextVersion}/${name}` })) };
   const calls: string[] = [];
   let state = "running", failInstall = false, failNewStart = false, failOldStart = false, concurrentStart = false;
   let runtimeVersion: string | null | undefined;
@@ -57,7 +58,7 @@ async function fixture(t: TestContext, options: { source?: boolean; brokenContro
     const version = JSON.parse(await readFile(join(dirname(dirname(args[0])), "package.json"), "utf8")).version;
     if (options.brokenControl && version === nextVersion) {
       calls.push(`${args[1]}:${version}`);
-      return execute(_node, args, { env: { ...process.env, AXIOM_DATA_DIR: root } });
+      return execute(_node, args, { env: { ...process.env, AXIOM_DATA_DIR: root }, fetcher });
     }
     if (args[1] === "--version") return version;
     const action = args[1]; calls.push(`${action}:${version}`);
@@ -77,11 +78,13 @@ async function fixture(t: TestContext, options: { source?: boolean; brokenContro
   };
   const fetcher = async (url: string) => {
     if (url.endsWith("/latest")) return new Response(JSON.stringify(release));
-    return new Response(bytes[url.split("/").at(-1)!].toString("utf8"));
+    const asset = release.assets.find(asset => asset.browser_download_url === url);
+    assert.ok(asset, `Unexpected fixture URL: ${url}`);
+    return new Response(new Uint8Array(bytes[asset.name]));
   };
   const updater = createUpdater({ root, fetcher, command, isAlive: (pid: number) => pid === process.pid });
   const installedVersion = async () => JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")).version;
-  return { root, packageRoot, cli, bytes, release, calls, updater, command, installedVersion, packageAt, state: () => state,
+  return { root, packageRoot, cli, bytes, release, calls, updater, command, fetcher, installedVersion, packageAt, state: () => state,
     refuseStop: () => { refuseStop = true; },
     reportVersion: (value: string | null) => { runtimeVersion = value; },
     raceStart: () => { concurrentStart = true; },
@@ -125,12 +128,13 @@ test("same-size checksum mismatch includes expected and actual digests before to
 test("npm command errors expose bounded output and exit code instead of a log-only instruction", async t => {
   const root = await mkdtemp(join(tmpdir(), "axiom-npm-error-")); t.after(() => rm(root, { recursive: true, force: true }));
   const log = join(root, "output.log");
-  await assert.rejects(execute(process.execPath, ["-e", "console.error('npm error code ECONNRESET'); process.exit(7)"], { log }), (error: Error) => {
+  const { fetcher } = await fixture(t);
+  await assert.rejects(execute(process.execPath, ["-e", "console.error('npm error code ECONNRESET'); process.exit(7)"], { log, fetcher }), (error: Error) => {
     assert.match(error.message, /退出[（\s]7[）。]/);
     assert.match(error.message, /ECONNRESET/);
     return true;
   });
-  await assert.rejects(execute(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { log, timeoutMs: 100 }), { code: "total-timeout" });
+  await assert.rejects(execute(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { log, fetcher, timeoutMs: 100 }), { code: "total-timeout" });
 });
 test("successful desktop backend update keeps CLI location, dependencies and user data", async (t) => {
   const f = await fixture(t);
@@ -190,9 +194,9 @@ test("explicit recovery bypasses an existing candidate CLI whose control imports
   const { backup } = await recoveryRecord(f);
   await rename(f.packageRoot, backup);
   await f.packageAt(f.packageRoot, nextVersion);
-  assert.equal(await execute(process.execPath, [f.cli, "--version"]), nextVersion);
+  assert.equal(await execute(process.execPath, [f.cli, "--version"], { fetcher: f.fetcher }), nextVersion);
   for (const action of ["status", "stop", "start"]) {
-    await assert.rejects(execute(process.execPath, [f.cli, action, "--json"], { env: { ...process.env, AXIOM_DATA_DIR: f.root } }), /Unexpected token/);
+    await assert.rejects(execute(process.execPath, [f.cli, action, "--json"], { env: { ...process.env, AXIOM_DATA_DIR: f.root }, fetcher: f.fetcher }), /Unexpected token/);
   }
   const result = await f.updater.runJob("recover");
   assert.equal(result.job.phase, "complete", result.job.message);

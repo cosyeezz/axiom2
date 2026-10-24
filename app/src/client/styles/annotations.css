@@ -7,7 +7,7 @@
 .annotation-source { border-radius: 4px; cursor: text; }
 ::highlight(reply-annotation) { background-color: color-mix(in srgb, var(--accent-hover) 22%, transparent); text-decoration: underline; text-decoration-color: var(--accent-hover); }
 ::highlight(reply-annotation-hover) { background-color: color-mix(in srgb, var(--accent-hover) 12%, transparent); }
-.annotation-popover { position: fixed; z-index: 100; width: min(400px, calc(100vw - 24px)); max-height: min(360px, calc(100dvh - 24px)); overflow: auto; border-radius: 8px; box-shadow: 0 12px 40px #0006; }
+.annotation-popover { position: fixed; z-index: 100; width: min(400px, calc(100vw - 24px)); max-height: min(360px, var(--annotation-viewport-height, calc(100dvh - 24px))); overflow: auto; border-radius: 8px; box-shadow: 0 12px 40px #0006; }
 .annotation-popover .annotation-editor { margin: 0; }
 .markdown .annotation-shell .annotation-source > p { margin-bottom: 12px; }
 .markdown > .annotation-shell:first-child > .annotation-source > :first-child { margin-top: 0; }

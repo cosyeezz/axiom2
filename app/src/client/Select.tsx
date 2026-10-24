@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon.js";
-import { useAnchoredPopup } from "./useAnchoredPopup.js";
+import { revealPopupOption, useAnchoredPopup } from "./useAnchoredPopup.js";
 import "./styles/select.css";
 
 type Option = { value: string; label: string; group?: string };
@@ -17,9 +17,10 @@ export function Select({ id, label, descriptionId, value, options, onChange, dis
   const expanded = open && !disabled && options.length > 0;
   const active = Math.max(0, options.findIndex(option => option.value === activeValue));
   const optionKeys = JSON.stringify(options.map(option => option.value));
-  const { panel, host } = useAnchoredPopup(expanded ? trigger.current : null, { maxWidth: 640, maxHeight: 320, matchWidth: true, preferBelow: true });
+  const { panel, host } = useAnchoredPopup(expanded ? trigger.current : null, { maxWidth: 640, minWidth: 120, maxHeight: 320, matchWidth: true, preferBelow: true });
   const close = () => setOpen(false);
-  const show = () => { setActiveValue(value); search.current = { text: "", at: 0 }; setOpen(true); };
+  // Safari/WebViews do not consistently focus buttons on pointer activation.
+  const show = () => { trigger.current?.focus({ preventScroll: true }); setActiveValue(value); search.current = { text: "", at: 0 }; setOpen(true); };
   const choose = (option: Option) => {
     trigger.current?.focus({ preventScroll: true });
     close();
@@ -28,13 +29,7 @@ export function Select({ id, label, descriptionId, value, options, onChange, dis
   useEffect(() => { if (disabled) close(); }, [disabled]);
   useLayoutEffect(() => {
     if (!expanded) return;
-    const node = panel.current, option = node?.querySelectorAll<HTMLElement>('[role="option"]')[active];
-    // Scroll only the options layer, never the page or the owning dialog.
-    if (node && option) {
-      const menuBox = node.getBoundingClientRect(), optionBox = option.getBoundingClientRect();
-      if (optionBox.top < menuBox.top) node.scrollTop -= menuBox.top - optionBox.top + 4;
-      else if (optionBox.bottom > menuBox.bottom) node.scrollTop += optionBox.bottom - menuBox.bottom + 4;
-    }
+    revealPopupOption(panel.current, active);
   }, [expanded, active, optionKeys, panel]);
   useEffect(() => {
     if (!expanded) return;

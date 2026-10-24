@@ -174,6 +174,7 @@ test("Model summaries: only explicitly configured + authenticated models, no sec
     assert.deepEqual(available.available, [
       {
         provider: "axiom-local-check",
+        providerName: "axiom-local-check",
         id: "only-configured",
         name: "Explicit",
         levels: ["off"],

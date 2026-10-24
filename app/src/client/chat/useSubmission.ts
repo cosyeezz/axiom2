@@ -75,7 +75,7 @@ export function useSubmission(
       if (!stopping && !continuing) {
         if (!provided) stamp = prepareDraftSubmission(scope, captured, requestId);
         flushSync(() => {
-          optimisticStart(scope, requestId, captured, state.active);
+          optimisticStart(scope, requestId, captured, state.active, provided?.rewrite);
           started = true;
           if (provided) provided.onStart();
           else clearSubmittedDraft(scope, captured, false);

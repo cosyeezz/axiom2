@@ -1,3 +1,5 @@
+import type { ServiceRecovery } from "../service-recovery-records.js";
+import { assertServiceRecovery } from "../service-recovery.js";
 import { createHash } from "node:crypto";
 import type { Agents } from "../agents.js";
 import { toolKey } from "../transcript.js";
@@ -93,18 +95,26 @@ export class TaskCommands {
           );
         if (name === "delegate")
           return this.delegate(scope, run, callId, c.params!);
-        const row = this.records.own(scope, c.params!.taskId);
+        const row = this.records.own(scope, this.records.modelId("task", c.params!.taskId));
         if (name === "append") {
           brief(c.params!.summary, "追加简述");
           return this.scheduler.append(row, c.params!);
         }
         if (name === "cancel_task")
           return this.scheduler.cancel(row, c.params!, "agent");
-        return this.delivery.result(scope, row.id, c.params!.resultId);
+        return this.delivery.result(scope, row.id, this.records.modelId("result", c.params!.resultId));
       });
-    return name === "append" || name === "cancel_task"
-      ? this.serial(text(c.params!.taskId, "子任务标识"), invoke)
-      : invoke();
+    const result = await (name === "append" || name === "cancel_task"
+      ? this.serial(this.records.modelId("task", c.params!.taskId), invoke)
+      : invoke());
+    // Keep persisted receipts canonical; only the model-tool reply carries references.
+    const value = object(result);
+    if (name === "delegate") return { ...value,
+      taskRefs: (value.taskIds as string[]).map((id) => this.records.modelRef("task", id)) };
+    if (name === "read_result") return { ...value,
+      taskRef: this.records.modelRef("task", String(value.taskId)),
+      resultRef: this.records.modelRef("result", String(value.id)) };
+    return result;
   }
   private async delegate(
     scope: Scope,
@@ -170,7 +180,7 @@ export class TaskCommands {
     this.agents.publish(`sessions:${scope.workspaceId}`);
     return { taskIds, status: "queued", budgets };
   }
-  async command(c: Command): Promise<unknown> {
+  async command(c: Command, recovery?: ServiceRecovery): Promise<unknown> {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     if (c.op === "task.preferences.get") return this.records.settings();
@@ -284,6 +294,7 @@ export class TaskCommands {
       newWork
         ? {
             beforeStart: () => {
+              if (recovery) assertServiceRecovery(this.agents, recovery);
               if (
                 this.scheduler.closing ||
                 this.records.stopEpoch(scope) !== stopEpoch

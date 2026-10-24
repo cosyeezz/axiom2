@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { startServer } from "../src/server/index.js";
 import { transcriptMessages } from "../src/server/transcript.js";
+import type { AgentViews } from "../src/server/agents/views.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-compacted-unread-"));
@@ -55,9 +56,14 @@ try {
   manager.appendCompaction("<axiom-summary>second summary</axiom-summary>", null, 1000);
   result("retained"); notice("retained");
   const raw = readFileSync(manager.getSessionFile()!, "utf8");
-  assert.deepEqual(transcriptMessages(manager).filter(m => m.taskNotice).map(m => m.resultId), ["retained"]);
+  assert.ok(!transcriptMessages(manager).some(m => m.taskNotice));
+  assert.equal(manager.getBranch().filter(e => e.type === "custom_message" && e.customType === "axiom-result").length, 4);
 
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.route("**/@vite/client", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("async function handleMessage(payload) {", "async function handleMessage(payload) { return;") });
+  });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(view => {
@@ -67,17 +73,15 @@ try {
   const targetRow = page.locator(`[data-session-id="${target.id}"]`);
   const otherRow = page.locator(`[data-session-id="${other.id}"]`);
   await targetRow.locator(".session-state.unread").waitFor();
-  // A hidden page still cannot acknowledge the recovered notifications.
+  // A hidden page cannot acknowledge the session, even with all results synchronized.
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'))");
   await targetRow.locator("button.history-item").click();
-  await page.locator('[data-result-id="retained"]').waitFor({ state: "attached" });
-  const notificationBatch = page.locator('#messages > .task-notices');
+  await page.locator('.history-card').first().waitFor();
   const assertBatch = async () => {
-    assert.equal(await notificationBatch.count(), 1);
-    assert.equal(await notificationBatch.locator('summary').count(), 0);
-    assert.deepEqual(await page.locator('#messages > .compaction-card, #messages > .task-notices').evaluateAll(nodes => nodes.map(node => node.className.includes('task-notices') ? 'notices' : 'compression')), ['compression', 'notices']);
-    assert.deepEqual(await notificationBatch.locator('[data-result-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-result-id'))), ['archived-one', 'archived-two', 'retained']);
-    assert.equal(await notificationBatch.locator('.task-notice:visible').count(), 3);
+    assert.equal(await page.locator('.task-notices, .task-notice[data-result-id], [data-result-id]').count(), 0);
+    assert.ok(!app.agents.messages(scope).some(m => m?.taskNotice));
+    const views = (app.agents as unknown as { views: AgentViews }).views;
+    assert.ok(!views.historyIndex(scope).segments.some(s => s.groups.some(g => 'notices' in g)));
   };
   await assertBatch();
   assert.equal(await page.evaluate(() => document.visibilityState), 'hidden');
@@ -85,12 +89,10 @@ try {
   // Rebuild the view before acknowledgement; the compact entry and order survive reload.
   await page.addInitScript("Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });");
   await page.reload();
-  await page.locator('[data-result-id="retained"]').waitFor({ state: 'attached' });
+  await page.locator('.history-card').first().waitFor();
   await assertBatch();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    assert.equal(await notificationBatch.locator('.task-notice:visible').count(), 3);
-    assert.equal(await notificationBatch.locator('[data-state="failed"]').innerText(), '子代理执行失败！');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await assertBatch();
     if (process.env.AXIOM_TEST_ARTIFACTS) {
@@ -102,21 +104,18 @@ try {
   await page.waitForTimeout(1100);
   assert.equal(await page.evaluate(() => document.visibilityState), 'hidden');
   assert.equal(app.store.session(workspace.id, target.id).readVersion, 1);
+  // Acknowledgement does not depend on archived cards or notification DOM.
+  const closeOriginals = page.getByRole('button', { name: '收起会话原文', exact: true });
+  while (await closeOriginals.count()) await closeOriginals.first().dispatchEvent('click');
+  await assertBatch();
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
-  await until(() => !app.store.session(workspace.id, target.id).unread, "compacted task results permanently block the read receipt");
-  assert.equal(await page.locator('[data-result-id="archived-one"]').count(), 1);
-  assert.equal(await page.locator('[data-result-id="archived-two"]').count(), 1);
-  assert.equal(await page.locator('[data-result-id="already-read"]').count(), 0);
-  assert.equal(await page.locator('[data-result-id="retained"]').count(), 1);
-  await page.getByRole('button', { name: '原始会话', exact: true }).click();
-  await page.getByText('正在查看原始会话', { exact: true }).waitFor();
-  assert.equal(await page.locator('#messages .compaction-card').count(), 0);
-  assert.deepEqual(await page.locator('#messages [data-result-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-result-id'))), ['already-read', 'archived-one', 'archived-two', 'retained']);
-  await page.getByRole('button', { name: '原始会话', exact: true }).click();
-  await notificationBatch.waitFor();
+  await until(() => !app.store.session(workspace.id, target.id).unread, "closed compacted task history permanently blocks the read receipt");
+  await assertBatch();
+  assert.equal(await page.getByRole('button', { name: '原始会话', exact: true }).count(), 0);
   assert.ok(!app.agents.messages(scope).some(m => m?.text === "private old input"));
-  assert.equal(readFileSync(manager.getSessionFile()!, "utf8"), raw, "display recovery must not modify the native transcript");
-  assert.deepEqual(transcriptMessages(manager).filter(m => m.taskNotice).map(m => m.resultId), ["retained"], "agent context stays compacted");
+  assert.equal(readFileSync(manager.getSessionFile()!, "utf8"), raw, "display filtering must not modify the native transcript");
+  assert.ok(!transcriptMessages(manager).some(m => m.taskNotice));
+  assert.equal(app.store.db.prepare("SELECT count(*) AS n FROM task_results WHERE delivery='pending'").get()!.n, 4, "UI read does not deliver or consume internal notifications");
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await otherRow.locator("button.history-item").click();
@@ -127,26 +126,27 @@ try {
   await otherRow.locator("button.history-item[aria-current=true]").waitFor();
   assert.equal(await targetRow.locator(".session-state.unread").count(), 0, "saved read state survives reload");
 
-  // A new immutable result must still light the dot. Until its real notice arrives,
-  // the mere existence of a compression card or task metadata cannot mark it read.
+  // A new result still lights the dot. Viewing the synchronized tail clears it
+  // independently of internal notification delivery or compaction.
   await page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'))");
   result("late");
   app.agents.refresh(scope);
   await targetRow.locator(".session-state.unread").waitFor();
   await targetRow.locator("button.history-item").click();
-  await page.waitForTimeout(1100);
-  assert.equal(app.store.session(workspace.id, target.id).unread, true, "missing notification is not inferred from a compression summary");
+  await until(() => !app.store.session(workspace.id, target.id).unread, "viewing synchronized results without notice DOM must acknowledge the session");
+  assert.equal(app.store.db.prepare("SELECT delivery FROM task_results WHERE id='late'").get()!.delivery, 'pending');
   notice("late");
   manager.appendCompaction("<axiom-summary>live compression</axiom-summary>", null, 1000);
   app.agents.refresh(scope);
-  await until(() => !app.store.session(workspace.id, target.id).unread, "live compaction did not recover the unread notification");
-  assert.equal(await page.locator('[data-result-id="late"]').count(), 1);
-  assert.equal(await page.locator('[data-result-id="archived-one"]').count(), 0, "cache rebuild does not restore acknowledged history");
+  await page.waitForTimeout(1100);
+  assert.equal(app.store.session(workspace.id, target.id).unread, false);
+  await assertBatch();
+  assert.equal(manager.getBranch().filter(e => e.type === 'custom_message' && e.customType === 'axiom-result').length, 5, 'native notifications remain stored');
   await otherRow.locator("button.history-item").click();
   await otherRow.locator("button.history-item[aria-current=true]").waitFor();
   assert.equal(await targetRow.locator(".session-state.unread").count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS: compacted unread task notices are rendered and acknowledged; switching/reload stay read; new and undelivered results stay unread; live compaction recovers notices without changing agent context");
+  console.log("PASS: no task notifications before/after multiple compactions, closed history, switching or reload; synchronized session tail acknowledges results without consuming internal delivery or changing native transcripts");
 } finally {
   await browser.close();
   await app.close();

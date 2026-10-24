@@ -5,7 +5,7 @@ on:
       platform:
         description: Desktop platform
         type: choice
-        options: [all, macos, windows]
+        options: [all, macos, windows, linux]
         default: all
       source_ref:
         description: Source tag or commit (empty uses the workflow ref)
@@ -15,6 +15,7 @@ permissions:
   contents: read
 jobs:
   desktop:
+    if: inputs.platform != 'linux'
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +38,12 @@ jobs:
       - run: npm ci
       - run: npm --prefix app run build:desktop
       - run: node scripts/build-desktop.mjs --targets ${{ runner.os == 'macOS' && 'universal' || 'x64' }}
+      - name: Verify native resources
+        env:
+          AXIOM_TEST_CARGO_FETCH: '1'
+        run: node scripts/test-environment-inventory.mjs
+      - name: Verify independent tool maintenance
+        run: node node_modules/tsx/dist/cli.mjs --test app/tests/offline-tool-maintenance.test.ts app/tests/rtk-removal.test.ts
       - name: Verify macOS disk image and universal application
         if: runner.os == 'macOS'
         shell: bash
@@ -159,3 +166,106 @@ jobs:
             app/test-results/
           if-no-files-found: warn
           retention-days: 7
+  linux-desktop:
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+            deb_arch: amd64
+            machine: Advanced Micro Devices X86-64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            deb_arch: arm64
+            machine: AArch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+      - name: Record source revision
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf curl wget file dpkg-dev
+      # The root prepare script builds bootstrap and the native supervisor before packaging.
+      - run: npm ci
+      - name: Configure namespace test environment
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      # Build the packaged worker before testing its headless entry point.
+      - run: npm --prefix app run build:desktop
+      # Linux --targets selects the package format; CPU architecture follows the runner.
+      - run: node scripts/build-desktop.mjs --targets deb
+      - name: Check native supervisor and offline cleanup
+        env:
+          # Fetch pinned test compiler dependencies once; fixture tests use --offline.
+          AXIOM_TEST_CARGO_FETCH: '1'
+        run: |
+          node --test native/owner.test.mjs
+          node scripts/test-environment-inventory.mjs
+          cd app
+          ../node_modules/.bin/tsx --test tests/desktop-native.test.ts tests/archive-cleanup.test.ts tests/pi-removal.test.ts tests/service-removal.test.ts tests/offline-tool-maintenance.test.ts tests/rtk-removal.test.ts
+      - name: Verify Linux desktop artifacts
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_DEB_ARCH: ${{ matrix.deb_arch }}
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          test "$(node -p 'process.arch')" = "$EXPECTED_ARCH"
+          test -s app/Axiom2.deb
+          test -x app/Axiom2-binary
+          file app/Axiom2-binary
+          readelf -h app/Axiom2-binary
+          readelf -h app/Axiom2-binary | grep -F "Machine:" | grep -F "$EXPECTED_MACHINE"
+          dpkg-deb --info app/Axiom2.deb
+          dpkg-deb --contents app/Axiom2.deb
+          test "$(dpkg-deb -f app/Axiom2.deb Architecture)" = "$EXPECTED_DEB_ARCH"
+          test "$(dpkg-deb -f app/Axiom2.deb Version)" = "$(node -p 'require("./package.json").version')"
+          node --input-type=module - <<'JS'
+          import { readFile } from 'node:fs/promises';
+          import { validateLinuxHelper } from './app/desktop/desktop-native.mjs';
+          const bundle = JSON.parse(await readFile('artifacts/pake-template/src-tauri/src/native-helper.json', 'utf8'));
+          validateLinuxHelper(bundle, process.arch);
+          JS
+          (cd app && sha256sum Axiom2.deb Axiom2-binary > SHA256SUMS-linux)
+      - name: Verify packaged archive worker without a display
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { randomUUID } from 'node:crypto';
+          import { mkdtemp, mkdir, realpath, stat, rm } from 'node:fs/promises';
+          import { tmpdir } from 'node:os';
+          import { join, resolve } from 'node:path';
+          const root = await realpath(await mkdtemp(join(tmpdir(), 'axiom-packaged-worker-')));
+          try {
+            await mkdir(join(root, 'updates'));
+            const info = await stat(join(root, 'updates'), { bigint: true });
+            const request = { root, op: 'inspect', taskId: randomUUID(), directory: [String(info.dev), String(info.ino)] };
+            const env = { ...process.env }; delete env.DISPLAY; delete env.WAYLAND_DISPLAY;
+            const result = JSON.parse(execFileSync(resolve('app/Axiom2-binary'), ['--axiom-archive-worker', JSON.stringify(request)], { env, encoding: 'utf8', timeout: 10_000 }));
+            assert.equal(result.writerStopped, true); assert.equal(result.quarantine, false);
+          } finally { await rm(root, { recursive: true, force: true }); }
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-Linux-${{ matrix.arch }}
+          path: |
+            app/Axiom2.deb
+            app/Axiom2-binary
+            app/SHA256SUMS-linux
+          if-no-files-found: error
+          retention-days: 30

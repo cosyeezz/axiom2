@@ -31,7 +31,8 @@ export function taskCallLabel(name: TaskTool, status: ToolStatus, output: Record
 
 export function readTaskReport(text: string, input: Record<string, unknown> | null): TaskResult | null {
   const value = callObject(text);
-  if (!value || value.id !== input?.resultId || value.taskId !== input?.taskId ||
+  if (!value || typeof value.id !== "string" || typeof value.taskId !== "string" || !(value.id === input?.resultId || typeof value.resultRef === "string" && value.resultRef === input?.resultId) ||
+    !(value.taskId === input?.taskId || typeof value.taskRef === "string" && value.taskRef === input?.taskId) ||
     typeof value.report !== "string" || typeof value.runId !== "string" ||
     !["completed", "failed", "cancelled", "interrupted"].includes(String(value.status)) ||
     !Array.isArray(value.unfinished) || !value.unfinished.every((item) => typeof item === "string") ||

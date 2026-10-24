@@ -10,6 +10,7 @@ export function taskIndex(list: TaskList) {
     index = { byAnchor: new Map(), byId: new Map() };
     for (const task of list.tasks) {
       index.byId.set(task.id, task);
+      if (task.ref) index.byId.set(task.ref, task);
       const group = index.byAnchor.get(task.anchor) ?? [];
       group.push(task); index.byAnchor.set(task.anchor, group);
     }

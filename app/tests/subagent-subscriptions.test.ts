@@ -64,7 +64,9 @@ test("six real background children preserve lazy histories, summaries, reconnect
       assert.equal((await client.request("subscribe", { scope: key })).ok, true);
     const { taskIds } = records.create(scope, "real-backgrounds", "local evidence only", Array.from({ length: 6 }, (_, i) => ({ task: `child-${i}` })), { provider: "fixture", id: "fixture", thinking: "off" });
     scheduler.preferencesChanged();
-    await until(() => responses.length === 6 && records.rows("WHERE status='running'").length === 6, "six real workers did not stream", 60000);
+    await until(() => responses.length === 6 && records.rows("WHERE status='running'").length === 6, "six real workers did not stream", 60000).catch(error => {
+      throw new Error(`${error.message}; responses=${responses.length}; tasks=${JSON.stringify(records.rows().map(({ status, error }) => ({ status, error })))}`);
+    });
     const children = taskIds.map(id => target(records.rows("WHERE id=?", id)[0]));
     await new Promise(resolve => setTimeout(resolve, 80));
     const backgroundCaches = children.map(child => views.messages.peek(child.sessionId));

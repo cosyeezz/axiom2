@@ -4,19 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { emptyMaintenanceState } from "../../shared/maintenance.js";
 import { emptyReaState, reaVersion, type ReaState } from "../../shared/rea.js";
 import { LocalPath } from "../LocalPath.js";
-import { ReaEngines } from "./ReaEngines.js";
+import { ReaEngines, type ReaFeedback } from "./ReaEngines.js";
 import { command, useConnectionState, useScope } from "../transport.js";
 
 export function ReaTool({ active }: { active: boolean }) {
   const state = useScope("builtin-tools:rea", emptyReaState);
   const connection = useConnectionState();
   const maintenance = useScope("maintenance", emptyMaintenanceState);
-  const [sending, setSending] = useState(false), [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
+  const [requests, setRequests] = useState<{ id: number; resource: string }[]>([]);
+  const requestIds = useRef(0), latestRequest = useRef(new Map<string, number>());
+  const [feedbacks, setFeedbacks] = useState<Record<string, ReaFeedback>>({});
+  const jobs = state.jobs ?? (state.job ? [state.job] : []);
+  const coreJob = jobs.find(job => !job.engine);
+  const sending = requests.some(item => item.resource === "rea");
+  const feedbackByResource = Object.fromEntries(Object.entries(feedbacks).filter(([resource, feedback]) => feedback.jobId === jobs.find(job => (job.engine ? `rea:${job.engine}` : "rea") === resource)?.id));
+  const feedback = feedbackByResource.rea;
   const checkButton = useRef<HTMLButtonElement>(null);
   const focusAfterReconcile = useRef(false);
   const [uninstall, setUninstall] = useState<string>();
   const [choice, setChoice] = useState<{ revision: string; enabled: boolean }>();
-  const busy = sending || !!state.job?.running || !!state.pendingOperation || !connection.connected;
+  const blocked = sending || !!coreJob?.running || !!state.pendingOperation || !connection.connected;
+  const busy = blocked || requests.length > 0 || jobs.some(job => job.running) || !!state.engines?.some(engine => engine.pendingOperation);
   useEffect(() => {
     if (!busy && focusAfterReconcile.current) { focusAfterReconcile.current = false; checkButton.current?.focus(); }
   }, [busy]);
@@ -24,49 +32,57 @@ export function ReaTool({ active }: { active: boolean }) {
   const older = !!state.version && state.version !== target && state.version.split(".").map(Number).some((part, i, current) =>
     current.slice(0, i).every((n, j) => n === Number(target.split(".")[j])) && part > Number(target.split(".")[i]));
   useEffect(() => {
-    if (active && connection.connected) void command("rea.refresh").catch((error: Error) => setFeedback({ text: error.message, error: true }));
+    if (active && connection.connected) void action("rea.refresh");
   }, [active, connection.connected, connection.generation]);
   async function action(op: string, params: Record<string, unknown> = {}) {
-    setSending(true); setFeedback(undefined);
+    const resource = typeof params.engine === "string" ? `rea:${params.engine}` : "rea";
+    const id = ++requestIds.current;
+    latestRequest.current.set(resource, id);
+    setRequests(previous => [...previous, { id, resource }]);
+    setFeedbacks(previous => { const next = { ...previous }; delete next[resource]; return next; });
+    let jobId = jobs.find(job => (job.engine ? `rea:${job.engine}` : "rea") === resource)?.id;
+    const report = (value: Omit<ReaFeedback, "jobId">) => {
+      if (latestRequest.current.get(resource) === id) setFeedbacks(previous => ({ ...previous, [resource]: { ...value, jobId } }));
+    };
     try {
-      await command(op, params) as ReaState;
+      const result = await command(op, params) as ReaState;
+      jobId = (result.jobs ?? (result.job ? [result.job] : [])).find(job => (job.engine ? `rea:${job.engine}` : "rea") === resource)?.id;
       if (op === "rea.reconcile") {
-        setFeedback({ text: "已确认原操作停止；文件与配置已保留，请检查当前安装。" });
-        focusAfterReconcile.current = true;
+        report({ text: "已确认原操作停止；文件与配置已保留，请检查当前安装。" });
+        if (resource === "rea") focusAfterReconcile.current = true;
       }
-      if (op === "rea.engineSave") setFeedback({ text: "组件路径已保存，请检测配套组件；已有会话需重新加载技能与 MCP。" });
-      if (op === "rea.save") setFeedback({ text: "默认设置已保存；已有会话请在技能与 MCP 面板重新加载。" });
+      if (op === "rea.engineSave") report({ text: "组件路径已保存，请检测配套组件；已有会话需重新加载技能与 MCP。" });
+      if (op === "rea.save") report({ text: "默认设置已保存；已有会话请在技能与 MCP 面板重新加载。" });
       if (["rea.installSkill", "rea.uninstallSkill", "rea.installMcp", "rea.uninstallMcp"].includes(op)) {
         const installed = op.startsWith("rea.install");
-        setFeedback({ text: `${op.endsWith("Skill") ? "Skill" : "MCP"} 已${installed ? "安装" : "卸载"}；已有会话请在技能与 MCP 面板调整选择并重新加载。` });
+        report({ text: `${op.endsWith("Skill") ? "Skill" : "MCP"} 已${installed ? "安装" : "卸载"}；已有会话请在技能与 MCP 面板调整选择并重新加载。` });
       }
-    } catch (error) { setChoice(undefined); setFeedback({ text: (error as Error).message, error: true }); }
-    finally { setSending(false); }
+    } catch (error) { if (op === "rea.save") setChoice(undefined); report({ text: (error as Error).message, error: true }); }
+    finally { setRequests(previous => previous.filter(item => item.id !== id)); }
   }
-  const error = feedback?.error ? feedback.text : state.error || (!feedback ? state.job?.error : undefined);
-  const reportedErrorJob = error && (error === state.job?.error || !!state.pendingOperation) ? state.job : undefined;
-  const reportedErrorResource = reportedErrorJob ? (reportedErrorJob.engine ? `rea:${reportedErrorJob.engine}` : "rea") : error ? maintenance.tasks.findLast(task => (task.resource === "rea" || task.resource.startsWith("rea:")) && (task.error?.message === error || !!state.pendingOperation && ["unknown", "interrupted"].includes(task.status)))?.resource : undefined;
+  const error = feedback?.error ? feedback.text : state.error || (!feedback ? coreJob?.error : undefined);
+  const reportedErrorResources = jobs.filter(job => job.error && !feedbackByResource[job.engine ? `rea:${job.engine}` : "rea"] && maintenance.tasks.findLast(task => task.resource === (job.engine ? `rea:${job.engine}` : "rea"))?.id === job.id).map(job => job.engine ? `rea:${job.engine}` : "rea");
   return <article className="supplier-detail tools-detail" id="rea" aria-labelledby="rea-heading" style={active ? undefined : { display: "none" }}>
     <div className="detail-heading row-between"><div><h2 id="rea-heading">REA</h2><p className="meta">Reverse Engineer Anything · 分析 JavaScript、应用程序和二进制文件。</p></div><span className="tag">{state.version ? "已安装" : "待安装"}</span></div>
     <div className="tools-content">
       <div className="tools-feedback" aria-live="polite">
-        {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || state.job?.message || "安装官方 REA 后，技能与 MCP 会一起加入能力列表。"}</p>}
+        {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || coreJob?.message || "安装官方 REA 后，技能与 MCP 会一起加入能力列表。"}</p>}
         {!connection.connected && <p>连接已断开；重连后读取当前操作进度。</p>}
       </div>
-      <BackendMaintenance resource="rea" label="REA" showError={reportedErrorResource !== "rea"} location="所连接后台 · 应用级 · Axiom 独立管理">
+      <BackendMaintenance resource="rea" label="REA" showError={!reportedErrorResources.includes("rea")} location="所连接后台 · 应用级 · Axiom 独立管理">
         <dl className="tools-facts">
           <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}</dd></div>
           <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : "未安装"}</dd></div>
           <div><dt>{state.latest ? "最新版本" : "推荐版本"}</dt><dd><code>v{target}</code></dd></div>
         </dl>
         {!state.supported && state.nodeVersion && <p className="tools-error">{state.supportError || "需要 Node.js 22.19+（22.x）、24.11+（24.x）或 26+。"}</p>}
-        {state.pendingOperation && !state.job?.running && <div className="tools-conflict" role="group" aria-label="核实 REA 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
+        {state.pendingOperation && !coreJob?.running && <div className="tools-conflict" role="group" aria-label="核实 REA 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
         <div className="tools-actions">
           <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("rea.refresh")}>检查安装</button>
           <button className="btn" disabled={busy || !state.supported} onClick={() => void action("rea.check")}>检查更新</button>
-          <button className="btn btn-primary" disabled={busy || !state.supported || older} onClick={() => void action("rea.install", { version: target })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version === target ? "重新安装 REA" : state.version ? "更新 REA" : "安装 REA"}</button>
+          <button className="btn btn-primary" disabled={busy || !state.supported || older} onClick={() => void action("rea.install", { version: target })}>{coreJob?.running && coreJob.kind === "install" ? "正在安装…" : state.version === target ? "重新安装 REA" : state.version ? "更新 REA" : "安装 REA"}</button>
           {(state.version || state.removalPending) && <button className="btn" disabled={busy} onClick={() => setUninstall(state.revision)}><Icon name="trash-2" />{state.removalPending ? "清理残留程序" : "卸载 REA"}</button>}
-          {state.job?.running && !["uninstall", "engine-uninstall"].includes(state.job.kind) && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.cancel", { jobId: state.job!.id })}>取消操作</button>}
+          {coreJob?.running && !["uninstall", "engine-uninstall"].includes(coreJob.kind) && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.cancel", { jobId: coreJob.id })}>取消操作</button>}
         </div>
         {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label="确认卸载 REA">
           <p>移除 Axiom 托管的 REA 程序及其技能、MCP 安装引用。保留默认设置、分析引擎与组件路径；正在执行任务时须先结束任务。</p>
@@ -98,7 +114,7 @@ export function ReaTool({ active }: { active: boolean }) {
         <label className="tools-toggle"><input type="checkbox" checked={choice?.revision === state.revision ? choice.enabled : state.enabled} disabled={busy || !state.version} onChange={e => { setChoice({ revision: state.revision, enabled: e.target.checked }); void action("rea.save", { enabled: e.target.checked, revision: state.revision }); }} /><span><strong>默认启用 REA</strong><small>新会话默认选用已安装的 Skill 与 MCP；会话及全局能力选择优先。</small></span></label>
         <p className="field-help tools-help">更新或重装 REA 会保留两个组件的安装选择。已有会话请在「技能与 MCP」面板调整选择后重新加载；无同名回退资源时，请取消失效的选择。卸载不会中断正在执行的任务。</p>
       </section>
-      <ReaEngines state={state} busy={busy} action={action} reportedErrorResource={reportedErrorResource} />
+      <ReaEngines state={state} busy={busy} blocked={blocked} sending={requests.map(item => item.resource)} feedback={feedbackByResource} action={action} reportedErrorResources={reportedErrorResources} />
       <section className="section tools-section" aria-labelledby="rea-doctor-heading">
         <div className="section-heading"><h3 id="rea-doctor-heading">连接检查</h3><p>检查版本、工具列表，并实际调用会话检查工具。</p></div>
         <button className="btn" disabled={busy || !!state.supportError || !state.version} onClick={() => void action("rea.doctor")}>检测 REA 连接</button>

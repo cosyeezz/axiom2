@@ -1,5 +1,5 @@
 import { inModelNetworkWorker, modelNetwork } from "./model-network.js";
-import { providerProxyUrl, providerProxyView, readProviderProxy } from "./integrations/model-proxy-env.js";
+import { parseProviderProxy, providerProxyUrl, providerProxyView, readProviderProxy } from "./integrations/model-proxy-env.js";
 import { mkdirSync, readFileSync, realpathSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, open, rename, rm } from "node:fs/promises";
@@ -24,7 +24,7 @@ import { createModelRuntime, ensureModelProvider, nativeProviderTemplates } from
 import { discoverModels } from "./model-discovery.js";
 import { AppError, object, text } from "../shared/protocol.js";
 import {
-  samplingKeys,
+  editableBodyOverride,
   modelCostKeys,
   emptyModelPricing,
   type ModelPricing,
@@ -49,11 +49,11 @@ function headersView(headers: Json = {}): OverrideRow[] {
 }
 function bodyView(body: Json = {}): OverrideRow[] {
   return Object.entries(body)
-    .filter(
-      ([key, value]) =>
-        samplingKeys.includes(key as any) && typeof value === "number",
-    )
-    .map(([key, value]) => ({ id: randomUUID(), key, value: String(value) }));
+    .filter(([key, value]) => editableBodyOverride(key, value))
+    .map(([key, value]) => ({
+      id: randomUUID(), key, value: String(value),
+      valueType: typeof value === "number" ? "number" : "string",
+    }));
 }
 function urlView(value: string): { url: string; keepUrl?: boolean } {
   try {
@@ -322,7 +322,8 @@ export class ModelService {
         models: [...entries(p)].map(([modelId, m]) => ({
           key: modelId,
           originalId: modelId,
-          id: modelId,
+          id: m.axiomRequestModelId ?? modelId,
+          ...(m.axiomRequestModelId ? { configId: modelId } : {}),
           name:
             m.name ?? runtime.getModel(providerId, modelId)?.name ?? modelId,
           levels: levelsOf(runtime.getModel(providerId, modelId)),
@@ -331,6 +332,7 @@ export class ModelService {
           costTiered: !!runtime.getModel(providerId, modelId)?.cost.tiers?.length,
           headers: headersView(m.headers),
           body: bodyView(m.samplingParams),
+          bodyVersion: 2,
         })),
       });
     }
@@ -479,6 +481,40 @@ export class ModelService {
         return { providerId, revision, source, message, models };
       });
     }, cancellation);
+  }
+  /** Called after login admission, while authActive excludes other configuration writers. */
+  configureLoginProxy(providerId: string, value: unknown, expectedRevision: string) {
+    return this.serial(async () => {
+      const { raw, revision } = await this.load();
+      if (revision !== expectedRevision)
+        throw new AppError("REVISION_CONFLICT", "配置已改变，请重新读取后认证。");
+      const candidate = JSON.parse(raw);
+      const previous = candidate.providers[providerId]?.axiomProxy;
+      const proxy = parseProviderProxy(value, previous);
+      // Validate before publishing or opening the browser; never fall back to direct.
+      providerProxyUrl(this.root, proxy);
+      if (JSON.stringify(proxy) === JSON.stringify(parseProviderProxy(previous))) return;
+      // pi rejects a provider containing only app metadata. Empty headers are a
+      // no-op native override: retain its own endpoints, protocols and models.
+      candidate.providers[providerId] ??= { headers: {} };
+      candidate.providers[providerId].axiomProxy = proxy;
+      const next = JSON.stringify(candidate, null, 2) + "\n";
+      if (Buffer.byteLength(next) > 1_000_000) invalid("配置超过 1 MB 上限");
+      const path = join(this.dir, `models-login-${randomUUID()}.tmp`);
+      try {
+        const file = await open(path, "wx", 0o600);
+        try { await file.writeFile(next); await file.sync(); }
+        finally { await file.close(); }
+        const checked = await this.runtime(path);
+        if (checked.getError()) invalid("pi 拒绝此代理配置；原文件未覆盖。");
+        if (digest(await this.raw()) !== revision)
+          throw new AppError("REVISION_CONFLICT", "配置已改变；未覆盖，请重新读取后认证。");
+        await rename(path, join(this.dir, "models.json"));
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("CONFIG_WRITE_FAILED", "授权代理配置保存失败，请重新读取后重试。");
+      } finally { await rm(path, { force: true }).catch(() => {}); }
+    });
   }
   save(input: unknown): Promise<{ revision: string; loggedOut: string[] }> {
     return this.serial(async () => {

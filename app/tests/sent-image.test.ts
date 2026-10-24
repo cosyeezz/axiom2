@@ -31,9 +31,8 @@ test("sent path images: validated suffix metadata, original body, live/history a
   assert.equal(append.role, "user", "Steering uses the same presentation role as ordinary input");
   assert.deepEqual(append.images, live.images);
   assert.equal(chatMessage({ role: "custom", customType: "axiom-append", display: true, content: "text-only steering" }, "steer")!.role, "user");
-  for (const customType of ["axiom-result", "extension-notice"]) {
-    assert.equal(chatMessage({ role: "custom", customType, display: true, content: "notice" }, "notice")!.role, "notice");
-  }
+  assert.equal(chatMessage({ role: "custom", customType: "extension-notice", display: true, content: "notice" }, "notice")!.role, "notice");
+  assert.equal(chatMessage({ role: "custom", customType: "axiom-result", display: true, content: "notice" }, "notice"), null);
   assert.equal(chatMessage({ role: "compactionSummary", summary: "summary" }, "summary")!.role, "notice");
   const historical = transcriptMessages(projectionFixture([
     { type: "message", id: "native", message: { role: "user", axiomId: "user", content } },
@@ -41,7 +40,7 @@ test("sent path images: validated suffix metadata, original body, live/history a
   ]));
   assert.deepEqual(historical, [live, append]);
   assert.equal(chatMessage({ role: "assistant", content }, "assistant")!.text, content);
-  assert.equal(chatMessage({ role: "custom", customType: "axiom-result", display: true, content }, "result")!.images, undefined);
+  assert.equal(chatMessage({ role: "custom", customType: "axiom-result", display: true, content }, "result"), null);
   assert.deepEqual(attachmentDisplay(content + "\n用户后文"), { text: content + "\n用户后文", attachments: [] });
   for (const invalid of [attachmentPrompt(body, [attachment, attachment]), attachmentPrompt(body, [{ ...attachment, id: "imag0" }]), content.slice(0, -1)]) {
     assert.equal(chatMessage({ role: "user", content: invalid }, "invalid")!.text, invalid);

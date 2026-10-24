@@ -148,7 +148,7 @@ export default function(pi) {
     for (const path of ["forbidden.txt", "shell-write", "extension-loaded", "global-loaded", "package-loaded", "shadow-write"])
       assert.equal(existsSync(join(cwd, path)), false, `${path} must not be created by child`);
     assert.equal(existsSync(installAttempt), false, "child must not even invoke package resolution or installation");
-    assert.ok(result.events.find((event) => event.type === "ready").environment.systemPrompt.includes("调研与测试子代理"));
+    assert.ok(result.events.find((event) => event.type === "ready").environment.systemPrompt.includes("You are a research and testing subagent."));
   }
   const mainSettings = { ...settings, packages: [pkg] };
   writeFileSync(join(pi, "settings.json"), JSON.stringify(mainSettings));
