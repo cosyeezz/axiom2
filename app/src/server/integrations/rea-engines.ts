@@ -1,3 +1,4 @@
+import { MaintenanceError } from "../../shared/maintenance.js";
 import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, win32, posix } from "node:path";
@@ -57,11 +58,12 @@ export function listEngines(config: ReaConfig, previous: ReaEngineState[] = [], 
   const paths = discoverEnginePaths(config.engines);
   return reaEngineIds.map(id => {
     const path = paths[id] || "", configured = !!config.engines?.[id];
-    const installable = config.installation?.version === "6.7.0" && engineInstallable(id, host);
+    const installable = ["win32", "linux"].includes(host.platform) && config.installation?.version === "6.7.0" && engineInstallable(id, host);
     const unsupported = !["darwin", "linux", "win32"].includes(host.platform) || !["arm64", "x64"].includes(host.arch) || id === "hopper" && host.platform === "win32" || ["ghidra", "jadx"].includes(id) && host.platform === "win32" && host.arch !== "x64";
     const old = previous.find(item => item.id === id && item.path === path && item.configured === configured);
-    if (old && !unsupported) return { ...old, installable };
-    return { id, path, configured, installable, status: unsupported ? "unsupported" : path ? "unchecked" : "missing", detail: unsupported ? "当前 REA 平台不支持此引擎。" : id === "ghidra" ? "Windows/Linux x64 可托管安装；macOS/Linux arm64 需接入含对应原生反编译组件的完整安装。" : id === "hopper" ? "只检测已有启动程序，不自动启动 GUI，也不验证商业许可。" : "按需配置或安装，点击检测后才运行版本检查。" };
+    const owned = { managed: !!config.managedEngines?.[id]?.length, removalPending: !!config.removalPending?.some(name => name.startsWith(`${id}-`)) };
+    if (old && !unsupported) return { ...old, installable, ...owned };
+    return { id, path, configured, installable, ...owned, status: unsupported ? "unsupported" : path ? "unchecked" : "missing", detail: unsupported ? "当前 REA 平台不支持此引擎。" : id === "ghidra" ? "Windows/Linux x64 可托管安装；macOS/Linux arm64 需接入含对应原生反编译组件的完整安装。" : id === "hopper" ? "只检测已有启动程序，不自动启动 GUI，也不验证商业许可。" : "按需配置或安装，点击检测后才运行版本检查。" };
   });
 }
 export async function checkEngines(root: string, config: ReaConfig, packageRoot: string | undefined, signal: AbortSignal, run: EngineRun = runEngine): Promise<ReaEngineState[]> {
@@ -100,7 +102,7 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
         item.status = report.healthy && !failed.length ? "ready" : "incompatible";
         item.detail = failed.length ? failed.map((check: { name?: string; detail?: string }) => `${check.name}: ${check.detail ?? "未通过"}`).join("\n").slice(0, 4000) : item.status === "ready" ? "REA 环境检查通过；未加载目标，不代表实际分析桥接已通过。" : "REA 检查未通过，请检查引擎与 Java 配置。";
       }
-    } catch (error) { signal.throwIfAborted(); item.status = "error"; item.detail = error instanceof Error ? error.message : "组件检测失败。"; }
+    } catch (error) { signal.throwIfAborted(); if (error instanceof MaintenanceError) throw error; item.status = "error"; item.detail = error instanceof Error ? error.message : "组件检测失败。"; }
   }
   return items;
 }

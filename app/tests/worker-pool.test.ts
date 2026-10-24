@@ -303,3 +303,21 @@ test('single-use session writers remain owned throughout retirement before the n
   const second = await next; assert.notEqual(second.ref.instanceId, first.ref.instanceId);
   await h.pool.retire(second.ref, 'end');
 });
+
+test('maintenance rejects active leases and waits for physical worker close before removing files', async t => {
+  const h = harness(t);
+  const lease = await h.acquire(); await lease.ensureReady();
+  let removed = false;
+  await assert.rejects(h.pool.maintenance(() => { removed = true; }), { code: 'MAINTENANCE_BUSY' });
+  assert.equal(removed, false);
+  await h.cleaned(lease);
+  const removal = h.pool.maintenance(() => { assert.equal(h.refs(), 0); removed = true; });
+  await turn(); assert.equal(removed, false);
+  await assert.rejects(h.acquire(), { code: 'MAINTENANCE_BUSY' });
+  await assert.rejects(h.pool.maintenance(() => {}), { code: 'MAINTENANCE_BUSY' });
+  h.children[0].emit('message', { type: 'closed', lease: lease.ref });
+  await turn(); assert.equal(removed, false, 'IPC close does not release executable files');
+  h.children[0].close(); await removal; assert.equal(removed, true);
+  await assert.rejects(h.pool.maintenance(() => { throw Error('disk busy'); }), /disk busy/);
+  const next = await h.acquire(); await h.pool.retire(next.ref, 'end');
+});

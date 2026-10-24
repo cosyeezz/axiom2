@@ -59,6 +59,7 @@ export class ExecutionPool {
   private backoff = new Map<string, number>();
   private generation = 0;
   private stopping = false;
+  private maintaining = false;
   private pumping = false;
   private scheduled = false;
   private peak = 0;
@@ -89,6 +90,7 @@ export class ExecutionPool {
   }
   acquire(request: AcquireRequest): Promise<ExecutionLease> {
     if(this.stopping) return Promise.reject(new AppError("SHUTTING_DOWN","执行池正在关闭"));
+    if(this.maintaining) return Promise.reject(new AppError("MAINTENANCE_BUSY","正在清理托管组件，请稍后再开始执行。"));
     if(request.signal.aborted || request.deadlineAt !== undefined && request.deadlineAt <= Date.now()) return Promise.reject(new AppError("AGENT_STOPPED","执行资源等待已取消或超时"));
     if(request.parentLease && (request.kind!=='memory-query'||!this.isActive(request.parentLease))) return Promise.reject(new AppError("AGENT_STOPPED","父执行已经结束"));
     const waiter: Waiter = {request,at:performance.now(),done:deferred(),abort:()=>{this.remove(waiter);waiter.done.reject(new AppError("AGENT_STOPPED","执行资源等待已取消或超时"));this.schedule();}};
@@ -115,7 +117,7 @@ export class ExecutionPool {
     return !i.consumed || i.environment.reuse==='cross-binding';
   }
   private pump() {
-    if(this.pumping||this.stopping)return;this.pumping=true;
+    if(this.pumping||this.stopping||this.maintaining)return;this.pumping=true;
     try {
       for(const w of [...this.waiters]) {
         const r=w.request;
@@ -309,7 +311,7 @@ export class ExecutionPool {
     this.prewarm();
   }
   private prewarm() {
-    if(this.stopping)return;
+    if(this.stopping||this.maintaining)return;
     const now=Date.now();
     // Only real admitted demand renews this window; idle retirement must not feed prewarming forever.
     for(const [key,value] of this.recent)if(now-value.lastDemandAt>=this.limits.idleTtlMs){this.recent.delete(key);value.environment.release();}
@@ -327,6 +329,17 @@ export class ExecutionPool {
     await Promise.all([...this.instances.values()].filter(i=>!i.lease&&(!providers||!i.environment.provider||providers.includes(i.environment.provider))).map(i=>this.retireInstance(i,'configuration')));
   }
   async trim() {for(const {environment:e} of this.recent.values())e.release();this.recent.clear();await Promise.all([...this.instances.values()].filter(i=>!i.lease).map(i=>this.retireInstance(i,'trim')));}
+  /** Quiesce retained workers before removing programs they may have cached. */
+  async maintenance<T>(operation: () => T): Promise<T> {
+    if (this.stopping || this.maintaining || this.waiters.length || [...this.instances.values()].some(i => i.lease))
+      throw new AppError("MAINTENANCE_BUSY", "仍有执行或维护任务，请结束后再卸载组件。");
+    this.maintaining = true;
+    try {
+      await this.trim();
+      if (this.stopping) throw new AppError("SHUTTING_DOWN", "执行池正在关闭。");
+      return await operation();
+    } finally { this.maintaining = false; this.schedule(); }
+  }
   async waitForPrewarm() {this.prewarm();await Promise.all([...this.instances.values()].filter(i=>!i.lease&&i.ready).map(i=>i.ready!.catch(()=>{})));}
   async close() {
     this.stopping=true;for(const w of [...this.waiters])w.abort();for(const {environment:e} of this.recent.values())e.release();this.recent.clear();

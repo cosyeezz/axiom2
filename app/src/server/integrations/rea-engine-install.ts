@@ -1,5 +1,8 @@
+import { maintainedFetch, maintenancePhase } from "../maintenance.js";
+import { MaintenanceError } from "../../shared/maintenance.js";
 import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, lstatSync, realpathSync } from "node:fs";
+import { trackBuiltinDirectory, assertBuiltinFilesSafe, forgetBuiltinDirectory } from "./builtin-operation.js";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -16,13 +19,13 @@ export function officialEngineUrl(raw: string) {
   if (url.protocol !== "https:" || url.username || url.password || url.port || !["api.adoptium.net", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"].includes(url.hostname)) throw Error("组件下载地址不属于受信任的官方发布服务。");
 }
 export const fetchEngine: EngineFetch = async (initial, signal) => {
-  const timed = AbortSignal.any([signal, AbortSignal.timeout(600_000)]);
+  const timed = signal;
   let url = initial;
   for (let hop = 0; hop < 6; hop++) {
     officialEngineUrl(url);
-    const response = await fetch(url, { signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-REA" } });
+    const response = await maintainedFetch(url, { signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-REA" } });
     if (response.status >= 300 && response.status < 400 && response.headers.get("location")) { await response.body?.cancel(); url = new URL(response.headers.get("location")!, url).href; continue; }
-    if (!response.ok) { await response.body?.cancel(); throw Error(`组件官方发布服务返回 HTTP ${response.status}。`); }
+    if (!response.ok) { await response.body?.cancel(); throw new MaintenanceError("http", `组件官方发布服务返回 HTTP ${response.status}。`); }
     return response;
   }
   throw Error("组件下载重定向过多。");
@@ -62,6 +65,7 @@ export async function downloadEngineFile(release: EngineRelease, output: string,
   const hash = createHash("sha256"); let size = 0;
   const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) { size += chunk.length; hash.update(chunk); callback(size > limit ? Error("组件下载超过大小限制。") : null, chunk); } });
   await pipeline(Readable.fromWeb(response.body as never), meter, createWriteStream(output, { flags: "wx", mode: 0o600 }), { signal });
+  maintenancePhase("verifying");
   if (!size || hash.digest("hex") !== release.sha256) throw Error("组件 SHA-256 校验失败；未切换当前安装。");
 }
 export async function findEnginePath(root: string, id: ReaEngineId, host: EngineHost): Promise<string> {
@@ -83,15 +87,24 @@ export async function prepareEngine(root: string, id: ReaEngineId, signal: Abort
   const release = await engineRelease(id, signal, host, fetcher);
   const directory = join(reaDirectory(root), "engines", `${id}-${randomUUID()}`);
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  const original = lstatSync(directory, { bigint: true });
+  const assertIdentity = () => {
+    const current = lstatSync(directory, { bigint: true });
+    if (!current.isDirectory() || current.isSymbolicLink() || realpathSync(directory) !== directory || current.dev !== original.dev || current.ino !== original.ino)
+      throw new MaintenanceError("stop-unconfirmed", "组件候选目录身份已变化，已保留文件与记录。");
+    assertBuiltinFilesSafe();
+  };
+  trackBuiltinDirectory(directory);
   try {
     notify(`正在下载 ${id} ${release.version}（${host.platform}/${host.arch}）…`);
     const archive = join(directory, release.format === "jar" ? "jadx-headless-mcp.jar" : `download.${release.format}`);
     await downloadEngineFile(release, archive, signal, fetcher);
+    maintenancePhase("installing");
     notify("SHA-256 校验通过，正在准备组件…");
     const unpacked = join(directory, "files");
     if (release.format !== "jar") { await mkdir(unpacked); await extractEngineArchive(archive, unpacked, release.format, signal); await rm(archive); }
     const path = release.format === "jar" ? archive : await findEnginePath(unpacked, id, host);
     await writeFile(join(directory, "source.json"), JSON.stringify({ ...release, ...host, installedAt: Date.now() }, null, 2), { flag: "wx", mode: 0o600 });
-    signal.throwIfAborted(); return { directory, path };
-  } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
+    signal.throwIfAborted(); assertIdentity(); return { directory, path };
+  } catch (error) { assertIdentity(); await rm(directory, { recursive: true, force: true }); forgetBuiltinDirectory(directory); throw error; }
 }

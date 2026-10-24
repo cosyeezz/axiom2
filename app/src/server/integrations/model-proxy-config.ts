@@ -4,13 +4,15 @@ import { dirname, join } from "node:path";
 import type { ProxyInstallation, ProxyKernel, ProxyProfile, ProxyStatus } from "../../shared/model-proxy.js";
 
 export type StoredProxyProfile = ProxyProfile & { source: string; enabled?: boolean };
-export type ProxyConfig = { revision: string; installations: Partial<Record<ProxyKernel, ProxyInstallation>>; profiles: StoredProxyProfile[]; bindings: Record<string, string> };
+export type ProxyConfig = { revision: string; installations: Partial<Record<ProxyKernel, ProxyInstallation>>; profiles: StoredProxyProfile[]; bindings: Record<string, string>; removalPending?: string[] };
 export type ProxyEndpoint = ProxyStatus & { port?: number; token?: string; generation: string };
 export type ProxyRuntime = Record<string, ProxyEndpoint>;
 export const proxyDirectory = (root: string) => join(root, "integrations", "model-proxy");
 export const proxyConfigPath = (root: string) => join(proxyDirectory(root), "config.json");
 export const proxyRuntimePath = (root: string) => join(proxyDirectory(root), "runtime.json");
 export const proxyExecutable = (root: string, kernel: ProxyKernel, install: ProxyInstallation) => join(proxyDirectory(root), "versions", install.directory, kernel + (process.platform === "win32" ? ".exe" : ""));
+export const proxyVersionDirectoryPattern = /^(xray|mihomo)-\d+\.\d+\.\d+-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+export const proxyImporterDirectoryPattern = /^xray-knife-\d+\.\d+\.\d+-(darwin|linux|win32)-(x64|arm64)$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 export function atomicProxyJson(file: string, value: unknown) {
@@ -25,6 +27,7 @@ export function readProxyConfig(root: string): ProxyConfig {
   try { value = JSON.parse(readFileSync(proxyConfigPath(root), "utf8")); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { revision: "", installations: {}, profiles: [], bindings: {} }; throw Error("无法读取模型转发配置；请检查文件权限和内容。"); }
   if (!record(value) || typeof value.revision !== "string" || !Array.isArray(value.profiles) || !record(value.bindings) || !record(value.installations)) throw Error("模型转发配置格式无效。");
+  if (value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some(name => typeof name !== "string" || !proxyVersionDirectoryPattern.test(name) && !proxyImporterDirectoryPattern.test(name)))) throw Error("内核待清理记录无效。");
   const ids = new Set<string>();
   for (const p of value.profiles) {
     if (!record(p) || typeof p.id !== "string" || !uuid.test(p.id) || ids.has(p.id) || (p.kernel !== "xray" && p.kernel !== "mihomo") || typeof p.source !== "string" || typeof p.name !== "string" || typeof p.node !== "string" || (p.enabled !== undefined && typeof p.enabled !== "boolean")) throw Error("模型转发线路格式无效或 ID 重复。");

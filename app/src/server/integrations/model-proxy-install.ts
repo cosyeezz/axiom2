@@ -1,3 +1,5 @@
+import { MaintenanceError } from "../../shared/maintenance.js";
+import { maintainedFetch, maintenancePhase } from "../maintenance.js";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,20 +22,23 @@ export async function downloadProxyAsset(initial: string, signal: AbortSignal, l
   const direct = new Agent();
   try {
     let url = new URL(initial);
-    const timed = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+    const timed = signal;
     for (let hop = 0; hop < 6; hop++) {
       if (url.protocol !== "https:" || url.username || url.password || url.port || !["api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"].includes(url.hostname)) throw Error("内核下载地址不属于官方发布服务。");
-      const response = await fetch(url, { dispatcher: direct, signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-Model-Proxy" } });
+      const response = await maintainedFetch(url.href, { signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-Model-Proxy" } }, ((input: string, init: RequestInit) => fetch(input, { ...init, dispatcher: direct } as Parameters<typeof fetch>[1])) as unknown as typeof globalThis.fetch);
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) { await response.body?.cancel(); url = new URL(response.headers.get("location")!, url); continue; }
-      if (!response.ok) { await response.body?.cancel(); throw Error(`官方发布服务返回 HTTP ${response.status}。`); }
+      if (!response.ok) { await response.body?.cancel(); throw new MaintenanceError("http", `官方发布服务返回 HTTP ${response.status}。`); }
       if (Number(response.headers.get("content-length")) > limit) { await response.body?.cancel(); throw Error("下载文件超过大小限制。"); }
       const length = Number(response.headers.get("content-length")), total = Number.isFinite(length) && length > 0 ? length : undefined;
       const chunks: Buffer[] = []; let size = 0, reported = Date.now();
       progress?.(0, total);
-      for await (const data of response.body ?? []) {
+      const reader = response.body?.getReader();
+      if (!reader) throw Error("下载未返回内容。");
+      try { while (true) {
+        const next = await reader.read(); if (next.done) break; const data = next.value;
         size += data.length; if (size > limit) throw Error("下载文件超过大小限制。"); chunks.push(Buffer.from(data));
         if (Date.now() - reported >= 250) { progress?.(size, total); reported = Date.now(); }
-      }
+      } } finally { await reader.cancel().catch(() => {}); }
       progress?.(size, total);
       return Buffer.concat(chunks);
     }
@@ -80,14 +85,20 @@ export async function installProxyKernel(root: string, release: ProxyRelease, si
   mkdirSync(dest, { recursive: true, mode: 0o700 });
   try {
     const archive = await downloadProxyAsset(release.url, signal, 120 * 1024 * 1024);
+    maintenancePhase("verifying");
     if (createHash("sha256").update(archive).digest("hex") !== release.sha256) throw Error("内核发布包 SHA-256 校验失败。");
+    maintenancePhase("installing");
     const binary = release.kernel + (process.platform === "win32" ? ".exe" : "");
     // mihomo ZIP uses its asset basename for the executable.
     const member = release.kernel === "xray" ? binary : release.asset.replace(/\.zip$/, ".exe");
     const data = release.asset.endsWith(".gz") ? gunzipSync(archive, { maxOutputLength: 200 * 1024 * 1024 }) : proxyZipMember(archive, member);
     const file = join(dest, binary); writeFileSync(file, data, { flag: "wx", mode: 0o700 }); chmodSync(file, 0o700);
+    maintenancePhase("validating");
     const version = (await runRtk(file, [release.kernel === "xray" ? "version" : "-v"], { root, signal, timeout: 10_000 })).toString();
     if (!version.includes(release.version) || !(release.kernel === "xray" ? /^Xray / : /^Mihomo /).test(version)) throw Error("内核版本自检失败。");
     signal.throwIfAborted(); return { version: release.version, directory };
-  } catch (error) { rmSync(dest, { recursive: true, force: true }); throw error; }
+  } catch (error) {
+    if (!(error instanceof MaintenanceError && error.code === "stop-unconfirmed")) rmSync(dest, { recursive: true, force: true });
+    throw error;
+  }
 }

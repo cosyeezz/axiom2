@@ -1,6 +1,6 @@
 import type { ReaEngineId, ReaEngineState } from "./rea-engines.js";
 export const reaVersion = "6.7.0";
-export type ReaJob = { id: string; kind: "check" | "install" | "doctor" | "engines-check" | "engine-install"; engine?: ReaEngineId; running: boolean; message: string; error?: string };
+export type ReaJob = { id: string; kind: "check" | "install" | "doctor" | "engines-check" | "engine-install" | "uninstall" | "engine-uninstall"; engine?: ReaEngineId; running: boolean; message: string; error?: string };
 export type ReaState = {
   revision: string;
   enabled: boolean;
@@ -10,9 +10,12 @@ export type ReaState = {
   mcpError?: string;
   nodeVersion: string;
   supported: boolean;
+  supportError?: string;
   version?: string;
   latest?: string;
   packageRoot?: string;
+  removalPending?: boolean;
+  pendingOperation?: string;
   job?: ReaJob;
   diagnostic?: { text: string; toolCount: number; at: number };
   engines?: ReaEngineState[];

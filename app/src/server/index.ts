@@ -2,6 +2,7 @@ import { latencyFor } from "./latency.js";
 import { assetCacheControl } from "./asset-cache.js";
 import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
+import { MaintenanceService } from "./maintenance.js";
 import { Resources } from "./resources.js";
 import { SkillFiles } from "./skill-files.js";
 import { OutgoingQueue } from "./outgoing.js";
@@ -121,6 +122,7 @@ export async function startServer(
     if (scope === "deleted-sessions") return { revision: seq };
     if (scope === "favorites") return preferences.favorites();
     if (scope === "configuration") return config;
+    if (scope === "maintenance") return maintenance.snapshot();
     if (scope === "resources") return resources.snapshot();
     if (scope === "builtin-tools:opencli") return opencli.snapshot();
     if (scope === "builtin-tools:rea") return rea.snapshot();
@@ -266,6 +268,7 @@ export async function startServer(
   };
   // RTK installs into immutable private directories; it does not mutate global tools or active workers.
   let proxyReady = false, proxyRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const maintenance = new MaintenanceService(store.root, () => publish("maintenance"));
   const modelProxy = new ModelProxyService(store.root, () => {
     publish("builtin-tools:model-proxy");
     if (!proxyReady || shuttingDown) return;
@@ -277,33 +280,18 @@ export async function startServer(
       inFlight.add(update);
     }, 150);
   });
-  const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), options.rea);
-  const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), options.rtk);
-  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, () => {
-    if (shuttingDown) return "后台服务正在退出";
-    if (resources.busy) return "正在等待技能与 MCP 资源操作完成";
-    // Includes prompts admitted before async model preparation registers a run.
-    if (workspaceOperations.size) return "正在等待工作空间操作完成";
-    if (agents.maintenancePending) return "正在等待后台执行及压缩结束";
-    if (store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get() ||
-        store.db.prepare("SELECT 1 FROM task_results WHERE delivery='inflight' LIMIT 1").get())
-      return "正在等待子任务及结果处理完成";
-    for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
-      if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
-        return "正在等待本机 Agent、子任务及压缩结束";
-    }
-    return undefined;
-  });
   let agents: Agents;
+  const removeIntegration = async <T,>(operation: () => T): Promise<T> => {
+    if (shuttingDown || !agents || agents.maintenancePending || resources.busy || workspaceOperations.size ||
+        store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get())
+      throw new AppError("MAINTENANCE_BUSY", "仍有任务或资源操作，请结束后再卸载组件。");
+    return agents.pool.maintenance(operation);
+  };
+  const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), { ...options.rea, removal: removeIntegration });
+  const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), { ...options.rtk, removal: removeIntegration });
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, removeIntegration);
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
-  const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {
-    if (opencli.installing || workspaceOperations.size) throw new AppError("AGENT_BUSY", "请等待资源安装及工作空间操作结束后重试。");
-    for (const row of store.db.prepare("SELECT id,workspaceId FROM sessions WHERE deletedAt IS NULL").all()) {
-      if (agents.active({ workspaceId: String(row.workspaceId), sessionId: String(row.id) }))
-        throw new AppError("AGENT_BUSY", "请先停止本机 Agent、子任务及压缩，再修改资源。");
-    }
-    await agents.pool.invalidate();
-  });
+  const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {});
   const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);
   const tasks = new Tasks(agents);
   attention = new SessionAttention(store, publish);
@@ -461,11 +449,9 @@ export async function startServer(
           workspaceOperations.set(operationWorkspace, (workspaceOperations.get(operationWorkspace) ?? 0) + 1);
         }
         let data: unknown;
-        if (resources.busy && (c.op === "prompt" || c.op === "agent.resume" || c.op === "agent.skills" || c.op === "task.append" || c.op.startsWith("reload.") || c.op === "compression.start"))
-          throw new AppError("RESOURCE_BUSY", "技能与 MCP 正在变更，请等待资源操作完成。");
-        if (opencli.installing && (["prompt", "agent.resume", "agent.reload", "agent.skills", "task.append", "compression.start"].includes(c.op) || c.op.startsWith("reload.")))
-          throw new AppError("TOOL_INSTALLING", "OpenCLI 正在安装或更新，请完成后再开始执行。");
-        if (c.op.startsWith("resources.")) {
+        if (c.op.startsWith("maintenance.")) {
+          data = c.op === "maintenance.get" ? maintenance.command(c) : await store.external(c, async () => maintenance.command(c));
+        } else if (c.op.startsWith("resources.")) {
           if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "资源管理使用应用级范围。");
           data = c.op === "resources.get" || c.op === "resources.detail" ? await resources.command(c) : await store.external(c, () => resources.command(c));
         } else if (c.op.startsWith("rea.")) {
@@ -984,6 +970,7 @@ export async function startServer(
       await remoteAccess?.close();
       attention.close();
       await resources.close();
+      maintenance.close();
       await opencli.close();
       await rea.close();
       await rtk.close();

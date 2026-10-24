@@ -1,13 +1,15 @@
-import { fork, type ChildProcess } from "node:child_process";
+import { currentMaintenance } from "../maintenance.js";
+import { MaintenanceError } from "../../shared/maintenance.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, connect } from "node:net";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ProxyInstallation } from "../../shared/model-proxy.js";
 import { atomicProxyJson, proxyDirectory, proxyExecutable, type ProxyEndpoint, type StoredProxyProfile } from "./model-proxy-config.js";
 import { runRtk } from "./rtk-process.js";
+import { ProxyGuardian } from "./model-proxy-guardian.js";
+import { assertProxyCanStart } from "./model-proxy-removal.js";
 import { toolEnvironment } from "./model-proxy-env.js";
 
 const privateIps = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"];
@@ -27,15 +29,14 @@ export function coreConfiguration(profile: StoredProxyProfile, port: number, tok
       ] } };
   }
   if (!profile.node.trim()) throw Error("请填写 mihomo 配置中的节点名称。");
-  const remote = /^https?:\/\//.test(profile.source.trim());
+  const remote = /^https?:\/\//i.test(profile.source.trim());
   if (remote) { const url = new URL(profile.source.trim()); if (url.username || url.password) throw Error("订阅地址不支持内嵌账号密码。"); }
   return { "mixed-port": port, "bind-address": "127.0.0.1", "allow-lan": false, authentication: [`axiom:${token}`], "skip-auth-prefixes": [],
     mode: "rule", "log-level": "silent", ipv6: true, "external-controller": "", "external-controller-unix": "", "external-controller-pipe": "",
     tun: { enable: false }, dns: { enable: false }, profile: { "store-selected": false, "store-fake-ip": false },
     "proxy-providers": { source: { "exclude-type": "direct|compatible|pass", "health-check": { enable: false },
       override: { "proxy-name": [{ pattern: "^$", target: "未命名节点" }] },
-      ...(remote ? { type: "http", url: profile.source.trim(), path: sourcePath, interval: 3600, proxy: "DIRECT" }
-      : { type: "file", path: sourcePath }) } },
+      type: "file", path: sourcePath } },
     "proxy-groups": [{ name: "selected", type: "select", use: ["source"], filter: `^${profile.node.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "empty-fallback": "REJECT" }],
     rules: ["DOMAIN,localhost,DIRECT", "DOMAIN-SUFFIX,localhost,DIRECT", "DOMAIN-SUFFIX,local,DIRECT",
       ...privateIps.map(ip => `${ip.includes(":") ? "IP-CIDR6" : "IP-CIDR"},${ip},DIRECT`), "MATCH,selected"] };
@@ -56,10 +57,10 @@ async function listening(port: number) {
 }
 export class ProxyProcess {
   readonly endpoint: ProxyEndpoint = { status: "starting", generation: randomUUID() };
-  private child?: ChildProcess;
+  private validationUnconfirmed = false;
   private stopping = false;
   private stopped?: Promise<void>;
-  private closed?: Promise<void>;
+  private guardian?: ProxyGuardian;
   private directory: string;
   constructor(readonly root: string, readonly profile: StoredProxyProfile, private changed: () => void) {
     this.directory = join(proxyDirectory(root), "runs", this.endpoint.generation);
@@ -69,40 +70,41 @@ export class ProxyProcess {
       const port = await reserveProxyPort(), token = randomBytes(32).toString("hex");
       signal.throwIfAborted();
       if (this.stopping) throw Error("线路启动已取消。");
+      assertProxyCanStart(this.root, this.profile.kernel);
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
       const source = join(this.directory, "provider.yaml"), config = join(this.directory, "config.json");
       const value = coreConfiguration(this.profile, port, token, source);
-      if (this.profile.kernel === "mihomo" && !/^https?:\/\//.test(this.profile.source.trim())) writeFileSync(source, this.profile.source, { mode: 0o600 });
+      if (this.profile.kernel === "mihomo") {
+        if (/^https?:\/\//i.test(this.profile.source.trim())) throw Error("订阅内容须先完成下载与验证。");
+        writeFileSync(source, this.profile.source, { mode: 0o600 });
+      }
       atomicProxyJson(config, value);
       const executable = proxyExecutable(this.root, this.profile.kernel, installation);
       const args = this.profile.kernel === "xray" ? ["run", "-config", config] : ["-d", this.directory, "-f", config];
+      const owner = join(this.directory, "owner.json");
+      atomicProxyJson(owner, { kernel: this.profile.kernel, directory: installation.directory });
       // Never publish raw core diagnostics: they may echo the supplied node credentials.
       try { await runRtk(executable, this.profile.kernel === "xray" ? ["run", "-test", "-config", config] : ["-t", ...args], { root: this.root, signal, timeout: 10_000 }); }
-      catch { throw Error("内核配置校验失败，请检查原生线路格式和节点参数。"); }
+      catch (error) {
+        if (error instanceof MaintenanceError) { this.validationUnconfirmed = error.code === "stop-unconfirmed"; throw error; }
+        throw Error("内核配置校验失败，请检查原生线路格式和节点参数。");
+      }
       signal.throwIfAborted();
       if (this.stopping) throw Error("线路启动已取消。");
-      const ts = import.meta.url.endsWith(".ts");
-      const child = this.child = fork(fileURLToPath(new URL(`./model-proxy-supervisor.${ts ? "ts" : "js"}`, import.meta.url)), [],
-        { execArgv: ts ? ["--import", import.meta.resolve("tsx")] : [], stdio: ["ignore", "ignore", "ignore", "ipc"] });
-      this.closed = new Promise(resolve => {
-        const exited = () => {
-          if (!this.stopping) {
-            this.endpoint.status = "error"; delete this.endpoint.port; delete this.endpoint.token;
-            this.endpoint.message = "代理内核已退出，请检查线路后重新启动。";
-            this.changed();
-          }
-          resolve();
-        };
-        child.once("exit", exited);
-        child.once("error", () => { if (!child.pid) exited(); });
+      const execution = currentMaintenance(), started = Date.now();
+      this.guardian = new ProxyGuardian(owner, () => execution?.remainingBudget() ?? { remainingMs: 15_000 - (Date.now() - started), code: "total-timeout" }, signal);
+      void this.guardian.closed.then(() => {
+        if (!this.stopping) {
+          this.endpoint.status = "error"; delete this.endpoint.port; delete this.endpoint.token;
+          this.endpoint.message = "代理内核已退出，请检查线路后重新启动。";
+          this.changed();
+        }
       });
-      child.send({ type: "start", executable, args, cwd: this.directory, env: toolEnvironment(process.env) }, error => {
-        if (error) child.kill("SIGTERM");
-      });
-      const abort = () => { void this.stop(); };
+      await this.guardian.start({ executable, args, cwd: this.directory, env: toolEnvironment(process.env) });
+      const abort = () => { void this.stop().catch(() => {}); };
       signal.addEventListener("abort", abort, { once: true });
       try {
-        const deadline = Date.now() + 15_000;
+        const deadline = currentMaintenance() ? Infinity : Date.now() + 15_000;
         while (Date.now() < deadline && this.endpoint.status === "starting") {
           signal.throwIfAborted();
           if (await listening(port)) {
@@ -110,6 +112,7 @@ export class ProxyProcess {
             if (this.stopping || this.endpoint.status !== "starting") throw Error("线路启动已取消。");
             // Provider cache files inherit the private directory; tighten existing ones too.
             try { if (process.platform !== "win32") chmodSync(source, 0o600); } catch { /* Remote subscription may not yet be downloaded. */ }
+            this.guardian.promoteToService();
             Object.assign(this.endpoint, { port, token, status: "running" }); this.changed(); return;
           }
           await delay(100, undefined, { signal });
@@ -129,16 +132,14 @@ export class ProxyProcess {
     this.endpoint.status = "stopped"; delete this.endpoint.port; delete this.endpoint.token;
     this.changed();
     this.stopped = (async () => {
-      const child = this.child;
-      if (child && child.exitCode === null && child.signalCode === null) {
-        // The supervisor owns core cleanup. Keep IPC open until it exits.
-        if (child.connected) child.send({ type: "stop" }, error => { if (error) child.kill("SIGTERM"); });
-        else child.kill("SIGTERM");
-        const force = setTimeout(() => child.kill("SIGKILL"), 5000);
-        try { await this.closed; } finally { clearTimeout(force); }
-      }
+      if (this.validationUnconfirmed) throw new MaintenanceError("stop-unconfirmed", "内核校验进程退出未确认，运行目录及程序文件已保留。");
+      await this.guardian?.stop();
       rmSync(this.directory, { recursive: true, force: true });
-    })();
+    })().catch(error => {
+      this.stopped = undefined;
+      this.endpoint.status = "error"; this.endpoint.message = error instanceof Error ? error.message : "无法确认内核停止，文件已保留。";
+      this.changed(); throw error;
+    });
     return this.stopped;
   }
 }

@@ -93,7 +93,7 @@ function* resources(cwd: string, agentDir: string, witnesses?: Map<string, Witne
   const root = dirname(agentDir);
   yield* visit(openCliConfigPath(root));
   const opencli = readOpenCliConfig(root);
-  if (opencli) {
+  if (opencli && !opencli.detached) {
     yield* visit(join(opencli.packageRoot, "package.json"));
     for (const name of openCliSkillNames) yield* visit(join(opencli.packageRoot, "skills", name, "SKILL.md"));
   }

@@ -3,12 +3,13 @@ import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "./temporary.js";
-import { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { previewEnvironment, runtimeEnvironment } from "../src/server/session-environment.js";
 import { environmentResourceOptions } from "../src/server/environment-resources.js";
+import { createInstalledResourceLoader } from "../src/server/installed-resource-loader.js";
 import { discoverCapabilities, capabilityRuntime } from "../src/server/capability-resources.js";
 import { taskTools } from "../src/server/task-tools.js";
-import { memoryQueryTool } from "../src/server/memory-tool.js";
+import { memoryQueryTool, memoryDetailTool } from "../src/server/memory-tool.js";
 import { ensureTopicSnapshot } from "../src/server/memory-topics.js";
 import { Agents } from "../src/server/agents.js";
 import { Store } from "../src/server/storage.js";
@@ -48,14 +49,15 @@ test("session-free preview uses native prompt generation and identical execution
       assert.equal(preview.memory?.topics, f.memoryTopics.text);
       const settingsManager = SettingsManager.create(f.cwd, f.pi, { projectTrusted: true });
       settingsManager.applyOverrides({ cacheWarming: "off" });
-      const loader = new DefaultResourceLoader({ cwd: f.cwd, agentDir: f.pi, settingsManager,
-        ...environmentResourceOptions(input, () => ({})), noExtensions: true, noPromptTemplates: true, noThemes: true });
+      const loader = createInstalledResourceLoader({ cwd: f.cwd, agentDir: f.pi, settingsManager,
+        ...environmentResourceOptions(input, () => ({})), noExtensions: true, noPromptTemplates: true, noThemes: true },
+        () => assert.fail("fixture resources must already be installed"));
       await loader.reload();
       const { session } = await createAgentSession({ cwd: f.cwd, agentDir: f.pi, settingsManager, resourceLoader: loader,
-        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute)],
+        sessionManager: SessionManager.inMemory(f.cwd), customTools: [...taskTools(noExecute), memoryQueryTool(noExecute), memoryDetailTool(() => input.memoryPath)],
         ...(process.platform === "win32" && !settingsManager.getSettings().defaultTools ? { tools: ["-bash", "+powershell"] } : {}) });
       try {
-        session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query"])]);
+        session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskTools(noExecute).map(tool => tool.name), "memory_query", "memory_detail"])]);
         ensureTopicSnapshot(session.sessionManager, f.memoryTopics);
         const actual = runtimeEnvironment(session, input);
         assert.equal(preview.systemPrompt, actual.systemPrompt, "preview and SDK runtime prompts are byte-identical for static resources");

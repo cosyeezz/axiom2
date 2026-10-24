@@ -1,3 +1,4 @@
+import { Icons } from "../../src/client/components.js";
 import { createRoot } from "react-dom/client";
 import { DisplaySettings } from "../../src/client/settings/DisplaySettings.js";
 import { initializeDisplaySettings } from "../../src/client/display-settings.js";
@@ -8,4 +9,4 @@ import "../../src/client/styles/theme.css";
 
 initializeTheme();
 initializeDisplaySettings();
-createRoot(document.getElementById("root")!).render(<main className="display-app display-page"><DisplaySettings /></main>);
+createRoot(document.getElementById("root")!).render(<><Icons /><main className="display-app display-page"><DisplaySettings /></main></>);

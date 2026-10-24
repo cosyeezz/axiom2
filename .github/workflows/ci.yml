@@ -12,6 +12,30 @@ concurrency:
   group: axiom-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.run_attempt == 1 && 'latest' || github.run_id }}
   cancel-in-progress: true
 jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/build-native.mjs
+      - name: Configure namespace test environment
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - run: node --test native/owner.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-ownership-${{ runner.arch }}
+          path: bin/native/
+          if-no-files-found: error
   validate:
     strategy:
       fail-fast: false
@@ -48,6 +72,13 @@ jobs:
           if (-not $binary) { throw 'fd.exe missing' }
           & $binary.FullName --version
           $binary.DirectoryName >> $env:GITHUB_PATH
+      - name: Configure Linux namespace test environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - run: npm ci
       - run: node --test scripts/auto-release.test.mjs
       - run: npm test
@@ -70,7 +101,7 @@ jobs:
       - run: npm ci
       - run: npm run check:package
   publish:
-    needs: [validate, package]
+    needs: [native, validate, package]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'cosyeezz/axiom2'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -93,6 +124,16 @@ jobs:
       - name: Build versioned release snapshot
         if: steps.release.outputs.publish == 'true'
         run: npm ci
+      - name: Include both Linux ownership helpers
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-ownership-*
+          path: bin/native/
+          merge-multiple: true
+      - name: Restore native executable permissions
+        if: steps.release.outputs.publish == 'true'
+        run: chmod 755 bin/native/linux-*/axiom-owner
       - name: Validate and retain the exact release package
         if: steps.release.outputs.publish == 'true'
         env:

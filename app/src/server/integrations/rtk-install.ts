@@ -1,3 +1,5 @@
+import { MaintenanceError } from "../../shared/maintenance.js";
+import { maintainedFetch, maintenancePhase } from "../maintenance.js";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,14 +17,14 @@ function officialUrl(raw: string) {
 }
 export const downloadRtk: RtkDownload = async (initial, signal, limit) => {
   let url = initial;
-  const timed = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
+  const timed = signal;
   for (let hop = 0; hop < 6; hop++) {
     officialUrl(url);
-    const response = await fetch(url, { signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-RTK", Accept: new URL(url).hostname === "api.github.com" ? "application/vnd.github+json" : "application/octet-stream" } });
+    const response = await maintainedFetch(url, { signal: timed, redirect: "manual", headers: { "User-Agent": "Axiom-RTK", Accept: new URL(url).hostname === "api.github.com" ? "application/vnd.github+json" : "application/octet-stream" } });
     if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
       await response.body?.cancel(); url = new URL(response.headers.get("location")!, url).href; continue;
     }
-    if (!response.ok) { await response.body?.cancel(); throw Error(`RTK 官方下载服务返回 HTTP ${response.status}，请稍后重试。`); }
+    if (!response.ok) { await response.body?.cancel(); throw new MaintenanceError("http", `RTK 官方下载服务返回 HTTP ${response.status}，请稍后重试。`); }
     if (Number(response.headers.get("content-length")) > limit) { await response.body?.cancel(); throw Error("RTK 下载文件超过限制。"); }
     const reader = response.body?.getReader(); if (!reader) throw Error("RTK 下载未返回内容。");
     const chunks: Buffer[] = []; let size = 0;
@@ -64,7 +66,9 @@ export async function installRtk(root: string, release: RtkRelease, signal: Abor
     notify(`正在下载 RTK OSS ${release.version}…`);
     const archive = await download(release.url, signal, 40 * 1024 * 1024);
     const checksums = (await download(release.checksums, signal, 256 * 1024)).toString("utf8");
+    maintenancePhase("verifying");
     signal.throwIfAborted(); verifyRtkArchive(archive, checksums, release.asset);
+    maintenancePhase("installing");
     notify("校验通过，正在解包和自检…");
     const packed = join(dest, release.asset); writeFileSync(packed, archive, { flag: "wx", mode: 0o600 });
     const tar = process.platform === "win32" ? join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "/usr/bin/tar";
@@ -78,8 +82,12 @@ export async function installRtk(root: string, release: RtkRelease, signal: Abor
       writeFileSync(join(dest, member), data, { flag: "wx", mode: member === binary ? 0o700 : 0o600 });
     }
     chmodSync(join(dest, binary), 0o700); rmSync(packed);
+    maintenancePhase("validating");
     await diagnoseRtk(root, join(dest, binary), release.version, signal, run);
     signal.throwIfAborted();
     return { directory, version: release.version };
-  } catch (error) { rmSync(dest, { recursive: true, force: true }); throw error; }
+  } catch (error) {
+    if (!(error instanceof MaintenanceError && error.code === "stop-unconfirmed")) rmSync(dest, { recursive: true, force: true });
+    throw error;
+  }
 }

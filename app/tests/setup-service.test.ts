@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, access, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -25,7 +25,7 @@ for (const problem of ['none', 'size', 'hash', 'manifest', 'http'] as const) {
       assert.equal(url, base + 'axiom2.tgz');
       return problem === 'http' ? new Response('blocked', { status: 403 }) : new Response(bytes);
     };
-    const run = () => installService({ root, fetcher, runner: async (args: string[]) => { calls.push(args); return JSON.stringify({ state: 'running' }); } });
+    const run = () => installService({ root, fetcher, runner: async (args: string[]) => { calls.push(args); if (args.includes('install')) { const packageRoot = join(root, 'service/node_modules/@cosyeezz/axiom2'); await mkdir(packageRoot, { recursive: true }); await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ name: '@cosyeezz/axiom2', version: '0.4.99' })); } return JSON.stringify({ state: 'running' }); } });
     if (problem === 'none') { await run(); assert.equal(calls.length, 2); assert.deepEqual(await readFile(join(root, 'setup/axiom2.tgz')), bytes); }
     else {
       await assert.rejects(run, problem === 'size' ? /大小不符.*预期.*实际/ : problem === 'hash' ? /SHA-256 不符.*预期.*实际/ : problem === 'manifest' ? /校验清单无效/ : /HTTP 403/);

@@ -23,7 +23,7 @@
     "app/package.json"
   ],
   "scripts": {
-    "build": "npm --prefix app run build",
+    "build": "node scripts/build-bootstrap.mjs && node scripts/build-native.mjs && npm --prefix app run build",
     "prepare": "npm run build",
     "test": "npm --prefix app test",
     "check:package": "node scripts/check-package.mjs"

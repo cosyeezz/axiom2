@@ -3,8 +3,9 @@ import { test, type TestContext } from "node:test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 const { createUpdater } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
-async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean; noBackend?: boolean; noNpm?: boolean } = {}) {
+async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean; noBackend?: boolean; noNpm?: boolean; onCommand?: (args: string[], settings: any) => Promise<void> } = {}) {
   const root = await mkdtemp(join(tmpdir(), "axiom-pi-update-")); t.after(() => rm(root, { recursive: true, force: true }));
   const node = join(root, "node/bin/node"), npm = options.linkedNpm ? join(root, "node/share/npm/bin/npm-cli.js") : join(dirname(node), "node_modules/npm/bin/npm-cli.js");
   const cli = join(root, "service/bin/axiom2.mjs"), prefix = join(root, "global"), modules = join(prefix, process.platform === "win32" ? "node_modules" : "lib/node_modules");
@@ -25,7 +26,8 @@ async function fixture(t: TestContext, options: { missingEntry?: boolean; missin
   };
   await installVersion("0.85.1");
   const installs: string[][] = []; let fail = false;
-  const command = async (_node: string, args: string[]) => {
+  const command = async (_node: string, args: string[], settings: any) => {
+    await options.onCommand?.(args, settings);
     assert.equal(_node, node);
     if (args[1] === "--version") {
       assert.equal(args[0], entry);
@@ -146,4 +148,39 @@ test("changing global modules symlink invalidates pi upgrade confirmation", asyn
   await symlink(a, f.modules, process.platform === "win32" ? "junction" : "dir");
   const state = await f.updater.piCheck(); await rm(f.modules); await symlink(b, f.modules, process.platform === "win32" ? "junction" : "dir");
   const result = await f.updater.runJob("pi", state.pi.release.token); assert.equal(result.job.phase, "error"); assert.equal(f.installs.length, 0);
+});
+
+for (const stage of ["root", "--version"]) test(`pi ${stage} probe follows live budgets and cancellation without starting more commands`, { timeout: 10000 }, async t => {
+  let enabled = false, captured: any, enter!: () => void;
+  const entered = new Promise<void>(resolve => { enter = resolve; });
+  const f = await fixture(t, { onCommand: async (args, options) => {
+    if (!enabled || args[1] !== stage) return;
+    assert.ok(options.signal, "probe must share the maintenance cancellation signal");
+    options.signal.throwIfAborted();
+    captured = options; enter();
+    await new Promise<void>((_resolve, reject) => options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+  } });
+  const state = await f.updater.piCheck(); enabled = true;
+  const work = f.updater.runJob("pi", state.pi.release.token);
+  await entered;
+  const running = await f.updater.status(), id = running.job.task.id;
+  try {
+    assert.equal(running.job.task.capabilities.cancel, true);
+    const initial = captured.getTimeout();
+    assert.ok(initial > 20000, "the old fixed 20 second limit must not govern a maintained probe");
+    const budgets = { ...running.job.task.budgets, totalMs: running.job.task.budgets.totalMs + 5000 };
+    await f.updater.maintenanceControl("extend", { id, budgets });
+    const end = Date.now() + 3000;
+    while (captured.getTimeout() === initial && Date.now() < end) await delay(20);
+    assert.equal(captured.getTimeout(), initial + 5000, "extension changes the running command limit without resetting elapsed time");
+    await f.updater.maintenanceControl("cancel", { id });
+    const result = await work;
+    assert.equal(result.job.task.status, "cancelled");
+    assert.equal(result.job.task.error.code, "cancelled");
+    assert.equal(f.installs.length, stage === "root" ? 0 : 1);
+    assert.equal(result.pi.release.token, null, "interrupted inspection invalidates the previous confirmation");
+    await assert.rejects(access(join(dirname(dirname(f.pkgPath)), ".axiom-pi-update.lock")));
+  } finally {
+    await f.updater.maintenanceControl("cancel", { id }).catch(() => {}); await work;
+  }
 });

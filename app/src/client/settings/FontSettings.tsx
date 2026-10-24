@@ -1,7 +1,11 @@
+import { Icon } from "../Icon.js";
+import { maintenanceActive, maintenanceStatusLabels } from "../../shared/maintenance.js";
+import { browserMaintenanceCommand, useBrowserMaintenance } from "../maintenance/browser-maintenance.js";
+import { BudgetEditor, MaintenanceTaskView } from "../maintenance/MaintenanceView.js";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Select } from "../Select.js";
 import { fontOptions, getDisplaySettings, setDisplaySettings, subscribeDisplaySettings } from "../display-settings.js";
-import { downloadOnlineFont, getFontLibrary, importFont, releaseFontPreviews, reloadFontLibrary, removeFont, saveFont, subscribeFontLibrary, type OnlineFont, type SavedFont } from "../font-library.js";
+import { downloadOnlineFont, getFontLibrary, importFont, releaseFontPreviews, reloadFontLibrary, removeFont, subscribeFontLibrary, type OnlineFont, type SavedFont } from "../font-library.js";
 import { FontRow } from "./FontRow.js";
 import { FontSpecimen } from "./FontSpecimen.js";
 import catalogUrl from "../font-catalog.json?url";
@@ -14,6 +18,7 @@ const defaultSample = "让阅读更舒适，灵感从这里开始。\nThe quick 
 const emptyCatalog: OnlineFont[] = [];
 
 export function FontSettings() {
+  const maintenance = useBrowserMaintenance(), fontTask = maintenance.tasks.at(-1);
   const settings = useSyncExternalStore(subscribeDisplaySettings, getDisplaySettings);
   const library = useSyncExternalStore(subscribeFontLibrary, getFontLibrary);
   const [open, setOpen] = useState(false);
@@ -44,8 +49,9 @@ export function FontSettings() {
   const input = useRef<HTMLInputElement>(null), dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null), detailHeading = useRef<HTMLHeadingElement>(null);
   const controller = useRef<AbortController | null>(null);
+  const persistent = useRef(false);
   const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); releaseFontPreviews(); }; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; if (!persistent.current) controller.current?.abort(); releaseFontPreviews(); }; }, []);
   useEffect(() => {
     if (!open) return;
     const element = dialog.current!;
@@ -79,15 +85,16 @@ export function FontSettings() {
   useEffect(() => {
     if (picked && "data" in picked && !library.loading && !saved) { setPicked(null); setDetail(false); requestAnimationFrame(() => dialog.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true })); }
   }, [picked, saved, library.loading]);
-  const run = async (label: string, action: (signal: AbortSignal) => Promise<void>) => {
+  const run = async (label: string, action: (signal: AbortSignal) => Promise<void>, persist = false) => {
     if (controller.current) return;
+    persistent.current = persist;
     const next = new AbortController(), startedInDialog = !!dialog.current?.open; controller.current = next;
     setBusy(label); setError(""); setNotice("");
     try { await action(next.signal); }
     catch (error) { if (alive.current && !(next.signal.aborted && startedInDialog && !dialog.current?.open)) setError(error instanceof Error ? error.message : "字体操作失败，请重试。"); }
-    finally { if (alive.current) setBusy(""); controller.current = null; if (!dialog.current?.open) releaseFontPreviews(); }
+    finally { if (alive.current) setBusy(""); controller.current = null; persistent.current = false; if (!dialog.current?.open) releaseFontPreviews(); }
   };
-  const close = () => { controller.current?.abort(); setOpen(false); setPicked(null); setDetail(false); setError(""); setNotice(""); releaseFontPreviews(); };
+  const close = () => { if (!persistent.current) controller.current?.abort(); setOpen(false); setPicked(null); setDetail(false); setError(""); setNotice(""); releaseFontPreviews(); };
   const show = () => { setOpen(true); setDetail(false); setError(""); setNotice(""); };
   const select = (font: OnlineFont | SavedFont) => {
     if (controller.current) return;
@@ -101,7 +108,12 @@ export function FontSettings() {
   const status = <>
     {open && !catalog && !catalogError && <p className="font-status" role="status">正在加载字体目录…</p>}
     {open && catalogError && <p className="display-theme-error" role="alert">{catalogError}<button type="button" className="display-reset" onClick={() => setCatalogAttempt(value => value + 1)}>重试字体目录</button></p>}
-    {(busy || notice) && <p className="font-status" role="status">{busy || notice}{busy && <button type="button" className="display-reset" onClick={() => controller.current?.abort()}>取消</button>}</p>}
+    {(busy || notice) && <p className="font-status" role="status">{busy || notice}{busy && !persistent.current && <button type="button" className="display-reset" onClick={() => controller.current?.abort()}>取消</button>}</p>}
+    {fontTask && (maintenanceActive(fontTask)
+      ? <MaintenanceTaskView task={fontTask} compact showError={!error && !library.error} connected onCancel={persistent.current ? () => browserMaintenanceCommand("cancel", fontTask.id) : undefined} />
+      : <details className="maintenance-details font-maintenance-settings"><summary><Icon name="history" /><span>上次字体任务 · {maintenanceStatusLabels[fontTask.status]}</span><Icon name="chevron-down" /></summary><MaintenanceTaskView task={fontTask} compact showError={!error && !library.error} connected /></details>)}
+    <details className="maintenance-details font-maintenance-settings"><summary><Icon name="sliders-horizontal" /><span>字体下载设置</span><Icon name="chevron-down" /></summary><BudgetEditor value={fontTask && maintenanceActive(fontTask) ? fontTask.budgets : maintenance.budgets} running={!!fontTask && maintenanceActive(fontTask)} onSave={budgets => fontTask && maintenanceActive(fontTask) ? browserMaintenanceCommand("extend", fontTask.id, budgets) : browserMaintenanceCommand("defaults", undefined, budgets)} /></details>
+    {maintenance.error && <p role="alert">{maintenance.error}</p>}
     {(error || library.error) && <p className="display-theme-error" role="alert">{error || library.error}</p>}
     {library.error && <button type="button" className="display-reset" disabled={!!busy || library.loading} onClick={() => void run("正在重新读取字体…", async () => { await reloadFontLibrary(); })}>重新读取字体</button>}
   </>;
@@ -155,11 +167,9 @@ export function FontSettings() {
               <div className="font-detail-actions">
                 {saved ? <><button type="button" className="display-reset" disabled={!!busy} aria-label={`移除 ${picked.name}`} onClick={() => void run("正在移除字体…", async () => { await removeFont(saved.id); setNotice(`已移除 ${saved.name}`); })}>移除</button><button type="button" className="btn btn-primary" disabled={!!busy || active} onClick={apply}>{active ? "使用中" : "使用字体"}</button></>
                   : online && <button type="button" className="btn btn-primary" disabled={!!busy || library.loading} onClick={() => void run(`正在下载 ${online.name}…`, async signal => {
-                    const candidate = await downloadOnlineFont(online, signal, bytes => setBusy(`正在下载 · ${sizeLabel(bytes)}`));
-                    if (signal.aborted) return;
-                    setBusy("正在保存字体…"); await saveFont(candidate, signal);
-                    if (!signal.aborted) setNotice(`已下载 ${online.name}，尚未使用。`);
-                  })}>下载字体{online.bytes ? ` · ${sizeLabel(online.bytes)}` : ""}</button>}
+                    await downloadOnlineFont(online);
+                    if (alive.current && dialog.current?.open) { setNotice(`已下载 ${online.name}，尚未使用。`); }
+                  }, true)}>下载字体{online.bytes ? ` · ${sizeLabel(online.bytes)}` : ""}</button>}
               </div>
             </div>
           </> : <div className="font-browser-welcome"><span className="font-welcome-glyph" aria-hidden="true">Aa 字</span><h3>找到适合你的字体</h3><p>搜索名称，或按语言和风格筛选。<br />选择一款字体，即可在这里试阅。</p><p className="font-help">预览不改变当前字体。下载与使用分别操作。</p></div>}

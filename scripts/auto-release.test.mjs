@@ -5,7 +5,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { assertPackageReceipt, assertReleaseAssets, assertVersions, compareVersions, existingReleaseStatus, nextVersion, syncVersions, verifyPublicRelease, verifyTag, verifyWithRetry, versionFiles } from './auto-release.mjs';
+import { gzipSync } from 'node:zlib';
+import { assertNativeArchive } from './release-native.mjs';
+import { assertReleaseIdentity, assertNativeReceipts, nativeReleaseNames, assertPackageReceipt, assertReleaseAssets, assertVersions, compareVersions, existingReleaseStatus, nextVersion, syncVersions, verifyPublicRelease, verifyTag, verifyWithRetry, versionFiles } from './auto-release.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const source = 'a'.repeat(40), commit = 'b'.repeat(40);
@@ -84,6 +86,14 @@ test('reruns resume absent or draft releases and leave published releases with a
   assert.throws(() => existingReleaseStatus({ ...release, prerelease: true }, source, commit));
 });
 
+test('release rereads retain tag, provenance, commit and expected visibility', () => {
+  const release = { id: 42, tag_name: 'v0.4.2', body: `Axiom-Source-Commit: ${source}`, target_commitish: commit, draft: true, prerelease: false };
+  assertReleaseIdentity(structuredClone(release), release, source, commit, 'draft');
+  for (const change of [{ id: 43 }, { tag_name: 'v0.4.3' }, { body: '' }, { target_commitish: source }, { draft: false }, { prerelease: true }])
+    assert.throws(() => assertReleaseIdentity({ ...release, ...change }, release, source, commit, 'draft'));
+  assertReleaseIdentity({ ...release, draft: false }, release, source, commit, 'published');
+});
+
 test('upload requires the exact tarball and commit exercised by package validation', () => {
   const bytes = Buffer.from('validated release archive');
   const state = { version: '0.4.2', commit };
@@ -93,6 +103,18 @@ test('upload requires the exact tarball and commit exercised by package validati
   assert.throws(() => assertPackageReceipt({ ...receipt, commit: source }, state, bytes));
   assert.throws(() => assertPackageReceipt({ ...receipt, version: '0.4.1' }, state, bytes));
   assert.throws(() => assertPackageReceipt({ ...receipt, size: 0, sha256: digest(Buffer.alloc(0)) }, state, Buffer.alloc(0)));
+});
+
+test('standalone native assets must match both validated tarball receipts and ELF architecture', () => {
+  const files = Object.fromEntries(nativeReleaseNames.map((name, index) => {
+    const bytes = Buffer.alloc(64); Buffer.from('7f454c460201', 'hex').copy(bytes); bytes.writeUInt16LE(index === 0 ? 62 : 183, 18); return [name, bytes];
+  }));
+  const receipt = { native: Object.fromEntries(Object.entries(files).map(([name, bytes]) => [name, { size: bytes.length, sha256: digest(bytes) }])) };
+  assertNativeReceipts(receipt, files);
+  assert.throws(() => assertNativeReceipts({}, files), /unvalidated/);
+  assert.throws(() => assertNativeReceipts(receipt, { ...files, [nativeReleaseNames[1]]: files[nativeReleaseNames[0]] }), /architecture/);
+  const changed = Buffer.from(files[nativeReleaseNames[0]]); changed[63] = 1;
+  assert.throws(() => assertNativeReceipts(receipt, { ...files, [nativeReleaseNames[0]]: changed }), /differs/);
 });
 
 test('release propagation retries reread metadata, preserve the creation identity and stop on persistent failure', async () => {
@@ -117,9 +139,75 @@ test('release propagation retries reread metadata, preserve the creation identit
   assert.equal(failedReads, 6);
 });
 
+function tarArchive(entries) {
+  const blocks = [];
+  for (const { name, bytes, type = '0', mode = 0o644, magic = 'ustar\0', version = '00' } of entries) {
+    const header = Buffer.alloc(512);
+    header.write(name, 0, 100, 'utf8');
+    header.write(`${mode.toString(8).padStart(7, '0')}\0`, 100, 8);
+    header.write(`${bytes.length.toString(8).padStart(11, '0')}\0`, 124, 12);
+    header.fill(32, 148, 156); header.write(type, 156, 1); header.write(magic, 257, 6); header.write(version, 263, 2);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8);
+    blocks.push(header, bytes, Buffer.alloc((512 - bytes.length % 512) % 512));
+  }
+  return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
+}
+function releaseFixture() {
+  const entries = [{ name: 'package/package.json', bytes: Buffer.from(JSON.stringify({ name: '@cosyeezz/axiom2', version: '0.4.2' })) }];
+  const files = {};
+  for (const [index, arch] of ['x64', 'arm64'].entries()) {
+    const bytes = Buffer.alloc(64); Buffer.from('7f454c460201', 'hex').copy(bytes); bytes.writeUInt16LE(index === 0 ? 62 : 183, 18);
+    const path = `package/bin/native/linux-${arch}`;
+    files[`axiom-owner-linux-${arch}`] = bytes;
+    entries.push({ name: `${path}/axiom-owner`, bytes, mode: 0o755 }, { name: `${path}/manifest.json`, bytes: Buffer.from(JSON.stringify({ protocol: 1, arch, sha256: digest(bytes) })) });
+  }
+  files['axiom2.tgz'] = tarArchive(entries);
+  return { files, entries };
+}
+
+test('published native assets are bound to regular executable tarball entries and manifests', () => {
+  const { files, entries } = releaseFixture();
+  assertNativeArchive(files['axiom2.tgz'], files, '0.4.2');
+  const changed = Buffer.from(files[nativeReleaseNames[0]]); changed[63] = 1;
+  assert.throws(() => assertNativeArchive(files['axiom2.tgz'], { ...files, [nativeReleaseNames[0]]: changed }, '0.4.2'), /differs from tarball/);
+  assert.throws(() => assertNativeArchive(files['axiom2.tgz'], files, '0.4.3'));
+  assert.throws(() => assertNativeArchive(tarArchive(entries.slice(0, -1)), files, '0.4.2'), /Missing tar entry/);
+  const helper = entries[1];
+  assert.throws(() => assertNativeArchive(tarArchive([...entries, { ...helper, name: helper.name.replace('/bin/', '//bin/./') }]), files, '0.4.2'), /duplicate/);
+  assert.throws(() => assertNativeArchive(tarArchive(entries.map(item => item === helper ? { ...item, type: '2' } : item)), files, '0.4.2'), /Unsupported tar entry type|regular file/);
+  assert.throws(() => assertNativeArchive(tarArchive(entries.map(item => item === helper ? { ...item, mode: 0o644 } : item)), files, '0.4.2'), /executable mode/);
+  assert.throws(() => assertNativeArchive(tarArchive([...entries, { name: 'package/bin', type: '2', bytes: Buffer.alloc(0) }]), files, '0.4.2'), /Unsupported tar entry type|directory ancestor/);
+  const manifest = entries[2];
+  assert.throws(() => assertNativeArchive(tarArchive(entries.map(item => item === manifest ? { ...item, bytes: Buffer.from('{"protocol":1,"arch":"x64","sha256":"wrong"}') } : item)), files, '0.4.2'));
+  // npm tarballs may carry a PAX path override: verify the effective path.
+  const field = `path=${helper.name}\n`;
+  let length = Buffer.byteLength(field) + 2;
+  while (length !== Buffer.byteLength(`${length} ${field}`)) length = Buffer.byteLength(`${length} ${field}`);
+  const pax = { name: 'PaxHeader', type: 'x', bytes: Buffer.from(`${length} ${field}`) };
+  assertNativeArchive(tarArchive([entries[0], pax, { ...helper, name: 'placeholder' }, ...entries.slice(2)]), files, '0.4.2');
+  assert.throws(() => assertNativeArchive(tarArchive([...entries, { ...pax, type: 'X' }, { name: 'placeholder', bytes: Buffer.from('BAD') }]), files, '0.4.2'), /Unsupported tar entry type/);
+  const long = { name: 'LongLink', type: 'L', bytes: Buffer.from('package/elsewhere\0') };
+  for (const metadata of [[pax, long], [long, pax]])
+    assert.throws(() => assertNativeArchive(tarArchive([entries[0], ...metadata, { ...helper, name: 'placeholder' }, ...entries.slice(2)]), files, '0.4.2'), /Conflicting tar path/);
+  assert.throws(() => assertNativeArchive(tarArchive(entries.map(item => item === helper ? { ...item, name: item.name + '/' } : item)), files, '0.4.2'), /directory path/);
+  assert.throws(() => assertNativeArchive(tarArchive([...entries, { name: 'package/extra/', type: '5', bytes: Buffer.alloc(512) }]), files, '0.4.2'), /directory must have no data/);
+  assert.throws(() => assertNativeArchive(tarArchive(entries.map(item => item === helper ? { ...item, magic: '', version: '' } : item)), files, '0.4.2'), /header format/);
+  const nulField = `path=${helper.name}\0suffix\n`;
+  let nulLength = Buffer.byteLength(nulField) + 2;
+  while (nulLength !== Buffer.byteLength(`${nulLength} ${nulField}`)) nulLength = Buffer.byteLength(`${nulLength} ${nulField}`);
+  assert.throws(() => assertNativeArchive(tarArchive([...entries, { ...pax, bytes: Buffer.from(`${nulLength} ${nulField}`) }, { name: 'placeholder', bytes: Buffer.from('BAD') }]), files, '0.4.2'), /Unsafe PAX control character/);
+  for (const [key, value] of [['path', ''], ['path', 'package/elsewhere\n'], ['uname', `ignored\n120 path=${helper.name}\n`]]) {
+    const field = `${key}=${value}\n`;
+    let length = Buffer.byteLength(field) + 2;
+    while (length !== Buffer.byteLength(`${length} ${field}`)) length = Buffer.byteLength(`${length} ${field}`);
+    assert.throws(() => assertNativeArchive(tarArchive([...entries, { ...pax, bytes: Buffer.from(`${length} ${field}`) }, { ...helper, bytes: Buffer.from('BAD') }]), files, '0.4.2'), /Unsafe PAX|Empty PAX/);
+  }
+});
+
 test('published-release retries repeat public verification and accept added desktop checksum entries', async () => {
-  const files = { 'axiom2.tgz': Buffer.from('validated backend') };
-  files.SHA256SUMS = Buffer.from(`${digest(files['axiom2.tgz'])}  axiom2.tgz\n${'c'.repeat(64)}  Axiom2.dmg\n`);
+  const { files } = releaseFixture();
+  files.SHA256SUMS = Buffer.from(Object.entries(files).map(([name, bytes]) => `${digest(bytes)}  ${name}\n`).join('') + `${'c'.repeat(64)}  Axiom2.dmg\n`);
   const release = { tag_name: 'v0.4.2', draft: false, prerelease: false, assets: Object.entries(files).map(([name, bytes]) => ({ name, state: 'uploaded', size: bytes.length, digest: `sha256:${digest(bytes)}`, browser_download_url: `https://github.com/cosyeezz/axiom2/releases/download/v0.4.2/${name}` })) };
   await assert.rejects(verifyPublicRelease(release, async () => new Response('temporarily unavailable', { status: 503 })), /public download failed/);
   const fetched = [];
@@ -128,7 +216,13 @@ test('published-release retries repeat public verification and accept added desk
     fetched.push(name);
     return new Response(files[name]);
   });
-  assert.deepEqual(fetched, ['axiom2.tgz', 'SHA256SUMS']);
+  assert.deepEqual(fetched, ['axiom2.tgz', 'SHA256SUMS', ...nativeReleaseNames]);
+  const substituted = Object.fromEntries(Object.entries(files).map(([name, bytes]) => [name, Buffer.from(bytes)]));
+  substituted[nativeReleaseNames[0]][63] = 1;
+  substituted.SHA256SUMS = Buffer.from(['axiom2.tgz', ...nativeReleaseNames].map(name => `${digest(substituted[name])}  ${name}\n`).join(''));
+  const altered = structuredClone(release);
+  for (const asset of altered.assets) { asset.size = substituted[asset.name].length; asset.digest = `sha256:${digest(substituted[asset.name])}`; }
+  await assert.rejects(verifyPublicRelease(altered, async url => new Response(substituted[url.split('/').at(-1)])), /differs from tarball/);
   await assert.rejects(verifyPublicRelease({ ...release, assets: [] }, async () => { throw Error('must validate metadata first'); }), /Expected exactly one/);
   await assert.rejects(verifyPublicRelease(release, async () => new Response('corrupted')), /download exceeds|strictly equal/);
 });

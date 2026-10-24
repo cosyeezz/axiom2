@@ -1,10 +1,12 @@
+import { Icon } from "../Icon.js";
+import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { ReaTool } from "./ReaTool.js";
 import { emptyReaState } from "../../shared/rea.js";
 import { ModelProxyTool } from "./ModelProxyTool.js";
 import { emptyModelProxyState } from "../../shared/model-proxy.js";
 import { RtkTool } from "./RtkTool.js";
 import { emptyRtkState } from "../../shared/rtk.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LocalPath } from "../LocalPath.js";
 import { SettingsSidebar } from "../components.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
@@ -32,11 +34,16 @@ export default function BuiltinTools() {
   const connection = useConnectionState();
   const connectionText = useConnection();
   const [draft, setDraft] = useState<{ revision: string; settings: OpenCliSettings }>();
+  const checkButton = useRef<HTMLButtonElement>(null);
+  const focusAfterReconcile = useRef(false);
+  const [uninstall, setUninstall] = useState<{ revision: string }>();
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; revision?: string }>();
   const settings = draft?.settings ?? state.settings;
-  const busy = sending || !!state.job?.running || !connection.connected;
-  const queued = !!state.job?.running && !!state.job.queued;
+  const busy = sending || !!state.job?.running || !!state.pendingOperation || !connection.connected;
+  useEffect(() => {
+    if (!busy && focusAfterReconcile.current) { focusAfterReconcile.current = false; checkButton.current?.focus(); }
+  }, [busy]);
   const update = hasUpdate(state.latest, state.version);
   const conflict = !!draft && draft.revision !== state.revision;
   const installStatus = state.version ? `v${state.version}` : state.installationError ? "安装不完整" : state.ready ? "未安装" : state.job?.error ? "状态未知" : "等待检查";
@@ -45,7 +52,7 @@ export default function BuiltinTools() {
   useEffect(() => {
     if (connection.connected) void command("opencli.get").then((value) => {
       // Preserve failed/interrupted jobs when reconnecting; explicit checks can replace them.
-      if (!(value as OpenCliState).job?.error) return command("opencli.refresh");
+      if (!(value as OpenCliState).job?.error && !(value as OpenCliState).pendingOperation) return command("opencli.refresh");
     }).catch((error: Error) => setFeedback({ text: error.message, error: true }));
   }, [connection.connected, connection.generation]);
   const change = (patch: Partial<OpenCliSettings>) => {
@@ -56,6 +63,10 @@ export default function BuiltinTools() {
     setSending(true); setFeedback(undefined);
     try {
       const result = await command(op, params) as OpenCliState;
+      if (op === "opencli.reconcile") {
+        setFeedback({ text: "已确认原操作停止；文件与配置已保留，请检查当前安装。" });
+        focusAfterReconcile.current = true;
+      }
       if (op === "opencli.openExtension") setFeedback({ text: params.target === "download" ? "已请求系统浏览器打开官方压缩包下载页。" : "已请求系统浏览器打开 Chrome 应用商店。" });
       if (op === "opencli.save") {
         setDraft(undefined);
@@ -87,22 +98,27 @@ export default function BuiltinTools() {
               {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{notice?.text || state.job?.message || (connection.connected ? connectionText : `${connectionText}；重连后读取当前操作进度。`)}</p>}
               {!connection.connected && (error || notice?.text || state.job?.message) && <p>{connectionText}；重连后读取当前操作进度。</p>}
             </div>
-            <section className="section tools-section" aria-labelledby="install-heading">
-              <div className="section-heading"><h3 id="install-heading">安装与更新</h3><p>官方 npm 包 · @jackwener/opencli</p></div>
+            <BackendMaintenance resource="opencli" label="OpenCLI" showError={!error} location={`所连接后台 · 应用级 · ${state.managed ? "Axiom 独立安装" : state.version ? "外部安装接入" : "独立安装目录"}`}>
               <dl className="tools-facts">
                 <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : " · npm 待检查"}</dd></div>
                 <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : installStatus}</dd></div>
                 <div><dt>最新版本</dt><dd>{state.latest ? <><code>v{state.latest}</code>{update && <span className="tag">有更新</span>}</> : state.job?.kind === "check" && state.job.error ? "检查失败" : "尚未检查"}</dd></div>
               </dl>
+              {state.supportError && <p className="field-help">{state.supportError}</p>}
+              {state.pendingOperation && !state.job?.running && <div className="tools-conflict" role="group" aria-label="核实 OpenCLI 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
               <div className="tools-actions">
-                <button className="btn" disabled={busy} onClick={() => void action("opencli.refresh")}>检查环境</button>
-                <button className="btn" disabled={busy} onClick={() => void action("opencli.check")}>检查更新</button>
-                <button className="btn btn-primary" disabled={busy || !state.latest || !!draft || (!!state.version && state.version !== state.latest && !update)} onClick={() => void action("opencli.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? queued ? "等待空闲…" : "正在安装…" : state.version ? update ? "更新 OpenCLI" : "重新安装" : "安装 OpenCLI"}</button>
+                <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("opencli.refresh")}>检查环境</button>
+                <button className="btn" disabled={busy || !!state.supportError} onClick={() => void action("opencli.check")}>检查更新</button>
+                <button className="btn btn-primary" disabled={busy || !!state.supportError || !state.latest || !!draft || (!!state.version && state.version !== state.latest && !update)} onClick={() => void action("opencli.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? update ? "更新 OpenCLI" : "重新安装" : "安装 OpenCLI"}</button>
+                {(state.configured || state.removalPending || state.version) && <button className="btn" disabled={busy || !!draft} onClick={() => setUninstall({ revision: state.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留文件" : state.managed ? "卸载 OpenCLI" : "移除接入"}</button>}
               </div>
-              {queued && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.cancel", { jobId: state.job!.id })}>取消排队</button>}
-              <p className="field-help tools-help">先检查更新，再安装已确认的版本。任务运行时点击安装会加入队列，空闲后自动执行，可离开此页面或取消排队。后台服务退出会取消排队。使用 npm 全局安装；更新会影响本机其他使用同一 OpenCLI 的程序。安装失败时可重新检查并重试。</p>
+              {uninstall && <div className="tools-conflict" role="group" aria-label="确认移除 OpenCLI">
+                <p>移除 Axiom 接入并清理托管程序。接入设置、Chrome 扩展与外部安装保留。请先结束正在使用 OpenCLI 的 Agent 任务。</p>
+                <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const revision = uninstall.revision; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, revision }); }}><Icon name="trash-2" />确认移除</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button></div>
+              </div>}
+              <p className="field-help tools-help">先检查更新，再安装已确认的版本。新版本安装到独立目录，验证成功后用于后续执行；现有任务继续使用原版本。可在任务面板取消安装或延长时间。外部 npm 安装保留，如需卸载请使用原安装方式。</p>
               {state.packageRoot && <p className="tools-path">安装位置 <LocalPath path={state.packageRoot} /></p>}
-            </section>
+            </BackendMaintenance>
             <section className="section tools-section" aria-labelledby="config-heading">
               <div className="section-heading"><h3 id="config-heading">接入设置</h3><p>仅对 Axiom 主 Agent 生效</p></div>
               <fieldset className="tools-fields" disabled={busy || !state.version}>
@@ -120,9 +136,10 @@ export default function BuiltinTools() {
               </div>
             </section>
             <section className="section tools-section" aria-labelledby="browser-heading">
-              <div className="section-heading"><h3 id="browser-heading">浏览器扩展与连接</h3></div>
+              <div className="section-heading"><h3 id="browser-heading">浏览器扩展与连接</h3><span className="tag">外部管理</span></div>
+              <dl className="maintenance-metrics"><div><dt>已安装扩展版本</dt><dd>未核实</dd></div><div><dt>可用扩展版本</dt><dd>未核实</dd></div></dl>
               <ol className="tools-steps"><li><strong>Chrome 应用商店安装（推荐）</strong>：打开商店页面，在 Chrome 中点击「添加至 Chrome」。</li><li><strong>手动下载压缩包</strong>：从官方发布页下载 <code>opencli-extension-v&#123;version&#125;.zip</code> 并解压。在 <code>chrome://extensions</code> 中启用开发者模式，点击「加载已解压的扩展程序」，选择解压后的扩展目录。</li></ol>
-              <div className="tools-actions"><button className="btn btn-primary" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "store" })}>Chrome 应用商店安装 <span aria-hidden="true">↗</span></button><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "download" })}>手动下载压缩包 <span aria-hidden="true">↗</span></button><button className="btn" disabled={busy || !state.version || !!draft} onClick={() => void action("opencli.doctor")}>检测连接</button></div>
+              <div className="tools-actions"><button className="btn btn-primary" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "store" })}>Chrome 应用商店安装 <span aria-hidden="true">↗</span></button><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.openExtension", { target: "download" })}>手动下载压缩包 <span aria-hidden="true">↗</span></button><button className="btn" disabled={busy || !!state.supportError || !state.version || !!draft} onClick={() => void action("opencli.doctor")}>检测连接</button></div>
               <p className="field-help tools-help">任选一种方式安装扩展，然后保持 Chrome 和扩展启用，点击「检测连接」查看诊断结果。</p>
               {state.diagnostic && <details className="tools-diagnostic" open><summary>官方诊断报告 · {new Date(state.diagnostic.checkedAt).toLocaleTimeString()}</summary><pre>{state.diagnostic.text}</pre></details>}
             </section>

@@ -1,3 +1,5 @@
+import { currentMaintenance, maintenancePhase } from "../maintenance.js";
+import { MaintenanceError } from "../../shared/maintenance.js";
 import { proxySourceLimit, type ProxyNode } from "../../shared/model-proxy.js";
 import { coreConfiguration } from "./model-proxy-process.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
@@ -41,7 +43,8 @@ export async function inspectXraySource(root: string, source: string, signal: Ab
   });
   if (!candidates.length) throw Error("未找到支持的 Xray 分享链接。支持 VLESS、VMess、Trojan 和 Shadowsocks；Clash 配置请使用 mihomo。");
   const executable = await prepareXrayImporter(root, signal, progress);
-  const timed = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+  maintenancePhase("validating", "正在使用 Xray 转换器识别节点…");
+  const timed = currentMaintenance() ? signal : AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
   const results = new Array<{ name: string; type: string; source: string } | undefined>(candidates.length);
   let next = 0, size = 0;
   async function worker() {
@@ -61,15 +64,21 @@ export async function inspectXraySource(root: string, source: string, signal: Ab
         if (Buffer.byteLength(json, "utf8") > proxySourceLimit) continue;
         results[index] = { name: displayName(link, index), type: String((outbound as { protocol: string }).protocol), source: json };
         size += Buffer.byteLength(json, "utf8");
-      } catch { /* Upstream diagnostics may contain credentials; only report a skipped count. */ }
+      } catch (error) { if (error instanceof MaintenanceError) throw error; /* Upstream diagnostics may contain credentials; only report a skipped count. */ }
       timed.throwIfAborted();
       if (size > 4 * proxySourceLimit) throw Error("节点配置总量过大，请减少本次导入的链接。");
     }
   }
   // Wait for every subprocess to close, including on cancellation or a failed sibling worker.
   const settled = await Promise.allSettled([worker(), worker()]);
-  if (timed.aborted) throw Error(signal.aborted ? "节点识别已取消。" : "Xray 节点识别超时，请减少本次导入的链接。");
-  if (settled.some(item => item.status === "rejected")) throw Error("节点配置总量过大，请减少本次导入的链接。");
+  const uncertain = settled.find(item => item.status === "rejected" && item.reason instanceof MaintenanceError && item.reason.code === "stop-unconfirmed");
+  if (uncertain?.status === "rejected") throw uncertain.reason;
+  if (timed.aborted) throw timed.reason;
+  const failure = settled.find(item => item.status === "rejected");
+  if (failure?.status === "rejected") {
+    if (failure.reason instanceof MaintenanceError) throw failure.reason;
+    throw Error("节点配置总量过大，请减少本次导入的链接。");
+  }
   const nodes: ProxyNode[] = [], outbounds = new Map<string, string>();
   for (const result of results) {
     if (!result) continue;

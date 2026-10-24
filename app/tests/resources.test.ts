@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Store } from "../src/server/storage.js";
 import { Capabilities } from "../src/server/capabilities.js";
 import { Resources } from "../src/server/resources.js";
+import { commitPiPackage, listPiPackageRemovals, piPackagePlan } from "../src/server/pi-package-storage.js";
 import { skillId, discoverCapabilities } from "../src/server/capability-resources.js";
 import type { ResourceDetail, ResourceState } from "../src/shared/resources.js";
 import type { OpenCliExecute } from "../src/server/integrations/opencli.js";
@@ -18,7 +19,11 @@ async function fixture(t: TestContext, execute?: OpenCliExecute, idle = async ()
   const root = mkdtempSync(join(tmpdir(), "axiom-resources-")), pi = join(root, "shared-pi");
   const old = process.env.PI_CODING_AGENT_DIR; process.env.PI_CODING_AGENT_DIR = pi;
   const store = new Store(root); new Capabilities(store, () => {}, pi);
-  const resources = new Resources(store, pi, () => {}, idle, execute);
+  // This fixture performs only in-process file writes and launches no command.
+  const resources = new Resources(store, pi, () => {}, idle, execute ? async (args, options) => {
+    try { return await execute(args, options); }
+    finally { options.onStopped("not-started"); }
+  } : undefined);
   t.after(async () => { await resources.close(); store.close(); if (old === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = old; rmSync(root, { recursive: true, force: true }); });
   const act = async (op: string, params: Record<string, unknown>) => {
     const state = await resources.refresh();
@@ -29,6 +34,28 @@ async function fixture(t: TestContext, execute?: OpenCliExecute, idle = async ()
   };
   return { root, pi, store, resources, act };
 }
+test("resource restart exposes a withdrawn package for cleanup while preserving local source files", async t => {
+  const f = await fixture(t), source = join(f.root, "external-package"), agentDir = join(f.root, "pi");
+  skill(join(source, "skills", "pending"));
+  file(join(source, "package.json"), JSON.stringify({ name: "fixture-local", pi: { skills: ["skills"] } }));
+  file(join(agentDir, "settings.json"), JSON.stringify({ packages: [source] }));
+  const request = { action: "remove" as const, source, cwd: f.root, agentDir, local: false };
+  await commitPiPackage(request, piPackagePlan(request).initialIdentity, new AbortController().signal);
+  const restarted = new Resources(f.store, f.pi, () => {}, async () => {});
+  try {
+    let state = await restarted.refresh();
+    const item = state.items.find(value => value.removalPending)!;
+    assert.ok(item); assert.equal(item.kind, "package"); assert.equal(item.managed, false); assert.equal(item.removable, true);
+    await assert.rejects(restarted.command({ op: "resources.update", requestId: randomUUID(), params: { id: item.id, revision: state.revision } }), /卸载尚未完成/);
+    await restarted.command({ op: "resources.remove", requestId: randomUUID(), params: { id: item.id, revision: state.revision, confirm: true } });
+    for (let i = 0; restarted.busy && i < 1000; i++) await delay(10);
+    assert.equal(restarted.busy, false);
+    state = restarted.snapshot(); assert.equal(state.job?.error, undefined); assert.equal(state.items.some(value => value.removalPending), false);
+    assert.deepEqual(listPiPackageRemovals(request), []);
+    assert.ok(existsSync(join(source, "skills", "pending", "SKILL.md")));
+  } finally { await restarted.close(); }
+});
+
 test("skill discovery silently resolves duplicates and skips malformed files without hiding actionable errors", async t => {
   const f = await fixture(t);
   const contents = [
@@ -130,11 +157,11 @@ test("unsafe names and invalid single-file imports never publish installation pa
   assert.ok((await f.act("resources.install", { kind: "skill", source: linked })).job?.error);
   const valid = await f.act("resources.install", { kind: "skill", source, name: "中文技能" }); assert.equal(valid.job?.error, undefined); assert.equal(valid.items.find(i => i.managed)?.name, "中文技能");
 });
-test("MCP removal clears config, namespaced and legacy OAuth while retaining unrelated credentials", async t => {
+test("MCP removal explicitly clears config, namespaced and legacy OAuth while retaining unrelated credentials", async t => {
   const f = await fixture(t); const url = "https://fixture.invalid/mcp";
   file(join(f.pi, "mcp.json"), JSON.stringify({ autoEnableCodemode: false, mcpServers: { fixture: { url }, other: { command: "never-launch" } } }));
   file(join(f.pi, "mcp-auth.json"), JSON.stringify({ [`mcp__fixture|${url}`]: { tokens: { access_token: "secret" } }, [url]: { tokens: { access_token: "legacy" } }, keep: { tokens: { access_token: "other" } } }));
-  const state = await f.act("resources.remove", { id: "mcp:fixture", confirm: true }); assert.equal(state.job?.error, undefined);
+  const state = await f.act("resources.remove", { id: "mcp:fixture", confirm: true, clearCredentials: true }); assert.equal(state.job?.error, undefined);
   assert.deepEqual(JSON.parse(readFileSync(join(f.pi, "mcp.json"), "utf8")), { autoEnableCodemode: false, mcpServers: { other: { command: "never-launch" } } });
   assert.deepEqual(JSON.parse(readFileSync(join(f.pi, "mcp-auth.json"), "utf8")), { keep: { tokens: { access_token: "other" } } });
   assert.ok(!JSON.stringify(state).includes("secret"));
@@ -143,9 +170,18 @@ test("MCP removal preserves legacy credentials shared by another named server", 
   const f = await fixture(t), url = "https://shared.fixture.invalid/mcp";
   file(join(f.pi, "mcp.json"), JSON.stringify({ mcpServers: { a: { url }, b: { url } } }));
   file(join(f.pi, "mcp-auth.json"), JSON.stringify({ [`mcp__a|${url}`]: {}, [url]: { shared: true }, [`mcp__b|${url}`]: { other: true } }));
-  const state = await f.act("resources.remove", { id: "mcp:a", confirm: true }); assert.equal(state.job?.error, undefined);
+  const state = await f.act("resources.remove", { id: "mcp:a", confirm: true, clearCredentials: true }); assert.equal(state.job?.error, undefined);
   const data = JSON.parse(readFileSync(join(f.pi, "mcp-auth.json"), "utf8"));
   assert.equal(data[`mcp__a|${url}`], undefined); assert.deepEqual(data[url], { shared: true }); assert.deepEqual(data[`mcp__b|${url}`], { other: true });
+});
+test("MCP removal retains authentication unless explicitly requested", async t => {
+  const f = await fixture(t), url = "https://fixture.invalid/mcp";
+  file(join(f.pi, "mcp.json"), JSON.stringify({ mcpServers: { fixture: { url } } }));
+  const credentials = JSON.stringify({ [`mcp__fixture|${url}`]: { tokens: { access_token: "keep" } }, [url]: { tokens: { access_token: "legacy" } } });
+  file(join(f.pi, "mcp-auth.json"), credentials);
+  const state = await f.act("resources.remove", { id: "mcp:fixture", confirm: true });
+  assert.equal(state.job?.error, undefined);
+  assert.equal(readFileSync(join(f.pi, "mcp-auth.json"), "utf8"), credentials);
 });
 test("removal rejects stale confirmation and busy admission without deleting files", async t => {
   let busy = false; const f = await fixture(t, undefined, async () => { if (busy) throw Error("busy"); });
@@ -254,6 +290,38 @@ test("skill scope follows declarations; removing a shared project reference pres
   // A global declaration remains global even when its source lives in a project.
   file(join(f.root, "pi/settings.json"), JSON.stringify({ skills: [shared] }));
   state = await f.resources.refresh(); assert.ok(state.items.some(i => i.scopeId === "global" && i.name === target.name));
+});
+for (const forced of ["guide", "directory"] as const) test(`shared ancestor skill removal overrides a forced ${forced} include without deleting source files`, async t => {
+  const f = await fixture(t), a = project(f, "project-a"), shared = join(f.root, ".agents/skills/ancestor"); skill(shared);
+  const guide = join(shared, "SKILL.md"), settings = join(a, ".pi/settings.json");
+  file(settings, JSON.stringify({ skills: [`+${forced === "guide" ? guide : shared}`] }));
+  const target = (await f.resources.refresh()).items.find(i => i.scopeId === "project-a" && i.source === guide)!;
+  assert.ok(target?.removable);
+  const state = await f.act("resources.remove", { id: target.id, confirm: true });
+  assert.equal(state.job?.error, undefined);
+  assert.equal(state.items.some(i => i.id === target.id), false);
+  assert.equal((await f.resources.refresh()).items.some(i => i.id === target.id), false);
+  assert.ok(existsSync(guide)); assert.ok(existsSync(join(shared, "scripts/run.js")));
+  assert.ok(JSON.parse(readFileSync(settings, "utf8")).skills.includes(`-${guide}`));
+});
+test("uninstall reports failure when final discovery fails or the target remains", async t => {
+  const f = await fixture(t), path = join(f.pi, "mcp.json");
+  file(path, JSON.stringify({ mcpServers: { fixture: { command: "never-run" } } }));
+  const remove = t.mock.method(f.resources as unknown as { remove(): Promise<void> }, "remove", async () => {});
+  let state = await f.act("resources.remove", { id: "mcp:fixture", confirm: true });
+  assert.match(state.job?.error ?? "", /仍发现此资源/);
+  assert.ok(state.items.some(i => i.id === "mcp:fixture"));
+  remove.mock.restore();
+  const refresh = f.resources.refresh.bind(f.resources);
+  t.mock.method(f.resources, "refresh", async (finishing = false) => {
+    if (finishing) throw Error("discovery failed");
+    return refresh();
+  });
+  state = await f.act("resources.remove", { id: "mcp:fixture", confirm: true });
+  assert.match(state.job?.error ?? "", /目录刷新失败/);
+  assert.equal(state.job?.message, "操作未完成");
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).mcpServers.fixture, undefined, "partial success is not rolled back or silently reported as complete");
+  assert.ok(JSON.parse(readFileSync(join(f.root, "resources/job.json"), "utf8")).job.error);
 });
 test("config-only save never reinstalls managed npm; project install cannot silently become global", async t => {
   let calls = 0;

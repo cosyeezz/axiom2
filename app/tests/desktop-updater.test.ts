@@ -125,8 +125,12 @@ test("same-size checksum mismatch includes expected and actual digests before to
 test("npm command errors expose bounded output and exit code instead of a log-only instruction", async t => {
   const root = await mkdtemp(join(tmpdir(), "axiom-npm-error-")); t.after(() => rm(root, { recursive: true, force: true }));
   const log = join(root, "output.log");
-  await assert.rejects(execute(process.execPath, ["-e", "console.error('npm error code ECONNRESET'); process.exit(7)"], { log }), /退出（7）.*ECONNRESET/);
-  await assert.rejects(execute(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { log, timeoutMs: 100 }), /超时/);
+  await assert.rejects(execute(process.execPath, ["-e", "console.error('npm error code ECONNRESET'); process.exit(7)"], { log }), (error: Error) => {
+    assert.match(error.message, /退出[（\s]7[）。]/);
+    assert.match(error.message, /ECONNRESET/);
+    return true;
+  });
+  await assert.rejects(execute(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { log, timeoutMs: 100 }), { code: "total-timeout" });
 });
 test("successful desktop backend update keeps CLI location, dependencies and user data", async (t) => {
   const f = await fixture(t);

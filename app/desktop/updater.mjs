@@ -1,6 +1,10 @@
 // Bundled with the desktop client; uses only Node.js built-ins so old backends can update.
-import { readFile, writeFile, mkdir, rename, rm, open, access, lstat, realpath } from "node:fs/promises";
+import { DesktopExecution, desktopTask, budgetsDefault, validBudgets } from './maintenance.mjs';
+import { createUpdaterReconciler } from './updater-reconciliation.mjs';
+import { createUpdaterSupervisor, updaterOwnerPresent, updaterTaskSnapshot } from './updater-supervision.mjs';
+import { readFile, writeFile, mkdir, mkdtemp, rename, rm, open, access, lstat, realpath, link } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { basename, dirname, join, resolve, delimiter, isAbsolute, sep } from "node:path";
@@ -41,25 +45,29 @@ async function logTail(path) {
   } catch { return { lines: [], updatedAt: null }; }
   finally { await file?.close(); }
 }
-export async function execute(node, args, { env = process.env, timeoutMs = 60_000, log } = {}) {
-  const output = log ? await open(log, "a", 0o600) : null;
+export async function execute(node, args, options = {}) {
+  const root = await mkdtemp(join(tmpdir(), "axiom-updater-command-"));
+  const task = desktopTask("probe", "check");
+  let supervisor, failure, output;
+  const execution = new DesktopExecution(task, snapshot => supervisor?.publish(snapshot));
+  const abort = () => execution.abort(options.signal.reason?.code ?? "cancelled", options.signal.reason?.message ?? "命令已取消。");
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
   try {
-    return await new Promise((resolve, reject) => {
-      const child = spawn(node, args, { env, windowsHide: true, stdio: ["ignore", output?.fd ?? "pipe", output?.fd ?? "pipe"] });
-      let text = "", errorText = "", oversized = false, timedOut = false;
-      child.stdout?.on("data", (data) => { text += data; if (text.length > 65536) { oversized = true; child.kill(); } });
-      child.stderr?.on("data", (data) => { if (errorText.length < 4096) errorText += data; });
-      const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-      child.once("error", (error) => { clearTimeout(timer); reject(error); });
-      child.once("close", async (code, signal) => {
-        clearTimeout(timer);
-        if (code !== 0 || oversized || signal || timedOut) {
-          const detail = log ? (await logTail(log)).lines.slice(-6).join(" · ") : errorText.trim() || text.trim();
-          reject(Error(`命令${timedOut ? `超时（${Math.round(timeoutMs / 1000)} 秒）` : oversized ? "输出超过限制" : `退出（${code ?? signal}）`}：${detail || "没有错误输出，请检查运行环境和网络。"}`));
-        } else resolve(text.trim());
-      });
-    });
-  } finally { await output?.close(); }
+    supervisor = createUpdaterSupervisor({ root, execution, log: options.log });
+    await supervisor.prepare();
+    await execution.phase("checking", "正在核实安装状态…");
+    output = await supervisor.command(node, args, { timeoutMs: 60000, ...options, cwd: options.cwd ?? process.cwd() });
+  } catch (error) { failure = error; }
+  finally {
+    options.signal?.removeEventListener("abort", abort);
+    await execution.finish(failure);
+    if (execution.task.status === "unknown") supervisor?.retain();
+    await supervisor?.release();
+    if (!supervisor?.uncertain()) await rm(root, { recursive: true, force: true });
+  }
+  if (failure) throw failure;
+  return output;
 }
 export function createUpdater({ root, fetcher = fetch, command = execute, isAlive = alive, api = RELEASE_API, base = RELEASE_BASE, env = process.env, runtimeNode = process.execPath } = {}) {
   if (!root || !isAbsolute(root)) throw Error("缺少绝对数据目录");
@@ -73,7 +81,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   async function piEnvironment() {
     const installed = await installation(true) ?? { node: runtimeNode };
     const npm = await npmCli(installed.node);
-    const modules = await command(installed.node, [npm, "root", "--global"], { env: environment, timeoutMs: 20000 });
+    const modules = await runCommand(installed.node, [npm, "root", "--global"], inspectionOptions());
     if (!isAbsolute(modules) || /[\r\n]/.test(modules)) throw Error("npm 全局目录无效。");
     const packageRoot = join(modules, ...piPackage.split("/"));
     const pkg = await json(join(packageRoot, "package.json"));
@@ -107,9 +115,10 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     catch { cli = { error: "pi 安装缓存无法读取，请重新查询。" }; }
     if (refresh) {
       try { const info = await piEnvironment(); cli = { version: info.version, packageRoot: info.packageRoot, legacy: info.legacy, identity: info.identity }; }
-      catch (error) { cli = { error: `无法读取终端 Pi：${error.message}` }; }
+      catch (error) { cli = { error: execution?.signal.aborted ? "终端 pi 读取已中断，请重新读取安装状态。" : `无法读取终端 Pi：${error.message}` }; }
       await mkdir(directory, { recursive: true });
       await atomic(join(directory, "pi-installation.json"), cli);
+      execution?.signal.throwIfAborted();
     }
     let release = null;
     try { release = await json(piReleaseFile); } catch { /* Explicit check replaces an unreadable optional cache. */ }
@@ -118,11 +127,11 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (release && cli?.identity !== release.identity) release = { ...release, token: null };
     return { runtimeVersion, cli, release };
   }
-  async function piRefresh() { await piStatus(true); return status(); }
+  async function piRefresh() { return runJob("pi-refresh"); }
   async function piCheck() {
     await piStatus(true);
-    const response = await fetcher(`https://registry.npmjs.org/${piPackage}/latest`, { signal: AbortSignal.timeout(20000) });
-    if (!response.ok) throw Error(`pi 版本查询失败（HTTP ${response.status}）。`);
+    const response = await network(`https://registry.npmjs.org/${piPackage}/latest`);
+    if (!response.ok) { await response.body?.cancel(); throw Object.assign(Error(`pi 版本查询失败（HTTP ${response.status}）。`), { code: "http" }); }
     const pkg = JSON.parse(await bounded(response, 1024 * 1024));
     if (pkg.name !== piPackage || !versionPattern.test(pkg.version)) throw Error("npm 未返回有效的 pi 稳定版本。");
     await mkdir(directory, { recursive: true });
@@ -132,34 +141,198 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     return status();
   }
   const environment = { ...env, AXIOM_DATA_DIR: root };
-  let owner;
+  let owner, execution, supervisor, pendingPiLock;
+  const runCommand = (file, args, options) => supervisor ? supervisor.command(file, args, options) : command(file, args, options);
+  const network = (url, init) => execution ? execution.fetch(url, fetcher, init) : fetcher(url, { ...init, signal: AbortSignal.timeout(20000) });
+  const inspectionOptions = () => {
+    const active = execution, started = Date.now();
+    active?.signal.throwIfAborted();
+    return { env: environment, timeoutMs: 20000, signal: active?.signal,
+      ...(active ? { timeoutCode: "total-timeout", getTimeout: () => active.task.budgets.totalMs - (started - active.task.startedAt) } : {}) };
+  };
+  const installOptions = () => ({ env: { ...environment, npm_config_fetch_retries: "2", npm_config_fetch_timeout: "86400000" }, timeoutMs: 600000, log, signal: execution?.signal, getTimeout: () => execution?.task.budgets.installMs ?? budgetsDefault.installMs });
+  async function maintenanceControl(action, payload = {}) {
+    if (action === "defaults") {
+      if (!validBudgets(payload.budgets)) throw Error("无效的时间预算。");
+      await mkdir(directory, { recursive: true }); await atomic(join(directory, "budgets.json"), payload.budgets); return status();
+    }
+    await database(db => {
+      db.exec("BEGIN IMMEDIATE");
+      const row = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get(), current = row && projectJob(row);
+      if (!current?.running || current.task?.id !== payload.id) throw Error("任务已结束或身份已变化。");
+      const previous = db.prepare("SELECT body FROM maintenance_control WHERE token=?").get(row.token);
+      const control = previous ? JSON.parse(previous.body) : {};
+      if (action === "cancel") { if (!current.task.capabilities.cancel) throw Error("此阶段无法取消，请等待安装器结果。"); control.cancel = true; }
+      else if (action === "extend") {
+        if (!current.task.capabilities.extend || !validBudgets(payload.budgets) || Object.keys(budgetsDefault).some(key => payload.budgets[key] < (control.budgets ?? current.task.budgets)[key])) throw Error("运行中只能延长可控制阶段的时限。");
+        control.budgets = payload.budgets;
+      } else throw Error("不支持的维护操作。");
+      db.prepare("INSERT OR REPLACE INTO maintenance_control VALUES(?,?)").run(row.token, JSON.stringify(control)); db.exec("COMMIT");
+    });
+    return status();
+  }
+  async function writeJob(patch) {
+    if (patch.task && supervisor) patch.task = supervisor.publish(patch.task);
+    await database(db => {
+      db.exec("BEGIN IMMEDIATE");
+      const row = db.prepare("SELECT body FROM job WHERE token=? AND pid=?").get(owner.token, process.pid);
+      if (!row) throw Error("更新任务归属已变化");
+      const body = JSON.stringify({ ...JSON.parse(row.body), ...patch });
+      db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(body, owner.token, process.pid);
+      archiveJob(db, { token: owner.token, pid: process.pid, body });
+      db.exec("COMMIT");
+    });
+  }
+  function archiveJob(db, row) {
+    db.prepare("INSERT OR REPLACE INTO maintenance_history(token,pid,body) VALUES(?,?,?)").run(row.token, row.pid, row.body);
+    // Preserve every unresolved or unreadable record. Only ordinary terminal
+    // records are eligible for the same recent-100 policy as other task centers.
+    const completed = [];
+    for (const candidate of db.prepare("SELECT token,body FROM maintenance_history WHERE CASE WHEN json_valid(body) THEN json_extract(body,'$.task.status') END IN ('succeeded','failed','cancelled')").all()) {
+      try { const task = JSON.parse(candidate.body).task; if (validHistoryTask(task)) completed.push({ token: candidate.token, createdAt: task.createdAt }); } catch { /* Preserve unreadable records. */ }
+    }
+    completed.sort((a, b) => b.createdAt - a.createdAt || b.token.localeCompare(a.token));
+    const remove = db.prepare("DELETE FROM maintenance_history WHERE token=?");
+    for (const candidate of completed.slice(100)) remove.run(candidate.token);
+  }
+  function validHistoryTask(task) {
+    return !!task && typeof task.id === "string" && typeof task.label === "string" && typeof task.resource === "string" && Number.isFinite(task.createdAt) && Array.isArray(task.steps) && validBudgets(task.budgets) && ["running", "cancelling", "unknown", "interrupted", "succeeded", "failed", "cancelled"].includes(task.status);
+  }
+  function projectJob(row, current = true) {
+    const value = JSON.parse(row.body);
+    if (value.supervised && value.task && value.running) {
+      try { value.task = updaterTaskSnapshot(root, value.task); }
+      catch { value.task.status = "unknown"; value.task.message = "更新监督记录无法核实，已保留安装目录与归属记录。"; }
+      if (value.task.status === "unknown") {
+        value.task.capabilities = { cancel: false, extend: false };
+        value.task.error = { code: "stop-unconfirmed", phase: value.task.phase, message: value.task.message };
+        value.phase = "interrupted"; value.message = value.task.message;
+      }
+    }
+    if (current && value.task && (value.reconciliation?.state === "release-pending" || (!isAlive(row.pid) || !value.running) && updaterOwnerPresent(root))) {
+      value.task.status = "unknown"; value.task.message = "更新进程或父提交退出尚未确认，归属记录仍保留。";
+      value.task.error = { code: "stop-unconfirmed", phase: value.task.phase, message: value.task.message };
+      value.task.capabilities = { cancel: false, extend: false };
+      value.phase = "interrupted"; value.message = value.task.message;
+    }
+    if (value.running && (!current || !isAlive(row.pid))) Object.assign(value, { running: false, phase: "interrupted", message: "上次更新进程已退出，请核实当前安装状态。" });
+    if (value.task && (!current || !value.running || value.phase === "interrupted")) {
+      value.task.capabilities = { cancel: false, extend: false };
+      if (["running", "cancelling"].includes(value.task.status)) {
+        value.task.status = value.phase === "error" ? "failed" : "interrupted";
+        value.task.message = value.message;
+        if (value.phase === "error") value.task.error = { code: "operation", phase: value.task.phase, message: value.message || "更新未完成。" };
+      }
+    }
+    return value;
+  }
+  async function history() {
+    return database(db => {
+      db.exec("BEGIN");
+      const rows = new Map(db.prepare("SELECT token,pid,body FROM maintenance_history").all().map(row => [row.token, row]));
+      const current = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get();
+      if (current) rows.set(current.token, current);
+      const tasks = [], warnings = [];
+      for (const row of rows.values()) {
+        try {
+          const value = projectJob(row, row.token === current?.token), task = value.task;
+          if (!validHistoryTask(task)) throw Error("维护任务详情不完整。");
+          tasks.push(task);
+        } catch { warnings.push("有更新记录无法读取，已保留原记录。请检查本机更新日志。"); }
+      }
+      tasks.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+      const unresolved = task => ["running", "cancelling", "unknown", "interrupted"].includes(task.status);
+      const recent = new Set(tasks.filter(task => !unresolved(task)).slice(-100));
+      db.exec("COMMIT");
+      return { tasks: tasks.filter(task => unresolved(task) || recent.has(task)), error: warnings.length ? `${warnings[0]}（${warnings.length} 条）` : null };
+    });
+  }
   async function database(operation) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const db = new DatabaseSync(join(directory, "jobs.sqlite"));
     try {
-      db.exec("PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS job (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL, pid INTEGER NOT NULL, body TEXT NOT NULL)");
+      db.exec("PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS job (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL, pid INTEGER NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_control (token TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS maintenance_history (token TEXT PRIMARY KEY, pid INTEGER NOT NULL, body TEXT NOT NULL)");
       return operation(db);
     } finally { db.close(); }
   }
-  const job = () => database((db) => { const row = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get(); return row ? { token: row.token, pid: row.pid, ...JSON.parse(row.body) } : null; });
+  const job = () => database((db) => { const row = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get(); return row ? { token: row.token, pid: row.pid, ...projectJob(row) } : null; });
   async function claim(kind, version) {
     const token = randomBytes(32).toString("hex");
+    const budgets = await json(join(directory, "budgets.json"), budgetsDefault);
+    if (!validBudgets(budgets)) throw Error("下载预算记录无效，请重新保存设置。");
     return database((db) => {
       db.exec("BEGIN IMMEDIATE");
-      const old = db.prepare("SELECT pid,body FROM job WHERE id=1").get();
+      if (updaterOwnerPresent(root)) throw Error("已有更新进程、启动结果或父提交尚未确认，请先核实已有任务；归属记录已保留。");
+      const old = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get();
+      if (old && JSON.parse(old.body).reconciliation?.state === "release-pending") throw Error("中断核实尚未提交完成，请再次核实原任务。");
+      const servicePending = !!(old && (JSON.parse(old.body).servicePending || JSON.parse(old.body).reconciliation?.servicePending));
+      if (servicePending && kind !== "recover") throw Error("服务启动结果仍需核实，请先恢复旧版本。");
+      if (old && (JSON.parse(old.body).task?.status === "unknown" || JSON.parse(old.body).supervised && JSON.parse(old.body).running && !isAlive(old.pid))) throw Error("上次更新退出尚未确认，请先核实已有任务。");
       if (old && JSON.parse(old.body).running && isAlive(old.pid)) throw Error("已有更新正在进行，请等待完成。");
-      const value = { kind, version, phase: "queued", running: true, message: "正在准备更新…", updatedAt: Date.now() };
-      db.prepare("INSERT OR REPLACE INTO job VALUES(1,?,?,?)").run(token, process.pid, JSON.stringify(value));
+      if (old) archiveJob(db, { ...old, body: JSON.stringify(projectJob(old, false)) });
+      const value = { kind, version, servicePending, task: desktopTask(kind, kind === "client" ? "download" : "update", budgets), phase: "queued", running: true, message: "正在准备更新…", updatedAt: Date.now() };
+      db.prepare("DELETE FROM maintenance_control").run();
+      const body = JSON.stringify(value);
+      db.prepare("INSERT OR REPLACE INTO job VALUES(1,?,?,?)").run(token, process.pid, body);
+      archiveJob(db, { token, pid: process.pid, body });
       db.exec("COMMIT");
       return { token, pid: process.pid, ...value };
     });
   }
+  async function reconcile(payload = {}) {
+    const installed = await installation(true);
+    const reconciler = await createUpdaterReconciler(root);
+    const persist = (db, row, value) => {
+      const body = JSON.stringify(value);
+      db.prepare("UPDATE job SET body=? WHERE id=1 AND token=? AND pid=?").run(body, row.token, row.pid);
+      archiveJob(db, { ...row, body });
+    };
+    const requested = row => {
+      const value = row && JSON.parse(row.body);
+      if (!value?.task || value.task.id !== payload.id) throw Error("要核实的更新任务已改变，请刷新任务记录。");
+      return value;
+    };
+    try {
+      await database(db => {
+        db.exec("BEGIN IMMEDIATE");
+        const row = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get(), value = requested(row);
+        if (value.reconciliation?.state === "complete") { db.exec("COMMIT"); return; }
+        if (value.reconciliation?.state !== "release-pending") {
+          const plan = reconciler.inspect(row, transaction => { if (!installed) throw Error("后台安装记录缺失，无法核实服务事务。"); return validateTransaction(transaction, installed); });
+          value.reconciliation = { state: "release-pending", plan, servicePending: plan.servicePending };
+          value.servicePending = plan.servicePending;
+          value.running = false; value.phase = "interrupted";
+          value.message = plan.servicePending ? "原更新进程已退出，服务事务仍保留；请恢复旧版本。" : "原更新进程已退出；安装结果未确认，请重新检查。";
+          Object.assign(value.task, { status: "interrupted", message: value.message, finishedAt: Date.now(), capabilities: { cancel: false, extend: false }, error: { code: "operation", phase: value.task.phase, message: value.message } });
+          persist(db, row, value);
+        }
+        db.exec("COMMIT");
+      });
+      await database(db => {
+        db.exec("BEGIN IMMEDIATE");
+        const row = db.prepare("SELECT token,pid,body FROM job WHERE id=1").get(), value = requested(row);
+        if (value.reconciliation?.state === "complete") { db.exec("COMMIT"); return; }
+        if (value.reconciliation?.state !== "release-pending") throw Error("中断核实提交状态已改变。");
+        reconciler.publish(value.task);
+        reconciler.release(value.reconciliation.plan, row);
+        value.servicePending = value.reconciliation.servicePending;
+        value.reconciliation = { state: "complete", servicePending: value.servicePending };
+        persist(db, row, value);
+        db.exec("COMMIT");
+      });
+    } finally { reconciler.dispose(); }
+    return status();
+  }
   async function progress(phase, message, extra = {}) {
-    const current = await job();
-    if (current?.token !== owner?.token || current.pid !== process.pid) throw Error("更新任务归属已变化");
-    const value = { ...current, download: null, ...extra, phase, message, updatedAt: Date.now() };
-    delete value.token; delete value.pid;
-    await database((db) => db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(JSON.stringify(value), owner.token, process.pid));
+    if (execution) {
+      const mapped = ({ preparing: "installing", stopping: "installing", switching: "installing", starting: "validating", restoring: "installing", ready: "verifying", complete: "validating" })[phase] ?? phase;
+      const safe = !["stopping", "switching", "starting", "restoring", "complete", "ready", "error"].includes(phase);
+      if (!["complete", "ready", "error"].includes(phase)) await execution.phase(mapped, message, safe);
+      execution.task.message = message;
+    }
+    // Hold the worker lease until the maintenance terminal snapshot is durable.
+    const state = execution && extra.running === false ? { ...extra, running: true } : extra;
+    await writeJob({ download: null, ...state, phase, message, updatedAt: Date.now(), ...(execution ? { task: structuredClone(execution.task) } : {}) });
   }
   async function installation(optional = false) {
     const value = await json(registration);
@@ -182,8 +355,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     return value;
   }
   async function check() {
-    const response = await fetcher(api, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Axiom2-Desktop-Updater" }, signal: AbortSignal.timeout(20_000) });
-    if (!response.ok) throw Error(`检查更新失败（HTTP ${response.status}），请稍后重试。`);
+    const response = await network(api, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Axiom2-Desktop-Updater" } });
+    if (!response.ok) { await response.body?.cancel(); throw Object.assign(Error(`检查更新失败（HTTP ${response.status}），请稍后重试。`), { code: "http" }); }
     const data = JSON.parse(await bounded(response, 1024 * 1024));
     const version = String(data.tag_name || "").replace(/^v/, "");
     if (data.tag_name !== `v${version}` || !versionPattern.test(version) || data.draft || data.prerelease || !Array.isArray(data.assets)) throw Error("发布版本信息无效。");
@@ -209,26 +382,15 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (!asset) throw Error("此版本尚未提供适用于本机的客户端安装包。");
     const destination = join(directory, `${asset.sha256}-${name}`);
     if (await exists(destination) && await validFile(destination, asset)) return destination;
-    const startedAt = Date.now(); let received = 0, lastBytes = 0, lastAt = startedAt, lastByteAt = startedAt;
-    const publish = async () => {
-      const now = Date.now();
-      await progress("downloading", `正在下载 ${name}…`, { download: { name, downloaded: received, total: asset.size, speed: (received - lastBytes) * 1000 / Math.max(1, now - lastAt), startedAt, updatedAt: now, lastByteAt } });
-      lastAt = now; lastBytes = received;
-    };
-    await publish();
-    const response = await fetcher(asset.url, { signal: AbortSignal.timeout(600_000) });
-    if (!response.ok) throw Error(`下载 ${name} 失败（HTTP ${response.status}），当前服务尚未更改。`);
-    const chunks = [];
-    for await (const chunk of response.body) {
-      received += chunk.length; lastByteAt = Date.now();
-      if (received > asset.size) throw Error(`${name} 大小不符：预期 ${asset.size} 字节，已接收 ${received} 字节。已拒绝安装。`);
-      chunks.push(chunk); if (Date.now() - lastAt >= 500) await publish();
-    }
-    await publish();
-    const bytes = Buffer.concat(chunks);
+    await progress("downloading", `正在下载 ${name}…`);
+    const response = await (execution ? execution.fetch(asset.url, fetcher) : fetcher(asset.url, { signal: AbortSignal.timeout(120_000) }));
+    if (!response.ok) { await response.body?.cancel(); throw Object.assign(Error(`下载失败（HTTP ${response.status}），当前服务尚未更改。`), { code: "http" }); }
+    const bytes = await bounded(response, asset.size);
+    await progress("verifying", "正在校验安装包大小与 SHA-256…");
     if (bytes.length !== asset.size) throw Error(`${name} 大小不符：预期 ${asset.size} 字节，实际 ${bytes.length} 字节。已拒绝安装。`);
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== asset.sha256) throw Error(`${name} SHA-256 不符：预期 ${asset.sha256}，实际 ${actual}。已拒绝安装，请重新下载。`);
+
     await writeFile(destination, bytes, { mode: 0o600 });
     return destination;
   }
@@ -242,9 +404,12 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const current = await job();
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
-    if (current) { delete current.pid; delete current.token; delete current.installer; }
-    return { pi: await piStatus(), serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
-      job: current, recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
+    if (current?.task && current.phase === "interrupted") { if (current.task.status !== "unknown") current.task.status = "interrupted"; current.task.capabilities = { cancel: false, extend: false }; }
+    if (current) { delete current.pid; delete current.token; delete current.installer; delete current.reconciliation; }
+    const pi = await piStatus();
+    if (current?.kind === "pi" && ["failed", "cancelled", "unknown", "interrupted"].includes(current.task?.status) && pi.release && pi.release.token === current.version) pi.release.token = null;
+    return { pi, serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
+      job: current, budgets: await json(join(directory, "budgets.json"), budgetsDefault), recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
   async function npmCli(node) {
     const candidates = [join(dirname(node), "node_modules/npm/bin/npm-cli.js"), join(dirname(node), "../lib/node_modules/npm/bin/npm-cli.js")];
@@ -256,15 +421,16 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     for (const candidate of candidates) if (await exists(candidate)) return resolve(candidate);
     throw Error("找不到 npm，请修复 Node.js 22.19.0+ 安装后重试。");
   }
-  const control = async (installed, action) => {
-    const result = JSON.parse(await command(installed.node, [installed.cli, action, "--json"], { env: environment, timeoutMs: 55_000 }));
+  const control = async (installed, action, recovery = false) => {
+    const options = { env: environment, timeoutMs: 55_000, recovery };
+    const result = action === "start" && supervisor ? await supervisor.start(installed.node, [installed.cli, action, "--json"], options) : JSON.parse(await runCommand(installed.node, [installed.cli, action, "--json"], options));
     if (result.state === "error") throw Error(result.message || "服务操作失败");
     return result;
   };
-  async function stopService(installed) {
-    const before = await control(installed, "status");
+  async function stopService(installed, recovery = false) {
+    const before = await control(installed, "status", recovery);
     if (before.state === "unmanaged") throw Error("端口被其他服务占用，请先处理后重试。");
-    const after = await control(installed, "stop");
+    const after = await control(installed, "stop", recovery);
     if (after.state !== "stopped") throw Error("尚未确认服务停止，未替换程序文件。");
     const until = Date.now() + 5000;
     while (before.pid && isAlive(before.pid)) { if (Date.now() > until) throw Error("服务进程尚未退出，未替换程序文件。"); await delay(50); }
@@ -312,7 +478,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       // The candidate's version command can work even when its control module
       // cannot load. Use the verified backup to stop it before moving any files.
       const runner = { ...installed, cli: join(transaction.backup, "bin/axiom2.mjs") };
-      await stopService(runner);
+      await supervisor?.allowRecovery(runner.node, runner.cli);
+      await stopService(runner, true);
       await reserveService();
       try {
         if (await exists(installed.packageRoot)) await rename(installed.packageRoot, join(transaction.stage, `failed-${randomBytes(8).toString("hex")}`));
@@ -328,6 +495,10 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       // protocol provides one, without making v0.2.x rollback impossible.
       if (result.version != null && result.version !== transaction.previousVersion) throw Error("运行中的服务版本与恢复记录不符，恢复尚未确认。");
     }
+    supervisor?.confirmService();
+    // Keep the transaction available until clearing the admission restriction
+    // is durable. A failed DB commit must leave a valid recovery entry point.
+    await writeJob({ servicePending: false });
     await rm(journalFile);
   }
   async function updateService(installed, release) {
@@ -342,11 +513,11 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     // Shallow keeps this direct package's complete dependency tree inside its
     // own node_modules, regardless of the user's default npm install strategy.
     // Move that tree intact; the staging prefix's self bin shims stay behind.
-    await command(installed.node, [await npmCli(installed.node), "install", "--prefix", stage, "--install-strategy=shallow", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save=false", archive], { env: environment, timeoutMs: 600_000, log });
+    await runCommand(installed.node, [await npmCli(installed.node), "install", "--prefix", stage, "--install-strategy=shallow", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save=false", archive], installOptions());
     await rename(join(stage, "node_modules/@cosyeezz/axiom2"), ready);
     const pkg = await json(join(ready, "package.json"));
     if (pkg?.name !== "@cosyeezz/axiom2" || pkg.version !== release.version) throw Error("安装包版本不匹配，未更改当前服务。");
-    const reported = await command(installed.node, [join(ready, "bin/axiom2.mjs"), "--version"], { env: environment });
+    const reported = await runCommand(installed.node, [join(ready, "bin/axiom2.mjs"), "--version"], inspectionOptions());
     if (reported !== release.version) throw Error("新版服务预检查失败，未更改当前服务。");
     const current = await control(installed, "status");
     if (!["running", "stopped"].includes(current.state)) throw Error("服务仍在启动或退出，请等待状态稳定后重试。");
@@ -367,6 +538,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       const result = await control(installed, "start");
       if (result.state !== "running" || result.version !== release.version) throw Error("新版服务未通过启动验证。");
       await atomic(join(directory, "previous-version.json"), transaction);
+      supervisor?.confirmService();
       await rm(journalFile);
       await progress("complete", `后台服务已更新至 ${release.version}，现在可以打开工作台。`, { running: false });
     } catch (error) {
@@ -376,7 +548,9 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     }
   }
   async function perform(kind, version) {
+    if (["check", "pi-check", "pi-refresh"].includes(kind)) { await progress("checking", kind === "pi-refresh" ? "正在读取 Pi 安装状态…" : "正在查询发布版本…"); await (kind === "check" ? check() : kind === "pi-check" ? piCheck() : piStatus(true)); await progress("complete", kind === "pi-refresh" ? "Pi 安装状态读取完成。" : "版本检查完成。", { running: false }); return; }
     if (kind === "pi") {
+      await progress("checking", "正在核实终端 pi 安装位置和版本…");
       const release = await json(piReleaseFile);
       if (!release || version !== release.token || !versionPattern.test(release.version)) throw Error("请先检查 pi 版本，再确认升级。");
       version = release.version;
@@ -384,16 +558,30 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       if (info.identity !== release.identity) throw Error("终端安装位置或版本已改变，请重新检查 pi 更新。");
       if (info.legacy) throw Error("检测到旧命名空间的 pi 安装，请先用原安装方式迁移，避免覆盖同名命令。");
       if (info.version && info.version !== version && !newer(version, info.version)) throw Error("当前 pi 高于已检查版本，未执行降级。");
-      const lock = join(dirname(info.packageRoot), ".axiom-pi-update.lock");
-      await mkdir(dirname(lock), { recursive: true });
-      let handle;
-      try { handle = await open(lock, "wx", 0o600); }
-      catch { throw Error("该 pi 安装正在被其他更新任务使用，或目录不可写。若更新进程已异常退出，请检查并移除安装目录旁的 .axiom-pi-update.lock 后重试。"); }
-      try {
-        await handle.writeFile(JSON.stringify({ pid: process.pid, root }));
+      const parent = dirname(info.packageRoot);
+      await mkdir(parent, { recursive: true });
+      const lock = join(await realpath(parent), ".axiom-pi-update.lock");
+      const staging = join(dirname(lock), `.axiom-pi-update-${owner.token}.lock`);
+      const body = JSON.stringify({ pid: process.pid, root, token: owner.token, taskId: execution.task.id, attemptId: execution.task.attemptId, ...supervisor?.identity() });
+      // Publish only a complete, flushed inode. The manifest binds that inode
+      // before the atomic no-replace link makes it the shared admission lock.
+      const handle = await open(staging, "wx", 0o600);
+      let identity;
+      try { await handle.writeFile(body); await handle.sync(); identity = await handle.stat({ bigint: true }); }
+      finally { await handle.close(); }
+      const lockRecord = { path: lock, staging, identity: { dev: String(identity.dev), ino: String(identity.ino) }, body };
+      supervisor?.bindPiLock(lockRecord);
+      try { await link(staging, lock); }
+      catch (error) {
+        await rm(staging); supervisor?.bindPiLock(null);
+        throw Error(`该 Pi 安装正在被其他更新任务使用，或目录不可写：${error.code ?? error.message}。请先核实原任务。`);
+      }
+      pendingPiLock = lockRecord;
+      if (process.platform !== "win32") { const dir = await open(dirname(lock), "r"); try { await dir.sync(); } finally { await dir.close(); } }
+      {
         if ((await piEnvironment()).identity !== info.identity) throw Error("终端 pi 在准备期间改变，请重新检查。");
-        await progress("installing", `正在安装终端 pi ${version}（npm 不提供总下载进度，下方显示实时日志）…`);
-        await command(info.installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--loglevel=http", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], { env: environment, timeoutMs: 600000, log });
+        await progress("installing", `正在安装终端 pi ${version}…`);
+        await runCommand(info.installed.node, [info.npm, "install", "--global", "--prefix", info.prefix, "--bin-links=true", "--ignore-scripts", "--loglevel=http", "--engine-strict", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--@earendil-works:registry=https://registry.npmjs.org", `${piPackage}@${version}`], installOptions());
         const actual = await piEnvironment();
         if (actual.version !== version) throw Error("安装后的 pi 版本未通过校验，请重新读取状态。");
         const pkg = await json(join(actual.packageRoot, "package.json"));
@@ -402,17 +590,17 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
         const shim = process.platform === "win32" ? join(actual.prefix, "pi.cmd") : join(actual.prefix, "bin/pi");
         if (!cli.startsWith(`${actual.packageRoot}${sep}`) || !await exists(cli) || !await exists(shim)) throw Error("pi 命令入口不完整，请重新检查并安装。");
         await progress("verifying", `正在验证终端 pi ${version}…`);
-        const reported = await command(info.installed.node, [cli, "--version"], { env: environment, timeoutMs: 20000 });
+        const reported = await runCommand(info.installed.node, [cli, "--version"], inspectionOptions());
         if (reported !== version) throw Error("终端 pi 未通过运行验证，请查看安装环境后重试。");
         await piStatus(true);
         await progress("complete", `终端 pi 已安装至 ${version}；重新打开终端会话后生效。应用内 pi 随后台服务更新。`, { running: false });
-      } finally { await handle.close(); await rm(lock, { force: true }); }
+      }
       return;
     }
     const installed = await installation();
     if (kind === "recover") {
       await restore(installed);
-      await progress("complete", "之前的服务程序已恢复。", { running: false });
+      await progress("complete", "之前的服务程序已恢复。", { running: false, servicePending: false });
       return;
     }
     if (await json(journalFile)) throw Error("上次更新尚未恢复，请先恢复旧版本。");
@@ -424,33 +612,83 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       await progress("ready", "客户端安装包已校验，点击“运行安装器”继续。", { running: false, installer, asset: release.assets["Axiom2.msi"] });
     } else throw Error("不支持的更新任务");
   }
+  async function releasePiLock() {
+    if (!pendingPiLock) return;
+    const { path, staging, identity, body } = pendingPiLock;
+    for (const file of [path, staging]) {
+      const current = await lstat(file, { bigint: true });
+      if (!current.isFile() || current.isSymbolicLink() || current.nlink !== 2n || String(current.dev) !== identity.dev || String(current.ino) !== identity.ino || await readFile(file, "utf8") !== body) throw Object.assign(Error("Pi 安装锁身份已改变，已保留归属记录。"), { code: "stop-unconfirmed" });
+    }
+    await rm(path); await rm(staging); pendingPiLock = undefined;
+  }
   async function runJob(kind, version, claimed) {
     owner = claimed || await claim(kind, version);
-    try { await writeFile(log, "", { mode: 0o600 }); await perform(kind, version); }
-    catch (error) { if (kind === "pi") await piStatus(true).catch(() => {}); await progress("error", error.message, { running: false }); }
-    finally { await releaseService(); }
+    execution = new DesktopExecution(owner.task, task => writeJob({ task }), () => database(db => { const value = db.prepare("SELECT body FROM maintenance_control WHERE token=?").get(owner.token); return value ? JSON.parse(value.body) : null; }));
+    let failure;
+    try {
+      if (command === execute) { supervisor = createUpdaterSupervisor({ root, execution, token: owner.token, fetcher, log }); await supervisor.prepare(); await writeJob({ supervised: true }); }
+      await writeFile(log, "", { mode: 0o600 });
+      await perform(kind, version);
+    }
+    catch (error) {
+      failure = error.code === "stop-unconfirmed" ? error : execution.signal.aborted ? execution.signal.reason : error;
+      if (kind === "pi") {
+        try { const release = await json(piReleaseFile); if (release && release.token === owner.version) await atomic(piReleaseFile, { ...release, token: null }); }
+        catch (error) { supervisor?.retain(); failure = Object.assign(Error(`Pi 更新确认状态未能保存：${error.message}`), { code: "stop-unconfirmed" }); }
+        if (!supervisor?.uncertain() && !execution.signal.aborted) await piStatus(true).catch(() => {});
+      }
+      await progress("error", failure.message, { running: false });
+    }
+    finally {
+      try {
+        await execution.finish(failure); await writeJob({ running: false });
+        if (!supervisor?.uncertain() && execution.task.status !== "unknown") { await releasePiLock(); await supervisor?.release(); }
+      } catch (error) {
+        supervisor?.retain();
+        execution.task.status = "unknown"; execution.task.capabilities = { cancel: false, extend: false };
+        execution.task.error = { code: "stop-unconfirmed", phase: execution.task.phase, message: "更新终态或安装锁提交尚未确认，已保留归属记录。" };
+        await writeJob({ running: false, task: structuredClone(execution.task) }).catch(() => {});
+        throw error;
+      }
+      finally { execution = undefined; supervisor = undefined; pendingPiLock = undefined; await releaseService(); }
+    }
     return status();
   }
   async function start(kind, version) {
-    if (!["service", "client", "recover", "pi"].includes(kind)) throw Error("不支持的更新任务");
-    if (kind === "pi") await piEnvironment(); else await installation();
+    if (!["service", "client", "recover", "pi", "check", "pi-check", "pi-refresh"].includes(kind)) throw Error("不支持的更新任务");
+    if (kind === "pi") await piEnvironment();
+    else if (!["pi-check", "pi-refresh", "check"].includes(kind)) await installation();
     const reserved = await claim(kind, version);
-    const output = await open(log, "a", 0o600);
-    let child;
+    let child, transferred = false;
     try {
-      child = spawn(process.execPath, [script, "worker", reserved.token], { env: environment, detached: true, windowsHide: true, stdio: ["ignore", output.fd, output.fd, "ipc"] });
+      child = spawn(process.execPath, [script, "worker", reserved.token], { env: environment, detached: true, windowsHide: true, stdio: ["ignore", "ignore", "ignore", "ipc"] });
       await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
       const changed = await database((db) => db.prepare("UPDATE job SET pid=? WHERE token=? AND pid=?").run(child.pid, reserved.token, process.pid));
       if (!changed.changes) throw Error("更新任务归属已变化");
+      transferred = true;
       await new Promise((resolve, reject) => child.send(reserved.token, (error) => error ? reject(error) : resolve()));
       child.unref();
     } catch (error) {
       if (child?.connected) child.disconnect();
       if (child) child.kill();
-      owner = reserved;
-      await progress("error", error.message, { running: false }).catch(() => {});
+      await database(db => {
+        db.exec("BEGIN IMMEDIATE");
+        const row = db.prepare("SELECT token,pid,body FROM job WHERE token=?").get(reserved.token);
+        if (row && [process.pid, child?.pid].includes(row.pid)) {
+          const value = JSON.parse(row.body);
+          if (value.running) {
+            value.running = false; value.phase = transferred ? "interrupted" : "error"; value.message = error.message;
+            value.task.status = transferred ? "unknown" : "failed"; value.task.capabilities = { cancel: false, extend: false };
+            value.task.error = { code: transferred ? "stop-unconfirmed" : "operation", phase: value.task.phase, message: error.message };
+            const body = JSON.stringify(value);
+            db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(body, row.token, row.pid);
+            archiveJob(db, { ...row, body });
+          }
+        }
+        db.exec("COMMIT");
+      });
       throw error;
-    } finally { await output.close(); }
+    }
     return status();
   }
   async function worker(token) {
@@ -472,13 +710,19 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       if (current?.kind === "client" && current.phase === "ready" && !current.running) {
         const body = { ...current, phase: "error", message };
         delete body.token; delete body.pid; delete body.installer;
-        await database((db) => db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(JSON.stringify(body), current.token, current.pid));
+        if (body.task) { body.task.status = "failed"; body.task.message = message; body.task.error = { code: "operation", phase: "verifying", message }; body.task.capabilities = { cancel: false, extend: false }; }
+        await database((db) => {
+          db.exec("BEGIN IMMEDIATE");
+          const text = JSON.stringify(body), changed = db.prepare("UPDATE job SET body=? WHERE token=? AND pid=?").run(text, current.token, current.pid);
+          if (changed.changes) archiveJob(db, { token: current.token, pid: current.pid, body: text });
+          db.exec("COMMIT");
+        });
       }
       throw Error(message);
     }
     return { installer: current.installer };
   }
-  return { check, piCheck, piRefresh, status, start, worker, runJob, installer, busy: async () => { const current = await job(); return { busy: !!(current?.running && current.kind !== "client" && isAlive(current.pid)) }; } };
+  return { reconcile, history, maintenanceControl, check, piCheck, piRefresh, status, start, worker, runJob, installer, busy: async () => { const current = await job(); return { busy: updaterOwnerPresent(root) || current?.reconciliation?.state === "release-pending" || current?.servicePending || current?.reconciliation?.servicePending || current?.task?.status === "unknown" || !!(current?.running && current.kind !== "client" && isAlive(current.pid)) }; } };
 }
 if (process.argv[1] && resolve(process.argv[1]) === script) {
   try {
@@ -487,9 +731,11 @@ if (process.argv[1] && resolve(process.argv[1]) === script) {
     const updater = createUpdater({ root: process.env.AXIOM_DATA_DIR });
     const [action, argument] = process.argv.slice(2);
     let value;
-    if (action === "pi-refresh") value = await updater.piRefresh();
-    else if (action === "pi-check") value = await updater.piCheck();
-    else if (["status", "check", "installer", "busy"].includes(action)) value = await updater[action]();
+    if (action === "pi-refresh") value = await updater.start("pi-refresh");
+    else if (action === "reconcile") value = await updater.reconcile(JSON.parse(argument || "{}"));
+    else if (["cancel", "extend", "defaults"].includes(action)) value = await updater.maintenanceControl(action, JSON.parse(argument || "{}"));
+    else if (["check", "pi-check"].includes(action)) value = await updater.start(action);
+    else if (["status", "history", "installer", "busy"].includes(action)) value = await updater[action]();
     else if (["service", "client", "recover", "pi"].includes(action)) value = await updater.start(action, argument);
     else if (action === "worker") { await updater.worker(argument); process.exit(0); }
     else throw Error("不支持的更新操作");

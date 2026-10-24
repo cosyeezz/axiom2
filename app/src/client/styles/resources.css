@@ -21,11 +21,10 @@
 .resources-app .detail-heading .tag { margin-top:3px; white-space:nowrap; }
 .resources-app .tools-content { padding-top:0; }
 .resources-app .tools-feedback:not(:empty) { margin-bottom:12px; }
-.resources-job-error { display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px 16px; }
-.resources-job-error > div { flex:1 1 240px; min-width:0; overflow-wrap:anywhere; }
-.resources-job-error p { margin:4px 0 0; }
-.resources-job-error .resources-job-context { color:var(--muted); font-weight:400; }
-.resources-job-error > .btn { flex-shrink:0; min-height:44px; }
+.resources-job-history { color:var(--muted); overflow-wrap:anywhere; }
+.resources-job-history > summary { cursor:pointer; padding:8px 0; }
+.resources-job-history p { margin:4px 0 0; }
+.resources-job-history > .btn { min-height:44px; }
 .resources-app .tools-section { padding-block:20px; }
 .resources-app .resources-content-section { padding-top:8px; }
 .resources-app .section-heading { align-items:center; gap:10px; margin-bottom:12px; }

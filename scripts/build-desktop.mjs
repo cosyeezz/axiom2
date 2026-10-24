@@ -3,8 +3,11 @@ import { spawn, execFileSync } from "node:child_process";
 import { dirname, join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { instrumentInstaller } from "./desktop-test-bridge.mjs";
+import { payload } from "./build-bootstrap.mjs";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+if (await readFile(join(repo, "app/desktop/setup-runtime.json"), "utf8") !== JSON.stringify(payload()) + "\n") throw Error("Desktop setup runtime is stale; run node scripts/build-bootstrap.mjs first.");
 const testInstance = process.argv.includes("--test-instance");
+const generateOnly = process.argv.includes("--generate-only");
 const toolchain = join(repo, "artifacts", "pake-toolchain");
 const source = join(toolchain, "node_modules", "pake-cli");
 const npm = (args) => {
@@ -14,7 +17,10 @@ const npm = (args) => {
 };
 let pkg;
 try { pkg = JSON.parse(await readFile(join(source, "package.json"), "utf8")); } catch {}
-if (pkg?.version !== "3.16.2") npm(["install", "--prefix", toolchain, "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", "pake-cli@3.16.2"]);
+if (pkg?.version !== "3.16.2") {
+  if (generateOnly) throw Error("Offline generation requires the already installed pake-cli@3.16.2 toolchain.");
+  npm(["install", "--prefix", toolchain, "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", "pake-cli@3.16.2"]);
+}
 const template = join(repo, "artifacts", "pake-template");
 await mkdir(template, { recursive: true });
 // Keep the isolated Cargo target cache, but refresh every source/config input.
@@ -45,7 +51,7 @@ if (testInstance) {
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
 await cp(join(repo, "app/desktop/axiom_connection.rs"), join(template, "src-tauri/src/axiom_connection.rs"));
-for (const name of ["axiom_theme.js", "axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
+for (const name of ["axiom_theme.js", "axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs", "maintenance.mjs", "service-start.mjs", "updater-supervision.mjs", "updater-reconciliation.mjs", "setup-runtime.json"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
 for (const [input, output] of [["test-probe.rs", "axiom_probe.rs"], ["test-controller-probe.js", "axiom_controller_probe.js"], ["test-workbench-probe.js", "axiom_workbench_probe.js"]]) {
   const destination = join(template, "src-tauri/src", output);
   if (testInstance) await cp(join(repo, "app/desktop", input), destination);
@@ -129,14 +135,23 @@ const featureMarker = 'tauri = { version = "2.10.2", features = [';
 if (!cargo.includes(featureMarker)) throw Error("Pake template changed: Tauri features not found");
 cargo = cargo.replace(featureMarker, featureMarker + '\n  "unstable",');
 await writeFile(cargoPath, cargo.replace(/^version = "[^"]+"/m, `version = "${version}"`));
-const extra = process.argv.slice(2).filter((arg) => arg !== "--test-instance");
+const cargoLockPath = join(template, "src-tauri/Cargo.lock");
+const cargoLock = await readFile(cargoLockPath, "utf8");
+const localPackage = /\[\[package\]\]\r?\nname = "pake"\r?\nversion = "[^"]+"(?=\r?\ndependencies = \[)/g;
+if ([...cargoLock.matchAll(localPackage)].length !== 1) throw Error("Pake lockfile changed: local package not found");
+await writeFile(cargoLockPath, cargoLock.replace(localPackage, `[[package]]\nname = "pake"\nversion = "${version}"`));
+const extra = process.argv.slice(2).filter((arg) => arg !== "--test-instance" && arg !== "--generate-only");
 if (testInstance) {
   const identifier = process.env.AXIOM_DESKTOP_TEST_IDENTIFIER || "local.axiom2.desktop.test";
   if (!/^local\.axiom2\.desktop\.test(?:\.[a-z0-9]+)*$/.test(identifier)) throw Error("Invalid isolated test identifier");
   extra.push("--identifier", identifier, "--name", "Axiom2-ServiceTest");
 }
+if (generateOnly) {
+  console.log(`Desktop sources generated offline: ${template}`);
+} else {
 const child = spawn(process.execPath, [join(template, "dist/cli.js"), "--config", "desktop/pake.json", ...extra, "--app-version", version], {
   cwd: join(repo, "app"), env: process.env, stdio: "inherit",
 });
 child.once("error", (error) => { console.error(error); process.exitCode = 1; });
 child.once("exit", (code) => { process.exitCode = code ?? 1; });
+}

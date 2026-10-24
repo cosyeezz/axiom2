@@ -160,9 +160,20 @@ try {
   assert.equal(await selected(page), "custom:inter"); assert.equal(requests, 1, "offline restore uses saved bytes");
   await open();
   for (const failure of ["offline", "http", "corrupt", "oversized", "missing"] as const) {
-    mode = failure; await choose("Lora");
-    if (await page.getByRole("button", { name: "重新加载预览", exact: true }).isVisible()) await page.getByRole("button", { name: "重新加载预览", exact: true }).click();
+    mode = failure;
+    const beforePreview = previewTexts.length;
+    // A stale alert can survive the retry click until React runs its effect.
+    // Observe this attempt's request before accepting its error state.
+    const requested = page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return url.hostname === "fonts.googleapis.com" && !names.has(url.searchParams.get("text") ?? "");
+    });
+    if (failure === "offline") await choose("Lora");
+    else await page.getByRole("button", { name: "重新加载预览", exact: true }).click();
+    await requested;
     await page.getByRole("alert").waitFor();
+    assert.equal(previewTexts.length, beforePreview + 1, `${failure} exercises a new preview request`);
+    assert.equal(await page.locator(".font-specimen").getAttribute("aria-busy"), "false");
     assert.equal(await selected(page), "custom:inter"); assert.equal(await records(page), 1);
     assert.equal(requests, 1, "preview failures never fall back to full-font download");
   }

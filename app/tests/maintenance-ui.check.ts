@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
+import { build } from "vite";
+import { chromium } from "playwright";
+const root = mkdtempSync(join(tmpdir(), "axiom-maintenance-ui-"));
+const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/maintenance");
+mkdirSync(artifacts, { recursive: true });
+await build({ configFile: false, root: resolve("src/client"), logLevel: "warn", define: { "process.env.NODE_ENV": '"production"' }, build: { outDir: root, emptyOutDir: true, target: "safari15", minify: false, lib: { entry: resolve("tests/fixtures/maintenance.tsx"), name: "MaintenanceFixture", formats: ["iife"], fileName: "fixture" } } });
+const files = readdirSync(root), js = files.find(file => file.endsWith(".js"))!, css = files.find(file => file.endsWith(".css"))!;
+writeFileSync(join(root, "index.html"), `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/${css}"></head><body><div id="root"></div><script src="/${js}"></script></body></html>`);
+const server = createServer((req, res) => {
+  const file = req.url === "/" ? "index.html" : basename(new URL(req.url!, "http://fixture").pathname);
+  if (![...files, "index.html"].includes(file)) { res.writeHead(404).end(); return; }
+  res.setHeader("Content-Type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html; charset=utf-8"); res.end(readFileSync(join(root, file)));
+});
+await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
+const errors: string[] = [];
+try {
+  const page = await browser.newPage(); page.on("pageerror", error => errors.push(error.message));
+  await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/`);
+  await page.getByRole("progressbar", { name: "当前下载进度" }).waitFor();
+  const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "page has no horizontal overflow");
+  for (const theme of ["dark", "light"]) {
+    await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
+    for (const width of [320, 390, 1200]) {
+      await page.setViewportSize({ width, height: 850 }); await noOverflow();
+      await page.screenshot({ path: join(artifacts, `resource-${theme}-${width}.png`), fullPage: true });
+      await page.getByRole("button", { name: "任务记录" }).click();
+      const dialog = page.getByRole("dialog", { name: "下载与维护" }); await dialog.waitFor();
+      assert.ok(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth), "task center has no horizontal overflow");
+      await page.screenshot({ path: join(artifacts, `center-${theme}-${width}.png`), fullPage: true });
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "detached" });
+      assert.match(await page.evaluate(() => document.activeElement?.textContent ?? ""), /任务记录/, "dialog restores keyboard focus");
+    }
+  }
+  const missing = await page.locator(".maintenance-panel svg use").evaluateAll(elements => elements.map(element => element.getAttribute("href")!).filter(href => !document.querySelector(href)));
+  assert.deepEqual(missing, [], "all maintenance glyphs resolve to real SVG symbols");
+  await page.getByText("时限与任务详情", { exact: true }).click();
+  await page.getByRole("spinbutton", { name: "任务总时限" }).fill("1800");
+  await page.getByRole("button", { name: "延长本次时限" }).click();
+  assert.equal(await page.getByRole("spinbutton", { name: "任务总时限" }).inputValue(), "1800");
+  await page.getByRole("button", { name: "取消任务", exact: true }).click();
+  await page.locator('.maintenance-task[data-status="cancelled"]').waitFor();
+  await page.getByRole("combobox", { name: "测试状态" }).selectOption("waiting");
+  assert.equal(await page.getByRole("status").innerText(), "等待中");
+  await page.getByText("正在等待当前 OpenCLI 执行结束；空闲后自动开始安装。", { exact: true }).waitFor();
+  await page.screenshot({ path: join(artifacts, "waiting-light.png"), fullPage: true });
+  await page.getByRole("combobox", { name: "测试状态" }).selectOption("failure");
+  assert.equal(await page.getByRole("alert").count(), 1);
+  await page.screenshot({ path: join(artifacts, "failure-light.png"), fullPage: true });
+  await page.getByRole("button", { name: "任务记录" }).click();
+  await page.getByRole("button", { name: /^进行中/ }).click();
+  assert.equal(await page.locator(".maintenance-task-list button").count(), 1);
+  assert.match(await page.locator(".maintenance-center-detail").innerText(), /OpenCLI/);
+  await page.keyboard.press("Escape");
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ passed: true, artifacts, cases: ["dark/light 320/390/1200", "task center filters", "wait reason", "single failure alert", "SVG glyphs", "budget extension", "cancel", "keyboard focus restoration"] }));
+} finally { await browser.close(); await new Promise<void>(done => server.close(() => done())); rmSync(root, { recursive: true, force: true }); }

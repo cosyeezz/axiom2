@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, delimiter } from "node:path";
+import { join, delimiter, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadSkills, formatSkillsForPrompt } from "@earendil-works/pi-coding-agent";
 import { OpenCliService, executeOpenCli, type OpenCliExecute } from "../src/server/integrations/opencli.js";
@@ -15,37 +15,8 @@ import { startServer } from "../src/server/index.js";
 import { WebSocket } from "ws";
 import { once } from "node:events";
 
-export function openCliFixture() {
-  const root = mkdtempSync(join(tmpdir(), "axiom-opencli-"));
-  const prefix = join(root, "global prefix"), modules = join(prefix, "node_modules");
-  const packageRoot = join(modules, "@jackwener", "opencli");
-  const calls: string[][] = [];
-  let version = "1.8.8", failInstall = false, hold: Promise<void> | undefined;
-  const install = (value: string) => {
-    mkdirSync(packageRoot, { recursive: true });
-    writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "@jackwener/opencli", version: value, bin: { opencli: "cli.js" } }));
-    writeFileSync(join(packageRoot, "cli.js"), "// fixture\n");
-    for (const name of openCliSkillNames) {
-      const dir = join(packageRoot, "skills", name); mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: Official fixture ${value}\n---\n\nRead this guide only when needed.\n`);
-    }
-  };
-  const execute: OpenCliExecute = async (args, options) => {
-    calls.push(args);
-    if (args[1] === "--version") return "11.0.0";
-    if (args[1] === "root") return modules;
-    if (args[1] === "prefix") return prefix;
-    if (args[1] === "view") return JSON.stringify(version);
-    if (args[1] === "doctor") return "[MISSING] Extension: not connected\nBrowser connectivity test failed";
-    if (args[1] === "install") {
-      if (hold) await Promise.race([hold, new Promise((_, reject) => options.signal.addEventListener("abort", () => reject(Error("aborted")), { once: true }))]);
-      if (failInstall) throw Error("fixture network failure token=secret-value");
-      install(version); return "installed";
-    }
-    throw Error(`Unexpected arguments: ${args.join(" ")}`);
-  };
-  return { root, prefix, packageRoot, calls, install, execute, locateNpm: () => "npm-cli.js", setVersion: (value: string) => { version = value; }, fail: () => { failInstall = true; }, hold: (value: Promise<void>) => { hold = value; } };
-}
+import { openCliFixture } from "./fixtures/opencli.js";
+
 const call = (service: OpenCliService, op: string, params = {}) => service.command({ requestId: randomUUID(), op, params });
 async function settle(service: OpenCliService) {
   const until = Date.now() + 5000;
@@ -145,61 +116,49 @@ test("OpenCLI: failed update, shutdown and interrupted restart never claim rollb
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: queued installation waits without running npm, supports cancellation and releases admission", async () => {
+test("OpenCLI: private installation is cancellable without a global admission queue", async () => {
   const f = openCliFixture();
-  let blocked = true;
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, () => blocked ? "正在等待任务结束" : undefined);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
   try {
     await call(service, "opencli.check"); await settle(service);
-    const before = f.calls.length;
-    const queued = await call(service, "opencli.install", { version: "1.8.8" });
-    assert.equal(queued.job?.queued, true);
-    assert.equal(service.installing, false);
-    assert.equal((await call(service, "opencli.refresh")).job?.id, queued.job?.id, "reconnect must preserve the queue");
+    f.hold(new Promise(() => {}));
+    const receipt = await call(service, "opencli.install", { version: "1.8.8" });
+    assert.notEqual(receipt.job?.queued, true); assert.equal(service.installing, true);
+    assert.equal((await call(service, "opencli.refresh")).job?.id, receipt.job?.id);
     await assert.rejects(call(service, "opencli.install", { version: "1.8.8" }), { code: "BUSY" });
-    await assert.rejects(call(service, "opencli.cancel", { jobId: "stale" }), { code: "NOT_QUEUED" });
-    assert.equal(f.calls.length, before, "waiting must not spawn npm");
-    const cancelled = await call(service, "opencli.cancel", { jobId: queued.job!.id });
-    assert.equal(cancelled.job?.running, false);
-    assert.equal(cancelled.job?.error, undefined);
-    assert.match(cancelled.job!.message, /已取消/);
-    blocked = false;
-    await call(service, "opencli.install", { version: "1.8.8" });
+    await assert.rejects(call(service, "opencli.cancel", { jobId: "stale" }), { code: "NOT_CANCELLABLE" });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const cancelled = await call(service, "opencli.cancel", { jobId: receipt.job!.id });
+    assert.equal(cancelled.job?.running, false); assert.equal(cancelled.job?.error, undefined); assert.match(cancelled.job!.message, /已取消/);
+    assert.equal(readOpenCliConfig(f.root), undefined); assert.equal(existsSync(f.packageRoot), false);
+    f.hold(Promise.resolve()); await call(service, "opencli.install", { version: "1.8.8" });
     assert.equal((await settle(service)).version, "1.8.8");
-    assert.equal(f.calls.filter(args => args[1] === "install").length, 1);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: queued installation revalidates the actual version before automatically executing", async () => {
+test("OpenCLI: installing revalidates the selected version before changing it", async () => {
   const f = openCliFixture(); f.install("1.8.7");
-  let blocked = true;
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, () => blocked ? "正在等待任务结束" : undefined);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
   try {
     await call(service, "opencli.check"); await settle(service);
-    await call(service, "opencli.install", { version: "1.8.8" });
     f.install("1.8.9");
-    blocked = false;
+    await call(service, "opencli.install", { version: "1.8.8" });
     const state = await settle(service);
-    assert.match(state.job!.error!, /未执行降级/);
-    assert.equal(state.version, "1.8.9");
-    assert.equal(service.installing, false);
+    assert.match(state.job!.error!, /未执行降级/); assert.equal(state.version, "1.8.9");
     assert.equal(f.calls.filter(args => args[1] === "install").length, 0);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: closing a queued installation cancels promptly and never replays it on restart", async () => {
-  const f = openCliFixture();
-  let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, () => "正在等待任务结束");
+test("OpenCLI: closing an installation cancels promptly and never replays on restart", async () => {
+  const f = openCliFixture(); let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
   try {
     await call(service, "opencli.check"); await settle(service);
-    await call(service, "opencli.install", { version: "1.8.8" });
-    const before = f.calls.length;
-    await service.close();
-    assert.equal(service.snapshot().job?.running, false);
-    assert.match(service.snapshot().job!.message, /排队安装已取消/);
+    f.hold(new Promise(() => {}));
+    await call(service, "opencli.install", { version: "1.8.8" }); await new Promise<void>(resolve => setImmediate(resolve));
+    await service.close(); const before = f.calls.length;
+    assert.equal(service.snapshot().job?.running, false); assert.match(service.snapshot().job!.message, /已取消/);
     service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
-    assert.equal(service.snapshot().job?.running, false);
-    assert.equal(f.calls.length, before);
+    assert.equal(service.snapshot().job?.running, false); assert.equal(f.calls.length, before);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -254,7 +213,7 @@ test("OpenCLI: failed environment checks settle their child before releasing job
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("OpenCLI: install queues behind an admitted prompt and automatically runs once idle", async () => {
+test("OpenCLI: private install runs alongside admitted prompts and leaves execution available", async () => {
   const f = openCliFixture();
   const app = await startServer({ root: join(f.root, "data"), port: 0, openCli: { execute: f.execute, locateNpm: f.locateNpm } });
   const ws = new WebSocket(app.origin.replace("http:", "ws:") + "/ws", { headers: { Origin: app.origin } });
@@ -279,24 +238,16 @@ test("OpenCLI: install queues behind an admitted prompt and automatically runs o
     assert.equal(app.agents.active(scope), false, "the async pre-launch window has no active run yet");
     const queued = await send("opencli.install", { params: { version: "1.8.8" } });
     assert.equal(queued.ok, true);
-    assert.equal(queued.data.job.queued, true);
-    assert.equal(f.calls.filter(args => args[1] === "install").length, 0);
-    // Waiting must not prevent additional work.
-    const secondPrompt = send("prompt", { ...scope, params: { text: "more" } });
-    release();
-    await prompt;
-    assert.equal((await secondPrompt).ok, true);
+    assert.notEqual(queued.data.job.queued, true);
     const until = Date.now() + 5000;
+    while (!f.calls.some(args => args[1] === "install")) {
+      assert.ok(Date.now() < until, "private install waited for the admitted prompt");
+      await new Promise<void>(r => setImmediate(r));
+    }
+    const secondPrompt = send("prompt", { ...scope, params: { text: "more" } });
+    release(); await prompt;
+    assert.equal((await secondPrompt).ok, true, "installation must not block other admitted work");
     let state;
-    do {
-      assert.ok(Date.now() < until, "queued install did not settle");
-      await new Promise<void>(r => setTimeout(r, 20));
-      state = (await send("opencli.get")).data;
-    } while (!f.calls.some(args => args[1] === "install"));
-    assert.equal(state.job.queued, false);
-    for (const op of ["prompt", "agent.resume", "agent.reload", "agent.skills", "task.append", "compression.start"])
-      assert.equal((await send(op, { ...scope })).error?.code, "TOOL_INSTALLING", `${op} must wait during actual installation`);
-    assert.equal((await send("opencli.cancel", { params: { jobId: state.job.id } })).error?.code, "NOT_QUEUED");
     finishInstall();
     do {
       assert.ok(Date.now() < until, "installation did not settle");

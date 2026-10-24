@@ -127,10 +127,10 @@ test("refresh is passive, paths persist with revision guard and only REA MCP rec
 });
 test("managed install commits only verified components; failure and revision races clean staging", async () => {
   for (const mode of ["success", "failure", "conflict", "cancel"] as const) {
-    const root = temporary(), initial = config(root), directory = join(root, "prepared");
+    const root = temporary(), initial = config(root), directory = join(root, "integrations", "rea", "engines", `java-${randomUUID()}`);
     let verify: (() => void) | undefined;
     const service = new ReaService(root, () => {}, {
-      prepareEngine: async () => { mkdirSync(directory); return { directory, path: join(directory, "jdk") }; },
+      prepareEngine: async () => { mkdirSync(directory, { recursive: true }); return { directory, path: join(directory, "jdk") }; },
       checkEngines: async (_root, value, _package, sig) => {
         if (mode === "conflict") atomicReaJson(reaConfigPath(root), { ...initial, revision: "other-writer" });
         if (mode === "cancel") await new Promise<void>(resolve => { verify = resolve; sig.addEventListener("abort", resolve as () => void, { once: true }); });
@@ -143,6 +143,7 @@ test("managed install commits only verified components; failure and revision rac
       if (mode === "cancel") { while (!verify) await new Promise(resolve => setTimeout(resolve, 5)); await call(service, "rea.cancel", { jobId: service.snapshot().job!.id }); }
       const state = await settle(service);
       assert.equal(!!readReaConfig(root).engines?.java, mode === "success"); assert.equal(existsSync(directory), mode === "success");
+      assert.equal(readReaConfig(root).managedEngines?.java?.length ?? 0, mode === "success" ? 1 : 0);
       if (mode === "failure" || mode === "conflict") assert.ok(state.job?.error); else assert.equal(state.job?.error, undefined);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }

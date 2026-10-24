@@ -11,6 +11,8 @@ export type ReaEngineState = {
   version?: string;
   checkedAt?: number;
   installable: boolean;
+  managed?: boolean;
+  removalPending?: boolean;
 };
 export const reaEngineLabels: Record<ReaEngineId, string> = { java: "JDK 21", ghidra: "Ghidra", hopper: "Hopper", jadx: "JADX Headless", wabt: "WABT" };
 export const reaEngineStatusLabels: Record<ReaEngineStatus, string> = {

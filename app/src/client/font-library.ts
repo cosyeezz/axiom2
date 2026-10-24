@@ -1,3 +1,6 @@
+import { MaintenanceError } from "../shared/maintenance.js";
+import { runBrowserMaintenance } from "./maintenance/browser-maintenance.js";
+import { maintenanceFetch, type MaintenanceExecution } from "../shared/maintenance-runtime.js";
 export type CustomFontId = `custom:${string}`;
 export type SavedFont = { id: CustomFontId; name: string; data: ArrayBuffer; source?: string; license?: string; weight?: string; style?: string };
 export type FontLibrary = { fonts: SavedFont[]; loading: boolean; available: boolean; error: string };
@@ -125,6 +128,13 @@ export async function saveFont(font: SavedFont, signal?: AbortSignal) {
   return font;
 }
 export async function importFont(file: File, signal?: AbortSignal) {
+  return runBrowserMaintenance({ resource: "font:import", label: file.name, action: "import", steps: ["checking", "installing", "validating"], signal }, async execution => {
+    execution.phase("installing", "正在导入字体…");
+    const result = await importFontFile(file, execution.signal);
+    execution.phase("validating"); return result;
+  });
+}
+async function importFontFile(file: File, signal?: AbortSignal) {
   validateFontFile(file.name, file.size);
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const id: CustomFontId = `custom:${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`;
@@ -132,9 +142,12 @@ export async function importFont(file: File, signal?: AbortSignal) {
   catch (error) { if (!faces.has(id)) decoding.delete(id); throw error; }
 }
 export async function removeFont(id: CustomFontId) {
-  await transact("readwrite", store => store.delete(id));
-  await reloadLibrary();
-  notifyOtherWindows();
+  await runBrowserMaintenance({ resource: `font:${id}`, label: state.fonts.find(font => font.id === id)?.name ?? "字体", action: "remove", steps: ["checking", "removing", "validating"] }, async execution => {
+    execution.phase("removing");
+    await transact("readwrite", store => store.delete(id), execution.signal);
+    execution.phase("validating"); await reloadLibrary(); notifyOtherWindows();
+    if (state.fonts.some(font => font.id === id)) throw Error("字体移除结果尚未确认，请重新读取字体库。");
+  });
 }
 
 export type OnlineFont = { id: CustomFontId; name: string; description: string; url: string; source: string; license: string; licenseUrl: string; category?: string; languages?: string[]; bytes?: number; aliases?: string; family?: string; weight?: number; style?: string; variable?: boolean };
@@ -154,7 +167,17 @@ export function releaseFontPreviews(keepId?: string) {
 // Full font bytes are fetched only by the explicit download action.
 // Staged faces are temporary until saved; text-subset previews never enter this cache.
 const downloads = new Map<string, Promise<SavedFont>>();
-export async function downloadOnlineFont(font: OnlineFont, signal?: AbortSignal, progress?: (bytes: number) => void): Promise<SavedFont> {
+export async function downloadOnlineFont(font: OnlineFont): Promise<SavedFont> {
+  return runBrowserMaintenance({ resource: `font:${font.id}`, label: font.name, action: "install", steps: ["checking", "downloading", "verifying", "installing", "validating"] }, async execution => {
+    const result = await loadOnlineFont(font, execution.signal, undefined, execution);
+    execution.phase("installing", "正在保存到浏览器字体库…");
+    await saveFont(result, execution.signal);
+    execution.phase("validating", "正在确认保存结果…");
+    if (!state.fonts.some(item => item.id === font.id)) throw Error("字体保存结果尚未确认，请重新读取字体库。");
+    return result;
+  });
+}
+async function loadOnlineFont(font: OnlineFont, signal?: AbortSignal, progress?: (bytes: number) => void, execution?: MaintenanceExecution): Promise<SavedFont> {
   const checkCanceled = () => { if (signal?.aborted) throw Error("已取消字体下载。"); };
   checkCanceled();
   const saved = state.fonts.find(item => item.id === font.id);
@@ -162,14 +185,10 @@ export async function downloadOnlineFont(font: OnlineFont, signal?: AbortSignal,
   let download = downloads.get(font.id);
   if (!download) {
     download = (async () => {
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 180_000);
-      const abort = () => controller.abort();
-      signal?.addEventListener("abort", abort, { once: true });
-      if (signal?.aborted) controller.abort();
       try {
-        const response = await fetch(font.url, { signal: controller.signal, credentials: "omit", referrerPolicy: "no-referrer" });
-        if (!response.ok) throw Error(`下载失败（HTTP ${response.status}），请稍后重试。`);
-        if (Number(response.headers.get("content-length")) > MAX_FONT_BYTES) throw Error("字体文件超过 30 MB。");
+        const response = await maintenanceFetch(font.url, { signal, credentials: "omit", referrerPolicy: "no-referrer" }, execution);
+        if (!response.ok) { await response.body?.cancel(); throw new MaintenanceError("http", `下载失败（HTTP ${response.status}），请稍后重试。`); }
+        if (Number(response.headers.get("content-length")) > MAX_FONT_BYTES) { await response.body?.cancel(); throw Error("字体文件超过 30 MB。"); }
         const reader = response.body?.getReader();
         if (!reader) throw Error("当前浏览器无法下载字体，请尝试本地导入。");
         const chunks: Uint8Array<ArrayBuffer>[] = [];
@@ -186,16 +205,15 @@ export async function downloadOnlineFont(font: OnlineFont, signal?: AbortSignal,
         let offset = 0;
         for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length; }
         const result: SavedFont = { id: font.id, name: font.name, data: data.buffer, source: font.source, license: font.license, weight: font.variable ? "1 1000" : String(font.weight ?? 400), style: font.style ?? "normal" };
+        execution?.phase("verifying", "正在校验字体格式…");
         await decodeFace(result);
         checkCanceled();
-        if (controller.signal.aborted) throw Error("字体下载超时，请重试。");
         return result;
       } catch (error) {
-        if (signal?.aborted) throw Error("已取消字体下载。");
-        if (controller.signal.aborted) throw Error("字体下载超时，请检查网络后重试，或从来源网站下载后导入。");
-        if (error instanceof TypeError) throw Error("无法连接字体来源，请检查网络后重试，或下载字体文件后导入。");
+        if (signal?.aborted) throw signal.reason;
+        if (error instanceof TypeError) throw new MaintenanceError("network", "无法连接字体来源，请检查网络后重试，或下载字体文件后导入。");
         throw error;
-      } finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
+      }
     })();
     downloads.set(font.id, download);
     download.catch(() => {
@@ -208,6 +226,7 @@ export async function downloadOnlineFont(font: OnlineFont, signal?: AbortSignal,
   checkCanceled();
   const face = await decodeFace(result);
   checkCanceled();
+  execution?.phase("validating", "正在加载字体…");
   previewFaces.add(result.id); registerFace(result.id, face);
   return result;
 }

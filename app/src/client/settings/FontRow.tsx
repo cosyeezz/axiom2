@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { customFontFamily, type OnlineFont, type SavedFont } from "../font-library.js";
+import { runBrowserMaintenance } from "../maintenance/browser-maintenance.js";
+import { maintenanceFetch } from "../../shared/maintenance-runtime.js";
+import { MaintenanceError } from "../../shared/maintenance.js";
 
 /** Only visible names request a small text subset, never a complete font file. */
 export function FontRow({ font, online, selected, available, active, disabled, onSelect }: {
@@ -21,17 +24,19 @@ export function FontRow({ font, online, selected, available, active, disabled, o
         const axes = online.style === "italic" ? `ital,wght@1,${online.weight ?? 400}` : `wght@${online.weight ?? 400}`;
         const url = new URL("https://fonts.googleapis.com/css2");
         url.searchParams.set("family", `${online.family}:${axes}`); url.searchParams.set("text", font.name); url.searchParams.set("display", "swap");
-        const css = await fetch(url, { signal: controller.signal, credentials: "omit", referrerPolicy: "no-referrer" });
-        if (!css.ok) return;
+        await runBrowserMaintenance({ resource: `font-preview:${font.id}`, label: `字体名称预览 · ${font.name}`, action: "preview", steps: ["downloading", "validating"], signal: controller.signal }, async execution => {
+        const css = await maintenanceFetch(url.toString(), { signal: execution.signal, credentials: "omit", referrerPolicy: "no-referrer" }, execution);
+        if (!css.ok) { await css.body?.cancel(); throw new MaintenanceError("http", `字体预览服务返回 HTTP ${css.status}。`); }
         const source = (await css.text()).match(/url\(['"]?(https:\/\/fonts\.gstatic\.com\/[^)'"\s]+)['"]?\)/)?.[1];
-        if (!source) return;
-        const response = await fetch(source, { signal: controller.signal, credentials: "omit", referrerPolicy: "no-referrer" });
-        if (!response.ok) return;
+        if (!source) throw new MaintenanceError("operation", "字体预览服务没有提供可用的名称子集。");
+        const response = await maintenanceFetch(source, { signal: execution.signal, credentials: "omit", referrerPolicy: "no-referrer" }, execution);
+        if (!response.ok) { await response.body?.cancel(); throw new MaintenanceError("http", `字体名称子集下载失败（HTTP ${response.status}）。`); }
         const data = await response.arrayBuffer();
-        if (controller.signal.aborted) return;
+        execution.signal.throwIfAborted(); execution.phase("validating", "正在加载字体名称子集…");
         face = await new FontFace(labelFamily, data).load();
-        if (controller.signal.aborted) return;
+        execution.signal.throwIfAborted();
         document.fonts.add(face); setSpecimen(true);
+        });
       } catch { /* The readable name remains available when the specimen service is offline. */ }
     })();
     return () => { controller.abort(); if (face) document.fonts.delete(face); setSpecimen(false); };

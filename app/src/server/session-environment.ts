@@ -13,7 +13,7 @@ import { environmentResourceOptions, type EnvironmentResourceInput } from "./env
 import { openCliResources } from "./integrations/opencli-resources.js";
 import { reaResources } from "./integrations/rea-resources.js";
 import { taskTools } from "./task-tools.js";
-import { memoryQueryTool } from "./memory-tool.js";
+import { memoryQueryTool, memoryDetailTool } from "./memory-tool.js";
 import { resourceWarnings } from "./reload-resources.js";
 import { topicSnapshot } from "./memory-topics.js";
 
@@ -69,10 +69,13 @@ export async function previewEnvironment(input: EnvironmentResourceInput & { mem
     createReadToolDefinition(input.cwd), createBashToolDefinition(input.cwd), createPowerShellToolDefinition(input.cwd),
     createEditToolDefinition(input.cwd), createWriteToolDefinition(input.cwd), createGrepToolDefinition(input.cwd),
     createFindToolDefinition(input.cwd), createLsToolDefinition(input.cwd), ...taskTools(unavailable), memoryQueryTool(unavailable),
+    memoryDetailTool(() => input.memoryPath),
   ];
   const configured = settings.getDefaultTools();
-  const defaults = configured ?? ["read", process.platform === "win32" ? "powershell" : "bash", "edit", "write"];
-  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query"];
+  const defaults = configured ?? (process.platform === "win32"
+    ? ["read", "edit", "write", "powershell"]
+    : ["read", "bash", "edit", "write"]);
+  const hostNames = [...taskTools(unavailable).map(tool => tool.name), "memory_query", "memory_detail"];
   const names = [...new Set([...defaults, ...hostNames])].filter(name => definitions.some(tool => tool.name === name));
   const tools = definitions.filter(tool => names.includes(tool.name));
   const toolSnippets = Object.fromEntries(definitions.filter(tool => tool.promptSnippet?.trim()).map(tool =>

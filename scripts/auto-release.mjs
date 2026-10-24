@@ -5,9 +5,11 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { assertNativeArchive } from './release-native.mjs';
 
 export const versionFiles = ['package.json', 'npm-shrinkwrap.json', 'app/package.json', 'app/package-lock.json', 'app/desktop/pake.json'];
 const repository = 'cosyeezz/axiom2';
+export const nativeReleaseNames = ['axiom-owner-linux-x64', 'axiom-owner-linux-arm64'];
 const marker = 'Axiom-Source-Commit: ';
 const pattern = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/;
 const run = (command, args, cwd = process.cwd()) => execFileSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] }).trim();
@@ -66,6 +68,17 @@ export function assertPackageReceipt(receipt, state, bytes) {
   assert.equal(receipt.size, bytes.length);
   assert.ok(bytes.length > 0 && bytes.length <= 128 * 1024 * 1024, 'Package exceeds updater limits');
   assert.equal(receipt.sha256, sha256(bytes), 'Package differs from the validated tarball');
+}
+
+export function assertNativeReceipts(receipt, files) {
+  for (const [index, name] of nativeReleaseNames.entries()) {
+    const bytes = files[name], proof = receipt.native?.[name];
+    assert.ok(Buffer.isBuffer(bytes) && bytes.length >= 64 && bytes.length <= 8 * 1024 * 1024, `${name}: native helper missing or invalid`);
+    assert.equal(bytes.subarray(0, 6).toString('hex'), '7f454c460201', `${name}: expected little-endian ELF64`);
+    assert.equal(bytes.readUInt16LE(18), index === 0 ? 62 : 183, `${name}: architecture mismatch`);
+    assert.equal(proof?.size, bytes.length, `${name}: unvalidated helper size`);
+    assert.equal(proof?.sha256, sha256(bytes), `${name}: differs from validated package helper`);
+  }
 }
 
 export function assertReleaseAssets(release, version, files) {
@@ -133,7 +146,7 @@ export async function verifyPublicRelease(release, fetcher = fetch, expectedPack
   assert.equal(release.prerelease, false);
   assert.match(release.tag_name, /^v(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/);
   const downloaded = {};
-  for (const name of ['axiom2.tgz', 'SHA256SUMS']) {
+  for (const name of ['axiom2.tgz', 'SHA256SUMS', ...nativeReleaseNames]) {
     const matches = release.assets.filter((asset) => asset.name === name);
     assert.equal(matches.length, 1, `Expected exactly one ${name}`);
     const asset = matches[0];
@@ -154,11 +167,15 @@ export async function verifyPublicRelease(release, fetcher = fetch, expectedPack
     assert.equal(`sha256:${sha256(bytes)}`, asset.digest);
     downloaded[name] = bytes;
   }
+  assertNativeArchive(downloaded['axiom2.tgz'], downloaded, release.tag_name.slice(1));
   const hash = sha256(downloaded['axiom2.tgz']);
   if (expectedPackageHash) assert.equal(hash, expectedPackageHash);
   // A later desktop publication may legitimately extend the checksum file.
-  const entries = downloaded.SHA256SUMS.toString('utf8').split(/\r?\n/).filter((line) => /^[a-f0-9]{64}  axiom2\.tgz$/.test(line));
-  assert.deepEqual(entries, [`${hash}  axiom2.tgz`]);
+  const lines = downloaded.SHA256SUMS.toString('utf8').split(/\r?\n/);
+  for (const name of ['axiom2.tgz', ...nativeReleaseNames]) {
+    const entries = lines.filter(line => line.slice(66) === name);
+    assert.deepEqual(entries, [`${sha256(downloaded[name])}  ${name}`]);
+  }
 }
 
 export async function verifyWithRetry(readRelease, verify, pause = () => delay(2000)) {
@@ -174,9 +191,17 @@ export async function verifyWithRetry(readRelease, verify, pause = () => delay(2
   }
 }
 
-const verifyPublished = (release, expectedHash) => verifyWithRetry(
+export function assertReleaseIdentity(fresh, expected, source, commit, status) {
+  assert.equal(fresh.id, expected.id, 'Release identity changed during verification');
+  assert.equal(fresh.tag_name, expected.tag_name, 'Release tag changed during verification');
+  assert.equal(existingReleaseStatus(fresh, source, commit), status, 'Release visibility changed during verification');
+}
+const verifyPublished = (release, source, commit, expectedHash) => verifyWithRetry(
   () => api(`releases/${release.id}`),
-  (fresh) => verifyPublicRelease(fresh, fetch, expectedHash),
+  async fresh => {
+    assertReleaseIdentity(fresh, release, source, commit, 'published');
+    await verifyPublicRelease(fresh, fetch, expectedHash);
+  },
 );
 
 export function existingReleaseStatus(release, source, commit) {
@@ -204,7 +229,7 @@ export async function prepare(stateFile) {
     verifyTag(tag, source);
     const existing = published.find((release) => release.tag_name === tag);
     if (existingReleaseStatus(existing, source, git('rev-parse', `${tag}^{commit}`)) === 'published') {
-      await verifyPublished(existing);
+      await verifyPublished(existing, source, git('rev-parse', `${tag}^{commit}`));
       return output({ skip: true, reason: 'already published and verified', source, tag }, stateFile);
     }
     git('checkout', '--detach', tag);
@@ -238,14 +263,18 @@ export async function publish(stateFile, directory) {
   // Upload the exact bytes exercised by check:package, without repacking after validation.
   const archive = join(directory, 'axiom2.tgz'), sums = join(directory, 'SHA256SUMS');
   const bytes = readFileSync(archive);
-  assertPackageReceipt(readJson(join(directory, 'package-validation.json')), state, bytes);
-  writeFileSync(sums, `${sha256(bytes)}  axiom2.tgz\n`);
-  const files = { 'axiom2.tgz': bytes, SHA256SUMS: readFileSync(sums) };
+  const receipt = readJson(join(directory, 'package-validation.json'));
+  assertPackageReceipt(receipt, state, bytes);
+  const files = { 'axiom2.tgz': bytes };
+  for (const name of nativeReleaseNames) files[name] = readFileSync(join(directory, name));
+  assertNativeReceipts(receipt, files);
+  writeFileSync(sums, Object.entries(files).map(([name, value]) => `${sha256(value)}  ${name}\n`).join(''));
+  files.SHA256SUMS = readFileSync(sums);
   git('push', 'origin', `refs/tags/${tag}:refs/tags/${tag}`);
   let release = releases().find((item) => item.tag_name === tag);
   if (release) {
     if (existingReleaseStatus(release, source, commit) === 'published') {
-      await verifyPublished(release);
+      await verifyPublished(release, source, commit, sha256(bytes));
       console.log(`Already published and verified: ${release.html_url}`);
       return;
     }
@@ -260,14 +289,18 @@ export async function publish(stateFile, directory) {
   }
   assert.equal(existingReleaseStatus(release, source, commit), 'draft');
   assert.equal(release.tag_name, tag);
-  gh('release', 'upload', tag, archive, sums, '--clobber', '--repo', repository);
-  release = await verifyWithRetry(() => api(`releases/${release.id}`), (fresh) => assertReleaseAssets(fresh, version, files));
+  gh('release', 'upload', tag, archive, sums, ...nativeReleaseNames.map(name => join(directory, name)), '--clobber', '--repo', repository);
+  release = await verifyWithRetry(() => api(`releases/${release.id}`), fresh => {
+    assertReleaseIdentity(fresh, release, source, commit, 'draft');
+    assertReleaseAssets(fresh, version, files);
+  });
   // Do not let an older run make itself Latest after a newer push or manual release.
   if (!sourceIsCurrent(source)) { console.log(`Keep ${tag} as draft: master has advanced.`); return; }
   const newerRelease = releases().find((item) => !item.draft && !item.prerelease && /^v/.test(item.tag_name) && pattern.test(item.tag_name.slice(1)) && compareVersions(item.tag_name.slice(1), version) > 0);
   assert.ok(!newerRelease, 'A newer release is already published; refusing to move Latest backwards');
   gh('release', 'edit', tag, '--repo', repository, '--draft=false', '--latest');
   const latest = await verifyWithRetry(() => api('releases/latest'), async (fresh) => {
+    assertReleaseIdentity(fresh, release, source, commit, 'published');
     assert.equal(fresh.tag_name, tag);
     await verifyPublicRelease(fresh, fetch, sha256(bytes));
   });

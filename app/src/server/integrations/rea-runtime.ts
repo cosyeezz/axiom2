@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ReaEnginePaths } from "../../shared/rea-engines.js";
+import { isReaEngineId, type ReaEngineId, type ReaEnginePaths } from "../../shared/rea-engines.js";
 import { validEnginePaths } from "./rea-engines.js";
 
 export const reaSkillName = "reverse-engineer-anything";
@@ -12,7 +12,15 @@ export function reaSupportedNode(version = process.versions.node) {
   const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
   return major === 22 && minor >= 19 || major === 24 && minor >= 11 || major >= 26;
 }
-export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; installation?: { directory: string; version: string } };
+export const reaProgramDirectoryPattern = /^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/;
+export const reaEngineDirectoryPattern = /^(java|ghidra|jadx|wabt)-[a-f0-9-]{36}$/;
+export type ManagedReaEngine = { directory: string; path: string };
+export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; managedEngines?: Partial<Record<ReaEngineId, ManagedReaEngine[]>>; removalPending?: string[]; installation?: { directory: string; version: string } };
+function validManagedEngines(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([id, records]) =>
+    isReaEngineId(id) && id !== "hopper" && Array.isArray(records) && records.every(record => record && typeof record.directory === "string" &&
+      reaEngineDirectoryPattern.test(record.directory) && record.directory.startsWith(`${id}-`) && validEnginePaths({ [id]: record.path }) && !!record.path));
+}
 export function readReaConfig(root: string): ReaConfig {
   try {
     const value = JSON.parse(readFileSync(reaConfigPath(root), "utf8"));
@@ -20,18 +28,30 @@ export function readReaConfig(root: string): ReaConfig {
         value.skillInstalled !== undefined && typeof value.skillInstalled !== "boolean" ||
         value.mcpInstalled !== undefined && typeof value.mcpInstalled !== "boolean" ||
         value.engines !== undefined && !validEnginePaths(value.engines) ||
+        value.managedEngines !== undefined && !validManagedEngines(value.managedEngines) ||
+        value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some((name: unknown) => typeof name !== "string" || !reaProgramDirectoryPattern.test(name) && !reaEngineDirectoryPattern.test(name))) ||
         value.installation && (!validReaVersion(value.installation.version) || typeof value.installation.directory !== "string" ||
-          !/^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/.test(value.installation.directory))) throw Error();
+          !reaProgramDirectoryPattern.test(value.installation.directory))) throw Error();
     return value;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { format: 1, revision: "", enabled: true };
     throw Error("REA 配置无法读取，请检查 integrations/rea/config.json；未覆盖原文件。");
   }
 }
-export function atomicReaJson(path: string, value: unknown) {
+export function atomicReaJson(path: string, value: unknown, onPublished?: () => void) {
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  try { writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", { flag: "wx", mode: 0o600 }); renameSync(temporary, path); }
+  try {
+    const fd = openSync(temporary, "wx", 0o600);
+    try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); } finally { closeSync(fd); }
+    renameSync(temporary, path);
+    // Keep published candidates even if syncing the containing directory fails.
+    onPublished?.();
+    if (process.platform !== "win32") {
+      const directory = openSync(dirname(path), "r");
+      try { fsyncSync(directory); } finally { closeSync(directory); }
+    }
+  }
   finally { rmSync(temporary, { force: true }); }
 }
 export function reaPackageRoot(root: string, config = readReaConfig(root)) {

@@ -1,3 +1,4 @@
+import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useEffect, useState } from "react";
 import { command, useConnectionState, useScope } from "../transport.js";
 import { Select } from "../Select.js";
@@ -10,6 +11,7 @@ export function RtkTool({ active }: { active: boolean }) {
   const [draft, setDraft] = useState<{ revision: string; settings: RtkSettings; baseSettings: RtkSettings }>();
   const [sending, setSending] = useState(false), [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
   const [days, setDays] = useState(7), [stats, setStats] = useState<RtkStats>(emptyRtkStats), [refresh, setRefresh] = useState(0);
+  const [uninstall, setUninstall] = useState<string>();
   const [clear, setClear] = useState<"Stats" | "Originals">();
   const settings = draft?.settings ?? state.settings, conflict = !!draft && draft.revision !== state.revision && !sameSettings(draft.baseSettings, state.settings);
   const busy = sending || !!state.job?.running || !connection.connected;
@@ -45,17 +47,19 @@ export function RtkTool({ active }: { active: boolean }) {
     const a = document.createElement("a"); a.href = url; a.download = "axiom-rtk-effects.json"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <article className="supplier-detail tools-detail" id="rtk" aria-labelledby="rtk-heading" style={active ? undefined : { display: "none" }}>
-    <div className="detail-heading row-between"><div><h2 id="rtk-heading">RTK</h2><p className="meta">缩减 shell 工具返回给模型的文本，保留原文回查。</p></div><span className="tag">{state.settings.enabled ? "已启用" : "未启用"}</span></div>
+    <div className="detail-heading row-between"><div><h2 id="rtk-heading">RTK</h2><p className="meta">缩减 shell 工具返回给模型的文本，保留原文回查。</p></div><span className="tag">{state.settings.enabled && state.executable ? "已启用" : state.settings.enabled ? "已设置启用 · 等待安装" : "未启用"}</span></div>
     <div className="tools-content">
       <div className="tools-feedback" aria-live="polite">{error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || state.job?.message || "默认关闭；安装后可选择等级并启用。"}</p>}{!connection.connected && <p>连接已断开；重连后读取当前进度。</p>}</div>
-      <section className="section tools-section" aria-labelledby="rtk-install-heading">
-        <div className="section-heading"><h3 id="rtk-install-heading">安装与更新</h3><p>官方 rtk-oss · Apache-2.0 · Axiom 独立管理</p></div>
-        <dl className="tools-facts"><div><dt>当前平台</dt><dd>{state.platform || "读取中"}{state.platform && !state.supported && " · 暂无官方发布包"}</dd></div><div><dt>当前版本</dt><dd>{state.version ? `v${state.version}` : "未安装"}</dd></div><div><dt>最新版本</dt><dd>{state.latest ? `v${state.latest}` : "尚未检查"}</dd></div></dl>
-        <div className="tools-actions"><button className="btn" disabled={busy || !state.supported} onClick={() => void action("rtk.check")}>检查 RTK 更新</button><button className="btn btn-primary" disabled={busy || !state.latest || !state.supported} onClick={() => void action("rtk.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? state.latest === state.version ? "重新安装 RTK" : "更新 RTK" : "安装 RTK"}</button><button className="btn" disabled={busy || !state.version} onClick={() => void action("rtk.doctor")}>运行自检</button>{state.job?.running && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rtk.cancel", { jobId: state.job!.id })}>取消操作</button>}</div>
+      <BackendMaintenance resource="rtk" label="RTK" location="所连接后台 · 应用级 · Axiom 独立管理">
+        <dl className="tools-facts"><div><dt>当前平台</dt><dd>{state.platform || "读取中"}{state.platform && !state.supported && (state.supportError ? " · 托管维护暂不可用" : " · 暂无官方发布包")}</dd></div><div><dt>当前版本</dt><dd>{state.version ? `v${state.version}` : "未安装"}</dd></div><div><dt>最新版本</dt><dd>{state.latest ? `v${state.latest}` : "尚未检查"}</dd></div></dl>
+        {state.supportError && <p className="field-help">{state.supportError}</p>}
+        <div className="tools-actions"><button className="btn" disabled={busy || !state.supported} onClick={() => void action("rtk.check")}>检查 RTK 更新</button><button className="btn btn-primary" disabled={busy || !state.latest || !state.supported} onClick={() => void action("rtk.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? state.latest === state.version ? "重新安装 RTK" : "更新 RTK" : "安装 RTK"}</button><button className="btn" disabled={busy || !!state.supportError || !state.version} onClick={() => void action("rtk.doctor")}>运行自检</button>{state.job?.running && state.job.kind !== "uninstall" && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rtk.cancel", { jobId: state.job!.id })}>取消操作</button>}</div>
+        <div className="tools-actions"><button className="btn" disabled={busy || (!state.executable && !state.removalPending)} onClick={() => setUninstall(state.revision)}>{state.removalPending ? "清理卸载残留" : "卸载 RTK"}</button></div>
+        {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label="确认卸载 RTK"><p>将删除 Axiom 托管的 RTK {state.version ? `v${state.version}` : "程序"}及旧版本，保留过滤设置、效果记录和原文。请先结束执行任务；清理期间暂不能开始新执行。</p><div className="tools-actions"><button className="btn" disabled={busy || uninstall !== state.revision} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rtk.uninstall", { revision, confirm: true }); }}>确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>取消</button></div>{uninstall !== state.revision && <p>安装状态已变化，请关闭后重新确认。</p>}</div>}
         <p className="field-help tools-help">先检查更新，再安装已确认版本。校验下载包并运行自检后切换，失败保留当前版本；不会自动升级或降级。可离开页面，服务退出会中断操作。安装与更新不会自动启用过滤；未保存的过滤设置会保留，安装完成后可继续保存。</p>
         {state.executable && <p className="tools-path">程序位置 <LocalPath path={state.executable} /></p>}
         {state.diagnostic && <p className="field-help" role="status">{state.diagnostic.text} · {new Date(state.diagnostic.at).toLocaleString()}</p>}
-      </section>
+      </BackendMaintenance>
       <section className="section tools-section" aria-labelledby="rtk-settings-heading">
         <div className="section-heading"><h3 id="rtk-settings-heading">过滤设置</h3><p>等级由 Axiom 控制过滤范围和门槛</p></div>
         <fieldset className="tools-fields" disabled={busy}>

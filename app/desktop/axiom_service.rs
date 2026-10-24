@@ -81,6 +81,16 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     if fs::read_to_string(&helper).ok().as_deref() != Some(source) {
         fs::write(&helper, source).map_err(|e| e.to_string())?;
     }
+    for (name, runtime_source) in [
+        ("maintenance.mjs", include_str!("maintenance.mjs")),
+        ("updater-supervision.mjs", include_str!("updater-supervision.mjs")),
+        ("updater-reconciliation.mjs", include_str!("updater-reconciliation.mjs")),
+        ("service-start.mjs", include_str!("service-start.mjs")),
+        ("setup-runtime.json", include_str!("setup-runtime.json")),
+    ] {
+        let runtime = cache.join(name);
+        if fs::read_to_string(&runtime).ok().as_deref() != Some(runtime_source) { fs::write(&runtime, runtime_source).map_err(|e| e.to_string())?; }
+    }
     let mut command = Command::new(node);
     command.arg(helper).arg(action);
     if let Some(version) = version { command.arg(version); }
@@ -91,9 +101,10 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     }
     let mut child = command.spawn().map_err(|e| format!("无法启动更新控制程序：{e}"))?;
     let stdout = child.stdout.take().ok_or("无法读取更新状态")?;
+    let output_limit: u64 = if action == "history" { 8 * 1024 * 1024 } else { 65536 };
     let reader = std::thread::spawn(move || {
         let mut output = String::new();
-        stdout.take(65536).read_to_string(&mut output).map(|_| output)
+        stdout.take(output_limit + 1).read_to_string(&mut output).map(|_| output)
     });
     // Pi checks may spend 20s inspecting npm and another 20s querying the registry.
     let deadline = Instant::now() + Duration::from_secs(if action == "pi-check" { 50 } else { 30 });
@@ -106,6 +117,7 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
         std::thread::sleep(Duration::from_millis(50));
     }
     let output = reader.join().map_err(|_| "更新状态读取失败")?.map_err(|e| e.to_string())?;
+    if output.len() as u64 > output_limit { return Err("更新记录超过单次读取上限，原记录仍保留在本机。".into()); }
     let mut result: Value = serde_json::from_str(output.trim()).map_err(|_| "更新控制程序没有返回有效状态")?;
     if result["state"] == "error" { return Err(result["message"].as_str().unwrap_or("更新失败").into()); }
     result["clientVersion"] = json!(env!("CARGO_PKG_VERSION"));
@@ -132,9 +144,9 @@ pub async fn axiom_reveal_path(window: Webview, path: String) -> Result<(), Stri
 #[tauri::command]
 pub async fn axiom_update(window: Webview, action: String, version: Option<String>) -> Result<Value, String> {
     axiom_views::authorize(&window)?;
-    if !["status", "check", "pi-check", "pi-refresh", "pi", "service", "client", "recover", "installer"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
+    if !["status", "history", "check", "pi-check", "pi-refresh", "pi", "service", "client", "recover", "installer", "cancel", "extend", "defaults", "reconcile"].contains(&action.as_str()) { return Err("不支持的更新操作".into()); }
     if ["client", "installer"].contains(&action.as_str()) && !cfg!(windows) { return Err("本机平台尚未提供客户端安装包，请从发布页下载。".into()); }
-    if action != "status" && action != "check" { crate::axiom_setup::ensure_idle()?; }
+    if !["status", "history", "check"].contains(&action.as_str()) { crate::axiom_setup::ensure_idle()?; }
     let install = action == "installer";
     let backend = ["service", "recover"].contains(&action.as_str());
     let observed = axiom_views::revision();

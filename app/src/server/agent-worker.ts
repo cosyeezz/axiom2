@@ -1,3 +1,4 @@
+import "./pi-settings-storage.js";
 import { ModelLatency, latencyError } from "./model-latency.js";
 import { configureModelNetwork, defaultModelsPath, toolEnvironment } from "./integrations/model-proxy-env.js";
 import { capabilityExtensions, capabilityRuntime, discoverCapabilities, type CapabilityRuntime } from "./capability-resources.js";
@@ -21,12 +22,13 @@ import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { nativeInputs, nativeQueuedMessages, recallNativeInputs, retainedInput } from "./agents/native-queue.js";
 import { queueTaskNotifications } from "./agents/task-notifications.js";
 import { join, resolve, dirname } from "node:path";
+import { applyOpenCliEnvironment } from "./integrations/opencli-runtime.js";
+import { createInstalledResourceLoader } from "./installed-resource-loader.js";
 import {
   createAgentSession,
   createBashToolDefinition,
   createPowerShellToolDefinition,
   type BashSpawnHook,
-  DefaultResourceLoader,
   SettingsManager,
   resizeImage,
   type AgentSession,
@@ -659,15 +661,13 @@ async function run(input: WorkerInput) {
       : projectSettings;
     // No speculative cache requests after a user stops or a worker finishes.
     settingsManager.applyOverrides({ cacheWarming: "off" });
-    let opencli = input.task ? undefined : openCliResources(input.root, input.cwd);
+    const openCliBaseEnvironment = { ...process.env };
+    let opencli = input.task ? undefined : openCliResources(input.root, input.cwd, openCliBaseEnvironment);
     let rea = input.task ? undefined : reaResources(input.root, input.cwd);
     if (rea?.warning) send({ type: "warning", text: rea.warning });
     if (opencli?.warning) send({ type: "warning", text: opencli.warning });
-    if (opencli?.env) {
-      for (const key of Object.keys(process.env)) if (key.toUpperCase() === "PATH" || key === "OPENCLI_PROFILE") delete process.env[key];
-      Object.assign(process.env, opencli.env);
-    }
-    const loader = new DefaultResourceLoader({
+    if (!input.task) applyOpenCliEnvironment(process.env, opencli?.env ?? openCliBaseEnvironment);
+    const loader = createInstalledResourceLoader({
       cwd: input.cwd,
       agentDir: join(input.root, "pi"),
       settingsManager,
@@ -745,7 +745,7 @@ async function run(input: WorkerInput) {
         pi.on("turn_end", (event) => compressionBoundary(event));
         pi.on("agent_before_settle", (event) => compressionBoundary(event));
       }],
-    });
+    }, () => send({ type: "warning", text: "资源包尚未安装或版本不匹配。请到资源页安装或更新后重载，会话不会自动下载。" }));
     prepareReload = async (capabilities) => {
       if (input.task) await projectSettings.reload();
       else {
@@ -759,7 +759,8 @@ async function run(input: WorkerInput) {
             throw Error("已选择的 Skills 或 MCP 资源不可用，请恢复对应资源后重试。");
           Object.assign(input.capabilities, capabilityRuntime(catalog, selection));
         }
-        opencli = openCliResources(input.root, input.cwd);
+        opencli = openCliResources(input.root, input.cwd, openCliBaseEnvironment);
+        applyOpenCliEnvironment(process.env, opencli.env ?? openCliBaseEnvironment);
         rea = reaResources(input.root, input.cwd);
       }
     };

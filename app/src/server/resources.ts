@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
+import { withPiSettingsLock, writePiSettingsBytes } from "./pi-settings-storage.js";
+import { lockResourcePaths, withResourceFiles } from "./resource-file-lock.js";
+import { beginNpmOperation, claimNpmOperation, listNpmPending, type NpmOperation, type NpmPending } from "./resource-npm-operation.js";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DefaultPackageManager, SettingsManager, getAgentDir, loadSkills, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
@@ -8,10 +11,15 @@ import { AppError, object, text, type Command } from "../shared/protocol.js";
 import { skillImportName } from "../shared/skill-import.js";
 import { importSkillName, nameImportedSkill } from "./skill-import.js";
 import { configProjection, restoreConfig } from "./resource-config.js";
-import type { ResourceDetail, ResourceItem, ResourceScope, ResourceState } from "../shared/resources.js";
+import type { ResourceDetail, ResourceItem, ResourceJob, ResourceScope, ResourceState } from "../shared/resources.js";
 import type { Store } from "./storage.js";
 import { capabilityFileDigest, discoverCapabilities, skillId } from "./capability-resources.js";
-import { executeOpenCli, findNpmCli, type OpenCliExecute } from "./integrations/opencli.js";
+import { runPiPackage } from "./pi-package-process.js";
+import { listPiPackageRemovals, piPackagePlan } from "./pi-package-storage.js";
+import { MaintenanceError } from "../shared/maintenance.js";
+import { runMaintenance, maintenancePhase } from "./maintenance.js";
+import { findNpmCli, type OpenCliExecute } from "./integrations/opencli.js";
+import { runRtk, assertToolProcessesStopped } from "./integrations/rtk-process.js";
 import { reaConfigPath } from "./integrations/rea-runtime.js";
 
 type McpConfig = ReturnType<NonNullable<McpExtensionOptions["loadConfig"]>>["servers"][number]["config"];
@@ -33,6 +41,10 @@ function json(path: string): Record<string, any> {
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return {}; throw new AppError("RESOURCE_FILE_INVALID", "资源配置无法读取，请修复文件后重试；未覆盖原文件。"); }
 }
 function atomic(path: string, value: unknown) {
+  if (existsSync(path)) {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new AppError("RESOURCE_SHARED", "配置文件通过链接共享或已被替换，未覆盖文件；请先检查原来源。");
+  }
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.${randomUUID()}.tmp`;
   try { writeFileSync(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" }); renameSync(temp, path); }
@@ -44,27 +56,133 @@ function npmSpec(value: unknown) {
   if (!match) throw new AppError("INVALID_INPUT", "请填写 npm 包名，可附加版本号或 dist-tag。");
   return { spec, name: match[1] };
 }
+export type ResourceNpmExecute = (args: string[], options: Parameters<OpenCliExecute>[1] & { onStopped: (proof: "not-started" | "tree-cleaned") => void }) => Promise<string>;
+const executeResourceNpm: ResourceNpmExecute = async (args, options) => (await runRtk(process.execPath, args, {
+  root: options.cwd, env: options.env, signal: options.signal, timeout: options.timeout, output: "tail", onStopped: options.onStopped,
+})).toString("utf8");
 type Managed = { scopeId?: string; id: string; kind: "skill" | "mcp"; name: string; source: string; directory: string; paths?: string[]; version?: string; bin?: string };
 type Target = { builtin?: boolean; sharedOwned?: boolean; referenceOnly?: boolean; item: ResourceItem; skillPaths?: string[]; path?: string; managed?: Managed; package?: { source: string; cwd: string; local: boolean }; mcp?: { path: string; raw: any }[] };
+type Operation = { job: ResourceJob; controller: AbortController; keys: string[]; checks: { read: () => unknown; identity: string }[]; pending?: Promise<void>; npm?: NpmOperation; npmSettled?: boolean };
+function canonical(path: string): string {
+  let at = resolve(path), tail: string[] = [];
+  while (!existsSync(at) && dirname(at) !== at) { tail.unshift(basename(at)); at = dirname(at); }
+  const value = join(realpathSync(at), ...tail);
+  return process.platform === "win32" ? value.toLowerCase() : value;
+}
 export class Resources {
   private state: ResourceState = { revision: "", items: [], scopes: [], warnings: [] };
   private targets = new Map<string, Target>();
   private files = new Map<string, string>();
-  private pending?: Promise<void>;
-  private controller = new AbortController();
+  private operations = new Map<string, Operation>();
+  private reserved = new Map<string, string>();
+  private refreshPending?: Promise<ResourceState>;
+  private commitEpoch = 0;
   private closed = false;
   private readonly recordsPath: string;
   private readonly jobPath: string;
   constructor(readonly store: Store, readonly sharedPiDir: string, private readonly publish: () => void,
-    private readonly idle: () => Promise<void>, private readonly execute: OpenCliExecute = executeOpenCli) {
+    private readonly beforeChange: () => Promise<void>, private readonly execute: ResourceNpmExecute = executeResourceNpm) {
     this.recordsPath = join(store.root, "resources", "installed.json");
     this.jobPath = join(store.root, "resources", "job.json");
-    const saved = json(this.jobPath).job as ResourceState["job"];
-    if (saved) this.state.job = { ...saved, running: false, ...(saved.running ? { message: "上次操作被中断", error: "请刷新检查实际资源；未自动重复操作。" } : {}) };
+    const persisted = json(this.jobPath);
+    const saved = (Array.isArray(persisted.jobs) ? persisted.jobs : persisted.job ? [persisted.job] : []) as ResourceJob[];
+    this.state.jobs = saved.map(job => ({ ...job, running: false, ...(job.running ? { message: "上次操作被中断", error: "请刷新检查实际资源；未自动重复操作。" } : {}) }));
+    this.state.job = this.state.jobs.at(-1);
   }
-  get busy() { return !!this.pending; }
+  get busy() { return this.operations.size > 0; }
   snapshot() { return structuredClone(this.state); }
   private records(): Managed[] { const records = json(this.recordsPath).items ?? []; if (!Array.isArray(records)) throw Error("资源安装记录无效。"); return records; }
+  private npmPending() { return listNpmPending(join(this.store.root, "resources")); }
+  private npmDomain(record: NpmPending) { return record.kind === "mcp" ? this.mcpPath(this.scope(record.scopeId)) : this.settings(record.scopeId); }
+  private npmLive(record: NpmPending) {
+    if (this.operations.get(record.jobId)?.npm) return true;
+    try { const claim = claimNpmOperation(join(this.store.root, "resources"), record, this.npmDomain(record)); claim.close(); return false; }
+    catch (error) { return error instanceof AppError && error.code === "RESOURCE_BUSY"; }
+  }
+  private directoryReferenced(directory: string, ignoreRecord?: string, project?: (path: string, config: any) => any) {
+    const root = canonical(directory);
+    const overlap = (path: string, parents = false) => { const value = canonical(path); return value === root || inside(root, value) || parents && inside(value, root); };
+    if (this.records().some(record => record.id !== ignoreRecord && [record.directory, ...(record.paths ?? [])].some(path => overlap(path, true)))) return true;
+    for (const path of this.resourceFiles().filter(path => ["settings.json", "mcp.json"].includes(basename(path)))) {
+      const config = project ? project(path, json(path)) : json(path);
+      if (basename(path) === "settings.json") {
+        for (const entry of [...(Array.isArray(config.skills) ? config.skills : []), ...(Array.isArray(config.packages) ? config.packages : [])]) {
+          const source = typeof entry === "string" ? entry : entry?.source;
+          if (typeof source !== "string" || /^(npm:|git:|https?:|[!-])/.test(source)) continue;
+          const value = source.replace(/^\+/, "");
+          if (overlap(value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(path), value), true)) return true;
+        }
+      } else {
+        const mentioned = (value: unknown): boolean => {
+          if (typeof value === "string") {
+            const normalized = value.replace(/\\/g, "/"), candidate = process.platform === "win32" ? normalized.toLowerCase() : normalized;
+            const needle = root.replace(/\\/g, "/");
+            return candidate.includes(needle) || isAbsolute(value) && overlap(value);
+          }
+          return !!value && typeof value === "object" && Object.values(value).some(mentioned);
+        };
+        if (mentioned(config.mcpServers)) return true;
+      }
+    }
+    return false;
+  }
+  private assertDirectoryRemoval(directory: string, context?: Operation, ignoreRecord?: string, project?: (path: string, config: any) => any) {
+    const pending = this.npmPending().filter(record => record.directory === directory);
+    if (pending.some(record => !context?.npm?.ready || context.npm.record.jobId !== record.jobId)) throw new MaintenanceError("stop-unconfirmed", `安装进程退出尚未确认或父提交尚未完成，已保留文件与记录。位置：${directory}`);
+    if (context?.npm && [context.npm.record.directory, context.npm.record.previous?.directory].includes(directory)) context.npm.assertDirectory(directory);
+    if (this.directoryReferenced(directory, ignoreRecord, project)) throw new AppError("RESOURCE_COMMIT_PENDING", "仍有配置或安装记录引用此目录，已保留文件；请核实提交或回滚结果。");
+    assertToolProcessesStopped(directory);
+  }
+  private removeDirectory(directory: string, context?: Operation, locked = false, ignoreRecord?: string) {
+    const work = () => {
+      this.assertDirectoryRemoval(directory, context, ignoreRecord);
+      rmSync(directory, { recursive: true, force: true });
+    };
+    return locked ? work() : withResourceFiles(this.resourceFiles(), work);
+  }
+  private recoverNpmPending() {
+    for (const pending of this.npmPending()) {
+      if (this.operations.has(pending.jobId) || pending.format !== 2 || pending.phase !== "ready" || pending.unconfirmed) continue;
+      let claim: NpmOperation | undefined;
+      try {
+        claim = claimNpmOperation(join(this.store.root, "resources"), pending, this.npmDomain(pending));
+        withResourceFiles(this.resourceFiles(), () => {
+          claim!.assertDirectory(); assertToolProcessesStopped(pending.directory);
+          const record = this.records().find(record => record.directory === pending.directory && record.kind === pending.kind && (record.scopeId ?? "global") === pending.scopeId);
+          if (record) {
+            if (!existsSync(pending.directory)) return;
+            let complete = false;
+            if (record.kind === "skill" && record.paths?.length) {
+              const settingsPath = this.settings(pending.scopeId), skills = json(settingsPath).skills;
+              complete = Array.isArray(skills) && record.paths.every(path => inside(pending.directory, path) && skills.some(entry => {
+                if (typeof entry !== "string" || /^[!-]/.test(entry)) return false;
+                const value = entry.replace(/^\+/, "");
+                return canonical(value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settingsPath), value)) === canonical(path);
+              }));
+            } else if (record.kind === "mcp" && record.name === pending.name) {
+              const config = json(this.mcpPath(this.scope(pending.scopeId))).mcpServers?.[record.name];
+              complete = Array.isArray(config?.args) && config.args.some((arg: unknown) => typeof arg === "string" && isAbsolute(arg) && inside(pending.directory, arg));
+            }
+            if (!complete) return; // A partial commit stays available for repair.
+            if (pending.previous && existsSync(pending.previous.directory)) {
+              claim!.assertDirectory(pending.previous.directory);
+              this.removeDirectory(pending.previous.directory, undefined, true);
+            }
+          } else {
+            if (this.directoryReferenced(pending.directory)) return;
+            assertToolProcessesStopped(pending.directory);
+            rmSync(pending.directory, { recursive: true, force: true });
+          }
+          const saved = json(this.jobPath), jobs: ResourceJob[] = Array.isArray(saved.jobs) ? saved.jobs : saved.job ? [saved.job] : [];
+          const prior = jobs.find(job => job.id === pending.jobId);
+          this.persistJobs([prior && !prior.running ? prior : { ...prior, id: pending.jobId, running: false, scopeId: pending.scopeId,
+            label: prior?.label ?? pending.name ?? pending.packageName, message: "已核实上次安装的目录与引用，未重新执行安装。", error: "上次任务被中断；已恢复文件与配置记录，请核实资源实际状态。" }], true);
+          claim!.finish(); this.commitEpoch++;
+        });
+      } catch { /* Busy, changed identities, and ambiguous commits retain the gate. */ }
+      finally { claim?.close(); }
+    }
+  }
   private save(records: Managed[]) { atomic(this.recordsPath, { items: records }); }
   private scopes(): ResourceScope[] { return [{ id: "global", name: "全局", kind: "global" }, ...this.store.workspaces().filter(w => w.authorized).map(w => ({ id: w.id, name: w.name, path: w.path, kind: "project" as const }))]; }
   private scope(id: unknown = "global") {
@@ -81,19 +199,39 @@ export class Resources {
     if (settingsManager.drainErrors().length) throw Error("技能设置格式无效，请先修复设置文件。");
     return { settingsManager, manager: new DefaultPackageManager({ cwd, agentDir: join(this.store.root, "pi"), settingsManager }) };
   }
-  async refresh(finishing = false) {
+  refresh(_finishing = false): Promise<ResourceState> {
+    if (this.refreshPending) return this.refreshPending;
+    this.refreshPending = (async () => {
+      this.recoverNpmPending();
+      while (!await this.scan(this.commitEpoch)) { /* A commit invalidated this scan; read again. */ }
+      return this.snapshot();
+    })().finally(() => { this.refreshPending = undefined; });
+    return this.refreshPending;
+  }
+  private async scan(epoch: number) {
     const targets = new Map<string, Target>(), files = new Map<string, string>(), warnings = new Set<string>();
-    const records = this.records();
-    const track = (path: string) => files.set(path, fileIdentity(path));
+    let invalidated = false;
+    const track = (path: string) => {
+      const identity = fileIdentity(path);
+      if (files.has(path)) { if (files.get(path) !== identity) invalidated = true; }
+      else files.set(path, identity);
+    };
     track(this.recordsPath); track(this.settings());
+    const records = this.records();
+    for (const pending of this.npmPending()) if (pending.unconfirmed || !this.npmLive(pending)) warnings.add(`资源安装进程或配置提交尚未确认，相关操作已阻止，文件保留于：${pending.directory}`);
     const scopes = this.scopes();
+    for (const scope of scopes) { track(this.settings(scope.id)); track(this.mcpPath(scope)); }
+    for (const cwd of this.contexts()) { track(join(cwd, ".pi", "settings.json")); track(join(cwd, ".pi", "mcp.json")); }
     const add = (target: Omit<Target, "item"> & { item: Omit<ResourceItem, "scopeId"> & { scopeId?: string } }) => { if (!targets.has(target.item.id)) targets.set(target.item.id, { ...target, item: { scopeId: "global", ...target.item } }); };
     const packages: { root: string; id: string }[] = [];
+    const packageReferences: { root: string; id?: string }[] = [];
     const skillScopes = new Map<string, Map<string, string>>();
     const identity = (path: string) => { try { return skillId(realpathSync(path)); } catch { return skillId(path); } };
     for (const cwd of this.contexts()) {
       const { manager } = this.manager(cwd);
       const resolved = await manager.resolve(async () => "skip"), map = new Map<string, string>();
+      for (const resource of [...resolved.extensions, ...resolved.skills, ...resolved.prompts, ...resolved.themes])
+        if (resource.metadata.origin === "top-level" && !resource.path.startsWith("builtin:")) packageReferences.push({ root: resource.path });
       for (const entry of resolved.skills.filter(e => e.enabled)) {
         const scopeId = entry.metadata.scope === "project" ? scopes.find(s => s.path === cwd)?.id : "global";
         const loaded = loadSkills({ cwd, agentDir: join(this.store.root, "pi"), skillPaths: [entry.path], includeDefaults: false });
@@ -105,9 +243,27 @@ export class Resources {
         track(settingsPath);
         const id = digest([settingsPath, pkg.source]);
         const owned = !!pkg.installedPath && (inside(join(this.store.root, "pi", "npm"), pkg.installedPath) || inside(join(this.store.root, "pi", "git"), pkg.installedPath) || local && (inside(join(cwd, ".pi", "npm"), pkg.installedPath) || inside(join(cwd, ".pi", "git"), pkg.installedPath)));
-        if (pkg.installedPath) packages.push({ root: pkg.installedPath, id });
+        if (pkg.installedPath) { packages.push({ root: pkg.installedPath, id }); packageReferences.push({ root: pkg.installedPath, id }); }
         add({ item: { id, scopeId: local ? scopes.find(s => s.path === cwd)?.id ?? "global" : "global", kind: "package", name: pkg.source, description: "pi 资源包 · 包含的技能与其他资源一起管理", source: pkg.installedPath ?? settingsPath, managed: owned, removable: true,
           cleanup: ["移除 pi 包声明", ...(owned ? [`删除托管包及其依赖：${pkg.installedPath}`] : ["外部共享源文件保留（本应用不拥有）"])], note: local ? `工作空间：${cwd}` : "应用级资源包" }, package: { source: pkg.source, cwd, local } });
+      }
+    }
+    for (const scope of scopes) {
+      const local = scope.kind === "project", cwd = scope.path ?? this.store.root, settingsPath = this.settings(scope.id);
+      track(join(dirname(settingsPath), "axiom-package-removals"));
+      let removals: ReturnType<typeof listPiPackageRemovals>;
+      try { removals = listPiPackageRemovals({ cwd, local, agentDir: join(this.store.root, "pi") }); }
+      catch { warnings.add(`${scope.name}的资源包待清理记录无法核实，请检查目录链接、记录格式与权限后刷新；未自动清理。`); continue; }
+      for (const pending of removals) {
+        track(pending.path); track(settingsPath);
+        const id = digest([settingsPath, pending.source]);
+        const note = "卸载尚未完成。请继续清理；完成前不能重新安装或更新此包。";
+        const existing = targets.get(id);
+        if (existing) { existing.item.removalPending = true; existing.item.note = note; }
+        else add({ package: { source: pending.source, cwd, local }, item: { id, scopeId: scope.id, kind: "package", name: pending.source,
+          description: "pi 资源包 · 卸载待清理", source: pending.directory ?? settingsPath, managed: pending.managed, removable: true, removalPending: true,
+          cleanup: ["确认此范围的包声明已移除", ...(pending.managed ? [`清理托管包及其依赖：${pending.directory}`] : ["外部共享源文件保留（本应用不拥有）"]), "移除待清理记录"], note } });
+        if (pending.directory) { packages.push({ root: pending.directory, id }); packageReferences.push({ root: pending.directory, id }); }
       }
     }
     for (const record of records) {
@@ -123,7 +279,7 @@ export class Resources {
     for (const cwd of this.contexts()) {
       const catalog = await discoverCapabilities(this.store.root, cwd, this.sharedPiDir);
       catalog.warnings.forEach(w => warnings.add(w));
-      catalog.files.forEach(file => track(file.path));
+      catalog.files.forEach(file => { if (capabilityFileDigest(file.path) !== file.digest) invalidated = true; track(file.path); });
       for (const server of catalog.config.servers.filter(server => server.source === reaConfigPath(this.store.root))) {
         add({ builtin: true, item: { id: "builtin:rea:mcp", kind: "mcp", name: server.name, description: "REA 内置 MCP 服务", source: server.source, builtin: "rea",
           managed: true, removable: false, cleanup: [], note: "由内置工具 REA 管理；安装、卸载、更新和默认启用请到内置工具设置。" } });
@@ -173,6 +329,17 @@ export class Resources {
       }
     }
     for (const record of records.filter(r => r.kind === "mcp")) if (scopes.some(s => s.id === (record.scopeId ?? "global")) && ![...targets.values()].some(t => t.managed?.id === record.id)) add({ item: { id: `orphan:${record.id}`, scopeId: record.scopeId ?? "global", kind: "mcp", name: record.name, description: "安装目录待清理", source: record.directory, managed: true, removable: true, cleanup: [`删除遗留安装目录及依赖：${record.directory}`, "移除安装记录"] }, managed: record, mcp: [] });
+    // Package roots protect all resource types, including filtered/disabled packages.
+    for (const target of targets.values()) if (target.package && target.item.managed) {
+      const own = packages.find(pkg => pkg.id === target.item.id);
+      if (own && packageReferences.some(reference => {
+        if (reference.id === target.item.id) return false;
+        try { const root = realpathSync(own.root), path = realpathSync(reference.root); return identity(root) === identity(path) || inside(root, path); } catch { return false; }
+      })) {
+        target.sharedOwned = true; target.item.removable = false;
+        target.item.note = "其他资源声明仍引用此包目录。请先解除这些引用，再更新或卸载。";
+      }
+    }
     // A discovery scope is not file ownership: detach shared/ancestor guides
     // from this scope, never delete a file still used by another scope.
     for (const target of targets.values()) if (!target.builtin && target.skillPaths?.length) {
@@ -205,71 +372,210 @@ export class Resources {
       target.item.movable = !reason;
       target.item.moveBlockedReason = reason;
     }
-    // A refresh begun while idle must not replace the admitted operation's snapshot.
-    if (this.busy && !finishing) return this.snapshot();
+    if (invalidated || epoch !== this.commitEpoch || [...files].some(([path, hash]) => fileIdentity(path) !== hash)) return false;
     this.targets = targets; this.files = files;
     this.state = { ...this.state, scopes, items: [...targets.values()].map(t => t.item), warnings: [...warnings], revision: digest([scopes, [...files]]) };
-    this.publish(); return this.snapshot();
+    this.publish(); return true;
   }
-  private assertFiles() { for (const [path, hash] of this.files) if (fileIdentity(path) !== hash) throw new AppError("REVISION_CONFLICT", "资源文件已改变，请刷新后重试。"); }
-  private notify() { atomic(this.jobPath, { job: this.state.job }); this.publish(); }
+  private assertFiles(context: Operation) {
+    context.controller.signal.throwIfAborted();
+    for (const check of context.checks) if (digest(check.read()) !== check.identity)
+      throw new AppError("REVISION_CONFLICT", "此资源的文件或配置已改变，请刷新后重试。");
+  }
+  private persistJobs(updates: ResourceJob[], locked = false) {
+    const work = () => {
+      const saved = json(this.jobPath), prior: ResourceJob[] = Array.isArray(saved.jobs) ? saved.jobs : saved.job ? [saved.job] : [];
+      const merged = new Map(prior.map(job => [job.id, job]));
+      for (const job of updates) merged.set(job.id, job);
+      const all = [...merged.values()], recent = new Set(all.filter(job => !job.running && !job.error).slice(-30).map(job => job.id));
+      const jobs = all.filter(job => job.running || job.error || recent.has(job.id)), job = jobs.at(-1);
+      atomic(this.jobPath, { job, jobs });
+      this.state.jobs = jobs; this.state.job = job;
+    };
+    return locked ? work() : withResourceFiles([this.jobPath], work);
+  }
+  private notify() { this.persistJobs([...this.operations.values()].map(operation => operation.job)); this.publish(); }
+  private conflicting(keys: string[], owner?: string) {
+    return keys.some(key => [...this.reserved.entries()].some(([held, jobId]) => jobId !== owner && (key === held || key.startsWith("path:") && held.startsWith("path:") && (key.startsWith(held + sep) || held.startsWith(key + sep)))));
+  }
+  private resourceFiles(target?: Target, extra: string[] = []) {
+    return [...new Set([this.recordsPath, ...this.scopes().flatMap(scope => [this.settings(scope.id), this.mcpPath(scope)]),
+      ...[...this.files.keys()].filter(path => ["settings.json", "mcp.json"].includes(basename(path))),
+      ...(target?.path ? [target.path] : []), ...(target?.managed ? [target.managed.directory] : []), ...extra])];
+  }
+  private physicalFiles(target?: Target) { return [target?.path, target?.managed?.directory].filter((path): path is string => !!path); }
+  private commitFiles<T>(context: Operation, target: Target | undefined, work: () => T, extra: string[] = []) {
+    const release = lockResourcePaths(this.physicalFiles(target));
+    try { return withResourceFiles(this.resourceFiles(undefined, extra), () => {
+      this.assertFiles(context);
+      if (context.npm) {
+        context.npm.assertDirectory(undefined, true);
+        if (context.npm.record.previous) context.npm.assertDirectory(context.npm.record.previous.directory, true);
+      }
+      return work();
+    }); }
+    finally { release(); }
+  }
+  private reserveSkillNames(context: Operation, scopeId: string, names: string[]) {
+    const keys = names.map(name => "skill-name:" + canonical(this.settings(scopeId)) + ":" + name);
+    if (this.conflicting(keys, context.job.id)) throw new AppError("RESOURCE_BUSY", "同名技能正在安装或移动，请等待对应任务完成后重试；未覆盖技能配置。");
+    const paths = [
+      ...[...this.targets.values()].filter(target => target.item.id !== context.job.targetId && target.item.scopeId === scopeId).flatMap(target => target.skillPaths ?? []),
+      ...this.records().filter(record => record.id !== context.job.targetId && (record.scopeId ?? "global") === scopeId && record.kind === "skill").flatMap(record => record.paths ?? []),
+    ];
+    const settingsPath = this.settings(scopeId), entries = json(settingsPath).skills ?? [];
+    if (!Array.isArray(entries)) throw new AppError("RESOURCE_FILE_INVALID", "技能路径配置格式无效，未覆盖原配置。");
+    paths.push(join(dirname(settingsPath), "skills"));
+    if (scopeId === "global") paths.push(join(this.sharedPiDir, "skills"));
+    for (const entry of entries) if (typeof entry === "string" && !/^[!-]/.test(entry)) {
+      const value = entry.replace(/^\+/, "");
+      paths.push(value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settingsPath), value));
+    }
+    const own = context.job.targetId ? this.targets.get(context.job.targetId) : undefined;
+    const excluded = new Set(own ? this.guides(own).map(path => canonical(path)) : []);
+    const existing = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [...new Set(paths)], includeDefaults: false }).skills;
+    if (existing.some(skill => !excluded.has(canonical(skill.filePath)) && names.includes(skill.name))) throw new AppError("RESOURCE_CONFLICT", "此作用范围已有同名技能，请修改技能名称；未覆盖已有技能文件或配置。");
+    for (const key of keys) if (!context.keys.includes(key)) { context.keys.push(key); this.reserved.set(key, context.job.id); }
+  }
+  private prepare(p: Record<string, unknown>, target: Target | undefined, scope: ResourceScope, op: string): Operation {
+    const keys = new Set<string>(), checks: Operation["checks"] = [];
+    const check = (read: () => unknown) => checks.push({ read, identity: digest(read()) });
+    const pathKey = (path: string) => keys.add("path:" + canonical(path));
+    const kind = target?.item.kind ?? p.kind;
+    const label = target?.item.name ?? (typeof p.name === "string" && p.name.trim() ? p.name.trim()
+      : kind === "package" ? "pi 资源包" : typeof p.source === "string" ? p.source.startsWith("npm:") || kind === "mcp" ? npmSpec(p.source).name : basename(p.source) : "技能与 MCP");
+    const resource = "resources:" + (target?.item.id ?? digest([scope.id, kind, p.name, p.source]));
+    if (target) keys.add("target:" + target.item.id);
+    if (kind === "package") {
+      const request = { action: op === "resources.remove" ? "remove" as const : "install" as const, source: target?.package?.source ?? text(p.source, "pi 包来源", 1000), cwd: target?.package?.cwd ?? scope.path ?? this.store.root, local: scope.kind === "project", fromSettings: !!target, agentDir: join(this.store.root, "pi") };
+      const plan = piPackagePlan(request);
+      if (plan.parsed.type === "npm") pathKey(join(dirname(plan.settingsPath), "npm"));
+      else if (plan.parsed.type === "git") pathKey(plan.directory!);
+      else keys.add("packages:" + canonical(plan.settingsPath));
+      check(() => { const entries = json(plan.settingsPath).packages ?? []; return entries.filter(plan.matches); });
+    } else if (kind === "mcp") {
+      const name = target?.item.name ?? text(p.name, "MCP 名称", 128);
+      keys.add("mcp-name:" + name.replace(/-/g, "_"));
+      for (const path of new Set([...(target?.mcp?.map(entry => entry.path) ?? [this.mcpPath(scope)]), ...(op === "resources.move" ? [this.mcpPath(this.scope(p.destinationScopeId))] : [])]))
+        check(() => json(path).mcpServers?.[name] ?? null);
+    } else {
+      const paths = [...(target?.skillPaths ?? []), ...(target?.managed?.paths ?? []), ...(target?.path ? [target.path] : [])];
+      for (const path of paths) pathKey(path);
+      const source = typeof p.source === "string" ? p.source : target?.managed?.source;
+      const name = target?.item.name ?? (typeof p.name === "string" && p.name.trim() ? p.name.trim() : source && !source.startsWith("npm:") ? skillImportName(source) : undefined);
+      const names = target ? loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: target.skillPaths ?? [], includeDefaults: false }).skills.map(skill => skill.name) : name ? [name] : [];
+      for (const name of names) for (const id of [scope.id, ...(op === "resources.move" ? [this.scope(p.destinationScopeId).id] : [])]) keys.add("skill-name:" + canonical(this.settings(id)) + ":" + name);
+      if (op === "resources.move" && target?.path) pathKey(join(dirname(this.settings(this.scope(p.destinationScopeId).id)), "skills", basename(target.path)));
+      if (target) for (const settingsPath of this.files.keys()) if (basename(settingsPath) === "settings.json") check(() => {
+        const entries = json(settingsPath).skills ?? [];
+        return entries.filter((entry: unknown) => {
+          if (typeof entry !== "string") return false;
+          const value = entry.replace(/^[+!-]/, ""), absolute = value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settingsPath), value);
+          return paths.some(path => resolve(path) === absolute || inside(absolute, path));
+        });
+      });
+    }
+    if (target?.managed) check(() => this.records().find(record => record.id === target.managed!.id) ?? null);
+    const roots = [target?.path, target?.managed?.directory, ...(target?.skillPaths ?? [])].filter((path): path is string => !!path);
+    for (const path of roots) pathKey(path);
+    for (const path of this.files.keys()) if (roots.some(root => path === root || inside(root, path))) check(() => fileIdentity(path));
+    return { job: { id: randomUUID(), running: true, label, message: "正在准备资源操作…", scopeId: scope.id, operation: op, targetId: target?.item.id, resource }, controller: new AbortController(), keys: [...keys], checks };
+  }
   async command(c: Command) {
-    if (c.op === "resources.get") return this.busy ? this.snapshot() : this.refresh();
+    if (c.op === "resources.get") return this.refresh();
     if (c.op === "resources.detail") return this.detail(object(c.params ?? {}));
     if (!["resources.install", "resources.update", "resources.remove", "resources.save", "resources.move"].includes(c.op)) throw new AppError("UNKNOWN_OPERATION", "不支持的资源操作。");
-    if (this.closed || this.busy) throw new AppError("RESOURCE_BUSY", "资源操作进行中，请等待完成。");
+    if (this.closed) throw new AppError("RESOURCE_BUSY", "后台正在关闭，未开始新的资源操作。");
     const p = object(c.params ?? {});
+    if (c.op === "resources.install" && p.id !== undefined) throw new AppError("INVALID_INPUT", "新增资源不能指定已有资源标识；替换已有资源请使用更新操作。");
     const previous = this.state.revision;
+    if (typeof p.id === "string" && [...this.operations.values()].some(operation => operation.job.targetId === p.id))
+      throw new AppError("RESOURCE_BUSY", "此资源正在维护，请等待对应任务完成；其他资源可以继续操作。");
     await this.refresh();
-    if (this.busy) throw new AppError("RESOURCE_BUSY", "另一资源操作已开始。");
+    if (this.closed) throw new AppError("RESOURCE_BUSY", "后台正在关闭，未开始新的资源操作。");
     if (p.revision !== previous || p.revision !== this.state.revision) throw new AppError("REVISION_CONFLICT", "资源目录已变化，请刷新后重试。");
     const target = p.id ? this.targets.get(text(p.id, "资源标识")) : undefined;
     if (c.op !== "resources.install" && !target) throw new AppError("RESOURCE_MISSING", "资源不存在，请刷新。");
     const scope = this.scope(target?.item.scopeId ?? p.scopeId);
+    const kind = target?.item.kind ?? p.kind, source = target?.managed?.source ?? p.source;
+    const packageName = typeof source === "string" && (kind === "mcp" || source.startsWith("npm:")) ? npmSpec(source).name : undefined;
+    const name = target?.item.name ?? p.name;
+    const pendingNpm = this.npmPending().find(record => !this.operations.has(record.jobId) &&
+      (target && record.targetId === target.item.id || record.scopeId === scope.id && record.kind === kind &&
+        (kind === "mcp" ? typeof name === "string" && name.replace(/-/g, "_") === record.name?.replace(/-/g, "_") : record.packageName === packageName)));
+    if (pendingNpm) {
+      if (this.npmLive(pendingNpm)) throw new AppError("RESOURCE_BUSY", "另一个宿主仍在维护此资源或提交配置，请等待对应任务完成；其他资源可以继续操作。");
+      throw new MaintenanceError("stop-unconfirmed", "此资源的上次安装进程或配置提交尚未确认，已保留目录与记录；未重复安装或删除文件。");
+    }
     if (target?.builtin) throw new AppError("BUILTIN_RESOURCE", "此资源由内置工具管理，请到内置工具设置更新或重新安装。");
     if (target?.sharedOwned) throw new AppError("RESOURCE_SHARED", "其他作用范围仍引用此资源，请先移除这些引用再编辑、更新或卸载。");
+    if (target?.item.removalPending && c.op !== "resources.remove") throw new AppError("RESOURCE_REMOVAL_PENDING", "此资源包卸载尚未完成，请先清理残留文件。");
     if (c.op === "resources.move") {
       const destination = this.scope(p.destinationScopeId);
       if (!target!.item.movable || destination.id === scope.id || (destination.kind !== "global" && scope.kind !== "global"))
         throw new AppError("INVALID_INPUT", target!.item.moveBlockedReason ?? "请选择可独立管理的技能或 MCP，在项目与全局之间移动。");
     }
     if (c.op === "resources.remove" && (!target!.item.removable || p.confirm !== true)) throw new AppError("INVALID_INPUT", "请确认此资源的清理范围。");
-    this.state.job = { id: randomUUID(), running: true, message: "正在准备资源操作…" };
+    const context = this.prepare(p, target, scope, c.op), job = context.job;
+    if (this.conflicting(context.keys)) throw new AppError("RESOURCE_BUSY", "此资源或共享安装目录正在维护，请等待对应任务完成；其他资源可以继续操作。");
+    for (const key of context.keys) this.reserved.set(key, job.id);
+    this.operations.set(job.id, context);
+    this.state.jobs = [...(this.state.jobs ?? []).filter(old => old.running || old.error), ...(this.state.jobs ?? []).filter(old => !old.running && !old.error).slice(-30), job];
+    this.state.job = job;
     try { this.notify(); }
     catch {
-      this.state.job.running = false; this.state.job.error = "无法保存资源作业记录，尚未修改资源。请检查文件权限后重试。";
-      this.publish(); throw new AppError("RESOURCE_STATE_FAILED", this.state.job.error);
+      this.operations.delete(job.id); for (const key of context.keys) this.reserved.delete(key);
+      job.running = false; job.error = "无法保存资源作业记录，尚未修改资源。请检查文件权限后重试。";
+      this.publish(); throw new AppError("RESOURCE_STATE_FAILED", job.error);
     }
-    // Persist admission before queuing any side effect; reserve before yielding.
-    this.pending = Promise.resolve().then(async () => {
-      await this.idle(); this.scope(scope.id); this.assertFiles();
+    let refreshed = false;
+    context.pending = Promise.resolve().then(() => runMaintenance(this.store.root, { id: job.id, resource: job.resource!, label: job.label!, action: c.op.slice(10), scope: scope.id === "global" ? "应用级" : "项目：" + scope.name + " (" + scope.id + ")", params: p, cancel: true, controllable: true, steps: c.op === "resources.remove" ? ["checking", "removing", "validating"] : ["checking", "installing", "validating"] }, context.controller, async () => {
+      await this.beforeChange(); this.scope(scope.id); this.assertFiles(context);
+      maintenancePhase(c.op === "resources.remove" ? "removing" : "installing");
       if (c.op === "resources.move") {
         const destination = this.scope(p.destinationScopeId);
-        this.state.job!.resourceId = target!.item.kind === "mcp" ? await this.moveMcp(target!, destination) : await this.moveSkill(target!, destination);
+        job.resourceId = target!.item.kind === "mcp" ? await this.moveMcp(context, target!, destination) : await this.moveSkill(context, target!, destination);
       }
-      else if (c.op === "resources.save") await this.saveContent(p, target!);
-      else if (c.op === "resources.remove") await this.remove(target!);
-      else if (target?.package) await this.updatePackage(target);
-      else if ((target?.item.kind ?? p.kind) === "skill") await this.installSkill({ ...p, scopeId: scope.id }, target);
-      else if ((target?.item.kind ?? p.kind) === "mcp") await this.installMcp({ ...p, scopeId: scope.id }, target);
-      else if (p.kind === "package") await this.installPackage({ ...p, scopeId: scope.id });
+      else if (c.op === "resources.save") await this.saveContent(context, p, target!);
+      else if (c.op === "resources.remove") await this.remove(context, target!, p.clearCredentials === true);
+      else if (target?.package) await this.updatePackage(context, target);
+      else if ((target?.item.kind ?? p.kind) === "skill") await this.installSkill(context, { ...p, scopeId: scope.id }, target);
+      else if ((target?.item.kind ?? p.kind) === "mcp") await this.installMcp(context, { ...p, scopeId: scope.id }, target);
+      else if (p.kind === "package") await this.installPackage(context, { ...p, scopeId: scope.id });
       else throw new AppError("INVALID_INPUT", "请选择技能或 MCP。");
-      this.state.job!.message = "已完成。新会话使用更新后的资源；已有会话可重载资源，卸载的锁定能力需新建会话后重新选择。";
-    }).catch(error => {
-      this.state.job!.message = "操作未完成";
-      // npm/MCP errors may contain secrets or command arguments.
-      this.state.job!.error = error instanceof AppError ? error.message : "资源操作失败，请检查来源、文件权限和网络后刷新核实。已完成的清理不会自动回滚。";
+      this.commitEpoch++;
+      context.controller.signal.throwIfAborted();
+      maintenancePhase("validating");
+      try { await this.refresh(true); refreshed = true; }
+      catch { throw new AppError("RESOURCE_VERIFY_FAILED", "资源文件已处理，但目录刷新失败，无法确认最终结果。请刷新核实，不要直接重复操作。"); }
+      if (c.op === "resources.remove" && this.targets.has(target!.item.id))
+        throw new AppError("RESOURCE_VERIFY_FAILED", "卸载后仍发现此资源，操作未完成。请刷新核实来源和引用配置。");
+      job.message = (job.commit ? "已核实 Git 提交 " + job.commit + "。" : job.version ? "已核实版本 " + job.version + "。" : "已完成。") + "新会话使用更新后的资源；已有会话可重载资源，卸载的锁定能力需新建会话后重新选择。";
+    })).catch(error => {
+      job.message = "操作未完成";
+      job.error = error instanceof AppError || error instanceof MaintenanceError ? error.message : "资源操作失败，请检查来源、文件权限和网络后刷新核实。已完成的清理不会自动回滚。";
     }).finally(async () => {
-      this.state.job!.running = false;
-      try { await this.refresh(true); } catch { this.state.warnings = ["资源目录刷新失败，请修复配置后重试。"]; }
-      this.pending = undefined;
-      try { this.notify(); }
+      this.commitEpoch++;
+      if (!refreshed) try { await this.refresh(true); } catch {
+        this.state.warnings = ["资源目录刷新失败，请修复配置后重试。"];
+        job.error ??= "资源目录刷新失败，无法确认最终结果，请刷新核实。";
+      }
+      job.running = false;
+      let persisted = false;
+      try { this.notify(); persisted = true; }
       catch {
-        this.state.job!.error = "资源操作结果未能保存，请刷新核实实际资源；不要自动重复操作。";
-        try { this.publish(); } catch { /* The in-memory result remains available on reconnect. */ }
+        job.error = "资源操作结果未能保存，请刷新核实实际资源；不要自动重复操作。";
+        try { this.publish(); } catch { /* Retain the in-memory result. */ }
+      }
+      finally {
+        try { if (persisted && context.npmSettled) context.npm?.finish(); }
+        catch {
+          job.error = "资源结果已处理，但维护记录未能清理；请刷新核实，未自动重复安装。";
+          try { this.notify(); } catch { /* Keep the durable gate for recovery. */ }
+        } finally { context.npm?.close(); this.operations.delete(job.id); for (const key of context.keys) this.reserved.delete(key); }
       }
     });
-    return this.snapshot();
+    return { ...this.snapshot(), acceptedJobId: job.id };
   }
   private guides(target: Target) {
     return [...new Set((target.skillPaths ?? []).flatMap(path => {
@@ -298,19 +604,19 @@ export class Resources {
     return detail;
   }
   private async detail(p: Record<string, unknown>) {
-    if (this.busy) throw new AppError("RESOURCE_BUSY", "资源操作进行中，请完成后读取配置。");
     await this.refresh();
-    if (this.busy) throw new AppError("RESOURCE_BUSY", "资源操作进行中，请完成后读取配置。");
     const target = this.targets.get(text(p.id, "资源标识"));
     if (!target) throw new AppError("RESOURCE_MISSING", "资源不存在，请刷新。");
+    const context = this.prepare({}, target, this.scope(target.item.scopeId), "resources.detail");
+    if (this.conflicting(context.keys)) throw new AppError("RESOURCE_BUSY", "此资源正在维护，请完成后读取配置；其他资源可以继续浏览。");
     return this.describe(target);
   }
-  private async saveContent(p: Record<string, unknown>, target: Target) {
+  private async saveContent(context: Operation, p: Record<string, unknown>, target: Target) {
     if (target.mcp?.length) {
       let config: unknown;
       try { config = restoreConfig(JSON.parse(text(p.config, "MCP 配置", 256 * 1024)), target.mcp[0].raw); }
       catch { throw new AppError("INVALID_INPUT", "配置 JSON 或已保存值的占位符无效，请重新加载配置后编辑。"); }
-      return this.installMcp({ config: JSON.stringify(config), configOnly: true }, target);
+      return this.installMcp(context, { config: JSON.stringify(config), configOnly: true }, target);
     }
     const document = this.describe(target).documents.find(d => d.path === p.path);
     if (!document?.editable) throw new AppError("INVALID_INPUT", "此技能由外部来源或资源包管理，不能在这里直接改写。");
@@ -320,50 +626,125 @@ export class Resources {
       writeFileSync(stage, p.content, { flag: "wx", mode: statSync(document.path).mode });
       const loaded = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [stage], includeDefaults: false });
       if (!loaded.skills.length || loaded.diagnostics.some(d => d.type === "error")) throw new AppError("INVALID_INPUT", "技能内容缺少有效名称或说明，请检查 YAML frontmatter。");
-      this.assertFiles(); renameSync(stage, document.path);
+      this.commitFiles(context, target, () => {
+        this.reserveSkillNames(context, target.item.scopeId, loaded.skills.map(skill => skill.name));
+        renameSync(stage, document.path);
+      });
     } finally { rmSync(stage, { force: true }); }
   }
-  private async installPackage(p: Record<string, unknown>) {
+  private async installPackage(context: Operation, p: Record<string, unknown>) {
     const source = text(p.source, "pi 包来源", 1000);
     if (!source.startsWith("npm:") && !source.startsWith("git:")) throw new AppError("INVALID_INPUT", "pi 包来源应以 npm: 或 git: 开头。");
-    const scope = this.scope(p.scopeId), { manager, settingsManager } = this.manager(scope.path ?? this.store.root);
-    await manager.installAndPersist(source, { local: scope.kind === "project" }); await settingsManager.flush();
-    if (settingsManager.drainErrors().length) throw Error("包配置写入失败。");
+    const scope = this.scope(p.scopeId);
+    await this.packageOperation(context, "install", source, scope.path ?? this.store.root, scope.kind === "project");
   }
-  private async updatePackage(target: Target) {
-    const pkg = target.package!, { manager, settingsManager } = this.manager(pkg.cwd);
-    // installAndPersist is scope-specific; update(source) can update both scopes.
-    await manager.installAndPersist(pkg.source, { local: pkg.local }); await settingsManager.flush();
-    if (settingsManager.drainErrors().length) throw Error("包配置写入失败。");
+  private async packageOperation(context: Operation, action: "install" | "remove", source: string, cwd: string, local: boolean, fromSettings = false) {
+    const plan = piPackagePlan({ action, source, cwd, local, fromSettings, agentDir: join(this.store.root, "pi") });
+    context.job.resourceId = digest([plan.settingsPath, plan.storedSource]);
+    const result = await runPiPackage({ action, source, cwd, local, fromSettings, agentDir: join(this.store.root, "pi") }, context.controller.signal);
+    Object.assign(context.job, { version: result.version, commit: result.commit });
   }
-  private async npm(directory: string, source: string) {
+  private async updatePackage(context: Operation, target: Target) {
+    const pkg = target.package!;
+    // Operate on this scope only and resolve local references against its settings.
+    await this.packageOperation(context, "install", pkg.source, pkg.cwd, pkg.local, true);
+  }
+  private async npm(context: Operation, directory: string, source: string, kind: "skill" | "mcp", displayName?: string, previousDirectory?: string) {
     const { spec, name } = npmSpec(source);
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    atomic(join(directory, "package.json"), { private: true });
-    await this.execute([findNpmCli(), "install", "--prefix", directory, "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", ...(name.startsWith("@") ? [`--${name.split("/")[0]}:registry=https://registry.npmjs.org`] : []), spec],
-      { cwd: directory, env: { ...process.env, npm_config_cache: join(directory, "cache") }, signal: this.controller.signal, timeout: 600000 });
+    const pending: NpmPending = { jobId: context.job.id, directory, scopeId: context.job.scopeId!, kind, name: displayName, packageName: name, targetId: context.job.targetId };
+    const operation = context.npm = beginNpmOperation(join(this.store.root, "resources"), pending, this.npmDomain(pending), previousDirectory);
+    let launched = false, unconfirmed = false;
+    try {
+      atomic(join(directory, "package.json"), { private: true });
+      const cli = findNpmCli(); launched = true;
+      await this.execute([cli, "install", "--prefix", directory, "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", ...(name.startsWith("@") ? [`--${name.split("/")[0]}:registry=https://registry.npmjs.org`] : []), spec],
+        { cwd: directory, env: { ...process.env, npm_config_cache: join(directory, "cache"), npm_config_fetch_timeout: "86400000" }, signal: context.controller.signal, timeout: 600000, onStopped: proof => operation.readyWith(proof) });
+    } catch (error) {
+      unconfirmed = error instanceof MaintenanceError && error.code === "stop-unconfirmed";
+      throw error;
+    } finally {
+      if (!launched && !operation.ready) operation.readyWith("not-started");
+      try { assertToolProcessesStopped(directory); } catch { unconfirmed = true; }
+      if (unconfirmed || !operation.ready) {
+        operation.retainUnknown();
+        throw new MaintenanceError("stop-unconfirmed", `安装进程退出尚未确认，已保留文件与记录。位置：${directory}`);
+      }
+    }
     const root = join(directory, "node_modules", ...name.split("/")), pkg = json(join(root, "package.json"));
     if (pkg.name !== name) throw Error("npm 包校验失败。");
+    if (typeof pkg.version === "string") context.job.version = pkg.version;
     return { root, pkg };
   }
-  private replacePaths(remove: string[], add: string[], scopeId = "global") {
-    const path = this.settings(scopeId), settings = json(path);
-    if (settings.skills !== undefined && !Array.isArray(settings.skills)) throw Error("技能路径格式无效。");
-    settings.skills = [...(settings.skills ?? []).filter((v: unknown) => typeof v !== "string" || !remove.some(r => v === r)), ...add];
-    atomic(path, settings);
+  private withSettingsLock<T>(path: string, write: () => T): T {
+    if (basename(path) !== "settings.json") return write();
+    try { return withPiSettingsLock(path, write); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ELOCKED") throw new AppError("RESOURCE_BUSY", "此配置正在被其他进程修改，尚未覆盖其内容，请稍后刷新重试。");
+      if (code === "SETTINGS_PATH_ALIAS") throw new AppError("RESOURCE_SHARED", (error as Error).message);
+      throw error;
+    }
   }
-  private async moveMcp(target: Target, destination: ResourceScope) {
+  private editSettings(path: string, update: (settings: Record<string, any>) => void) {
+    this.withSettingsLock(path, () => { const settings = json(path); update(settings); atomic(path, settings); });
+  }
+  /** Undo only this operation's array entries; unrelated concurrent commits survive. */
+  private patchArray(path: string, field: string, update: (entries: any[]) => any[], key: (entry: any) => string = entry => JSON.stringify(entry)) {
+    return this.withSettingsLock(path, () => {
+    const existed = existsSync(path), original = existed ? readFileSync(path) : undefined, config = json(path), present = field in config;
+    const before = config[field] ?? [];
+    if (!Array.isArray(before)) throw new AppError("RESOURCE_FILE_INVALID", "资源路径配置格式无效，未覆盖原文件。");
+    const after = update(before), initial = new Map(before.map(entry => [key(entry), entry])), written = new Map(after.map(entry => [key(entry), entry]));
+    const changed = new Set([...initial.keys(), ...written.keys()].filter(id => digest(initial.get(id) ?? null) !== digest(written.get(id) ?? null)));
+    config[field] = after; atomic(path, config);
+    return () => this.withSettingsLock(path, () => {
+      const current = json(path), entries = current[field] ?? [];
+      if (!Array.isArray(entries)) throw Error("资源恢复时发现配置格式已改变。");
+      const actual = new Map(entries.map(entry => [key(entry), entry]));
+      for (const id of changed) if (digest(actual.get(id) ?? null) !== digest(written.get(id) ?? null)) throw Error("此资源的配置已被其他程序修改，未覆盖新内容。");
+      if (digest(current) === digest(config)) {
+        if (original === undefined) rmSync(path, { force: true }); else writePiSettingsBytes(path, original);
+        return;
+      }
+      const restored = entries.flatMap(entry => !changed.has(key(entry)) ? [entry] : initial.has(key(entry)) ? [initial.get(key(entry))] : []);
+      for (let index = 0; index < before.length; index++) {
+        const entry = before[index], id = key(entry);
+        if (!changed.has(id) || actual.has(id)) continue;
+        const next = before.slice(index + 1).map(key).find(id => restored.some(entry => key(entry) === id));
+        if (next !== undefined) restored.splice(restored.findIndex(entry => key(entry) === next), 0, entry);
+        else restored.push(entry);
+      }
+      if (!present && !restored.length) delete current[field]; else current[field] = restored;
+      if (!existed && !Object.keys(current).length) rmSync(path, { force: true }); else atomic(path, current);
+    });
+    });
+  }
+  private replacePaths(remove: string[], add: string[], scopeId = "global") {
+    this.editSettings(this.settings(scopeId), settings => {
+      if (settings.skills !== undefined && !Array.isArray(settings.skills)) throw Error("技能路径格式无效。");
+      settings.skills = [...(settings.skills ?? []).filter((v: unknown) => typeof v !== "string" || !remove.some(r => v === r)), ...add];
+    });
+  }
+  private async moveMcp(context: Operation, target: Target, destination: ResourceScope) {
     const entry = target.mcp![0], name = target.item.name, destinationPath = this.mcpPath(destination);
     const validate = (await validation).validateMcpServerConfig;
     const parsed = validate(name, entry.raw);
     if (typeof parsed === "string") throw new AppError("INVALID_INPUT", "MCP 配置无效，请修复连接配置后再移动。");
     if (destination.kind === "project" && "auth" in parsed && parsed.auth)
       throw new AppError("INVALID_INPUT", "此 MCP 使用仅限全局的认证供应商，不能移入项目。");
-    this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles();
+    return this.commitFiles(context, target, () => {
+    this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles(context);
     const sourceConfig = json(entry.path), destinationConfig = json(destinationPath);
     const names = Object.keys(destinationConfig.mcpServers ?? {});
-    if (names.some(other => other.replace(/-/g, "_") === name.replace(/-/g, "_")) || [...this.targets.values()].some(other => other !== target && other.item.kind === "mcp" && (other.item.scopeId === destination.id || other.item.name !== name) && other.item.name.replace(/-/g, "_") === name.replace(/-/g, "_")))
+    if (names.some(other => other.replace(/-/g, "_") === name.replace(/-/g, "_")) || [...this.targets.values()].some(other => other.item.id !== target.item.id && other.item.kind === "mcp" && (other.item.scopeId === destination.id || other.item.name !== name) && other.item.name.replace(/-/g, "_") === name.replace(/-/g, "_")))
       throw new AppError("RESOURCE_CONFLICT", "目标范围已有同名 MCP 或工具名称空间冲突，请先处理后再移动；未覆盖任何配置。");
+    for (const path of this.resourceFiles().filter(path => basename(path) === "mcp.json")) {
+      for (const [other, raw] of Object.entries(json(path).mcpServers ?? {})) {
+        if (path === entry.path && other === name) continue;
+        if (other !== name && other.replace(/-/g, "_") === name.replace(/-/g, "_") || target.item.scopeId === "global" && other === name && mcpOverride(raw))
+          throw new AppError("RESOURCE_CONFLICT", "其他范围新增了同名 MCP 覆盖或名称冲突，请刷新后再移动。");
+      }
+    }
     // A linked configuration may still be used by a different scope.
     for (const path of [entry.path, destinationPath]) {
       if (!existsSync(path)) continue;
@@ -405,8 +786,9 @@ export class Resources {
       throw new AppError("RESOURCE_MOVE_FAILED", "MCP 移动失败，已恢复原配置；请检查文件及数据库权限后重试。");
     }
     return this.mcpId(destinationPath, name);
+    }, [destinationPath]);
   }
-  private async moveSkill(target: Target, destination: ResourceScope) {
+  private async moveSkill(context: Operation, target: Target, destination: ResourceScope) {
     const guides = this.guides(target), names = new Set(loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: guides, includeDefaults: false }).skills.map(s => s.name));
     if (!names.size) throw new AppError("INVALID_INPUT", "技能内容无法读取，请修复后再移动。");
     const { manager } = this.manager(destination.path ?? this.store.root);
@@ -414,7 +796,7 @@ export class Resources {
     const candidates = resolved.skills.filter(entry => entry.metadata.scope === (destination.kind === "project" ? "project" : "user")).map(entry => entry.path);
     // Include explicitly scoped resources and shared global guides, even when a
     // same-name guide was hidden by discovery precedence.
-    candidates.push(...[...this.targets.values()].filter(t => t !== target && t.item.scopeId === destination.id).flatMap(t => t.skillPaths ?? []));
+    candidates.push(...[...this.targets.values()].filter(t => t.item.id !== target.item.id && t.item.scopeId === destination.id).flatMap(t => t.skillPaths ?? []));
     if (destination.kind === "global") candidates.push(join(this.sharedPiDir, "skills"));
     for (const path of candidates) {
       const loaded = loadSkills({ cwd: destination.path ?? this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [path], includeDefaults: false });
@@ -446,13 +828,13 @@ export class Resources {
       const value = entry.replace(/^[+!-]/, ""), absolute = value.startsWith("~/") ? join(homedir(), value.slice(2)) : resolve(dirname(settings), value);
       return paths.some(path => absolute === resolve(path));
     };
-    sourceConfig.skills = (sourceConfig.skills ?? []).filter((entry: unknown) => !matches(entry, sourceSettings, [...oldPaths, ...guides]));
-    destinationConfig.skills = [...(destinationConfig.skills ?? []).filter((entry: unknown) => typeof entry === "string" && /^[!-]/.test(entry) || !matches(entry, destinationSettings, newPaths)), ...newPaths];
-    const records = target.managed ? this.records().map(record => record.id === target.managed!.id ? { ...record, scopeId: destination.id } : record) : undefined;
-    const snapshots = [sourceSettings, destinationSettings, ...(records ? [this.recordsPath] : [])].map(path => ({ path, content: existsSync(path) ? readFileSync(path) : undefined }));
-    const stage = destinationPath ? `${destinationPath}.${randomUUID()}.staging` : undefined;
-    const backup = target.path ? `${target.path}.${randomUUID()}.backup` : undefined;
-    let backedUp = false, placed = false, writing = false, committed = false;
+    const updateSource = (entries: unknown[]) => entries.filter(entry => !matches(entry, sourceSettings, [...oldPaths, ...guides]));
+    const updateDestination = (entries: unknown[]) => [...entries.filter(entry => typeof entry === "string" && /^[!-]/.test(entry) || !matches(entry, destinationSettings, newPaths)), ...newPaths];
+    const undo: (() => void)[] = [];
+    const stage = destinationPath ? join(dirname(dirname(destinationPath)), `.axiom-move-${randomUUID()}.staging`) : undefined;
+    const backup = target.path ? join(dirname(dirname(target.path)), `.axiom-move-${randomUUID()}.backup`) : undefined;
+    let backedUp = false, placed = false, committed = false;
+    let release: (() => void) | undefined;
     const assertDestination = () => {
       if (!destinationPath) return;
       try { lstatSync(destinationPath); }
@@ -469,11 +851,22 @@ export class Resources {
           return true;
         } });
       }
-      this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles(); assertDestination();
+      release = lockResourcePaths([...this.physicalFiles(target), ...(destinationPath ? [destinationPath] : [])]);
+      const configFiles = this.resourceFiles(undefined, [sourceSettings, destinationSettings]);
+      let committedIdentity: string;
+      const ownSettings = () => [
+        (json(sourceSettings).skills ?? []).filter((entry: unknown) => matches(entry, sourceSettings, [...oldPaths, ...guides])),
+        (json(destinationSettings).skills ?? []).filter((entry: unknown) => matches(entry, destinationSettings, newPaths)),
+      ];
+      withResourceFiles(configFiles, () => {
+      this.scope(target.item.scopeId); this.scope(destination.id); this.assertFiles(context); assertDestination();
+      this.reserveSkillNames(context, destination.id, [...names]);
       if (backup) { renameSync(target.path!, backup); backedUp = true; renameSync(stage!, destinationPath!); placed = true; }
-      writing = true;
-      atomic(sourceSettings, sourceConfig); atomic(destinationSettings, destinationConfig);
-      if (records) this.save(records);
+      undo.push(this.patchArray(sourceSettings, "skills", updateSource));
+      undo.push(this.patchArray(destinationSettings, "skills", updateDestination));
+      if (target.managed) undo.push(this.patchArray(this.recordsPath, "items", entries => entries.map(record => record.id === target.managed!.id ? { ...record, scopeId: destination.id } : record), record => record.id));
+      committedIdentity = digest(ownSettings());
+      });
       const catalog = await discoverCapabilities(this.store.root, destination.path ?? this.store.root, this.sharedPiDir);
       const movedGuides = target.path ? guides.map(guide => guide === target.path ? destinationPath! : join(destinationPath!, relative(target.path!, guide))) : guides;
       if (movedGuides.some(guide => !catalog.skills.some(s => resolve(s.source) === resolve(guide))))
@@ -487,6 +880,8 @@ export class Resources {
       }
       // The file identity changes only for local files. Keep the user's default
       // selection while invalidating unlocked session catalogs for both scopes.
+      withResourceFiles(configFiles, () => {
+      if (digest(ownSettings()) !== committedIdentity) throw new AppError("REVISION_CONFLICT", "移动期间此技能的路径声明已改变，请刷新核实；未覆盖新配置。");
       this.store.db.exec("BEGIN");
       try {
         const row = this.store.db.prepare("SELECT body FROM capability_preferences WHERE id=1").get();
@@ -502,34 +897,38 @@ export class Resources {
         this.store.db.exec("COMMIT");
       } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
       committed = true;
+      });
     } catch (error) {
       const failures: unknown[] = [];
       const restore = (run: () => void) => { try { run(); } catch (failure) { failures.push(failure); } };
-      if (writing) for (const saved of snapshots.reverse()) restore(() => {
-        if (saved.content === undefined) rmSync(saved.path, { force: true });
-        else writeFileSync(saved.path, saved.content);
-      });
-      if (placed) restore(() => rmSync(destinationPath!, { recursive: true, force: true }));
-      if (backedUp) restore(() => renameSync(backup!, target.path!));
+      restore(() => withResourceFiles(this.resourceFiles(), () => {
+        for (const revert of undo.reverse()) restore(revert);
+        if (!failures.length) {
+          if (placed) restore(() => rmSync(destinationPath!, { recursive: true, force: true }));
+          if (backedUp) restore(() => renameSync(backup!, target.path!));
+        }
+      }));
       if (failures.length) throw new AppError("RESOURCE_ROLLBACK_FAILED", `移动失败且部分配置未能恢复，请检查文件权限并刷新核实。${backedUp ? `原技能备份位置：${backup}` : "技能文件仍保留在原安装目录。"}`);
       throw error;
     } finally {
-      if (stage) rmSync(stage, { recursive: true, force: true });
-      if (committed && backup) rmSync(backup, { recursive: true, force: true });
+      try {
+        if (stage) rmSync(stage, { recursive: true, force: true });
+        if (committed && backup) rmSync(backup, { recursive: true, force: true });
+      } finally { release?.(); }
     }
     if (target.managed) return target.item.id;
     const guide = guides[0] === target.path ? destinationPath! : join(destinationPath!, relative(target.path!, guides[0]));
     return destination.id === "global" ? `skill:${skillId(guide)}` : `skill:${destination.id}:${skillId(guide)}`;
   }
-  private async installSkill(p: Record<string, unknown>, target?: Target) {
-    if (target && !target.managed) return this.updateLocalSkill(p, target);
+  private async installSkill(context: Operation, p: Record<string, unknown>, target?: Target) {
+    if (target && !target.managed) return this.updateLocalSkill(context, p, target);
     const source = text(p.source ?? target?.managed?.source, "技能来源", 2000), id = randomUUID();
     const directory = join(this.store.root, "resources", id);
-    let committed = false;
+    let committed = false, settled = false;
     try {
       let paths: string[], version: string | undefined;
       if (source.startsWith("npm:")) {
-        const installed = await this.npm(directory, source); version = installed.pkg.version;
+        const installed = await this.npm(context, directory, source, "skill", undefined, target?.managed?.directory); version = installed.pkg.version;
         const declared = installed.pkg.pi?.skills ?? ["skills"];
         if (!Array.isArray(declared) || declared.some((v: unknown) => typeof v !== "string" || v.includes("*") || !inside(installed.root, resolve(installed.root, v)))) throw new AppError("INVALID_INPUT", "此 npm 包的技能目录声明不受支持，请使用 pi 资源包方式安装。");
         paths = declared.map((v: string) => resolve(installed.root, v));
@@ -555,38 +954,51 @@ export class Resources {
       }
       const loaded = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: paths, includeDefaults: false });
       if (!loaded.skills.length || loaded.diagnostics.some(d => d.type === "error")) throw new AppError("INVALID_INPUT", "来源中没有有效技能，请检查 SKILL.md。");
-      this.assertFiles();
+      this.commitFiles(context, target, () => {
+      this.reserveSkillNames(context, this.scope(target?.item.scopeId ?? p.scopeId).id, loaded.skills.map(skill => skill.name));
+      this.assertFiles(context);
       const record: Managed = { scopeId: this.scope(target?.item.scopeId ?? p.scopeId).id, id: target?.managed?.id ?? id, kind: "skill", name: loaded.skills.map(s => s.name).join("、"), source, directory, paths, version };
       for (const other of this.targets.values()) {
-        if (other === target || other.item.scopeId !== record.scopeId) continue;
+        if (other.item.id === target?.item.id || other.item.scopeId !== record.scopeId) continue;
         const names = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: other.skillPaths ?? [], includeDefaults: false }).skills.map(s => s.name);
         if (loaded.skills.some(s => names.includes(s.name))) throw new AppError("RESOURCE_CONFLICT", "此作用范围已有同名技能，请修改安装名称或更新已有技能；未覆盖任何文件。");
+      }
+      for (const other of this.records()) {
+        if (other.id === record.id || (other.scopeId ?? "global") !== record.scopeId || other.kind !== "skill") continue;
+        const names = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: other.paths ?? [], includeDefaults: false }).skills.map(skill => skill.name);
+        if (loaded.skills.some(skill => names.includes(skill.name))) throw new AppError("RESOURCE_CONFLICT", "此作用范围已有同名技能，请修改安装名称或更新已有技能；未覆盖任何文件。");
       }
       // Persist ownership before publishing load paths so interrupted operations remain removable.
       const previous = this.records();
       this.save([...previous.filter(r => r.id !== record.id), record]);
       try { this.replacePaths(target?.managed?.paths ?? [], paths, record.scopeId); }
       catch (error) { this.save(previous); throw error; }
+      context.job.resourceId = record.id;
       committed = true;
-      if (target?.managed) rmSync(target.managed.directory, { recursive: true, force: true });
-    } finally { if (!committed) rmSync(directory, { recursive: true, force: true }); }
+      if (target?.managed) this.removeDirectory(target.managed.directory, context, true);
+      });
+      settled = true;
+    } finally { if (!committed) this.removeDirectory(directory, context); context.npmSettled = settled || !committed; }
   }
-  private async updateLocalSkill(p: Record<string, unknown>, target: Target) {
+  private async updateLocalSkill(context: Operation, p: Record<string, unknown>, target: Target) {
     const source = text(p.source, "新版技能目录", 2000), path = target.path;
     if (target.referenceOnly || !target.item.removable || !path || !lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink() || !isAbsolute(source) || !existsSync(join(source, "SKILL.md")) || resolve(source) === resolve(path) || inside(path, source) || inside(source, path))
       throw new AppError("INVALID_INPUT", "请选择另一份包含 SKILL.md 的新版技能目录；共享包或符号链接请通过原安装器更新。");
-    const stage = `${path}.${randomUUID()}.staging`, backup = `${path}.${randomUUID()}.backup`;
+    const stage = join(dirname(dirname(path)), `.axiom-update-${randomUUID()}.staging`), backup = join(dirname(dirname(path)), `.axiom-update-${randomUUID()}.backup`);
     let count = 0, bytes = 0;
     try {
       await cp(source, stage, { recursive: true, filter: file => { const stat = lstatSync(file); count++; bytes += stat.size; if (stat.isSymbolicLink() || count > 10000 || bytes > 50 * 1024 * 1024) throw new AppError("INVALID_INPUT", "新版目录包含符号链接或超过导入大小限制。"); return true; } });
       const loaded = loadSkills({ cwd: this.store.root, agentDir: join(this.store.root, "pi"), skillPaths: [stage], includeDefaults: false });
       if (!loaded.skills.length) throw new AppError("INVALID_INPUT", "新版目录中没有有效技能。");
-      this.assertFiles(); renameSync(path, backup);
-      try { renameSync(stage, path); } catch (error) { renameSync(backup, path); throw error; }
-      rmSync(backup, { recursive: true, force: true });
+      this.commitFiles(context, target, () => {
+        this.reserveSkillNames(context, target.item.scopeId, loaded.skills.map(skill => skill.name));
+        renameSync(path, backup);
+        try { renameSync(stage, path); } catch (error) { renameSync(backup, path); throw error; }
+        rmSync(backup, { recursive: true, force: true });
+      });
     } finally { rmSync(stage, { recursive: true, force: true }); }
   }
-  private async installMcp(p: Record<string, unknown>, target?: Target) {
+  private async installMcp(context: Operation, p: Record<string, unknown>, target?: Target) {
     const name = target?.item.name ?? text(p.name, "MCP 名称", 128);
     if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new AppError("INVALID_INPUT", "MCP 名称仅支持字母、数字、下划线和短横线。");
     const scope = this.scope(target?.item.scopeId ?? p.scopeId);
@@ -594,13 +1006,13 @@ export class Resources {
     if ([...this.targets.values()].some(t => t.item.kind === "mcp" && t.item.name !== name && t.item.name.replace(/-/g, "_") === name.replace(/-/g, "_"))) throw new AppError("INVALID_INPUT", "MCP 名称与现有工具名称空间冲突。");
     const source = typeof p.source === "string" ? p.source.trim() : target?.managed?.source;
     const id = randomUUID(), directory = join(this.store.root, "resources", id);
-    let record: Managed | undefined, committed = false;
+    let record: Managed | undefined, committed = false, settled = false;
     try {
       let raw: unknown;
       if (typeof p.config === "string" && p.config.trim()) { try { raw = JSON.parse(p.config); } catch { throw new AppError("INVALID_INPUT", "MCP 配置必须是有效 JSON 对象。"); } }
       else raw = target?.mcp?.[0]?.raw;
       if (source && !p.configOnly) {
-        const installed = await this.npm(directory, source), bins = installed.pkg.bin;
+        const installed = await this.npm(context, directory, source, "mcp", name, target?.managed?.directory), bins = installed.pkg.bin;
         const binName = typeof p.bin === "string" && p.bin ? p.bin : target?.managed?.bin;
         const bin = typeof bins === "string" ? bins : bins && (binName ? bins[binName] : Object.keys(bins).length === 1 ? Object.values(bins)[0] : undefined);
         if (typeof bin !== "string" || !inside(installed.root, resolve(installed.root, bin)) || !existsSync(resolve(installed.root, bin))) throw new AppError("INVALID_INPUT", "npm 包没有唯一可执行入口，请填写 bin 名称。");
@@ -609,6 +1021,14 @@ export class Resources {
         record = { scopeId: scope.id, id: target?.managed?.id ?? id, kind: "mcp", name, source, directory, version: installed.pkg.version, bin: binName };
       }
       const validate = (await validation).validateMcpServerConfig;
+      this.commitFiles(context, target, () => {
+      const destinationPath = this.mcpPath(scope);
+      for (const path of new Set(this.resourceFiles().filter(path => basename(path) === "mcp.json"))) {
+        for (const other of Object.keys(json(path).mcpServers ?? {})) {
+          if (other.replace(/-/g, "_") === name.replace(/-/g, "_") && (other !== name || !target && path === destinationPath))
+            throw new AppError("RESOURCE_CONFLICT", "此作用范围已有同名 MCP 或工具名称空间冲突，请刷新后重试；未覆盖任何配置。");
+        }
+      }
       const override = scope.kind === "project" && mcpOverride(raw) ? raw as Record<string, unknown> : undefined;
       let parsed: McpConfig | string;
       if (override) {
@@ -620,15 +1040,18 @@ export class Resources {
       const entries = target?.mcp?.length ? target.mcp : [{ path: scope.path ? join(scope.path, ".pi", "mcp.json") : join(this.sharedPiDir, "mcp.json"), raw: {} }];
       if (entries.length > 1) throw new AppError("MULTIPLE_SOURCES", "同名 MCP 在多处配置，请先统一源文件后更新；卸载会显示全部清理位置。");
       if (!override && entries[0].path !== join(this.sharedPiDir, "mcp.json") && "auth" in parsed && parsed.auth) throw new AppError("INVALID_INPUT", "项目 MCP 不允许使用全局认证供应商。");
-      this.assertFiles();
+      this.assertFiles(context);
       const previous = this.records();
       if (record) this.save([...previous.filter(r => r.id !== record!.id), record]);
       const path = entries[0].path, config = json(path); config.mcpServers ??= {}; config.mcpServers[name] = override ?? parsed;
       try { atomic(path, config); }
       catch (error) { if (record) this.save(previous); throw error; }
+      context.job.resourceId = this.mcpId(path, name);
       committed = !!record;
-      if (record && target?.managed) rmSync(target.managed.directory, { recursive: true, force: true });
-    } finally { if (!committed) rmSync(directory, { recursive: true, force: true }); }
+      if (record && target?.managed) this.removeDirectory(target.managed.directory, context, true);
+      });
+      settled = true;
+    } finally { if (!committed) this.removeDirectory(directory, context); context.npmSettled = settled || !committed; }
   }
   private async credentials(name: string, entries: { path: string; raw: any }[]) {
     const urls = [...new Set(entries.flatMap(e => typeof e.raw?.url === "string" ? [e.raw.url] : []))];
@@ -640,14 +1063,17 @@ export class Resources {
       for (const value of urls) {
         let url: string; try { url = String(new URL(value)); } catch { continue; }
         const key = `mcp__${name.replace(/-/g, "_")}|${url}`;
-        const otherEntries = [...this.targets.values()].flatMap(t => (t.mcp ?? []).filter(e => !entries.some(removed => removed.path === e.path && t.item.name === name)).map(e => ({ name: t.item.name, raw: e.raw })));
         const sameUrl = (e: { raw: any }) => { try { return String(new URL(e.raw.url)) === url; } catch { return false; } };
-        const sharedLegacy = otherEntries.some(sameUrl), sharedNamed = otherEntries.some(e => e.name === name && sameUrl(e));
         await store.forServer(name, url).withRefreshLock(async () => {
+          withResourceFiles(this.resourceFiles(), () => {
+          const otherEntries = [...new Set(this.resourceFiles().filter(path => basename(path) === "mcp.json"))].flatMap(path =>
+            Object.entries(json(path).mcpServers ?? {}).map(([other, raw]) => ({ name: other, raw })));
+          const sharedLegacy = otherEntries.some(sameUrl), sharedNamed = otherEntries.some(e => e.name === name && sameUrl(e));
           backend.withLock(raw => {
             const data = raw ? JSON.parse(raw) : {}; if (!sharedNamed) delete data[key];
             if (!sharedLegacy) delete data[url];
             return { result: undefined, next: JSON.stringify(data, null, 2) };
+          });
           });
         });
       }
@@ -670,34 +1096,61 @@ export class Resources {
     if (target.item.scopeId === "global") this.store.db.prepare("UPDATE session_capabilities SET selection=NULL,revision=revision+1 WHERE lockedAt IS NULL").run();
     else this.store.db.prepare("UPDATE session_capabilities SET selection=NULL,revision=revision+1 WHERE lockedAt IS NULL AND sessionId IN (SELECT id FROM sessions WHERE workspaceId=?)").run(target.item.scopeId);
   }
-  private async remove(target: Target) {
-    this.prune(target);
+  private async remove(context: Operation, target: Target, clearCredentials = false) {
     if (target.package) {
-      const pkg = target.package, { manager, settingsManager } = this.manager(pkg.cwd);
-      await manager.removeAndPersist(pkg.source, { local: pkg.local }); await settingsManager.flush();
-      if (settingsManager.drainErrors().length) throw Error("包声明清理失败。");
-    } else if (target.mcp) {
-      await this.credentials(target.item.name, target.mcp);
-      this.assertFiles();
+      this.prune(target);
+      const pkg = target.package;
+      await this.packageOperation(context, "remove", pkg.source, pkg.cwd, pkg.local, true);
+      return;
+    }
+    const matches = (entry: unknown, settingsPath: string, paths: string[]) => {
+      if (typeof entry !== "string") return false;
+      const value = entry.replace(/^[+!-]/, "");
+      const absolute = value.startsWith("~/") ? resolve(homedir(), value.slice(2)) : resolve(dirname(settingsPath), value);
+      return paths.some(path => relative(resolve(path), absolute) === "");
+    };
+    this.commitFiles(context, target, () => {
+    // Check the post-removal references before pruning preferences or changing
+    // any config. A refused cleanup must leave the original resource usable.
+    if (target.managed) this.assertDirectoryRemoval(target.managed.directory, undefined, target.managed.id, (path, config) => {
+      if (basename(path) === "mcp.json" && target.mcp?.some(entry => canonical(entry.path) === canonical(path))) delete config.mcpServers?.[target.item.name];
+      if (basename(path) === "settings.json" && target.managed!.kind === "skill" && Array.isArray(config.skills)) {
+        // Mirror the two writes below exactly: scanned settings lose target
+        // paths; only the owner's settings lose the managed record's raw paths.
+        // A scope added since scanning must keep its references in this preview.
+        if (target.path && !target.referenceOnly && this.files.has(path))
+          config.skills = config.skills.filter((entry: unknown) => !matches(entry, path, [target.path!, ...(target.skillPaths ?? [])]));
+        if (path === this.settings(target.managed!.scopeId))
+          config.skills = config.skills.filter((entry: unknown) => typeof entry !== "string" || !(target.managed!.paths ?? []).includes(entry));
+      }
+      return config;
+    });
+    this.prune(target);
+    if (target.mcp) {
+      this.assertFiles(context);
       for (const entry of target.mcp) { const config = json(entry.path); delete config.mcpServers?.[target.item.name]; atomic(entry.path, config); }
     } else if (target.path) {
       if (target.referenceOnly) {
-        const path = this.settings(target.item.scopeId), settings = json(path), guides = target.skillPaths ?? [];
-        settings.skills = [...(settings.skills ?? []).filter((p: unknown) => typeof p !== "string" || ![target.path!, ...guides].some(value => resolve(dirname(path), p) === resolve(value))), ...guides.map(guide => `!${guide}`)];
-        atomic(path, settings); return;
+        const path = this.settings(target.item.scopeId), guides = target.skillPaths ?? [];
+        this.editSettings(path, settings => { settings.skills = [...(settings.skills ?? []).filter((p: unknown) => !matches(p, path, [target.path!, ...guides])), ...guides.map(guide => `-${guide}`)]; });
+        return;
       }
       const paths = [target.path, ...(target.skillPaths ?? [])];
       for (const path of this.files.keys()) if (basename(path) === "settings.json") {
-        const settings = json(path);
-        if (Array.isArray(settings.skills)) { const before = settings.skills; settings.skills = before.filter((p: unknown) => typeof p !== "string" || !paths.some(value => p === value || resolve(dirname(path), p) === resolve(value))); if (settings.skills.length !== before.length) atomic(path, settings); }
+        this.withSettingsLock(path, () => {
+          const settings = json(path);
+          if (Array.isArray(settings.skills)) { const before = settings.skills; settings.skills = before.filter((p: unknown) => !matches(p, path, paths)); if (settings.skills.length !== before.length) atomic(path, settings); }
+        });
       }
-      rmSync(target.path, { recursive: true, force: true });
+      if (!target.managed) rmSync(target.path, { recursive: true, force: true });
     }
     if (target.managed) {
       if (target.managed.kind === "skill") this.replacePaths(target.managed.paths ?? [], [], target.managed.scopeId);
-      rmSync(target.managed.directory, { recursive: true, force: true });
+      this.removeDirectory(target.managed.directory, undefined, true, target.managed.id);
       this.save(this.records().filter(r => r.id !== target.managed!.id));
     }
+    });
+    if (target.mcp && clearCredentials) await this.credentials(target.item.name, target.mcp);
   }
-  async close() { this.closed = true; this.controller.abort(); await this.pending; }
+  async close() { this.closed = true; const active = [...this.operations.values()]; for (const operation of active) operation.controller.abort(); await Promise.allSettled(active.map(operation => operation.pending)); await this.refreshPending; }
 }

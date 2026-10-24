@@ -3,10 +3,11 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { defaultRtkSettings, rtkLevels, type RtkSettings } from "../../shared/rtk.js";
 
-export type RtkConfig = RtkSettings & { format: 1; revision: string; installation?: { directory: string; version: string } };
+export type RtkConfig = RtkSettings & { format: 1; revision: string; installation?: { directory: string; version: string }; removalPending?: string[] };
 export const rtkDirectory = (root: string) => join(root, "integrations", "rtk");
 export const rtkConfigPath = (root: string) => join(rtkDirectory(root), "config.json");
 export const rtkVersionPattern = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
+export const rtkDirectoryPattern = /^v[\d.]+-[a-f0-9-]{36}$/;
 export function atomicRtkJson(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.${randomUUID()}.tmp`;
@@ -22,7 +23,8 @@ export function readRtkConfig(root: string): RtkConfig {
   try { value = JSON.parse(readFileSync(rtkConfigPath(root), "utf8")); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { format: 1, revision: "", ...defaultRtkSettings }; throw Error("RTK 配置无法读取，请检查 integrations/rtk/config.json；未覆盖原配置。"); }
   if (value?.format !== 1 || typeof value.revision !== "string" || !validRtkSettings(value) || (value.installation &&
-      (!rtkVersionPattern.test(value.installation.version) || !/^v[\d.]+-[a-f0-9-]{36}$/.test(value.installation.directory))))
+      (!rtkVersionPattern.test(value.installation.version) || !rtkDirectoryPattern.test(value.installation.directory))) ||
+      (value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some(name => typeof name !== "string" || !rtkDirectoryPattern.test(name)))))
     throw Error("RTK 配置无效；未覆盖原配置。");
   return value;
 }

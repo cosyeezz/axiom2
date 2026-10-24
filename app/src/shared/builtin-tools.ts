@@ -5,8 +5,9 @@ export type OpenCliSettings = {
 };
 export type OpenCliJob = {
   id: string;
-  kind: "refresh" | "check" | "install" | "doctor";
+  kind: "refresh" | "check" | "install" | "doctor" | "uninstall";
   running: boolean;
+  cancellable?: boolean;
   queued?: boolean;
   version?: string;
   message: string;
@@ -14,12 +15,16 @@ export type OpenCliJob = {
 };
 export type OpenCliState = {
   ready: boolean;
+  supportError?: string;
   nodeVersion: string;
   npmVersion?: string;
   version?: string;
   latest?: string;
   packageRoot?: string;
   configured: boolean;
+  managed?: boolean;
+  removalPending?: boolean;
+  pendingOperation?: string;
   revision: string;
   settings: OpenCliSettings;
   job?: OpenCliJob;

@@ -1,3 +1,4 @@
+import "./pi-settings-storage.js";
 import { modelToolTransport } from "./integrations/model-proxy-tools.js";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";

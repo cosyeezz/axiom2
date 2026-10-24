@@ -38,9 +38,12 @@ async function discard() { await page.getByRole("button", { name: "放弃修改"
 try {
   await page.goto(app.origin + "/settings.html");
   await page.getByRole("link", { name: "技能与 MCP", exact: true }).click();
-  const historicalAlert = page.getByRole("alert").filter({ hasText: "上次资源操作失败" });
+  const historicalAlert = page.locator("details.resources-job-history");
   await historicalAlert.waitFor();
-  assert.match(await historicalAlert.innerText(), /不代表当前任务状态/);
+  assert.equal(await historicalAlert.getAttribute("open"), null);
+  assert.equal(await page.getByRole("alert").count(), 0);
+  await historicalAlert.locator("summary").click();
+  assert.match(await historicalAlert.innerText(), /不代表当前操作状态/);
   await page.getByRole("button", { name: "刷新目录", exact: true }).click();
   await historicalAlert.waitFor();
   for (const width of [1440, 390]) {
@@ -68,15 +71,16 @@ try {
   const blockedPage = await blockedContext.newPage();
   blockedPage.on("pageerror", error => errors.push(error.message));
   await blockedPage.goto(app.origin + "/resources.html");
+  await blockedPage.locator("details.resources-job-history summary").click();
   await blockedPage.getByRole("button", { name: "关闭上次资源操作失败提示" }).click();
-  assert.equal(await blockedPage.getByRole("alert").filter({ hasText: "上次资源操作失败" }).count(), 0);
+  assert.equal(await blockedPage.locator("details.resources-job-history").count(), 0);
   await blockedContext.close();
   await page.locator("aside.supplier-panel").getByRole("button", { name: "安装技能", exact: true }).click();
   await page.getByRole("button", { name: "打开文件或文件夹", exact: true }).click();
   await page.getByRole("button", { name: "打开文件或文件夹", exact: true }).waitFor();
   assert.equal(await page.getByLabel("资源来源", { exact: true }).inputValue(), "");
   picked = [source]; await page.getByRole("button", { name: "打开文件或文件夹", exact: true }).click();
-  await page.waitForFunction(() => document.querySelector<HTMLInputElement>("#resource-source")?.value.endsWith("/source"));
+  await page.waitForFunction(source => document.querySelector<HTMLInputElement>("#resource-source")?.value === source, source);
   assert.equal(await page.getByLabel("技能名称", { exact: true }).inputValue(), "source");
   await page.getByLabel("技能名称", { exact: true }).fill("ui-folder-skill");
   await page.locator("footer").getByRole("button", { name: "安装技能", exact: true }).click();
@@ -135,7 +139,8 @@ try {
   await page.getByRole("button", { name: "移动到全局", exact: true }).click();
   await page.getByRole("button", { name: "确认移动", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "目标范围已有同名 MCP" }).waitFor();
-  assert.match(await historicalAlert.innerText(), /目标范围已有同名 MCP/, "new failures are not suppressed by dismissal of an older job");
+  assert.match(await page.getByRole("alert").filter({ hasText: "目标范围已有同名 MCP" }).innerText(), /目标范围已有同名 MCP/, "new failures are not suppressed by dismissal of an older job");
+  await historicalAlert.locator("summary").click();
   await historicalAlert.getByRole("button", { name: "关闭上次资源操作失败提示" }).click();
   await historicalAlert.waitFor({ state: "hidden" });
   assert.equal(await page.getByRole("combobox", { name: "作用范围", exact: true }).innerText(), "项目 A");

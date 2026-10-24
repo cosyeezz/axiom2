@@ -16,9 +16,9 @@ export type RtkReason = keyof typeof rtkReasons;
 export type RtkEvent = { id: string; at: number; role: "main" | "subagent"; level: RtkLevel; filter: string; reason: RtkReason; inputBytes: number; outputBytes: number; durationMs: number; version: string };
 export type RtkStats = { days: number; count: number; filtered: number; inputBytes: number; outputBytes: number; durationMs: number; reasons: { reason: RtkReason; count: number }[]; recent: RtkEvent[]; error?: string };
 export const emptyRtkStats: RtkStats = { days: 7, count: 0, filtered: 0, inputBytes: 0, outputBytes: 0, durationMs: 0, reasons: [], recent: [] };
-export type RtkJob = { id: string; kind: "check" | "install" | "doctor"; running: boolean; message: string; error?: string };
+export type RtkJob = { id: string; kind: "check" | "install" | "doctor" | "uninstall"; running: boolean; message: string; error?: string };
 export type RtkState = {
-  revision: string; settings: RtkSettings; version?: string; executable?: string; latest?: string; platform: string; supported: boolean;
-  job?: RtkJob; diagnostic?: { text: string; at: number }; error?: string;
+  revision: string; settings: RtkSettings; version?: string; executable?: string; latest?: string; platform: string; supported: boolean; supportError?: string;
+  job?: RtkJob; diagnostic?: { text: string; at: number }; error?: string; removalPending?: boolean;
 };
 export const emptyRtkState: RtkState = { revision: "", settings: defaultRtkSettings, platform: "", supported: false };

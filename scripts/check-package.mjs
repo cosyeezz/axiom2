@@ -35,10 +35,27 @@ try {
   const paths = packed.files.map((file) => file.path);
   for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/client/index.html"])
     assert.ok(paths.includes(file), `Missing runtime file: ${file}`);
+  const nativeArchitectures = process.env.AXIOM_VERIFIED_PACKAGE_DIR ? ["x64", "arm64"] : process.platform === "linux" ? [process.arch] : [];
+  const nativeDigests = {}, nativeAssets = {};
+  for (const arch of nativeArchitectures) {
+    const directory = `bin/native/linux-${arch}`, executable = `${directory}/axiom-owner`;
+    assert.ok(paths.includes(executable) && paths.includes(`${directory}/manifest.json`), `Missing native ownership helper: ${arch}`);
+    assert.ok((packed.files.find(file => file.path === executable).mode & 0o111) !== 0, `Native helper is not executable: ${arch}`);
+    const manifest = JSON.parse(await readFile(join(root, directory, "manifest.json"), "utf8"));
+    assert.equal(manifest.arch, arch); assert.equal(manifest.protocol, 1);
+    assert.equal(manifest.sha256, createHash("sha256").update(await readFile(join(root, executable))).digest("hex"));
+    assert.equal(manifest.sourceSha256, createHash("sha256").update(await readFile(join(root, "native/axiom-owner.c"))).digest("hex"));
+    nativeDigests[arch] = manifest.sha256;
+  }
   assert.ok(!paths.some((path) => /(?:^|\/)(?:auth\.json|models\.json|\.env|test-results|sessions|\.aoci)(?:\/|$)/.test(path)));
   const prefix = join(temporary, "prefix");
   npm(["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", join(temporary, packed.filename)]);
   const installed = join(prefix, ...(process.platform === "win32" ? [] : ["lib"]), "node_modules", "@cosyeezz", "axiom2");
+  for (const arch of nativeArchitectures) {
+    const bytes = await readFile(join(installed, 'bin/native', `linux-${arch}`, 'axiom-owner'));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), nativeDigests[arch], `Installed tarball helper differs: ${arch}`);
+    nativeAssets[`axiom-owner-linux-${arch}`] = bytes;
+  }
   cli = join(installed, "bin/axiom2.mjs");
   assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
   assert.match(execFileSync(process.execPath, [cli, "--help"], { encoding: "utf8" }), /4317/);
@@ -186,11 +203,13 @@ try {
     const archive = await readFile(join(temporary, packed.filename));
     await mkdir(destination, { recursive: true });
     await writeFile(join(destination, "axiom2.tgz"), archive);
+    for (const [name, bytes] of Object.entries(nativeAssets)) await writeFile(join(destination, name), bytes);
     await writeFile(join(destination, "package-validation.json"), JSON.stringify({
       version: pkg.version,
       commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
       sha256: createHash("sha256").update(archive).digest("hex"),
       size: archive.length,
+      native: Object.fromEntries(Object.entries(nativeAssets).map(([name, bytes]) => [name, { size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }])),
     }, null, 2) + "\n");
   }
   console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
