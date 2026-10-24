@@ -143,7 +143,13 @@ try {
   await page.locator("#add-supplier").click();
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
   await providerSelect.click();
-  assert.deepEqual(await page.getByRole("listbox", { name: "供应商", exact: true }).getByRole("option").evaluateAll(options => options.map(option => ({ id: option.getAttribute("data-value"), name: option.textContent }))), supportedProviders.map((provider) => ({ id: provider.id, name: `${provider.name} · ${provider.id}` })));
+  const providerOptions = await page.getByRole("listbox", { name: "供应商", exact: true }).getByRole("option").evaluateAll(options => options.map(option => ({ id: option.getAttribute("data-value"), name: option.textContent })));
+  assert.deepEqual(providerOptions, supportedProviders.filter(provider => provider.id !== "openai-codex").map((provider) => ({ id: provider.id, name: provider.name })));
+  assert.equal(providerOptions.some(provider => provider.id === "openai-codex"), false, "legacy OpenAI is not offered for new connections");
+  assert.deepEqual(providerOptions.filter(provider => provider.id === "openai"), [{ id: "openai", name: "OpenAI" }]);
+  assert.deepEqual(providerOptions.filter(provider => provider.id === "kiro"), [{ id: "kiro", name: "kiro" }]);
+  assert.deepEqual(providerOptions.filter(provider => provider.id === "qoder"), [{ id: "qoder", name: "Qoder" }]);
+  assert.deepEqual(providerOptions.filter(provider => provider.id === "qoder-cn"), [{ id: "qoder-cn", name: "Qoder 国内版" }]);
   await page.keyboard.press("Escape");
   assert.ok(supportedProviders.length > 2, "dropdown is populated from pi, not a fixed pair");
   await chooseSelect(page, providerSelect, "openai");

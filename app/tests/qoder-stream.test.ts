@@ -5,7 +5,7 @@ import { qoderProvider } from "../src/server/providers/qoder.js";
 import { type QoderRegion } from "../src/server/providers/qoder-protocol.js";
 import { unwrapQoderSse } from "../src/server/providers/qoder-sse.js";
 
-process.env.AXIOM_EXPERIMENTAL_QODER = "1";
+delete process.env.AXIOM_EXPERIMENTAL_QODER;
 
 function decode(text: string) {
   const from = "_doRTgHZBKcGVjlvpC,@aFSx#DPuNJme&i*MzLOEn)sUrthbf%Y^w.(kIQyXqWA!$", to = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -31,6 +31,7 @@ async function fixture(region: QoderRegion = "cn") {
     }
     throw Error("Unexpected fixture endpoint");
   };
+  assert.equal(provider.name, region === "cn" ? "Qoder 国内版" : "Qoder");
   assert.equal(provider.getModels().length, 0);
   const previous = globalThis.fetch; globalThis.fetch = transport;
   try {

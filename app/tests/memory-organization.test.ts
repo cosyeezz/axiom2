@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { tmpdir } from "./temporary.js";
 import { Store } from "../src/server/storage.js";
 import { Memories, type MemoryExecution } from "../src/server/memories.js";
-import { memoryDirectory } from "../src/server/memory-files.js";
+import { memoryDirectory, digest } from "../src/server/memory-files.js";
+import { memoryDetail } from "../src/server/memory-detail.js";
 import { memoryOrganizationScope, memorySummaryVersion, type MemoryOrganization } from "../src/shared/memory.js";
 import type { Command, Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -45,6 +46,33 @@ function fixture() {
     async close() { await memories.close(); store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
+test("chapters organize without percentages and preserve numbered details and abandoned context", async t => {
+  const f = fixture();
+  try {
+    const entry = join(memoryDirectory(f.root, f.scope.sessionId), "MEMORY.md");
+    writeFileSync(entry, "# 固定记忆标题\n## [已放弃] 旧方案\n- [未开始] 旧实现\n## [已完成] 新方案\n- [已完成] 验证\n");
+    memoryDetail(entry, { action: "write", content: "失败尝试：不再采用", anchor: "## [已放弃] 旧方案", entryRevision: digest(readFileSync(entry)) });
+    memoryDetail(entry, { action: "write", content: "当前方案验证通过", anchor: "- [已完成] 验证", entryRevision: digest(readFileSync(entry)) });
+    await f.ready();
+    const detail = f.memories.read(f.scope, "references/details.md#detail:1");
+    assert.equal(detail.content, "失败尝试：不再采用"); assert.doesNotMatch(detail.content, /当前方案/);
+    assert.throws(() => f.memories.save(f.scope, "references/details.md", detail.revision, "覆盖"), /memory_detail/);
+    await f.command("memory.organize"); assert.equal((await f.done()).status, "completed");
+    const input = JSON.parse(f.calls.find(call => JSON.parse(call.prompt).currentFile.path === "MEMORY.md")!.prompt);
+    assert.deepEqual(input.references.map((ref: any) => ref.path), ["references/details.md#detail:1", "references/details.md#detail:2"]);
+    assert.equal(input.branchContext.find((node: any) => node.title === "旧实现").abandoned, true);
+    const detailsInput = JSON.parse(f.calls.find(call => JSON.parse(call.prompt).currentFile.path === "references/details.md")!.prompt);
+    assert.ok(detailsInput.references.some((ref: any) => ref.path === "MEMORY.md"));
+    assert.equal(f.entry().title, "固定记忆标题");
+    t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 31 * 60_000 });
+    assert.equal((f.memories as any).organizerReady({ ...f.entry(), status: "pending", updatedAt: 0 }), true);
+    for (const body of ["# 固定记忆标题\n- [等待] 用户输入", "# 固定记忆标题\n- [已放弃] 旧实现"]) {
+      writeFileSync(entry, body); await f.memories.scanAsync(f.scope);
+      assert.equal((f.memories as any).organizerReady({ ...f.entry(), status: "pending", updatedAt: 0 }), false);
+    }
+  } finally { await f.close(); }
+});
+
 test("manual source organization bypasses quiet time and preserves the background interval and source bytes", async () => {
   const f = fixture();
   try {
@@ -61,6 +89,29 @@ test("manual source organization bypasses quiet time and preserves the backgroun
     assert.equal(f.memories.preferences().intervalMs, 300_000);
     assert.ok(f.published.some((event) => event.scope === memoryOrganizationScope(f.workspace.id) && (event.data as MemoryOrganization).status === "completed"));
     await f.command("memory.organize"); await f.done(); assert.equal(f.calls.length, 2, "source button explicitly regenerates a ready summary");
+  } finally { await f.close(); }
+});
+
+test("failed organization can retry the same readable revision without inheriting catalog errors", async () => {
+  const f = fixture();
+  try {
+    await f.ready();
+    const original = f.entry().revision;
+    f.memories.runner = { close: async () => {}, execute: async () => { throw Error("模型暂不可用"); } };
+    await f.command("memory.organize");
+    assert.equal((await f.done()).status, "failed");
+    const failed = f.entry();
+    assert.ok(failed.error); assert.equal(failed.revision, original);
+    const view = f.memories.view(failed);
+    assert.equal(view.error, undefined); assert.equal(view.reason, undefined);
+    assert.ok(view.entry); assert.equal(view.revision, original);
+    await f.memories.scanAsync(failed);
+    assert.equal(f.memories.snapshot(f.scope)?.error, undefined);
+    let calls = 0;
+    f.memories.runner = { close: async () => {}, execute: async () => { calls++; return answer; } };
+    await f.command("memory.organize");
+    assert.equal((await f.done()).status, "completed"); assert.equal(calls, 1);
+    assert.equal(f.entry().error, undefined); assert.equal(f.entry().revision, original);
   } finally { await f.close(); }
 });
 

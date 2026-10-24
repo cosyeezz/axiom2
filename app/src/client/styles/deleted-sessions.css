@@ -10,7 +10,7 @@
 .deleted-session-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 6px 5px 10px;min-width:0}
 .deleted-session-description{flex:1;min-width:0}
 .deleted-session-description strong,.deleted-session-description small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.deleted-session-description strong{font-size:13px;font-weight:400;line-height:20px}
+.deleted-session-description strong{font-size:13px;font-weight:400;line-height:20px;color:var(--muted);text-decoration:line-through}
 .deleted-session-description small{font-size:11px;line-height:16px;color:var(--muted)}
 .deleted-session-restore{display:flex;align-items:center;justify-content:center;gap:4px;min-width:58px;min-height:44px;padding:4px;font-size:12px;border-radius:6px;color:var(--muted);flex-shrink:0}
 .deleted-session-restore:hover{color:var(--fg)}

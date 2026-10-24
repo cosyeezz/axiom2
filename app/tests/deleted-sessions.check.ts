@@ -50,6 +50,25 @@ try {
   const rows = queue.locator(".deleted-session-row");
   await queue.getByText("恢复到中间", { exact: true }).waitFor();
   assert.equal(await rows.count(), 30);
+  const originalTheme = await page.locator("html").getAttribute("data-theme");
+  for (const theme of ["dark", "light"]) {
+    await page.locator("html").evaluate((element, value) => element.setAttribute("data-theme", value), theme);
+    const styles = await rows.first().evaluate((row) => {
+      const title = getComputedStyle(row.querySelector("strong")!);
+      const workspace = getComputedStyle(row.querySelector("small")!);
+      const restore = getComputedStyle(row.querySelector("button")!);
+      return { color: title.color, muted: workspace.color, titleLine: title.textDecorationLine,
+        workspaceLine: workspace.textDecorationLine, restoreLine: restore.textDecorationLine };
+    });
+    assert.equal(styles.color, styles.muted, `${theme}: deleted title uses the theme's muted gray`);
+    assert.equal(styles.titleLine, "line-through", `${theme}: deleted title is struck through`);
+    assert.equal(styles.workspaceLine, "none", "workspace label is not struck through");
+    assert.equal(styles.restoreLine, "none", "restore button is not struck through");
+  }
+  await page.locator("html").evaluate((element, value) => {
+    if (value === null) element.removeAttribute("data-theme");
+    else element.setAttribute("data-theme", value);
+  }, originalTheme);
   assert.equal(await queue.locator("a").count(), 0);
   assert.equal(await queue.locator(".history-item").count(), 0);
   const before = sent.length;

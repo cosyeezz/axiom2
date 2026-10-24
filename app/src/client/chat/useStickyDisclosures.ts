@@ -1,7 +1,7 @@
 import { useLayoutEffect, type RefObject } from "react";
 import "../styles/sticky-disclosures.css";
 
-const disclosureSelector = "details[open]";
+const disclosureSelector = 'details[open], .session-environment[data-expanded="true"]';
 
 /** CSS handles sticky headings without moving the reader when details change. */
 export function useStickyDisclosures(container: RefObject<HTMLElement | null>, followBottom: RefObject<boolean>) {
@@ -22,7 +22,7 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
       for (const block of root.querySelectorAll(disclosureSelector)) {
         // Closed ancestors can retain mounted, individually open disclosures.
         if (block.parentElement?.closest("details:not([open])")) continue;
-        const node = block.querySelector<HTMLElement>(":scope > summary");
+        const node = block.querySelector<HTMLElement>(":scope > summary, :scope > .environment-tags");
         if (node) headings.set(block, { node, height: node.getBoundingClientRect().height, top: 0, depth: 0 });
       }
       // DOM order guarantees that an ancestor's offset is known before its children.
@@ -62,7 +62,7 @@ export function useStickyDisclosures(container: RefObject<HTMLElement | null>, f
       }
       schedule();
     });
-    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["open"] });
+    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["open", "data-expanded"] });
     measure();
     return () => {
       cancelAnimationFrame(frame);

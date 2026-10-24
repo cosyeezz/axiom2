@@ -100,6 +100,10 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     const agent = (op: string, params = {}) => app.agents.command({ op, params, ...scope, requestId: randomUUID() });
     const compress = (op: string, params = {}) => app.agents.compressions.command({ op, params, ...scope, requestId: randomUUID() });
     await agent("agent.model", { selection: { provider: "fixture", id: "fixture", thinking: "off" } });
+    if (scenario === "edit") {
+      mkdirSync(memoryDirectory(root, session.id), { recursive: true });
+      writeFileSync(memoryPath, "# 会话记忆\n\n## 目标与范围\n尚未记录\n");
+    }
     await agent("prompt", { text: "保留这个关键决定" });
     if (scenario === "handoff") await until(() => !!settled, "seed did not enter its settlement window");
     else await until(() => !app.agents.active(scope), "seed run did not settle");

@@ -29,6 +29,7 @@
 .memory-status{--memory-tone:var(--muted);padding:12px 14px 14px;border:1px solid var(--border-soft);border-radius:var(--radius-md);background:color-mix(in srgb,var(--fg) 2.5%,transparent)}
 .memory-status[data-tone=active]{--memory-tone:var(--accent)}
 .memory-status[data-tone=done]{--memory-tone:var(--success)}
+.memory-status[data-tone=failed]{--memory-tone:var(--danger)}
 .memory-status[data-tone=blocked]{--memory-tone:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent);background:color-mix(in srgb,var(--warn) 6%,transparent)}
 .memory-progress-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px}
 .memory-state-badge{display:inline-flex;align-items:center;gap:6px;min-width:0;padding:3px 10px 3px 8px;border-radius:999px;color:var(--memory-tone);background:color-mix(in srgb,var(--memory-tone) 14%,transparent);font-size:12px;line-height:1.5;font-weight:510;overflow-wrap:anywhere}
@@ -45,11 +46,40 @@
 .memory-todo-body li{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft)}
 .memory-todo-body li:last-child{border:0}
 .memory-task-marker{display:flex;align-self:center;align-items:center;justify-content:center;width:14px;height:14px;flex:0 0 14px;border:1px solid var(--muted);border-radius:4px;color:var(--success)}
+.memory-todo-body li[data-kind]{display:block}
+.memory-task-row{display:flex;align-items:baseline;gap:6px;min-width:0;flex-wrap:wrap;padding:4px 0;--task-tone:var(--muted)}
+.memory-todo-body li[data-kind]>ul{margin:6px 0 0 12px;padding-left:8px;border-left:1px solid var(--border-soft)}
+.memory-todo-body li[data-kind=heading]>:is(.memory-task-row,.memory-task-disclosure) .memory-task-title{font-weight:600}
+.memory-todo-body li[data-abandoned]>:is(.memory-task-row,.memory-task-disclosure) .memory-task-title,.memory-entry [data-abandoned]{text-decoration:line-through;color:var(--muted)}
+.memory-task-refs{color:var(--accent);font-size:11px;overflow-wrap:anywhere}
+.memory-task-disclosure>summary{cursor:pointer;list-style:none;border-radius:4px}
+.memory-task-disclosure>summary::-webkit-details-marker{display:none}
+.memory-task-disclosure>summary:hover{background:color-mix(in srgb,var(--fg) 4%,transparent)}
+.memory-task-disclosure>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.memory-task-chevron{width:10px;height:10px;flex:0 0 10px;color:var(--muted);align-self:center}
+.memory-task-disclosure[open]>summary>.memory-task-chevron{transform:rotate(90deg)}
+.memory-task-row>.memory-task-marker{width:16px;height:16px;flex-basis:16px;border:0!important;border-radius:0;background:none!important;color:var(--task-tone)}
+.memory-task-row>.memory-task-marker>svg{width:16px;height:16px}
+.memory-task-row>.memory-task-state{color:var(--task-tone)}
+.memory-todo-body li[data-state=进行中]>.memory-task-disclosure>.memory-task-row,.memory-todo-body li[data-state=进行中]>.memory-task-row{--task-tone:var(--accent)}
+.memory-todo-body li[data-state=已完成]>.memory-task-disclosure>.memory-task-row,.memory-todo-body li[data-state=已完成]>.memory-task-row{--task-tone:var(--success)}
+.memory-todo-body li[data-state=等待]>.memory-task-disclosure>.memory-task-row,.memory-todo-body li[data-state=等待]>.memory-task-row{--task-tone:var(--warn)}
+.memory-todo-body li[data-state=失败]>.memory-task-disclosure>.memory-task-row,.memory-todo-body li[data-state=失败]>.memory-task-row{--task-tone:var(--danger)}
+.memory-task-details{min-width:0;padding:4px 0 4px 10px;border-left:2px solid var(--border-soft);margin:6px 0 4px 7px}
+.memory-inline-detail{min-width:0;overflow-wrap:anywhere}
+.memory-inline-detail h4{margin:8px 0;font-size:11px;color:var(--muted)}
+.memory-inline-detail .markdown{font-size:12px;min-width:0}
+.memory-inline-detail .markdown ul{list-style:disc;padding-left:18px;margin:8px 0}
+.memory-inline-detail .markdown li{display:list-item;padding:0;border:0}
+.memory-inline-detail .markdown pre{max-width:100%;overflow:auto}
 .memory-task-marker svg{width:12px;height:12px;stroke-width:1.6}
-.memory-task-title{flex:1;min-width:0;color:var(--fg-2)}
+.memory-task-title{flex:1;min-width:0;color:var(--fg-2);overflow-wrap:anywhere}
 .memory-task-state{font-size:11px;color:var(--muted);flex-shrink:0}
-.memory-todo-body li[data-state=已完成] .memory-task-marker{border-color:color-mix(in srgb,var(--success) 50%,transparent);background:color-mix(in srgb,var(--success) 8%,transparent)}
-.memory-todo-body li[data-state=进行中] .memory-task-marker{border:0;color:var(--accent)}
+.memory-detail-choices{display:flex;gap:8px;flex-wrap:wrap}
+.memory-detail-choices [aria-pressed=true]{color:var(--accent);text-decoration:underline}
+@media(max-width:480px){.memory-todo-body li[data-kind]>ul{margin-left:6px;padding-left:6px}.memory-task-row{gap:4px}.memory-task-title{flex-basis:55%}.memory-task-details{padding-left:6px;margin-left:3px}}
+.memory-todo-body li[data-state=已完成]>.memory-task-marker,.memory-todo-body li[data-state=已完成]>.memory-task-row>.memory-task-marker{border-color:color-mix(in srgb,var(--success) 50%,transparent);background:color-mix(in srgb,var(--success) 8%,transparent)}
+.memory-todo-body li[data-state=进行中]>.memory-task-marker,.memory-todo-body li[data-state=进行中]>.memory-task-row>.memory-task-marker{border:0;color:var(--accent)}
 .memory-task-marker .bubble-loading{width:14px;height:14px}
 .memory-loading{display:flex;align-items:center;gap:8px;color:var(--muted)}
 .memory-loading>.bubble-loading{width:18px;height:18px;flex:0 0 18px}

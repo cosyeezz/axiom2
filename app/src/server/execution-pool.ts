@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 import { AppError } from "../shared/protocol.js";
 import type { ExecutionMode, PreparedEnvironment } from "./execution-profile.js";
 import { sameLease, type LeaseRef } from "./execution-protocol.js";
-export type ExecutionKind = "agent" | "memory-query" | "memory-organize" | "compression-summary";
+export type ExecutionKind = "agent" | "memory-query" | "memory-organize" | "session-title" | "compression-summary";
 export interface PoolLimits {
   maxLiveProcesses: number; maxIdleRetained: number; targetReadyTotal: number; nestedLeafReserve: number;
   maxPrewarming: number; idleTtlMs: number; maxLifetimeMs: number; maxQueued: number; prepareTimeoutMs: number;

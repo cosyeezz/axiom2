@@ -9,7 +9,7 @@ import { ModelService } from "./model-service.js";
 import { acceptsLease, awaitExecutionPermit, instanceSend, leaseSender, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 
 export interface MemoryWorkerInput {
-  kind: "query" | "organize"; executionGate?: boolean; root: string; cwd: string; modelsFile?: string;
+  kind: "query" | "organize" | "title"; executionGate?: boolean; root: string; cwd: string; modelsFile?: string;
   selection: Selection; prompt: string; systemPrompt?: string;
 }
 type Binding = { ref?: LeaseRef; controller: AbortController };

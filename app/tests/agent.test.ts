@@ -17,7 +17,7 @@ import { TaskRecords } from "../src/server/tasks/records.js";
 import { startServer } from "../src/server/index.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 import { running } from "../src/shared/agent.js";
-import { parseMemory } from "../src/shared/memory.js";
+import { parseMemory, memoryComplete } from "../src/shared/memory.js";
 const waitFor = async (check: () => boolean, message: string, timeout = 20000, signal?: AbortSignal) => {
   const end = Date.now() + timeout;
   while (!check()) {
@@ -54,7 +54,7 @@ test(
       providerFailure = false;
     const requests: any[] = [];
     let memoryPath = "";
-    const observedProgress: (number | null)[] = [];
+    const observedProgress: { state: string; complete: boolean; percent: number | null }[] = [];
     const cacheReads = [0, 80, 20, 90];
     let responseReady = 0, releaseResponse: (() => void) | undefined;
     const fixture = createServer(async (req, res) => {
@@ -63,7 +63,10 @@ test(
       const body = JSON.parse(raw);
       requests.push(body);
       count++;
-      if (count === 3 || count === 4) observedProgress.push(parseMemory(readFileSync(memoryPath, "utf8")).percent);
+      if (count === 3 || count === 4) {
+        const progress = parseMemory(readFileSync(memoryPath, "utf8"));
+        observedProgress.push({ state: progress.state, complete: memoryComplete(progress), percent: progress.percent });
+      }
       if (providerFailure) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: { message: "Unsupported parameter: temperature; api_key=sk-fixture-secret", type: "invalid_request_error", code: "unsupported_parameter" } }));
@@ -114,10 +117,9 @@ test(
                 arguments: JSON.stringify({ path: "verified.txt" }),
               },
             },
-            { index: 1, id: "start-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
-              { oldText: "## 目标与范围\n尚未记录", newText: "## 目标与范围\n验证真实文件工具与进度更新" },
-              { oldText: "整体状态：尚未记录\n整体进度：待评估\n当前进展：尚未记录", newText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑\n- [进行中] 验证真实文件工具与进度更新" },
-            ] }) } },
+            { index: 1, id: "start-memory", type: "function", function: { name: "write", arguments: JSON.stringify({ path: memoryPath,
+              content: "# 文件工具验证\n\n## 验证\n- [进行中] 验证真实文件工具与进度更新\n",
+            }) } },
           ],
         });
         chunk({}, "tool_calls");
@@ -150,9 +152,9 @@ test(
                 }),
               },
             },
-            { index: 2, id: "complete-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath, edits: [
-              { oldText: "整体状态：进行中\n整体进度：约 50%\n当前进展：验证文件编辑\n- [进行中] 验证真实文件工具与进度更新", newText: "整体状态：已完成\n整体进度：100%\n当前进展：真实工具回环已完成\n- [已完成] 验证真实文件工具与进度更新" },
-            ] }) } },
+            { index: 2, id: "complete-memory", type: "function", function: { name: "edit", arguments: JSON.stringify({ path: memoryPath,
+              oldText: "- [进行中] 验证真实文件工具与进度更新", newText: "- [已完成] 验证真实文件工具与进度更新",
+            }) } },
           ],
         });
         chunk({}, "tool_calls");
@@ -329,16 +331,18 @@ test(
         "真实工具编辑\n",
       );
       assert.equal(count, 4);
-      assert.deepEqual(observedProgress, [50, 100], "real pi file edits update progress during work and at completion");
+      assert.deepEqual(observedProgress, [{ state: "进行中", complete: false, percent: null }, { state: "已完成", complete: true, percent: null }], "real file tools update chapter state without invented percentages");
       app.agents.memories.scan();
-      assert.equal(app.agents.memories.view(scope).progress.percent, 100);
+      assert.equal(memoryComplete(app.agents.memories.view(scope).progress), true);
       const assertMemoryPrompt = (request: any, path: string) => {
         const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
         assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
-        assert.match(system, /主动维护会话记忆文件/);
-        assert.match(system, /最终回复前，检查并更新本会话记忆/);
-        assert.match(system, /RULES\.md/);
-        assert.match(system, /首次维护前先读取/);
+        assert.match(system, /主动维护本会话记忆文件/);
+        assert.match(system, /最终回复、压缩或交接前，核对状态和详情与实际一致/);
+        assert.match(system, /任务使用 Markdown 标题组织/);
+        assert.match(system, /失败：本次任务或尝试已结束/);
+        assert.match(system, /memory_detail/);
+        assert.doesNotMatch(system, /RULES\.md/);
       };
       assertMemoryPrompt(requests[0], memoryPath);
       assert.ok(

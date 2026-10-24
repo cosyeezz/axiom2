@@ -8,24 +8,22 @@ const nativeProviders = [{
   template: { id: "codebuddy-cn", name: "CodeBuddy 国内版", api: "openai-completions", url: "https://copilot.tencent.com/v2", methods: ["api_key", "oauth"] } satisfies Template,
   load: async () => (await import("./providers/codebuddy-cn.js")).codeBuddyProvider(),
 }, {
-  template: { id: "kiro", name: "Kiro（仅认证）", api: "kiro-auth-only", url: "", methods: ["oauth"] } satisfies Template,
+  template: { id: "kiro", name: "kiro", api: "kiro-auth-only", url: "", methods: ["oauth"] } satisfies Template,
   load: async () => (await import("./providers/kiro.js")).kiroProvider(),
 }, {
-  template: { id: "qoder", name: "Qoder（实验性）", api: "openai-completions", url: "https://api2.qoder.sh", methods: ["api_key", "oauth"] } satisfies Template,
+  template: { id: "qoder", name: "Qoder", api: "openai-completions", url: "https://api2.qoder.sh", methods: ["api_key", "oauth"] } satisfies Template,
   load: async () => (await import("./providers/qoder.js")).qoderProvider("intl"),
 }, {
-  template: { id: "qoder-cn", name: "Qoder 国内版（实验性）", api: "openai-completions", url: "https://gateway.qoder.com.cn", methods: ["api_key", "oauth"] } satisfies Template,
+  template: { id: "qoder-cn", name: "Qoder 国内版", api: "openai-completions", url: "https://gateway.qoder.com.cn", methods: ["api_key", "oauth"] } satisfies Template,
   load: async () => (await import("./providers/qoder.js")).qoderProvider("cn"),
 }];
 
 // The add-provider menu is metadata. Listing it must not initialize a provider.
 export function nativeProviderTemplates(): Template[] {
-  return nativeProviders.filter(({ template }) => !template.id.startsWith("qoder") || process.env.AXIOM_EXPERIMENTAL_QODER === "1").map(({ template }) => ({ ...template, methods: [...template.methods] }));
+  return nativeProviders.map(({ template }) => ({ ...template, methods: [...template.methods] }));
 }
 
 export async function ensureModelProvider(runtime: ModelRuntime, providerId: string) {
-  if ((providerId === "qoder" || providerId === "qoder-cn") && process.env.AXIOM_EXPERIMENTAL_QODER !== "1")
-    throw Error("Qoder 接入尚属实验性；需设置 AXIOM_EXPERIMENTAL_QODER=1 后显式启用，真实账号链路尚未验收。");
   await registerModelProvider(runtime, providerId);
 }
 
@@ -62,8 +60,8 @@ export async function createModelRuntime(options: RuntimeOptions = {}) {
     }
   }
   for (const provider of nativeProviders) {
-    // Disabled experimental providers remain inert registrations, so stale credentials
-    // cannot break unrelated providers or fall through to a generic OpenAI transport.
+    // Restore native registrations for configured providers and persisted credentials;
+    // their models must not fall through to a generic OpenAI transport.
     if (needed.has(provider.template.id)) await registerModelProvider(runtime, provider.template.id);
   }
   if (options.refreshOnCreate === false) {

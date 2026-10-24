@@ -8,6 +8,7 @@ import { basename, join, resolve } from "node:path";
 import { build } from "vite";
 import { chromium, type Page } from "playwright";
 import { displayTypography } from "../scripts/display-typography.js";
+import { formatFontCatalog } from "../src/client/format-font-catalog.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-fonts-"));
 const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/fonts");
@@ -38,7 +39,9 @@ const records = (page: Page) => page.evaluate(() => new Promise<number>((resolve
 }));
 try {
   const context = await browser.newContext({ viewport: { width: 1200, height: 1000 } });
-  let requests = 0, mode: "ok" | "http" | "corrupt" | "offline" | "pending" = "ok";
+  let requests = 0, mode: "ok" | "http" | "corrupt" | "offline" | "pending" | "oversized" | "missing" = "ok";
+  const names = new Set(formatFontCatalog(JSON.parse(readFileSync("src/client/font-catalog.json", "utf8"))).map(font => font.name));
+  const previewTexts: string[] = [];
   await context.route(/https:\/\/(cdn\.jsdelivr\.net|raw\.githubusercontent\.com)\//, async route => {
     requests++;
     if (mode === "pending") return;
@@ -46,8 +49,22 @@ try {
     await route.fulfill({ status: mode === "http" ? 503 : 200, contentType: "font/woff2", headers: { "access-control-allow-origin": "*" }, body: mode === "corrupt" ? Buffer.from("not a font") : bytes });
   });
   let labelRequests = 0;
-  await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '@font-face { src: url(https://fonts.gstatic.com/axiom-name.woff2); }' }));
-  await context.route('https://fonts.gstatic.com/**', route => { labelRequests++; return route.fulfill({ contentType: 'font/woff2', body: bytes }); });
+  await context.route('https://fonts.googleapis.com/**', route => {
+    const text = new URL(route.request().url()).searchParams.get("text")!;
+    assert.ok(text, "every preview request must restrict glyphs via text");
+    const label = names.has(text);
+    if (!label) {
+      previewTexts.push(text);
+      if (mode === "pending") return;
+      if (mode === "offline") return route.abort("internetdisconnected");
+    }
+    return route.fulfill({ status: !label && mode === "http" ? 503 : 200, contentType: 'text/css', body: !label && mode === "missing" ? "/* unavailable */" : `@font-face { src: url(https://fonts.gstatic.com/axiom-${label ? "name" : "preview"}.woff2); }` });
+  });
+  await context.route('https://fonts.gstatic.com/**', route => {
+    const label = route.request().url().includes("axiom-name");
+    if (label) labelRequests++;
+    return route.fulfill({ contentType: 'font/woff2', body: !label && mode === "corrupt" ? Buffer.from("not a font") : !label && mode === "oversized" ? Buffer.alloc(512 * 1024 + 1) : bytes });
+  });
   const page = await context.newPage(); page.setDefaultTimeout(10_000);
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(url); await waitReady(page);
@@ -62,6 +79,10 @@ try {
     await page.getByRole("searchbox", { name: "搜索字体" }).fill(name);
     await row(name).click();
   };
+  const previewReady = () => page.waitForFunction(() => {
+    const specimen = document.querySelector<HTMLTextAreaElement>(".font-specimen");
+    return specimen?.getAttribute("aria-busy") === "false" && getComputedStyle(specimen).fontFamily.includes("Axiom");
+  });
   const download = () => page.getByRole("button", { name: /^下载字体/ }).click();
   const upload = async (name: string, buffer: Buffer) => page.locator('input[type=file]').setInputFiles({ name, mimeType: "application/octet-stream", buffer });
   await upload("invalid.txt", bytes); await page.getByRole("alert").filter({ hasText: "请选择" }).waitFor();
@@ -109,29 +130,62 @@ try {
   await page.getByRole("option", { name: "所有语言", exact: true }).click();
   await page.getByRole("combobox", { name: "字体风格", exact: true }).click();
   await page.getByRole("option", { name: "所有风格", exact: true }).click();
-  await choose("Inter"); await waitReady(page); await page.locator(".font-specimen").waitFor();
-  assert.equal(await selected(page), "default"); assert.equal(await records(page), 0); assert.equal(requests, 1);
+  await choose("Inter"); await previewReady();
+  assert.equal(await selected(page), "default"); assert.equal(await records(page), 0); assert.equal(requests, 0, "detail preview never downloads the full font");
+  assert.match(await page.locator(".font-specimen").evaluate(el => getComputedStyle(el).fontFamily), /AxiomPreview-inter/);
+  const initialRequests = previewTexts.length;
+  await page.locator("#font-preview-text").fill("子集试阅 Abc 123 😀😀"); await previewReady();
+  assert.equal(previewTexts.length, initialRequests + 1);
+  assert.equal(previewTexts.at(-1), [...new Set("子集试阅 Abc 123 😀😀")].sort().join(""));
+  assert.equal(requests, 0);
+  await page.locator("#font-preview-text").dispatchEvent("compositionstart");
+  await page.locator("#font-preview-text").fill("输入法组字中");
+  await page.waitForTimeout(400);
+  assert.equal(previewTexts.length, initialRequests + 1, "IME composition does not request intermediate text");
+  await page.locator("#font-preview-text").dispatchEvent("compositionend"); await previewReady();
+  assert.equal(previewTexts.length, initialRequests + 2);
+  await page.locator("#font-preview-text").fill("");
+  await page.waitForTimeout(400);
+  assert.equal(previewTexts.length, initialRequests + 2, "empty text never requests an unrestricted font");
+  await page.locator("#font-preview-text").fill("让阅读更舒适，灵感从这里开始。\nThe quick brown fox jumps over the lazy dog.\n0123456789 · Aa Bb Cc"); await previewReady();
   await download(); await waitReady(page);
   assert.equal(await selected(page), "default", "download saves without applying");
-  assert.equal(await records(page), 1); assert.equal(requests, 1, "preview bytes reused");
+  assert.equal(await records(page), 1); assert.equal(requests, 1, "explicit download fetches full bytes, never saves the preview subset");
+  assert.match(await page.locator(".font-specimen").evaluate(el => getComputedStyle(el).fontFamily), /AxiomFont-inter/);
+  assert.equal(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomPreview-inter")), false);
   await page.getByRole("button", { name: "使用字体", exact: true }).click();
   assert.equal(await selected(page), "custom:inter");
   await sibling.waitForFunction(() => document.querySelector('#display-font-family')?.textContent === "Inter");
   await close(); mode = "offline"; await page.reload(); await waitReady(page);
   assert.equal(await selected(page), "custom:inter"); assert.equal(requests, 1, "offline restore uses saved bytes");
   await open();
-  for (const failure of ["offline", "http", "corrupt"] as const) {
-    mode = failure; await choose("Lora"); await page.getByRole("alert").waitFor(); await waitReady(page);
+  for (const failure of ["offline", "http", "corrupt", "oversized", "missing"] as const) {
+    mode = failure; await choose("Lora");
+    if (await page.getByRole("button", { name: "重新加载预览", exact: true }).isVisible()) await page.getByRole("button", { name: "重新加载预览", exact: true }).click();
+    await page.getByRole("alert").waitFor();
     assert.equal(await selected(page), "custom:inter"); assert.equal(await records(page), 1);
+    assert.equal(requests, 1, "preview failures never fall back to full-font download");
   }
-  mode = "pending"; await page.setViewportSize({ width: 320, height: 640 }); await choose("Lora");
-  await page.getByRole("button", { name: "← 返回字体列表", exact: true }).click();
-  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "搜索字体");
+  mode = "pending"; await page.setViewportSize({ width: 320, height: 640 });
+  await page.getByRole("button", { name: "重新加载预览", exact: true }).click();
   await page.getByRole("button", { name: "取消", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "已取消" }).waitFor(); await waitReady(page);
+  await page.getByRole("alert").filter({ hasText: "已取消" }).waitFor();
+  await page.getByRole("button", { name: "← 返回字体列表", exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-pressed") === "true");
+  assert.equal(await page.locator(".font-specimen").count(), 0, "mobile back releases the preview");
   await page.setViewportSize({ width: 1200, height: 1000 });
-  mode = "ok"; await page.getByRole("button", { name: "重新加载预览", exact: true }).click(); await waitReady(page);
-  await download(); await waitReady(page);
+  await page.locator(".font-specimen").waitFor({ state: "visible" });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await choose("Lora");
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "已取消" }).waitFor();
+  await page.setViewportSize({ width: 1200, height: 1000 });
+  mode = "ok"; await page.getByRole("button", { name: "重新加载预览", exact: true }).click(); await previewReady();
+  for (const failure of ["offline", "http", "corrupt"] as const) {
+    mode = failure; await download(); await waitReady(page); await page.getByRole("alert").waitFor();
+    assert.equal(await records(page), 1, "failed full download never persists the subset");
+  }
+  mode = "ok"; await download(); await waitReady(page);
   assert.equal(await selected(page), "custom:inter"); assert.equal(await records(page), 2);
   await page.getByRole("button", { name: "使用字体", exact: true }).click();
   assert.equal(await selected(page), "custom:lora");
@@ -160,26 +214,27 @@ try {
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement?.textContent), "浏览字体库", "Escape restores focus");
   await page.setViewportSize({ width: 1200, height: 1000 }); await open();
-  await choose("Aclonica"); await waitReady(page);
-  assert.ok(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomFont-aclonica")));
+  await choose("Aclonica"); await previewReady();
+  assert.ok(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomPreview-aclonica")));
   await close();
-  assert.equal(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomFont-aclonica")), false, "closing releases unsaved preview");
+  assert.equal(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomPreview-aclonica")), false, "closing releases unsaved preview");
   assert.ok(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomFont-inter")), "saved fonts remain available");
   await open();
-  const delayNextFont = async () => page.evaluate(() => {
+  const delayNextFont = async (prefix = "AxiomFont-") => page.evaluate(prefix => {
     const original = FontFace.prototype.load; (window as any).releaseFont = undefined;
     FontFace.prototype.load = function() {
-      if (!this.family.startsWith("AxiomFont-")) return original.call(this);
+      if (!this.family.startsWith(prefix)) return original.call(this);
       FontFace.prototype.load = original;
       return original.call(this).then(face => new Promise<FontFace>(resolve => { (window as any).releaseFont = () => resolve(face); }));
     };
-  });
-  await delayNextFont(); await choose("思源黑体 · Noto Sans SC");
+  }, prefix);
+  await delayNextFont("AxiomPreview-"); await choose("思源黑体 · Noto Sans SC");
   await page.waitForFunction(() => !!(window as any).releaseFont);
   await page.getByRole("button", { name: "取消", exact: true }).click(); await page.evaluate(() => (window as any).releaseFont());
   await page.getByRole("alert").filter({ hasText: "已取消" }).waitFor(); await waitReady(page);
   assert.equal(await records(page), 2); assert.equal(await selected(page), "default");
-  await choose("思源宋体 · Noto Serif SC"); await waitReady(page);
+  await choose("思源宋体 · Noto Serif SC"); await previewReady();
+  assert.equal(await page.evaluate(() => [...document.fonts].some(face => face.family === "AxiomPreview-noto-sans-sc")), false, "canceled decode never registers a stale subset");
   // A later explicit selection in another window is retained when download saves.
   await sibling.getByRole("button", { name: "恢复默认", exact: true }).click();
   await download(); await waitReady(page);

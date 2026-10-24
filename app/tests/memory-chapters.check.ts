@@ -1,0 +1,82 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, mkdirSync, realpathSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright";
+import { startServer } from "../src/server/index.js";
+import { memoryDirectory, digest } from "../src/server/memory-files.js";
+import { memoryDetail } from "../src/server/memory-detail.js";
+import type { Workspace, Session } from "../src/shared/protocol.js";
+
+const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-memory-chapters-ui-"))), project = join(root, "project");
+mkdirSync(project);
+const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
+const app = await startServer({ root, port: 0, dev: true });
+const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
+try {
+  const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
+  const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
+  const scope = { workspaceId: workspace.id, sessionId: session.id };
+  const entry = join(memoryDirectory(root, session.id), "MEMORY.md");
+  writeFileSync(entry, "# 章节记忆验证\n# [已放弃] 旧方案\n## 旧探索\n### [未开始] 废弃实现[^依据]\n#### [进行中] 废弃验证\n# [进行中] 新方案\n## [已完成] 设计\n## [进行中] 修复取消按钮\n## [等待] 外部设备\n### [未开始] 真机验证\n## [失败] 验证失败\n\n[^依据]: 放弃是因为旧方案不可行。\n");
+  const detail = (anchor: string, content: string) => memoryDetail(entry, { action: "write", anchor, entryRevision: digest(readFileSync(entry)), content });
+  detail("## [进行中] 修复取消按钮", "ONLY_DETAIL_ONE：保留修复依据与验证结果。");
+  detail("## [进行中] 修复取消按钮 〔1〕", "DETAIL_TWO_START\n\n" + "第二段正文。".repeat(2800) + "\n\nDETAIL_TWO_END");
+  detail("## [已完成] 设计", "UNRELATED_DETAIL_THREE");
+  app.agents.memories.scan();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const errors: string[] = [], reads: Array<{ path: string; offset?: number }> = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("websocket", socket => socket.on("framesent", frame => { try { const value = JSON.parse(String(frame.payload)); if (value.op === "memory.read") reads.push(value.params); } catch {} }));
+  await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
+  await page.goto(app.origin);
+  await page.getByRole("button", { name: "上下文与会话记忆", exact: true }).click();
+  const todo = page.getByRole("dialog", { name: "上下文与会话记忆", exact: true });
+  await todo.getByText("章节记忆验证", { exact: true }).waitFor();
+  assert.doesNotMatch(await todo.innerText(), /进度待评估|\d+%/);
+  assert.ok(await todo.locator('li[data-abandoned="true"]').count() >= 4);
+  assert.ok(await todo.locator("li > ul > li").count() > 0);
+  for (const icon of ["circle", "circle-dot", "circle-check", "clock", "circle-slash", "circle-x"]) assert.ok(await todo.locator(`use[href="#i-${icon}"]`).count(), icon);
+  assert.equal(reads.length, 0, "closed details must not prefetch");
+  const summary = todo.locator("summary.memory-task-row").filter({ hasText: "修复取消按钮" });
+  await summary.focus(); await page.keyboard.press("Enter");
+  await todo.getByText("ONLY_DETAIL_ONE：保留修复依据与验证结果。", { exact: true }).waitFor();
+  assert.deepEqual(reads.map(read => read.path), ["references/details.md#detail:1"]);
+  assert.doesNotMatch(await todo.innerText(), /DETAIL_TWO_START|UNRELATED_DETAIL_THREE/);
+  assert.ok(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open));
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await todo.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, `tree overflow at ${width}`);
+    const decoration = await todo.locator('li[data-abandoned="true"] .memory-task-title').first().evaluate(node => getComputedStyle(node).textDecorationLine);
+    assert.match(decoration, /line-through/);
+    if (width !== 320) await page.screenshot({ path: `/tmp/axiom-memory-chapters-${width}.png` });
+  }
+  await todo.getByRole("button", { name: "详情 2", exact: true }).click();
+  await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
+  assert.doesNotMatch(await todo.innerText(), /ONLY_DETAIL_ONE|DETAIL_TWO_END|UNRELATED_DETAIL_THREE/);
+  await todo.getByRole("button", { name: "继续读取此条详情", exact: true }).click();
+  await todo.getByText("DETAIL_TWO_END", { exact: true }).waitFor();
+  assert.deepEqual(reads.map(read => read.path), ["references/details.md#detail:1", "references/details.md#detail:2", "references/details.md#detail:2"]);
+  assert.ok(reads[2].offset! > 0);
+  assert.equal(await todo.getByRole("button", { name: "编辑", exact: true }).count(), 0);
+  await summary.focus(); await page.keyboard.press("Space");
+  await todo.locator(".memory-inline-detail").waitFor({ state: "detached" });
+  assert.ok(await todo.getByText("真机验证", { exact: true }).isVisible(), "folding details does not hide descendants");
+  // Markdown source retains inherited strikes and single-document footnotes.
+  await todo.getByRole("button", { name: "查看完整记忆" }).click();
+  const panel = page.getByRole("dialog", { name: "会话记忆", exact: true });
+  await panel.locator(".memory-entry").waitFor();
+  assert.ok(await panel.locator(".memory-entry [data-abandoned]").count() > 0);
+  await panel.locator(".memory-entry [data-footnote-target]").click();
+  await panel.getByText("放弃是因为旧方案不可行。", { exact: true }).waitFor();
+  await panel.getByRole("button", { name: "编辑", exact: true }).click();
+  const original = await panel.getByRole("textbox", { name: "记忆内容" }).inputValue();
+  assert.match(original, /# \[已放弃\] 旧方案/); assert.doesNotMatch(original, /~~/);
+  assert.deepEqual(errors, []);
+  console.log("任务树UI通过：六态、桌面/390/320、Enter/Space、单编号懒加载/切换/分页隔离、整支划线、原文编辑。");
+} finally {
+  await browser.close(); await app.close();
+  if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+  rmSync(root, { recursive: true, force: true });
+}

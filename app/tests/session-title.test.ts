@@ -9,8 +9,8 @@ const assistant = (text: string) => ({ role: "assistant", content: [{ type: "tex
 // in title-generation.test.ts, rather than a separate direct-fork harness.
 test("title validation normalizes whitespace and counts Unicode code points", () => {
   assert.equal(validSessionTitle("  会话\n 标题\t "), "会话 标题");
-  assert.equal(validSessionTitle("😀".repeat(10)), "😀".repeat(10));
-  for (const value of [null, 1, {}, "", " \n ", "😀".repeat(11), "12345678901", "a\0b", "<x>", "\ud800"])
+  assert.equal(validSessionTitle("😀".repeat(13)), "😀".repeat(13));
+  for (const value of [null, 1, {}, "", " \n ", "😀".repeat(14), "12345678901234", "a\0b", "<x>", "\ud800"])
     assert.equal(validSessionTitle(value), undefined);
 });
 

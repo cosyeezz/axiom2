@@ -1,21 +1,21 @@
-# Qoder 原生接入（实验性）
+# Qoder 原生接入
 
-## 状态与启用
+## 状态与使用
 
-**默认关闭，尚未完成真实账号验收，不应作为生产稳定供应商。** 本实现沿用 CodeBuddy 国内版的接入流程：参考 9Router、静态复核官方发布客户端、实现原生 provider、运行隔离测试。并非部署 9Router 网关，也不是把 Qoder 当成标准 OpenAI API。
+Qoder 默认作为普通供应商提供，不需要实验开关，名称不带“实验性”。**真实账号链路尚未验收**，这属于验证状态，不作为隐藏入口或禁止调用的条件。本实现沿用 CodeBuddy 国内版的接入流程：参考 9Router、静态复核官方发布客户端、实现原生 provider、运行隔离测试。并非部署 9Router 网关，也不是把 Qoder 当成标准 OpenAI API。
 
-需要测试时，由操作者在 Axiom 服务的环境中显式设置 `AXIOM_EXPERIMENTAL_QODER=1`。此变更没有替用户设置环境、修改真实配置、启动登录、重启服务或部署。
+原 `AXIOM_EXPERIMENTAL_QODER` 环境变量不再控制展示、登录、刷新、目录或推理；未设置或保留旧值 `0` 均可使用。此变更没有修改真实配置、启动登录、重启服务或部署。
 
-启用后，“添加供应商”提供两个独立项：
+“添加供应商”默认提供两个独立项：
 
 | ID | 名称 | 认证 |
 | --- | --- | --- |
-| `qoder` | Qoder（实验性） | 国际站 Personal Access Token（`pt-`）或浏览器设备授权 |
-| `qoder-cn` | Qoder 国内版（实验性） | 国内站 PAT 或浏览器设备授权 |
+| `qoder` | Qoder | 国际站 Personal Access Token（`pt-`）或浏览器设备授权 |
+| `qoder-cn` | Qoder 国内版 | 国内站 PAT 或浏览器设备授权 |
 
 添加供应商并保存认证后，手动拉取模型列表。没有内置猜测的模型清单；目录不可用会明确失败。两个地区的认证与缓存隔离，不能混用 OAuth 凭据。PAT 无法从字符串本身判定地区，请选择其签发地区。
 
-自定义 Base URL 不受支持；私有代理应使用其他供应商 ID，不能覆盖这两个原生 ID。关闭实验开关后，添加菜单隐藏 Qoder，已有配置保留为不可用的原生注册：不能登录、刷新认证、拉取远端目录或推理，但仍能读取、编辑、删除配置，不应阻塞其他供应商的管理。
+自定义 Base URL 不受支持；私有代理应使用其他供应商 ID，不能覆盖这两个原生 ID。默认展示不改变认证要求、地区隔离或协议限制；登录、刷新、目录和推理沿用正常认证与错误处理。
 
 环境变量 PAT：国际站支持 `QODER_PERSONAL_ACCESS_TOKEN`（优先）或 `QODER_API_KEY`；国内站仅使用 `QODER_CN_API_KEY`，避免误用国际站令牌。
 
@@ -62,13 +62,13 @@
 在 `app/` 下执行（使用隔离临时目录）：
 
 ```sh
-TMPDIR=/private/tmp ./node_modules/.bin/tsx --test --test-concurrency=1 \
+TMPDIR=/private/tmp ./node_modules/.bin/tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 \
   tests/qoder-auth.test.ts tests/qoder-stream.test.ts tests/qoder-runtime.test.ts \
   tests/codebuddy-auth.test.ts tests/codebuddy-stream.test.ts \
   tests/codebuddy-runtime.test.ts tests/model-runtime.test.ts
 ./node_modules/.bin/tsc --noEmit --pretty false
 ```
 
-本轮离线结果：上述七文件 **39/39 通过，退出码 0**；TypeScript 检查 **退出码 0**。回归包含已有 CodeBuddy 链路、冷启动不创建缓存、快照恢复不重写缓存/认证，以及禁用 Qoder 后仍可管理其他供应商。
+前轮协议接入验证：上述七文件 **39/39 通过，退出码 0**；TypeScript 检查 **退出码 0**。回归包含已有 CodeBuddy 链路、冷启动不创建缓存及快照恢复不重写缓存/认证。默认展示改版将原禁用回归替换为无开关的登录／目录／推理、旧值 `0` 下的正常注册与模型可用性，并新增双地区名称和默认下拉断言。本轮十文件（上述七文件加 `kiro-runtime`、`model-oauth-config`、`models`）48/48通过，生产构建退出0；Chrome九视口及触控回归通过，两个Qoder名称及默认可见断言通过。首轮浏览器在初始按钮禁用处超时，原检查重跑及两份只读诊断均通过，未复现且根因未确定，未以固定延时绕过。最终注释同步后重跑构建、Qoder／通用runtime检查和浏览器检查均退出0。日志在 `/tmp/axiom-qoder-normal.UTOtoy/`，截图在其 `app/test-results/model-polish/`；未部署或重启正式服务。
 
 Qoder runtime 测试对子进程预载 mock fetch 并禁用真实 socket；测试用认证值均为 fixture。测试覆盖的是本地适配器和 Axiom 运行时契约，不是供应商在线可用性。不要用仅替换父进程 fetch 的测试代替子进程网络隔离。

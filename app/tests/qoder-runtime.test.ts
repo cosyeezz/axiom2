@@ -11,6 +11,22 @@ import { ensureModelProvider, nativeProviderTemplates } from "../src/server/mode
 import { closeModelNetworks } from "../src/server/model-network.js";
 
 const providerId = "qoder-cn";
+test("Qoder regional templates are available without an experimental opt-in", () => {
+  const previous = process.env.AXIOM_EXPERIMENTAL_QODER;
+  try {
+    for (const value of [undefined, "0", "1"]) {
+      if (value === undefined) delete process.env.AXIOM_EXPERIMENTAL_QODER;
+      else process.env.AXIOM_EXPERIMENTAL_QODER = value;
+      assert.deepEqual(nativeProviderTemplates().filter(item => item.id.startsWith("qoder")).map(({ id, name, methods }) => ({ id, name, methods })), [
+        { id: "qoder", name: "Qoder", methods: ["api_key", "oauth"] },
+        { id: "qoder-cn", name: "Qoder 国内版", methods: ["api_key", "oauth"] },
+      ]);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.AXIOM_EXPERIMENTAL_QODER;
+    else process.env.AXIOM_EXPERIMENTAL_QODER = previous;
+  }
+});
 test("Qoder isolated worker login, signed catalog, reopened settings and snapshot runtime", { timeout: 45000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-qoder-runtime-"));
   const envKeys = ["AXIOM_PI_DIR", "NODE_OPTIONS", "AXIOM_QODER_FIXTURE_DIR", "AXIOM_EXPERIMENTAL_QODER"] as const;
@@ -18,7 +34,7 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
   const preload = fileURLToPath(new URL("./fixtures/qoder-network.cjs", import.meta.url));
   process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`;
   process.env.AXIOM_QODER_FIXTURE_DIR = root; process.env.AXIOM_PI_DIR = join(root, "pi");
-  process.env.AXIOM_EXPERIMENTAL_QODER = "1";
+  delete process.env.AXIOM_EXPERIMENTAL_QODER;
   globalThis.fetch = async () => { throw Error("Unexpected parent network request in Qoder fixture"); };
   const service = new ModelService(root), owner = {};
   const logins = new Logins(service, () => {}, async () => {}, async (url) => {
@@ -26,7 +42,8 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
   });
   try {
     const draft = await service.read(), template = draft.templates.find(item => item.id === providerId)!;
-    assert.ok(template); assert.deepEqual(template.methods, ["api_key", "oauth"]);
+    assert.ok(template); assert.equal(template.name, "Qoder 国内版"); assert.deepEqual(template.methods, ["api_key", "oauth"]);
+    assert.equal(draft.templates.find(item => item.id === "qoder")?.name, "Qoder");
     const runtime = await service.runtime();
     assert.equal(runtime.getRegisteredNativeProvider(providerId), undefined, "templates must be lazy");
     const flow = await logins.start(owner, providerId, "oauth", draft.revision);
@@ -45,6 +62,8 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
     assert.equal(stored.access, "dt-FIXTURE"); assert.equal(stored.region, "cn"); assert.ok(stored.machineId);
     const reopened = new ModelService(root), view = await reopened.read();
     assert.equal(view.providers.find(item => item.providerId === providerId)?.auth?.configured, true);
+    assert.equal(view.providers.find(item => item.providerId === providerId)?.name, "Qoder 国内版");
+    assert.equal(view.templates.find(item => item.id === providerId)?.name, "Qoder 国内版");
     assert.ok(!JSON.stringify(view).includes("dt-FIXTURE"));
     const catalog = await reopened.catalog(providerId, view.revision);
     assert.equal(catalog.source, "native"); assert.equal(catalog.models.length, 1); assert.equal(catalog.models[0].id, "auto");
@@ -68,23 +87,20 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
       return new Response('data: {"statusCodeValue":200,"body":"{\\"choices\\":[{\\"delta\\":{\\"content\\":\\"ok\\"},\\"finish_reason\\":\\"stop\\"}]}"}\n\ndata: {"statusCodeValue":200,"body":"[DONE]"}\n\n', { headers: { "content-type": "text/event-stream" } });
     } });
     assert.equal(result.stopReason, "stop", result.errorMessage);
-    delete process.env.AXIOM_EXPERIMENTAL_QODER;
+    // A stale opt-out from an older installation no longer hides or disables Qoder.
+    process.env.AXIOM_EXPERIMENTAL_QODER = "0";
     await closeModelNetworks(root);
-    assert.ok(!nativeProviderTemplates().some(item => item.id === providerId));
     writeFileSync(join(service.dir, "models.json"), JSON.stringify({ providers: { "codebuddy-cn": { headers: {} } } }));
-    assert.equal((await reopened.runtime()).getError(), undefined, "disabled credentials must not poison configuration validation");
-    const disabledView = await reopened.read();
-    assert.ok(disabledView.providers.some(item => item.providerId === "codebuddy-cn"), "disabled Qoder credentials must not block other providers");
-    assert.ok(!disabledView.templates.some(item => item.id === providerId));
-    await reopened.save({ ...disabledView, providers: disabledView.providers.map(p => ({ ...p, key: "" })) });
-    const disabled = await reopened.runtime(snapshotPath);
-    assert.equal((await disabled.getAvailable(providerId)).length, 0);
-    await assert.rejects(ensureModelProvider(disabled, providerId), /实验性/);
-    const denied = await disabled.completeSimple(disabled.getModel(providerId, "auto")!, { messages: [{ role: "user", content: "no network", timestamp: 1 }] }, {
-      fetch: async () => { assert.fail("disabled provider must never fetch"); },
-    });
-    assert.equal(denied.stopReason, "error");
-    assert.match(denied.errorMessage!, /关闭|实验性/);
+    assert.equal((await reopened.runtime()).getError(), undefined);
+    const settings = await reopened.read();
+    assert.ok(settings.providers.some(item => item.providerId === "codebuddy-cn"));
+    assert.equal(settings.templates.find(item => item.id === providerId)?.name, "Qoder 国内版");
+    await reopened.save({ ...settings, providers: settings.providers.map(p => ({ ...p, key: "" })) });
+    const restored = await reopened.runtime(snapshotPath);
+    await ensureModelProvider(restored, providerId);
+    assert.equal((await restored.getAvailable(providerId)).length, 1);
+    await ensureModelProvider(restored, "qoder");
+    assert.equal(restored.getRegisteredNativeProvider("qoder")?.name, "Qoder");
     await snapshot.logout(providerId);
     assert.ok(!(await snapshot.listCredentials()).some(item => item.providerId === providerId));
   } finally {

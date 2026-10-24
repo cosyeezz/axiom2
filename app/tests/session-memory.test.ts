@@ -13,7 +13,7 @@ import { Costs } from "../src/server/costs.js";
 import { textFileCommand, type OpenMemoryFile } from "../src/server/memory-open.js";
 import { initializeMemory, memoryDirectory, digest, replaceMemoryFile, readMemoryTextSnapshot, textFile } from "../src/server/memory-files.js";
 import { pendingMemoryRead, recordMemoryRead } from "../src/server/memory-recovery.js";
-import { memoryInstruction, memoryRules, memoryTemplate, memorySummaryVersion, parseMemory } from "../src/shared/memory.js";
+import { memoryInstruction, memoryTemplate, legacyMemoryTemplate, memorySummaryVersion, parseMemory } from "../src/shared/memory.js";
 import { AppError, type Scope, type Workspace, type Session } from "../src/shared/protocol.js";
 function fixture(openFile?: OpenMemoryFile, replaceFile?: typeof replaceMemoryFile, readCorrectionFile?: typeof textFile, observed?: (scope: string) => boolean, readCorrectionSnapshot?: typeof readMemoryTextSnapshot) {
   const root = mkdtempSync(join(tmpdir(), "axiom-memory-")), project = mkdtempSync(join(tmpdir(), "axiom-memory-project-"));
@@ -294,7 +294,7 @@ test("progress accepts explicit legacy fields and real checkboxes without turnin
     { state: "已完成", title: "完成类型检查" },
     { state: "未开始", title: "完成移动端检查" },
     { state: "进行中", title: "核对桌面布局" },
-    { state: "阻塞", title: "等待实体设备" },
+    { state: "阻塞", title: "等待实体设备", waiting: true },
   ]);
   assert.equal(checkboxes.current, "浏览器验收");
   assert.equal(checkboxes.next, "完成移动端检查");
@@ -322,8 +322,8 @@ test("progress accepts explicit legacy fields and real checkboxes without turnin
   assert.equal(hiddenFields.current, "");
   assert.deepEqual(hiddenFields.tasks, []);
   assert.equal(hiddenFields.progressState, "conflict", "没有显式任务的已完成 100% 不能成为有效进度");
-  assert.match(memoryRules, /保留“## 目标与范围”和“## 任务进度”栏目/);
-  assert.match(memoryInstruction("C:/memory/session/MEMORY.md", "C:/memory/RULES.md"), /首次维护前先读取/);
+  assert.ok(memoryInstruction("C:/memory/session/MEMORY.md").includes("C:/memory/session/MEMORY.md"));
+  assert.doesNotMatch(memoryInstruction("C:/memory/session/MEMORY.md"), /RULES\.md/);
 });
 test("file changes invalidate semantic content immediately, subscribe locally and reject stale saves", async () => {
   const f = fixture(); try {
@@ -743,7 +743,7 @@ test("catalog excludes empty scaffolds, shows literal excerpts and retains real 
   const f = fixture(); try {
     assert.deepEqual(f.memories.catalog(f.scope.workspaceId), []);
     const path = join(f.directory, "MEMORY.md");
-    for (const body of ["", "  \n", "# 会话记忆\n\n## 目标与范围\n", memoryTemplate.replaceAll("\n", "\r\n")]) {
+    for (const body of ["", "  \n", "# 会话记忆\n\n## 目标与范围\n", legacyMemoryTemplate.replaceAll("\n", "\r\n")]) {
       writeFileSync(path, body); f.memories.scan();
       assert.deepEqual(f.memories.catalog(f.scope.workspaceId), []);
     }
@@ -752,7 +752,7 @@ test("catalog excludes empty scaffolds, shows literal excerpts and retains real 
     writeFileSync(detail, "有实际内容的详细资料"); f.memories.scan();
     assert.equal(f.memories.catalog(f.scope.workspaceId)[0].hasContent, true);
     unlinkSync(detail);
-    writeFileSync(path, memoryTemplate.replace("## 结论与决定\n尚未记录", "## 结论与决定\n迁移保留原始文件")); f.memories.scan();
+    writeFileSync(path, legacyMemoryTemplate.replace("## 结论与决定\n尚未记录", "## 结论与决定\n迁移保留原始文件")); f.memories.scan();
     const entry = f.memories.catalog(f.scope.workspaceId)[0];
     assert.equal(entry.excerpt, "迁移保留原始文件");
     assert.equal(entry.summary, "", "excerpt must not masquerade as a generated summary");
@@ -946,7 +946,7 @@ test("compaction recovery requires a successful complete actual entry read for e
     const event = { toolName: "read", input: { path, offset: 1, limit: 1 }, isError: false, content: [{ type: "text", text: "目标" }] };
     assert.equal(recordMemoryRead(manager, path, root, event), false);
     assert.equal(pendingMemoryRead(manager), id);
-    assert.equal(recordMemoryRead(manager, path, root, { ...event, content: [{ type: "text", text: "目标\n约束\n下一步" }] }), true);
+    assert.equal(recordMemoryRead(manager, path, root, { ...event, input: { path, offset: 1, limit: 3 }, content: [{ type: "text", text: "目标\n约束\n下一步" }] }), true);
     assert.equal(pendingMemoryRead(manager), null);
     manager.appendCompaction("第二次摘要", first, 500); assert.ok(pendingMemoryRead(manager));
     assert.equal(recordMemoryRead(manager, path, root, { ...event, isError: true }), false);

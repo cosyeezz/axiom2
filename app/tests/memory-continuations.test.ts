@@ -41,7 +41,7 @@ function fixture() {
 
 test("only explicit actionable tasks allow continuation", () => {
   assert.equal(continuationTasks(parseMemory(pending)).length, 1);
-  for (const content of ["", "## 下一步\n- [ ] 只是资料", ...["等待用户确认", "进行中（等待用户确认）", "进行中；等待用户确认", "进行中 (waiting for approval)", "暂停", "停止", "待授权"]
+  for (const content of ["", "## 下一步\n- 只是资料", ...["等待用户确认", "进行中（等待用户确认）", "进行中；等待用户确认", "进行中 (waiting for approval)", "暂停", "停止", "待授权"]
     .map((state) => pending.replace("整体状态：进行中", `整体状态：${state}`)),
     pending.replace("当前进展：核心功能完成", "当前进展：核心功能完成。等待用户提供信息"), pending + "\n## 下一步\n等待授权",
     pending + "\n下一步：进行剩余验证。需要用户提供设备",

@@ -209,31 +209,33 @@
   .composer .model-picker > summary > span { max-width: 140px; }
   .composer .send, .composer .composer-actions { grid-column: 4; grid-row: 2; }
 }
-/* Model selection keeps identity, reasoning and commit actions in separate bands. */
+/* Compact controls leave the scrollable model directory most of the available height. */
 .model-picker .model-popover {
   width: 384px;
   max-width: calc(100vw - 40px);
   max-height: min(560px, 70dvh);
 }
 .compression-settings .model-picker .model-popover { width: 100%; max-width: 100%; }
-.model-picker .model-search { margin: 10px; }
-.model-picker .model-list { max-height: min(320px, 38dvh); padding: 2px 6px 8px; overscroll-behavior: contain; }
-.model-picker .model-row { margin-bottom: 2px; }
-.model-picker .model-option { font-family: var(--font-body); min-height: 60px; padding: 10px; gap: 10px; }
-.model-picker .model-copy { display: grid; gap: 3px; text-align: left; }
-.model-picker .model-name { font-size: 13px; font-weight: 510; line-height: 1.5; overflow-wrap: anywhere; }
-.model-picker .model-provider-name { font: 11px/1.5 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.model-picker .model-search { margin: 4px 6px; padding-inline: 8px; gap: 6px; }
+.model-picker .model-search input { min-height: 36px; padding-block: 6px; }
+.model-picker .model-list { flex: 1 1 auto; min-height: 48px; max-height: 360px; padding: 0 4px 4px; overscroll-behavior: contain; }
+.model-picker .model-row { margin-bottom: 0; }
+.model-picker .model-option { font-family: var(--font-body); min-height: 48px; padding: 5px 8px; gap: 6px; }
+.model-picker .model-copy { display: grid; gap: 0; text-align: left; }
+.model-picker .model-name { font-size: 12px; font-weight: 510; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker .model-provider-name { font: 10px/1.4 var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-picker .model-check { width: 14px; height: 14px; order: 1; }
 .model-picker .model-row:has(.model-option[aria-pressed="true"]) { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .model-picker .model-row .model-favorite { margin-right: 4px; }
 .model-picker .model-favorite[aria-pressed="true"] { opacity: 1; pointer-events: auto; }
-.model-picker .model-reasoning { min-width: 0; margin: 0; padding: 12px; border: 0; border-top: 1px solid var(--border); flex-shrink: 0; }
-.model-picker .model-reasoning legend { float: left; width: 100%; padding: 0; margin-bottom: 8px; font-size: 11px; color: var(--muted); }
+.model-picker .model-reasoning { min-width: 0; margin: 0; padding: 4px 8px; border: 0; border-top: 1px solid var(--border); flex-shrink: 0; }
+.model-picker .model-reasoning legend { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
 .model-picker .model-reasoning > p { clear: both; }
-.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)); gap: 4px; }
+/* Reserve seven equal slots even when a model exposes fewer reasoning levels. */
+.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; container-type: inline-size; }
 .model-picker .model-level { position: relative; min-width: 0; cursor: pointer; }
 .model-picker .model-level input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; font: 11px/1.5 var(--font-mono); color: var(--fg-2); pointer-events: none; }
+.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; font: 10px/1.5 var(--font-mono); font-size: min(calc(10px * var(--display-font-scale, 1)), 3cqw); color: var(--fg-2); white-space: nowrap; pointer-events: none; }
 .model-picker .model-level input:enabled:hover + span { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .model-picker .model-level input:checked + span { border-color: var(--accent); background: var(--accent); color: var(--accent-on); }
 .model-picker .model-level input:enabled:checked:hover + span { border-color: var(--accent-hover); background: var(--accent-hover); }
@@ -241,7 +243,7 @@
 .model-picker .model-level input:focus-visible + span { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
 .model-picker .model-level input:disabled { cursor: not-allowed; }
 .model-picker .model-level input:disabled + span { opacity: .5; }
-.model-picker .model-footer { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+.model-picker .model-footer { padding: 5px 8px; gap: 6px; flex-wrap: wrap; justify-content: space-between; }
 .model-picker .model-manage { display: inline-flex; align-items: center; min-height: 36px; color: var(--muted); font-size: 12px; text-decoration: none; border-radius: 4px; }
 .model-picker .model-manage:hover { color: var(--fg); }
 .model-picker .model-manage:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
@@ -250,22 +252,28 @@
 .model-picker .model-cancel { color: var(--fg-2); }
 .model-picker .model-confirm { background: var(--accent); color: var(--accent-on); }
 .model-picker .model-confirm:hover:not(:disabled) { background: var(--accent-hover); }
-.model-picker .model-popover > :is(.meta, .execution-alert) { padding: 8px 12px; flex-shrink: 0; overflow-wrap: anywhere; }
+.model-picker .model-popover > :is(.meta, .execution-alert) { padding: 4px 8px 6px; flex-shrink: 0; overflow-wrap: anywhere; line-height: 1.5; }
 .model-picker .model-popover[data-floating] { position: fixed; inset: auto; margin: 0; }
 .model-picker .model-popover > .execution-alert { color: var(--danger-text); }
-@media (max-width: 430px) {
-  .model-picker .model-levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .model-picker .model-levels:has(> :only-child) { grid-template-columns: 1fr; }
+.model-picker .model-run-note { flex-shrink: 0; padding-inline: 8px; color: var(--muted); font-size: 11px; }
+.model-picker .model-run-note > summary { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 24px; cursor: pointer; list-style: none; }
+.model-picker .model-run-note > summary::-webkit-details-marker { display: none; }
+.model-picker .model-run-note > summary > svg { width: 12px; height: 12px; flex-shrink: 0; }
+.model-picker .model-run-note[open] > summary > svg { transform: rotate(180deg); }
+.model-picker .model-run-note > p { padding-bottom: 6px; overflow-wrap: anywhere; }
+@media (hover: none), (pointer: coarse) {
+  /* Touch users cannot hover to read the full identity in a tooltip. */
+  .model-picker .model-name, .model-picker .model-provider-name { white-space: normal; overflow-wrap: anywhere; }
 }
 @media (pointer: coarse) {
-  .model-picker .model-level span, .model-picker .model-actions button, .model-picker .model-manage { min-height: 44px; }
+  .model-picker .model-search input, .model-picker .model-level span, .model-picker .model-actions button, .model-picker .model-manage, .model-picker .model-run-note > summary { min-height: 44px; }
 }
 .session-init-body {
   overflow-wrap: anywhere;
 }
-.session-init .session-system-prompt {
-  max-height: 360px;
-  overflow: auto;
+.session-init pre {
+  max-height: none;
+  overflow: visible;
 }
 .composer { position: relative; }
 .attachment-picker { grid-column: 1; grid-row: 1; position: relative; display: grid; width: 44px; height: 44px; }

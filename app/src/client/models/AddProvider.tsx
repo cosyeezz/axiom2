@@ -66,7 +66,8 @@ export function AddProvider({ templates, blocked, login, close }: {
   login: (providerId: string) => void;
   close: () => void;
 }) {
-  const providers = templates.filter((template) => template.methods?.includes("oauth"));
+  // Keep legacy credentials usable, but offer only the unified OpenAI login for new connections.
+  const providers = templates.filter((template) => template.id !== "openai-codex" && template.methods?.includes("oauth"));
   const [selected, setSelected] = useState("");
   const providerId = providers.some((provider) => provider.id === selected) ? selected : (providers[0]?.id ?? "");
   return (
@@ -77,7 +78,7 @@ export function AddProvider({ templates, blocked, login, close }: {
         <div className="field">
           <label htmlFor="oauth-provider-select">供应商</label>
           <Select autoFocus id="oauth-provider-select" label="供应商" value={providerId} disabled={!providers.length} onChange={setSelected}
-            options={providers.length ? providers.map(provider => ({ value: provider.id, label: `${provider.name} · ${provider.id}` })) : [{ value: "", label: "暂无可用供应商" }]} />
+            options={providers.length ? providers.map(provider => ({ value: provider.id, label: provider.name })) : [{ value: "", label: "暂无可用供应商" }]} />
           <p className="field-help">供应商列表来自 pi；无需填写接口地址或协议。</p>
         </div>
         {!providers.length && <p className="auth-error" role="status">当前后台未返回可用的 OAuth 供应商，请更新或重启后台服务，再重新读取配置。</p>}

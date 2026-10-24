@@ -11,9 +11,10 @@ const waiting = /(?:等待|等候|待用户|需(?:要)?用户|需要确认|待�
 
 /** Only explicit unfinished work is eligible. Memory is evidence, never new authorization. */
 export function continuationTasks(progress: MemoryProgress) {
+  if (progress.format === "chapters") return progress.tasks.filter(task => !task.abandoned && !task.waiting && (task.state === "未开始" || task.state === "进行中"));
   if (progress.state === "已完成" || waiting.test(progress.stateDetail ?? progress.state) ||
       waiting.test(progress.current) || waiting.test(progress.next) || progress.progressState === "conflict") return [];
-  return progress.tasks.filter((task) => (task.state === "未开始" || task.state === "进行中") && !waiting.test(task.title));
+  return progress.tasks.filter((task) => !task.abandoned && !task.waiting && (task.state === "未开始" || task.state === "进行中") && !waiting.test(task.title));
 }
 
 type Chain = { checkedRunId: string; attempts: number; seen: Set<string>; controller?: AbortController };

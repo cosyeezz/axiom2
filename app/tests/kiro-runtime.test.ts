@@ -22,6 +22,7 @@ test("Kiro auth-only login survives worker/reopen without changing other OAuth p
   const logins = new Logins(service, () => {}, async () => {});
   try {
     const view = await service.read();
+    assert.equal(view.templates.find(p => p.id === "kiro")?.name, "kiro");
     assert.equal(view.templates.find(p => p.id === "kiro")?.api, "kiro-auth-only");
     assert.deepEqual(view.templates.find(p => p.id === "kiro")?.methods, ["oauth"]);
     assert.ok(view.templates.some(p => p.id === "codebuddy-cn"));
@@ -63,6 +64,7 @@ test("Kiro auth-only login survives worker/reopen without changing other OAuth p
     writeFileSync(join(service.dir, "auth.json"), JSON.stringify(stored));
     const reopened = new ModelService(root), settings = await reopened.read();
     const entry = settings.providers.find(p => p.providerId === "kiro")!;
+    assert.equal(entry.name, "kiro");
     assert.equal(entry.auth?.configured, true); assert.equal(entry.connectionType, "oauth");
     assert.equal(entry.api, "kiro-auth-only"); assert.deepEqual(entry.models, []);
     assert.equal(settings.templates.find(p => p.id === "kiro")?.api, "kiro-auth-only");

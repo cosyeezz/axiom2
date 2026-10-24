@@ -47,7 +47,7 @@ export class PooledMemoryRunner implements MemoryRunner {
     const environment=this.profiles.prepare({entry:'memory',cwd,modelDir:this.models.dir,modelsRaw:await this.models.raw(),selection:input.selection,mode:this.pool.mode});
     let lease:ExecutionLease|undefined;
     try {
-      lease=await this.pool.acquire({environment,kind:input.kind==='query'?'memory-query':'memory-organize',requestStartedAtMonoMs,signal,deadlineAt,parentLease:input.parentLease,memory:{concurrency:preferences.concurrency,queue:preferences.queue}});
+      lease=await this.pool.acquire({environment,kind:input.kind==='title'?'session-title':input.kind==='query'?'memory-query':'memory-organize',requestStartedAtMonoMs,signal,deadlineAt,parentLease:input.parentLease,memory:{concurrency:preferences.concurrency,queue:preferences.queue}});
       if(!environment.current())throw Error('记忆模型配置已变化，请重试');
       const child=await lease.ensureReady();
       signal.throwIfAborted();

@@ -5,9 +5,6 @@ import { encodeQoderBody, object, qoderChatPath, qoderFailure, qoderHeaders, qod
 import { unwrapQoderSse } from "./qoder-sse.js";
 
 const completions = lazyApi(() => import("@earendil-works/pi-ai/api/openai-completions"));
-function requireEnabled() {
-  if (process.env.AXIOM_EXPERIMENTAL_QODER !== "1") throw Error("Qoder 实验性接入已关闭；需设置 AXIOM_EXPERIMENTAL_QODER=1 后显式启用。");
-}
 const positive = (value: unknown, fallback: number) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : fallback;
 // Text-only metadata; account catalog/config is required before inference.
 function descriptor(region: QoderRegion, config: Record<string, unknown>): Model<"openai-completions"> {
@@ -84,7 +81,6 @@ export function qoderProvider(region: QoderRegion = "intl") {
       ...input, maxRetries: 0,
       // The OpenAI adapter constructs messages/tools only. The fake OpenAI URL is never fetched.
       fetch: async (_input, init) => {
-        requireEnabled();
         // Check the original context: the OpenAI adapter filters unsupported images before fetch.
         if (context.messages.some(message => Array.isArray(message.content) && message.content.some(block => !["text", "thinking", "toolCall"].includes(block.type))))
           throw Error("Qoder 当前接入仅支持文本；图片和文件内容不会被静默丢弃。");
@@ -116,15 +112,9 @@ export function qoderProvider(region: QoderRegion = "intl") {
   }
   return createProvider<"openai-completions">({
     id: site.id, name: site.name, baseUrl: site.device,
-    auth: { apiKey: envApiKeyAuth(`${site.name} Personal Access Token（pt-）`, region === "cn" ? ["QODER_CN_API_KEY"] : ["QODER_PERSONAL_ACCESS_TOKEN", "QODER_API_KEY"]), oauth: { ...oauth,
-      login: interaction => { requireEnabled(); return oauth.login(interaction); },
-      refresh: (credential, signal) => { requireEnabled(); return oauth.refresh(credential, signal); },
-      toAuth: async credential => { requireEnabled(); return { apiKey: packQoderCredential(credential, region) }; },
-    } },
+    auth: { apiKey: envApiKeyAuth(`${site.name} Personal Access Token（pt-）`, region === "cn" ? ["QODER_CN_API_KEY"] : ["QODER_PERSONAL_ACCESS_TOKEN", "QODER_API_KEY"]), oauth },
     models: [],
-    filterModels: models => process.env.AXIOM_EXPERIMENTAL_QODER === "1" ? models : [],
     async fetchModels(context) {
-      requireEnabled();
       const credential = context.credential;
       if (!credential) throw Error("Qoder 请先配置认证，再拉取模型目录。");
       const key = credential.type === "oauth" ? packQoderCredential(credential, region) : credential.key;

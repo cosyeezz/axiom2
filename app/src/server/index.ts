@@ -589,10 +589,7 @@ export async function startServer(
           if (c.op === "session.rename" && scope) agents.memories.rename(scope);
           if (c.op === "session.read")
             publish(`thread:${c.workspaceId}:${c.sessionId}`);
-          if (c.op === "session.rename") {
-            const run = agents.info(scope!).run;
-            if (run) agents.signal(scope!, run.id, { type: "title-settled" });
-          }
+          if ((c.op === "session.rename" || c.op === "session.delete") && scope) agents.titles.cancel(scope);
           publish(`sessions:${c.workspaceId}`);
           if (c.op === "session.delete")
             publish(`session:${c.workspaceId}:${c.sessionId}`, null);

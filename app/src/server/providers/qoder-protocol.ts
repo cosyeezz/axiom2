@@ -28,8 +28,8 @@ import { constants, createCipheriv, createHash, publicEncrypt, randomUUID } from
 
 export type QoderRegion = "intl" | "cn";
 export const qoderSites = {
-  intl: { id: "qoder", name: "Qoder（实验性）", login: "https://qoder.com/device/selectAccounts", open: "https://openapi.qoder.sh", center: "https://center.qoder.sh", device: "https://api2.qoder.sh" },
-  cn: { id: "qoder-cn", name: "Qoder 国内版（实验性）", login: "https://qoder.com.cn/device/selectAccounts", open: "https://openapi.qoder.com.cn", center: "https://gateway.qoder.com.cn", device: "https://gateway.qoder.com.cn" },
+  intl: { id: "qoder", name: "Qoder", login: "https://qoder.com/device/selectAccounts", open: "https://openapi.qoder.sh", center: "https://center.qoder.sh", device: "https://api2.qoder.sh" },
+  cn: { id: "qoder-cn", name: "Qoder 国内版", login: "https://qoder.com.cn/device/selectAccounts", open: "https://openapi.qoder.com.cn", center: "https://gateway.qoder.com.cn", device: "https://gateway.qoder.com.cn" },
 } as const;
 export const qoderChatPath = "/algo/api/v2/service/pro/sse/agent_chat_generation";
 export type QoderIdentity = { token: string; userId: string; machineId: string };

@@ -301,10 +301,6 @@ export class AgentRuns {
             .prepare("UPDATE runs SET status='running' WHERE id=?")
             .run(run.id);
         }
-        if (event.type === "title" && !live.task && !live.finish && !live.closed) {
-          if (this.store.generatedTitle(scope, event.title)) this.views.changed(scope);
-          this.signal(scope, run.id, { type: "title-result", settled: !this.store.requestTitle(scope) });
-        }
         if (event.type === "context-rebuilt") this.views.refresh(scope);
         if (event.type === "messages-persisted") this.views.persisted(scope, event.ids);
         if (event.type === "latency") {
@@ -350,10 +346,14 @@ export class AgentRuns {
           this.views.changed(scope);
         }
         if (event.type === "warning" || event.type === "system-prompt") {
-          const environment = this.views.info(scope).environment;
+          const previous = this.views.info(scope).environment;
+          const environment = event.type === "system-prompt" && event.environment ? event.environment : previous;
           if (environment) {
             if (event.type === "warning") environment.warnings.push(event.text);
-            else environment.systemPrompt = event.systemPrompt;
+            else {
+              environment.systemPrompt = event.systemPrompt;
+              environment.warnings = [...new Set([...(previous?.warnings ?? []), ...environment.warnings])];
+            }
             this.store.db
               .prepare(
                 "UPDATE agent_sessions SET environment=? WHERE sessionId=?",

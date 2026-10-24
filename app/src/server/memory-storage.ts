@@ -2,7 +2,6 @@ import { copyFileSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { defaultDataRoot } from "./data-root.js";
-import { memoryRules } from "../shared/memory.js";
 import { AppError } from "../shared/protocol.js";
 
 const roots = new Map<string, string>();
@@ -48,14 +47,7 @@ export function ensureMemoryDirectory(path: string) {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(path) !== path) throw new AppError("MEMORY_PATH", "记忆目录不能使用符号链接");
 }
-function initializeRules(directory: string) {
-  ensureMemoryDirectory(directory);
-  const path = join(directory, "RULES.md");
-  try { writeFileSync(path, memoryRules, { flag: "wx", mode: 0o600 }); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw Error("记忆规则不是普通文件");
-}
+// Historical RULES files are user data: leave them untouched, never load or generate them.
 /** A complete tree signature detects changes during copying, including large artifacts. */
 function tree(directory: string): Map<string, string> {
   const entries = new Map<string, string>();
@@ -105,11 +97,11 @@ export function initializeMemoryStorage(root: string, sessionIds: string[], targ
   if (existsSync(bindingPath(root))) {
     roots.delete(root);
     const directory = boundMemoryRoot(root);
-    initializeRules(directory); roots.set(root, directory); return;
+    ensureMemoryDirectory(directory); roots.set(root, directory); return;
   }
   const oldRoot = legacyMemoryRoot(root);
   const destination = target ?? (root === canonical(defaultDataRoot()) ? join(canonical(homedir()), ".axiom", "memory") : oldRoot);
-  if (destination === oldRoot) { initializeRules(oldRoot); return; }
+  if (destination === oldRoot) { ensureMemoryDirectory(oldRoot); return; }
   ensureMemoryDirectory(destination);
   const originals: Array<[string, string]> = [];
   for (const id of sessionIds) {
@@ -129,7 +121,7 @@ export function initializeMemoryStorage(root: string, sessionIds: string[], targ
     } finally { rmSync(stage, { recursive: true, force: true }); }
   }
   for (const [source, signature] of originals) if (JSON.stringify([...tree(source)]) !== signature) throw Error("迁移期间旧记忆改变，保留原目录");
-  initializeRules(destination);
+  ensureMemoryDirectory(destination);
   // Publish complete JSON atomically under Store's exclusive lock.
   const pending = mkdtempSync(join(root, ".memory-location-"));
   try {

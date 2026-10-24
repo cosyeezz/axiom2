@@ -1,9 +1,10 @@
 import { ModelLatency, latencyError } from "./model-latency.js";
 import { configureModelNetwork, defaultModelsPath, toolEnvironment } from "./integrations/model-proxy-env.js";
 import { capabilityExtensions, capabilityRuntime, discoverCapabilities, type CapabilityRuntime } from "./capability-resources.js";
-import { resolveBuiltinSkills } from "./builtin-capabilities.js";
+import { environmentResourceOptions } from "./environment-resources.js";
+import { runtimeEnvironment } from "./session-environment.js";
 import { applySkillDiscovery } from "./skill-discovery.js";
-import { resourceSnapshot, resourceWarnings } from "./reload-resources.js";
+import { resourceSnapshot } from "./reload-resources.js";
 import { resumeReloadedSession } from "./reload-resume.js";
 import type { ResourceSnapshot } from "../shared/reload.js";
 import { performance } from "node:perf_hooks";
@@ -11,11 +12,11 @@ import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSe
 import { randomUUID } from "node:crypto";
 import { ensureTopicSnapshot, injectTopicSnapshot } from "./memory-topics.js";
 import type { MemoryTopicSnapshot } from "../shared/memory-tree.js";
-import { memoryQueryTool } from "./memory-tool.js";
-import { memoryInstruction } from "../shared/memory.js";
+import { memoryQueryTool, memoryDetailTool } from "./memory-tool.js";
+import { guardMemoryEdit } from "./memory-detail.js";
 import { pendingMemoryRead, recordMemoryRead } from "./memory-recovery.js";
 import { within } from "./memory-files.js";
-import { memoryRoot, memoryRulesPath } from "./memory-storage.js";
+import { memoryRoot } from "./memory-storage.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { nativeInputs, nativeQueuedMessages, recallNativeInputs, retainedInput } from "./agents/native-queue.js";
 import { queueTaskNotifications } from "./agents/task-notifications.js";
@@ -25,7 +26,6 @@ import {
   createBashToolDefinition,
   createPowerShellToolDefinition,
   type BashSpawnHook,
-  loadSkills,
   DefaultResourceLoader,
   SettingsManager,
   resizeImage,
@@ -41,7 +41,6 @@ import { getCurrentSystemMessage, getSystemMessageText } from "@earendil-works/p
 import { executionOutcome } from "./execution-outcome.js";
 import { isResumeControl, omitResumeControls, resumeSession } from "./resume-session.js";
 import { ModelService } from "./model-service.js";
-import { openCliSkillNames } from "./integrations/opencli-runtime.js";
 import { rtkExtension } from "./integrations/rtk-runtime.js";
 import { openCliResources } from "./integrations/opencli-resources.js";
 import { reaResources } from "./integrations/rea-resources.js";
@@ -52,7 +51,6 @@ import { compressionError } from "./compression-error.js";
 import { errorMessage } from "./error-message.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "./request-selection.js";
-import { TITLE_INSTRUCTION, TITLE_SETTLED_INSTRUCTION, extractSessionTitle } from "./session-title.js";
 import { taskTools } from "./task-tools.js";
 import { TaskPhase, TaskBudgetReminder, taskBudgetIntro, taskBudgetUpdate, taskBudgetWarning, taskSummaryInstruction, type TaskBudget } from "./task-budget.js";
 import {
@@ -94,7 +92,6 @@ export interface WorkerInput {
   compressionPreparation?: string;
   rewrite?: boolean;
   images?: ImageAttachment[];
-  requestTitle?: boolean;
   requestId?: string;
   task?: { id: string; inputIds: string[]; editable?: boolean; budget?: TaskBudget };
   notification?: { id: string; content: string; items?: { id: string; content: string }[] };
@@ -105,40 +102,6 @@ let session: AgentSession | undefined,
   accepting = false,
   inputClosed = false;
 let sdkStream: AgentSession["agent"]["streamFunction"] | undefined;
-let titleSettled = false;
-let wantsTitle = false;
-let titleConfirmation: Promise<void> | undefined;
-let resolveTitleConfirmation: (() => void) | undefined;
-
-function titleSettlementMessage(messages: readonly AgentMessage[]) {
-  if (activeInput?.task || !titleSettled || messages.some((message) =>
-    message.role === "custom" && message.customType === "axiom-title-settled")) return;
-  return { customType: "axiom-title-settled", content: TITLE_SETTLED_INSTRUCTION, display: false };
-}
-
-async function titleBoundary(event: BoundaryState): Promise<BoundaryResult | undefined> {
-  // Only acknowledge a durable title. The coordinator replies after its CAS;
-  // waiting here cannot insert a message between a tool call and its result.
-  await titleConfirmation;
-  if (cancelled) return;
-  const message = titleSettlementMessage(event.context.contextMessages);
-  if (message) return { entries: [...event.entries, { type: "custom_message", ...message }] };
-}
-
-function requestTitleConfirmation(title: string) {
-  titleConfirmation = new Promise<void>((resolve) => {
-    const timer = setTimeout(() => {
-      resolveTitleConfirmation = undefined;
-      resolve(); // The next run rechecks durable state if acknowledgement was lost.
-    }, 5000);
-    resolveTitleConfirmation = () => {
-      clearTimeout(timer);
-      resolveTitleConfirmation = undefined;
-      resolve();
-    };
-    send({ type: "title", title });
-  });
-}
 let activeInput: WorkerInput | undefined;
 let activeLease: LeaseRef | undefined;
 let environment: AgentInfo["environment"];
@@ -169,7 +132,7 @@ async function performReload(id: string, resumed: boolean, cold = false) {
       await prepareReload?.(capabilities);
       await session.reload();
       if (activeInput?.task) session.setActiveToolsByName(taskPhase.stage === "summary" ? [] : subagentTools);
-      else session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"])]);
+      else session.setActiveToolsByName([...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query", "memory_detail"])]);
     }
     if (cancelled) throw Error("会话已停止，重载结果待确认。");
     send({ type: "reload-stage", id, stage: "comparing" });
@@ -178,15 +141,13 @@ async function performReload(id: string, resumed: boolean, cold = false) {
       return skillsOnly && before ? { ...before, skills: next.skills } : next;
     };
     loadedResources = snapshot();
-    environment = { cwd: activeInput!.cwd, systemPrompt: session.systemPrompt, tools: session.getActiveToolNames(),
-      skills: session.resourceLoader.getSkills().skills.map(skill => skill.name), extensions: session.resourceLoader.getExtensions().extensions.length,
-      retry: { ...session.settingsManager.getRetrySettings(), provider: session.settingsManager.getProviderRetrySettings() }, warnings: resourceWarnings(session, activeInput?.capabilities) };
+    environment = runtimeEnvironment(session, activeInput!);
     const report = () => {
       // A resumed prompt may finish native MCP tool discovery before the
       // continuation is accepted. Publish its current declarations, not the
       // earlier background-connection snapshot.
       loadedResources = snapshot();
-      environment = { ...environment!, systemPrompt: session!.systemPrompt, tools: session!.getActiveToolNames() };
+      environment = runtimeEnvironment(session!, activeInput!);
       send({ type: "reload-result", id, ok: true, before, after: loadedResources, warnings: environment!.warnings, environment, resumed });
     };
     if (!resumed) report();
@@ -441,14 +402,6 @@ process.on("message", (value: any) => {
     }
     return;
   }
-  if (value.type === "title-settled" || value.type === "title-result") {
-    if (value.type === "title-settled" || value.settled === true) {
-      titleSettled = true;
-      wantsTitle = false;
-    }
-    resolveTitleConfirmation?.();
-    return;
-  }
   if (typeof value.id === "string" && value.id) {
     if (value.type === "compression-cancel") {
       compressionSnapshots.delete(value.id);
@@ -624,9 +577,6 @@ process.on("message", (value: any) => {
     phaseAbort = Promise.resolve();
     resumeSubmission = undefined;
     lastQueue = "";
-    titleSettled = false;
-    resolveTitleConfirmation?.();
-    titleConfirmation = undefined;
     inputQueue = Promise.resolve();
     pendingInputs.clear();
     budgetReminder?.dispose();
@@ -678,8 +628,6 @@ async function run(input: WorkerInput) {
   const runSend = leaseSender(activeLease, input.runId);
   const latency = new ModelLatency(input.runId, record => runSend({ type: "latency", record }));
   let restoreStream: (() => void) | undefined;
-  wantsTitle = Boolean(input.requestTitle) && !input.task;
-  titleSettled ||= !input.requestTitle && !input.task;
   let reusable = false;
   try {
     process.chdir(input.cwd);
@@ -723,21 +671,7 @@ async function run(input: WorkerInput) {
       cwd: input.cwd,
       agentDir: join(input.root, "pi"),
       settingsManager,
-      // Managed skills replace same-named legacy links without modifying user files.
-      // Children don't load the managed browser automation skills.
-      noSkills: !input.task && input.capabilities?.skillPaths !== undefined && input.capabilities.skillPaths !== null,
-      skillsOverride: (base) => {
-        if (!input.task && input.capabilities?.skillPaths) {
-          const loaded = loadSkills({ cwd: input.cwd, agentDir: join(input.root, "pi"),
-            skillPaths: input.capabilities.skillPaths, includeDefaults: false });
-          const automatic = new Set(input.capabilities.selection.skills ?? []);
-          return { ...loaded, skills: loaded.skills.map(skill => ({ ...skill,
-            disableModelInvocation: !automatic.has(skill.name) })) };
-        }
-        const general = input.task ? base.skills.filter(skill => !openCliSkillNames.includes(skill.name)) : base.skills;
-        return { skills: resolveBuiltinSkills(general, [...opencli?.skills ?? [], ...rea?.skills ?? []]),
-          diagnostics: [...base.diagnostics, ...opencli?.diagnostics ?? [], ...rea?.diagnostics ?? []] };
-      },
+      ...environmentResourceOptions(input, () => ({ opencli, rea }), subagentPolicy),
       // Extensions execute arbitrary JS, may shadow read tools or add commands.
       // Only the host's inline lifecycle/permission hooks run in a child.
       ...(input.task ? { noExtensions: true, noPromptTemplates: true } : {}),
@@ -754,6 +688,10 @@ async function run(input: WorkerInput) {
           const path = resolve(input.cwd, inputPath);
           if ((within(join(input.root, "memory"), path) || within(memoryRoot(input.root), path)) && (!input.memoryPath || !within(dirname(input.memoryPath), path)))
             return { block: true, reason: "只能维护所属主会话的记忆；其他来源记忆只读。" };
+          if (input.memoryPath) {
+            try { guardMemoryEdit(input.memoryPath, event.toolName, { ...event.input, path }); }
+            catch (error) { return { block: true, reason: (error as Error).message }; }
+          }
         });
         if (input.memoryPath) pi.on("tool_result", (event) => {
           try { if (session) recordMemoryRead(session.sessionManager, input.memoryPath!, input.cwd, event); }
@@ -806,15 +744,7 @@ async function run(input: WorkerInput) {
         });
         pi.on("turn_end", (event) => compressionBoundary(event));
         pi.on("agent_before_settle", (event) => compressionBoundary(event));
-        pi.on("turn_end", titleBoundary);
-        pi.on("agent_before_settle", titleBoundary);
       }],
-      appendSystemPromptOverride: (base) => [...base, "引用本地文件时，使用 Markdown 链接 [文件名](路径)", ...(input.task
-        ? [subagentPolicy]
-        : [
-            ...(input.memoryPath ? [memoryInstruction(input.memoryPath, memoryRulesPath(input.root))] : []),
-            "将适合委派的工作拆成独立子任务，独立测试优先并行。委派时交代背景、目标、范围、约束及交付要求；测试任务另给出工作目录、命令或测试范围、前置条件，并协调独立端口、临时目录和输出路径。有依赖或争用共享资源的任务按顺序执行。\n\n测试期间不要修改其覆盖的文件。委派后继续独立工作，不轮询；收到完成通知后用 read_result 读取对应结果，核对证据、实际命令、退出码、关键结果及未验证项。相关文件变化后重跑受影响的检查；文件未变且已验证的检查无需重复。应用调研建议前重新核对当前文件。代码修改由主代理完成。",
-          ])],
     });
     prepareReload = async (capabilities) => {
       if (input.task) await projectSettings.reload();
@@ -844,7 +774,7 @@ async function run(input: WorkerInput) {
       settingsManager,
       resourceLoader: loader,
       sessionManager: openTranscript(input.file, input.cwd),
-      customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal))],
+      customTools: input.task ? [] : [...taskTools(callTask), memoryQueryTool((id, params, signal) => callTask("memory_query", id, params, signal)), memoryDetailTool(() => activeInput?.memoryPath)],
       ...(input.task
         ? { tools: subagentTools, excludeTools: [...taskToolNames] }
         // Main agents keep authorized extension tools and the platform shell.
@@ -888,24 +818,12 @@ async function run(input: WorkerInput) {
     });
     if (!input.task)
       session.setActiveToolsByName([
-        ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"]),
+        ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query", "memory_detail"]),
       ]);
     await session.setModel(model);
     session.setThinkingLevel(input.selection.thinking);
     if (session.thinkingLevel !== input.selection.thinking) throw Error();
-    environment = {
-        cwd: input.cwd,
-        systemPrompt: session.systemPrompt,
-        tools: session.getActiveToolNames(),
-        skills: loader.getSkills().skills.map((s) => s.name),
-        extensions: result.extensionsResult.extensions.length,
-        retry: { ...settingsManager.getRetrySettings(), provider: settingsManager.getProviderRetrySettings() },
-        warnings: [
-          ...(result.extensionsResult.errors.length
-            ? ["部分扩展加载失败。"]
-            : []),
-        ],
-      };
+    environment = runtimeEnvironment(session, input);
     loadedResources = resourceSnapshot(session, input.capabilities);
     send({ type: "resources-loaded", resources: loadedResources });
     } else {
@@ -915,7 +833,7 @@ async function run(input: WorkerInput) {
       await session.setModel(model);
       session.setThinkingLevel(input.selection.thinking);
       session.refreshContext();
-      environment = environment ? { ...environment, systemPrompt: session.systemPrompt } : environment;
+      environment = runtimeEnvironment(session, input);
       requireImageModel(session.model, originalImages);
     }
     const skillInput = prepareSkillInput(input.prompt, input.skills, session);
@@ -961,12 +879,14 @@ async function run(input: WorkerInput) {
     };
     const publishRetry = () => send({ type: "progress", phase: currentPhase, retry });
     phase("requesting");
-    let publishedPrompt = session.systemPrompt;
+    let publishedEnvironment = JSON.stringify(environment);
     const publishPrompt = () => {
-      const systemPrompt = session!.systemPrompt;
-      if (systemPrompt === publishedPrompt) return;
-      publishedPrompt = systemPrompt;
-      send({ type: "system-prompt", systemPrompt });
+      const next = runtimeEnvironment(session!, activeInput!);
+      const serialized = JSON.stringify(next);
+      if (serialized === publishedEnvironment) return;
+      publishedEnvironment = serialized;
+      environment = next;
+      send({ type: "system-prompt", systemPrompt: next.systemPrompt, environment: next });
     };
     unsubscribeRun = session.subscribe((event) => {
       const send = runSend;
@@ -1095,16 +1015,6 @@ async function run(input: WorkerInput) {
       }
       if (event.type === "message_end") {
         runMessages.push(event.message);
-        if (wantsTitle && !titleSettled && event.message.role === "assistant" &&
-            ["stop", "toolUse"].includes(event.message.stopReason)) {
-          const text = event.message.content.filter((block) => block.type === "text")
-            .map((block) => block.text).join("\n");
-          const title = extractSessionTitle(text);
-          if (title) {
-            wantsTitle = false;
-            requestTitleConfirmation(title);
-          }
-        }
         setImmediate(() => {
           if (activeInput?.runId !== input.runId) return;
           delivered();
@@ -1139,13 +1049,6 @@ async function run(input: WorkerInput) {
     handledTaskTransition = taskPhase.revision;
     let phaseMessageStart = 0;
     if (!cancelled) {
-      // Append, never remove or relocate, title protocol messages. A manual
-      // retry reuses the original instruction and leaves the failed response at
-      // the tail so resumeSession can exclude it before requesting continuation.
-      const titleMessage = input.resume ? undefined : wantsTitle && !titleSettled
-        ? { customType: "axiom-title", content: TITLE_INSTRUCTION, display: false }
-        : titleSettlementMessage(session.messages);
-      if (titleMessage) await session.sendCustomMessage(titleMessage, { triggerTurn: false });
       send({ type: "usage", usage: usage(), autoCheck: true });
       if (input.resume) {
         if (input.task?.budget) {
@@ -1267,8 +1170,6 @@ async function run(input: WorkerInput) {
     // cannot mistake unfinished decode work for an input safe to replay.
     await inputQueue;
     await session.waitForIdle();
-    const titleMessage = titleSettlementMessage(session.messages);
-    if (titleMessage && !cancelled) await session.sendCustomMessage(titleMessage, { triggerTurn: false });
     const outcome = executionOutcome(runMessages.slice(phaseMessageStart), cancelled, aborted, announcedRunning);
     compressionBoundary();
     closeCompressionRequests();
@@ -1293,7 +1194,6 @@ async function run(input: WorkerInput) {
     });
   } finally {
     restoreStream?.();
-    resolveTitleConfirmation?.();
     budgetReminder?.dispose();
     closeCompressionRequests();
     unsubscribeRun?.();

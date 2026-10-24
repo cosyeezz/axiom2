@@ -1,5 +1,7 @@
+import { SessionTitles } from "./session-titles.js";
 import { SessionReloads } from "./session-reloads.js";
 import { Capabilities } from "./capabilities.js";
+import { previewEnvironment } from "./session-environment.js";
 import { performance } from "node:perf_hooks";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
 import { ExecutionProfiles, fileRevision } from "./execution-profile.js";
@@ -54,6 +56,7 @@ export class Agents {
   private starts = new Map<string, PendingStart>();
   private readonly unwatchConfiguration: () => void;
   readonly memories: Memories;
+  readonly titles: SessionTitles;
   readonly continuations: MemoryContinuations;
   private memoryQueries = new Map<string, { scope: Scope; controller: AbortController }>();
   readonly compressions: Compressions;
@@ -158,6 +161,7 @@ export class Agents {
   }
   async stop(scope: Scope, source: StopSource = "user") {
     this.continuations.cancel(scope, true);
+    this.titles.cancel(scope);
     const start = this.starts.get(scope.sessionId);
     start?.controller.abort();
     for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
@@ -176,6 +180,7 @@ export class Agents {
     const affected = this.affected(providers);
     if (affected.length && !confirmed) throw new AppError("ACTIVE_RUNS_CONFIRMATION_REQUIRED", "需先停止受影响会话，再退出认证。");
     this.continuations.cancelAll();
+    this.titles.cancelProviders(providers);
     const starts = [...this.starts.values()].filter(start => !start.provider || providers.includes(start.provider));
     for (const start of starts) start.controller.abort();
     await this.compressions.stopProviders(providers, confirmed);
@@ -185,7 +190,7 @@ export class Agents {
     this.unwatchConfiguration();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
-    await Promise.all([this.reloads.close(), this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
+    await Promise.all([this.titles.close(), this.reloads.close(), this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
     await Promise.all(starts.map(start => start.done));
     await this.pool.close();
   }
@@ -203,12 +208,14 @@ export class Agents {
     this.memories = new Memories(store, publish, openMemoryFile, undefined, undefined, observed);
     this.memories.isActive = (scope) => this.active(scope) || this.starts.has(scope.sessionId) || this.store.db.prepare("SELECT 1 FROM tasks WHERE parentSessionId=? AND status IN ('queued','starting','running','stopping','summarizing')").get(scope.sessionId) !== undefined;
     this.memories.runner = new ColdMemoryRunner(this.memories, models, this.pool, this.profiles);
+    this.titles = new SessionTitles(this.memories, scope => this.changed(scope));
     this.views = new AgentViews(store, publish, observed);
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
     this.compressions = new Compressions(this);
     this.continuations = new MemoryContinuations(this);
     this.reloads = new SessionReloads(this);
     this.runs.onEvent = (scope, run, event) => {
+      if (event.type === "provider_request") this.titles.request(scope, run);
       this.reloads.event(scope, run.id, event);
       this.compressions.event(scope, run.id, event);
       if (["input-accepted", "input-persisted", "queue", "provider_request"].includes(event.type)) this.memories.touch(scope);
@@ -234,6 +241,7 @@ export class Agents {
       this.externalEvent?.(scope, run, event);
     };
     this.runs.onSettled = (scope, run) => {
+      this.titles.request(scope, run, true);
       this.reloads.settled(scope, run.id);
       for (const query of this.memoryQueries.values()) if (query.scope.sessionId === scope.sessionId) query.controller.abort();
       this.compressions.settled(scope, run.id);
@@ -270,6 +278,22 @@ export class Agents {
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     this.owner(scope);
+    if (c.op === "agent.environment") {
+      if (Object.keys(p).length) throw new AppError("INVALID_INPUT", "环境读取不接受额外参数。");
+      const current = this.info(scope);
+      if (current.environment || current.task) return current.environment;
+      const plan = await this.capabilities.prepare(scope);
+      const preview = await previewEnvironment({ root: this.store.root, cwd: this.store.workspace(scope.workspaceId).path,
+        capabilities: plan.runtime, memoryPath: join(memoryDirectory(this.store.root, scope.sessionId), "MEMORY.md"),
+        memoryTopics: this.memories.topicSnapshot(scope.workspaceId) });
+      // Never overwrite a runtime snapshot or bind a transcript. Revalidate the
+      // owner and preference revisions after asynchronous resource discovery.
+      const latest = this.info(scope);
+      if (latest.environment) return latest.environment;
+      if (this.capabilities.state(scope).revision !== plan.revision || this.capabilities.preferences().revision !== plan.preferencesRevision)
+        throw new AppError("REVISION_CONFLICT", "环境配置已改变，请重新加载预览。");
+      return preview;
+    }
     if (c.op === "agent.reload" || c.op === "agent.skills") return this.reloads.command(c);
     if (["prompt", "agent.resume", "agent.model"].includes(c.op) && this.reloads.active(scope))
       throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
@@ -571,11 +595,10 @@ export class Agents {
           phase: "initializing",
           resumedFromRunId: internal.memoryContinuation?.expectedRunId ?? (typeof p.expectedRunId === "string" ? p.expectedRunId : null),
         };
-        let requestTitle = false;
         this.store.db.exec("BEGIN IMMEDIATE");
         try {
         if (capabilities) this.capabilities.lock(scope, capabilities);
-        requestTitle = !internal.task && this.store.requestTitle(scope,
+        if (!internal.task) this.store.requestTitle(scope,
           internal.notification || resuming || internal.memoryContinuation || internal.compressionPreparation ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
         this.store.db
           .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId) VALUES(?,?,?,?,?,?,?)")
@@ -593,7 +616,7 @@ export class Agents {
           .run(run.startedAt, scope.sessionId);
         this.store.db.exec("COMMIT");
         } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
-        if (!internal.task) this.memories.touch(scope);
+        if (!internal.task) { this.memories.touch(scope); this.titles.start(scope, run.id); }
         if (capabilities) this.capabilities.changed(scope);
         this.publish(threadScope(scope), this.thread(scope));
         // Invoke now: launch installs pending synchronously before its first await.
@@ -621,7 +644,6 @@ export class Agents {
             memoryContinuation: !!internal.memoryContinuation,
             compressionPreparation: internal.compressionPreparation?.id,
             rewrite: !!rewrite,
-            requestTitle,
             images,
             skills,
             task: internal.task ? { ...internal.task, budget: internal.task.budget ? { ...internal.task.budget,

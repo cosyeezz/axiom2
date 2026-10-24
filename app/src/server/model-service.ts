@@ -343,7 +343,7 @@ export class ModelService {
       },
       templates: [...new Map<string, ModelConfiguration["templates"][number]>([
         ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, { ...p, methods: [...(p.methods ?? [])] }]),
-        ...runtime.getProviders().filter(p => !["qoder", "qoder-cn"].includes(p.id) || process.env.AXIOM_EXPERIMENTAL_QODER === "1").map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
+        ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
         name: p.name,
         api: p.getModels()[0]?.api ?? (p.id === "kiro" ? "kiro-auth-only" : "openai-completions"),

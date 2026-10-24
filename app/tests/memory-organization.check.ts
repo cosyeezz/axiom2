@@ -36,10 +36,10 @@ try {
   const calls: MemoryExecution[] = [];
   let mode: "hold" | "fail" | "complete" = "hold";
   app.agents.memories.runner = { close: async () => release?.(), execute: async (input) => {
-    calls.push(input); input.read(input.scope.sessionId, "MEMORY.md");
+    calls.push(input); assert.ok(JSON.parse(input.prompt).currentFile.content);
     if (mode === "hold") await new Promise<void>((resolve) => { release = resolve; input.signal?.addEventListener("abort", () => resolve(), { once: true }); });
     if (mode === "fail") throw Error("模型暂不可用 api_key=sk-fixture-secret /Users/private/path/to/source.md");
-    return { answer: JSON.stringify({ title: "记忆整理验收", summary: "已完成记忆整理验证，入口能够显示进度和结果，来源内容保持完整。" }), incomplete: false };
+    return { answer: JSON.stringify([{ topic: "记忆整理验收", section: "关联资料", item: "整理验证", content: "已完成记忆整理验证，入口能够显示进度和结果，来源内容保持完整。" }]), incomplete: false };
   } };
   await app.agents.memories.command({ requestId: randomUUID(), op: "memory.configure", ...a, params: { organizerModel: { provider: "fixture", id: "fixture", thinking: "off" } } });
   await app.agents.memories.scanAsync();
@@ -106,7 +106,7 @@ try {
   assert.equal(await document.getByRole("alert").count(), 0);
   await closeDocument();
   await app.agents.memories.command({ requestId: randomUUID(), op: "memory.summaries.clear", workspaceId: workspace.id, params: { confirmed: true } });
-  await openGlobal(); await global.getByText("暂无已整理的摘要", { exact: true }).waitFor();
+  await openGlobal(); await global.getByText("暂无已整理记忆", { exact: true }).waitFor();
   const workspaceButton = global.getByRole("button", { name: "整理工作空间", exact: true });
   assert.equal(await workspaceButton.isEnabled(), true, "empty catalog can still start organization");
   await global.getByRole("textbox", { name: "搜索记忆" }).fill("没有匹配的筛选");
@@ -134,7 +134,12 @@ try {
   assert.deepEqual(new Set(calls.slice(beforeWorkspace).map((call) => call.scope.sessionId)), new Set([a.sessionId, b.sessionId]));
   assert.equal(calls.some((call) => call.scope.sessionId === foreign.sessionId), false);
   assert.equal(await global.getByRole("textbox", { name: "搜索记忆" }).inputValue(), "", "workspace switches reset catalog filters");
-  await wait(async () => await global.locator(".memory-catalog-item").count() === 2);
+  await global.locator('.memory-tree-node[data-kind="Topic"]').waitFor();
+  assert.equal(await global.locator('.memory-tree-node[data-kind="Topic"]').count(), 1, "两个来源合并到同一主题");
+  await global.locator('.memory-tree-node[data-kind="Topic"]').click();
+  await global.locator('.memory-tree-node[data-kind="Section"]').click();
+  await global.locator('.memory-tree-node[data-kind="Item"]').click();
+  assert.equal(await global.locator('.memory-tree-source').count(), 2, "合并内容保留两个来源");
   await workspaceButton.click(); await global.getByText("暂无需要整理的内容", { exact: true }).waitFor();
   assert.equal(calls.length, beforeWorkspace + 2, "workspace action skips valid summaries and empty entries");
   assert.deepEqual(readFileSync(entryPath), original); assert.deepEqual(errors, []);

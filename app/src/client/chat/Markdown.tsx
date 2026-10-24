@@ -55,8 +55,10 @@ function InlinePath({ path, images }: { path: string; images?: MarkdownImageOwne
   return <LocalPath path={pathRelativeToFile(path, context?.sourceFile)} scope={images?.scope ?? context?.pathScope} base={context?.pathBase} showActions={false}><code>{path}</code></LocalPath>;
 }
 type BlockRenderer = (children: ReactNode, index: number, source: string) => ReactNode;
-function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false): ReactNode {
+function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: BlockRenderer, compact = false, source?: { line: number; abandoned: boolean[] }): ReactNode {
+  let line = source?.line ?? 0;
   return items.map((t: any, i) => {
+    const startLine = line; line += (t.raw?.match(/\n/g) ?? []).length;
     const render = () => {
     const inner = () => (t.tokens ? tokens(t.tokens, images, undefined, compact || t.type === "link") : t.text);
     // The activity summary is a single-line disclosure control: no nested links,
@@ -99,10 +101,14 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
         return <blockquote key={i}>{inner()}</blockquote>;
       case "list": {
         const Tag = t.ordered ? "ol" : "ul";
+        let itemLine = startLine;
         return (
           <Tag key={i} {...(t.ordered ? { start: t.start } : {})}>
-            {t.items.map((item: any, n: number) => (
-              <li key={n}>
+            {t.items.map((item: any, n: number) => {
+              const start = itemLine; itemLine += (item.raw?.match(/\n/g) ?? []).length;
+              // Marked may omit the separator newline from the final line of an item.
+              if (!item.raw?.endsWith("\n")) itemLine++;
+              return <li key={n} data-abandoned={source?.abandoned[start] || undefined}>
                 {item.task && (
                   <input
                     type="checkbox"
@@ -111,9 +117,9 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
                     aria-label="任务状态"
                   />
                 )}
-                {tokens(item.tokens, images)}
-              </li>
-            ))}
+                {tokens(item.tokens, images, undefined, false, source ? { ...source, line: start } : undefined)}
+              </li>;
+            })}
           </Tag>
         );
       }
@@ -174,11 +180,12 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
         return <span key={i}>{t.tokens ? inner() : (t.text ?? t.raw)}</span>;
     }
     };
-    const node = render();
+    const rendered = render();
+    const node = source?.abandoned[startLine] && rendered && t.type !== "list" ? <div key={i} data-abandoned>{rendered}</div> : rendered;
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink, pathScope, pathBase, sourceFile, attachments }: { text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
+export const Markdown = memo(({ text, images, renderBlock, compact = false, onLocalLink, pathScope, pathBase, sourceFile, attachments, abandonedLines }: { abandonedLines?: boolean[]; text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
   const cache = useContext(DerivedContext), prefix = useId(), returns = useRef(new Map<string, string>());
   const ast = useMemo(() => cache ? cache.get(`markdown:footnotes-v2:breaks:${text}`, () => markdownTokens(text)) : markdownTokens(text), [cache, text]);
   const notes = useMemo(() => {
@@ -195,7 +202,7 @@ export const Markdown = memo(({ text, images, renderBlock, compact = false, onLo
     return result;
   }, [ast]);
   return <MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink, pathScope, pathBase, sourceFile, attachments }}>
-    {tokens(ast, images, renderBlock, compact)}
+    {tokens(ast, images, renderBlock, compact, abandonedLines ? { line: 0, abandoned: abandonedLines } : undefined)}
     {!compact && notes.size > 0 && <section aria-label="引用"><hr /><ol>{[...notes.values()].map((note) => {
       const target = `${prefix}-note-${note.number}`;
       return <li key={note.id} id={target} tabIndex={-1}>{tokens(note.tokens, images)} <a href={`#${target}`} aria-label={`返回引用 ${note.number}`} onClick={(event) => {

@@ -5,7 +5,8 @@ import { memoryDirectory, referencedPaths } from "./memory-files.js";
 import { memoryOrganizerPrompt, memoryMatchPrompt, memoryAnswerPrompt } from "../shared/memory-prompts.js";
 import { parseMemoryRecords, type MemorySource } from "../shared/memory-tree.js";
 import { AppError, type Scope } from "../shared/protocol.js";
-import type { MemoryDocument, MemoryQueryResult } from "../shared/memory.js";
+import { memoryBody, parseMemory, type MemoryDocument, type MemoryQueryResult } from "../shared/memory.js";
+import { detailFile, detailIds } from "../shared/memory-outline.js";
 import type { Selection } from "../shared/agent.js";
 import type { LeaseRef } from "./execution-protocol.js";
 
@@ -28,7 +29,11 @@ export class MemoryPipeline {
   private references(scope: Scope, path: string, content: string) {
     const root = memoryDirectory(this.memories.store.root, scope.sessionId);
     // Only explicit text references. No traversal of conversations, scripts or arbitrary project files.
-    return [...new Set(referencedPaths(`${root}/${path}`, content).filter((file) => /\.(md|txt)$/i.test(file)).map((file) => relative(root, file).replaceAll("\\", "/")))].filter((file) => file !== path);
+    const links = referencedPaths(`${root}/${path}`, content).filter((file) => /\.(md|txt)$/i.test(file)).map((file) => relative(root, file).replaceAll("\\", "/"));
+    if (path === "MEMORY.md") links.push(...detailIds(memoryBody(content)).map(id => `${detailFile}#detail:${id}`));
+    // Independent detail extraction must retain the owning branch's current disposition.
+    if (path === detailFile) links.push("MEMORY.md");
+    return [...new Set(links)].filter((file) => file !== path);
   }
   private verify(scope: Scope, documents: MemorySource[]) {
     for (const source of documents) {
@@ -86,6 +91,8 @@ export class MemoryPipeline {
       const prompt = JSON.stringify({
         currentFile: { sessionId: scope.sessionId, path: target.path, revision: document.revision, content: document.content },
         references: references.map(({ path, content }) => ({ path, content })),
+        branchContext: parseMemory(target.path === "MEMORY.md" ? document.content : references.find(ref => ref.path === "MEMORY.md")?.content ?? "").outline,
+        detailPolicy: "编号详情服从branchContext中的abandoned/waiting；未关联详情只作未归属历史材料，不能推断为当前计划。",
         names: tree.topics.map((topic) => ({ topic: topic.name, sections: topic.sections.map((section) => section.name) })),
         topicNameChars: tree.nameChars, topicNameReviewThresholdChars: preferences.topicNameReviewThresholdChars, reviewRequired: over,
         oversizedTopics: [...oversized],
@@ -100,7 +107,7 @@ export class MemoryPipeline {
       if (result.incomplete) throw new AppError("MEMORY_BUDGET", "整理结果不完整，未发布");
       const output = parseMemoryRecords(result.answer);
       this.memories.records.stage(processingId, `校验来源：${target.path}`);
-      const dependencies = references.map(({ path, revision }) => ({ sessionId: scope.sessionId, path, revision }));
+      const dependencies = references.map(({ path, revision }) => ({ sessionId: scope.sessionId, path: path.replace(/#detail:\d+$/, ""), revision }));
       this.verify(scope, [{ sessionId: scope.sessionId, path: target.path, revision: document.revision }, ...dependencies]);
       // Reclassification also needs the other source files to remain at their indexed revisions.
       this.verify(scope, [...new Map(existing.map(({ file }) => [JSON.stringify([file.sessionId, file.path]), file])).values()].flatMap((file) => [file, ...file.dependencies]));

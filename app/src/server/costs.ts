@@ -109,7 +109,7 @@ export class Costs {
       if (this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_usage'").get()) {
         for (const row of this.store.db.prepare("SELECT * FROM memory_usage WHERE sessionId=?").all(session.id)) {
           const query = row.kind === "query";
-          add(query ? "tool" : "other", query ? "memory_query" : "memory_organize", query ? "记忆查询" : "后台记忆整理", usageCost(row.usage ? JSON.parse(String(row.usage)) : null), row.provider ? String(row.provider) : null, row.model ? String(row.model) : null);
+          add(query ? "tool" : "other", row.kind === "title" ? "session_title" : query ? "memory_query" : "memory_organize", row.kind === "title" ? "会话标题" : query ? "记忆查询" : "后台记忆整理", usageCost(row.usage ? JSON.parse(String(row.usage)) : null), row.provider ? String(row.provider) : null, row.model ? String(row.model) : null);
         }
       }
       for (const [id, job] of jobs) {

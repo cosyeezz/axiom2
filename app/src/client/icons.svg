@@ -74,6 +74,11 @@
 <symbol id="i-zoom-out" class="ui-symbol" viewBox="2 2 20 20"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21l-4.35-4.35M8 11h6"/></g></symbol>
 <symbol id="i-minus" class="ui-symbol" viewBox="4 11 16 2"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></symbol>
 <symbol id="i-check" class="ui-symbol" viewBox="3 5 18 13"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M20 6L9 17l-5-5"/></symbol>
+<!-- Task states use Lucide circle, circle-dot, circle-slash and circle-x. -->
+<symbol id="i-circle" class="ui-symbol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="i-circle-dot" class="ui-symbol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/></symbol>
+<symbol id="i-circle-slash" class="ui-symbol" viewBox="0 0 24 24"><g stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 15 6-6"/></g></symbol>
+<symbol id="i-circle-x" class="ui-symbol" viewBox="0 0 24 24"><g stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></g></symbol>
 <symbol id="i-circle-check" class="ui-symbol" viewBox="1 1 22 22"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16 9l-5.5 5.5L8 12"/></g></symbol>
 <symbol id="i-triangle-alert" class="ui-symbol" viewBox="0.982 1.986 22.016 20.014"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="m21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4m0 4h.01"/></symbol>
 <symbol id="i-circle-help" class="ui-symbol" viewBox="1 1 22 22"><g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3m.08 4h.01"/></g></symbol>

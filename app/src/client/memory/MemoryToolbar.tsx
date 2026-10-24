@@ -14,6 +14,7 @@ import { ModelPicker } from "../chat/ModelPicker.js";
 import { MemoryTreePage } from "./MemoryTreePage.js";
 import { ProcessingPage, type ProcessingOpening } from "../pages/ProcessingPage.js";
 import { MemoryDocumentView } from "./MemoryDocumentView.js";
+import { MemoryTaskTree } from "./MemoryOutlineView.js";
 import { MemoryFilter } from "./MemoryFilter.js";
 import { MemoryOrganizeControl } from "./MemoryOrganizeControl.js";
 import { publicMemoryError } from "./memory-errors.js";
@@ -43,7 +44,7 @@ function memoryReasonText(reason?: MemoryReason) {
   }
 }
 
-const stateTones: Record<string, string> = { 进行中: "active", 已完成: "done", 阻塞: "blocked" };
+const stateTones: Record<string, string> = { 进行中: "active", 已完成: "done", 阻塞: "blocked", 等待: "blocked", 失败: "failed", 已放弃: "idle" };
 /** The parser keeps the raw status line when it carries a reason, e.g. 阻塞（等待用户提供节点）. */
 function stateReason(state: string, detail?: string) {
   if (!detail || !detail.startsWith(state)) return "";
@@ -73,7 +74,7 @@ function useMemory(scope: Scope) {
   const view = snapshot?.error ? { ...emptyMemoryView(scope), reason: snapshot.reason ?? "unavailable" } : snapshot;
   return { view };
 }
-function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigger: HTMLButtonElement) => void; context: ContextMemoryInfo }) {
+function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigger: HTMLButtonElement, path?: string) => void; context: ContextMemoryInfo }) {
   const { view } = useMemory(scope), [expanded, setExpanded] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
@@ -81,10 +82,10 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigg
   const recorded = (text?: string) => !!text && text !== "尚未记录";
   const hasProgress = !view?.reason && !!progress && (recorded(progress.goal) || recorded(progress.state) || progress.tasks.length > 0);
   const percent = hasProgress && progress?.progressState === "valid" ? progress.percent : null;
-  const estimate = percent == null ? "进度待评估" : `${percent < 100 ? "约 " : ""}${percent}%`;
+  const estimate = percent == null ? progress?.format === "chapters" ? progress.state || "工作记录" : "进度待评估" : `${percent < 100 ? "约 " : ""}${percent}%`;
   const inProgress = progress?.state === "进行中";
   const state = recorded(progress?.state) ? progress!.state : "", reason = stateReason(state, progress?.stateDetail);
-  const tone = stateTones[state] ?? "idle", done = progress?.tasks.filter((t) => t.state === "已完成").length ?? 0;
+  const tone = stateTones[state] ?? "idle", activeTasks = progress?.tasks.filter(t => !t.abandoned) ?? [], done = activeTasks.filter(t => t.state === "已完成").length;
   const availability = memoryReasonText(view?.reason);
   const status = !view ? "读取中…" : availability || (!hasProgress ? "暂无记录" : progress?.progressState === "conflict" ? "进度待核对" : estimate);
   return <section className="memory-todo" aria-label="本会话任务进度">
@@ -100,9 +101,8 @@ function Todo({ scope, openMemory, context }: { scope: Scope; openMemory: (trigg
           {reason && <p className="memory-state-reason">{reason}</p>}
           {percent != null && <><progress value={percent} max={100} aria-label="任务整体进度" /><p className="memory-progress-note">整体进度为模型估计，与已完成事项数分别统计。</p></>}
         </section>
-        {progress?.tasks.length ? <section className="memory-tasks"><div className="memory-section-head"><h3>任务清单</h3><p className="memory-task-count">已完成 {done} / {progress.tasks.length} 项</p></div><ul>{progress.tasks.map((t, i) => <li key={i} data-state={t.state}><span className="memory-task-marker" aria-hidden="true">{t.state === "已完成" ? <Icon name="check" /> : t.state === "进行中" ? <BubbleLoadingIcon /> : null}</span><span className="memory-task-title">{t.title}</span><span className="memory-task-state">{t.state}</span></li>)}</ul></section> : <p className="memory-task-empty">尚未记录任务清单</p>}
+        {progress?.tasks.length || (progress?.format === "chapters" && progress.outline?.length) ? <section className="memory-tasks"><div className="memory-section-head"><h3>工作记录</h3><p className="memory-task-count">已完成 {done} / {activeTasks.length} 项</p></div><MemoryTaskTree nodes={progress.outline ?? []} scope={scope} revision={view.revision} /></section> : <p className="memory-task-empty">尚未记录任务清单</p>}
         <dl className="memory-next">{recorded(progress?.current) && <><dt>当前进展</dt><dd>{progress?.current}</dd></>}{recorded(progress?.next) && <><dt>下一步</dt><dd>{progress?.next}</dd></>}</dl>
-        {progress?.overLimit && <p className="meta" role="status">入口超过 2,000 字，请将详情移入分类资料。</p>}
       </>}
     </MetricDetail>}
   </section>;
@@ -202,7 +202,7 @@ function Global({ workspaceId, workspaces, select, open }: { workspaceId: string
   </>;
 }
 type MemoryLocation = { scope: Scope; path: string; title?: string };
-type MemoryOpening = { scope: Scope | null; trigger: HTMLButtonElement };
+type MemoryOpening = { scope: Scope | null; trigger: HTMLButtonElement; path?: string };
 export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: { scope: Scope | null; workspaces: Workspace[]; children: (tools: UsageTools) => ReactNode; navigationGuard?: { current: (action: () => void) => void } }) {
   const [opened, setOpened] = useState<MemoryOpening | null>(null);
   const guarded = useRef<(action: () => void) => void>((action) => action());
@@ -211,13 +211,13 @@ export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: 
     navigationGuard.current = (action) => opened ? guarded.current(action) : action();
     return () => { navigationGuard.current = (action) => action(); };
   }, [navigationGuard, opened]);
-  const open = (value: Scope | null, trigger: HTMLButtonElement) => {
-    const next = opened?.scope === value ? null : { scope: value, trigger };
+  const open = (value: Scope | null, trigger: HTMLButtonElement, path?: string) => {
+    const next = opened?.scope === value ? null : { scope: value, trigger, path };
     if (opened) guarded.current(() => setOpened(next)); else setOpened(next);
   };
   return <>
     {children({
-      session: (context) => scope?.sessionId ? <Todo key={scope.sessionId} scope={scope} context={context} openMemory={(trigger) => open(scope, trigger)} /> : <button className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip="创建会话后查看上下文与记忆" disabled><ContextMemoryIcon percent={context.percent} /></button>,
+      session: (context) => scope?.sessionId ? <Todo key={scope.sessionId} scope={scope} context={context} openMemory={(trigger, path) => open(scope, trigger, path)} /> : <button className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip="创建会话后查看上下文与记忆" disabled><ContextMemoryIcon percent={context.percent} /></button>,
       global: <button className="memory-global action-icon" aria-label="全局记忆" data-tooltip="全局记忆" aria-expanded={!!opened && !opened.scope} aria-haspopup="dialog" disabled={!workspaces.length} onClick={(event) => open(null, event.currentTarget)}><MemoryIcon name="book" /></button>,
     })}
     {opened && <MemoryPanel key={`${opened.scope?.sessionId ?? "global"}`} opening={opened} workspace={scope?.workspaceId} workspaces={workspaces} guarded={guarded} onClose={() => setOpened(null)} />}
@@ -225,7 +225,7 @@ export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: 
 }
 function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { opening: MemoryOpening; workspace?: string; workspaces: Workspace[]; guarded: { current: (action: () => void) => void }; onClose: () => void }) {
   const { panel, close, host } = useSettingsPopover(opening.trigger, onClose);
-  const [history, setHistory] = useState<MemoryLocation[]>(opening.scope ? [{ scope: opening.scope, path: "MEMORY.md" }] : []);
+  const [history, setHistory] = useState<MemoryLocation[]>(opening.scope ? [{ scope: opening.scope, path: opening.path ?? "MEMORY.md" }] : []);
   const [workspaceId, setWorkspaceId] = useState(opening.scope?.workspaceId || workspace || workspaces[0]?.id || "");
   const [records, setRecords] = useState<ProcessingOpening | null>(null);
   const [dirty, setDirty] = useState(false), [pending, setPending] = useState<(() => void) | null>(null);

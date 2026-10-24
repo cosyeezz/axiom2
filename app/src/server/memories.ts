@@ -10,7 +10,9 @@ import { Worker } from "node:worker_threads";
 import type { Store } from "./storage.js";
 import type { Selection } from "../shared/agent.js";
 import { AppError, object, text, type Scope, type Command } from "../shared/protocol.js";
-import { emptyMemoryView, emptyMemoryDocument, memoryScope, memoryCatalogScope, memoryOrganizationScope, type MemoryOrganization, memoryExcerpt, parseMemory, memoryTitleMaxChars, memorySummaryMaxChars, memorySummaryVersion, validMemorySummary, type MemoryView, type MemoryCatalogEntry, type MemoryDocument, type MemoryQueryResult, type MemoryReason } from "../shared/memory.js";
+import { emptyMemoryView, emptyMemoryDocument, memoryScope, memoryCatalogScope, memoryOrganizationScope, type MemoryOrganization, memoryExcerpt, parseMemory, memoryComplete, memoryTitleMaxChars, memorySummaryMaxChars, memorySummaryVersion, validMemorySummary, type MemoryView, type MemoryCatalogEntry, type MemoryDocument, type MemoryQueryResult, type MemoryReason } from "../shared/memory.js";
+import { assertMemoryEdit } from "./memory-detail.js";
+import { detailFile, parseDetailBlocks } from "../shared/memory-outline.js";
 import { memoryTitleIndex, compactOrganizerProjection, digest, memoryDirectory, memoryFiles, memoryPath, MemoryLinkCache, MemoryReadEvidence, MemoryTextCache, textFile, referencedPaths, within, readMemoryBytes, readMemoryTextSnapshot, replaceMemoryFile } from "./memory-files.js";
 import { memoryRoot, legacyMemoryRoot } from "./memory-storage.js";
 import { realpathSync } from "node:fs";
@@ -28,7 +30,7 @@ export interface MemoryExecution {
   read: (sessionId: string, path: string, offset?: number, limit?: number, options?: { includeImage?: boolean }) => MemoryDocument;
   /** 仅探测原始字节修订，供执行器在结束前验证实际读取的依据。 */
   revision?: (sessionId: string, path: string) => string;
-  kind: "query" | "organize";
+  kind: "query" | "organize" | "title";
 }
 export interface MemoryRunner { execute(input: MemoryExecution): Promise<MemoryExecutionResult>; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
 /** 持久目录的内部字段不属于前端目录协议。 */
@@ -441,7 +443,9 @@ export class Memories {
       const corrections = this.store.db.prepare("SELECT id,target FROM memory_corrections WHERE workspaceId=? ORDER BY id").all(scope.workspaceId);
       const blocked = corrections.some((c) => entry.includes(String(c.target)));
       // 对外仍是不可用快照；内部保留已验证的文件清单，以便纠正器能清理重现的原文。
-      const view = { ...scope, revision: digest(JSON.stringify([files, corrections.map((c) => c.id)])), entry, progress: parseMemory(entry), files, deleted: owner.deletedAt !== null,
+      // Scope callers may pass a catalog entry carrying a previous organizer error.
+      // Only identity belongs in the fresh file snapshot.
+      const view = { workspaceId: scope.workspaceId, sessionId: scope.sessionId, revision: digest(JSON.stringify([files, corrections.map((c) => c.id)])), entry, progress: parseMemory(entry), files, deleted: owner.deletedAt !== null,
         ...(blocked ? { error: "记忆等待纠正", reason: "correction_pending" as const } : {}) };
       this.cachedViews.set(scope.sessionId, view);
       return view;
@@ -458,7 +462,7 @@ export class Memories {
       const corrections = this.store.db.prepare("SELECT id,target FROM memory_corrections WHERE workspaceId=? ORDER BY id").all(scope.workspaceId);
       const blocked = corrections.some((c) => entry.includes(String(c.target)));
       // 扫描完成后的清理清单只驻留服务端缓存，snapshot/view 仍会屏蔽旧内容。
-      return { ...scope, revision: digest(JSON.stringify([files, corrections.map((c) => c.id)])), entry, progress: parseMemory(entry), files, deleted: owner.deletedAt !== null,
+      return { workspaceId: scope.workspaceId, sessionId: scope.sessionId, revision: digest(JSON.stringify([files, corrections.map((c) => c.id)])), entry, progress: parseMemory(entry), files, deleted: owner.deletedAt !== null,
         ...(blocked ? { error: "记忆等待纠正", reason: "correction_pending" as const } : {}) };
     } catch (error) {
       return { ...scope, revision: "error", entry: "", progress: parseMemory(""), files: [], deleted: owner.deletedAt !== null, error: "记忆读取失败", reason: this.memoryReason(error) };
@@ -526,7 +530,7 @@ export class Memories {
   private applyScan(scope: Scope, view: MemoryView, changedCatalogs?: Set<string>, dependencyVerification?: DependencyVerification) {
     const cached = this.cachedViews.get(scope.sessionId);
     this.cachedViews.set(scope.sessionId, view);
-    const sourceTitle = String(this.owner(scope).title);
+    const sourceTitle = view.progress.title || String(this.owner(scope).title);
     const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
     const previous = old ? JSON.parse(String(old.body)) as StoredMemoryCatalogEntry : undefined;
     // A changed source can never retain its old derived summary. Stable
@@ -592,9 +596,9 @@ export class Memories {
   rename(scope: Scope) {
     const row = this.store.db.prepare("SELECT body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);
     if (!row) return;
-    const entry = JSON.parse(String(row.body)) as StoredMemoryCatalogEntry, sourceTitle = String(this.owner(scope).title);
+    const entry = JSON.parse(String(row.body)) as StoredMemoryCatalogEntry, sourceTitle = this.cachedViews.get(scope.sessionId)?.progress.title || String(this.owner(scope).title);
     // 已整理条目显示模型主题；未整理条目仍以会话标题作为临时展示文本。
-    const title = entry.status === "ready" ? entry.title : sourceTitle;
+    const title = this.cachedViews.get(scope.sessionId)?.progress.title || (entry.status === "ready" ? entry.title : sourceTitle);
     if (entry.title === title && entry.sourceTitle === sourceTitle) return;
     this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=?").run(JSON.stringify({ ...entry, title, sourceTitle }), scope.sessionId);
     this.publishCatalog(scope.workspaceId);
@@ -652,7 +656,8 @@ export class Memories {
   }
   read(scope: Scope, input = "MEMORY.md", offset = 0, limit = 16000, options: { includeImage?: boolean } = {}): MemoryDocument {
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 16000) throw new AppError("INVALID_INPUT", "读取分页范围无效");
-    const path = this.localPath(scope, input), directory = memoryDirectory(this.store.root, scope.sessionId);
+    const detail = /^references\/details\.md#detail:([1-9]\d*)$/.exec(input);
+    const path = this.localPath(scope, detail ? detailFile : input), directory = memoryDirectory(this.store.root, scope.sessionId);
     const stat = statSync(path);
     if (/\.(png|jpg|jpeg|gif|webp)$/i.test(path)) {
       if (stat.size > 5 * 1024 * 1024) throw new AppError("MEMORY_LIMIT", "图片超过 5 MiB 预览预算");
@@ -663,8 +668,11 @@ export class Memories {
     const data = readMemoryBytes(path), content = new TextDecoder("utf-8", { fatal: true }).decode(data);
     if (within(directory, path) && this.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId).some((c) => content.includes(String(c.target))))
       throw new AppError("MEMORY_CORRECTION_PENDING", "资料包含待清理的明确否定条目，旧内容暂不可查询");
-    return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: content.slice(offset, offset + limit), offset,
-      nextOffset: content.length > offset + limit ? offset + limit : null };
+    const block = detail ? parseDetailBlocks(content).find(block => block.id === Number(detail[1])) : undefined;
+    if (detail && !block) throw new AppError("MEMORY_READ_FAILED", "详情不存在");
+    const selected = block?.content ?? content;
+    return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: selected.slice(offset, offset + limit), offset,
+      nextOffset: selected.length > offset + limit ? offset + limit : null };
   }
   private readCached(scope: Scope, input: string, offset: number | undefined, limit: number | undefined, cache: MemoryTextCache, links: MemoryLinkCache): MemoryDocument {
     const pageOffset = offset ?? 0, pageLimit = limit ?? 16000;
@@ -699,6 +707,9 @@ export class Memories {
     if (path !== "MEMORY.md" && !/^references\/.+\.(md|txt)$/i.test(path)) throw new AppError("MEMORY_PATH", "只能编辑入口或详细文档");
     const target = memoryPath(memoryDirectory(this.store.root, scope.sessionId), path);
     if (digest(readMemoryBytes(target)) !== revision) throw new AppError("REVISION_CONFLICT", "资料已被修改；保留当前编辑，请重新读取后合并");
+    const directory = memoryDirectory(this.store.root, scope.sessionId);
+    if (target === join(directory, detailFile)) throw new AppError("MEMORY_PATH", "详情文件由memory_detail维护，不能整文件编辑");
+    if (target === join(directory, "MEMORY.md")) assertMemoryEdit(target, textFile(target), content);
     // Synchronous compare/write: no server task can interleave between them.
     this.generations.set(scope.sessionId, this.generation(scope) + 1);
     this.replaceFile(target, revision, content);
@@ -915,7 +926,7 @@ export class Memories {
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
       for (const entry of entries) {
-        const title = String(this.owner(entry).title);
+        const title = this.cachedViews.get(entry.sessionId)?.progress.title || String(this.owner(entry).title);
         const next: StoredMemoryCatalogEntry = { ...entry, title, sourceTitle: title, summary: "", summaryVersion: undefined,
           keywords: [], dependencies: [], indexedAt: null, status: entry.reason ? "error" : "pending", error: entry.reason ? entry.error : undefined };
         if (JSON.stringify(next) === JSON.stringify(entry)) continue;
@@ -940,8 +951,7 @@ export class Memories {
     const activity = this.pipeline.tree.activity(source.sessionId);
     return source.revision !== "error" && !source.reason && this.needsOrganization(source) &&
       (source.hasContent || this.pipeline.tree.files(source.workspaceId).some((file) => file.sessionId === source.sessionId)) &&
-      progress?.state === "已完成" && progress.progressState === "valid" && progress.percent === 100 &&
-      progress.tasks.length > 0 && progress.tasks.every((task) => task.state === "已完成") &&
+      !!progress && memoryComplete(progress) &&
       !this.isActive(source) && Date.now() - Math.max(source.updatedAt, activity.updatedAt) > ORGANIZER_QUIET_MS;
   }
   /**
@@ -987,7 +997,7 @@ export class Memories {
     const activity = this.pipeline.tree.activity(source.sessionId).version;
     const guard = () => {
       signal.throwIfAborted(); this.owner(source);
-      if (activity !== this.pipeline.tree.activity(source.sessionId).version || automatic && (!this.organizerReady({ ...source, status: "pending" }) || this.view(source).progress.percent !== 100))
+      if (activity !== this.pipeline.tree.activity(source.sessionId).version || automatic && (!this.organizerReady({ ...source, status: "pending" }) || !memoryComplete(this.view(source).progress)))
         throw new AppError("REVISION_CONFLICT", "会话已恢复活动，旧整理结果已作废");
     };
     guard();
@@ -999,7 +1009,8 @@ export class Memories {
       if (!row) throw new AppError("REVISION_CONFLICT", "来源已变化，未提交旧摘要");
       // Merge derived fields into the latest projection so concurrent renames survive.
       const current = JSON.parse(String(row.body)) as StoredMemoryCatalogEntry;
-      const entry = { ...current, ...patch, sourceTitle: String(this.owner(source).title) };
+      const fixedTitle = this.cachedViews.get(source.sessionId)?.progress.title;
+      const entry = { ...current, ...patch, ...(fixedTitle ? { title: fixedTitle } : {}), sourceTitle: fixedTitle || String(this.owner(source).title) };
       const updated = this.store.db.prepare("UPDATE memory_sources SET body=? WHERE sessionId=? AND revision=? AND body=?")
         .run(JSON.stringify(entry), source.sessionId, source.revision, row.body);
       if (!updated.changes) throw new AppError("REVISION_CONFLICT", "来源已变化，未提交旧摘要");

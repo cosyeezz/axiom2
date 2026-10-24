@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Select } from "../Select.js";
 import { fontOptions, getDisplaySettings, setDisplaySettings, subscribeDisplaySettings } from "../display-settings.js";
-import { customFontFamily, getFontLibrary, importFont, previewOnlineFont, releaseFontPreviews, reloadFontLibrary, removeFont, saveFont, subscribeFontLibrary, type OnlineFont, type SavedFont } from "../font-library.js";
+import { downloadOnlineFont, getFontLibrary, importFont, releaseFontPreviews, reloadFontLibrary, removeFont, saveFont, subscribeFontLibrary, type OnlineFont, type SavedFont } from "../font-library.js";
 import { FontRow } from "./FontRow.js";
+import { FontSpecimen } from "./FontSpecimen.js";
 import catalogUrl from "../font-catalog.json?url";
 import { formatFontCatalog, type FontCatalog } from "../format-font-catalog.js";
 
@@ -37,7 +38,6 @@ export function FontSettings() {
   const [language, setLanguage] = useState("all"), [category, setCategory] = useState("all");
   const [limit, setLimit] = useState(60);
   const [picked, setPicked] = useState<OnlineFont | SavedFont | null>(null);
-  const [preview, setPreview] = useState<SavedFont | null>(null);
   const [detail, setDetail] = useState(false);
   const [sample, setSample] = useState(defaultSample), [sampleSize, setSampleSize] = useState(28);
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -52,6 +52,14 @@ export function FontSettings() {
     element.showModal();
     return () => { element.close(); trigger.current?.focus({ preventScroll: true }); };
   }, [open]);
+  useEffect(() => {
+    if (!open || !picked) return;
+    const narrow = window.matchMedia("(max-width: 640px)");
+    const restoreDetail = () => { if (!narrow.matches) setDetail(true); };
+    restoreDetail();
+    narrow.addEventListener("change", restoreDetail);
+    return () => narrow.removeEventListener("change", restoreDetail);
+  }, [open, picked]);
   useEffect(() => { setLimit(60); if (list.current) list.current.scrollTop = 0; }, [query, language, category, panel]);
   const options = [...fontOptions, ...library.fonts.map(font => ({ value: font.id, label: font.name, group: "已添加字体" }))];
   if (!options.some(option => option.value === settings.fontFamily)) options.push({ value: settings.fontFamily, label: library.loading ? "正在加载字体…" : "字体不可用" });
@@ -69,7 +77,7 @@ export function FontSettings() {
   const active = !!picked && settings.fontFamily === picked.id;
   // A record removed by another window must not remain available for application.
   useEffect(() => {
-    if (picked && "data" in picked && !library.loading && !saved) { setPicked(null); setPreview(null); setDetail(false); requestAnimationFrame(() => dialog.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true })); }
+    if (picked && "data" in picked && !library.loading && !saved) { setPicked(null); setDetail(false); requestAnimationFrame(() => dialog.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus({ preventScroll: true })); }
   }, [picked, saved, library.loading]);
   const run = async (label: string, action: (signal: AbortSignal) => Promise<void>) => {
     if (controller.current) return;
@@ -79,16 +87,12 @@ export function FontSettings() {
     catch (error) { if (alive.current && !(next.signal.aborted && startedInDialog && !dialog.current?.open)) setError(error instanceof Error ? error.message : "字体操作失败，请重试。"); }
     finally { if (alive.current) setBusy(""); controller.current = null; if (!dialog.current?.open) releaseFontPreviews(); }
   };
-  const close = () => { controller.current?.abort(); setOpen(false); setPicked(null); setPreview(null); setDetail(false); setError(""); setNotice(""); releaseFontPreviews(); };
+  const close = () => { controller.current?.abort(); setOpen(false); setPicked(null); setDetail(false); setError(""); setNotice(""); releaseFontPreviews(); };
   const show = () => { setOpen(true); setDetail(false); setError(""); setNotice(""); };
   const select = (font: OnlineFont | SavedFont) => {
     if (controller.current) return;
-    setPicked(font); setPreview(null); setDetail(true); releaseFontPreviews(font.id);
+    setPicked(font); setDetail(true); setError(""); setNotice(""); releaseFontPreviews(font.id);
     if (window.innerWidth <= 640) requestAnimationFrame(() => detailHeading.current?.focus({ preventScroll: true }));
-    void run(`正在加载 ${font.name}…`, async signal => {
-      const candidate = library.fonts.find(item => item.id === font.id) ?? ("url" in font ? await previewOnlineFont(font, signal, bytes => setBusy(`正在加载预览 · ${sizeLabel(bytes)}`)) : font);
-      if (!signal.aborted) setPreview(candidate);
-    });
   };
   const apply = () => {
     if (!saved) return;
@@ -110,7 +114,7 @@ export function FontSettings() {
         const file = event.currentTarget.files?.[0]; event.currentTarget.value = "";
         if (file) void run("正在导入字体…", async signal => {
           const font = await importFont(file, signal);
-          if (!signal.aborted) { setPicked(font); setPreview(font); setOpen(true); setDetail(true); setPanel("saved"); setQuery(""); setNotice(`已导入 ${font.name}，尚未使用。`); }
+          if (!signal.aborted) { setPicked(font); setOpen(true); setDetail(true); setPanel("saved"); setQuery(""); setNotice(`已导入 ${font.name}，尚未使用。`); }
         });
       }} />
     {!open && status}
@@ -132,7 +136,7 @@ export function FontSettings() {
             if (index < 0) return;
             event.preventDefault(); buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
           }}>
-            {filtered.slice(0, limit).map(font => <FontRow key={font.id} font={font} online={"url" in font ? font : undefined} selected={picked?.id === font.id} available={library.fonts.some(item => item.id === font.id) || preview?.id === font.id} active={settings.fontFamily === font.id} disabled={!!busy} onSelect={() => select(font)} />)}
+            {filtered.slice(0, limit).map(font => <FontRow key={font.id} font={font} online={"url" in font ? font : undefined} selected={picked?.id === font.id} available={library.fonts.some(item => item.id === font.id)} active={settings.fontFamily === font.id} disabled={!!busy} onSelect={() => select(font)} />)}
             {!filtered.length && (panel === "saved" || catalog) && <div className="font-empty"><p>{query || (panel === "online" && (language !== "all" || category !== "all")) ? "没有找到匹配的字体" : "还没有添加字体"}</p><button type="button" className="display-reset" onClick={() => { setQuery(""); setLanguage("all"); setCategory("all"); setPanel("online"); }}>查看全部字体</button></div>}
             {filtered.length > limit && <button type="button" className="font-more btn" onClick={() => setLimit(value => value + 60)}>显示更多（还有 {filtered.length - limit} 款）</button>}
           </div>
@@ -145,17 +149,16 @@ export function FontSettings() {
               {online && <div className="font-source-links"><a href={online.source} target="_blank" rel="noreferrer">字体来源 ↗</a><a href={online.licenseUrl} target="_blank" rel="noreferrer">{online.license} ↗</a></div>}
             </div>
             <div className="font-preview-toolbar"><label htmlFor="font-preview-text">预览文字</label><label className="font-size-label">字号 <input type="range" aria-label="预览字号" min={16} max={48} value={sampleSize} onChange={event => setSampleSize(Number(event.currentTarget.value))} /><output>{sampleSize}</output></label></div>
-            {preview ? <textarea id="font-preview-text" className="font-specimen" aria-label="预览文字" value={sample} maxLength={500} spellCheck={false} onChange={event => setSample(event.currentTarget.value)} style={{ fontFamily: customFontFamily(preview.id), fontSize: `${sampleSize}px` }} />
-              : <div className="font-specimen-placeholder">{busy ? "正在加载字体预览…" : <><p>预览未加载</p><button type="button" className="btn" onClick={() => select(picked)}>重新加载预览</button></>}</div>}
+            {detail && <FontSpecimen key={picked.id} font={saved ?? picked} text={sample} size={sampleSize} onChange={setSample} />}
             <div className="font-detail-footer">
-              <p className="font-help">{active ? "当前正在使用此字体。" : saved ? "已保存在此设备，可离线使用。" : "预览仅临时加载，下载后才会保存到此设备。"}{online && !online.languages?.some(item => item.startsWith("chinese")) ? " 中文使用系统字体。" : ""}</p>
+              <p className="font-help">{active ? "当前正在使用此字体。" : saved ? "已保存在此设备，可离线使用。" : "试阅文字会发送至 Google Fonts，仅加载所需字形；下载才获取并保存完整字体。"}{online && !online.languages?.some(item => item.startsWith("chinese")) ? " 中文使用系统字体。" : ""}</p>
               <div className="font-detail-actions">
-                {saved ? <><button type="button" className="display-reset" disabled={!!busy} aria-label={`移除 ${picked.name}`} onClick={() => void run("正在移除字体…", async () => { await removeFont(saved.id); setPreview(null); setNotice(`已移除 ${saved.name}`); })}>移除</button><button type="button" className="btn btn-primary" disabled={!!busy || active} onClick={apply}>{active ? "使用中" : "使用字体"}</button></>
+                {saved ? <><button type="button" className="display-reset" disabled={!!busy} aria-label={`移除 ${picked.name}`} onClick={() => void run("正在移除字体…", async () => { await removeFont(saved.id); setNotice(`已移除 ${saved.name}`); })}>移除</button><button type="button" className="btn btn-primary" disabled={!!busy || active} onClick={apply}>{active ? "使用中" : "使用字体"}</button></>
                   : online && <button type="button" className="btn btn-primary" disabled={!!busy || library.loading} onClick={() => void run(`正在下载 ${online.name}…`, async signal => {
-                    const candidate = preview ?? await previewOnlineFont(online, signal, bytes => setBusy(`正在下载 · ${sizeLabel(bytes)}`));
+                    const candidate = await downloadOnlineFont(online, signal, bytes => setBusy(`正在下载 · ${sizeLabel(bytes)}`));
                     if (signal.aborted) return;
                     setBusy("正在保存字体…"); await saveFont(candidate, signal);
-                    if (!signal.aborted) { setPreview(candidate); setNotice(`已下载 ${online.name}，尚未使用。`); }
+                    if (!signal.aborted) setNotice(`已下载 ${online.name}，尚未使用。`);
                   })}>下载字体{online.bytes ? ` · ${sizeLabel(online.bytes)}` : ""}</button>}
               </div>
             </div>

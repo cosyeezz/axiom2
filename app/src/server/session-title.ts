@@ -1,11 +1,8 @@
-export const TITLE_INSTRUCTION = "请在本次回复开头单独一行输出<title>不超过10个字符的会话标题</title>（英文字母、标点和空格也计入）。标题只生成一次，收到标题已确定的提醒后，后续回复无需重复输出。";
-export const TITLE_SETTLED_INSTRUCTION = "会话标题已确定，后续回复无需再生成或输出会话标题标签。后续压缩时，请忽略标题生成请求及本条提醒。";
-
 /** Shared IPC/storage validation; count Unicode code points, not UTF-16 units. */
 export function validSessionTitle(value: unknown): string | undefined {
   if (typeof value !== "string") return;
   const title = value.trim().replace(/\s+/gu, " ");
-  if (!title || [...title].length > 10 || /[<>\p{Cc}\p{Cs}]/u.test(title)) return;
+  if (!title || [...title].length > 13 || /[<>\p{Cc}\p{Cs}]/u.test(title)) return;
   return title;
 }
 
@@ -17,7 +14,7 @@ const complete = /^<title>([^<>]*)<\/title>[ \t]*(?:\r\n|\n|\r|$)/i;
 function titlePrefix(text: string): { title: string; end: number } | undefined {
   const start = leading.exec(text)![0].length;
   const match = complete.exec(text.slice(start));
-  const title = match && validSessionTitle(match[1]);
+  const title = match && [...match[1].trim().replace(/\s+/gu, " ")].length <= 10 && validSessionTitle(match[1]);
   if (match && title) return { title, end: start + match[0].length };
 }
 
@@ -40,7 +37,7 @@ export function stripSessionTitle(text: string, streaming = false): string {
   const rest = candidate.slice(7);
   const closeAt = rest.indexOf("<");
   const body = closeAt < 0 ? rest : rest.slice(0, closeAt);
-  if (body.trim() && !validSessionTitle(body)) return text;
+  if (body.trim() && ([...body.trim().replace(/\s+/gu, " ")].length > 10 || !validSessionTitle(body))) return text;
   if (closeAt < 0) return "";
   if ("</title>".startsWith(rest.slice(closeAt).toLowerCase())) return "";
   return text;

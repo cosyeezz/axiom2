@@ -61,7 +61,7 @@ export function ModelPicker({
   const details = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
   const floating = expanded && !details.current?.closest(".compression-settings,.memory-dialog");
-  const { panel, host } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 320, maxHeight: 440, fillMobile: true });
+  const { panel, host } = useAnchoredPopup(floating ? details.current : null, { maxWidth: 384, maxHeight: 560, fillMobile: true });
   useEffect(() => {
     if (!floating) return;
     const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) close(false); };
@@ -292,9 +292,10 @@ export function ModelPicker({
           </div>}
         </div>
         {running(info.run) && (
-          <p className="meta">
-            当前执行：{info.run!.selection.provider} / {info.run!.selection.id} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}；模型和思考等级均在下次执行生效，本次追加消息仍沿用当前设置。
-          </p>
+          <details className="model-run-note">
+            <summary><span>下次执行生效，本次追加不变。</span><Icon name="chevron" /></summary>
+            <p>当前执行：{info.run!.selection.provider} / {info.run!.selection.id} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}</p>
+          </details>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}
       </div></ModelMenu>}

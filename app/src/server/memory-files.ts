@@ -3,8 +3,8 @@ import { mkdirSync, writeFileSync, readFileSync, realpathSync, lstatSync, readdi
 import { dirname, join, resolve, relative, isAbsolute, extname, sep } from "node:path";
 import { markdownLocalLinks } from "../shared/markdown.js";
 import { AppError } from "../shared/protocol.js";
-import { memoryRoot, memoryRulesPath, ensureMemoryDirectory } from "./memory-storage.js";
-import { memoryRules, memoryTemplate, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
+import { memoryRoot, ensureMemoryDirectory } from "./memory-storage.js";
+import { memoryTemplate, type MemoryCatalogEntry, type MemoryFile } from "../shared/memory.js";
 
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 export const within = (root: string, path: string) => { const rel = relative(root, path); return rel === "" || !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`); };
@@ -101,10 +101,6 @@ export function initializeMemory(root: string, sessionId: string) {
   const actualRoot = realpathSync(root);
   const directory = memoryDirectory(actualRoot, sessionId);
   ensureMemoryDirectory(directory);
-  const rules = memoryRulesPath(actualRoot);
-  try { writeFileSync(rules, memoryRules, { flag: "wx", mode: 0o600 }); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  if (!lstatSync(rules).isFile() || lstatSync(rules).isSymbolicLink() || lstatSync(rules).nlink !== 1) throw new AppError("MEMORY_PATH", "记忆规则不是普通文件");
   const path = join(directory, "MEMORY.md");
   try { writeFileSync(path, memoryTemplate, { flag: "wx", mode: 0o600 }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }

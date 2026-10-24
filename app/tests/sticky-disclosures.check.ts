@@ -11,7 +11,7 @@ import type { Session, Workspace } from "../src/shared/protocol.js";
 import { defaultBudgets, emptyTasks, tasksScope, type TaskList } from "../src/shared/tasks.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-sticky-"));
-const artifacts = resolve("test-results/sticky-disclosures");
+const artifacts = resolve(process.env.AXIOM_STICKY_ARTIFACTS || "test-results/sticky-disclosures");
 mkdirSync(artifacts, { recursive: true });
 mkdirSync(join(root, "workspace"));
 mkdirSync(join(root, "pi"));
@@ -126,7 +126,8 @@ try {
   await page.locator("#prompt").fill("保留我的草稿");
   for (const width of [1440, 390, 360]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const selector of [".session-environment", ".compaction-card", ".task-operation > details"]) {
+    // Environment tags are covered by session-environment.check.ts, not native details.
+    for (const selector of [".compaction-card", ".task-operation > details"]) {
       console.log(`Checking ${width}: ${selector}`);
       const block = page.locator(selector).first();
       const parent = block.locator('xpath=ancestor::details[contains(@class,"tool-activity")][1]');
@@ -317,7 +318,7 @@ try {
   await expandInPlace(nestedProcess.locator(".tool-call"));
   await page.screenshot({ path: join(artifacts, "bottom-nested-reveal.png") });
   assert.deepEqual(errors, []);
-  console.log(`PASS: sticky environment/tools/compression/task, continuous thinking beneath the sticky process title, nested offsets, resize, streaming, inner scrolling, block boundaries, collapse, draft preservation, independent child window, desktop/mobile, bounded bottom reveal. Screenshots: ${artifacts}`);
+  console.log(`PASS: sticky tools/compression/task, continuous thinking beneath the sticky process title, nested offsets, resize, streaming, inner scrolling, block boundaries, collapse, draft preservation, independent child window, desktop/mobile, bounded bottom reveal. Screenshots: ${artifacts}`);
 } finally {
   await browser?.close();
   await app?.close();

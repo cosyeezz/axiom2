@@ -56,6 +56,33 @@ export interface Run {
   retry?: RetryInfo | null;
   resumedFromRunId?: string | null;
 }
+export interface EnvironmentTool {
+  name: string;
+  description: string;
+  parameters: unknown;
+}
+export interface EnvironmentSkill {
+  name: string;
+  description: string;
+  path: string;
+  automatic: boolean;
+}
+export interface SessionEnvironment {
+  cwd: string;
+  /** Missing in older execution snapshots. Preview is never an execution receipt. */
+  systemPrompt?: string;
+  source?: "preview" | "runtime";
+  tools: string[];
+  toolDefinitions?: EnvironmentTool[];
+  skills: string[];
+  skillDetails?: EnvironmentSkill[];
+  mcp?: { name: string; description: string; source: string }[];
+  /** Exact Topic directory injected separately from the system prompt. */
+  memory?: { topics: string };
+  extensions: number;
+  warnings: string[];
+  retry?: RetrySettings;
+}
 export interface AgentInfo {
   activeTaskCount?: number;
   queue?: { id: string; text: string; mode: "steer" | "followUp"; skills?: import("./skills.js").SkillReference[] }[];
@@ -70,16 +97,7 @@ export interface AgentInfo {
   completedRunDurationMs?: number;
   /** Main-session memory location; null for child sessions. Independent of initialization. */
   memoryDirectory?: string | null;
-  environment: {
-    cwd: string;
-    /** Absent only in environment snapshots saved before prompt inspection. */
-    systemPrompt?: string;
-    tools: string[];
-    skills: string[];
-    extensions: number;
-    warnings: string[];
-    retry?: RetrySettings;
-  } | null;
+  environment: SessionEnvironment | null;
   usage: {
     input: number;
     output: number;

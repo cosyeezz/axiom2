@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { tmpdir } from "./temporary.js";
 import { initializeMemoryStorage, legacyMemoryRoot, memoryRoot, memoryRulesPath } from "../src/server/memory-storage.js";
 import { initializeMemory, memoryDirectory } from "../src/server/memory-files.js";
-import { memoryRules } from "../src/shared/memory.js";
 import { Store } from "../src/server/storage.js";
 import { Memories } from "../src/server/memories.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
@@ -33,7 +32,7 @@ test("migration preserves originals and binary artifacts, rewrites local absolut
     assert.equal(readFileSync(f.entry, "utf8"), original, "old files are recovery copies, not rewritten");
     assert.equal(readFileSync(join(next, "MEMORY.md"), "utf8"), original.replace(legacyMemoryRoot(f.root), f.target));
     assert.deepEqual(readFileSync(join(next, "artifacts", "plot.png")), binary);
-    assert.equal(readFileSync(memoryRulesPath(f.root), "utf8"), memoryRules);
+    assert.equal(existsSync(memoryRulesPath(f.root)), false, "new memory storage does not generate a rules file");
     writeFileSync(join(next, "MEMORY.md"), "迁移后继续工作");
     initializeMemoryStorage(f.root, ["session-one"], f.target);
     assert.equal(readFileSync(join(next, "MEMORY.md"), "utf8"), "迁移后继续工作");

@@ -2,7 +2,7 @@
 .thread { isolation: isolate; overflow-anchor: none; }
 /* Leave enough scroll range to reveal a final short disclosure above the composer. */
 .thread > .thread-content { padding-bottom: 12px; }
-.thread details[open] > [data-sticky-disclosure], .task-results > details[open] > summary {
+.thread :is(details[open], .session-environment[data-expanded="true"]) > [data-sticky-disclosure], .task-results > details[open] > summary {
   position: sticky;
   top: calc(var(--disclosure-top, 0px) + 8px);
   z-index: var(--disclosure-layer, 1);
@@ -12,7 +12,8 @@
   box-shadow: inset 0 1px 0 var(--border), 0 1px 0 var(--border-soft);
 }
 /* Hide scrolled text in the top clearance, without covering nested headers. */
-.thread details:not(details details) > [data-sticky-disclosure]::before,
+.thread details:not(details details):not(.session-environment details) > [data-sticky-disclosure]::before,
+.thread .session-environment > [data-sticky-disclosure]::before,
 .task-results > details[open] > summary::before {
   content: "";
   position: absolute;

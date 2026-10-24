@@ -151,9 +151,10 @@ export function releaseFontPreviews(keepId?: string) {
     }
   }
 }
-// Download only on request. Previewed faces are temporary until explicitly saved.
+// Full font bytes are fetched only by the explicit download action.
+// Staged faces are temporary until saved; text-subset previews never enter this cache.
 const downloads = new Map<string, Promise<SavedFont>>();
-export async function previewOnlineFont(font: OnlineFont, signal?: AbortSignal, progress?: (bytes: number) => void): Promise<SavedFont> {
+export async function downloadOnlineFont(font: OnlineFont, signal?: AbortSignal, progress?: (bytes: number) => void): Promise<SavedFont> {
   const checkCanceled = () => { if (signal?.aborted) throw Error("已取消字体下载。"); };
   checkCanceled();
   const saved = state.fonts.find(item => item.id === font.id);
