@@ -42,9 +42,12 @@ test('archive consent is explicit and paths are selected only from preview', asy
   assert.equal((await f.remove(preview.token, true, '../keep')).job.task.status, 'failed');
   assert.deepEqual(await readFile(f.path), f.bytes);
 });
-test('changed archives are refused after confirmation without deleting them', async t => {
-  const f = await fixture(t), preview = await f.preview(); await writeFile(f.path, 'changed');
+test('changed archives are refused after confirmation without deleting them', { skip: process.platform === 'win32' }, async t => {
+  const f = await fixture(t), preview = await f.preview();
+  assert.ok(preview.targets.some((target: { id: string }) => target.id === f.id));
+  await writeFile(f.path, 'changed');
   const result = await f.remove(preview.token); assert.equal(result.job.task.status, 'failed');
+  assert.match(result.job.message, /归档已变化/);
   assert.equal(await readFile(f.path, 'utf8'), 'changed'); assert.equal(result.archiveCleanup.token, null);
 });
 test('digest mismatch is shown unverified rather than authorized for deletion', async t => {
@@ -58,6 +61,18 @@ test('unsupported Windows deletion is reported without an actionable target', as
   assert.equal(preview.items[0].state, 'unverified'); assert.match(preview.items[0].note, /Windows.*尚不支持/);
   assert.deepEqual(await readFile(f.path), f.bytes);
 });
+test('unsupported Windows updater preview cannot authorize deletion', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t), preview = await f.preview();
+  assert.deepEqual(preview.targets, []);
+  assert.equal(preview.items[0].state, 'unverified');
+  assert.match(preview.items[0].note, /Windows.*尚不支持/);
+  const result = await f.remove(preview.token);
+  assert.equal(result.job.task.status, 'failed');
+  assert.equal(result.job.archiveCommit, 'not-started');
+  assert.equal(result.archiveCleanup.token, preview.token);
+  assert.deepEqual(await readFile(f.path), f.bytes);
+});
+
 test('restoration, install ownership and shared admission block archive cleanup', async t => {
   const f = await fixture(t); await writeFile(join(f.root, 'updates/transaction.json'), '{}');
   assert.equal((await f.updater.runJob('archive-preview')).job.task.status, 'failed');

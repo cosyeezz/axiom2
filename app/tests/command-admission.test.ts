@@ -16,7 +16,7 @@ import { runTool } from "../src/server/integrations/tool-process.js";
 
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-command-gate-")));
-  const directory = `v1.0.0-${randomUUID()}`, bin = join(root, "integrations/rtk/versions", directory, "rtk");
+  const directory = `v1.0.0-${randomUUID()}`, bin = join(root, "integrations/rtk/versions", directory, process.platform === "win32" ? "rtk.exe" : "rtk");
   mkdirSync(join(bin, ".."), { recursive: true }); writeFileSync(bin, "fixture", { mode: 0o700 });
   atomicRtkJson(rtkConfigPath(root), { format: 1, revision: "initial", enabled: true, level: "balanced", subagents: true, installation: { version: "1.0.0", directory } });
   const get = () => offlineToolRequest(root, { op: "rtk.get", requestId: randomUUID() }).data;

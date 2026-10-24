@@ -138,22 +138,23 @@ try {
   // baseline uses the current runtime with an older version marker; native
   // Windows checks additionally upgrade the actual published v0.2.3 runtime.
   const installedPackage = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
+  const archive = await readFile(join(temporary, packed.filename));
+  const assetBase = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/`;
+  const assets = { "axiom2.tgz": archive, ...nativeAssets };
+  const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: Object.entries(assets).map(([name, bytes]) => ({
+    name, state: "uploaded", size: bytes.length, digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, browser_download_url: assetBase + name,
+  })) };
+  const releaseFetcher = async (url) => {
+    if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
+    assert.ok(url.startsWith(assetBase), "Unexpected release asset URL");
+    const name = url.slice(assetBase.length);
+    assert.ok(Object.hasOwn(assets, name), `Unexpected release asset: ${name}`);
+    return new Response(assets[name]);
+  };
   for (const strategy of ["hoisted", "nested"]) {
     await writeFile(join(installed, "package.json"), JSON.stringify({ ...installedPackage, version: "0.0.0" }));
     const beforeUpdate = control("start");
-    const archive = await readFile(join(temporary, packed.filename));
-    const assetBase = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/`;
-    const assets = { "axiom2.tgz": archive, ...nativeAssets };
-    const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: Object.entries(assets).map(([name, bytes]) => ({
-      name, state: "uploaded", size: bytes.length, digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, browser_download_url: assetBase + name,
-    })) };
-    const updater = createUpdater({ root: join(temporary, "data"), env: { ...serviceEnv, npm_config_install_strategy: strategy }, fetcher: async (url) => {
-      if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
-      assert.ok(url.startsWith(assetBase), "Unexpected release asset URL");
-      const name = url.slice(assetBase.length);
-      assert.ok(Object.hasOwn(assets, name), `Unexpected release asset: ${name}`);
-      return new Response(assets[name]);
-    } });
+    const updater = createUpdater({ root: join(temporary, "data"), env: { ...serviceEnv, npm_config_install_strategy: strategy }, fetcher: releaseFetcher });
     await updater.check();
     const updated = await updater.runJob("service", pkg.version);
     assert.equal(updated.job.phase, "complete", updated.job.message);
@@ -194,7 +195,7 @@ try {
   assert.throws(() => control("status"));
   await writeFile(join(recoveryRoot, "updates/transaction.json"), JSON.stringify({ id: recoveryId, stage: recoveryStage, backup: recoveryBackup,
     packageRoot: installed, cli, node: process.execPath, previousVersion: pkg.version, version: "999.0.0", wasRunning: true }));
-  const recoveryUpdater = createUpdater({ root: recoveryRoot, env: serviceEnv });
+  const recoveryUpdater = createUpdater({ root: recoveryRoot, env: serviceEnv, fetcher: releaseFetcher });
   const recovered = await recoveryUpdater.runJob("recover");
   assert.equal(recovered.job.phase, "complete", recovered.job.message);
   assert.equal(recovered.recovery, false);

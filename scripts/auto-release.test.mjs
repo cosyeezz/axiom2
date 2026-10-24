@@ -28,6 +28,11 @@ test('every Linux isolation consumer configures the runner before execution', ()
   }
 });
 
+test('CI explicitly permits fetching native archive fixture dependencies before offline tests', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /- run: npm test\n        env:\n          AXIOM_TEST_CARGO_FETCH: '1'/);
+});
+
 test('release versions advance numerically beyond source, public releases and reserved draft tags', () => {
   assert.equal(nextVersion('0.4.1', []), '0.4.2');
   assert.equal(nextVersion('0.4.1', ['v0.4.9', 'v0.4.10', 'v0.4.11']), '0.4.12');
