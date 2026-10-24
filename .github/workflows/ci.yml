@@ -98,6 +98,13 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      - name: Configure Linux namespace test environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - run: npm ci
       - run: npm run check:package
   publish:
@@ -116,6 +123,12 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Configure Linux namespace test environment
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Allocate or resume release version
         id: release
         env:

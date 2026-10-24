@@ -12,6 +12,22 @@ import { assertReleaseIdentity, assertNativeReceipts, nativeReleaseNames, assert
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const source = 'a'.repeat(40), commit = 'b'.repeat(40);
 
+test('every Linux isolation consumer configures the runner before execution', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const jobs = workflow.split(/(?=^  [a-z]+:\s*$)/m);
+  for (const job of ['native', 'validate', 'package', 'publish']) {
+    const block = jobs.find((entry) => entry.startsWith(`  ${job}:\n`));
+    assert.ok(block, `Missing ${job} job`);
+    const configure = block.indexOf('sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0');
+    const execute = block.indexOf(job === 'native' ? 'node --test native/owner.test.mjs' : 'npm ci');
+    assert.ok(configure >= 0 && configure < execute, `${job} must enable namespaces before building or testing`);
+    assert.ok(block.includes('if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then'), `${job} must tolerate kernels without the AppArmor sysctl`);
+    if (job === 'validate' || job === 'package') {
+      assert.match(block, /- name: Configure Linux namespace test environment\n        if: runner\.os == 'Linux'/, `${job} must not run Linux configuration on other platforms`);
+    }
+  }
+});
+
 test('release versions advance numerically beyond source, public releases and reserved draft tags', () => {
   assert.equal(nextVersion('0.4.1', []), '0.4.2');
   assert.equal(nextVersion('0.4.1', ['v0.4.9', 'v0.4.10', 'v0.4.11']), '0.4.12');
