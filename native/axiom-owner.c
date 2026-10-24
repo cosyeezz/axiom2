@@ -133,6 +133,37 @@ static void init_process(int parent, int host, int channel, int gate, int ready,
         if (ended == worker) _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status));
     }
 }
+// Keep the duplex readable until the host consumes CLEANED. Closing immediately
+// can turn a concurrent STOP/DEADLINE write into EPIPE and discard that receipt.
+// All descendants are already gone; an absent ACK only delays exit, never work.
+static void await_cleanup_ack(int host) {
+    const int64_t deadline = now_ms() + 2000;
+    char input[256], expected[sizeof nonce + 4]; size_t used = 0;
+    snprintf(expected, sizeof expected, "ACK %s", nonce);
+    for (;;) {
+        int64_t remaining = deadline - now_ms();
+        if (remaining <= 0) return;
+        struct pollfd fds[] = {
+            { .fd = host, .events = POLLIN }, { .fd = control, .events = POLLIN }
+        };
+        int result = poll(fds, 2, (int)remaining);
+        if (result < 0 && errno == EINTR) continue;
+        if (result <= 0 || fds[0].revents) return;
+        if (!fds[1].revents) continue;
+        ssize_t n = read(control, input + used, sizeof input - used - 1);
+        if (n <= 0) return;
+        used += (size_t)n; input[used] = 0;
+        char *line;
+        while ((line = memchr(input, '\n', used))) {
+            *line = 0;
+            if (!strcmp(input, expected)) return;
+            // Late control frames cannot affect a tree that is already reaped.
+            size_t consumed = (size_t)(line - input) + 1;
+            used -= consumed; memmove(input, input + consumed, used); input[used] = 0;
+        }
+        if (used == sizeof input - 1) return;
+    }
+}
 int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
     const char *token = getenv("AXIOM_OWNER_NONCE");
@@ -223,6 +254,8 @@ stopped:
     frame("CLEANED", reason, status);
     if (gate[1] >= 0) close(gate[1]);
     if (ready[0] >= 0) close(ready[0]);
-    close(child); close(host); close(control);
+    close(child);
+    await_cleanup_ack(host);
+    close(host); close(control);
     return reason == 0 && WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }

@@ -86,7 +86,7 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     reject(error); return;
   }
   const chunks: Buffer[] = []; let stderr = Buffer.alloc(0), bytes = 0, errorBytes = 0, stdoutTruncated = false, failure: unknown, commandSent = false, admissionLost = false;
-  let result: ToolProcessReply | undefined, stopping: Promise<void> | undefined;
+  let result: ToolProcessReply | undefined, deliveryFailure: Error | undefined, stopping: Promise<void> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   const cleanup = () => stopping ??= owned.close();
   const uncertain = () => new MaintenanceError("stop-unconfirmed", "程序退出未能确认，文件已保留；请核实后台进程后重试。");
@@ -96,6 +96,12 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     stopTimer ??= setTimeout(() => { admissionLost = true; journal.revoke(); lease.close(); clearInterval(timer); activeOwners.delete(owner); reject(uncertain()); }, 7000);
   };
   const abort = () => stop(signal?.reason ?? new MaintenanceError("cancelled", "操作已取消。"));
+  const deliveryFailed = () => {
+    // IPC can close because the native deadline killed a worker still starting.
+    // Defer this generic transport error until cleanup supplies its real cause.
+    deliveryFailure ??= Error("程序无法启动，请检查安装。");
+    stop();
+  };
   const timer = setInterval(() => {
     owned.setDeadline(deadline());
     if (remaining().remainingMs <= 0) stop(timeoutError());
@@ -121,14 +127,14 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
       else stderr = Buffer.concat([stderr, message.data]).subarray(-(options.errorLimit ?? 64 * 1024));
     } else { result = message; stop(); }
   });
-  child.once("error", () => stop(Error("程序无法启动，请检查安装。")));
+  child.once("error", deliveryFailed);
   child.once("close", async () => {
     clearInterval(timer); signal?.removeEventListener("abort", abort);
     try {
       await cleanup();
       const nativeFailure = owned.failure();
       if (nativeFailure instanceof MaintenanceError && nativeFailure.code === "stop-unconfirmed") throw nativeFailure;
-      failure ??= nativeFailure;
+      failure ??= nativeFailure ?? deliveryFailure;
       if (!admissionLost) {
         options.onStopped?.(commandSent ? "tree-cleaned" : "not-started");
         journal.confirmed();
@@ -144,6 +150,6 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     if (signal?.aborted) { abort(); return; }
     const request: ToolProcessRequest = { file, args, cwd: options.cwd ?? options.root, input: options.input ?? "", env: options.env ?? process.env };
     commandSent = true;
-    child.send(request, error => { if (error) stop(Error("程序无法启动，请检查安装。")); });
+    child.send(request, error => { if (error) deliveryFailed(); });
   }, error => stop(error));
 });

@@ -1,4 +1,4 @@
-import { fork, type ForkOptions } from "node:child_process";
+import { fork, type ChildProcess, type ForkOptions } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,21 +25,35 @@ export function forkLinuxOwned(entry: string, options: Pick<ForkOptions, "cwd" |
     env: { ...(options.env ?? process.env), AXIOM_OWNER_PARENT: String(process.pid), AXIOM_OWNER_NONCE: nonce, AXIOM_OWNER_DEADLINE: String(Math.floor(deadline)) },
     detached: false, stdio: ["ignore", "ignore", "ignore", "ipc", "pipe"],
   });
+  return superviseLinuxOwnedChild(child, nonce, deadline, timeoutError, beforeStart);
+}
+
+/** Isolated protocol state machine; callers still need a verified native helper. */
+export function superviseLinuxOwnedChild(child: ChildProcess, nonce: string, deadline: number, timeoutError: () => MaintenanceError, beforeStart?: (identity: ProcessOwnerIdentity) => void | Promise<void>) {
   const control = child.stdio[4] as Duplex;
-  let received = "", admitted = false, cleaned = false, ended = false, revoked = false, sawReady = false, nativeError: Error | undefined;
-  let arming: Promise<void> = Promise.resolve();
+  let received = "", admitted = false, cleaned = false, ended = false, revoked = false, closing = false, sawReady = false, nativeError: Error | undefined;
+  let arming: Promise<void> = Promise.resolve(), transportError: Error | undefined;
   let readyResolve!: () => void, readyReject!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   let cleanResolve!: () => void, cleanReject!: (error: Error) => void;
   const stopped = new Promise<void>((resolve, reject) => { cleanResolve = resolve; cleanReject = reject; });
   void ready.catch(() => {}); void stopped.catch(() => {});
   let lastDeadline = Math.floor(deadline);
-  const send = (line: string) => {
-    // After a suspended host resumes, the native side may already have sent
-    // CLEANED and closed. Writing would destroy the duplex before it is read.
-    if (monotonicMilliseconds() < lastDeadline && !ended && !control.destroyed) control.write(line + "\n", error => { if (error) { revoked = true; nativeError ??= uncertain(); readyReject(nativeError); } });
+  const transportFailed = () => {
+    // Once the nonce-bound receipt has proved waitpid(PID1), a late write error
+    // cannot make that tree alive again. Protocol errors remain fail-closed.
+    if (cleaned) return;
+    revoked = true; transportError ??= uncertain(); readyReject(nativeError ?? transportError);
   };
-  control.on("error", () => { revoked = true; nativeError ??= uncertain(); readyReject(nativeError); });
+  const send = (line: string, acknowledgement = false) => {
+    // An ACK is allowed after the deadline: it acknowledges proof, not work.
+    if ((acknowledgement || monotonicMilliseconds() < lastDeadline) && !ended && !control.destroyed) {
+      control.write(line + "\n", error => { if (error) transportFailed(); });
+      return true;
+    }
+    return false;
+  };
+  control.on("error", transportFailed);
   control.setEncoding("utf8");
   control.on("data", (chunk: string) => {
     received += chunk;
@@ -56,21 +70,26 @@ export function forkLinuxOwned(entry: string, options: Pick<ForkOptions, "cwd" |
         }
         sawReady = true;
         arming = Promise.resolve().then(async () => {
-          if (revoked || cleaned || ended) throw nativeError ?? unsupported();
+          if (revoked || cleaned || ended) throw nativeError ?? transportError ?? unsupported();
           await beforeStart?.({ platform: "linux", initPid, startTime });
-          if (revoked || cleaned || ended) throw nativeError ?? unsupported();
-          admitted = true; send("GO"); readyResolve();
+          if (revoked || cleaned || ended) throw nativeError ?? transportError ?? unsupported();
+          if (monotonicMilliseconds() >= lastDeadline) throw timeoutError();
+          if (!send("GO")) throw nativeError ?? transportError ?? unsupported();
+          admitted = true; readyResolve();
         }).catch(error => {
-          revoked = true; nativeError ??= error instanceof Error ? error : unsupported(); readyReject(nativeError); send("STOP");
+          revoked = true;
+          if (error !== transportError) nativeError ??= error instanceof Error ? error : unsupported();
+          readyReject(nativeError ?? transportError ?? unsupported()); send("STOP");
         });
       }
       else if (match[1] === "ERROR") { revoked = true; nativeError ??= unsupported(); readyReject(nativeError); }
       else if (match[1] === "CLEANED") {
         revoked = true; cleaned = true;
         const reason = Number(match[3]);
-        if (!admitted) { nativeError ??= unsupported(); readyReject(nativeError); }
-        else if (reason === 2) nativeError ??= timeoutError();
+        if (reason === 2) nativeError ??= timeoutError();
         else if (reason > 2) nativeError ??= new MaintenanceError("operation", "原生监督器中断了程序，整个进程树已停止。");
+        if (!admitted) { nativeError ??= unsupported(); readyReject(nativeError); }
+        send(`ACK ${nonce}`, true);
         cleanResolve();
       }
     }
@@ -78,21 +97,23 @@ export function forkLinuxOwned(entry: string, options: Pick<ForkOptions, "cwd" |
   child.once("error", () => { revoked = true; nativeError ??= unsupported(); readyReject(nativeError); });
   child.once("close", () => {
     ended = true; revoked = true;
-    if (!admitted) { readyReject(nativeError ?? unsupported()); cleanResolve(); } // No business request was admitted.
+    if (!admitted) { readyReject(nativeError ?? transportError ?? unsupported()); cleanResolve(); } // No business request was admitted.
     else if (!cleaned) { nativeError = uncertain(); cleanReject(nativeError); }
   });
   let stopping: Promise<void> | undefined;
   return {
     child, ready,
-    failure: () => nativeError,
+    // Valid proof supersedes transport uncertainty regardless of callback order,
+    // but protocol/domain errors are separate and can never be cleared by it.
+    failure: () => nativeError ?? (cleaned ? undefined : transportError),
     setDeadline(value: number) {
       const next = Math.floor(value), now = monotonicMilliseconds();
-      if (!Number.isSafeInteger(next) || next <= now || next === lastDeadline || cleaned || ended || now >= lastDeadline) return;
+      if (!Number.isSafeInteger(next) || next <= now || next === lastDeadline || closing || cleaned || ended || now >= lastDeadline) return;
       lastDeadline = next; send(`DEADLINE ${next}`);
     },
     close() {
-      revoked = true;
-      if (!admitted) readyReject(nativeError ?? unsupported());
+      closing = true; revoked = true;
+      if (!admitted) readyReject(nativeError ?? transportError ?? unsupported());
       return stopping ??= (async () => {
         if (!cleaned) send("STOP");
         let timer: ReturnType<typeof setTimeout> | undefined;

@@ -20,6 +20,10 @@ for (const kind of ["skill", "mcp"] as const) test(`${kind} can be read, saved a
   mkdirSync(skillDir, { recursive: true }); mkdirSync(pi, { recursive: true });
   writeFileSync(guide, "---\nname: live-fixture\ndescription: live save regression\n---\nOriginal guide\n");
   writeFileSync(join(pi, "mcp.json"), JSON.stringify({ mcpServers: { "live-fixture": { command: "never-launched" } } }));
+  // Establish the SDK's empty stores before the configuration watcher starts:
+  // delayed startup creation events are not effects of the online resource edit.
+  writeFileSync(join(pi, "auth.json"), "{}");
+  writeFileSync(join(pi, "models-store.json"), "{}");
   const app = await startServer({ root, port: 0 });
   const ws = new WebSocket(app.origin.replace("http", "ws") + "/ws", { headers: { Origin: app.origin } });
   async function request(op: string, params = {}, scope = {}): Promise<Reply> {

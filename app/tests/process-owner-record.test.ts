@@ -69,6 +69,29 @@ for (const scenario of ["write-failure", "close-before-ready", "close-during-arm
   });
 }
 
+test("Linux deadline during owner arming never admits business and retains timeout proof", { skip: process.platform !== "linux", timeout: 15000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-journal-deadline-")), entry = join(root, "worker.cjs"), marker = join(root, "business");
+  writeFileSync(entry, `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started'); setInterval(()=>{},1000);`);
+  let release!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  const journal = createProcessOwner(join(root, "owner.json"));
+  let armed = false;
+  const owner = forkLinuxOwned(entry, {}, monotonicMilliseconds() + 7000, undefined, async identity => {
+    journal.arm(identity); armed = true;
+    owner.setDeadline(monotonicMilliseconds() + 100); await barrier;
+  });
+  const exited = once(owner.child, "close");
+  try {
+    await assert.rejects(owner.ready, { code: "total-timeout" });
+    release(); await owner.close(); await exited;
+    assert.ok(armed, "deadline must expire during the persisted-owner barrier");
+    assert.equal((owner.failure() as { code?: string })?.code, "total-timeout");
+    assert.ok(!existsSync(marker));
+    journal.confirmed();
+    assert.ok(!existsSync(join(root, "owner.json")));
+  } finally { release(); await owner.close().catch(() => {}); rmSync(root, { recursive: true, force: true }); }
+});
+
 for (const phase of ["intent", "armed"]) test(`Linux restart recovery after host dies in ${phase}`, { skip: process.platform !== "linux", timeout: 20000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-journal-recovery-")), record = join(root, "owner.json"), driver = join(root, "host.mjs"), worker = join(root, "worker.cjs");
   writeFileSync(worker, `process.send('business'); setInterval(()=>{},1000);`);

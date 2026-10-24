@@ -27,7 +27,7 @@ function descendants(pid, result = []) {
   return result;
 }
 
-for (const scenario of ['normal', 'stop', 'deadline', 'extend', 'no-go', 'stopped-worker']) {
+for (const scenario of ['normal', 'stop', 'deadline', 'extend', 'no-go', 'stopped-worker', 'late-control', 'unacked']) {
   test(`native ownership: ${scenario}`, { skip: process.platform !== 'linux', timeout: 15000 }, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'axiom-native-test-'));
     const entry = join(directory, 'worker.cjs');
@@ -54,7 +54,7 @@ if (process.argv[2] === 'leaf') {
     const child = fork(entry, [], { execPath: helper, execArgv: [process.execPath], serialization: 'advanced',
       env: { ...process.env, AXIOM_OWNER_PARENT: String(process.pid), AXIOM_OWNER_NONCE: nonce, AXIOM_OWNER_DEADLINE: String(initial) },
       stdio: ['ignore', 'ignore', 'pipe', 'ipc', 'pipe'] });
-    let stderr = '', buffer = '', receipt, ready = false, closed = false, message, error;
+    let stderr = '', buffer = '', receipt, requestedExitAt, ready = false, closed = false, message, error;
     const send = line => { if (!child.stdio[4].destroyed) child.stdio[4].write(line + '\n'); };
     child.stderr.on('data', chunk => { stderr += chunk; });
     child.stdio[4].on('error', failure => { error ??= failure; });
@@ -70,7 +70,15 @@ if (process.argv[2] === 'leaf') {
         const fields = line.split(' ');
         if (fields[1] !== nonce) { error = Error('Protocol nonce mismatch'); continue; }
         if (fields[0] === 'READY') { ready = true; if (scenario !== 'no-go') send('GO'); }
-        if (fields[0] === 'CLEANED') receipt = { reason: Number(fields[2]), status: Number(fields[3]) };
+        if (fields[0] === 'CLEANED') {
+          receipt = { reason: Number(fields[2]), status: Number(fields[3]) };
+          if (scenario === 'late-control') {
+            // Receipt proves waitpid already completed; queue late controls before
+            // ACK in this same turn, without relying on a timed polling window.
+            send('STOP'); send(`DEADLINE ${milliseconds() + 1000}`);
+          }
+          if (scenario !== 'unacked') send(`ACK ${nonce}`);
+        }
       }
     });
     try {
@@ -85,7 +93,7 @@ if (process.argv[2] === 'leaf') {
         // PID1, the worker and a detached orphan must all belong to the launcher.
         assert.ok(owned.length >= 3, JSON.stringify(owned));
       }
-      if (scenario === 'normal') child.send('exit');
+      if (['normal', 'late-control', 'unacked'].includes(scenario)) { requestedExitAt = Date.now(); child.send('exit'); }
       else if (scenario === 'stop') send('STOP');
       else if (scenario === 'deadline' || scenario === 'stopped-worker') {
         if (scenario === 'stopped-worker') {
@@ -101,8 +109,14 @@ if (process.argv[2] === 'leaf') {
       }
       const status = await exited;
       assert.ok(receipt, `No CLEANED: ${stderr}; ${error ?? ''}`);
-      assert.equal(receipt.reason, scenario === 'normal' ? 0 : ['stop', 'extend'].includes(scenario) ? 1 : 2);
-      assert.equal(status.code, scenario === 'normal' ? 7 : 1);
+      const normal = ['normal', 'late-control', 'unacked'].includes(scenario);
+      assert.equal(receipt.reason, normal ? 0 : ['stop', 'extend'].includes(scenario) ? 1 : 2);
+      assert.equal(status.code, normal ? 7 : 1);
+      assert.equal(error, undefined, `Unexpected control error: ${error}`);
+      if (scenario === 'unacked') {
+        const waited = Date.now() - requestedExitAt;
+        assert.ok(waited >= 1500 && waited < 5000, `Missing ACK must only delay exit for a bounded interval: ${waited}ms`);
+      }
       for (const item of owned) assert.notEqual(identity(item.pid), item.start, `Owned process still present: ${item.pid}`);
     } finally {
       if (!closed) { send('STOP'); await Promise.race([exited, delay(2000)]); }

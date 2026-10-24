@@ -14,8 +14,9 @@ The release workflow builds and tests each architecture, combines both artifacts
 
 The parent forks the helper with the Node executable as its first argument, followed by the worker arguments. `AXIOM_OWNER_PARENT`, `AXIOM_OWNER_NONCE` and `AXIOM_OWNER_DEADLINE` identify the parent, operation and initial absolute monotonic deadline in milliseconds. File descriptor 4 carries newline-delimited control messages. Node chooses its separate IPC descriptor through `NODE_CHANNEL_FD`.
 
-- Helper → parent: `READY <nonce> 0 0` after the native PID 1 has initialized.
+- Helper → parent: `READY <nonce> <init-pid> <start-time>` after the native PID 1 has initialized.
 - Parent → helper: `GO` permits worker startup; `STOP` requests cleanup; `DEADLINE <milliseconds>` changes the absolute deadline.
+- Parent → helper: `ACK <nonce>` acknowledges a verified `CLEANED` receipt. After reaping the tree the helper consumes late control frames and waits at most two seconds for this ACK before closing; missing ACK never permits additional work. Legacy hosts without ACK remain supported with this bounded exit delay.
 - Helper → parent: `CLEANED <nonce> <reason> <wait-status>` only after `waitpid` has confirmed native PID 1 exited. Reasons are normal exit (0), STOP (1), deadline (2), lost parent/control channel (3), or protocol/internal failure (4).
 - Helper → parent: `ERROR <nonce> <errno> 0` reports initialization failure.
 
