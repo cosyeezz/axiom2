@@ -82,13 +82,20 @@ test("linked data parent or statistics file cannot authorize deletion", () => {
 test("a delayed filter result cannot recreate data after cleanup revokes its revision", async () => {
   const f = fixture(), directory = `v1.0.0-${randomUUID()}`, bin = join(f.root, "integrations/rtk/versions", directory);
   try {
-    mkdirSync(bin, { recursive: true }); writeFileSync(join(bin, "rtk"), "fixture");
+    mkdirSync(bin, { recursive: true }); writeFileSync(join(bin, process.platform === "win32" ? "rtk.exe" : "rtk"), "fixture");
     atomicRtkJson(rtkConfigPath(f.root), { ...readRtkConfig(f.root), enabled: true, installation: { version: "1.0.0", directory } });
+    const before = readRtkConfig(f.root).revision;
+    let calls = 0;
     const text = Array.from({ length: 100 }, (_, i) => `src/long-directory/file-${i}.ts`).join("\n");
     const result = await filterRtkResult(f.root, "main", { type: "tool_result", toolName: "bash", toolCallId: "data", input: { command: "rg --files" }, content: [{ type: "text", text }], isError: false, details: undefined, structuredContent: { output: text, exit_code: 0, truncated: false } }, undefined, async () => {
-      withCommandAdmission(f.root, () => clearRtkData(f.root, "originals", rtkDataScope(f.root, "originals").revision));
+      calls++;
+      withCommandAdmission(f.root, () => {
+        assert.equal(clearRtkData(f.root, "originals", rtkDataScope(f.root, "originals").revision).count, 0);
+      });
       return Buffer.from("100 files\n");
     });
+    assert.equal(calls, 1, "the delayed filter must execute, not bypass a missing native executable");
+    assert.notEqual(readRtkConfig(f.root).revision, before);
     assert.equal(result, undefined); assert.equal(rtkDataScope(f.root, "originals").count, 0);
   } finally { f.cleanup(); }
 });

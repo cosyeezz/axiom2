@@ -14,7 +14,7 @@ import { cleanupRows, cleanupProgress, acceptedCleanupJob } from "../src/client/
 
 function fixture(proof = true) {
   const root = fs.mkdtempSync(join(tmpdir(), "axiom-rea-download-cleanup-"));
-  const config: ReaConfig = { format: 1, revision: randomUUID(), enabled: false, skillInstalled: false, downloads: {}, engines: { ghidra: "/external/ghidra" } };
+  const config: ReaConfig = { format: 1, revision: randomUUID(), enabled: false, skillInstalled: false, downloads: {}, engines: { ghidra: join(root, "external", "ghidra") } };
   const paths = {} as Record<DownloadId, string>;
   for (const id of ["ghidra", "hopper"] as const) {
     const directory = `${id}-${randomUUID()}`, filename = id === "ghidra" ? "package.zip" : "package.dmg";
@@ -25,6 +25,7 @@ function fixture(proof = true) {
     if (proof) { const install = beginBuiltinOperation(root, "rea", undefined, id); install.trackDirectory(path); install.finish(); install.close(); }
   }
   atomicReaJson(reaConfigPath(root), config);
+  assert.deepEqual(readReaConfig(root), config, "cleanup fixtures must pass native configuration validation");
   const clean = (id: DownloadId, digest?: string) => {
     const op = beginBuiltinOperation(root, "rea");
     try {

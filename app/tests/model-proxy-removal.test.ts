@@ -11,6 +11,13 @@ import { once } from "node:events";
 import { ProxyProcess } from "../src/server/integrations/model-proxy-process.js";
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, readProxyConfig, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
+async function kernelReady(kernel: childProcess.ChildProcess, exited: Promise<unknown>) {
+  let timer!: NodeJS.Timeout;
+  try {
+    await Promise.race([once(kernel.stdout!, "data"), exited.then(() => { throw Error("fixture kernel exited before readiness"); }),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error("fixture kernel readiness timed out")), 5000); })]);
+  } finally { clearTimeout(timer); }
+}
 async function settle(s: ModelProxyService) { const deadline = Date.now() + 5000; await turn(); while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); } return s.snapshot(); }
 async function settleImporter(s: ModelProxyService) { const deadline = Date.now() + 5000; await turn(); while (s.snapshot().importer?.busy) { assert.ok(Date.now() < deadline); await turn(); } return s.snapshot().importer!; }
 const importerCommand = (s: ModelProxyService, action: string) => s.command({ requestId: randomUUID(), op: `modelProxy.importer${action}`, params: { revision: s.snapshot().revision, confirm: true } });
@@ -29,7 +36,7 @@ function fixture() {
   return { root, config, importer, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
 const uninstall = (s: ModelProxyService) => s.command({ requestId: randomUUID(), op: "modelProxy.uninstall", params: { kernel: "xray", revision: s.snapshot().revision, confirm: true } });
-test("proxy uninstall awaits owned process stop and preserves unrelated kernel, subscriptions and bindings", async t => {
+test("proxy uninstall awaits owned process stop and preserves unrelated kernel, subscriptions and bindings", { skip: process.platform === "win32" && "requires native POSIX process enumeration" }, async t => {
   const f = fixture(); let release!: () => void, stopping = false;
   t.mock.method(ProxyProcess.prototype, "start", async function(this: ProxyProcess) { this.endpoint.status = "running"; });
   t.mock.method(ProxyProcess.prototype, "stop", async function(this: ProxyProcess) { if (this.profile.kernel === "xray" && !stopping) { stopping = true; await new Promise<void>(done => { release = done; }); } this.endpoint.status = "stopped"; });
@@ -63,7 +70,7 @@ test("proxy uninstall rejects stale revision and unsafe parent without modifying
     assert.ok(fs.existsSync(join(outside, f.config.installations.xray!.directory, "sentinel")));
   } finally { await s.close(); f.cleanup(); }
 });
-test("proxy partial removal revokes installation and can be retried after restart", async t => {
+test("proxy partial removal revokes installation and can be retried after restart", { skip: process.platform === "win32" && "requires native POSIX process enumeration" }, async t => {
   const f = fixture(), rm = fs.rmSync; let s = new ModelProxyService(f.root, () => {});
   const mock = t.mock.method(fs, "rmSync", ((path, options) => {
     if (String(path) === join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory)) { assert.equal(readProxyConfig(f.root).installations.xray, undefined); throw Error("busy"); }
@@ -104,25 +111,26 @@ test("importer uninstall preserves running kernels and retries its own pending r
   } finally { mock.mock.restore(); syncBuiltinESMExports(); await s.close(); f.cleanup(); }
 });
 
-test("proxy refuses deletion after an unconfirmed historical kernel exit", async () => {
+test("proxy refuses deletion after an unconfirmed historical kernel exit", { skip: process.platform === "win32" && "requires a POSIX fixture executable and process enumeration" }, async () => {
   const f = fixture(), run = join(proxyDirectory(f.root), "runs", randomUUID());
   fs.mkdirSync(run, { recursive: true });
   // 直接托管以存活进程为事实依据：伪造一个仍存活的“内核”进程阻止删除。
   const versions = join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory);
   fs.mkdirSync(versions, { recursive: true });
   const kernelPath = join(versions, "xray");
-  fs.writeFileSync(kernelPath, "#!/bin/sh\nsleep 60\n"); fs.chmodSync(kernelPath, 0o755);
-  const { spawn } = await import("node:child_process");
-  const kernel = spawn(kernelPath, ["run", "-config", "/dev/null"], { stdio: "ignore" });
-  fs.writeFileSync(join(run, "kernel.json"), JSON.stringify({ pid: kernel.pid, kernel: "xray", executable: kernelPath, startedAt: new Date().toISOString() }));
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const s = new ModelProxyService(f.root, () => {});
+  fs.writeFileSync(kernelPath, `#!${process.execPath}\nprocess.stdout.write('ready\\n'); setInterval(() => {}, 1000);\n`); fs.chmodSync(kernelPath, 0o755);
+  const kernel = childProcess.spawn(kernelPath, ["run", "-config", "/dev/null"], { stdio: ["ignore", "pipe", "ignore"] });
+  const exited = once(kernel, "exit");
+  let s: ModelProxyService | undefined;
   try {
+    await kernelReady(kernel, exited);
+    s = new ModelProxyService(f.root, () => {});
+    fs.writeFileSync(join(run, "kernel.json"), JSON.stringify({ pid: kernel.pid, kernel: "xray", executable: kernelPath, startedAt: new Date().toISOString() }));
     await uninstall(s); assert.match((await settle(s)).job!.error!, /尚有代理进程未确认退出/);
     assert.deepEqual(readProxyConfig(f.root), f.config); assert.ok(fs.existsSync(f.importer));
-  } finally { kernel.kill("SIGKILL"); await s.close(); f.cleanup(); }
+  } finally { kernel.kill("SIGKILL"); await exited.catch(() => {}); await s?.close(); f.cleanup(); }
 });
-test("unrelated kernel junction does not block target uninstall", async () => {
+test("unrelated kernel junction does not block target uninstall", { skip: process.platform === "win32" && "requires native POSIX process enumeration" }, async () => {
   const f = fixture(), versions = join(proxyDirectory(f.root), "versions"), outside = join(f.root, "other-kernel");
   const mihomo = join(versions, f.config.installations.mihomo!.directory);
   fs.renameSync(mihomo, outside); fs.symlinkSync(outside, mihomo, process.platform === "win32" ? "junction" : "dir");
@@ -139,16 +147,37 @@ for (const [configured, argument] of [[true, 'run'], [false, 'run'], [true, '-co
   fs.writeFileSync(executable, `#!${process.execPath}\nprocess.stdout.write('ready\\n'); setInterval(() => {}, 1000);\n`); fs.chmodSync(executable, 0o755);
   if (!configured) { delete f.config.installations.xray; atomicProxyJson(proxyConfigPath(f.root), f.config); }
   const kernel = childProcess.spawn(executable, [argument], { stdio: ["ignore", "pipe", "ignore"] });
-  const exited = once(kernel, "exit"); await once(kernel.stdout!, "data");
-  const s = new ModelProxyService(f.root, () => {});
+  const exited = once(kernel, "exit");
+  let s: ModelProxyService | undefined;
   try {
+    await kernelReady(kernel, exited);
+    s = new ModelProxyService(f.root, () => {});
     const before = fs.readFileSync(proxyConfigPath(f.root), "utf8"), state = s.snapshot();
     assert.ok(state.cleanup!.xray!.paths.includes(old));
     await s.command({ op: "modelProxy.uninstall", requestId: randomUUID(), params: { kernel: "xray", revision: state.revision, confirm: true, cleanupRevision: state.cleanup!.xray!.revision } });
     assert.match((await settle(s)).job!.error!, /尚有代理进程未确认退出/);
     assert.equal(fs.readFileSync(proxyConfigPath(f.root), "utf8"), before);
     assert.ok(fs.existsSync(executable));
-  } finally { kernel.kill("SIGKILL"); await exited; await s.close(); f.cleanup(); }
+  } finally { kernel.kill("SIGKILL"); await exited.catch(() => {}); await s?.close(); f.cleanup(); }
+});
+for (const configured of [true, false]) test(`Windows kernel removal fails closed with ${configured ? "current" : "only historical"} installations`, { skip: process.platform !== "win32" }, async () => {
+  const f = fixture(), old = join(proxyDirectory(f.root), "versions", `xray-0.9.0-${randomUUID()}`);
+  fs.mkdirSync(old); fs.writeFileSync(join(old, "sentinel"), "historical kernel");
+  if (!configured) { delete f.config.installations.xray; atomicProxyJson(proxyConfigPath(f.root), f.config); }
+  const s = new ModelProxyService(f.root, () => {});
+  try {
+    const before = fs.readFileSync(proxyConfigPath(f.root)), state = s.snapshot();
+    const paths = state.cleanup!.xray!.paths;
+    assert.ok(paths.includes(old));
+    await s.command({ op: "modelProxy.uninstall", requestId: randomUUID(), params: {
+      kernel: "xray", revision: state.revision, confirm: true, cleanupRevision: state.cleanup!.xray!.revision,
+    } });
+    assert.match((await settle(s)).job!.error!, /当前平台无法核实全部代理内核进程/);
+    assert.deepEqual(fs.readFileSync(proxyConfigPath(f.root)), before);
+    assert.equal(readProxyConfig(f.root).removalPending, undefined);
+    for (const path of paths) assert.equal(fs.readFileSync(join(path, "sentinel"), "utf8"), path === old ? "historical kernel" : "xray");
+    assert.ok(fs.existsSync(f.importer));
+  } finally { await s.close(); f.cleanup(); }
 });
 test("proxy removal fails closed when process enumeration is unavailable", { skip: process.platform === "win32" }, async t => {
   const f = fixture(), s = new ModelProxyService(f.root, () => {}), execute = childProcess.execFileSync;

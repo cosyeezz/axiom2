@@ -99,7 +99,8 @@ export interface WorkerInput {
   rewrite?: boolean;
   images?: ImageAttachment[];
   requestId?: string;
-  task?: { id: string; inputIds: string[]; editable?: boolean; budget?: TaskBudget };
+  task?: { id: string; inputIds: string[]; editable?: boolean; budget?: TaskBudget;
+    bootstrapInputs?: { id: string; text: string; mode: "steer" | "followUp"; images?: ImageAttachment[]; skills?: SkillReference[] }[] };
   notification?: { id: string; content: string; items?: { id: string; content: string }[] };
 }
 let session: AgentSession | undefined,
@@ -1057,12 +1058,38 @@ async function run(input: WorkerInput) {
     if (!cancelled) {
       send({ type: "usage", usage: usage(), autoCheck: true });
       if (input.resume) {
-        if (input.task?.budget) {
-          announcedBudget = budgetKey(input.task.budget);
-          await session.sendCustomMessage({ customType: "axiom-budget", display: false,
-            content: taskBudgetIntro(input.task.budget), details: { runId: input.runId } }, { triggerTurn: false });
-        }
-        await resumeSession(session, input.task?.inputIds[0] ?? input.requestId);
+        await resumeSession(session, input.task?.inputIds[0] ?? input.requestId, async () => {
+          if (input.task?.budget) {
+            announcedBudget = budgetKey(input.task.budget);
+            await session!.sendCustomMessage({ customType: "axiom-budget", display: false,
+              content: taskBudgetIntro(input.task.budget), details: { runId: input.runId } }, { triggerTurn: false });
+          }
+          for (const item of input.task?.bootstrapInputs ?? []) {
+            const images = imagesInput(item.images), prepared = await prepareImages(images);
+            if (cancelled) throw new AppError("TASK_STOPPED", "子任务已停止，未恢复执行。");
+            requireImageModel(session!.model, images);
+            if (!retainedInput(session!, item.id)) {
+              const skill = prepareSkillInput(item.text, item.skills, session!);
+              const budget = input.task?.budget;
+              const prompt = budget ? `${taskBudgetUpdate(budget)}\n\n${skill.prompt}` : skill.prompt;
+              // Idle persistence, not an IPC steering queue: all recovered
+              // additions are durable and visible before the first request.
+              await session!.sendCustomMessage({ customType: "axiom-append", display: true,
+                content: prepared.length ? imageContent(prompt, prepared) : prompt,
+                details: { axiomInput: item.id, images: imageMetadata(images),
+                  ...(skill.metadata ? { skillInput: skill.metadata } : {}),
+                  ...(budget ? { axiomBudget: { runId: input.runId, revision: budget.revision ?? 0 }, taskInputText: skill.prompt } : {}) },
+              }, { triggerTurn: false });
+            }
+            send({ type: "input-accepted", id: item.id });
+            delivered();
+          }
+          if (cancelled) throw new AppError("TASK_STOPPED", "子任务已停止，未恢复执行。");
+          // Image preparation may yield across a budget phase transition. Keep
+          // the additions, but let the phase loop issue its summary instruction
+          // instead of spending that window on an obsolete work continuation.
+          if (taskPhase.revision !== handledTaskTransition) return false;
+        });
         send({ type: "context-rebuilt" });
       } else if (input.compressionPreparation) {
         // Reuse the public prompt lifecycle without adding a synthetic user turn.

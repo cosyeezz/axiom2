@@ -558,7 +558,7 @@ export class Resources {
     if (target?.item.kind === "skill" && !target.managed && (c.op === "resources.rename" || c.op === "resources.remove" && p.force === true)) {
       const selected = target;
       const owner = [...this.targets.values()].find(other => other.managed?.kind === "skill" && other.skillPaths?.some(path => selected.skillPaths?.some(guide => canonical(guide) === canonical(path))));
-      if (owner) target = { ...target, managed: owner.managed, skillPaths: owner.skillPaths };
+      if (owner) target = { ...target, path: owner.path, managed: owner.managed, skillPaths: owner.skillPaths };
     }
     const context = this.prepare(p, target, scope, c.op), job = context.job;
     if (this.conflicting(context.keys)) throw new AppError("RESOURCE_BUSY", "此资源或共享安装目录正在维护，请等待对应任务完成；其他资源可以继续操作。");

@@ -391,6 +391,18 @@ export class TaskScheduler {
     const firstImage = batch.findIndex((input) => this.records.images(input.id).length > 0);
     const inputs = firstImage < 0 ? batch : batch.slice(0, firstImage + 1);
     const images = firstImage < 0 ? [] : this.records.images(inputs.at(-1)!.id);
+    // Recovered, provably undispatched additions must enter the first resumed
+    // request. Waiting for the worker's running IPC races a fast model response.
+    // Do not batch controls, rewrites or inputs already handed to any run.
+    const bootstrapInputs: typeof queued = [];
+    if (resuming && recovery?.kind === "resume") {
+      const saved = new Set((JSON.parse(recovery.payload) as { id: string }[]).map(input => input.id));
+      for (const input of queued.slice(1)) {
+        if (!saved.has(input.id) || input.runId !== null || !["steer", "followUp"].includes(input.mode)) break;
+        bootstrapInputs.push(input);
+      }
+    }
+    const handedInputs = [...inputs, ...bootstrapInputs];
     if (!inputs.length) {
       this.store.db
         .prepare(
@@ -415,6 +427,10 @@ export class TaskScheduler {
             id: row.id,
             inputIds: inputs.map((i) => i.id),
             editable: inputs.every((i) => this.records.drafts.has(i.id)),
+            ...(bootstrapInputs.length ? { bootstrapInputs: bootstrapInputs.map(input => ({
+              id: input.id, text: input.body, mode: input.mode === "followUp" ? "followUp" as const : "steer" as const,
+              images: this.records.images(input.id), skills: this.records.skills(input.id),
+            })) } : {}),
             budget: budgetContext,
           },
           beforeStart: () => {
@@ -422,8 +438,8 @@ export class TaskScheduler {
             if (
               this.closing || this.recalling.has(row.id) ||
               this.records.rows("WHERE id=?", row.id)[0]?.status !== "queued" ||
-              !inputs.every((input) =>
-                this.records.inputs(row, "queued").some((queued) => queued.id === input.id),
+              !handedInputs.every((input) =>
+                this.records.inputs(row, "queued").some((queued) => queued.id === input.id && queued.runId === input.runId),
               )
             )
               throw new AppError("TASK_STOPPED", "子任务已停止，未启动");
@@ -444,7 +460,7 @@ export class TaskScheduler {
             if (recovery) this.store.db.prepare("UPDATE tasks SET workDeadlineAt=?,summaryDeadlineAt=? WHERE id=?")
               .run(row.workDeadlineAt ?? run.startedAt + this.records.budgets(row.budgets).workMs, row.summaryDeadlineAt ?? null, row.id);
             this.store.db.prepare("DELETE FROM task_stops WHERE taskId=?").run(row.id);
-            for (const input of inputs) {
+            for (const input of handedInputs) {
               this.records.receipt(input.id, "queued", null, run.id);
               this.handed.add(input.id);
               this.store.db

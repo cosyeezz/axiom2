@@ -20,7 +20,7 @@ export function omitResumeControls(session: AgentSession) {
 }
 
 /** Resume through the public Session lifecycle, including native retry/settling. */
-export async function resumeSession(session: AgentSession, requestId?: string) {
+export async function resumeSession(session: AgentSession, requestId?: string, beforeResume?: () => Promise<void | false>) {
   if (!session.isIdle) throw new AppError("AGENT_BUSY", "会话仍在执行，暂时无法重试。");
   omitResumeControls(session);
   const entries = session.sessionManager.buildSessionProjection().entries;
@@ -53,6 +53,9 @@ export async function resumeSession(session: AgentSession, requestId?: string) {
   const context = session.messages.filter((message) => message.role !== "system");
   if (!context.length || context.at(-1)?.role === "assistant")
     throw new AppError("NO_CONTINUATION", "没有可续接的未完成请求，请输入新的要求。");
+  // Bootstrap only after repairing the interrupted history: an append before
+  // that repair would hide an aborted assistant or an unpaired tool call tail.
+  if (await beforeResume?.() === false) return;
   try {
     await session.sendCustomMessage({
       customType: resumeControlType, content: [], display: false,

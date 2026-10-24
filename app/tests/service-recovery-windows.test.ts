@@ -31,9 +31,16 @@ test("running child resumes before its undispatched additions, including a crash
     store.db.prepare("UPDATE tasks SET status='running',runId=? WHERE id=?").run(runId, id);
     store.db.prepare("UPDATE task_inputs SET state='inflight',runId=? WHERE taskId=?").run(runId, id);
     const append = f.records.queue(id, "accepted but never handed to worker", "steer");
+    const followUp = f.records.queue(id, "second undispatched addition", "followUp");
+    const uncertain = f.records.queue(id, "must never replay an uncertain handoff", "steer");
+    f.records.receipt(uncertain, "queued", null, runId); // Match the scheduler's durable handoff receipt.
+    store.db.prepare("UPDATE task_inputs SET state='inflight',runId=? WHERE id=?").run(runId, uncertain);
+    const images = [{ data: "fixture", mimeType: "image/png" }], skills = [{ name: "fixture", path: join(f.root, "SKILL.md") }];
+    store.db.prepare("INSERT INTO task_input_images VALUES(?,?)").run(append, JSON.stringify(images));
+    store.db.prepare("INSERT INTO task_input_skills VALUES(?,?)").run(followUp, JSON.stringify(skills));
     store.close(); store = new Store(f.root);
     assert.equal(store.recoveries.get(row.sessionId)?.kind, "resume");
-    assert.deepEqual(JSON.parse(store.recoveries.get(row.sessionId)!.payload).map((i: any) => i.id), [append]);
+    assert.deepEqual(JSON.parse(store.recoveries.get(row.sessionId)!.payload).map((i: any) => i.id), [append, followUp]);
     const recover = () => {
       const records = new TaskRecords(store);
       const agents = { store, publish: () => {}, assertContinuation: () => {} } as unknown as Agents;
@@ -43,13 +50,45 @@ test("running child resumes before its undispatched additions, including a crash
       return records;
     };
     let records = recover();
-    assert.deepEqual(records.inputs(records.rows("WHERE id=?", id)[0], "queued").map(i => i.mode), ["resume", "steer"]);
+    assert.deepEqual(records.inputs(records.rows("WHERE id=?", id)[0], "queued").map(i => i.mode), ["resume", "steer", "followUp"]);
     scheduler!.closing = true; await new Promise(resolve => setImmediate(resolve));
     store.close(); store = new Store(f.root); // Control item already had a durable receipt.
     records = recover();
     scheduler!.recover(records.rows("WHERE id=?", id)[0], store.recoveries.get(row.sessionId)!);
-    assert.deepEqual(records.inputs(records.rows("WHERE id=?", id)[0], "queued").map(i => i.mode), ["resume", "steer"]);
-    assert.equal(records.inputs(records.rows("WHERE id=?", id)[0], "queued")[1].id, append);
+    const queued = records.inputs(records.rows("WHERE id=?", id)[0], "queued");
+    assert.deepEqual(queued.map(i => i.mode), ["resume", "steer", "followUp"]);
+    assert.equal(queued[1].id, append);
+    let task: any;
+    const newRun = randomUUID();
+    (scheduler!.agents as any).command = async (_command: unknown, internal: any) => {
+      task = internal.task;
+      internal.beforeStart();
+      store.db.exec("BEGIN IMMEDIATE");
+      try {
+        const startedAt = Date.now();
+        store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'starting',?,?)").run(newRun, row.sessionId, JSON.stringify(selection), startedAt);
+        internal.onCommit({ id: newRun, startedAt });
+        store.db.exec("COMMIT");
+      } catch (error) { store.db.exec("ROLLBACK"); throw error; }
+    };
+    await (scheduler as any).start(records.rows("WHERE id=?", id)[0]);
+    assert.deepEqual(task.inputIds, [queued[0].id], "resume control is distinct from model additions");
+    assert.deepEqual(task.bootstrapInputs, [
+      { id: append, text: "accepted but never handed to worker", mode: "steer", images, skills: [] },
+      { id: followUp, text: "second undispatched addition", mode: "followUp", images: [], skills },
+    ]);
+    assert.equal(task.bootstrapInputs.some((input: any) => input.id === uncertain), false);
+    assert.deepEqual(records.inputs(records.rows("WHERE id=?", id)[0], "queued"), []);
+    for (const input of [queued[0].id, append, followUp]) {
+      assert.deepEqual({ ...store.db.prepare("SELECT state,runId FROM task_inputs WHERE id=?").get(input) }, { state: "starting", runId: newRun });
+      assert.equal(store.db.prepare("SELECT runId FROM task_input_receipts WHERE inputId=?").get(input)?.runId, newRun);
+    }
+    scheduler!.closing = true; await new Promise(resolve => setImmediate(resolve));
+    store.close(); store = new Store(f.root); // A crash after start handoff cannot replay unknown additions.
+    assert.equal(store.recoveries.get(row.sessionId)?.kind, "resume");
+    assert.deepEqual(JSON.parse(store.recoveries.get(row.sessionId)!.payload), []);
+    new TaskRecords(store);
+    for (const input of [append, followUp, uncertain]) assert.equal(store.db.prepare("SELECT state FROM task_input_receipts WHERE inputId=?").get(input)?.state, "unknown");
   } finally {
     if (scheduler) { scheduler.closing = true; await new Promise(resolve => setImmediate(resolve)); }
     store.close(); rmSync(f.root, { recursive: true, force: true });

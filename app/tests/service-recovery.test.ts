@@ -190,15 +190,25 @@ test("ten interrupted sessions auto-resume with bounded concurrency; user stop a
     await until(() => app!.tasks.child({ workspaceId: first.workspaceId, sessionId: first.sessionId })?.status === "running" && pending.size === 2, "parent and child did not start");
     const childRun = app.agents.info({ workspaceId: first.workspaceId, sessionId: first.sessionId }).run!.id;
     const deadline = records.rows("WHERE id=?", first.id)[0].workDeadlineAt;
-    records.queue(first.id, "fixture undispatched requirement survives restart", "steer");
+    const additions = [
+      records.queue(first.id, "fixture undispatched requirement survives restart", "steer"),
+      records.queue(first.id, "fixture second undispatched requirement survives restart", "followUp"),
+    ];
     await app.close(); app = undefined;
-    hold = false;
+    const restartRequest = requests.length;
+    hold = false; // Immediate completion must not race away the recovered additions.
     app = await startServer({ root, port: 0 });
     await until(() => children.every(id => app!.store.db.prepare("SELECT status FROM tasks WHERE id=?").get(id)?.status === "completed") && app!.agents.info(parent.scope).run?.status === "completed", "child queue and parent did not recover automatically", 90000);
     assert.equal(app.agents.info({ workspaceId: first.workspaceId, sessionId: first.sessionId }).run?.resumedFromRunId, childRun);
     assert.equal(app.store.db.prepare("SELECT workDeadlineAt FROM tasks WHERE id=?").get(first.id)!.workDeadlineAt, deadline, "recovery does not extend the original child budget");
     assert.equal(app.agents.info(parent.scope).run?.resumedFromRunId, parent.runId);
-    assert.ok(requests.some(request => JSON.stringify(request.messages).includes("fixture undispatched requirement survives restart")));
+    const recovered = requests.slice(restartRequest).filter(request => JSON.stringify(request.messages).includes("fixture running child"));
+    assert.equal(recovered.length, 1, "recovery must include all saved additions in its first request, not send a later turn");
+    const text = JSON.stringify(recovered[0].messages);
+    const requirements = ["fixture undispatched requirement survives restart", "fixture second undispatched requirement survives restart"];
+    assert.ok(text.indexOf(requirements[0]) >= 0 && text.indexOf(requirements[1]) > text.indexOf(requirements[0]), "saved additions must remain FIFO");
+    for (const requirement of requirements) assert.equal(text.split(requirement).length - 1, 1);
+    for (const id of additions) assert.equal(app.store.db.prepare("SELECT state FROM task_input_receipts WHERE inputId=?").get(id)?.state, "delivered");
     assert.equal(app.store.recoveries.pending().length, 0);
   } finally {
     await app?.close(); fixture.closeAllConnections(); await new Promise<void>(resolve => fixture.close(() => resolve()));

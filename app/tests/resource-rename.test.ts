@@ -113,7 +113,15 @@ for (const operation of ["rename", "remove"] as const) test(`shared managed skil
   const installation = json(join(f.root, "resources/installed.json")).items[0].directory;
   const settings = join(referencing, ".pi/settings.json"); file(settings, JSON.stringify({ skills: [dirname(guide)] }));
   const ref = (await f.resources.refresh()).items.find(item => item.name === "shared" && item.scopeId === "referencing")!;
+  const physicalFiles = (f.resources as any).physicalFiles.bind(f.resources);
+  let locked: string[] | undefined;
+  t.mock.method(f.resources as any, "physicalFiles", (target: any) => {
+    const paths = physicalFiles(target);
+    if (target?.item.id === ref.id) locked = paths;
+    return paths;
+  });
   state = await f.act(`resources.${operation}`, { id: ref.id, name: "renamed", force: true, confirm: true }); assert.equal(state.job?.error, undefined);
+  assert.deepEqual(locked, [installation], "a reference must use the owner root lock, never an SQLite lock inside the installation being removed");
   const records = json(join(f.root, "resources/installed.json")).items;
   assert.equal(state.items.some(item => item.name === "shared"), false);
   if (operation === "rename") {
