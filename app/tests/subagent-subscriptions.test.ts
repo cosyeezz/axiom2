@@ -16,7 +16,11 @@ const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
 test("six real background children preserve lazy histories, summaries, reconnect snapshots and deletion cleanup", { timeout: 120000 }, async t => {
   const root = mkdtempSync(join(tmpdir(), "axiom-live-subscriptions-")), project = join(root, "project"), pi = join(root, "pi");
-  mkdirSync(project); mkdirSync(pi); writeFileSync(join(project, "sentinel.txt"), "unchanged");
+  mkdirSync(project); mkdirSync(pi);
+  // SDK settings reads create this parent. Initialize it before concurrent workers
+  // so a missing-to-directory transition cannot invalidate another worker's scan.
+  mkdirSync(join(project, ".pi"));
+  writeFileSync(join(project, "sentinel.txt"), "unchanged");
   const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = pi;
   const responses: ServerResponse[] = [], sockets: WebSocket[] = [];
   const chunk = (response: ServerResponse, delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
