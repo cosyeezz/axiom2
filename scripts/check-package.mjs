@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, relative, dirname } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
+import { reportPackageFailure } from "./package-failure-evidence.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -157,6 +158,7 @@ try {
     const updater = createUpdater({ root: join(temporary, "data"), env: { ...serviceEnv, npm_config_install_strategy: strategy }, fetcher: releaseFetcher });
     await updater.check();
     const updated = await updater.runJob("service", pkg.version);
+    if (updated.job.phase !== "complete") await reportPackageFailure({ root: join(temporary, "data"), job: updated.job, strategy });
     assert.equal(updated.job.phase, "complete", updated.job.message);
     assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
     const afterUpdate = control("status");
@@ -197,6 +199,7 @@ try {
     packageRoot: installed, cli, node: process.execPath, previousVersion: pkg.version, version: "999.0.0", wasRunning: true }));
   const recoveryUpdater = createUpdater({ root: recoveryRoot, env: serviceEnv, fetcher: releaseFetcher });
   const recovered = await recoveryUpdater.runJob("recover");
+  if (recovered.job.phase !== "complete") await reportPackageFailure({ root: recoveryRoot, job: recovered.job, strategy: "recover" });
   assert.equal(recovered.job.phase, "complete", recovered.job.message);
   assert.equal(recovered.recovery, false);
   assert.equal(control("status").version, pkg.version);

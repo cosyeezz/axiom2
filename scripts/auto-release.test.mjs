@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { diagnosticSignals, packageFailureEvidence, reportPackageFailure } from './package-failure-evidence.mjs';
 import { gzipSync } from 'node:zlib';
 import { assertNativeArchive } from './release-native.mjs';
 import { assertReleaseIdentity, assertNativeReceipts, nativeReleaseNames, assertPackageReceipt, assertReleaseAssets, assertVersions, compareVersions, existingReleaseStatus, nextVersion, syncVersions, verifyPublicRelease, verifyTag, verifyWithRetry, versionFiles } from './auto-release.mjs';
@@ -39,6 +41,169 @@ test('Windows Node 22 package validation has bounded time for installation and c
   assert.ok(block, 'Missing package job');
   assert.match(block, /timeout-minutes: \$\{\{ matrix\.os == 'windows-latest' && matrix\.node == '22\.19\.0' && 45 \|\| 30 \}\}/);
   assert.match(block, /- run: npm ci\n      - run: npm run check:package/);
+});
+
+function evidenceFixture(t) {
+  const root = mkdtempSync(join(tmpdir(), 'axiom-package-evidence-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const id = '11111111-1111-4111-8111-111111111111';
+  const commandId = '22222222-2222-4222-8222-222222222222';
+  const serviceId = '33333333-3333-4333-8333-333333333333';
+  const task = { id, attemptId: 'attempt-fixture', status: 'unknown', phase: 'installing', error: { code: 'stop-unconfirmed', message: 'Ownership retained' }, capabilities: { cancel: false, extend: false } };
+  const job = { phase: 'interrupted', running: false, task };
+  const taskPath = `tasks/${id}`;
+  const put = (path, value) => {
+    const target = join(root, 'updates', path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value));
+    return target;
+  };
+  const manifest = { taskId: id, attemptId: task.attemptId, gateId: 'DO_NOT_PRINT_OWNER', token: 'DO_NOT_PRINT_MANIFEST_TOKEN', parentWitness: { ready: true }, serviceResolved: false, commands: [{ id: commandId, state: 'registered' }], services: [{ id: serviceId, state: 'armed', requestStopped: false }] };
+  put(`${taskPath}/task.json`, task);
+  put(`${taskPath}/supervision.json`, manifest);
+  put('process-owner.json', { id: 'DO_NOT_PRINT_OWNER' });
+  put(`${taskPath}/parent-request.json`, { nonce: 'parent-nonce', parentPid: 42 });
+  put(`${taskPath}/parent-ready.json`, { nonce: 'parent-nonce', parentPid: 42 });
+  put(`${taskPath}/command-${commandId}/request.json`, { nonce: 'command-nonce', env: { API_KEY: 'DO_NOT_PRINT_ENV' }, args: ['DO_NOT_PRINT_ARGS'] });
+  return { root, job, task, taskPath, commandId, serviceId, manifest, put };
+}
+
+test('package failure evidence separates stored state and receipt proofs without copying secrets or output', async (t) => {
+  const f = evidenceFixture(t);
+  const db = new DatabaseSync(join(f.root, 'updates/jobs.sqlite'));
+  try {
+    db.exec('CREATE TABLE job (id INTEGER PRIMARY KEY, body TEXT, token TEXT)');
+    db.prepare('INSERT INTO job VALUES (1, ?, ?)').run(JSON.stringify({ phase: 'installing', running: false, task: { ...f.task, status: 'failed' }, auth: 'DO_NOT_PRINT_AUTH' }), 'DO_NOT_PRINT_DB_TOKEN');
+  } finally { db.close(); }
+  f.put(`${f.taskPath}/parent-exited.json`, { nonce: 'parent-nonce', parentPid: 42, exited: true });
+  f.put(`${f.taskPath}/command-${f.commandId}/ready.json`, { nonce: 'command-nonce', pid: 123 });
+  f.put(`${f.taskPath}/command-${f.commandId}/cleaned.json`, { nonce: 'command-nonce', reason: 'exited', code: 1, writerStopped: true, parentExited: false });
+  f.put(`${f.taskPath}/command-${f.commandId}/result.json`, { nonce: 'command-nonce', ok: false, output: 'DO_NOT_PRINT_OUTPUT', error: { code: 'operation', message: 'https://host.invalid/private Bearer PRIVATE_BEARER token=PRIVATE_TOKEN' } });
+  const evidence = await packageFailureEvidence({ root: f.root, job: f.job, strategy: 'hoisted' });
+  assert.equal(evidence.projected.phase, 'interrupted');
+  assert.equal(evidence.stored.job.phase, 'installing');
+  assert.equal(evidence.stored.job.task.status, 'failed');
+  assert.equal(evidence.task.identityMatches, true);
+  assert.equal(evidence.supervision.identityMatches, true);
+  assert.equal(evidence.owner.state, 'ok');
+  assert.equal(evidence.owner.gateMatches, true);
+  assert.equal(evidence.parent.ready.nonceMatches, true);
+  assert.equal(evidence.parent.ready.pidMatches, true);
+  assert.equal(evidence.parent.exited.exited, true);
+  assert.equal(evidence.parent.exited.pidMatches, true);
+  assert.equal(evidence.commands[0].state, 'registered');
+  assert.equal(evidence.commands[0].cleaned.writerStopped, true);
+  assert.equal(evidence.commands[0].cleaned.code, 1);
+  assert.equal(evidence.commands[0].result.ok, false);
+  assert.equal(evidence.services[0].requestStopped, false);
+  assert.doesNotMatch(JSON.stringify(evidence), /DO_NOT_PRINT|PRIVATE_|parent-nonce|command-nonce/);
+});
+
+test('package diagnostics distinguish parent readiness, command cleanup, service stop and final gate failures', async (t) => {
+  const f = evidenceFixture(t);
+  f.manifest.parentWitness.ready = false;
+  f.manifest.commands = [];
+  f.manifest.services = [];
+  f.put(`${f.taskPath}/supervision.json`, f.manifest);
+  f.put(`${f.taskPath}/parent-ready.json`, { nonce: 'wrong', parentPid: 99 });
+  let evidence = await packageFailureEvidence({ root: f.root, job: f.job, strategy: 'nested' });
+  assert.equal(evidence.supervision.parentReady, false);
+  assert.equal(evidence.parent.ready.nonceMatches, false);
+  assert.equal(evidence.parent.ready.pidMatches, false);
+  assert.deepEqual(evidence.commands, []);
+  f.manifest.parentWitness.ready = true;
+  f.manifest.commands = [{ id: f.commandId, state: 'registered' }];
+  f.manifest.services = [{ id: f.serviceId, state: 'armed', requestStopped: false }];
+  f.put(`${f.taskPath}/supervision.json`, f.manifest);
+  evidence = await packageFailureEvidence({ root: f.root, job: f.job, strategy: 'nested' });
+  assert.equal(evidence.commands[0].cleaned.state, 'absent');
+  assert.equal(evidence.services[0].requestStopped, false);
+  f.manifest.commands[0].state = 'cleaned';
+  f.manifest.services[0] = { id: f.serviceId, state: 'closed', requestStopped: true };
+  f.manifest.serviceResolved = true;
+  f.put(`${f.taskPath}/supervision.json`, f.manifest);
+  evidence = await packageFailureEvidence({ root: f.root, job: f.job, strategy: 'recover' });
+  assert.equal(evidence.commands[0].state, 'cleaned');
+  assert.equal(evidence.services[0].requestStopped, true);
+  assert.equal(evidence.supervision.serviceResolved, true);
+  assert.equal(evidence.owner.state, 'ok', 'retained gate is still reported after otherwise resolved work');
+});
+
+test('diagnostic signals never return free text, command arguments or arbitrary credentials', () => {
+  const raw = '\x1b[31mParserError\x1b[0m OpenProcess access denied timeout https://host.invalid/private Bearer PRIVATE_BEARER API_KEY=PRIVATE_ASSIGNMENT {"password":"PRIVATE_PASSWORD","authorization":"PRIVATE_AUTH"} ghp_PRIVATE_GITHUB sk-PRIVATE_PROVIDER eyJprivate.payload.signature --password hunter2 --token abcDEF123 Authorization: Basic PRIVATE_BASIC\x00';
+  assert.deepEqual(diagnosticSignals(raw), ['timeout', 'accessDenied', 'powershellParser', 'processHandle']);
+  assert.deepEqual(diagnosticSignals('DO_NOT_PRINT'.repeat(10000)), []);
+  assert.equal(diagnosticSignals(null), undefined);
+});
+
+test('package diagnostics handle absent, corrupt, oversized and linked evidence without following it', async (t) => {
+  const f = evidenceFixture(t);
+  f.put(`${f.taskPath}/task.json`, 'invalid JSON');
+  f.put(`${f.taskPath}/command-${f.commandId}/ready.json`, Buffer.alloc(524289, 120));
+  const outside = join(f.root, 'outside.json');
+  writeFileSync(outside, '{"nonce":"DO_NOT_PRINT_LINK"}');
+  linkSync(outside, join(f.root, 'updates', f.taskPath, `command-${f.commandId}`, 'result.json'));
+  const evidence = await packageFailureEvidence({ root: f.root, job: f.job, strategy: 'hoisted' });
+  assert.equal(evidence.task.state, 'invalid');
+  assert.equal(evidence.stored.state, 'unavailable');
+  assert.equal(evidence.commands[0].ready.state, 'oversized');
+  assert.equal(evidence.commands[0].cleaned.state, 'absent');
+  assert.equal(evidence.commands[0].result.state, 'unsafe');
+  const invalid = await packageFailureEvidence({ root: f.root, job: { task: { id: '../../outside' } }, strategy: 'DO_NOT_PRINT_STRATEGY' });
+  assert.equal(invalid.task.state, 'invalid-id');
+  assert.equal(invalid.strategy, undefined);
+  assert.doesNotMatch(JSON.stringify(invalid), /DO_NOT_PRINT/);
+});
+
+test('package diagnostics reject evidence reached through an external directory link', async (t) => {
+  const f = evidenceFixture(t);
+  const directory = join(f.root, 'outside');
+  mkdirSync(directory);
+  writeFileSync(join(directory, 'result.json'), '{"nonce":"DO_NOT_PRINT_EXTERNAL"}');
+  const command = join(f.root, 'updates', f.taskPath, `command-${f.commandId}`);
+  rmSync(command, { recursive: true });
+  // Directory junctions do not need Windows Developer Mode or symlink rights.
+  symlinkSync(directory, command, process.platform === 'win32' ? 'junction' : 'dir');
+  const evidence = await packageFailureEvidence({ root: f.root, job: f.job });
+  assert.equal(evidence.commands[0].result.state, 'unsafe');
+  assert.doesNotMatch(JSON.stringify(evidence), /DO_NOT_PRINT/);
+});
+
+test('package diagnostics reject an updates directory replaced by a link', async (t) => {
+  const f = evidenceFixture(t);
+  const external = join(f.root, 'external');
+  mkdirSync(external);
+  rmSync(join(f.root, 'updates'), { recursive: true });
+  symlinkSync(external, join(f.root, 'updates'), process.platform === 'win32' ? 'junction' : 'dir');
+  const evidence = await packageFailureEvidence({ root: f.root, job: f.job });
+  assert.equal(evidence.state, 'unsafe-root');
+});
+
+test('package failure reporting keeps valid bounded JSON and cannot mask the original assertion', async (t) => {
+  const f = evidenceFixture(t);
+  f.manifest.commands = Array.from({ length: 20 }, (_, index) => ({ id: f.commandId, state: index === 19 ? 'cleaned' : 'registered' }));
+  f.put(`${f.taskPath}/supervision.json`, f.manifest);
+  f.put(`${f.taskPath}/command-${f.commandId}/request.json.stderr`, '界'.repeat(10000));
+  const lines = [];
+  await reportPackageFailure({ root: f.root, job: f.job }, line => lines.push(line));
+  assert.equal(lines.length, 1);
+  const serialized = lines[0].slice('PACKAGE_FAILURE_EVIDENCE '.length);
+  assert.ok(Buffer.byteLength(serialized) <= 32768);
+  const evidence = JSON.parse(serialized);
+  assert.equal(evidence.truncated, true);
+  assert.equal(evidence.commandCount, 20);
+  assert.equal(evidence.commands.length, 12);
+  assert.equal(evidence.commands.at(-1).state, 'cleaned');
+  assert.doesNotMatch(serialized, /界/);
+  await reportPackageFailure({ root: f.root, job: f.job }, () => { throw Error('DO_NOT_PRINT_EMITTER'); });
+  const original = Error('original assertion');
+  await assert.rejects(async () => {
+    await reportPackageFailure({ root: join(f.root, 'missing'), job: f.job }, () => { throw Error('diagnostic failed'); });
+    throw original;
+  }, error => error === original);
+  const fallback = [];
+  await reportPackageFailure({ root: join(f.root, 'missing') }, line => fallback.push(line));
+  assert.deepEqual(fallback, ['PACKAGE_FAILURE_EVIDENCE {"state":"unavailable"}']);
 });
 
 test('release versions advance numerically beyond source, public releases and reserved draft tags', () => {
