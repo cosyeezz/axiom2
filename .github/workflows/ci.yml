@@ -93,7 +93,9 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
         node: ['22.19.0', '24']
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Windows Node 22 completed all package assertions at minute 27, then hit
+    # the 30-minute job limit while cleaning up its isolated installations.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && matrix.node == '22.19.0' && 45 || 30 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

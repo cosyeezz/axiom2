@@ -33,6 +33,14 @@ test('CI explicitly permits fetching native archive fixture dependencies before 
   assert.match(workflow, /- run: npm test\n        env:\n          AXIOM_TEST_CARGO_FETCH: '1'/);
 });
 
+test('Windows Node 22 package validation has bounded time for installation and cleanup', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const block = workflow.split(/(?=^  [a-z]+:\s*$)/m).find((entry) => entry.startsWith('  package:\n'));
+  assert.ok(block, 'Missing package job');
+  assert.match(block, /timeout-minutes: \$\{\{ matrix\.os == 'windows-latest' && matrix\.node == '22\.19\.0' && 45 \|\| 30 \}\}/);
+  assert.match(block, /- run: npm ci\n      - run: npm run check:package/);
+});
+
 test('release versions advance numerically beyond source, public releases and reserved draft tags', () => {
   assert.equal(nextVersion('0.4.1', []), '0.4.2');
   assert.equal(nextVersion('0.4.1', ['v0.4.9', 'v0.4.10', 'v0.4.11']), '0.4.12');
