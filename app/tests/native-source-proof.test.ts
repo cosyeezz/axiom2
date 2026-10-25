@@ -47,7 +47,9 @@ test('native source proof binds distinct product/workflow SHAs, all tracked inpu
     const proof = await sourceProofAction('verify', context.root, context.expected.probeSha);
     assert.notEqual(proof.productSha, proof.probeSha);
     assert.equal(verifySourceProof(proof, context.expected), proof);
-    assert.equal(proof.productFiles.find((file: any) => file.path === 'empty.txt').size, 0);
+    const emptyInput = proof.productFiles.find(file => file.path === 'empty.txt');
+    assert.ok(emptyInput, 'the tracked empty input is retained in the proof');
+    assert.equal(emptyInput.size, 0);
     assert.equal(proof.webFiles.length, 3);
     assert.deepEqual(JSON.parse(await readFile(join(context.root, 'app/test-results/native-source-proof.json'), 'utf8')), proof);
     for (const mutate of [
