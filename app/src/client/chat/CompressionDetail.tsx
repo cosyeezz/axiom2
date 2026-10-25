@@ -14,6 +14,7 @@ import { AutoCompressionSettings } from "./AutoCompressionSettings.js";
 import { ProcessingPage } from "../pages/ProcessingPage.js";
 import type { Scope } from "../../shared/protocol.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
+import { useModelDisplay } from "../useModelDisplay.js";
 
 export function compressionStatusLabel(job: Compression) {
   if (job.state === "completed") return job.phase === "done" ? "已应用" : "应用状态待核实";
@@ -81,6 +82,7 @@ export function CompressionDetail({
   onCancel: () => void;
 }) {
   const { panel, close, host } = useSettingsPopover(trigger, onClose);
+  const display = useModelDisplay();
   const [records, setRecords] = useState(false);
   const [now, setNow] = useState(Date.now());
   const active = job?.state === "running",
@@ -143,7 +145,7 @@ export function CompressionDetail({
           <h3>压缩模型</h3>
           <ModelPicker nested value={selection} disabled={busy || pending} onSelect={onSelect} />
           <p>{inherited ? "尚未设置全局压缩模型，默认使用当前会话模型。" : "已全局记忆，主／子会话共用，刷新和重启后保留。"}选择仅用于压缩，不改变聊天模型。</p>
-          {active && <p>本次任务：{job!.selection.provider} / {job!.selection.id}；修改模型仅影响下一次压缩。</p>}
+          {active && <p>本次任务：{display(job!.selection).label}；修改模型仅影响下一次压缩。</p>}
         </section>
         <AutoCompressionSettings contextWindow={contextWindow} />
         <section>
@@ -260,7 +262,7 @@ export function CompressionDetail({
           <div className="card compression-preview">
             {job?.summary ? (
               <article>
-                <h4 className="compression-preview-label">模型摘要 · {job.selection.id}</h4>
+                <h4 className="compression-preview-label">模型摘要 · {display(job.selection).model}</h4>
                 <CompressionSummary text={job.summary} />
               </article>
             ) : (

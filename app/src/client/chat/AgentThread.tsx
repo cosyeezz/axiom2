@@ -8,9 +8,10 @@ import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
+import { TitleResultCard, useTitleResult } from "../workspaces/TitleFeedback.js";
 import { Message } from "./Message.js";
 import { ProcessFlow } from "./ProcessFlow.js";
-import { ModelRequestStatus } from "./ProcessStatus.js";
+import { ModelRequestStatus, pendingModelActivity } from "./ProcessStatus.js";
 import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
 import { RestoreSubmission } from "./RestoreSubmission.js";
@@ -25,31 +26,24 @@ import { useDisclosureReveal } from "./useDisclosureReveal.js";
 import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useHistoryConversation, useThreadMessage } from "./OriginalConversation.js";
 import { useHistoryRows } from "./HistoryTimeline.js";
-import { VirtualTimeline, type TimelineNavigation } from "./VirtualTimeline.js";
+import { VirtualTimeline, type TimelineNavigation, type TimelineRow } from "./VirtualTimeline.js";
 import type { ScrollDirection } from "./delivery-navigation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
-function requestingModel(index: ThreadIndex) {
-  return activeStatus(index.runStatus) && index.runStatus !== "stopping" && index.runPhase === "requesting";
-}
 function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
   scope: Scope; group: NonNullable<ThreadIndex["groups"]>[number]; tail: boolean; index: ThreadIndex; animateFold: boolean;
 }) {
   const last = useThreadMessage(scope, group.ids.at(-1)!);
   const activeRunId = tail && activeStatus(index.runStatus) ? index.runId : undefined;
   const awaitingMore = tail && activeStatus(index.runStatus) && (!last?.runId || last.runId === index.runId);
-  const requesting = tail && requestingModel(index);
-  // ProcessFlow decides from the rendered slices whether the live process title
-  // can carry the request or a temporary row is needed; message snapshots for
-  // the last id can lag one frame behind the group itself.
-  const requestInGroup = requesting;
-  return <><ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} requesting={requestInGroup} />
-    {requesting && !requestInGroup && <ModelRequestStatus />}</>;
+  const requesting = tail && pendingModelActivity(index);
+  return <ProcessFlow scope={scope} group={group} awaitingMore={awaitingMore} activeRunId={activeRunId} settled={!tail} animateFold={animateFold} requesting={requesting} />;
 }
 
 type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number };
 function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0 }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
+  const titleResult = useTitleResult(scope);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
   const threadReceived = useScopeOrder(scope?.sessionId ? threadScope(scope) : null);
@@ -187,12 +181,16 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
   useLayoutEffect(() => { previousGroups.current = liveGroups; }, [liveGroups]);
   const editReveal = editing && historyReceived && history.ready ? { messageId: editing.target.messageId, revision: editing.revision } : undefined;
-  const { rows, groups, segments } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal,
+  const { rows: historyRows, groups, segments } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal,
     renderLive: (group, groupIndex, currentGroups) => <Fragment>
       {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
       {group.activity ? <ThreadActivityGroup scope={scope!} group={group} tail={groupIndex === currentGroups.length - 1} index={index} animateFold={folding.has(group.id)} />
         : <Message scope={scope!} id={group.id} initialTaskInputId={task?.initialInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
     </Fragment> });
+  // A session-level result lives outside folded model/tool processes and remains
+  // available in reading mode. It never impersonates a delivery or native message.
+  const rows: TimelineRow[] = titleResult ? [...historyRows, { key: `title:${titleResult.id}`, estimate: 86,
+    revision: String(titleResult.endedAt), render: () => <TitleResultCard record={titleResult} /> }] : historyRows;
   const revealKey = editReveal && rows.find(row => row.messageIds?.includes(editReveal.messageId))?.key;
   const cancelNavigation = () => { timelineNavigation.current?.cancel(); setStepping(null); };
   const scroll = (target: "top" | "bottom" | ScrollDirection) => {
@@ -270,7 +268,8 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
           </small>
           {item.state === "failed" && <RestoreSubmission scope={scope} id={item.id} nested={nested} />}</div>
         </article>)}
-        {scope?.sessionId && requestingModel(index) && !groups.at(-1)?.activity && <ModelRequestStatus />}
+        {scope?.sessionId && (pendingModelActivity(index) && !groups.at(-1)?.activity && (!groups.at(-1)?.delivery || index.runPhase !== "generating") ||
+          !activeStatus(index.runStatus) && pending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus />}
         {historyReceived && !task && !groups.length && !segments.length && !pending.length && !index.error && !history.loading && !history.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>

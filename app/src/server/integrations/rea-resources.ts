@@ -1,8 +1,9 @@
 import { engineEnvironment, discoverEnginePaths } from "./rea-engines.js";
+import { inspectNodeRuntime } from "./managed-node.js";
 import { loadSkills, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { errorMessage } from "../error-message.js";
-import { inspectReaProgram, inspectReaSkill, reaConfigPath, reaPackageRoot, reaSkillName, readReaConfig } from "./rea-runtime.js";
+import { inspectReaProgram, inspectReaSkill, reaConfigPath, reaPackageRoot, reaSkillName, reaNode, reaProcessEnvironment, reaDirectory, readReaConfig } from "./rea-runtime.js";
 
 type McpConfig = ReturnType<NonNullable<McpExtensionOptions["loadConfig"]>>;
 type Server = McpConfig["servers"][number];
@@ -30,9 +31,10 @@ export function reaResources(root: string, cwd: string): Resources {
       try {
         const installation = inspectReaProgram(packageRoot, config.installation!.version);
         files.push(...installation.files);
+        if (config.installation?.runtime) files.push(...inspectNodeRuntime(join(reaDirectory(root), "versions", config.installation.directory), config.installation.runtime).files);
         result.server = { name: "rea", source: reaConfigPath(root), scope: "extension", config: {
-          command: process.execPath, args: [installation.entry, "mcp"], enabled: config.enabled,
-          env: engineEnvironment(discoverEnginePaths(config.engines)),
+          command: reaNode(root, config), args: [installation.entry, "mcp"], cwd: root, enabled: config.enabled,
+          env: Object.fromEntries(Object.entries({ ...reaProcessEnvironment(root, config), ...engineEnvironment(discoverEnginePaths(config.engines)) }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
           description: "REA · 逆向分析 JavaScript、应用程序与二进制文件", exposure: "codemode",
         } };
       } catch (error) { result.warning = `内置 REA MCP 未加载：${errorMessage(error, "请重新安装 REA。")}`; }

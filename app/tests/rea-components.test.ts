@@ -71,7 +71,7 @@ test("REA component choices survive default changes, restart, reinstall and upgr
     await call(service, "rea.save", { enabled: false, revision: service.snapshot().revision });
     await service.close(); service = new ReaService(root, () => {}, fixture.dependencies);
     assert.equal(service.snapshot().enabled, false); assert.equal(service.snapshot().skillInstalled, false); assert.equal(service.snapshot().mcpInstalled, false);
-    for (const version of ["6.7.0", "6.7.1"]) {
+    for (const version of ["6.7.0", "6.8.0"]) {
       fixture.setLatest(version); await call(service, "rea.check"); await settle(service);
       await call(service, "rea.install", { version }); await settle(service);
       assert.equal(service.snapshot().skillInstalled, false); assert.equal(service.snapshot().mcpInstalled, false);

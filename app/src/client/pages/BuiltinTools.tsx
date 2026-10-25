@@ -100,10 +100,11 @@ export default function BuiltinTools() {
             </div>
             <BackendMaintenance resource="opencli" label="OpenCLI" showError={!error} location={`所连接后台 · 应用级 · ${state.managed ? "Axiom 独立安装" : state.version ? "外部安装接入" : "独立安装目录"}`}>
               <dl className="tools-facts">
-                <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : " · npm 待检查"}</dd></div>
+                <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : " · npm 待检查"}{state.runtimeManaged ? " · 组件专用" : state.version ? " · 旧版共享环境" : " · 安装时自动准备专用环境"}</dd></div>
                 <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : installStatus}</dd></div>
                 <div><dt>最新版本</dt><dd>{state.latest ? <><code>v{state.latest}</code>{update && <span className="tag">有更新</span>}</> : state.job?.kind === "check" && state.job.error ? "检查失败" : "尚未检查"}</dd></div>
               </dl>
+              {state.version && !state.runtimeManaged && <p className="field-help">现有安装保持不变。重新安装或更新后迁移到版本绑定的独立 Node/npm，不修改系统或 Axiom 后台运行环境。</p>}
               {state.supportError && <p className="field-help">{state.supportError}</p>}
               {state.pendingOperation && !state.job?.running && <div className="tools-conflict" role="group" aria-label="核实 OpenCLI 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
               <div className="tools-actions">

@@ -29,7 +29,7 @@ async function wheel(page: Page, modifiers: { ctrlKey?: boolean; metaKey?: boole
 const scaleReached = (page: Page, value: number) => page.waitForFunction(value => Number(document.documentElement.style.getPropertyValue("--display-font-scale")) === value / 100, value);
 const near = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < .1, `${actual} != ${expected}`);
 try {
-  app = await startServer({ root: join(root, "data"), port: 0 });
+  app = await startServer({ root: join(root, "data"), port: 0, dev: true });
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
@@ -233,9 +233,9 @@ try {
       const controls = [input, ...composer.querySelectorAll<HTMLElement>('#attach,.model-picker > summary,.send')].map(el => el.getBoundingClientRect());
       const box = composer.getBoundingClientRect();
       return {
-        textAccessible: mobile ? horizontalScroll && style.whiteSpace === 'pre' : textFits,
-        linesAccessible: mobile ? verticalScroll : input.clientHeight >= parseFloat(style.lineHeight) * 3,
-        mobileSizing: !mobile || (input.clientHeight === 40 && parseFloat(style.fontSize) === 14 && parseFloat(style.lineHeight) === 22),
+        textAccessible: mobile ? !horizontalScroll && style.whiteSpace === 'pre-wrap' && textFits : textFits,
+        linesAccessible: verticalScroll || input.clientHeight >= parseFloat(style.lineHeight) * 3,
+        mobileSizing: !mobile || (composer.hasAttribute('data-multiline') && input.clientHeight <= 148 && parseFloat(style.fontSize) === 16 && parseFloat(style.lineHeight) === 22),
         contained: controls.every(r => r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1),
         overlaps: controls.some((a, i) => controls.slice(i + 1).some(b => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1)),
       };

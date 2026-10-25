@@ -1,33 +1,57 @@
 import { useEffect, useRef, useState } from "react";
 import type { Scope } from "../../shared/protocol.js";
-import { processingActive } from "../../shared/processing.js";
-import { useProcessingList } from "../processing/records.js";
-import { ProcessingDisclosure } from "../processing/ProcessDetail.js";
-import { ProcessingPage } from "../pages/ProcessingPage.js";
+import type { ProcessingList, ProcessingRecord, ProcessingSummary } from "../../shared/processing.js";
+import { titleCardCandidate, titleCardResult } from "../../shared/title-card.js";
+import { useProcessingList, useProcessingRecord } from "../processing/records.js";
+import { ProcessingDetails, processingDuration } from "../processing/ProcessDetail.js";
 import { MetricDetail } from "../chat/MetricDetail.js";
+import { Icon } from "../components.js";
+import { useModelDisplay } from "../useModelDisplay.js";
+import "../styles/title-result.css";
 
-/** A lightweight title entry, never a conversation message or a new task card. */
-export function TitleFeedback({ scope }: { scope: Scope }) {
-  const read = useProcessingList(scope.workspaceId, { kind: "session.title", sessionId: scope.sessionId });
-  const latest = read.data?.items[0], trigger = useRef<HTMLButtonElement>(null), previous = useRef(latest?.state);
-  const [opened, setOpened] = useState(false), [history, setHistory] = useState(false);
+/** Session metadata, not a delegated task, message or new accounting source. */
+export function useTitleResult(scope: Scope | null) {
+  const list = useProcessingList(scope?.workspaceId ?? null, { kind: "session.title", sessionId: scope?.sessionId, state: "completed" });
+  const eligible = (item: ProcessingSummary) => item.workspaceId === scope?.workspaceId && item.sessionId === scope?.sessionId && titleCardCandidate(item);
+  const first = list.data?.items.find(eligible);
+  // Empty-memory checks can fill a whole page. Scan only summaries until the
+  // newest generation is found; never hydrate all historical request bodies.
+  const [scan, setScan] = useState<{ root: ProcessingList; before: number }>();
+  const cursor = !first && scan?.root === list.data ? scan?.before : undefined;
+  const tail = useProcessingList(cursor === undefined ? null : scope?.workspaceId ?? null,
+    { kind: "session.title", sessionId: scope?.sessionId, state: "completed", before: cursor });
+  const nextItem = cursor !== undefined && !tail.stale && !tail.error ? tail.data?.items.find(eligible) : undefined;
   useEffect(() => {
-    if (previous.current && processingActive(previous.current) && latest?.state === "completed" && latest.outcome === "applied") setOpened(false);
-    previous.current = latest?.state;
-  }, [latest?.state, latest?.outcome]);
-  if (!latest && !read.error && !opened) return null;
-  const labels = { running: "标题生成中", cancelling: "标题取消中", completed: latest?.outcome === "no_evidence" ? "标题等待记忆" : "标题记录", failed: "标题生成失败", cancelled: "标题已取消", interrupted: "标题已中断", invalidated: "标题结果已失效" };
-  const label = read.stale ? "标题状态待确认" : read.error ? "标题记录读取失败" : latest ? labels[latest.state] : "标题记录";
-  return <>
-    <button ref={trigger} className="title-feedback" data-state={read.stale ? undefined : latest?.state} aria-label={`标题生成记录：${label}`} aria-live="polite" aria-atomic="true" data-tooltip={label} aria-expanded={opened} aria-haspopup="dialog" onClick={() => setOpened(!opened)}>{label}</button>
-    {opened && trigger.current && <MetricDetail trigger={trigger.current} title="标题生成记录" placement="auto" subtitle="当前会话 · 不影响主会话执行 · 查看不会重新生成标题" className="title-feedback-panel" onClose={() => setOpened(false)}>
-      {history ? <ProcessingPage workspaceId={scope.workspaceId} initial={{ kind: "session.title", sessionId: scope.sessionId }} onBack={() => setHistory(false)} /> : <>
-        {read.stale && <p className="meta" role="status">连接恢复中，暂不能确认当前标题状态。</p>}{read.error && <p role="alert">{read.error}</p>}
-        {latest?.outcome === "no_evidence" && <p className="meta">尚无有效记忆，本次未请求标题模型。后续主会话每三次模型请求或成功结束时会再次检查；手动命名优先。</p>}
-        {read.data?.items.slice(0, 3).map(item => <ProcessingDisclosure key={item.id} workspaceId={scope.workspaceId} item={item} />)}
-        {!read.data?.items.length && !read.error && <p>没有已记录的标题生成请求。</p>}
-        <button className="btn" onClick={() => setHistory(true)}>查看标题历史</button><p className="meta">手动修改标题优先；未采用的生成结果仍可在记录中查看。</p>
-      </>}
+    if (!list.data || list.stale || list.error || first) return;
+    if (scan?.root !== list.data) {
+      if (list.data.next !== null) setScan({ root: list.data, before: list.data.next });
+    } else if (cursor !== undefined && !tail.stale && !tail.loading && !tail.error && tail.data && !nextItem &&
+      tail.data.next !== null && tail.data.next < cursor) setScan({ root: list.data, before: tail.data.next });
+  }, [list.data, list.stale, list.error, first, scan, cursor, tail.data, tail.stale, tail.loading, tail.error, nextItem]);
+  const item = first ?? nextItem;
+  const read = useProcessingRecord(scope?.workspaceId ?? null, item?.id ?? null);
+  const record = read.data;
+  return !list.error && !read.error && record && record.id === item?.id && record.workspaceId === scope?.workspaceId &&
+    record.sessionId === scope?.sessionId && titleCardResult(record) ? record : undefined;
+}
+
+/** Compact subagent-style result row; no pending, failed or empty-check placeholders. */
+export function TitleResultCard({ record }: { record: ProcessingRecord }) {
+  const result = titleCardResult(record), display = useModelDisplay();
+  const trigger = useRef<HTMLButtonElement>(null), [opened, setOpened] = useState(false);
+  if (!result) return null;
+  const status = result.applied ? "会话标题已生成" : "会话标题已生成 · 未采用";
+  const model = display(record.selection ?? record.calls.find(call => call.sentAt != null && call.state === "completed")?.selection ?? {});
+  return <article className="title-result-card" data-processing-id={record.id} aria-label={status}>
+    <button ref={trigger} type="button" className="title-result-trigger" aria-haspopup="dialog" aria-expanded={opened}
+      aria-label={`查看标题生成详情：${result.title}${result.applied ? "" : " · 未采用"}`} onClick={() => setOpened(true)}>
+      <Icon name="check" className="title-result-state" />
+      <span className="title-result-copy"><strong>{result.title}</strong><small>{status} · {model.label} · {processingDuration(record.startedAt, record.endedAt)}</small></span>
+      <Icon name="subagent-open" className="title-result-open" />
+    </button>
+    {opened && trigger.current && <MetricDetail trigger={trigger.current} title="标题生成详情" placement="auto" className="title-result-panel" onClose={() => setOpened(false)}>
+      {!result.applied && <p className="meta">标题已生成，但未替换会话名称；手动命名优先。</p>}
+      <div className="processing-detail"><ProcessingDetails record={record} /></div>
     </MetricDetail>}
-  </>;
+  </article>;
 }

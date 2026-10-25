@@ -50,6 +50,50 @@ try {
     document.body.append(probe); const size = parseFloat(getComputedStyle(probe.firstElementChild!).fontSize); probe.remove(); return size;
   });
   assert.ok(supplementFont >= 16, "annotation supplement keeps a 16px focus-zoom floor even with smaller global typography");
+  // Keep single-line entry compact; expanded text owns the entire upper width.
+  const geometry = () => page.locator(".composer").evaluate(form => {
+    const input = form.querySelector("textarea")!, style = getComputedStyle(input);
+    const rect = form.getBoundingClientRect(), text = input.getBoundingClientRect();
+    const controls = [".attachment-picker", ".model-picker > summary", ".send"].map(selector => {
+      const box = form.querySelector(selector)!.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, height: box.height };
+    });
+    return { expanded: form.hasAttribute("data-multiline"), height: rect.height, width: rect.width,
+      inputWidth: text.width, inputHeight: text.height, textBottom: text.bottom, scrollHeight: input.scrollHeight,
+      clientHeight: input.clientHeight, lineHeight: parseFloat(style.lineHeight),
+      padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+      bottom: rect.bottom, controls, horizontalOverflow: input.scrollWidth > input.clientWidth + 1 };
+  });
+  for (const android of [false, true]) {
+    await page.locator(".app").evaluate((node, android) => node.classList.toggle("android-workbench", android), android);
+    for (const [width, height] of [[320, 640], [390, 844], [390, 480]]) {
+      await page.setViewportSize({ width, height });
+      await input.fill("短"); await settle();
+      const compact = await geometry();
+      assert.equal(compact.expanded, false); assert.equal(compact.height, 56);
+      await input.fill("第一行\n第二行"); await settle();
+      const two = await geometry();
+      assert.equal(two.expanded, true);
+      assert.ok(two.inputWidth >= two.width - 20, "expanded text spans the full inner composer width");
+      assert.ok(two.controls.every(box => box.top >= two.textBottom - 1), "controls occupy only the bottom row, never the text area");
+      assert.ok(two.controls.every(box => Math.abs(box.bottom - (two.bottom - 6)) <= 1), "plus, model and send stay at the bottom");
+      for (let lines = 3; lines <= 7; lines++) {
+        await input.fill(Array.from({ length: lines }, (_, index) => `第${index + 1}行`).join("\n")); await settle();
+        const state = await geometry();
+        assert.ok(Math.abs(state.inputHeight - (Math.min(lines, 6) * state.lineHeight + state.padding)) <= 1, `mobile grows to six lines (${android ? "Android" : "iOS"}, ${width}x${height}, ${lines} lines): ${JSON.stringify(state)}`);
+        assert.equal(state.horizontalOverflow, false);
+        assert.equal(state.scrollHeight > state.clientHeight + 1, lines > 6, "only drafts beyond six lines scroll");
+      }
+      // Soft wrapping must expand once and settle, not oscillate as width changes.
+      await input.fill("自动换行的长文本".repeat(12)); await settle();
+      const wrapped = await geometry(); assert.equal(wrapped.expanded, true);
+      await settle(); assert.deepEqual(await geometry(), wrapped);
+      await input.fill(""); await settle();
+      assert.equal((await geometry()).height, 56, "clearing restores the compact row");
+    }
+  }
+  await page.locator(".app").evaluate(node => node.classList.remove("android-workbench"));
+  await page.setViewportSize({ width: 390, height: 844 });
   await input.tap();
   await input.fill("多行输入与软键盘回归。".repeat(40)); await settle();
   await page.evaluate(() => {

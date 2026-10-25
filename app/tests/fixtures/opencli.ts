@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync,
 import { tmpdir } from "../temporary.js";
 import { join, dirname } from "node:path";
 import { executeOpenCli, type OpenCliExecute } from "../../src/server/integrations/opencli.js";
+import { managedNodeFixture } from "./managed-node.js";
 import { openCliSkillNames } from "../../src/server/integrations/opencli-runtime.js";
 
 export function openCliFixture() {
@@ -31,7 +32,7 @@ export function openCliFixture() {
     options.signal.throwIfAborted();
     calls.push(args);
     if (args[0] === "-e") return executeOpenCli(args, options);
-    if (args[1] === "--version") return args[0] === "npm-cli.js" ? "11.0.0" : JSON.parse(readFileSync(join(dirname(args[0]), "package.json"), "utf8")).version;
+    if (args[1] === "--version") return /(?:^|[\\/])npm-cli\.js$/.test(args[0]) ? "11.0.0" : JSON.parse(readFileSync(join(dirname(args[0]), "package.json"), "utf8")).version;
     if (args[1] === "root") return modules;
     if (args[1] === "prefix") return prefix;
     if (args[1] === "view") return JSON.stringify(version);
@@ -45,5 +46,5 @@ export function openCliFixture() {
     }
     throw Error(`Unexpected arguments: ${args.join(" ")}`);
   };
-  return { root, prefix, packageRoot, calls, install, execute, locateNpm: () => "npm-cli.js", setVersion: (value: string) => { version = value; }, fail: () => { failInstall = true; }, hold: (value: Promise<void>) => { hold = value; } };
+  return { root, prefix, packageRoot, calls, install, execute, runtime: managedNodeFixture(() => version), locateNpm: () => "npm-cli.js", setVersion: (value: string) => { version = value; }, fail: () => { failInstall = true; }, hold: (value: Promise<void>) => { hold = value; } };
 }

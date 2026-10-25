@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, MessagePart } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
+import type { TaskTool } from "../../shared/tasks.js";
+import { taskExecutionText } from "../tasks/task-call.js";
 import { useHistoryRevision } from "./useHistoryRevision.js";
 import { detailRead } from "./detail-read.js";
 import { JsonPaths } from "../LocalPath.js";
 import { Markdown } from "./Markdown.js";
 
 /** Mounted inside an open disclosure. Reads hidden fields in full and refreshes them while streaming. */
-export function MessagePartBody({ scope, message, callId, field = "text", fallback = "尚未记录输出" }: {
-  scope: Scope; message: ChatMessage | null; callId?: string; field?: "text" | "thinking"; fallback?: string;
+export function MessagePartBody({ scope, message, callId, field = "text", fallback = "尚未记录输出", taskTool }: {
+  scope: Scope; message: ChatMessage | null; callId?: string; field?: "text" | "thinking"; fallback?: string; taskTool?: TaskTool | null;
 }) {
   const history = useHistoryRevision(scope);
   const call = message?.calls?.find((value) => value.id === callId);
@@ -52,8 +54,9 @@ export function MessagePartBody({ scope, message, callId, field = "text", fallba
   const error = needed && failed?.identity === identity ? failed.error : "";
   // Expose the initial read before its effect starts; background refreshes keep the body steady.
   const loading = needed && !error && !retained;
+  const visibleText = taskTool ? taskExecutionText(taskTool, message ? { ...message, text, truncated: needed && !retained } : null) : text;
   return <>
-    {field === "thinking" ? <Markdown text={text || fallback} pathScope={scope} /> : <><pre>{text || fallback}</pre>{callId && <JsonPaths text={text} scope={scope} />}</>}
+    {field === "thinking" ? <Markdown text={text || fallback} pathScope={scope} /> : <><pre>{visibleText || fallback}</pre>{callId && <JsonPaths text={text} scope={scope} />}</>}
     {loading && <p className="tool-truncated" role="status">正在加载记录…</p>}
     {error && <p className="execution-alert" role="alert">{error} <button type="button" className="btn" onClick={() => setFailed(null)}>重新加载</button></p>}
   </>;

@@ -4,7 +4,7 @@ import { proxySourceLimit, type ProxyNode } from "../../shared/model-proxy.js";
 import { coreConfiguration } from "./model-proxy-process.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
 import { prepareXrayImporter, xrayImporterDirectory } from "./model-proxy-xray-installer.js";
-import { runRtk } from "./rtk-process.js";
+import { runNative } from "./native-process.js";
 
 export function shareSourceLines(source: string): string[] {
   let content = source.trim();
@@ -53,7 +53,7 @@ export async function inspectXraySource(root: string, source: string, signal: Ab
       const index = next++, link = candidates[index];
       let outbound: unknown;
       try {
-        const result = JSON.parse((await runRtk(executable, ["parse", "-i", "--json"], {
+        const result = JSON.parse((await runNative(executable, ["parse", "-i", "--json"], {
           root: xrayImporterDirectory(root), input: `${link}\n`, signal: timed, timeout: 10_000, limit: proxySourceLimit,
         })).toString("utf8"));
         if (!Array.isArray(result.outbounds) || result.outbounds.length !== 1) continue;

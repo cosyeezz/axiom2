@@ -3,10 +3,10 @@ import { accessSync, constants, existsSync, realpathSync, statSync } from "node:
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, win32, posix } from "node:path";
 import { reaEngineIds, type ReaEngineId, type ReaEnginePaths, type ReaEngineState } from "../../shared/rea-engines.js";
-import { inspectReaProgram, reaEngineRevision, type ReaConfig } from "./rea-runtime.js";
+import { inspectReaProgram, reaEngineRevision, reaNode, reaProcessEnvironment, type ReaConfig } from "./rea-runtime.js";
 import { runEngine, type EngineRun } from "./rea-engine-process.js";
 import { maintenanceProcessSupported } from "../maintenance-process.js";
-import { engineContractVersion, engineVersionPolicy, ghidraVersion, installedEngineVersion, managedEngineVersion, verifiedJadxVersion, wabtVersion } from "./rea-engine-policy.js";
+import { engineContractVersion, engineContractSupported, engineVersionPolicy, ghidraVersion, installedEngineVersion, managedEngineVersion, verifiedJadxVersion, wabtVersion } from "./rea-engine-policy.js";
 
 export type EngineHost = { platform: string; arch: string };
 export const engineHost = (): EngineHost => ({ platform: process.platform, arch: process.arch });
@@ -67,7 +67,7 @@ export function listEngines(config: ReaConfig, previous: ReaEngineState[] = [], 
   const paths = discoverEnginePaths(config.engines);
   return reaEngineIds.map(id => {
     const path = paths[id] || "", configured = !!config.engines?.[id];
-    const installable = maintenanceProcessSupported(host.platform) && config.installation?.version === engineContractVersion && engineInstallable(id, host);
+    const installable = maintenanceProcessSupported(host.platform) && engineContractSupported(config.installation?.version) && engineInstallable(id, host);
     const unsupported = !["darwin", "linux", "win32"].includes(host.platform) || !["arm64", "x64"].includes(host.arch) || id === "hopper" && host.platform === "win32" || ["ghidra", "jadx"].includes(id) && host.platform === "win32" && host.arch !== "x64";
     const revision = reaEngineRevision(config, id), validationRevision = engineValidationRevision(config, id, paths);
     const old = previous.find(item => item.id === id && item.path === path && item.configured === configured && item.validationRevision === validationRevision);
@@ -80,7 +80,7 @@ export function listEngines(config: ReaConfig, previous: ReaEngineState[] = [], 
   });
 }
 export async function checkEngines(root: string, config: ReaConfig, packageRoot: string | undefined, signal: AbortSignal, run: EngineRun = runEngine, only?: ReaEngineId): Promise<ReaEngineState[]> {
-  const paths = discoverEnginePaths(config.engines), env = engineEnvironment(paths), items = listEngines(config);
+  const paths = discoverEnginePaths(config.engines), env = { ...reaProcessEnvironment(root, config), ...engineEnvironment(paths) }, items = listEngines(config);
   const binary = (home: string, name: string) => join(home, process.platform === "win32" ? `${name}.exe` : name);
   for (const item of items) {
     if (only && item.id !== only) continue;
@@ -108,9 +108,9 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
         }
         item.version = wabtVersion; item.status = "ready"; item.detail = "三个 WASM 工具的版本检查通过，未加载分析目标。";
       } else {
-        if (!packageRoot || config.installation?.version !== engineContractVersion) throw Error(`当前检测契约验证于 REA ${engineContractVersion}；请先安装该版本或等待适配新版本。`);
+        if (!packageRoot || !engineContractSupported(config.installation?.version)) throw Error(`当前检测契约验证于 REA ${engineContractVersion}；请先安装该版本或等待适配新版本。`);
         const { entry } = inspectReaProgram(packageRoot, config.installation.version);
-        const result = await run(process.execPath, [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, signal, timeout: 60_000 });
+        const result = await run(reaNode(root, config), [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, signal, timeout: 60_000 });
         const report = JSON.parse(result.stdout);
         if (![0, 1].includes(result.code) || !Array.isArray(report.scope_checks) || !report.scope_checks.length || typeof report.healthy !== "boolean") throw Error("REA 未返回有效的组件检查报告。");
         const failed = report.scope_checks.filter((check: { ok?: boolean }) => check.ok !== true);

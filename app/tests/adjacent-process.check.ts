@@ -53,6 +53,7 @@ try {
   assert.equal(await groups.first().locator('.tool-duration').innerText(), "—");
   publish(live, { ...current, thinkingActive: false, streaming: false, status: "completed" }); request(live, "completed");
   await groups.locator(':scope > summary .activity-title').getByText("执行完成", { exact: true }).waitFor();
+  assert.equal(await groups.first().locator(':scope > summary .activity-status-completed').count(), 0, "local completion has no final-delivery checkmark");
   assert.equal(await groups.count(), 1);
   assert.equal(await groups.first().locator('.thinking-block[data-status="running"]').count(), 0, "old running deltas cannot keep a completed merged card active");
   await page.screenshot({ path: join(artifacts, "390-completed-merged.png") });
@@ -90,7 +91,7 @@ try {
   const waiting = session();
   publish(waiting, { ...before, status: "completed", streaming: false, thinkingActive: false });
   request(waiting); await openSession(waiting);
-  await groups.locator(':scope > summary .activity-title').getByText("正在思考", { exact: true }).waitFor();
+  await groups.locator(':scope > summary .activity-title').getByText("请求中", { exact: true }).waitFor();
   assert.equal(await groups.count(), 1);
   assert.equal(await groups.first().getAttribute("data-status"), "running");
   assert.equal(await page.locator(".process-requesting").count(), 0);
@@ -122,6 +123,7 @@ try {
   manager.appendMessage({ role: "user", content: "归档检查", timestamp: 1 });
   manager.appendMessage(assistant("old", [{ type: "thinking", thinking: "旧运行记录" }]));
   manager.appendMessage(assistant("new", [{ type: "thinking", thinking: "新运行记录" }]));
+  manager.appendMessage(assistant("new", [{ type: "text", text: "归档前确认最终交付" }], "stop"));
   const compaction = manager.appendCompaction("完整交接摘要", null, 20000);
   manager.appendMessage({ role: "user", content: "当前问题", timestamp: 2 });
   app.store.db.prepare("INSERT INTO agent_sessions(sessionId,file) VALUES(?,?)").run(archived.id, manager.getSessionFile()!);

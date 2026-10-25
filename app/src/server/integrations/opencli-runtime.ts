@@ -2,6 +2,8 @@ import { accessSync, constants, existsSync, lstatSync, readFileSync, realpathSyn
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { managedDirectory } from "./managed-removal.js";
 import type { OpenCliSettings } from "../../shared/builtin-tools.js";
+import { inspectNodeRuntime, validNodeBinding, type NodeRuntimeBinding } from "./managed-node.js";
+import { inspectNodeLauncher } from "./node-launcher.js";
 
 export const openCliSkillNames = ["opencli-usage", "opencli-browser"];
 export type OpenCliConfig = OpenCliSettings & {
@@ -10,6 +12,7 @@ export type OpenCliConfig = OpenCliSettings & {
   packageRoot: string;
   binDirectory: string;
   directory?: string;
+  runtime?: NodeRuntimeBinding;
   detached?: boolean;
   removalPending?: string[];
   migration?: { packageRoot: string; version?: string; at: number; externalFilesRetained: true };
@@ -35,6 +38,7 @@ export function readOpenCliConfig(root: string): OpenCliConfig | undefined {
       if (value.detached || resolve(value.packageRoot) !== resolve(paths.packageRoot) || resolve(value.binDirectory) !== resolve(paths.binDirectory)) throw Error();
       managedDirectory(root, ["integrations", "opencli", "versions"], value.directory, openCliVersionPattern);
     }
+    if (value.runtime !== undefined && (!value.directory || !validNodeBinding(value.runtime))) throw Error();
     if (value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some((name: unknown) => typeof name !== "string" || !openCliVersionPattern.test(name)))) throw Error();
     return value;
   } catch (error) {
@@ -42,13 +46,17 @@ export function readOpenCliConfig(root: string): OpenCliConfig | undefined {
     throw Error("OpenCLI 配置无法读取，请检查 integrations/opencli.json；未覆盖原文件。");
   }
 }
+export const openCliPrefix = (config: OpenCliConfig) => resolve(config.packageRoot, "../../..");
+export const openCliCommandDirectory = (config: OpenCliConfig) => config.runtime ? join(openCliPrefix(config), "commands") : config.binDirectory;
+export const openCliNode = (config: OpenCliConfig) => config.runtime ? inspectNodeRuntime(openCliPrefix(config), config.runtime).node : process.execPath;
 export function openCliEnvironment(config: OpenCliConfig, source = process.env): NodeJS.ProcessEnv {
   if (config.detached) return { ...source };
   const env = { ...source };
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
   const previous = env[pathKey] ?? "";
   for (const key of Object.keys(env)) if (key.toUpperCase() === "PATH") delete env[key];
-  env.PATH = [config.binDirectory, dirname(process.execPath), previous].filter(Boolean).join(delimiter);
+  // Only the OpenCLI launcher enters the agent PATH, never its private node/npm.
+  env.PATH = [openCliCommandDirectory(config), ...(config.runtime ? [] : [dirname(process.execPath)]), previous].filter(Boolean).join(delimiter);
   // Empty profile follows OpenCLI's own saved default; don't inherit a stale override.
   delete env.OPENCLI_PROFILE;
   if (config.profile) env.OPENCLI_PROFILE = config.profile;
@@ -74,6 +82,7 @@ export function validateOpenCliPackage(config: OpenCliConfig, expected?: string)
     managedDirectory(prefix, ["node_modules", "@jackwener"], "opencli", /^opencli$/);
     managedDirectory(prefix, ["node_modules"], ".bin", /^\.bin$/);
   }
+  if (config.runtime) openCliNode(config); // A broken binding never falls back to the host.
   const packageRoot = realpathSync(config.packageRoot);
   const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
   if (pkg.name !== "@jackwener/opencli" || typeof pkg.version !== "string" || !/^\d+\.\d+\.\d+$/.test(pkg.version) || (expected && pkg.version !== expected) || typeof pkg.bin?.opencli !== "string") throw Error("OpenCLI 安装信息或版本无效，请重新安装。");
@@ -89,5 +98,6 @@ export function validateOpenCliPackage(config: OpenCliConfig, expected?: string)
       for (const suffix of [".cmd", ".ps1"]) if (lstatSync(join(config.binDirectory, `opencli${suffix}`)).isSymbolicLink()) throw Error("OpenCLI 命令入口指向外部文件。");
     } else if (realpathSync(shim) !== entry) throw Error("OpenCLI 命令入口与托管程序不一致。");
   }
+  if (config.runtime) inspectNodeLauncher(openCliPrefix(config), openCliNode(config), entry);
   return { entry, version: pkg.version as string };
 }

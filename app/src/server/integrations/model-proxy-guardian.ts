@@ -1,3 +1,4 @@
+import { supervisorEnvironment } from "./component-environment.js";
 import { MaintenanceError } from "../../shared/maintenance.js";
 import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -33,7 +34,7 @@ export class ProxyGuardian {
     this.journal = createProcessOwner(join(dirname(owner), "process-owner.json"));
     const source = import.meta.url.endsWith(".ts");
     const entry = fileURLToPath(new URL(`./model-proxy-supervisor.${source ? "ts" : "js"}`, import.meta.url));
-    const options = { execArgv: source ? ["--import", import.meta.resolve("tsx")] : [] };
+    const options = { env: supervisorEnvironment(), execArgv: source ? ["--import", import.meta.resolve("tsx")] : [] };
     try {
       this.owned = forkMaintenanceProcess(entry, options, this.deadline(), () => this.timeoutError(), identity => this.journal.arm(identity), dirname(owner));
       this.child = this.owned.child;

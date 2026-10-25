@@ -47,7 +47,7 @@ test("cross-boundary result retains its unique identity and is available to the 
   assert.equal(result.messages.get("tool-across")?.text, "full result");
 });
 
-test("archive folds interrupted activities without a final answer, hides task notifications and keeps prose", () => {
+test("interrupted archives disclose only tools/thinking, never imply delivery or hide narration", () => {
   const cases = [
     { name: "tool-only", content: [{ type: "toolCall", id: "read", name: "read", arguments: { path: "history.ts" } }], stopReason: "toolUse" },
     { name: "thinking-only", content: [{ type: "thinking", thinking: "unfinished reasoning" }], stopReason: "toolUse" },
@@ -66,29 +66,32 @@ test("archive folds interrupted activities without a final answer, hides task no
     manager.appendMessage({ role: "assistant", timestamp: 1, ...activity } as any);
     const result = historyProjection(manager, "fixture"), segment = result.index.segments[0];
     const group = segment.groups.find(g => g.ids.includes(id))!;
-    assert.equal(group.folded, true, activity.name);
+    assert.equal(!!group.folded, false, activity.name);
     assert.ok(group.process, activity.name);
     assert.equal(group.process.status, activity.name === "cancelled" ? "cancelled" : activity.name === "error-only" ? "failed" : "completed");
     assert.equal(group.process.calls, activity.name === "tool-only" ? 1 : 0);
-    assert.equal(group.process.inline, false, "settled interrupted history has an outer status card; its original process stays inside");
+    assert.equal(group.process.inline, true, "settled tools are only a local disclosure, not a delivered outer card");
     assert.equal(segment.messageIds.includes(notice), false);
     assert.equal(result.messages.has(notice), false);
     assert.equal(segment.groups.some(g => "notices" in g), false);
     assert.ok(![...result.messages.values()].some(m => m.taskNotice));
     assert.equal(segment.groups.find(g => g.ids.includes(plain))?.activity, false, "unmarked ordinary prose stays outside");
     const commentaryGroup = segment.groups.find(g => g.ids.includes(commentary))!;
-    assert.equal(commentaryGroup.activity, true); assert.equal(commentaryGroup.folded, true);
-    assert.equal(commentaryGroup.process?.inline, false, "explicit process narration has a lazy outer archive card");
+    assert.equal(commentaryGroup.activity, false); assert.equal(!!commentaryGroup.folded, false);
+    assert.equal(commentaryGroup.process, undefined, "commentary remains a visible body row");
     assert.ok(!commentaryGroup.ids.includes(plain));
     assert.ok(!threadGroups(segment.messageIds.map(mid => result.messages.get(mid)!)).find(g => g.ids.includes(id))?.folded, "shared live grouping must not prematurely fold");
   }
 });
 
-test("commentary-only native archive closes before a later cross-compaction delivery", () => {
+test("commentary-only native archive folds only after a real cross-compaction delivery", () => {
   for (const runId of ["same-run", undefined]) {
     const manager = SessionManager.inMemory();
     const commentary = manager.appendMessage({ ...assistant("process only"), axiomRunId: runId, content: [{ type: "text", text: "PRIVATE-COMMENTARY", textSignature: JSON.stringify({ v: 1, id: "commentary", phase: "commentary" }) }] } as any);
     const first = manager.appendCompaction("first summary", null, 2000);
+    const undelivered = historyProjection(manager, "before");
+    assert.equal(!!undelivered.index.segments[0].groups[0].folded, false);
+    assert.equal(undelivered.index.segments[0].groups[0].activity, false);
     const final = manager.appendMessage({ ...assistant("PRIVATE-DELIVERY"), axiomRunId: runId } as any);
     const second = manager.appendCompaction("second summary", null, 2000);
     const projection = historyProjection(manager, "fixture");
@@ -100,16 +103,33 @@ test("commentary-only native archive closes before a later cross-compaction deli
     assert.ok(!JSON.stringify(projection.index).includes("PRIVATE-"), "archive catalogue stays lightweight");
   }
 });
-test("archive wraps mixed narration and call fragments while preserving selection notices", () => {
+test("undelivered archive separates mixed narration from calls and preserves selection notices", () => {
   const manager = SessionManager.inMemory();
   const change = { previous: { provider: "old", modelId: "old", thinking: "low" }, current: { provider: "new", modelId: "new", thinking: "high" } };
   const id = manager.appendMessage({ ...assistant("visible narration"), axiomSelectionChange: change, content: [{ type: "text", text: "visible narration" }, { type: "toolCall", id: "read", name: "read", arguments: { path: "history.ts" } }], stopReason: "toolUse" });
   manager.appendCompaction("summary", null, 2000);
   const groups = historyProjection(manager, "fixture").index.segments[0].groups;
-  assert.equal(groups.length, 1);
-  assert.equal(groups[0].id, `final-process:${id}`); assert.equal(groups[0].activity, true); assert.deepEqual(groups[0].selectionChange, change);
-  assert.equal(groups[0].folded, true); assert.deepEqual(groups[0].ids, [id]); assert.equal(groups[0].process?.calls, 1);
-  assert.equal(groups[0].callsOnlyIds, undefined, "the inner process must retain the narration, not just calls");
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].id, id); assert.equal(groups[0].activity, false); assert.deepEqual(groups[0].selectionChange, change);
+  assert.ok(groups.every(group => !group.folded));
+  assert.equal(groups[1].process?.calls, 1);
+  assert.deepEqual(groups[1].callsOnlyIds, [id], "local disclosure must not duplicate or hide narration");
+});
+
+test("archive tool summaries honor thinking-only masks and task disclosure laziness", () => {
+  const manager = SessionManager.inMemory();
+  const id = manager.appendMessage({ ...assistant("visible narration"), content: [
+    { type: "thinking", thinking: "private reasoning" }, { type: "text", text: "visible narration" },
+    { type: "toolCall", id: "delegate", name: "delegate", arguments: { tasks: [] } },
+  ], stopReason: "toolUse" });
+  manager.appendCompaction("summary", null, 2000);
+  const groups = historyProjection(manager, "fixture").index.segments[0].groups;
+  const thought = groups.find(group => group.thinkingOnlyIds?.includes(id))!;
+  assert.equal(thought.process?.calls, 0); assert.equal(thought.process?.hasTasks, undefined);
+  assert.equal(thought.process?.latest, undefined);
+  const task = groups.find(group => group.callsOnlyIds?.includes(id))!;
+  assert.equal(task.process?.calls, 1); assert.equal(task.process?.hasTasks, true);
+  assert.ok(groups.every(group => !group.folded));
 });
 
 test("final archives retain the full status card and lightweight original tool summary", () => {

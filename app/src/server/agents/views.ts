@@ -13,7 +13,7 @@ import {
   type RunOrigin,
   type ThreadIndex,
 } from "../../shared/agent.js";
-import { threadGroups } from "../../shared/thread-layout.js";
+import { threadDelivery, threadGroups } from "../../shared/thread-layout.js";
 import type { Store } from "../storage.js";
 import { contextUsage } from "../context-usage.js";
 import { lastRequestUsage } from "../request-usage.js";
@@ -208,7 +208,7 @@ export class AgentViews {
     const source = `${file}:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
     let saved = this.histories.get(scope.sessionId);
     if (saved?.source !== source) {
-      saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source, this.origins(scope)) };
+      saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source, this.origins(scope), this.transient.get(scope.sessionId)?.values()) };
       this.histories.delete(scope.sessionId);
       if (saved.projection.bytes <= 32 * 1024 * 1024) {
         while ([...this.histories.values()].reduce((sum, value) => sum + value.projection.bytes, saved.projection.bytes) > 32 * 1024 * 1024)
@@ -276,6 +276,12 @@ export class AgentViews {
         (message.role === "assistant" &&
           !!previous?.calls?.length !== !!message.calls?.length) ||
         (!!previous && JSON.stringify(threadGroups([previous])) !== JSON.stringify(threadGroups([message])));
+    // A completed final can settle archives before its native record is written.
+    // Refresh their catalogue exactly on delivery transitions, not every delta.
+    if (!!previous && threadDelivery(previous) !== threadDelivery(message) || !previous && threadDelivery(message)) {
+      this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
+      this.histories.delete(scope.sessionId);
+    }
     messages?.set(message.id, message);
     if (messages && (fresh || layoutChanged)) {
       this.layouts.delete(messages);

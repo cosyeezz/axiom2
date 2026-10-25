@@ -10,6 +10,8 @@ export type ReaState = {
   skillError?: string;
   mcpError?: string;
   nodeVersion: string;
+  npmVersion?: string;
+  runtimeManaged?: boolean;
   supported: boolean;
   supportError?: string;
   version?: string;

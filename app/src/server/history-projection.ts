@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ChatMessage, RunOrigin } from "../shared/agent.js";
-import type { HistoryGroup, HistoryIndex } from "../shared/history.js";
+import { unarchivedGroups, type HistoryGroup, type HistoryIndex } from "../shared/history.js";
+import { taskToolName } from "../shared/tasks.js";
 import { threadGroups } from "../shared/thread-layout.js";
 import { toolSummary } from "../shared/tool-summary.js";
 import { chatMessage, transcriptEntries } from "./transcript.js";
@@ -13,7 +14,7 @@ export interface HistoryProjection {
   bytes: number;
 }
 /** Physical compaction events delimit disjoint UI ranges, independently of model keep boundaries. */
-export function historyProjection(manager: SessionManager, _source: string, origins: ReadonlyMap<string, RunOrigin> = new Map()): HistoryProjection {
+export function historyProjection(manager: SessionManager, _source: string, origins: ReadonlyMap<string, RunOrigin> = new Map(), current: Iterable<ChatMessage> = []): HistoryProjection {
   const branch = manager.getBranch();
   const positions = new Map(branch.map((entry, i) => [entry.id, i]));
   const checkpoints = branch.filter(entry => entry.type === "compaction");
@@ -36,25 +37,32 @@ export function historyProjection(manager: SessionManager, _source: string, orig
     for (const id of related) hash.update(JSON.stringify(messages.get(id) ?? null));
     return hash.digest("hex").slice(0, 24);
   };
+  // Delivery belongs to the complete user turn, not to a physical storage bucket.
+  // Include terminal deltas which may precede native persistence. Compaction
+  // summaries are storage boundaries, never new user turns or deliveries.
+  for (const message of current) if (!message.compression) messages.set(message.id, message);
+  const ordered = [...messages.values()].filter(message => !message.compression);
+  const layout = threadGroups(ordered);
   const segments = checkpoints.map((checkpoint, i) => {
     const compression = compactionDisplay(checkpoint, branch);
     messages.set(checkpoint.id, { id: checkpoint.id, role: "notice", text: checkpoint.summary, compression });
-    const groups: HistoryGroup[] = threadGroups(buckets[i], { archived: true }).map(group => {
+    const retained = new Set(buckets[i].map(message => message.id));
+    const excluded = new Set(ordered.filter(message => !retained.has(message.id)).map(message => message.id));
+    const groups: HistoryGroup[] = unarchivedGroups(layout, excluded).map(group => {
       const items = group.ids.map(id => messages.get(id)!);
       const last = items.filter(item => item.role === "assistant").at(-1);
-      const calls = items.flatMap(item => item.calls ?? []);
+      const thinkingOnly = new Set(group.thinkingOnlyIds);
+      const calls = items.flatMap(item => thinkingOnly.has(item.id) ? [] : item.calls ?? []);
       const latest = calls.at(-1);
       const latestSummary = latest && toolSummary(latest);
-      // A compaction can interrupt a run before final_answer. These archived
-      // activities are still completed history, not live process fragments.
-      // Leave ordinary prose boundaries intact.
-      const folded = group.folded || group.activity && items.some(item => item.role === "assistant");
-      return { ...group, ...(folded ? { folded: true } : {}), revision: digest(group.ids), estimatedHeight: folded ? group.folded ? 82 : 36 : group.activity ? 60 : Math.min(680, 92 + Math.ceil((items[0]?.text.length ?? 0) / 75) * 24),
-        ...(folded ? { process: {
+      const folded = !!group.folded;
+      return { ...group, revision: digest(group.ids), estimatedHeight: folded ? 82 : group.activity ? 60 : Math.min(680, 92 + Math.ceil((items[0]?.text.length ?? 0) / 75) * 24),
+        ...(group.activity ? { process: {
           status: last?.error || last?.status === "failed" ? "failed" as const : last?.status === "cancelled" ? "cancelled" as const : "completed" as const,
           calls: calls.length,
           ...(items.some(item => item.runOrigin) ? { origins: [...new Set(items.flatMap(item => item.runOrigin ? [item.runOrigin] : []))] } : {}),
-          inline: !group.folded,
+          inline: !folded,
+          ...(calls.some(call => taskToolName(call.name)) ? { hasTasks: true } : {}),
           failed: calls.filter(call => messages.get(`tool-${call.id}`)?.status === "failed").length,
           succeeded: calls.filter(call => messages.get(`tool-${call.id}`)?.status === "completed").length,
           ...(latest && latestSummary ? { latest: { name: latestSummary.label, icon: latestSummary.icon,

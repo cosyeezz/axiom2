@@ -1,3 +1,4 @@
+import { supervisorEnvironment } from "./component-environment.js";
 import { withCommandAdmission } from "../command-admission.js";
 import { currentMaintenance } from "../maintenance.js";
 import { MaintenanceError } from "../../shared/maintenance.js";
@@ -76,7 +77,7 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
   try {
     options.beforeStart?.(owner);
     const entry = fileURLToPath(new URL(`./tool-process-worker.${source ? "ts" : "js"}`, import.meta.url));
-    const forkOptions = { cwd: options.cwd ?? options.root, execArgv: source ? ["--import", import.meta.resolve("tsx")] : [], serialization: "advanced" as const };
+    const forkOptions = { cwd: options.cwd ?? options.root, env: supervisorEnvironment(), execArgv: source ? ["--import", import.meta.resolve("tsx")] : [], serialization: "advanced" as const };
     owned = forkMaintenanceProcess(entry, forkOptions, deadline(), timeoutError, identity => journal.arm(identity));
     child = owned.child;
   } catch (error) {

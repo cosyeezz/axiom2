@@ -3,16 +3,18 @@ import { createPortal } from "react-dom";
 import { Icon } from "../Icon.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
 import { useCostReport, type CostReportState } from "../useCostReport.js";
+import { useModelDisplay } from "../useModelDisplay.js";
 import { costAmount, costTokens, costCategories, costLabels, costPartLabels, costParts, sumCosts, type CostReport, type CostRow, type CostTotals } from "../../shared/costs.js";
 import type { Scope } from "../../shared/protocol.js";
 import "../styles/costs.css";
 const number = (value: number) => value.toLocaleString("zh-CN");
 function Breakdown({ row, title, description }: { row: CostRow; title?: ReactNode; description?: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const display = useModelDisplay()({ provider: row.provider, id: row.model });
   return <details className="cost-line" onToggle={(event) => setOpen(event.currentTarget.open)}>
-    <summary><Icon name="chevron-right" className="cost-chevron" />{title ?? <strong className="cost-line-title">{row.model ?? "模型未记录"}</strong>}<strong className="cost-number">{costAmount(row)}</strong><small className="cost-line-meta">{description ?? <>{row.provider ?? "供应商未记录"} · {row.records} 条用量记录 · <span className="cost-token-count">{costTokens(row)} Token</span></>}</small></summary>
+    <summary><Icon name="chevron-right" className="cost-chevron" />{title ?? <strong className="cost-line-title">{display.model}</strong>}<strong className="cost-number">{costAmount(row)}</strong><small className="cost-line-meta">{description ?? <>{display.provider} · {row.records} 条用量记录 · <span className="cost-token-count">{costTokens(row)} Token</span></>}</small></summary>
     {open && <div className="cost-breakdown">
-      {title && <p className="cost-model-context">{row.model ?? "模型未记录"} · {row.provider ?? "供应商未记录"} · {row.records} 条用量记录</p>}
+      {title && <p className="cost-model-context">{display.model} · {display.provider} · {row.records} 条用量记录</p>}
       <div className="cost-table-scroll" tabIndex={0} role="region" aria-label="Token 费用分项"><table><caption>按 Token 类型计算 · 美元</caption><thead><tr><th scope="col">类型</th><th scope="col">已知 Token</th><th scope="col">折算单价 / 百万</th><th scope="col">已知费用</th></tr></thead>
         <tbody>{costParts.map((part) => <tr key={part}><th scope="row">{costPartLabels[part]}</th><td>{number(row.tokens[part])}</td>
           <td>{!row.unknownParts && !row.unknownTokens && row.tokens[part] > 0 ? `$${(row.parts[part] / row.tokens[part] * 1_000_000).toFixed(4)}` : "—"}</td>
@@ -27,6 +29,7 @@ function Amount({ value }: { value: CostTotals }) {
   return <strong className="cost-number">{costAmount(value)}</strong>;
 }
 const Report = memo(function Report({ report }: { report: CostReport }) {
+  const display = useModelDisplay();
   const totals = Object.fromEntries(costCategories.map((category) => [category, sumCosts(report.rows.filter((row) => row.category === category))]));
   const sessionTitle = (id: string) => report.sessions.find((session) => session.id === id)?.title ?? "未知会话";
   const children = report.sessions.filter((session) => session.taskId);
@@ -57,7 +60,7 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
         const title = <h3 className="cost-line-title"><span className="cost-index">{String(index + 1).padStart(2, "0")}</span><span>{child.title}</span></h3>;
         const status = <>{({ queued: "排队中", starting: "启动中", running: "运行中", stopping: "停止中", completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" } as Record<string, string>)[child.status ?? ""] ?? "状态未知"}{child.id === report.requestedSessionId ? " · 当前查看的子会话" : ""}</>;
         return <article className={`cost-source cost-task${rows.length === 1 ? " cost-task-single" : ""}`} key={child.id} data-session-id={child.id}>
-          {rows.length === 1 ? <Breakdown row={rows[0]} title={title} description={<>{status} · {rows[0].model ?? "模型未记录"} · {rows[0].records} 条记录 · <span className="cost-token-count">{costTokens(rows[0])} Token</span></>} /> : <>
+          {rows.length === 1 ? <Breakdown row={rows[0]} title={title} description={<>{status} · {display({ provider: rows[0].provider, id: rows[0].model }).model} · {rows[0].records} 条记录 · <span className="cost-token-count">{costTokens(rows[0])} Token</span></>} /> : <>
             <div className="cost-source-heading"><div>{title}<p>{status}</p></div><Amount value={sumCosts(rows)} /></div>
             {rows.map((row) => <Breakdown key={row.id} row={row} />)}
             {!rows.length && <p className="cost-empty">暂无已记录用量；排队或尚未返回的请求不计作零费用。</p>}

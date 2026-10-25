@@ -13,8 +13,10 @@ export interface HistoryGroup extends ThreadGroup {
     origins?: RunOrigin[];
     failed: number;
     succeeded?: number;
-    /** Settled archives own an outer status card; their inner process stays inline. */
+    /** A local tool/thinking disclosure, not evidence of a completed delivery. */
     inline?: boolean;
+    /** Task cards must remain visible before delivery, including in archives. */
+    hasTasks?: boolean;
     latest?: { name: string; icon: ToolIcon; target: string; status: "completed" | "failed" | "cancelled" | "unknown" };
     preview: string;
   };
@@ -41,6 +43,7 @@ export function unarchivedGroups(groups: ThreadGroup[], archived: Set<string>): 
     return [{ ...group, id, ids,
       ...(group.thinkingOnlyIds ? { thinkingOnlyIds: group.thinkingOnlyIds.filter(id => retained.has(id)) } : {}),
       ...(group.callsOnlyIds ? { callsOnlyIds: group.callsOnlyIds.filter(id => retained.has(id)) } : {}),
+      ...(group.bodyHiddenIds ? { bodyHiddenIds: group.bodyHiddenIds.filter(id => retained.has(id)) } : {}),
       ...(ids[0] !== group.ids[0] ? { selectionChange: undefined } : {}),
     }];
   });

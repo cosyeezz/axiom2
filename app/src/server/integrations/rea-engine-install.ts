@@ -10,7 +10,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReaEngineId } from "../../shared/rea-engines.js";
 import { extractEngineArchive } from "./rea-engine-archive.js";
 import { engineHost, engineInstallable, type EngineHost } from "./rea-engines.js";
-import { ghidraVersion, jadxVersion, jadxSha256, wabtVersion } from "./rea-engine-policy.js";
+import { ghidraVersion, jadxVersion, jadxSha256, wabtVersion, engineContractSupported, engineContractVersion } from "./rea-engine-policy.js";
 import { readReaConfig, reaDirectory } from "./rea-runtime.js";
 import { reuseEngineDownload } from "./rea-engine-download.js";
 import { buildGhidraNatives, ghidraBuildEnvironment } from "./rea-engine-ghidra.js";
@@ -44,7 +44,8 @@ export async function smallText(url: string, signal: AbortSignal, fetcher: Engin
   finally { await reader.cancel(); }
   return Buffer.concat(chunks).toString("utf8");
 }
-export async function engineRelease(id: ReaEngineId, signal: AbortSignal, host = engineHost(), fetcher: EngineFetch = fetchEngine): Promise<EngineRelease> {
+export async function engineRelease(id: ReaEngineId, signal: AbortSignal, host = engineHost(), fetcher: EngineFetch = fetchEngine, reaVersion = engineContractVersion): Promise<EngineRelease> {
+  if (!engineContractSupported(reaVersion)) throw Error(`REA ${reaVersion} 的配套依赖契约尚未验证，未选择不兼容的最新版组件。`);
   const manualGhidra = id === "ghidra" && ["darwin", "linux"].includes(host.platform) && ["x64", "arm64"].includes(host.arch);
   const manualHopper = id === "hopper" && host.platform === "darwin" && ["x64", "arm64"].includes(host.arch);
   if (!engineInstallable(id, host) && !manualGhidra && !manualHopper) throw Error("当前后台系统/架构没有受支持的发行包，请通过官方说明配置已有安装。");
@@ -115,7 +116,7 @@ export async function findEnginePath(root: string, id: ReaEngineId, host: Engine
 export async function prepareEngine(root: string, id: ReaEngineId, signal: AbortSignal, notify: (message: string) => void, fetcher: EngineFetch = fetchEngine, selected?: EngineRelease, options: { cachedOnly?: boolean; run?: EngineRun } = {}) {
   const host = engineHost(), run = options.run ?? runEngine;
   if (!engineInstallable(id, host)) throw Error("当前组件需要手动安装，请使用下载安装包。");
-  const release = selected ?? await engineRelease(id, signal, host, fetcher);
+  const release = selected ?? await engineRelease(id, signal, host, fetcher, readReaConfig(root).installation?.version);
   if (release.format === "dmg") throw Error("Hopper 安装由用户通过官方安装器完成。");
   const buildEnv = id === "ghidra" && host.platform === "darwin" ? await ghidraBuildEnvironment(root, signal, run) : undefined;
   const directory = join(reaDirectory(root), "engines", `${id}-${randomUUID()}`);

@@ -2,12 +2,12 @@ import { MaintenanceError } from "../../shared/maintenance.js";
 import { maintainedFetch, maintenancePhase } from "../maintenance.js";
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { gunzipSync, inflateRawSync } from "node:zlib";
 import { Agent, fetch } from "undici";
 import type { ProxyKernel } from "../../shared/model-proxy.js";
 import { proxyDirectory } from "./model-proxy-config.js";
-import { runRtk } from "./rtk-process.js";
+import { runNative } from "./native-process.js";
 
 export type ProxyRelease = { kernel: ProxyKernel; version: string; asset: string; url: string; sha256: string };
 export function proxyAsset(kernel: ProxyKernel, version: string, platform = process.platform as string, arch = process.arch as string) {
@@ -94,7 +94,7 @@ export async function installProxyKernel(root: string, release: ProxyRelease, si
     const data = release.asset.endsWith(".gz") ? gunzipSync(archive, { maxOutputLength: 200 * 1024 * 1024 }) : proxyZipMember(archive, member);
     const file = join(dest, binary); writeFileSync(file, data, { flag: "wx", mode: 0o700 }); chmodSync(file, 0o700);
     maintenancePhase("validating");
-    const version = (await runRtk(file, [release.kernel === "xray" ? "version" : "-v"], { root, signal, timeout: 10_000 })).toString();
+    const version = (await runNative(file, [release.kernel === "xray" ? "version" : "-v"], { root, signal, timeout: 10_000, environmentDirectory: join(dirname(file), "environment") })).toString();
     if (!version.includes(release.version) || !(release.kernel === "xray" ? /^Xray / : /^Mihomo /).test(version)) throw Error("内核版本自检失败。");
     signal.throwIfAborted(); return { version: release.version, directory };
   } catch (error) {

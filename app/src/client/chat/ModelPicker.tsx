@@ -4,6 +4,7 @@ import { useAnchoredPopup } from "../useAnchoredPopup.js";
 import { closePopover } from "../popover.js";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
+import { modelDisplay } from "../../shared/model-display.js";
 import {
   agentScope,
   emptyAgent,
@@ -90,7 +91,7 @@ export function ModelPicker({
   };
   const models = useMemo(() => expanded ? config.available
     .filter((m) =>
-      `${m.provider} ${m.name} ${m.id}`
+      `${m.providerName ?? ""} ${m.provider} ${m.name} ${m.id}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
     )
@@ -137,7 +138,7 @@ export function ModelPicker({
         <span>
           {childDefault ? "默认子模型 · " : ""}
           {selection
-            ? `${config.available.find((m) => m.provider === selection.provider && m.id === selection.id)?.name ?? selection.id} · ${selection.thinking}`
+            ? `${modelDisplay(config.available, selection).model} · ${selection.thinking}`
             : inheritLabel ?? (childDefault
               ? "继承主会话选择"
               : "未选择模型")}
@@ -173,7 +174,7 @@ export function ModelPicker({
                   type="button"
                   className="model-option"
                   disabled={busy || disabled}
-                  data-tooltip={`${m.name}\n${m.provider} / ${m.id}`}
+                  data-tooltip={modelDisplay(config.available, m).label}
                   aria-pressed={
                     draft?.provider === m.provider && draft.id === m.id
                   }
@@ -188,8 +189,8 @@ export function ModelPicker({
                   }
                 >
                   <span className="model-copy">
-                    <span className="model-name">{m.name}</span>
-                    <small className="model-provider-name">{m.provider}</small>
+                    <span className="model-name">{modelDisplay(config.available, m).model}</span>
+                    <small className="model-provider-name">{modelDisplay(config.available, m).provider}</small>
                   </span>
                   <Icon className="model-check" name="check" />
                 </button>
@@ -294,7 +295,7 @@ export function ModelPicker({
         {running(info.run) && (
           <details className="model-run-note">
             <summary><span>下次执行生效，本次追加不变。</span><Icon name="chevron" /></summary>
-            <p>当前执行：{info.run!.selection.provider} / {info.run!.selection.id} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}</p>
+            <p>当前执行：{modelDisplay(config.available, info.run!.selection).label} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}</p>
           </details>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}

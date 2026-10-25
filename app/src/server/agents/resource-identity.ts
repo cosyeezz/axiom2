@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, constants, type BigIntStats } from "node:fs";
 import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { openCliConfigPath, openCliSkillNames, readOpenCliConfig } from "../integrations/opencli-runtime.js";
-import { reaConfigPath, reaPackageRoot, reaSkillName, readReaConfig } from "../integrations/rea-runtime.js";
+import { openCliConfigPath, openCliSkillNames, openCliPrefix, openCliNode, validateOpenCliPackage, readOpenCliConfig } from "../integrations/opencli-runtime.js";
+import { reaConfigPath, reaPackageRoot, reaSkillName, reaDirectory, readReaConfig } from "../integrations/rea-runtime.js";
+import { inspectNodeRuntime } from "../integrations/managed-node.js";
+import { inspectNodeLauncher } from "../integrations/node-launcher.js";
 import { piDevelopmentSkillPath } from "../axiom-prompt.js";
 import { rejectExecution, type ExecutionRejection, type RejectionObserver } from "../execution-diagnostics.js";
 
@@ -137,12 +139,18 @@ function* resources(cwd: string, agentDir: string, witnesses?: Map<string, Witne
   yield* visit(openCliConfigPath(root), { scope: 'integration', resource: 'config' });
   const opencli = readOpenCliConfig(root);
   if (opencli && !opencli.detached) {
+    if (opencli.runtime) {
+      const runtime = inspectNodeRuntime(openCliPrefix(opencli), opencli.runtime);
+      const { entry } = validateOpenCliPackage(opencli);
+      for (const file of [...runtime.files, ...inspectNodeLauncher(openCliPrefix(opencli), openCliNode(opencli), entry)]) yield* visit(file, { scope: 'integration', resource: 'entry' });
+    }
     yield* visit(join(opencli.packageRoot, "package.json"), { scope: 'integration', resource: 'package' });
     for (const name of openCliSkillNames) yield* visit(join(opencli.packageRoot, "skills", name, "SKILL.md"), { scope: 'integration', resource: 'skills' });
   }
   yield* visit(reaConfigPath(root), { scope: 'integration', resource: 'config' });
   const rea = readReaConfig(root), packageRoot = reaPackageRoot(root, rea);
   if (packageRoot) {
+    if (rea.installation?.runtime) for (const file of inspectNodeRuntime(join(reaDirectory(root), "versions", rea.installation.directory), rea.installation.runtime).files) yield* visit(file, { scope: 'integration', resource: 'entry' });
     yield* visit(join(packageRoot, "package.json"), { scope: 'integration', resource: 'package' });
     if (rea.mcpInstalled !== false) {
       yield* visit(join(packageRoot, "scripts", "rea.mjs"), { scope: 'integration', resource: 'entry' });

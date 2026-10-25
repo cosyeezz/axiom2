@@ -10,9 +10,23 @@ import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 export const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
 export const classification = (input: Pick<MemoryExecution, "prompt">, name = "记忆事务") => ({ answer: JSON.stringify([{ name, children: JSON.parse(input.prompt).purposes.map((p: { id: string }) => ({ purposeId: p.id })) }]), incomplete: false });
-export const navigation = (input: Pick<MemoryExecution, "prompt">, answer = "原文验证通过") => {
+/** Independently decode the model-facing protocol for fake semantic selections. */
+export const matchingCandidates = (input: Pick<MemoryExecution, "prompt">) => {
   const data = JSON.parse(input.prompt);
-  return { answer: data.candidates ? JSON.stringify(data.candidates.map((c: { id: string }) => c.id)) : answer, incomplete: false };
+  if (!Array.isArray(data.catalog)) return undefined;
+  const groups = new Map<number, string>();
+  const candidates: { id: number; text: string; kind?: string; purpose?: string; state?: string }[] = [];
+  for (const row of data.catalog) {
+    if (row[0] === "G") { groups.set(row[1], row[2]); continue; }
+    candidates.push(data.stage === "directories"
+      ? { id: row[0], kind: row[1] === "D" ? "directory" : "purpose", text: row[2] }
+      : { id: row[0], purpose: groups.get(row[1]), state: row[2], text: row[3] });
+  }
+  return candidates;
+};
+export const navigation = (input: Pick<MemoryExecution, "prompt">, answer = "原文验证通过") => {
+  const candidates = matchingCandidates(input);
+  return { answer: candidates ? JSON.stringify(candidates.map(c => c.id)) : answer, incomplete: false };
 };
 /** All fixtures use disposable storage, explicit batch driving and no business models. */
 export function purposeFixture() {

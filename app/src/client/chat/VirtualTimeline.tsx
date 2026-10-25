@@ -1,5 +1,7 @@
 import { Fragment, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { nextDelivery, type ScrollDirection } from "./delivery-navigation.js";
+import { createPortal } from "react-dom";
+import { FoldIcon } from "../StatusIcons.js";
 
 export interface TimelineNavigation {
   step: (direction: ScrollDirection) => boolean;
@@ -13,6 +15,10 @@ export interface TimelineRow {
   /** Cached message fallback for catalogues from an older running backend. */
   isDelivery?: () => boolean;
   estimate: number;
+  revision?: string;
+  /** The card disappears on expansion; anchor to its first source message. */
+  expandTo?: string;
+  ranges?: { id: string; label: string; key: string; collapse: () => void }[];
   segmentId?: string;
   collapseKey?: string;
   render: () => ReactNode;
@@ -46,10 +52,11 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   const heights = useRef(new Map<string, number>());
   const [viewport, setViewport] = useState({ top: 0, height: 800 });
   const [, invalidate] = useState(0);
-  const anchor = useRef<{ key: string; offset: number; fallback?: string } | null>(null);
+  const anchor = useRef<{ key: string; offset: number; fallback?: string; messageId?: string } | null>(null);
   const positioning = useRef(false);
   const collapseFocus = useRef<string | null>(null);
-  const signature = rows.map(row => row.key).join("\n");
+  const expandFocus = useRef<string | null>(null);
+  const signature = rows.map(row => `${row.key}:${row.revision ?? ""}`).join("\n");
   const previousSignature = useRef(signature);
   const frame = useRef(0);
   const selectionSignature = useRef("[]");
@@ -75,7 +82,7 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const { rows, offsets } = geometry.current;
     const top = el.scrollTop - topInScroller();
     const i = rows.findIndex((_, i) => offsets[i + 1] > top);
-    if (i >= 0) anchor.current = { key: rows[i].key, offset: offsets[i] - top, fallback: rows[i].collapseKey };
+    if (i >= 0) anchor.current = { key: rows[i].key, offset: offsets[i] - top, fallback: rows[i].collapseKey, messageId: rows[i].messageIds?.[0] };
   };
   const measureViewport = () => {
     const el = scrollElement();
@@ -89,7 +96,8 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const { rows, offsets } = geometry.current;
     let i = rows.findIndex(row => row.key === saved.key);
     const fallback = i < 0;
-    if (fallback && saved.fallback) i = rows.findIndex(row => row.key === saved.fallback);
+    if (i < 0 && saved.messageId) i = rows.findIndex(row => row.messageIds?.includes(saved.messageId!));
+    if (i < 0 && saved.fallback) i = rows.findIndex(row => row.key === saved.fallback);
     if (i < 0) return;
     const offset = fallback ? Math.max(0, Math.min(24, saved.offset)) : saved.offset;
     const top = topInScroller() + offsets[i] - offset;
@@ -195,6 +203,11 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     return () => { cancelAnimationFrame(frame); observer.disconnect(); positioning.current = false; };
   }, [reveal?.key, reveal?.revision]);
   useLayoutEffect(() => {
+    if (expandFocus.current) {
+      const key = rows.find(row => row.messageIds?.includes(expandFocus.current!))?.key;
+      const row = key && root.current?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(key)}"]`);
+      if (row) { row.tabIndex = -1; row.focus({ preventScroll: true }); expandFocus.current = null; }
+    }
     if (collapseFocus.current) {
       const key = collapseFocus.current;
       const card = root.current?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(key)}"] .history-disclosure`);
@@ -238,25 +251,75 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const positions = rows.flatMap((row, i) => pinned.has(row.key) ? [i] : []);
     if (positions.length) for (let i = Math.min(...positions); i <= Math.max(...positions); i++) pinned.add(rows[i].key);
   }
+  // Navigation targets mount individually; do not pin every intervening row.
+  if (reveal) pinned.add(reveal.key);
+  if (collapseFocus.current) pinned.add(collapseFocus.current);
+  const expandedKey = expandFocus.current && rows.find(row => row.messageIds?.includes(expandFocus.current!))?.key;
+  if (expandedKey) pinned.add(expandedKey);
   const overscan = Math.max(600, viewport.height);
   const visible = rows.map((row, i) => ({ row, i })).filter(({ row, i }) =>
     offsets[i + 1] >= viewport.top - overscan && offsets[i] <= viewport.top + viewport.height + overscan || pinned.has(row.key));
   let end = 0;
-  const segments = new Set<string>();
-  return <div ref={root} className="virtual-timeline" data-total-rows={rows.length} data-window-top={Math.round(viewport.top)}>
+  const shell = root.current?.closest<HTMLElement>(".thread-shell");
+  const shellBounds = shell?.getBoundingClientRect();
+  const threadBounds = scrollElement()?.getBoundingClientRect();
+  const base = (threadBounds?.top ?? 0) - (shellBounds?.top ?? 0);
+  const mobile = !!shell?.closest(".mobile-workbench,.android-workbench") || matchMedia("(max-width: 700px)").matches;
+  const ranges = new Map<string, { range: NonNullable<TimelineRow["ranges"]>[number]; top: number; distance: number }>();
+  for (const { row, i } of visible) {
+    if (offsets[i + 1] <= viewport.top || offsets[i] >= viewport.top + viewport.height) continue;
+    const start = Math.max(offsets[i], viewport.top), end = Math.min(offsets[i + 1], viewport.top + viewport.height);
+    const distance = Math.max(0, start - viewport.top - viewport.height / 2, viewport.top + viewport.height / 2 - end);
+    for (const range of row.ranges ?? []) if (!ranges.has(range.id)) ranges.set(range.id, {
+      range, top: base + Math.max(8, start - viewport.top + 20), distance,
+    });
+  }
+  const controls = [...ranges.values()];
+  const current = controls.reduce<typeof controls[number] | undefined>((best, next) => !best || next.distance < best.distance ? next : best, undefined);
+  const nav = shell?.querySelector<HTMLElement>(".thread-navigation")?.getBoundingClientRect();
+  const controlTops: number[] = [];
+  const collapse = (range: NonNullable<TimelineRow["ranges"]>[number]) => {
+    following.current = false;
+    deliveryCursor.current = null;
+    positioning.current = true;
+    anchor.current = { key: range.key, offset: 24 };
+    collapseFocus.current = range.key;
+    setReveal(previous => ({ key: range.key, selector: `[data-timeline-key="${CSS.escape(range.key)}"] .history-disclosure`, revision: (previous?.revision ?? 0) + 1 }));
+    range.collapse();
+  };
+  return <><div ref={root} className="virtual-timeline" data-total-rows={rows.length} data-window-top={Math.round(viewport.top)}>
     {visible.map(({ row, i }) => {
       const gap = offsets[i] - end; end = offsets[i + 1];
-      const inViewport = offsets[i + 1] > viewport.top && offsets[i] < viewport.top + viewport.height;
-      const rail = row.segmentId && inViewport && !segments.has(row.segmentId);
-      if (rail && row.segmentId) segments.add(row.segmentId);
       return <Fragment key={row.key}>
         {gap > 0 && <div className="timeline-spacer" style={{ height: gap }} aria-hidden="true" />}
-        <div data-timeline-key={row.key} data-history-segment={row.segmentId} className={`timeline-row${row.segmentId ? " history-range-row" : ""}`}>
-          {rail && row.collapse && <button type="button" className="history-range-collapse" style={{ top: Math.max(2, viewport.top - offsets[i] + 36) }} aria-label="收起本段会话原文" onClick={() => { collapseFocus.current = row.collapseKey ?? null; row.collapse?.(); }}>收起</button>}
+        <div data-timeline-key={row.key} data-history-segment={row.segmentId} data-history-segments={row.ranges?.map(range => range.id).join(" ") || undefined} className="timeline-row"
+          onClickCapture={event => {
+            if (!(event.target instanceof Element) || !event.target.closest("[data-history-expand]")) return;
+            following.current = false; deliveryCursor.current = null; positioning.current = false; setReveal(undefined);
+            anchor.current = { key: row.key, offset: 24, messageId: row.expandTo };
+            expandFocus.current = row.expandTo ?? null;
+          }}>
           {row.render()}
         </div>
       </Fragment>;
     })}
     {offsets.at(-1)! - end > 0 && <div className="timeline-spacer" style={{ height: offsets.at(-1)! - end }} aria-hidden="true" />}
-  </div>;
+  </div>{shell && createPortal(<div className="history-range-controls" data-mobile={mobile || undefined} aria-label="历史范围收起">
+    {(mobile ? current ? [current] : [] : controls).map(({ range, top }) => {
+      if (!mobile) {
+        const height = shellBounds?.height ?? viewport.height;
+        const preferred = Math.max(4, Math.min(top, height - 48));
+        const options = [preferred, ...Array.from({ length: Math.max(0, Math.floor((height - 8) / 46)) }, (_, i) => 4 + 46 * i)]
+          .filter(y => y + 44 <= height - 4 && !controlTops.some(other => Math.abs(other - y) < 46)
+            && !(nav && shellBounds && nav.width > 0 && nav.height > 0 && y + 44 > nav.top - shellBounds.top - 4 && y < nav.bottom - shellBounds.top + 4))
+          .sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred));
+        if (!options.length) return null;
+        top = options[0]; controlTops.push(top);
+      }
+      return <button key={range.id} type="button" className="history-range-collapse" data-collapse-segment={range.id}
+        style={mobile ? undefined : { top }} aria-label={range.label} data-tooltip={range.label} onClick={() => collapse(range)}>
+        <span aria-hidden="true"><FoldIcon /></span>
+      </button>;
+    })}
+  </div>, shell)}</>;
 }

@@ -69,15 +69,29 @@ try {
   assert.equal(await toggle("旧方案").getAttribute("aria-expanded"), "false");
   assert.equal(await toggle("已交付目标").getAttribute("aria-expanded"), "false");
   assert.equal(await toggle("新方案").getAttribute("aria-expanded"), "true");
+  const assertDirection = async (name: string, expanded: boolean) => {
+    const arrow = toggle(name).locator(".memory-task-chevron");
+    assert.equal(await arrow.locator("use").getAttribute("href"), "#i-chevron-down");
+    const matrix = await arrow.evaluate(node => {
+      const value = new DOMMatrixReadOnly(getComputedStyle(node).transform);
+      return { a: value.a, d: value.d };
+    });
+    assert.ok(Math.abs(matrix.a - (expanded ? -1 : 1)) < 0.001 && Math.abs(matrix.d - (expanded ? -1 : 1)) < 0.001, expanded ? "expanded arrow points up" : "collapsed arrow points down");
+  };
+  await assertDirection("已交付目标", false); await assertDirection("新方案", true);
   assert.equal(await todo.getByText("交付步骤", { exact: true }).count(), 0);
   assert.equal(await todo.getByRole("button", { name: "新方案", exact: true }).count(), 0, "no file means no clickable title");
   assert.equal(await todo.getByRole("button", { name: "查看详情：新方案", exact: true }).count(), 0);
   assert.equal(await todo.locator("button button, button a").count(), 0);
+  assert.equal(await todo.locator(".memory-task-state").count(), 0, "task rows must not show status text");
   assert.equal(await todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true }).count(), 1);
   for (const name of ["旧方案", "旧探索", "废弃实现"]) await toggle(name).click();
   assert.ok(await todo.locator('li[data-abandoned="true"]').count() >= 4);
   assert.equal(await todo.locator('li[data-abandoned="true"] animateTransform').count(), 0);
-  for (const state of ["未开始", "进行中", "已完成", "等待", "已放弃", "失败"]) assert.ok(await todo.locator(`svg.memory-state-icon[data-state="${state}"]`).count(), state);
+  for (const state of ["未开始", "进行中", "已完成", "等待", "已放弃", "失败"]) {
+    assert.ok(await todo.locator(`svg.memory-state-icon[data-state="${state}"]`).count(), state);
+    assert.ok(await todo.getByRole("img", { name: state, exact: true }).count(), `accessible status: ${state}`);
+  }
   const active = todo.locator('li:not([data-abandoned]) > .memory-task-row svg[data-state="进行中"]').first();
   const waiting = todo.locator('svg.memory-state-icon[data-state="等待"]').first();
   const done = todo.locator('li:not([data-goal]) > .memory-task-row svg[data-state="已完成"]').first();
@@ -93,7 +107,8 @@ try {
   }
   assert.equal(await done.locator('[repeatCount="indefinite"]').count(), 0);
   assert.equal(reads.length, 0, "closed details must not prefetch");
-  await toggle("新方案").click(); await toggle("新方案").click();
+  await toggle("新方案").click(); await assertDirection("新方案", false);
+  await toggle("新方案").click(); await assertDirection("新方案", true);
   assert.equal(await done.evaluate((node, previous) => node === previous, doneNode), true);
   const detailButton = todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true });
   await todo.locator(".toolbar-detail-body").evaluate(node => { node.scrollTop = 100; });
@@ -108,6 +123,14 @@ try {
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await todo.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, `tree overflow at ${width}`);
+    const rows = await todo.locator(".memory-task-row:visible").evaluateAll(nodes => nodes.map(row => {
+      const toggle = row.querySelector(".memory-branch-disclosure"), marker = row.querySelector(".memory-task-marker")!, title = row.querySelector(".memory-task-title")!, detail = row.querySelector(".memory-task-detail-button");
+      return { text: (row as HTMLElement).innerText.trim(), title: (title as HTMLElement).innerText.trim(), ordered: marker.getBoundingClientRect().right <= title.getBoundingClientRect().left && (!toggle || title.nextElementSibling === toggle && title.getBoundingClientRect().right <= toggle.getBoundingClientRect().left && (!detail || toggle.nextElementSibling === detail && toggle.getBoundingClientRect().right <= detail.getBoundingClientRect().left)) };
+    }));
+    for (const row of rows) {
+      assert.equal(row.text, row.title, `only title text at ${width}`);
+      assert.equal(row.ordered, true, `disclosure after title and before optional document icon at ${width}`);
+    }
     assert.match(await todo.locator('li[data-abandoned="true"] .memory-task-title').first().evaluate(node => getComputedStyle(node).textDecorationLine), /line-through/);
     if (width <= 640) {
       const targets = await todo.locator('.memory-title-open:visible,.memory-branch-disclosure:visible,.memory-task-detail-button:visible').evaluateAll(nodes => nodes.map(node => ({ label: node.getAttribute("aria-label") || node.textContent, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
@@ -159,7 +182,7 @@ try {
   assert.match(await rejection.innerText(), /已有记忆标题不能改名/);
   assert.equal(readFileSync(entry, "utf8"), originalEntry);
   assert.deepEqual(errors, []);
-  console.log("标题路径任务树UI通过：六态/有效前沿、独立折叠、存在才可点、标题与图标同路、懒加载分页隔离、DOM/焦点/滚动、1440/390/320、文件消失降级、完整详情导航与改名拒绝。");
+  console.log("标题路径任务树UI通过：隐藏状态文字/保留无障碍状态、展开箭头在标题右侧及文本文件图标左侧/收起向下展开向上、六态/有效前沿、独立折叠、存在才可点、标题与图标同路、懒加载分页隔离、DOM/焦点/滚动、1440/390/320、文件消失降级、完整详情导航与改名拒绝。");
 } finally {
   await browser.close(); await app.close();
   if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;

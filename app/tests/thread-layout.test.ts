@@ -164,11 +164,11 @@ test("threadGroups: delegate and mixed calls share the process block", () => {
     delegated,
     message("tool-task", "toolResult"),
     message("second", "assistant", true),
-  ]), [group(true, "first", "task", "second")]);
+  ]), [{ ...group(true, "first", "task", "second"), hasTasks: true }]);
   assert.deepEqual(threadGroups([
     { ...delegated, calls: delegated.calls!.slice(1) },
     { ...delegated, id: "another-task" },
-  ]), [group(true, "task", "another-task")]);
+  ]), [{ ...group(true, "task", "another-task"), hasTasks: true }]);
 });
 
 test("threadGroups: all task tools join activity, including namespaced and mixed calls", () => {
@@ -177,7 +177,7 @@ test("threadGroups: all task tools join activity, including namespaced and mixed
       const special = { ...message("task", "assistant", true), calls: [{ id: "special", name: prefix + name, input: "{}" }] };
       for (const calls of [special.calls, [...special.calls, ...message("other", "assistant", true).calls!]]) {
         assert.deepEqual(threadGroups([message("before", "assistant", true), { ...special, calls }, message("after", "assistant", true)]),
-          [group(true, "before", "task", "after")]);
+          [{ ...group(true, "before", "task", "after"), hasTasks: true }]);
       }
     }
   }
@@ -204,17 +204,17 @@ test("threadGroups: task thinking and task calls stay together inside activity",
       const task: ChatMessage = { ...thought("task"), calls: [{ id: "task-call", name: prefix + name, input: "{}" }] };
       for (const calls of [task.calls, [...before.calls!, ...task.calls!, ...after.calls!]]) {
         assert.deepEqual(threadGroups([before, message("result", "toolResult"), thought("between"), { ...task, calls }, after]), [
-          group(true, "before", "between", "task", "after"),
+          { ...group(true, "before", "between", "task", "after"), hasTasks: true },
         ]);
       }
-      assert.deepEqual(threadGroups([task, after]), [group(true, "task", "after")]);
-      assert.deepEqual(threadGroups([thought("leading"), task]), [group(true, "leading", "task")]);
+      assert.deepEqual(threadGroups([task, after]), [{ ...group(true, "task", "after"), hasTasks: true }]);
+      assert.deepEqual(threadGroups([thought("leading"), task]), [{ ...group(true, "leading", "task"), hasTasks: true }]);
       for (const boundary of [
         { error: "出错" }, { status: "failed" as const }, { status: "cancelled" as const },
       ]) {
-        assert.deepEqual(threadGroups([before, { ...task, ...boundary }, after]), [group(true, "before", "task", "after")]);
+        assert.deepEqual(threadGroups([before, { ...task, ...boundary }, after]), [{ ...group(true, "before", "task", "after"), hasTasks: true }]);
       }
-      assert.deepEqual(threadGroups([before, message("user", "user"), task]), [group(true, "before"), group(false, "user"), group(true, "task")]);
+      assert.deepEqual(threadGroups([before, message("user", "user"), task]), [group(true, "before"), group(false, "user"), { ...group(true, "task"), hasTasks: true }]);
     }
   }
 });
@@ -475,23 +475,25 @@ test("AgentViews: the first delegate call publishes its process group", (t) => {
   assert.deepEqual(events, [{
     scope: threadScope(scope),
     data: { ids: ["last"], groups: [{ ...group(false, "last"), hideThinking: true },
-      { ...group(true, "last"), id: "calls:last", callsOnlyIds: ["last"] }] },
+      { ...group(true, "last"), id: "calls:last", callsOnlyIds: ["last"], hasTasks: true }] },
   }]);
+  views.flush(scope);
+  assert.equal(events[1]?.scope, messageScope(scope, "last"), "task hydration receives the queued message delta");
 });
 
-test("AgentViews: changing a regular call to delegate preserves the group index", (t) => {
+test("AgentViews: changing a regular call to delegate republishes task hydration metadata", (t) => {
   const first = message("first", "assistant", true);
   const last = { ...message("last", "assistant", true), text: "initial task progress" };
   const { views, scope, events } = fixture(t, [first, last]);
   const delegated = { ...last, calls: [{ ...last.calls![0], name: "delegate" }] };
   views.messageChanged(scope, delegated);
-  assert.deepEqual(events, []);
+  assert.deepEqual(events, [{ scope: threadScope(scope), data: { ids: ["first", "last"], groups: threadGroups([first, delegated]) } }]);
   views.flush(scope);
   events.length = 0;
   views.messageChanged(scope, { ...delegated, text: "task progress" });
   assert.deepEqual(events, []);
   views.messageChanged(scope, last);
-  assert.deepEqual(events, []);
+  assert.deepEqual(events, [{ scope: threadScope(scope), data: { ids: ["first", "last"], groups: threadGroups([first, last]) } }]);
 });
 
 test("AgentViews: assistant tool failures and recovery retain the group and publish only message updates", (t) => {

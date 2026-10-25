@@ -1,4 +1,5 @@
 import type { ChatMessage, ThreadIndex } from "./agent.js";
+import { taskToolName } from "./tasks.js";
 
 /** Delivery navigation follows final-answer bodies, never process completion cards. */
 export function threadDelivery(message: ChatMessage): boolean {
@@ -62,6 +63,7 @@ export function threadGroups(messages: ChatMessage[], options: { archived?: bool
       groups.push(group);
     }
     group.ids.push(message.id);
+    if (part !== "thinking" && message.calls?.some(call => taskToolName(call.name))) group.hasTasks = true;
     if (part === "thinking") (group.thinkingOnlyIds ??= []).push(message.id);
     if (part === "calls") (group.callsOnlyIds ??= []).push(message.id);
   };
@@ -85,8 +87,10 @@ export function threadGroups(messages: ChatMessage[], options: { archived?: bool
     } else if (threadActivity(message) || threadThinking(message)) appendProcess(message, selectionChange);
     else groups.push({ id: message.id, ids: [message.id], activity: false, ...(selectionChange ? { selectionChange } : {}) });
   }
-  const folded = foldFinalProcesses(groups, messages);
-  return mergeAdjacentProcesses(options.archived ? foldArchivedProcesses(folded, messages) : folded);
+  // Compaction and run completion are not deliveries. Archived and live
+  // fragments follow the same explicit, completed final-answer boundary.
+  const folded = foldDeliveredFragments(foldFinalProcesses(groups, messages), messages);
+  return mergeAdjacentProcesses(folded);
 }
 
 /** Status and run ownership belong to the contents, not to adjacent card boundaries.
@@ -98,25 +102,7 @@ function mergeAdjacentProcesses(groups: NonNullable<ThreadIndex["groups"]>) {
   let pending: NonNullable<ThreadIndex["groups"]> = [];
   const flush = () => {
     if (pending.length < 2) result.push(...pending);
-    else {
-      const contributions = new Map<string, { thinkingOnly: boolean; callsOnly: boolean }>();
-      for (const part of pending) {
-        const thinking = new Set(part.thinkingOnlyIds), calls = new Set(part.callsOnlyIds);
-        for (const id of part.ids) {
-          const prior = contributions.get(id);
-          contributions.set(id, { thinkingOnly: thinking.has(id) && (prior?.thinkingOnly ?? true),
-            callsOnly: calls.has(id) && (prior?.callsOnly ?? true) });
-        }
-      }
-      const ids = [...contributions.keys()];
-      const thinkingOnlyIds = ids.filter(id => contributions.get(id)!.thinkingOnly);
-      const callsOnlyIds = ids.filter(id => contributions.get(id)!.callsOnly);
-      result.push({ id: pending[0].id, ids, activity: true,
-        ...(pending.some(part => part.folded) ? { folded: true } : {}),
-        ...(pending[0].selectionChange ? { selectionChange: pending[0].selectionChange } : {}),
-        ...(thinkingOnlyIds.length ? { thinkingOnlyIds } : {}),
-        ...(callsOnlyIds.length ? { callsOnlyIds } : {}) });
-    }
+    else result.push(mergeProcessGroups(pending));
     pending = [];
   };
   for (const group of groups) {
@@ -128,18 +114,40 @@ function mergeAdjacentProcesses(groups: NonNullable<ThreadIndex["groups"]>) {
   return result;
 }
 
-/** Archived fragments are settled, even when compaction preceded the answer.
- * Wrap adjacent narration and execution together; ProcessFlow retains their
- * original inner slices. Never borrow an answer or prose from another range.
+/** One rendering contribution per message, shared by live and expanded history.
+ * Union explicit thinking/body/call bits; thinking + calls must not invent body.
  */
-function foldArchivedProcesses(groups: NonNullable<ThreadIndex["groups"]>, messages: ChatMessage[]) {
-  const byId = new Map(messages.map(message => [message.id, message]));
+export function mergeProcessGroups(parts: NonNullable<ThreadIndex["groups"]>) {
+  const contributions = new Map<string, number>();
+  for (const part of parts) {
+    const thinking = new Set(part.thinkingOnlyIds), calls = new Set(part.callsOnlyIds), hidden = new Set(part.bodyHiddenIds);
+    for (const id of part.ids) {
+      const bits = (calls.has(id) ? 0 : 1) | (thinking.has(id) || calls.has(id) || hidden.has(id) ? 0 : 2) | (thinking.has(id) ? 0 : 4);
+      contributions.set(id, (contributions.get(id) ?? 0) | bits);
+    }
+  }
+  const ids = [...contributions.keys()];
+  const thinkingOnlyIds = ids.filter(id => contributions.get(id) === 1);
+  const callsOnlyIds = ids.filter(id => contributions.get(id) === 4);
+  const bodyHiddenIds = ids.filter(id => contributions.get(id) === 5);
+  return { id: parts[0].id, ids, activity: true,
+    ...(parts.every(part => part.folded) ? { folded: true } : {}),
+    ...(parts.some(part => part.hasTasks) ? { hasTasks: true } : {}),
+    ...(parts[0].selectionChange ? { selectionChange: parts[0].selectionChange } : {}),
+    ...(thinkingOnlyIds.length ? { thinkingOnlyIds } : {}),
+    ...(callsOnlyIds.length ? { callsOnlyIds } : {}),
+    ...(bodyHiddenIds.length ? { bodyHiddenIds } : {}) };
+}
+
+/** Wrap fragments only after the caller has confirmed a completed delivery.
+ * ProcessFlow retains their original inner slices and narration ownership.
+ */
+function foldArchivedProcesses(groups: NonNullable<ThreadIndex["groups"]>, messages: ChatMessage[], byId = new Map(messages.map(message => [message.id, message]))) {
   const result: NonNullable<ThreadIndex["groups"]> = [];
   let pending: NonNullable<ThreadIndex["groups"]> = [], runId: string | undefined;
   const collect = (parts: NonNullable<ThreadIndex["groups"]>) => {
-    const ids = [...new Set(parts.flatMap(group => group.ids))];
-    result.push({ id: `final-process:${ids[0]}`, ids, activity: true, folded: true,
-      ...(parts[0].selectionChange ? { selectionChange: parts[0].selectionChange } : {}) });
+    const merged = mergeProcessGroups(parts);
+    result.push({ ...merged, id: `final-process:${merged.ids[0]}`, folded: true });
   };
   const flush = () => {
     if (pending.some(group => group.activity)) collect(pending);
@@ -167,6 +175,31 @@ function foldArchivedProcesses(groups: NonNullable<ThreadIndex["groups"]>, messa
   return result;
 }
 
+/** A resumed delivery can have a new run ID. Settle earlier fragments in the
+ * same user turn without borrowing across users, compactions or prior answers.
+ * Reuse archive wrapping only after explicit delivery: it preserves notices,
+ * selection boundaries and isolated unmarked prose, while enclosing task slices.
+ */
+function foldDeliveredFragments(groups: NonNullable<ThreadIndex["groups"]>, messages: ChatMessage[]) {
+  const byId = new Map(messages.map(message => [message.id, message]));
+  const result: NonNullable<ThreadIndex["groups"]> = [];
+  let pending: NonNullable<ThreadIndex["groups"]> = [];
+  const flush = (delivered = false) => {
+    result.push(...(delivered && pending.length ? foldArchivedProcesses(pending, messages, byId) : pending));
+    pending = [];
+  };
+  for (const group of groups) {
+    const message = byId.get(group.ids[0])!;
+    if (message.role === "user" || message.compression) {
+      flush(); result.push(group);
+    } else if (!group.activity && threadDelivery(message)) {
+      flush(true); result.push(group);
+    } else pending.push(group);
+  }
+  flush();
+  return result;
+}
+
 /** Keep live slices stable; only a confirmed answer moves narration into its process. */
 function foldFinalProcesses(groups: NonNullable<ThreadIndex["groups"]>, messages: ChatMessage[]) {
   const byId = new Map(messages.map(message => [message.id, message]));
@@ -183,7 +216,7 @@ function foldFinalProcesses(groups: NonNullable<ThreadIndex["groups"]>, messages
     if (message.role === "user" || message.compression || message.role === "notice" && !message.taskNotice) {
       result.push(group); start = result.length; continue;
     }
-    if (!group.activity && message.phase === "final_answer" && !message.calls?.length) {
+    if (!group.activity && threadDelivery(message)) {
       const preceding = result.splice(start);
       if (preceding.length) {
         const ids = [...new Set(preceding.flatMap(item => item.ids))];

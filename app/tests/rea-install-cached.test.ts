@@ -235,7 +235,7 @@ test("Hopper service confirms the cached version after restart and reports syste
       assert.deepEqual(readReaConfig(root), before); assert.deepEqual(readFileSync(fixture.cached.path), fixture.data);
       const tasks = JSON.parse(readFileSync(join(root, "maintenance", "tasks.json"), "utf8")).tasks;
       assert.equal(tasks.at(-1).resource, "rea:hopper"); assert.equal(tasks.at(-1).status, mode === "success" ? "succeeded" : "cancelled");
-      atomicReaJson(reaConfigPath(root), { ...before, installation: { ...before.installation!, version: "6.8.0" } });
+      atomicReaJson(reaConfigPath(root), { ...before, installation: { ...before.installation!, version: "6.9.0" } });
       await assert.rejects(call(service, "rea.engine-open-installer", params), /尚未适配/);
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }

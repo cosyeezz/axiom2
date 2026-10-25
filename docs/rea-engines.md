@@ -20,7 +20,7 @@
 
 ## 版本与配置
 
-当前托管安装及 Ghidra／JADX doctor 适配契约验证于 `rea-agents@6.7.0`；更新到未适配版本后不默认继续使用原安装策略。JDK 取 Adoptium 21 最新修订，Ghidra 验证 12.1.4、接受 12.1.x，JADX Headless MCP 固定 0.7.1，WABT 固定 1.0.42。普通 jadx CLI 不能代替此 JAR。“检查更新”寻找符合这份契约的版本，不追随任意上游最新版。Hopper 未有 REA 固定版本范围，因此展示本地与官方发行版本，不宣称许可、升级资格或实际桥接兼容。
+当前托管安装及 Ghidra／JADX doctor 适配契约验证于 `rea-agents@6.7.0` 与 `rea-agents@6.8.0`；两版的桥接文件分别来自各自 REA 包。更新到未适配版本时拒绝自动安装，不默认沿用旧契约。Node/npm 同样按目标版本准备组件私有环境，不要求升级后台 Node；版本范围、隔离边界和上游文件摘要见[内置组件的独立运行环境](builtin-component-environments.md)。JDK 取 Adoptium 21 最新修订，Ghidra 验证 12.1.4、接受 12.1.x，JADX Headless MCP 固定 0.7.1，WABT 固定 1.0.42。普通 jadx CLI 不能代替此 JAR。“检查更新”寻找符合这份契约的版本，不追随任意上游最新版。Hopper 未有 REA 固定版本范围，因此展示本地与官方发行版本，不宣称许可、升级资格或实际桥接兼容。
 
 JDK／Ghidra／macOS Hopper 优先读取安装内的版本元数据。托管组件保存发行版本，旧安装从来源记录恢复，刷新和重启不丢失版本显示。WABT 的显式检测核对三个程序的输出。JADX doctor 只检查环境和桥接结构，不能据此推断版本；显式检测额外校验 JAR 的官方 SHA-256，只有匹配固定发行包时才确认 0.7.1，其余保持版本未核实，不能被来源元数据覆盖。
 

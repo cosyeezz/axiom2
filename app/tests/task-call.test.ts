@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ChatMessage } from "../src/shared/agent.js";
 import { taskToolName } from "../src/shared/tasks.js";
-import { callObject, readTaskReport, taskCallLabel, taskCallStatus } from "../src/client/tasks/task-call.js";
+import { callObject, readTaskReport, taskCallLabel, taskCallStatus, taskExecutionText } from "../src/client/tasks/task-call.js";
 
 const parent: ChatMessage = { id: "parent", role: "assistant", text: "", status: "completed" };
 const result: ChatMessage = { id: "tool-call", role: "toolResult", text: "", status: "completed" };
@@ -43,6 +43,35 @@ test("historical result cards omit generated tool logs and warnings while preser
   }
   const actual = { ...report, status: "failed", reason: "集成环境不可用", unfinished: ["集成验证尚未运行"], sideEffects: "已修改 config.json；尚未发布。" };
   assert.deepEqual(readTaskReport(JSON.stringify(actual), input), actual);
+});
+test("execution output hides stored metadata while full records still support cards and exact report matching", () => {
+  for (const name of ["append", "cancel_task"] as const) {
+    const receipt = { taskId: "task-uuid", inputId: "input-uuid", runId: null, startedAt: 1, status: "queued" };
+    const message = { ...result, text: JSON.stringify(receipt) }, before = structuredClone(message);
+    assert.equal(taskExecutionText(name, message), '{"status":"queued"}');
+    assert.deepEqual(message, before, "display projection must not mutate the stored receipt");
+    assert.equal(callObject(message.text)!.inputId, "input-uuid");
+  }
+  const full = { id: "result-uuid", taskId: "task-uuid", runId: "run-uuid", taskRef: "t1", resultRef: "r2",
+    status: "cancelled", report: "完整正文".repeat(5000), reportKind: "partial", reason: "预算耗尽", unfinished: ["未完成验证"],
+    sideEffects: "已修改配置", budgetSummary: true, stop: { source: "budget", reason: "截止时间", requestedAt: 123 }, startedAt: 1, endedAt: 2, elapsedMs: 1 };
+  const message = { ...result, text: JSON.stringify(full) };
+  const visible = JSON.parse(taskExecutionText("read_result", message));
+  assert.deepEqual(visible, { status: full.status, report: full.report, reportKind: full.reportKind, reason: full.reason,
+    unfinished: full.unfinished, sideEffects: full.sideEffects, budgetSummary: true, stop: { source: "budget", reason: "截止时间" } });
+  assert.equal(readTaskReport(message.text, { taskId: "t1", resultId: "r2" })!.id, "result-uuid");
+  assert.equal(readTaskReport(message.text, { taskId: "t1", resultId: "r3" }), null);
+  assert.doesNotMatch(taskExecutionText("read_result", message), /uuid|requestedAt|startedAt|endedAt|elapsedMs/);
+});
+test("execution output preserves errors and avoids exposing truncated JSON metadata", () => {
+  const text = '{"taskId":"task-uuid","inputId":"input-uuid","status":"queued"}';
+  assert.equal(taskExecutionText("append", { ...result, text, truncated: true }), "完整输出尚未加载");
+  assert.equal(taskExecutionText("append", { ...result, text: "拒绝追加", status: "failed" }), "拒绝追加");
+  assert.equal(taskExecutionText("read_result", { ...result, text: "", error: "读取失败" }), "读取失败");
+  assert.equal(taskExecutionText("append", { ...result, text: "调用已停止", status: "cancelled" }), "调用已停止");
+  assert.equal(taskExecutionText("append", { ...result, text: "legacy plain output" }), "legacy plain output");
+  assert.equal(taskExecutionText(null, { ...result, text }), text);
+  assert.equal(taskExecutionText("append", null), "尚未记录输出");
 });
 test("namespaced tools and malformed streaming parameters have safe presentation fallbacks", () => {
   assert.equal(taskToolName("functions.append"), "append");

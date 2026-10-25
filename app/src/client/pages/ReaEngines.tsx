@@ -2,7 +2,7 @@ import { Icon } from "../Icon.js";
 import { revealLocalPath } from "../LocalPath.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useState } from "react";
-import { compareEngineVersions, engineDownloadSatisfied, engineRecommendationSatisfied, reaEngineContractVersion, reaEngineLabels, reaEngineStatusLabels, type ReaEngineReleaseState, type ReaEngineState } from "../../shared/rea-engines.js";
+import { compareEngineVersions, engineDownloadSatisfied, engineRecommendationSatisfied, supportedReaEngineContract, reaEngineLabels, reaEngineStatusLabels, type ReaEngineReleaseState, type ReaEngineState } from "../../shared/rea-engines.js";
 import type { ReaState } from "../../shared/rea.js";
 
 export type ReaFeedback = { text: string; error?: boolean; jobId?: string };
@@ -29,7 +29,7 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
   const unsupported = engine.status === "unsupported", label = reaEngineLabels[engine.id];
   const manual = !engine.installable && (engine.id === "ghidra" || engine.id === "hopper" && state.engineHost?.platform === "darwin");
   const downloadable = engine.installable || manual;
-  const unavailable = busy || !state.supported || !!state.supportError || unsupported || state.version !== reaEngineContractVersion;
+  const unavailable = busy || !state.supported || !!state.supportError || unsupported || !supportedReaEngineContract(state.version);
   const current = engineRecommendationSatisfied(engine), downloaded = engineDownloadSatisfied(engine);
   const recommended = engine.available?.version ?? engine.recommendedVersion;
   const cachedInstall = !!engine.download && (engine.installable || engine.id === "hopper" && state.engineHost?.platform === "darwin") && (downloaded || !recommended);
@@ -39,7 +39,7 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
   const selectRelease = (operation: "install" | "download") => engine.available && setConfirm({ revision, version: engine.available.version, release: engine.available, operation });
   return <BackendMaintenance resource={`rea:${engine.id}`} label={label} activeOnly showError={!reportedError} location="">
     <div className="rea-engine-summary">
-      <dl className="rea-engine-versions"><div><dt>当前版本</dt><dd>{engine.version ?? (engine.path ? "待检测" : "未安装")}</dd></div><div><dt>{engine.id === "hopper" ? "官方版本" : "推荐版本"}</dt><dd>{recommended ?? (engine.id === "java" && state.version === reaEngineContractVersion ? "21 · 待检查修订" : "待检查")}</dd></div></dl>
+      <dl className="rea-engine-versions"><div><dt>当前版本</dt><dd>{engine.version ?? (engine.path ? "待检测" : "未安装")}</dd></div><div><dt>{engine.id === "hopper" ? "官方版本" : "推荐版本"}</dt><dd>{recommended ?? (engine.id === "java" && supportedReaEngineContract(state.version) ? "21 · 待检查修订" : "待检查")}</dd></div></dl>
       <span className="tag">{status}</span>
     </div>
     {error && <div className="tools-feedback" aria-live="polite"><p className="tools-error" role="alert">{error}</p></div>}

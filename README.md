@@ -7,7 +7,8 @@
 ### 让 AI 工作，能看见，也能接着做。
 
 **面向长任务的本地 AI 编程工作台。**<br>
-把项目、对话、任务进度和可复用的经验，放进同一个工作界面。
+把项目、对话、任务进度和可复用的经验，放进同一个工作界面。<br>
+**电脑上启动，手机上接着做。** 支持 Windows、macOS 与 Android，离开桌面也能查看进度、继续下达任务。
 
 Local-first AI coding workbench for long-running projects.
 
@@ -48,6 +49,12 @@ Axiom2 基于 [Pi](https://github.com/earendil-works/pi) 构建：主代理负�
 
 子代理定位于**调研与验证，而非多人同时改代码**；不递归委派，不加载主代理的完整资源与权限。并发数、默认模型和工作时限可配置。
 
+### 随时随地，手机也能推进项目
+
+不必一直守在电脑前。用 Android 客户端或手机浏览器连接电脑上的工作台，查看主／子代理进度、发送新任务或追加要求，让通勤和外出时的想法也能接上正在进行的工作。
+
+任务仍由电脑执行，关闭手机应用不会停止后台任务。远程使用需要电脑保持开机、后台运行，手机与电脑通过同一 Tailscale 网络连通。[了解手机连接 →](app/android/README.md)
+
 ### 多个项目，一套工作台，不用反复切换工具
 
 | 你想做的事 | Axiom2 提供的工作方式 |
@@ -78,9 +85,34 @@ Axiom2 更适合需要反复研究同一代码库、执行多步骤任务的开�
 
 ## 快速开始
 
-### 1. 在电脑上启动后台
+### 1. 下载客户端，用安装管理完成准备（推荐）
 
-先安装 [Node.js 22.19.0 或更新版本](https://nodejs.org/)，确保 `node` 和 `npm` 可用。**无需先安装 Git、Rust 或 Pi。**
+下载并打开 **[Windows 安装版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.msi)** 或 **[macOS 通用版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.dmg)**，在客户端内完成安装，不必先到终端逐项配置。
+
+1. 展开 **「安装与准备」**，按提示检查并安装运行环境；缺少 Node.js 时，可点击 **「安装 Node.js」**。
+2. 在 **「后台服务」** 中点击 **「安装并启动服务」**，等待安装和校验完成。
+3. 点击 **「连接」** 进入工作台。已有后台时，可以跳过安装直接连接。
+
+需要 Node.js 22.19.0+ 与 npm，客户端可协助安装；请保持联网并完成系统请求的安装授权。Windows 客户端需要 WebView2；当前安装包未签名／未公证，首次打开的系统提示见下方[客户端说明](#客户端)。
+
+### 2. 选项目，配模型，发出第一个任务
+
+1. 点击 **「打开文件夹…」**，选择你信任的本地项目。
+2. 进入 **「配置 → 模型服务」**，添加自定义接口与 API Key，或选择当前 Pi 支持的 OAuth 登录方式，保存配置。
+3. 回到会话，选择可用模型和思考等级，发送任务。
+
+打开工作台不要求注册 Axiom2 账户；模型供应商的认证仍然需要。选择项目即授权 Agent 访问该目录，请先阅读下方[安全边界](#安全与当前边界)。
+
+### 3. 电脑启动，手机接着做
+
+安装 **[Android 客户端](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12)**，让手机与电脑登录同一 Tailscale 网络，连接电脑后台，即可在手机上查看进度、发送任务。手机浏览器也可访问同一工作台地址。[手机连接指南 →](app/android/README.md)
+
+下次使用，在桌面客户端启动后台并连接即可；工作台内的 **「服务与更新」** 可返回服务管理。关闭浏览器或客户端**不会停止电脑上的后台任务**，但电脑和后台必须保持运行，服务不会自动注册开机启动。停止任务或后台不等于撤销已发生的文件修改。
+
+<details>
+<summary>Linux / 偏好终端？使用命令行安装</summary>
+
+先安装 [Node.js 22.19.0 或更新版本](https://nodejs.org/)，确保 `node` 和 `npm` 可用，无需先安装 Git、Rust 或 Pi。
 
 **macOS / Linux：**
 
@@ -94,52 +126,31 @@ curl -fsSL https://raw.githubusercontent.com/cosyeezz/axiom2/master/install.sh |
 irm https://raw.githubusercontent.com/cosyeezz/axiom2/master/install.ps1 | iex
 ```
 
-脚本安装最新 Release 的后台包并启动服务。完成后打开 **[http://127.0.0.1:4317/](http://127.0.0.1:4317/)**，即可使用浏览器工作台。
-
-<details>
-<summary>想先审阅脚本，或手动安装？</summary>
-
-一行命令会下载并执行远程脚本。你可以先下载并审阅 [install.sh](install.sh) / [install.ps1](install.ps1)，确认后再运行；或者使用 npm 安装发布包：
+脚本安装最新 Release 的后台包并启动服务，完成后打开 **[http://127.0.0.1:4317/](http://127.0.0.1:4317/)**。一行命令会下载并执行远程脚本，建议先审阅 [install.sh](install.sh) / [install.ps1](install.ps1)；也可以直接使用 npm 安装发布包：
 
 ```sh
 npm install -g https://github.com/cosyeezz/axiom2/releases/latest/download/axiom2.tgz
 axiom2 start
 ```
 
-安装路径由 npm 全局配置决定；无写权限时，使用用户级 Node.js 安装或 npm prefix。发布附件的校验文件和版本说明见 [Releases](https://github.com/cosyeezz/axiom2/releases)。
+日常管理：`axiom2 start` 启动、`axiom2 status` 查看状态、`axiom2 stop` 停止后台（会中断活动执行）。安装路径由 npm 全局配置决定；无写权限时使用用户级 Node.js 安装或 npm prefix。校验文件和版本说明见 [Releases](https://github.com/cosyeezz/axiom2/releases)。
 
 </details>
 
-### 2. 选项目，配模型，发出第一个任务
-
-1. 点击 **「打开文件夹…」**，选择你信任的本地项目。
-2. 进入 **「配置 → 模型服务」**，添加自定义接口与 API Key，或选择当前 Pi 支持的 OAuth 登录方式，保存配置。
-3. 回到会话，选择可用模型和思考等级，发送任务。
-
-打开工作台不要求注册 Axiom2 账户；模型供应商的认证仍然需要。选择项目即授权 Agent 访问该目录，请先阅读下方[安全边界](#安全与当前边界)。
-
-### 3. 下次直接继续使用
-
-```sh
-axiom2 start    # 启动后台
-axiom2 status   # 查看状态
-axiom2 stop     # 停止后台，会中断活动执行
-```
-
-关闭浏览器或桌面客户端**不会停止电脑上的后台任务**，前提是电脑与后台仍在运行。服务不会自动注册开机启动；停止任务或后台不等于撤销已经发生的文件修改。
-
 ## 客户端
 
-**先用浏览器即可，不必先装桌面壳。** 需要独立窗口、服务管理入口或手机访问时，再选择客户端。
+**推荐 Windows / macOS 用户通过桌面客户端安装和管理后台，再按需连接手机。** Linux 或偏好终端的用户可使用上方折叠项中的命令行安装，通过浏览器访问。
 
 | 平台 | 入口 | 使用条件 |
 | --- | --- | --- |
-| Windows / macOS / Linux 浏览器 | 按上方命令启动后台后，打开本机地址 | 后台所在电脑需要 Node.js；Linux 原生目录选择另需图形桌面与 GTK 依赖 |
 | Windows x64 | [安装版 MSI](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.msi) · [便携版 EXE](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.exe) | 客户端 v0.4.13；需要 WebView2，当前未签名 |
 | macOS Apple 芯片 / Intel | [通用版 DMG](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.dmg) | 客户端 v0.4.13；ad-hoc 签名，未获 Apple 公证 |
 | Android 8.0+ | [APK 下载与发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12) | 客户端 v0.4.12；连接电脑后台，不在手机本地执行任务 |
+| 电脑 / 手机浏览器 | 后台运行后，打开本机地址或可达的 Tailscale 地址 | 后台所在电脑需要 Node.js；Linux 原生目录选择另需图形桌面与 GTK 依赖 |
 
-**后台与客户端独立发布。** 一行安装跟随后台最新 Release；桌面和 Android 链接指向各自已有安装包的版本，最新后台发布页不一定包含客户端。
+Windows 安装包当前未签名。macOS 安装包为 ad-hoc 签名、未获 Apple 公证，首次打开如被阻止，可在「系统设置 → 隐私与安全性」中确认「仍要打开」；仅对确认来源可信的安装包操作。
+
+**后台与客户端独立发布。** 客户端安装管理与命令行安装均获取后台最新 Release；桌面和 Android 链接指向各自已有安装包的版本，最新后台发布页不一定包含客户端。
 
 手机与电脑加入同一 **Tailscale** 网络后，可在 Android 客户端连接电脑上的工作台：发送任务、查看主／子会话、选择模型，任务仍由电脑执行。连接方式、扫码和原生功能以所装 APK 版本为准。[Android 与内网连接指南 →](app/android/README.md)
 

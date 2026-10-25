@@ -50,10 +50,9 @@ function TaskBranch({ item, goal, paths, openDetail }: { item: TreeItem; goal: b
   }, [node.state, node.abandoned]);
   return <li data-state={node.state} data-abandoned={node.abandoned || undefined} data-kind={node.kind} data-goal={goal || undefined}>
     <div className="memory-task-row" data-task-key={item.key}>
-      <span className="memory-task-marker">{node.state && <MemoryStateIcon state={node.state} motion={!node.abandoned} />}</span>
-      {!!children.length && <button type="button" className="memory-branch-toggle memory-branch-disclosure" aria-label={`${expanded ? "收起" : "展开"}：${memoryTitleLabel(node.title)}`} aria-expanded={expanded} aria-controls={id} onClick={() => { setVisited(true); setExpanded(!expanded); }}><Icon name="chevron-right" className="memory-task-chevron" /></button>}
+      <span className="memory-task-marker" role={node.state ? "img" : undefined} aria-label={node.state === "阻塞" ? "等待" : node.state || undefined}>{node.state && <MemoryStateIcon state={node.state} motion={!node.abandoned} />}</span>
       <span className="memory-task-title"><MemoryTaskTitle text={node.title} path={path} onOpen={(_path, event) => openDetail(item, event.currentTarget)} /></span>
-      {node.state && <span className="memory-task-state">{node.state === "阻塞" ? "等待" : node.state}</span>}
+      {!!children.length && <button type="button" className="memory-branch-toggle memory-branch-disclosure" aria-label={`${expanded ? "收起" : "展开"}：${memoryTitleLabel(node.title)}`} aria-expanded={expanded} aria-controls={id} onClick={() => { setVisited(true); setExpanded(!expanded); }}><Icon name="chevron-down" className="memory-task-chevron" /></button>}
       {path && <button type="button" className="memory-task-detail-button" aria-label={`查看详情：${memoryTitleLabel(node.title)}`} onClick={event => openDetail(item, event.currentTarget)}><Icon name="file-text" /></button>}
     </div>
     {!!children.length && <div id={id} hidden={!expanded} className="memory-branch">

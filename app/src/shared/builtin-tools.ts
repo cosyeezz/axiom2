@@ -19,6 +19,7 @@ export type OpenCliState = {
   supportError?: string;
   nodeVersion: string;
   npmVersion?: string;
+  runtimeManaged?: boolean;
   version?: string;
   latest?: string;
   packageRoot?: string;

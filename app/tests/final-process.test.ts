@@ -37,24 +37,27 @@ const m = (id: string, extra: Partial<ChatMessage> = {}): ChatMessage => ({ id, 
 test("final phase folds narration and process in order, with final thinking inside and answer outside", () => {
   const prior = [m("user", { role: "user" }), m("narration", { phase: "commentary" }), m("tools", { text: "", calls: [{ id: "c", name: "read", input: "{}" }] })];
   const final = m("answer", { thinking: "检查", phase: "final_answer", streaming: true });
-  const groups = threadGroups([...prior, final]);
+  assert.ok(!threadGroups([...prior, final]).some(group => group.folded), "a streaming final is not a delivery");
+  const groups = threadGroups([...prior, { ...final, streaming: false }]);
   assert.deepEqual(groups.map(g => [g.ids, g.activity, !!g.folded]), [
     [["user"], false, false], [["narration", "tools", "answer"], true, true], [["answer"], false, false],
   ]);
   assert.deepEqual(groups[1].thinkingOnlyIds, ["answer"]);
   assert.equal(groups[2].hideThinking, true);
-  assert.deepEqual(threadGroups([...prior, { ...final, text: "增量", streaming: false }]),
-    groups.map(group => group.activity || group.id !== "answer" ? group : { ...group, delivery: true }));
+  assert.deepEqual(threadGroups([...prior, { ...final, text: "增量", streaming: false }]), groups);
+  for (const extra of [{ text: "" }, { status: "failed" as const }, { status: "cancelled" as const }, { error: "length limit" }]) {
+    assert.ok(!threadGroups([...prior, { ...final, streaming: false, ...extra }]).some(group => group.folded));
+  }
   assert.ok(!threadGroups([...prior, { ...final, phase: undefined }]).some(g => g.folded));
 });
-test("archived narration on both sides joins a real outer process without crossing boundaries", () => {
+test("undelivered archives keep narration separate and only locally disclose tools", () => {
   const before = m("before", { phase: "commentary" }), after = m("after");
   const tools = m("tools", { text: "", calls: [{ id: "c", name: "read", input: "{}" }] });
   const groups = threadGroups([before, tools, after], { archived: true });
-  assert.deepEqual(groups.map(g => [g.ids, g.activity, g.folded]), [[["before", "tools", "after"], true, true]]);
+  assert.deepEqual(groups.map(g => [g.ids, g.activity, !!g.folded]), [[["before"], false, false], [["tools"], true, false], [["after"], false, false]]);
   assert.deepEqual(processSlices([before, tools, after]).map(s => s.kind), ["body", "process", "body"], "wrapping must retain original inner hierarchy");
   assert.ok(!threadGroups([before, tools, after]).some(g => g.folded), "live grouping is unchanged");
-  assert.deepEqual(threadGroups([before], { archived: true }).map(g => [g.activity, g.folded]), [[true, true]], "explicit archived commentary is process even without a tool");
+  assert.deepEqual(threadGroups([before], { archived: true }).map(g => [g.activity, !!g.folded]), [[false, false]], "archiving commentary cannot hide its body");
   assert.deepEqual(threadGroups([after], { archived: true }).map(g => g.activity), [false], "unmarked isolated prose stays outside");
   for (const boundary of [m("boundary", { role: "user" }), m("boundary", { role: "notice" }), m("boundary", { phase: "final_answer" })]) {
     const split = threadGroups([before, tools, boundary, after], { archived: true });
@@ -62,19 +65,19 @@ test("archived narration on both sides joins a real outer process without crossi
     assert.ok(!split.find(g => g.folded)?.ids.includes("after"));
   }
   const splitRun = threadGroups([before, tools, m("new-run", { runId: "new" })], { archived: true });
-  assert.deepEqual(splitRun.find(g => g.folded)?.ids, ["before", "tools"]);
+  assert.ok(!splitRun.some(g => g.folded), "a run boundary is not delivery");
 });
-test("commentary-only archives fold without borrowing a later delivery or unrelated prose", () => {
+test("commentary-only archives require a real delivery and respect unrelated prose", () => {
   for (const runId of ["run", undefined]) {
     const before = m("before", { phase: "commentary", runId });
     const after = m("after", { phase: "commentary", runId });
     const prose = m("prose", { runId });
     const answer = m("answer", { phase: "final_answer", runId: "other-run" });
     const archived = threadGroups([before, after], { archived: true });
-    assert.deepEqual(archived.map(g => [g.ids, g.activity, g.folded]), [[["before", "after"], true, true]]);
+    assert.deepEqual(archived.map(g => [g.ids, g.activity, !!g.folded]), [[["before"], false, false], [["after"], false, false]]);
     assert.deepEqual(threadGroups([before]).map(g => g.activity), [false], "live commentary stays readable");
     const split = threadGroups([before, prose, after], { archived: true });
-    assert.deepEqual(split.map(g => [g.ids, g.activity]), [[["before"], true], [["prose"], false], [["after"], true]]);
+    assert.deepEqual(split.map(g => [g.ids, g.activity]), [[["before"], false], [["prose"], false], [["after"], false]]);
     assert.deepEqual(threadGroups([before, answer], { archived: true }).map(g => [g.ids, g.activity]), [[["before"], true], [["answer"], false]]);
     for (const boundary of [m("b", { role: "user" }), m("b", { role: "notice" }), m("b", { phase: "final_answer" })]) {
       const groups = threadGroups([before, boundary, after], { archived: true });
@@ -85,6 +88,56 @@ test("commentary-only archives fold without borrowing a later delivery or unrela
   const selectionChange: NonNullable<ChatMessage["selectionChange"]> = { from: { provider: "p", id: "a", thinking: "high" }, to: { provider: "p", id: "b", thinking: "low" } };
   const groups = threadGroups([m("a", { phase: "commentary" }), m("b", { phase: "commentary", selectionChange })], { archived: true });
   assert.equal(groups.length, 2); assert.deepEqual(groups[1].selectionChange, selectionChange);
+});
+test("resumed direct delivery encloses earlier task slices and process narration across runs", () => {
+  const old = [m("user", { role: "user" }),
+    m("delegate", { runId: "old", text: "", calls: [{ id: "d", name: "functions.delegate", input: "{}" }] }),
+    m("narration", { runId: "old", text: "正在核验", calls: [{ id: "r", name: "read", input: "{}" }] }),
+    m("results", { runId: "old", text: "", calls: [{ id: "rr", name: "functions.read_result", input: "{}" }, { id: "a", name: "functions.append", input: "{}" }] })];
+  const final = m("final", { runId: "resumed", text: "最终交付", phase: "final_answer" });
+  assert.ok(!threadGroups(old).some(g => g.folded), "ongoing task slices stay visible until delivery");
+  for (const archived of [false, true]) {
+    const groups = threadGroups([...old, final], { archived });
+    assert.deepEqual(groups.map(g => [g.ids, g.activity, !!g.folded]), [
+      [["user"], false, false], [["delegate", "narration", "results"], true, true], [["final"], false, false],
+    ]);
+    assert.deepEqual(processSlices(old.slice(1)).map(s => s.kind), ["task", "body", "process", "task", "task"]);
+    assert.equal(groups.at(-1)?.delivery, true);
+  }
+  const thought = { ...final, thinking: "最终检查" };
+  const groups = threadGroups([...old, thought]);
+  assert.deepEqual(groups[1].ids, ["delegate", "narration", "results", "final"]);
+  assert.deepEqual(groups[1].thinkingOnlyIds, ["final"]);
+  assert.ok(!processSlices([...old.slice(1), thought], groups[1].thinkingOnlyIds).some(s => s.kind === "body" && s.id === "final"));
+});
+test("delivered fragment wrapping respects hard boundaries and keeps unrelated prose outside", () => {
+  const task = m("task", { runId: "old", text: "", calls: [{ id: "d", name: "delegate", input: "{}" }] });
+  const final = m("answer", { runId: "resumed", phase: "final_answer" });
+  for (const boundary of [m("b", { role: "user" }), m("b", { compression: { number: 1, title: "压缩", before: 20, after: 10 } }), m("b", { phase: "final_answer" })]) {
+    const groups = threadGroups([task, boundary, m("new", { text: "", thinking: "新段" }), final]);
+    assert.ok(!groups.some(g => g.ids.includes("task") && g.ids.includes("new")));
+    if (boundary.phase !== "final_answer") assert.equal(groups.find(g => g.ids.includes("task"))?.folded, undefined, "a later user/compaction cannot settle an earlier live fragment");
+  }
+  const notice = m("notice", { role: "notice", text: "独立系统通知" });
+  const split = threadGroups([task, notice, final]);
+  assert.deepEqual(split.map(g => [g.ids, g.activity, !!g.folded]), [[["task"], true, true], [["notice"], false, false], [["answer"], false, false]]);
+  const selectionChange: NonNullable<ChatMessage["selectionChange"]> = { from: { provider: "p", id: "a", thinking: "high" }, to: { provider: "p", id: "b", thinking: "low" } };
+  const selected = threadGroups([task, { ...final, selectionChange }]);
+  assert.equal(selected[0].folded, true); assert.deepEqual(selected[1].selectionChange, selectionChange);
+  const prose = m("unrelated", { runId: "unrelated", text: "未标记的独立正文" });
+  const safe = threadGroups([prose, task, final]);
+  assert.equal(safe.find(g => g.ids.includes("unrelated"))?.activity, false);
+  assert.ok(!safe.find(g => g.folded)?.ids.includes("unrelated"));
+});
+test("cross-run delivered fragments preserve thinking-only contribution masks", () => {
+  const failed = m("failed-final", { phase: "final_answer", thinking: "failed reasoning", status: "failed", runId: "old" });
+  const final = m("final", { phase: "final_answer", runId: "new" });
+  const groups = threadGroups([failed, final]);
+  const thought = groups.find(group => group.activity && group.ids.includes(failed.id))!;
+  assert.equal(thought.folded, true);
+  assert.deepEqual(thought.thinkingOnlyIds, [failed.id]);
+  assert.deepEqual(processSlices([failed], thought.thinkingOnlyIds).map(slice => slice.kind), ["process"]);
+  assert.equal(groups.filter(group => !group.activity && group.ids.includes(failed.id)).length, 1, "failed final body is never duplicated inside the aggregate");
 });
 test("retained live suffix rebases identity and removes archived thinking/call masks", () => {
   const groups = [{ id: "calls:old", ids: ["old", "new"], activity: true, callsOnlyIds: ["old"], thinkingOnlyIds: ["old", "new"] }];

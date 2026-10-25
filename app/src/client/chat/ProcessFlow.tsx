@@ -1,4 +1,4 @@
-import { Fragment, useContext, useMemo, useSyncExternalStore } from "react";
+import { Fragment, createContext, useContext, useMemo, useSyncExternalStore } from "react";
 import { messageScope, type ChatMessage, type ThreadIndex } from "../../shared/agent.js";
 import { processSlices, type ProcessEntry, type ProcessSlice } from "../../shared/process-layout.js";
 import type { Scope } from "../../shared/protocol.js";
@@ -12,12 +12,13 @@ import { ModelRequestStatus } from "./ProcessStatus.js";
 import { ActivityGroup, ActivitySettled, ToolReference } from "./ToolActivity.js";
 
 type Group = NonNullable<ThreadIndex["groups"]>[number];
+const ArchivedEntries = createContext<ReadonlySet<string>>(new Set());
 function useProcessSlices(scope: Scope, group: Group) {
   const original = useContext(OriginalMessages);
-  const key = JSON.stringify([group.ids, group.thinkingOnlyIds, group.callsOnlyIds]);
+  const key = JSON.stringify([group.ids, group.thinkingOnlyIds, group.callsOnlyIds, group.bodyHiddenIds]);
   const store = useMemo(() => {
     const read = () => processSlices(group.ids.map(id => scopeSnapshot<ChatMessage>(messageScope(scope, id)) ?? original?.get(id))
-      .filter((m): m is ChatMessage => !!m), group.thinkingOnlyIds, group.callsOnlyIds);
+      .filter((m): m is ChatMessage => !!m), group.thinkingOnlyIds, group.callsOnlyIds, group.bodyHiddenIds);
     let value = read();
     return {
       get: () => value,
@@ -52,8 +53,9 @@ function TaskCall({ scope, messageId, callId }: { scope: Scope; messageId: strin
 function ProcessItem({ scope, entry, latestRun }: { scope: Scope; entry: ProcessEntry; latestRun?: string }) {
   const message = useThreadMessage(scope, entry.kind === "tool" ? entry.call.messageId : entry.id);
   const settled = useContext(ActivitySettled);
+  const archived = useContext(ArchivedEntries).has(entry.kind === "tool" ? entry.call.messageId : entry.id);
   const earlierRun = !!latestRun && !!message?.runId && message.runId !== latestRun;
-  return <ActivitySettled.Provider value={settled || earlierRun}>
+  return <ActivitySettled.Provider value={settled || archived || earlierRun}>
     {entry.kind === "tool" ? <ToolReference scope={scope} reference={entry.call} />
       : <Message scope={scope} id={entry.id} inActivity thinkingOnly={entry.kind === "thinking"} hideThinking={entry.kind === "outcome"} />}
   </ActivitySettled.Provider>;
@@ -68,16 +70,17 @@ function ProcessSegment({ scope, slice, settled, awaitingMore, activeRunId, requ
   const callsOnlyIds = callMessageIds.filter(id => !thinkingIds.includes(id) && !outcomeIds.has(id));
   const messageIds = [...new Set(slice.entries.map(entry => entry.kind === "tool" ? entry.call.messageId : entry.id))];
   const last = useThreadMessage(scope, messageIds.at(-1)!);
-  const closed = settled || !!latestRun && !!last?.runId && last.runId !== latestRun;
-  return <ActivityGroup scope={scope} messageIds={messageIds} thinkingOnlyIds={thinkingOnlyIds} callsOnlyIds={callsOnlyIds}
+  const archived = useContext(ArchivedEntries);
+  const closed = settled || messageIds.every(id => archived.has(id)) || !!latestRun && !!last?.runId && last.runId !== latestRun;
+  return <ActivityGroup scope={scope} disclosureKey={`slice:${slice.id}`} messageIds={messageIds} thinkingOnlyIds={thinkingOnlyIds} callsOnlyIds={callsOnlyIds}
     callIds={slice.calls.map(call => call.callId)} inline settled={closed} awaitingMore={!closed && awaitingMore}
     activeRunId={closed ? undefined : activeRunId} requesting={!closed && requesting}>
     {open => open ? slice.entries.map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} latestRun={latestRun ?? last?.runId} />) : null}
   </ActivityGroup>;
 }
 
-export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, animateFold, requesting = false, archiveExpanded = false, contentsOnly = false }: {
-  scope: Scope; group: Group; settled: boolean; awaitingMore?: boolean; activeRunId?: string; animateFold?: boolean; requesting?: boolean; archiveExpanded?: boolean; contentsOnly?: boolean;
+export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, animateFold, requesting = false, archiveExpanded = false, contentsOnly = false, settledIds = [] }: {
+  scope: Scope; group: Group; settled: boolean; awaitingMore?: boolean; activeRunId?: string; animateFold?: boolean; requesting?: boolean; archiveExpanded?: boolean; contentsOnly?: boolean; settledIds?: string[];
 }) {
   const slices = useProcessSlices(scope, group);
   const last = useThreadMessage(scope, group.ids.at(-1)!);
@@ -88,7 +91,7 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
     if (slice.kind === "task") return <TaskCall key={key} scope={scope} {...slice.call} />;
     if (slice.kind === "process") {
       // The archive row already owns this disclosure; do not add a second closed process.
-      if (archiveExpanded) return <Fragment key={key}>{slice.entries.map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} />)}</Fragment>;
+      if (archiveExpanded) return <Fragment key={key}>{slice.entries.map(entry => <ProcessItem key={`${entry.kind}:${entry.id}`} scope={scope} entry={entry} latestRun={last?.runId} />)}</Fragment>;
       const tail = index === slices.length - 1;
       // Prose settles the process above it, including stale stream deltas. A
       // task operation alone does not prove a sibling tool has finished.
@@ -96,21 +99,19 @@ export function ProcessFlow({ scope, group, settled, awaitingMore, activeRunId, 
       return <ProcessSegment key={key} scope={scope} slice={slice} settled={closed} latestRun={last?.runId}
         awaitingMore={tail && !closed && awaitingMore} activeRunId={tail && !closed ? activeRunId : undefined} requesting={tail && !closed && requesting} />;
     }
-    const body = <Message scope={scope} id={slice.id} inActivity hideThinking={slice.kind === "body"} />;
-    // Live activity groups contain only error/cancellation bodies: ordinary prose
-    // already has its own thread group. Keep these terminal outcomes visible.
-    return !group.folded && !archiveExpanded && slice.kind === "body"
-      ? <ActivityGroup key={key} scope={scope} messageIds={[slice.id]} inline settled={settled}>{body}</ActivityGroup>
-      : <Message key={key} scope={scope} id={slice.id} inActivity hideThinking={slice.kind === "body"} />;
+    // Narration is visible until delivery. A local tool disclosure must never
+    // hide prose merely because it shares a coalesced archive/live flow.
+    return <Message key={key} scope={scope} id={slice.id} inActivity hideThinking={slice.kind === "body"} />;
   };
   // Archived headers already own the outer status card, but final archives keep
   // the original inner process disclosures, commentary and task cards intact.
-  if (!group.folded || contentsOnly) return <>{slices.map(renderSlice)}{requesting && !settled && slices.at(-1)?.kind !== "process" && <ModelRequestStatus />}</>;
-  return <ActivityGroup scope={scope} messageIds={group.ids} thinkingOnlyIds={group.thinkingOnlyIds}
+  const content = !group.folded || contentsOnly ? <>{slices.map(renderSlice)}{requesting && !settled && slices.at(-1)?.kind !== "process" && <ModelRequestStatus tool={slices.at(-1)?.kind === "task"} />}</>
+    : <ActivityGroup scope={scope} messageIds={group.ids} thinkingOnlyIds={group.thinkingOnlyIds}
     callsOnlyIds={group.callsOnlyIds} callIds={slices.flatMap(slice => slice.kind === "process" ? slice.calls.map(call => call.callId) : [])}
     settled={outerSettled} awaitingMore={awaitingMore} activeRunId={outerSettled ? undefined : activeRunId}
     requesting={requesting} animateFold={animateFold && outerSettled}>
     {open => open ? slices.map(renderSlice) : slices.flatMap(slice =>
       slice.kind === "notice" ? [renderSlice(slice, 0)] : [])}
   </ActivityGroup>;
+  return <ArchivedEntries.Provider value={new Set(settledIds)}>{content}</ArchivedEntries.Provider>;
 }

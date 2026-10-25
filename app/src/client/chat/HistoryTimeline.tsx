@@ -1,11 +1,12 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Scope } from "../../shared/protocol.js";
 import { messageScope, type ChatMessage, type ThreadIndex } from "../../shared/agent.js";
 import { threadDelivery } from "../../shared/thread-layout.js";
 import { scopeSnapshot } from "../transport.js";
 import { unarchivedGroups, type HistoryGroup, type HistorySegment, type ThreadGroup } from "../../shared/history.js";
+import { historyFlow, type HistoryFlow } from "../../shared/history-layout.js";
+import { HistoryProcess } from "./HistoryProcess.js";
 import { FoldIcon } from "../StatusIcons.js";
-import { Icon } from "../Icon.js";
 import { Message } from "./Message.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
 import { ProcessFlow } from "./ProcessFlow.js";
@@ -27,17 +28,18 @@ function ArchiveBody({ scope, segmentId, group, store, initialTaskInputId, enabl
   const range = useHistoryRange(store, segmentId, group.id, enabled);
   return <>{!range.ready && <ReadStatus loading={!range.error} error={range.error} retry={range.retry} />}
     {range.ready && (group.activity ? <ProcessFlow scope={scope} group={group} settled
-      archiveExpanded={!!group.process && !group.folded} contentsOnly={!!group.process} />
+      archiveExpanded={!!group.process && !group.folded && !group.process.hasTasks} contentsOnly={!!group.process} />
       : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} initialTaskInputId={initialTaskInputId} />)}</>;
 }
-function ArchivedProcess({ scope, segmentId, group, store, initialTaskInputId }: {
-  scope: Scope; segmentId: string; group: HistoryGroup; store: HistoryStore; initialTaskInputId?: string | null;
+function ArchivedProcess({ scope, segmentId, group, store, initialTaskInputId, animateFold = false }: {
+  scope: Scope; segmentId: string; group: HistoryGroup; store: HistoryStore; initialTaskInputId?: string | null; animateFold?: boolean;
 }) {
   const process = group.process!;
-  const inline = process.inline ?? !group.id.startsWith("final-process:");
-  return <ActivityGroup scope={scope} summary={process} settled inline={inline}
+  const inline = !group.folded;
+  if (inline && process.hasTasks) return <ArchiveBody scope={scope} segmentId={segmentId} group={group} store={store} initialTaskInputId={initialTaskInputId} />;
+  return <ActivityGroup scope={scope} summary={process} settled inline={inline} animateFold={animateFold && !inline}
     disclosureKey={`archive:${segmentId}:${group.id}`} className="archived-process">
-    {open => open ? <ArchiveBody scope={scope} segmentId={segmentId} group={{ ...group, folded: !inline }} store={store} initialTaskInputId={initialTaskInputId} /> : null}
+    {open => open ? <ArchiveBody scope={scope} segmentId={segmentId} group={group} store={store} initialTaskInputId={initialTaskInputId} /> : null}
   </ActivityGroup>;
 }
 function CompactionInfo({ scope, segment, store }: { scope: Scope; segment: HistorySegment; store: HistoryStore }) {
@@ -51,19 +53,18 @@ function CompactionInfo({ scope, segment, store }: { scope: Scope; segment: Hist
     {full.error && <p className="execution-alert" role="alert">{full.error} <button className="btn" onClick={() => void full.load()}>重新加载</button></p>}
   </div>;
 }
-function HistoryCard({ scope, segment, open, toggle, store }: { scope: Scope; segment: HistorySegment; open: boolean; toggle: () => void; store: HistoryStore }) {
+function HistoryCard({ scope, segment, toggle, store }: { scope: Scope; segment: HistorySegment; toggle: () => void; store: HistoryStore }) {
   const [summary, setSummary] = useRememberedDisclosure(`summary:${segment.id}`);
   const compression = segment.compression;
   return <article className="compaction-card history-card" data-compaction-id={segment.id} aria-label={`压缩 #${compression.number}`}>
-    <div className="history-card-heading">
-      <span className="compaction-icon" aria-hidden="true"><FoldIcon /></span>
-      <div className="compaction-heading"><span className="history-card-number">压缩 <span>#{String(compression.number).padStart(2, "0")}</span></span>
-        <span className="history-card-range">{segment.messageIds.length} 条消息 · 与模型上下文独立保留</span></div>
-      <span className="compaction-tokens" data-tooltip="pi 内容估算，不是计费用量"><span className="compaction-token-values"><span>≈{compression.before.toLocaleString()}</span><span className="compaction-arrow" aria-label="压缩至">→</span><span className="compaction-token-after">{compression.after == null ? "—" : `≈${compression.after.toLocaleString()}`}</span></span><span className="compaction-token-label">Token · 估算</span></span>
-    </div>
-    <div className="history-card-actions">
-      <button type="button" className="history-disclosure" aria-expanded={open} onClick={toggle}><Icon name="chevron" /><span>{open ? "收起会话原文" : "展开会话原文"}</span></button>
-      <button type="button" className="history-disclosure" aria-expanded={summary} onClick={() => setSummary(value => !value)}><Icon name="chevron" /><span>{summary ? "收起压缩信息" : "展开压缩信息"}</span></button>
+    <div className="history-card-controls">
+      <button type="button" className="history-disclosure history-card-heading" data-history-expand aria-label="展开会话原文" aria-expanded={false} onClick={toggle}>
+        <span className="compaction-icon" aria-hidden="true"><FoldIcon /></span>
+        <span className="compaction-heading"><span className="history-card-number">压缩 <span>#{String(compression.number).padStart(2, "0")}</span></span>
+          <span className="history-card-range">{segment.messageIds.length} 条消息 · Token 估算</span></span>
+        <span className="compaction-tokens" data-tooltip="pi 内容估算，不是计费用量"><span className="compaction-token-values"><span>≈{compression.before.toLocaleString()}</span><span className="compaction-arrow" aria-label="压缩至">→</span><span className="compaction-token-after">{compression.after == null ? "—" : `≈${compression.after.toLocaleString()}`}</span></span></span>
+      </button>
+      <button type="button" className="history-summary-disclosure" aria-expanded={summary} onClick={() => setSummary(value => !value)}>{summary ? "收起压缩信息" : "查看压缩信息"}</button>
     </div>
     {summary && <CompactionInfo scope={scope} segment={segment} store={store} />}
   </article>;
@@ -108,20 +109,47 @@ export function useHistoryRows({ scope, index, history, renderLive, initialTaskI
     const message = scopeSnapshot<ChatMessage>(messageScope(scope, group.id)) ?? history.store.get(group.id);
     return !!message && threadDelivery(message);
   };
-  if (scope) {
-    for (const segment of segments) {
-      const open = expansions.current.open.get(segment.id)!;
-      const cardKey = `compression:${segment.id}`;
-      rows.push({ key: cardKey, estimate: 142, render: () => <HistoryCard scope={scope} segment={segment} open={open} toggle={() => toggle(segment.id)} store={history.store} /> });
-      if (open) for (const group of segment.groups) rows.push({
-        key: `archive:${segment.id}:${group.id}`, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group), estimate: group.estimatedHeight, segmentId: segment.id, collapseKey: cardKey, collapse: () => toggle(segment.id, false),
-        render: () => <>{group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
-          {group.process ? <ArchivedProcess scope={scope} segmentId={segment.id} group={group} store={history.store} initialTaskInputId={initialTaskInputId} />
-            : <ArchiveBody scope={scope} segmentId={segment.id} group={group} store={history.store} initialTaskInputId={initialTaskInputId} />}</>,
-      });
+  const flow = historyFlow(segments, expansions.current.open, groups);
+  const previousFlow = useRef<HistoryFlow[] | null>(null);
+  const completed = useRef(new Set<string>());
+  // Match contributions, not storage IDs: a live delivery can turn several
+  // visible archive rows into a new aggregate. Never animate history mounts,
+  // manual range expansion, or virtual recycling of an existing delivery.
+  const folding = new Set(flow.filter(entry => entry.kind === "messages" && entry.group.folded && !completed.current.has(entry.key) &&
+    previousFlow.current?.some(previous => previous.kind === "messages" && !previous.group.folded &&
+      previous.group.ids.some(id => entry.group.ids.includes(id)))).map(entry => entry.key));
+  useLayoutEffect(() => {
+    previousFlow.current = flow;
+    for (const entry of flow) if (entry.kind === "messages" && entry.group.folded) completed.current.add(entry.key);
+  });
+  if (scope) for (const entry of flow) {
+    if (entry.kind === "card") {
+      rows.push({ key: entry.key, estimate: 100, expandTo: entry.segment.messageIds[0],
+        render: () => <HistoryCard scope={scope} segment={entry.segment} toggle={() => toggle(entry.segment.id, true)} store={history.store} /> });
+      continue;
     }
-    groups.forEach((group, position) => rows.push({ key: `live:${group.id}`, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group), estimate: group.folded ? 84 : group.activity ? 100 : 180,
-      render: () => <Fragment>{renderLive(group, position, groups)}</Fragment> }));
+    const { group, sources } = entry;
+    const archiveSources = sources.filter(source => source.kind === "archive");
+    const segment = archiveSources[0]?.segment;
+    const ranges = [...new Map(archiveSources.map(source => [source.segment.id, source.segment])).values()].map(segment => ({
+      id: segment.id, label: `收起第 ${segment.compression.number} 段会话原文`, key: `compression:${segment.id}`,
+      collapse: () => toggle(segment.id, false),
+    }));
+    rows.push({ key: entry.key, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group),
+      estimate: group.activity ? 84 : archiveSources[0]?.group.estimatedHeight ?? 180,
+      segmentId: segment?.id, collapseKey: segment ? `compression:${segment.id}` : undefined, ranges,
+      revision: sources.map(source => source.kind === "archive" ? source.group.revision ?? source.segment.revision ?? "" : source.group.ids.join(",")).join("/"),
+      render: () => {
+        const source = sources[0];
+        if (sources.length === 1 && source.kind === "live") return <Fragment>{renderLive(group, source.position, groups)}</Fragment>;
+        return <>{group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
+          {sources.length > 1 ? <HistoryProcess scope={scope} group={group} sources={sources} store={history.store} index={index}
+            tail={sources.some(source => source.kind === "live" && source.position === groups.length - 1)} animateFold={folding.has(entry.key)} />
+            : source.kind === "archive" ? source.group.process
+              ? <ArchivedProcess scope={scope} segmentId={source.segment.id} group={source.group} store={history.store} initialTaskInputId={initialTaskInputId} animateFold={folding.has(entry.key)} />
+              : <ArchiveBody scope={scope} segmentId={source.segment.id} group={source.group} store={history.store} initialTaskInputId={initialTaskInputId} /> : null}</>;
+      },
+    });
   }
   // Original ranges stay open across a new compaction; only explicit user actions close them.
   useEffect(() => { if (!scope) expansions.current = null; }, [scope?.sessionId]);

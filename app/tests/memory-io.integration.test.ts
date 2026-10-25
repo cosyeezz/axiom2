@@ -53,7 +53,7 @@ test("pooled direct API isolates classification/navigation/evidence, uses no too
   const server = createServer(async (request, response) => {
     let raw = ""; for await (const part of request) raw += part; const payload = JSON.parse(raw); payloads.push(payload);
     const data = JSON.parse(payload.messages.find((m: any) => m.role === "user").content);
-    const content = data.purposes ? classification({ prompt: JSON.stringify(data) }).answer : data.candidates ? JSON.stringify(data.candidates.map((c: any) => c.id)) : "已读取完整依据。";
+    const content = data.purposes ? classification({ prompt: JSON.stringify(data) }).answer : navigation({ prompt: JSON.stringify(data) }, "已读取完整依据。").answer;
     response.writeHead(200, { "Content-Type": "text/event-stream" }); response.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
   });
   await new Promise<void>(r => server.listen(0, "127.0.0.1", r));
@@ -65,6 +65,14 @@ test("pooled direct API isolates classification/navigation/evidence, uses no too
     const result = await f.memories.query(scope, "读取情况"); assert.equal(result.answer, "已读取完整依据。"); assert.equal(payloads.length, 5); assert.equal(result.readDocuments?.length, 3);
     for (const payload of payloads) { assert.ok(!payload.tools?.length); assert.deepEqual(payload.messages.map((m: any) => m.role), ["system", "user"]); }
     for (const payload of payloads.slice(0, -1)) assert.ok(!JSON.stringify(payload).includes("DETAIL_SENTINEL")); assert.ok(JSON.stringify(payloads.at(-1)).includes("DETAIL_SENTINEL"));
+    for (const payload of payloads.slice(1, -1)) {
+      const user = JSON.parse(payload.messages[1].content);
+      assert.ok(Array.isArray(user.catalog)); assert.equal(user.candidates, undefined);
+      assert.ok(!JSON.stringify(payload).includes("candidateBindings"));
+      assert.ok(!JSON.stringify(user).includes(scope.sessionId));
+      assert.ok(!JSON.stringify(user).includes("details/"));
+      for (const purpose of f.tree.snapshot(f.workspace.id).purposes) assert.ok(!JSON.stringify(user).includes(purpose.id));
+    }
   } finally {
     await runner.close(); await f.close(); server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
   }

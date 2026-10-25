@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
+import { chromium, type Locator } from "playwright";
 import { startServer } from "../src/server/index.js";
 import type { AgentViews } from "../src/server/agents/views.js";
 import { TaskRecords } from "../src/server/tasks/records.js";
@@ -63,7 +63,7 @@ try {
     call("stop", "cancel_task", { taskId: taskRef }));
   const full = { ...result, taskRef, resultRef };
   assert.equal((await reply("read", "read_result", full)).report, result.report);
-  assert.deepEqual(await reply("append", "append", { taskId, inputId: "input-uuid", runId: result.runId, status: "accepted" }), { status: "accepted" });
+  assert.deepEqual(await reply("append", "append", { taskId, inputId: "input-uuid", runId: null, status: "queued" }), { status: "queued" });
   assert.deepEqual(await reply("stop", "cancel_task", { taskId, status: "completed" }), { status: "completed" });
   const reading = page.locator('.task-operation[data-tool="read_result"]');
   await reading.getByText("已读取", { exact: true }).waitFor();
@@ -74,6 +74,24 @@ try {
   await page.keyboard.press("Enter");
   await reading.getByRole("heading", { name: "指定版本报告" }).waitFor();
   await reading.getByText("EXACT_REPORT_END", { exact: true }).waitFor();
+  // Inspect the actual disclosed execution output, not just native content or card labels.
+  const executionOutput = async (operation: Locator) => {
+    const details = operation.locator(":scope > details");
+    if (await details.getAttribute("open") === null) await details.locator("summary").first().click();
+    const raw = operation.locator(".task-call-raw");
+    await raw.locator("summary").click();
+    const text = await raw.locator("pre").nth(1).innerText();
+    await raw.locator("summary").click();
+    return text;
+  };
+  const readOutput = JSON.parse(await executionOutput(reading));
+  assert.deepEqual(readOutput, { status: result.status, report: result.report, reportKind: result.reportKind, reason: result.reason, unfinished: result.unfinished, sideEffects: result.sideEffects });
+  const append = page.locator('.task-operation[data-tool="append"]');
+  const stop = page.locator('.task-operation[data-tool="cancel_task"]');
+  assert.equal(await executionOutput(append), '{"status":"queued"}');
+  assert.equal(await executionOutput(stop), '{"status":"completed"}');
+  // Presentation must not destroy the complete stored identity/receipt data.
+  assert.equal(JSON.parse(views.message(scope, "tool-append", true)!.text).inputId, "input-uuid");
   assert.ok((await reading.innerText()).includes("本次交付 · 失败"));
   assert.ok((await reading.innerText()).includes("待核验项"));
   await reading.getByRole("button", { name: "打开子会话" }).click();
@@ -103,8 +121,11 @@ try {
   await reading.locator("summary").first().click();
   await reading.getByText("EXACT_REPORT_END", { exact: true }).waitFor();
   assert.equal(await reading.getByText("NEWER_REPORT", { exact: true }).count(), 0);
+  assert.deepEqual(JSON.parse(await executionOutput(reading)), readOutput);
+  assert.equal(await executionOutput(append), '{"status":"queued"}');
+  assert.equal(await executionOutput(stop), '{"status":"completed"}');
   assert.deepEqual(errors, []);
-  console.log(`PASS: short-reference delegate/read/append/cancel, UUID child window, lazy full exact report, newer-result isolation, keyboard, responsive cards and reload. Artifacts: ${artifacts}`);
+  console.log(`PASS: short-reference delegate/read/append/cancel, metadata-free disclosed execution outputs before/after reload, intact stored receipts, UUID child window, lazy full exact report, newer-result isolation, keyboard and responsive cards. Artifacts: ${artifacts}`);
 } catch (error) {
   await page.screenshot({ path: join(artifacts, "failure.png") }).catch(() => {});
   throw error;

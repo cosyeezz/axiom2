@@ -5,7 +5,7 @@ import { taskLabels, taskToolName } from "../../shared/tasks.js";
 import { useFullMessage } from "../chat/useFullMessage.js";
 import { TaskReportBody } from "./TaskReportBody.js";
 import type { ToolCall } from "../chat/tool-summary.js";
-import { callObject, readTaskReport } from "./task-call.js";
+import { callObject, readTaskReport, taskExecutionText } from "./task-call.js";
 
 /** Mounted only on disclosure. Loads the recorded response, never replays the tool. */
 export function TaskCallDetails({ scope, call, result, message }: {
@@ -37,8 +37,7 @@ export function TaskCallDetails({ scope, call, result, message }: {
     <details className="task-call-raw" onToggle={(event) => setRawOpen(event.currentTarget.open)}>
       <summary>调用详情</summary>
       {rawOpen && <div><span className="task-call-meta">{call.name} · 输入参数</span><pre>{input}</pre>
-        <span className="task-call-meta">执行输出</span><pre>{output?.text || output?.error || "尚未记录输出"}</pre>
-        {output?.truncated && <p className="task-call-meta">当前仅展示部分输出</p>}
+        <span className="task-call-meta">执行输出</span><pre>{taskExecutionText(name, output)}</pre>
       </div>}
     </details>
   </div>;

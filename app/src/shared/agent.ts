@@ -189,10 +189,14 @@ export interface ThreadIndex {
     delivery?: boolean;
     /** A confirmed final reply folds all preceding process content in this segment. */
     folded?: boolean;
+    /** Contains task cards which remain visible until a completed delivery. */
+    hasTasks?: boolean;
     /** These messages contribute only thinking before their body. */
     thinkingOnlyIds?: string[];
     /** These messages contribute only calls after their body. */
     callsOnlyIds?: string[];
+    /** Thinking and calls contribute, but this message's separately rendered body does not. */
+    bodyHiddenIds?: string[];
     /** Process content is rendered separately from this body. */
     hideThinking?: boolean;
     selectionChange?: SelectionChange;

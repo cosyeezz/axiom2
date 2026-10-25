@@ -1,13 +1,19 @@
 import { useId, useLayoutEffect, useRef } from "react";
 import type { ToolStatus } from "./tool-summary.js";
+import { activeStatus, type ThreadIndex } from "../../shared/agent.js";
+
+/** A request owns the live row before the first meaningful assistant delta too. */
+export function pendingModelActivity(index: ThreadIndex) {
+  return activeStatus(index.runStatus) && index.runStatus !== "stopping" && index.runPhase !== "settling";
+}
 
 /** Shared label and motion for every live process phase. */
 export function ProcessTitle({ label, active = false, thinking = false }: { label: string; active?: boolean; thinking?: boolean }) {
   return <span data-thinking={active && thinking || undefined} className={`activity-title process-status-text${active ? " is-active" : ""}`}>{label}{active && <ProcessDots />}</span>;
 }
 
-export function ModelRequestStatus() {
-  return <div className="process-live process-requesting" role="status"><ProcessTitle label="正在思考" active thinking /></div>;
+export function ModelRequestStatus({ tool = false }: { tool?: boolean }) {
+  return <div className="process-live process-requesting" role="status"><ProcessTitle label={tool ? "调用工具" : "请求中"} active /></div>;
 }
 
 /** The dot mask receives the same gradient at the same coordinates as its label. */

@@ -32,10 +32,6 @@
 .memory-query-stage { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .memory-query-stage[data-state="failed"] { color: var(--danger); }
 .memory-query-feedback { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
-.title-feedback { flex-shrink: 0; padding: 8px; min-height: 36px; max-width: 90px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
-.title-feedback:is([data-state="failed"], [data-state="interrupted"]) { color: var(--danger); }
-.title-feedback-panel { width: min(760px, calc(100vw - 24px)); }
-.title-feedback:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .processing-summary-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; overflow-wrap: anywhere; }
 .processing-summary-line small { color: var(--muted); }
 .processing-disclosure { min-width: 0; overflow-wrap: anywhere; }

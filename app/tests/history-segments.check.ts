@@ -36,7 +36,7 @@ try {
         if (segment === 2 && turn === 0) manager.appendMessage(assistant("执行过程中的说明保留在绿色卡里面。", {
           content: [{ type: "text", text: "执行过程中的说明保留在绿色卡里面。", textSignature: JSON.stringify({ v: 1, id: "narration", phase: "commentary" }) }],
         }));
-        // An interrupted turn has no final_answer; it still needs an archive disclosure.
+        // An interrupted turn has no final_answer; only its tools may disclose locally.
         if (interrupted) {
           manager.appendMessage(assistant("过程后未标交付的说明", { stopReason: "toolUse" }));
           continue;
@@ -80,7 +80,14 @@ try {
   };
   const top = () => boundary(false), bottom = () => boundary(true);
   const card = (id: string) => page.locator(`[data-compaction-id="${id}"]`);
-  const originals = (id: string) => card(id).getByRole("button", { name: /会话原文/ });
+  const originals = (id: string) => card(id).getByRole("button", { name: "展开会话原文", exact: true });
+  const collapseRange = async (id: string) => {
+    await top();
+    const row = page.locator(`[data-history-segments~="${id}"]`).first();
+    for (let i = 0; i < 40 && !await row.count(); i++) { await page.locator("#thread").evaluate(n => { n.scrollTop += 350; }); await settle(); }
+    await row.scrollIntoViewIfNeeded(); await settle();
+    await page.locator(`[data-collapse-segment="${id}"]`).click(); await settle();
+  };
   await page.getByText("当前对话始终可见。", { exact: true }).waitFor(); await settle();
   assert.equal(await page.getByRole("button", { name: "原始会话", exact: true }).count(), 0);
   assert.ok(operations.some(command => command.op === "agent.history.index"));
@@ -91,31 +98,27 @@ try {
   assert.equal(await originals(fixture.compressions[1]).getAttribute("aria-expanded"), "false");
   assert.ok(!operations.some(command => command.op === "agent.history.read" && command.params.segmentId === fixture.compressions[0]));
   assert.equal(await card(fixture.compressions[0]).locator(".compaction-title").count(), 0);
-  const summary = card(fixture.compressions[0]).getByRole("button", { name: "展开压缩信息", exact: true });
+  const summary = card(fixture.compressions[0]).getByRole("button", { name: "查看压缩信息", exact: true });
   await summary.click(); await page.getByText("这里保留完整的交接摘要，与原文可以同时查看。", { exact: true }).waitFor();
   assert.equal(await originals(fixture.compressions[0]).getAttribute("aria-expanded"), "false");
   assert.equal(await page.getByText("不应显示的旧短标题", { exact: true }).count(), 0);
   await originals(fixture.compressions[0]).click(); await top();
   await page.getByText("第 1 段 · 问题 1：请检查历史展示和阅读体验", { exact: true }).waitFor();
-  assert.ok(await page.evaluate(id => {
-    const card = document.querySelector(`[data-compaction-id="${id}"]`)!;
-    const first = document.querySelector(`[data-history-segment="${id}"]`)!;
-    return !!(card.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
-  }, fixture.compressions[0]), "the compression card is the range header, never below its delivery");
+  assert.equal(await card(fixture.compressions[0]).count(), 0, "an expanded checkpoint has no card or summary placeholder");
+  assert.equal(await page.locator(".history-range-row").count(), 0, "expanded originals have no range rail");
   const archived = page.locator(".archived-process").first();
   const interruptedKey = views.historyIndex(scope).segments[0].groups.find(group => group.ids.includes(fixture.calls[0]))!.id;
   assert.equal(await archived.locator("xpath=..").getAttribute("data-timeline-key"), `archive:${fixture.compressions[0]}:${interruptedKey}`);
   assert.equal(await archived.getAttribute("open"), null);
-  assert.ok(!(await archived.getAttribute("class"))?.includes("process-live"), "interrupted archive gets a real outer status card");
-  assert.equal(await archived.locator(":scope > summary .activity-status-completed").count(), 1);
+  assert.ok((await archived.getAttribute("class"))?.includes("process-live"), "interrupted tools get only a local disclosure");
+  assert.equal(await archived.locator(":scope > summary .activity-status-completed").count(), 0);
+  assert.equal(await page.getByText("过程前未标交付的说明", { exact: true }).isVisible(), true);
+  assert.equal(await page.getByText("过程后未标交付的说明", { exact: true }).isVisible(), true);
   assert.equal(await archived.locator(".tool-call").count(), 0, "closed interrupted history does not mount tool rows");
   assert.ok(!operations.some(command => command.op === "agent.history.read" && command.params.groupId === interruptedKey), "folded process internals are not fetched");
   await archived.locator(":scope > summary").click();
-  await archived.getByText("过程前未标交付的说明", { exact: true }).waitFor();
-  await archived.getByText("过程后未标交付的说明", { exact: true }).waitFor();
-  const interruptedInner = archived.locator(".activity.process-live").first();
-  assert.equal(await interruptedInner.getAttribute("open"), null, "the original gray hierarchy stays folded inside the outer card");
-  await interruptedInner.locator(":scope > summary").click();
+  assert.equal(await archived.getByText("过程前未标交付的说明", { exact: true }).count(), 0, "narration is not inside the local tool disclosure");
+  assert.equal(await archived.locator(".activity.process-live").count(), 0, "there is no duplicate inner disclosure");
   const tool = archived.locator(".tool-call").first(); await tool.waitFor(); await tool.locator(":scope > summary").click();
   await page.getByText(/工具末尾-1/).waitFor();
   assert.equal(await page.locator("#prompt").inputValue(), "保留草稿，不得发送");
@@ -125,8 +128,7 @@ try {
   assert.equal(await tool.getAttribute("open"), "", "tool disclosure survives window recycling");
   await archived.locator(":scope > summary").click(); await settle();
   await top();
-  for (let i = 0; i < 25 && !await card(fixture.compressions[1]).count(); i++) { await page.locator("#thread").evaluate(n => { n.scrollTop += 400; }); await settle(); }
-  assert.equal(await originals(fixture.compressions[1]).getAttribute("aria-expanded"), "true", "opening the first range also opens all later ranges");
+  assert.equal(await card(fixture.compressions[1]).count(), 0, "opening the first range also removes all later expanded cards");
   await top();
   const finalKey = `final-process:${fixture.calls[1]}`;
   const finalRow = page.locator(`[data-timeline-key="archive:${fixture.compressions[1]}:${finalKey}"]`);
@@ -175,9 +177,7 @@ try {
   await finalCard.scrollIntoViewIfNeeded(); await settle();
   await page.screenshot({ path: join(artifacts, "desktop-final-original-hierarchy.png") });
   await finalCard.locator(":scope > summary").click(); await top();
-  await card(fixture.compressions[0]).scrollIntoViewIfNeeded();
-  assert.equal(await card(fixture.compressions[0]).getByRole("button", { name: "收起压缩信息", exact: true }).getAttribute("aria-expanded"), "true");
-  await originals(fixture.compressions[0]).click(); await settle();
+  await collapseRange(fixture.compressions[0]);
   assert.equal(await originals(fixture.compressions[0]).getAttribute("aria-expanded"), "false");
   await page.reload(); await page.getByText("当前对话始终可见。", { exact: true }).waitFor(); await settle(); await top();
   assert.equal(await originals(fixture.compressions[0]).getAttribute("aria-expanded"), "false", "manual collapse survives view reload");
@@ -206,8 +206,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   // Confirm the exact user-approved C-close / B-open behavior through the real UI.
   await top();
-  for (let i = 0; i < 25 && !await card(fixture.compressions[2]).count(); i++) { await page.locator("#thread").evaluate(n => { n.scrollTop += 350; }); await settle(); }
-  await originals(fixture.compressions[2]).click(); await settle();
+  await collapseRange(fixture.compressions[2]);
   const choices = () => page.evaluate(scope => JSON.parse(sessionStorage.getItem(`axiom:history-ranges:${scope.workspaceId}:${scope.sessionId}`) ?? "{}"), scope);
   const closedC = await choices();
   assert.deepEqual(fixture.compressions.map(id => closedC[id]), [false, false, false, true, true], "closing C closes A/B/C and leaves D/E open");

@@ -71,11 +71,12 @@ export function ReaTool({ active }: { active: boolean }) {
       </div>
       <BackendMaintenance resource="rea" label="REA" showError={!reportedErrorResources.includes("rea")} location="所连接后台 · 应用级 · Axiom 独立管理">
         <dl className="tools-facts">
-          <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}</dd></div>
+          <div><dt>运行环境</dt><dd>{state.nodeVersion ? `Node.js ${state.nodeVersion}` : "等待检查"}{state.npmVersion ? ` · npm ${state.npmVersion}` : ""}{state.runtimeManaged ? " · 组件专用" : state.version ? " · 旧版共享环境" : " · 安装时自动准备专用环境"}</dd></div>
           <div><dt>当前版本</dt><dd>{state.version ? <code>v{state.version}</code> : "未安装"}</dd></div>
           <div><dt>{state.latest ? "最新版本" : "推荐版本"}</dt><dd><code>v{target}</code></dd></div>
         </dl>
-        {!state.supported && state.nodeVersion && <p className="tools-error">{state.supportError || "需要 Node.js 22.19+（22.x）、24.11+（24.x）或 26+。"}</p>}
+        {state.version && !state.runtimeManaged && <p className="field-help">现有安装保持不变。重新安装或更新后使用与目标 REA 版本兼容的独立 Node/npm；不需要升级后台或系统 Node。</p>}
+        {!state.supported && state.nodeVersion && <p className="tools-error">{state.supportError || "当前后台平台尚不支持内置工具进程。"}</p>}
         {state.pendingOperation && !coreJob?.running && <div className="tools-conflict" role="group" aria-label="核实 REA 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
         <div className="tools-actions">
           <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("rea.refresh")}>检查安装</button>

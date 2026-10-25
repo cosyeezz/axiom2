@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { processingActive, processingFailed, processingReasonLabels, processingOutcomes, processingStates, type ProcessingPayload, type ProcessingRecord, type ProcessingSummary } from "../../shared/processing.js";
 import { useProcessingRecord } from "./records.js";
+import { useModelDisplay } from "../useModelDisplay.js";
 import "../styles/processing.css";
 
 export const processingTime = (value: number) => new Date(value).toLocaleString();
@@ -26,16 +27,17 @@ export function ProcessingSummaryLine({ item }: { item: ProcessingSummary }) {
 }
 /** The same authorized record body is used by all business entry points. */
 export function ProcessingDetails({ record }: { record: ProcessingRecord }) {
+  const display = useModelDisplay();
   const now = useProcessingNow(processingActive(record.state));
   return <>
     <h3>{record.title}</h3><ProcessingSummaryLine item={record} />
-    <dl><dt>开始时间</dt><dd>{processingTime(record.startedAt)}</dd><dt>耗时</dt><dd>{processingDuration(record.startedAt, record.endedAt, now)}</dd><dt>来源会话</dt><dd>{record.sessionId}</dd><dt>模型</dt><dd>{record.selection ? `${record.selection.provider} / ${record.selection.id} · ${record.selection.thinking ?? "未记录思考等级"}` : "未选择或未记录"}</dd><dt>记录编号</dt><dd>{record.id}</dd>{record.runId && <><dt>原执行编号</dt><dd>{record.runId}</dd></>}{record.toolCallId && <><dt>原工具调用</dt><dd>{record.toolCallId}</dd></>}</dl>
+    <dl><dt>开始时间</dt><dd>{processingTime(record.startedAt)}</dd><dt>耗时</dt><dd>{processingDuration(record.startedAt, record.endedAt, now)}</dd><dt>来源会话</dt><dd>{record.sessionId}</dd><dt>模型</dt><dd>{record.selection ? `${display(record.selection).label} · ${record.selection.thinking ?? "未记录思考等级"}` : "未选择或未记录"}</dd><dt>记录编号</dt><dd>{record.id}</dd>{record.runId && <><dt>原执行编号</dt><dd>{record.runId}</dd></>}{record.toolCallId && <><dt>原工具调用</dt><dd>{record.toolCallId}</dd></>}</dl>
     {record.batch && <details className="processing-batch"><summary>本批次范围 · {record.batch.purposeIds.length} 个目的 · {record.batch.sessionIds.length} 个来源会话 · {record.batch.published ? "已原子发布" : "未发布"}</summary><p>目录更新{record.batch.published ? "已应用" : "尚未应用"}{record.batch.skipped ? `；跳过 ${record.batch.skipped} 个目的` : ""}。</p><dl><dt>目的编号</dt><dd>{record.batch.purposeIds.join("、") || "无"}</dd><dt>来源会话</dt><dd>{record.batch.sessionIds.join("、") || "无"}</dd></dl></details>}
     {record.legacy && <p className="processing-legacy">历史记录仅保留原有信息。缺失的请求输入、输出或阶段时间未作还原。</p>}
     {record.error && <div className={processingFailed(record.state) ? "processing-failure" : "processing-notice"} role={processingFailed(record.state) ? "alert" : "status"}><h4>{processingReasonLabels[record.state]}</h4><pre>{record.error}</pre></div>}
     <details open={record.state !== "completed"}><summary>执行过程</summary>{record.stages.length ? <ol>{record.stages.map((stage, i) => <li key={i}><time>{processingTime(stage.at)}</time> {stage.name}</li>)}</ol> : <p>未记录阶段时间</p>}</details>
     <h4>模型请求 · {record.calls.length} 次</h4>{!record.calls.length && <p>{record.legacy ? "未记录模型请求详情" : "未发起模型请求或未进入调用阶段"}</p>}
-    {record.calls.map((call, i) => <section className="processing-call" key={call.id}><h4>请求 {i + 1} · {call.stage}</h4><p>{call.sentAt ? `已进入模型调用 · ${processingTime(call.sentAt)}` : call.output ? "已收到模型响应" : "未确认发出请求"} · {processingStates[call.state]} · {processingDuration(call.startedAt, call.endedAt, now)}</p>{call.sentAt && <p className="meta">此时间仅表示进入调用，不代表供应商已确认或已计费。</p>}{call.selection && <p className="meta">{call.selection.provider} / {call.selection.id}</p>}{call.error && <pre className={processingFailed(call.state) ? "processing-failure" : "processing-notice"}>{call.error}</pre>}<Payload label="请求输入" value={call.input} /><Payload label="模型原始响应" value={call.output} />{call.usage != null && <details><summary>用量 · 诊断信息，不作为重复计费依据</summary><pre>{JSON.stringify(call.usage, null, 2)}</pre></details>}</section>)}
+    {record.calls.map((call, i) => <section className="processing-call" key={call.id}><h4>请求 {i + 1} · {call.stage}</h4><p>{call.sentAt ? `已进入模型调用 · ${processingTime(call.sentAt)}` : call.output ? "已收到模型响应" : "未确认发出请求"} · {processingStates[call.state]} · {processingDuration(call.startedAt, call.endedAt, now)}</p>{call.sentAt && <p className="meta">此时间仅表示进入调用，不代表供应商已确认或已计费。</p>}{call.selection && <p className="meta">{display(call.selection).label}</p>}{call.error && <pre className={processingFailed(call.state) ? "processing-failure" : "processing-notice"}>{call.error}</pre>}<Payload label="请求输入" value={call.input} /><Payload label="模型原始响应" value={call.output} />{call.usage != null && <details><summary>用量 · 诊断信息，不作为重复计费依据</summary><pre>{JSON.stringify(call.usage, null, 2)}</pre></details>}</section>)}
     {record.result && <Payload label="处理结果" value={record.result} />}
   </>;
 }

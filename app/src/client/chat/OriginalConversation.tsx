@@ -46,6 +46,25 @@ export function useHistoryConversation(scope: Scope | null, index: ThreadIndex) 
   useEffect(() => () => store.dispose(), [store]);
   return { ...state, store, ready: !!state.index && !state.loading && !state.error && connection.connected, retry: () => void store.refresh() };
 }
+/** Acquire independent source groups in parallel; never broaden a read to a segment. */
+export function useHistoryRanges(store: HistoryStore, ranges: { segmentId: string; groupId: string }[]) {
+  const key = JSON.stringify(ranges);
+  const stable = useMemo(() => ranges, [key]);
+  const revision = useSyncExternalStore(store.subscribe, store.snapshot).index?.revision;
+  const subscribe = useCallback((notify: () => void) => {
+    const off = stable.map(range => store.subscribeRange(store.key(range.segmentId, range.groupId), notify));
+    return () => off.forEach(fn => fn());
+  }, [store, stable]);
+  // A primitive snapshot is stable even when several source ranges change together.
+  const snapshot = useSyncExternalStore(subscribe, () => JSON.stringify(stable.map(range => store.range(store.key(range.segmentId, range.groupId)))));
+  useEffect(() => {
+    const off = stable.map(range => store.acquire(range.segmentId, range.groupId));
+    return () => off.forEach(fn => fn());
+  }, [store, stable, revision]);
+  const states = JSON.parse(snapshot) as { ready: boolean; error: string }[];
+  return { ready: states.every(state => state.ready), error: states.find(state => state.error)?.error ?? "",
+    retry: () => stable.forEach(range => void store.load(range.segmentId, range.groupId)) };
+}
 export function useHistoryRange(store: HistoryStore, segmentId: string, groupId?: string, enabled = true) {
   const key = store.key(segmentId, groupId);
   const revision = useSyncExternalStore(store.subscribe, store.snapshot).index?.revision;

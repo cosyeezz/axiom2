@@ -1,4 +1,4 @@
-import type { OpenCliConfig } from "./opencli-runtime.js";
+import { openCliCommandDirectory, type OpenCliConfig } from "./opencli-runtime.js";
 
 /** Run the same platform entry points used by shell tools, under the candidate PATH. */
 export function openCliShimProbe(config: OpenCliConfig): string[] {
@@ -21,5 +21,5 @@ if (process.platform === 'win32') {
   results.push(result.stdout.trim());
 }
 process.stdout.write(JSON.stringify(results));`;
-  return ["-e", script, config.binDirectory];
+  return ["-e", script, openCliCommandDirectory(config)];
 }

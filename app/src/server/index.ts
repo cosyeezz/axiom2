@@ -57,7 +57,7 @@ import {
 } from "../shared/protocol.js";
 
 export async function startServer(
-  options: { rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void> } } = {},
+  options: { rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
@@ -294,7 +294,7 @@ export async function startServer(
   };
   const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), { ...options.rea, removal: removeIntegration });
   const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), { ...options.rtk, removal: removeIntegration });
-  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, removeIntegration);
+  const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, removeIntegration, options.openCli?.runtime);
   agents = new Agents(store, models, publish, options.openMemoryFile, (scope) => receivers(scope).length > 0);
   const resources = new Resources(store, models.dir, () => { publish("resources"); publish("capability-preferences"); }, async () => {});
   const skillFiles = new SkillFiles(agents.capabilities, (directory, signal) => fileManager.open(directory, signal), options.openMemoryFile);

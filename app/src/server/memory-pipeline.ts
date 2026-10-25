@@ -3,6 +3,7 @@ import type { Memories, MemoryExecution } from "./memories.js";
 import { MemoryTreeStore, type QueuedPurpose } from "./memory-tree.js";
 import { memoryDirectory, referencedPaths } from "./memory-files.js";
 import { memoryOrganizerPrompt, memoryMatchPrompt, memoryAnswerPrompt } from "../shared/memory-prompts.js";
+import { projectMemoryCandidates, type MemoryMatchCandidate } from "../shared/memory-query-projection.js";
 import type { MemoryPurpose, MemorySource, MemoryIndexNode } from "../shared/memory-tree.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { type MemoryDocument, type MemoryQueryResult } from "../shared/memory.js";
@@ -43,9 +44,11 @@ export class MemoryPipeline {
       throw new AppError("MEMORY_LOCATOR_INVALID", "原目的定位已失效；不能猜测来源或使用旧目录回答");
     return found;
   }
-  private async execute(input: Omit<MemoryExecution, "read">, stage: string) {
+  private async execute(input: Omit<MemoryExecution, "read">, stage: string, candidates?: readonly MemoryMatchCandidate[]) {
     const id = input.processingId;
-    const callId = id ? this.memories.records.callStart(id, stage, { systemPrompt: input.systemPrompt, prompt: input.prompt }, input.selection) : undefined;
+    // Bindings are audit data only, never part of the model input or worker request.
+    const callId = id ? this.memories.records.callStart(id, stage, { systemPrompt: input.systemPrompt, prompt: input.prompt,
+      ...(candidates ? { candidateBindings: candidates.map((candidate, index) => ({ number: index + 1, ...candidate })) } : {}) }, input.selection) : undefined;
     try {
       if (!this.memories.runner) throw new AppError("MEMORY_UNAVAILABLE", "记忆执行器不可用");
       const result = await this.memories.runner.execute({ ...input, processingCallId: callId, read: () => { throw Error("分类与查询模型不提供任意文件读取工具"); } });
@@ -131,20 +134,19 @@ export class MemoryPipeline {
     const snapshot = queryMemorySnapshot(this.tree.snapshot(scope.workspaceId)), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
     const empty: MemoryQueryResult = { answer: "", scope, incomplete: false, sources: [], indexVersion: snapshot.version };
     let turns = 0;
-    const match = async (stage: string, candidates: Array<{ id: string; text: string; [key: string]: unknown }>) => {
+    const match = async (stage: string, candidates: MemoryMatchCandidate[]) => {
       signal.throwIfAborted();
       if (!candidates.length) return [] as string[];
       if (++turns >= this.memories.preferences().maxTurns) throw new AppError("MEMORY_BUDGET", "索引导航轮数达到上限，查询未完成");
       const label = stage === "directories" ? "匹配目录与目的" : "选择记忆详情";
       this.memories.records.stage(processingId, label, selection);
-      const result = await this.execute({ ...base, systemPrompt: memoryMatchPrompt, prompt: JSON.stringify({ question, stage, candidates }) }, label);
+      const projection = projectMemoryCandidates(candidates);
+      const result = await this.execute({ ...base, systemPrompt: memoryMatchPrompt, prompt: JSON.stringify({ question, stage, catalog: projection.catalog }) }, label, candidates);
       signal.throwIfAborted();
       this.memories.records.stage(processingId, "校验索引导航结果");
       if (result.incomplete) throw new AppError("MEMORY_UNAVAILABLE", "索引导航未完整完成");
-      const selected: unknown = JSON.parse(result.answer), allowed = new Set(candidates.map(candidate => candidate.id));
-      if (!Array.isArray(selected) || selected.some(id => typeof id !== "string" || !allowed.has(id)) || new Set(selected).size !== selected.length)
-        throw new AppError("MEMORY_UNAVAILABLE", "索引导航返回越界或重复标识");
-      return selected as string[];
+      try { return projection.resolve(result.answer); }
+      catch { throw new AppError("MEMORY_UNAVAILABLE", "索引导航返回无效、越界或重复编号"); }
     };
     let frontier = snapshot.roots;
     const chosen = new Set<string>();
@@ -186,7 +188,7 @@ export class MemoryPipeline {
         details.set(id, { purpose, path, heading: node.title, state: node.abandoned ? "已放弃" : node.state ?? "" });
       }
     }
-    const selectedDetails = await match("details", [...details].map(([id, detail]) => ({ id, text: detail.heading, state: detail.state, purpose: detail.purpose.text })));
+    const selectedDetails = await match("details", [...details].map(([id, detail]) => ({ id, text: detail.heading, state: detail.state, purposeId: detail.purpose.id, purpose: detail.purpose.text })));
     // A title alone is not evidence. An empty detail selection is a genuine miss,
     // but still verify that the consulted locators were not changed in flight.
     const evidence: Array<{ purpose: string; heading: string; state: string; content: string }> = [];

@@ -1,4 +1,7 @@
 import { loadSkills } from "@earendil-works/pi-coding-agent";
+import { managedNode, type ManagedNodeProvider } from "./managed-node.js";
+import { componentEnvironment, prepareComponentEnvironment } from "./component-environment.js";
+import { writeNodeLauncher } from "./node-launcher.js";
 import { openCliShimProbe } from "./opencli-shim.js";
 import { currentMaintenance, maintenanceCancelled, maintenancePhase, runMaintenance } from "../maintenance.js";
 import { MaintenanceError } from "../../shared/maintenance.js";
@@ -10,7 +13,7 @@ import { AppError, type Command } from "../../shared/protocol.js";
 import { defaultOpenCliSettings, type OpenCliJob, type OpenCliState } from "../../shared/builtin-tools.js";
 import { openExtensionPage, type OpenCliExtensionTarget } from "./opencli-browser.js";
 import { errorMessage } from "../error-message.js";
-import { openCliConfigPath, openCliEnvironment, openCliSkillNames, openCliSkillPaths, openCliVersionPaths, openCliVersionPattern, readOpenCliConfig, validateOpenCliPackage, type OpenCliConfig } from "./opencli-runtime.js";
+import { openCliConfigPath, openCliEnvironment, openCliNode, openCliPrefix, openCliSkillNames, openCliSkillPaths, openCliVersionPaths, openCliVersionPattern, readOpenCliConfig, validateOpenCliPackage, type OpenCliConfig } from "./opencli-runtime.js";
 
 import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
 import { openCliRemovalPlan } from "./opencli-removal.js";
@@ -54,7 +57,7 @@ export function findNpmCli(env = process.env, node = process.execPath): string {
   return resolve(found);
 }
 import { toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
-type ExecuteOptions = { cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal; timeout: number; tool?: "opencli" | "rea" };
+type ExecuteOptions = { cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal; timeout: number; tool?: "opencli" | "rea"; nodeExecutable?: string };
 export type OpenCliExecute = (args: string[], options: ExecuteOptions) => Promise<string>;
 export const executeOpenCli: OpenCliExecute = async (args, options) => {
   options.signal.throwIfAborted();
@@ -62,7 +65,7 @@ export const executeOpenCli: OpenCliExecute = async (args, options) => {
   const npmNetwork = /npm-cli\.js$/i.test(args[0] ?? "") && ["install", "uninstall", "view"].includes(args[1]);
   if (execution && npmNetwork) args = [...args.filter(arg => !/^--fetch-(timeout|retries)=/.test(arg)), "--fetch-timeout=86400000", "--fetch-retries=2"];
   if (installing) maintenancePhase("installing");
-  const result = await runBuiltinTool(options.tool ?? "opencli", process.execPath, args, { ...options, limit: 128_000, errorLimit: 128_000, output: installing ? "tail" : "structured" });
+  const result = await runBuiltinTool(options.tool ?? "opencli", options.nodeExecutable ?? process.execPath, args, { ...options, limit: 128_000, errorLimit: 128_000, output: installing ? "tail" : "structured" });
   if (result.code !== 0) throw Error(errorMessage(result.stderr.toString("utf8") || result.stdout.toString("utf8"), "命令未完成，请检查网络和 npm 目录权限。", true, result.stderr.length > 0 ? result.stderrTruncated : result.stdoutTruncated));
   return result.stdout.toString("utf8").trim();
 };
@@ -77,7 +80,7 @@ export class OpenCliService {
   private controller?: AbortController;
   private closed = false;
   private readonly jobFile: string;
-  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage, private readonly removal: IntegrationRemoval = async work => work()) {
+  constructor(readonly root: string, private readonly changed: () => void, private readonly execute: OpenCliExecute = executeOpenCli, private readonly locateNpm = findNpmCli, private readonly openExtension: (target: OpenCliExtensionTarget) => Promise<void> = openExtensionPage, private readonly removal: IntegrationRemoval = async work => work(), private readonly runtime: ManagedNodeProvider = managedNode) {
     this.jobFile = join(root, "integrations", "opencli-job.json");
     this.loadConfig();
     try {
@@ -102,11 +105,15 @@ export class OpenCliService {
   }
   get installing() { return this.state.job?.running === true && this.state.job.kind === "install"; }
   private loadConfig() {
+    this.state.nodeVersion = ""; this.state.runtimeManaged = false; delete this.state.npmVersion;
     try {
       this.config = readOpenCliConfig(this.root);
       this.state.revision = this.config?.revision ?? "";
       this.state.configured = !!this.config && !this.config.detached;
       this.state.managed = !!this.config?.directory;
+      this.state.runtimeManaged = !!this.config?.runtime;
+      this.state.nodeVersion = this.config?.runtime ? `v${this.config.runtime.nodeVersion}` : process.version;
+      if (this.config?.runtime) this.state.npmVersion = this.config.runtime.npmVersion;
       this.state.removalPending = !!this.config?.removalPending?.length;
       this.state.settings = this.config ? { enabled: this.config.enabled, profile: this.config.profile, window: this.config.window } : { ...defaultOpenCliSettings };
       delete this.state.error;
@@ -118,9 +125,12 @@ export class OpenCliService {
     this.changed();
   }
   private async run(args: string[], timeout = 30_000, config = this.config) {
-    const env = config ? openCliEnvironment(config) : { ...process.env };
-    env.NO_COLOR = "1";
-    return this.execute(args, { cwd: this.root, env, signal: this.controller!.signal, timeout });
+    const nodeExecutable = config && !config.detached ? openCliNode(config) : process.execPath;
+    const source = config ? openCliEnvironment(config) : process.env;
+    const state = join(config?.directory ? openCliPrefix(config) : join(this.root, "integrations", "opencli"), "environment");
+    prepareComponentEnvironment(state);
+    const env = componentEnvironment(state, source, dirname(nodeExecutable));
+    return this.execute(args, { cwd: this.root, env, signal: this.controller!.signal, timeout, nodeExecutable });
   }
   private async npmCli() {
     this.npm = this.locateNpm();
@@ -132,6 +142,9 @@ export class OpenCliService {
     this.entry = entry; this.binDirectory = config.binDirectory;
     this.state.version = version; this.state.packageRoot = config.packageRoot;
     this.state.managed = !!config.directory;
+    this.state.nodeVersion = config.runtime ? `v${config.runtime.nodeVersion}` : process.version;
+    this.state.npmVersion = config.runtime?.npmVersion;
+    this.state.runtimeManaged = !!config.runtime;
   }
   private async inspect() {
     this.loadConfig(); this.state.ready = false;
@@ -143,7 +156,8 @@ export class OpenCliService {
       if (!this.config.detached) try { this.select(this.config); }
       catch (error) { this.state.installationError = errorMessage(error, "OpenCLI 安装不完整，请重新安装。"); }
     } else {
-      const npm = await this.npmCli();
+      let npm: string;
+      try { npm = await this.npmCli(); } catch { this.state.ready = true; return; }
       const modules = await this.run([npm, "root", "--global"]);
       const prefix = await this.run([npm, "prefix", "--global"]);
       if (!isAbsolute(modules) || !isAbsolute(prefix) || /[\r\n]/.test(modules + prefix)) throw Error("npm 返回了无效的全局安装目录。");
@@ -164,10 +178,9 @@ export class OpenCliService {
     atomicJson(openCliConfigPath(this.root), next); this.loadConfig(); delete this.state.diagnostic;
     });
   }
-  private async install(version: string, revision: string) {
+  private async install(version: string, revision: string, onPublished: () => void) {
     if (this.state.revision !== revision) throw Error("接入配置已变化，请重新检查后安装。");
     if (this.state.version && this.state.version !== version && !newerOpenCli(version, this.state.version)) throw Error("当前安装版本高于已检查的版本，未执行降级。");
-    const npm = await this.npmCli();
     const directory = `v${version}-${randomUUID()}`;
     const paths = openCliVersionPaths(this.root, directory);
     managedDirectory(this.root, ["integrations", "opencli", "versions"], directory, openCliVersionPattern);
@@ -177,10 +190,14 @@ export class OpenCliService {
     if (this.state.packageRoot && !this.config?.directory) candidate.migration = { packageRoot: this.state.packageRoot, version: this.state.version, at: Date.now(), externalFilesRetained: true };
     let published = false;
     try {
+      const runtime = await this.runtime.prepare("opencli", paths.prefix, packageName, version, this.controller!.signal, text => this.notify(text));
+      candidate.runtime = runtime.binding;
       this.notify(`正在安装 OpenCLI ${version} 到独立目录…`);
-      await this.run([npm, "install", "--prefix", paths.prefix, "--global=false", "--ignore-scripts", "--no-audit", "--no-fund", "--omit=dev", registry, `${packageName}@${version}`], 600_000);
+      await this.run([runtime.npm, "install", "--prefix", paths.prefix, "--global=false", "--ignore-scripts", "--no-audit", "--no-fund", "--omit=dev", "--engine-strict", registry, `${packageName}@${version}`], 600_000, candidate);
       maintenancePhase("validating");
       managedDirectory(this.root, ["integrations", "opencli", "versions"], directory, openCliVersionPattern);
+      const program = validateOpenCliPackage({ ...candidate, runtime: undefined }, version);
+      writeNodeLauncher(paths.prefix, openCliNode(candidate), program.entry);
       const validated = validateOpenCliPackage(candidate, version);
       const skills = loadSkills({ cwd: this.root, agentDir: join(this.root, "pi"), includeDefaults: false, skillPaths: openCliSkillPaths({ ...candidate, enabled: true }) });
       if (openCliSkillNames.some(name => skills.skills.filter(skill => skill.name === name).length !== 1)) throw Error("OpenCLI 官方常用技能未通过解析校验，原接入保持不变。");
@@ -192,7 +209,7 @@ export class OpenCliService {
       this.controller!.signal.throwIfAborted();
       if ((readOpenCliConfig(this.root)?.revision ?? "") !== revision) throw Error("接入配置已变化，未切换新版本；请重新读取后重试。");
       assertBuiltinFilesSafe();
-      atomicJson(openCliConfigPath(this.root), candidate, () => { published = true; });
+      atomicJson(openCliConfigPath(this.root), candidate, () => { published = true; onPublished(); });
       this.loadConfig(); this.select(candidate); delete this.state.installationError; delete this.state.diagnostic;
     } finally {
       // Published versions remain immutable while existing workers can still reference them.
@@ -217,7 +234,7 @@ export class OpenCliService {
       }
       markBuiltinRemovals(names.map(name => openCliVersionPaths(this.root, name).prefix));
       const next: OpenCliConfig = { ...current, format: 1, ...this.state.settings, revision: randomUUID(), packageRoot: "", binDirectory: "", detached: true, removalPending: names };
-      delete next.directory;
+      delete next.directory; delete next.runtime;
       atomicJson(openCliConfigPath(this.root), next); this.loadConfig();
       delete this.state.version; delete this.state.packageRoot; delete this.state.diagnostic; delete this.state.installationError;
       this.entry = undefined; this.binDirectory = undefined;
@@ -265,6 +282,7 @@ export class OpenCliService {
     if (kind === "install" && (!this.state.latest || c.params?.version !== this.state.latest || !versionPattern.test(this.state.latest))) throw new AppError("CHECK_REQUIRED", "请先检查更新，再安装已确认的版本。");
     if (kind === "uninstall" && (c.params?.confirm !== true || c.params.revision !== this.state.revision)) throw new AppError("CONFIRM_REQUIRED", "请读取当前配置并确认卸载。");
     const version = this.state.latest, revision = this.state.revision;
+    let installationPublished = false;
     const operation = beginBuiltinOperation(this.root, "opencli");
     this.controller = new AbortController();
     this.state.job = { id: randomUUID(), kind, running: true, cancellable: kind !== "uninstall", version, message: "正在检查本机环境…" };
@@ -282,11 +300,10 @@ export class OpenCliService {
         await this.inspect();
         if (kind === "check") {
           delete this.state.latest; this.notify("正在检查 OpenCLI 最新版本…");
-          const npm = this.npm ?? await this.npmCli();
-          const latest = JSON.parse(await this.run([npm, "view", packageName, "dist-tags.latest", "--json", registry]));
+          const latest = await this.runtime.latest(packageName, this.controller!.signal);
           if (typeof latest !== "string" || !versionPattern.test(latest)) throw Error("官方 npm 仓库未返回有效的稳定版本。");
           this.state.latest = latest;
-        } else if (kind === "install") await this.install(version!, revision);
+        } else if (kind === "install") await this.install(version!, revision, () => { installationPublished = true; });
         else if (kind === "doctor") {
           if (!this.entry) throw Error("请先安装 OpenCLI。");
           this.notify("正在运行官方连接诊断，请保持 Chrome 打开…");
@@ -297,8 +314,13 @@ export class OpenCliService {
       this.state.job!.message = kind === "install" ? "安装与技能接入已完成；请继续安装扩展并检测连接。" : kind === "uninstall" ? "托管程序与接入已移除；外部安装和接入设置保留。" : kind === "doctor" ? "诊断已完成，请查看下方官方报告。" : "检查已完成。";
     })).catch(error => {
       const cancelled = maintenanceCancelled(error, this.controller!.signal);
-      if (!cancelled) this.state.job!.error = errorMessage(error, "OpenCLI 操作未完成，请重新检查。");
-      this.state.job!.message = cancelled ? "操作已取消，当前接入未切换。" : "操作未完成";
+      if (installationPublished) {
+        this.state.job!.error = `OpenCLI 已切换至 ${version}，但后续确认未完成：${errorMessage(error, "请刷新检查安装与持久化状态。")}`;
+        this.state.job!.message = "新版本已生效，后续确认未完成；已保留安装文件。";
+      } else {
+        if (!cancelled) this.state.job!.error = errorMessage(error, "OpenCLI 操作未完成，请重新检查。");
+        this.state.job!.message = cancelled ? "操作已取消，当前接入未切换。" : "操作未完成";
+      }
     }).finally(() => {
       // A configuration rename can publish a new revision before a later
       // durability/cleanup failure; retries must use the on-disk revision.

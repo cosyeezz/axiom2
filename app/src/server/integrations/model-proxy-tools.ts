@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { getShellConfig, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { StdioTransport, StreamableHttpTransport } from "@earendil-works/pi-mcp";
 import { EnvHttpProxyAgent, fetch as networkFetch } from "undici";
+import { dirname } from "node:path";
+import { prepareComponentEnvironment } from "./component-environment.js";
 import { toolEnvironment } from "./model-proxy-env.js";
 
 const expandHome = (value: string) => value === "~" ? homedir() : value.startsWith("~/") || process.platform === "win32" && value.startsWith("~\\") ? join(homedir(), value.slice(2)) : value;
@@ -45,6 +47,13 @@ export const modelToolTransport: NonNullable<McpExtensionOptions["createTranspor
       headers: Object.fromEntries(Object.entries(config.headers ?? {}).map(([key, value]) => [key, resolveToolConfig(value, env)])),
       fetch: (async (input: Parameters<typeof globalThis.fetch>[0], init?: Parameters<typeof globalThis.fetch>[1]) => networkFetch(input as Parameters<typeof networkFetch>[0], { ...init, dispatcher } as Parameters<typeof networkFetch>[1])) as unknown as typeof globalThis.fetch,
     });
+  }
+  // Built-in REA supplies literal, already-resolved values. Do not interpret
+  // tokens/paths beginning with ! or containing $ as user MCP expressions.
+  if (entry.name === "rea" && entry.scope === "extension" && entry.source.replaceAll("\\", "/").endsWith("/integrations/rea/config.json")) {
+    if (config.env?.XDG_CONFIG_HOME) prepareComponentEnvironment(dirname(config.env.XDG_CONFIG_HOME));
+    return new StdioTransport({ command: config.command, args: config.args, cwd: config.cwd ?? cwd,
+      inheritEnv: false, stderr: "pipe", env: config.env });
   }
   const defined = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   return new StdioTransport({ command: expandHome(config.command), args: config.args?.map(expandHome),

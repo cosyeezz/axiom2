@@ -24,5 +24,3 @@
 .activity-status .activity-status-completed { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tool-activity > summary > svg:last-child { margin-left: auto; }
 .tool-activity .subagents, .tool-activity .task-operation { margin-block: 8px; }
-.process-origin { min-width: 0; color: var(--muted); font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
-.activity-overview:has(.process-origin) { flex-wrap: wrap; column-gap: 10px; row-gap: 2px; }

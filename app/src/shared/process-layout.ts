@@ -11,7 +11,7 @@ export type ProcessSlice =
   | { kind: "process"; id: string; calls: CallReference[]; entries: ProcessEntry[] };
 
 /** Prose and notices separate segments; thoughts and calls keep their segment identity. */
-export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[] = [], callsOnlyIds: string[] = []): ProcessSlice[] {
+export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[] = [], callsOnlyIds: string[] = [], bodyHiddenIds: string[] = []): ProcessSlice[] {
   const slices: ProcessSlice[] = [];
   let entries: ProcessEntry[] = [];
   const flush = () => {
@@ -29,7 +29,7 @@ export function processSlices(messages: ChatMessage[], thinkingOnlyIds: string[]
     }
     if (!callsOnlyIds.includes(message.id)) {
       if (message.thinking || message.thinkingActive) entries.push({ kind: "thinking", id: message.id });
-      if (!thinkingOnlyIds.includes(message.id)) {
+      if (!thinkingOnlyIds.includes(message.id) && !bodyHiddenIds.includes(message.id)) {
         if (message.text.trim() || message.images?.length) {
           flush();
           slices.push({ kind: "body", id: message.id });

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ProxyInstallation, ProxyNode } from "../../shared/model-proxy.js";
 import { atomicProxyJson, proxyDirectory, proxyExecutable } from "./model-proxy-config.js";
-import { toolEnvironment } from "./model-proxy-env.js";
+import { componentEnvironment, prepareComponentEnvironment } from "./component-environment.js";
 import { coreConfiguration, reserveProxyPort } from "./model-proxy-process.js";
 import { assertProxyCanStart } from "./model-proxy-removal.js";
 
@@ -69,8 +69,10 @@ export async function inspectProxySource(root: string, installation: ProxyInstal
     const started = Date.now();
     guardian = new ProxyGuardian(owner, () => execution?.remainingBudget() ?? { remainingMs: 30_000 - (Date.now() - started), code: "total-timeout" }, signal);
     void guardian.closed.then(() => { exited = true; });
+    const environment = join(directory, "environment");
+    prepareComponentEnvironment(environment);
     await guardian.start({ executable: proxyExecutable(root, "mihomo", installation),
-      args: ["-d", directory, "-f", config], cwd: directory, env: toolEnvironment(process.env) });
+      args: ["-d", directory, "-f", config], cwd: directory, env: componentEnvironment(environment) });
     const deadline = execution ? Infinity : Date.now() + 30_000;
     while (Date.now() < deadline && !exited) {
       signal.throwIfAborted();

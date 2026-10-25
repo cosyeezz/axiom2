@@ -6,7 +6,8 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, 
 import { basename, join } from "node:path";
 import { proxyDirectory, proxyImporterDirectoryPattern } from "./model-proxy-config.js";
 import { downloadProxyAsset, proxyAsset, proxyZipMember } from "./model-proxy-install.js";
-import { assertToolProcessesStopped, runRtk } from "./rtk-process.js";
+import { assertToolProcessesStopped } from "./tool-process.js";
+import { runNative } from "./native-process.js";
 
 // Standalone upstream executable, not linked into or redistributed with Axiom.
 // The project's MIT license does not cover all binary dependencies (including GPL sing-box).
@@ -52,7 +53,7 @@ export async function checkXrayImporter(root: string, signal: AbortSignal): Prom
   if (digest(archive) !== release.sha256) throw Error("导入组件压缩包校验失败，请重新安装。");
   const member = proxyZipMember(archive, basename(executable));
   if (statSync(executable).size !== member.length || digest(readFileSync(executable)) !== digest(member)) throw Error("导入组件程序校验失败，请重新安装。");
-  const found = (await runRtk(executable, ["--version"], { root: directory, signal, timeout: 10_000 })).toString().trim();
+  const found = (await runNative(executable, ["--version"], { root: directory, signal, timeout: 10_000 })).toString().trim();
   if (found !== `xray-knife ${version}`) throw Error("导入组件实际版本与固定兼容版本不一致。");
   signal.throwIfAborted(); return version;
 }
@@ -83,7 +84,7 @@ export async function prepareXrayImporter(root: string, signal: AbortSignal, pro
     if (!existsSync(executable) || statSync(executable).size !== data.length || digest(readFileSync(executable)) !== digest(data)) replaceFile(executable, data, 0o700);
     if (process.platform !== "win32") chmodSync(executable, 0o700);
     maintenancePhase("validating");
-    const found = (await runRtk(executable, ["--version"], { root: directory, signal, timeout: 10_000 })).toString().trim();
+    const found = (await runNative(executable, ["--version"], { root: directory, signal, timeout: 10_000 })).toString().trim();
     if (found !== `xray-knife ${version}`) throw Error("version");
     signal.throwIfAborted(); progress("Xray 分享导入组件校验完成。"); return executable;
   } catch (error) {

@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "./temporary.js";
 import { join, resolve } from "node:path";
 import { diagnoseRea, ReaService } from "../src/server/integrations/rea.js";
-import { reaConfigPath, reaDirectory, reaPackageRoot, reaSkillName, reaSupportedNode, readReaConfig } from "../src/server/integrations/rea-runtime.js";
+import { reaConfigPath, reaDirectory, reaPackageRoot, reaSkillName, reaSupportedNode, reaNode, readReaConfig } from "../src/server/integrations/rea-runtime.js";
 import { reaResources } from "../src/server/integrations/rea-resources.js";
 import { capabilityRuntime, discoverCapabilities, skillId } from "../src/server/capability-resources.js";
 import { resourceIdentity, resourceIdentityAsync } from "../src/server/agents/resource-identity.js";
@@ -40,7 +40,7 @@ test("REA installs privately, checks an actual MCP session, discovers bundled sk
     const skill = catalog.skills.find(s => s.name === reaSkillName)!;
     assert.ok(skill.source.startsWith(reaDirectory(root))); assert.equal(catalog.skills.filter(s => s.name === reaSkillName).length, 1);
     const builtinConfig = catalog.config.servers.find(s => s.name === "rea")!.config;
-    assert.ok("command" in builtinConfig); assert.equal(builtinConfig.command, process.execPath);
+    assert.ok("command" in builtinConfig); assert.equal(builtinConfig.command, reaNode(root)); assert.notEqual(builtinConfig.command, process.execPath);
     assert.ok(catalog.files.some(f => f.path.endsWith(join("references", "guide.md"))));
     assert.equal(capabilityRuntime(catalog, { skills: [skill.id], mcp: ["rea"] }).mcp.servers.length, 1);
     const identity = resourceIdentity(root, join(root, "pi"));
@@ -52,7 +52,7 @@ test("REA installs privately, checks an actual MCP session, discovers bundled sk
     writeFileSync(join(root, "pi", "mcp.json"), external);
     const overridden = await discoverCapabilities(root, root);
     const externalConfig = overridden.config.servers.find(s => s.name === "rea")!.config;
-    assert.ok("command" in externalConfig); assert.equal(externalConfig.command, process.execPath);
+    assert.ok("command" in externalConfig); assert.equal(externalConfig.command, reaNode(root));
     assert.equal(overridden.mcp.find(s => s.id === "rea")!.defaultSelected, true);
     assert.equal(overridden.mcp.find(s => s.id === "rea")!.builtin, "rea"); assert.equal(overridden.mcp.length, 2);
     assert.equal(readFileSync(join(root, "pi", "mcp.json"), "utf8"), external);
@@ -73,7 +73,7 @@ test("REA built-in MCP takes precedence over complete and partial project defini
     assert.deepEqual(invalid.config.errors, []); assert.ok(invalid.config.servers.some(s => s.name === "rea"));
     writeFileSync(join(root, ".pi", "mcp.json"), JSON.stringify({ mcpServers: { rea: { command: "project-rea" } } }));
     const complete = await discoverCapabilities(root, root);
-    assert.equal((complete.config.servers.find(s => s.name === "rea")!.config as { command: string }).command, process.execPath);
+    assert.equal((complete.config.servers.find(s => s.name === "rea")!.config as { command: string }).command, reaNode(root));
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -83,8 +83,8 @@ test("REA failed update and failed MCP verification keep current version and cle
     try {
       await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
       const original = readFileSync(reaConfigPath(root), "utf8");
-      f.setLatest("6.7.1"); await call(service, "rea.check"); await settle(service); f[failure]();
-      await call(service, "rea.install", { version: "6.7.1" }); const failed = await settle(service);
+      f.setLatest("6.8.0"); await call(service, "rea.check"); await settle(service); f[failure]();
+      await call(service, "rea.install", { version: "6.8.0" }); const failed = await settle(service);
       assert.ok(failed.job?.error); assert.ok(!failed.job.error.includes("secret-value"));
       assert.equal(failed.version, "6.7.0"); assert.equal(readFileSync(reaConfigPath(root), "utf8"), original);
       assert.equal(readdirSync(join(reaDirectory(root), "versions")).length, 1);
@@ -163,7 +163,7 @@ test("locked sessions keep the same managed REA selection across reinstall and u
     capabilities.lock(scope, await capabilities.prepare(scope));
     // Changed global defaults must not override this session's existing explicit selection.
     await call(service, "rea.save", { enabled: false, revision: service.snapshot().revision });
-    for (const version of ["6.7.0", "6.7.1"]) {
+    for (const version of ["6.7.0", "6.8.0"]) {
       f.setLatest(version); await call(service, "rea.check"); await settle(service);
       await call(service, "rea.install", { version });
       assert.equal((await settle(service)).job?.error, undefined);

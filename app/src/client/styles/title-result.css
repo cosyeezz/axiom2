@@ -1,0 +1,11 @@
+/* The subagent row's compact, neutral surface, with title-generation semantics. */
+.title-result-card { width: 100%; min-width: 0; margin: 10px 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--fg) 2%, transparent); }
+.title-result-trigger { display: grid; grid-template-columns: 18px minmax(0, 1fr) 16px; align-items: center; gap: 8px; width: 100%; min-height: 64px; padding: 8px 10px; text-align: left; color: var(--fg-2); }
+.title-result-trigger > svg { width: 18px; height: 18px; color: var(--meta); flex-shrink: 0; }
+.title-result-copy { display: grid; gap: 2px; min-width: 0; }
+.title-result-copy strong { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); font-weight: 510; overflow-wrap: anywhere; }
+.title-result-copy small { color: var(--muted); font-size: 11px; line-height: 18px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.title-result-trigger > .title-result-open { width: 16px; height: 16px; }
+.title-result-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.title-result-trigger:is(:hover, :focus-visible) .title-result-state, .title-result-trigger:is(:hover, :focus-visible) .title-result-open { color: var(--fg); }
+.title-result-panel { width: min(760px, calc(100vw - 24px)); }

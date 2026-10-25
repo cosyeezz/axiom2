@@ -44,7 +44,7 @@ try {
   const group = groups.first();
   const title = group.locator(':scope > summary .activity-title');
   const request = page.locator('.process-requesting');
-  await request.getByText('正在思考', { exact: true }).waitFor();
+  await request.getByText('请求中', { exact: true }).waitFor();
   assert.equal(await groups.count(), 0, 'initial request needs no fabricated activity or message');
   assert.equal(await request.locator('.process-ellipsis').count(), 1);
   for (const width of [1440, 390]) {
@@ -54,7 +54,7 @@ try {
     await page.screenshot({ path: join(artifacts, `${width}-requesting.png`) });
   }
   await page.reload();
-  await request.getByText('正在思考', { exact: true }).waitFor();
+  await request.getByText('请求中', { exact: true }).waitFor();
   for (const status of ['stopping', 'completed', 'failed', 'cancelled']) {
     setRequest('run', status);
     await request.waitFor({ state: 'detached' });
@@ -280,11 +280,11 @@ try {
   publish({ ...tool, streaming: false, status: 'completed' },
     { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: 'ready', status: 'completed', durationMs: 1500 });
   setRequest();
-  await title.filter({ hasText: '正在思考' }).waitFor();
-  assert.equal(await title.innerText(), '正在思考', 'tool continuation requesting reuses the thinking label');
+  await title.filter({ hasText: '调用工具' }).waitFor();
+  assert.equal(await title.innerText(), '调用工具', 'tool continuation requesting retains the latest actual activity');
   assert.equal(await request.count(), 0, 'tool continuation reuses the existing process title');
   assert.equal(await group.locator('.tool-call[open]').count(), 1, 'requesting preserves expanded tool details');
-  assert.ok(await title.getAttribute('data-thinking') !== null);
+  assert.equal(await title.getAttribute('data-thinking'), null, 'a follow-up request does not invent thinking');
   clearRequest(); publish(thought);
   await title.filter({ hasText: '正在思考' }).waitFor();
   assert.equal(await group.locator('.tool-result-state .process-outcome').count(), 0, 'successful tool rows have no checkmark or icon placeholder');
@@ -320,7 +320,7 @@ try {
   await page.locator('#messages .timeline-row > .task-operation').waitFor();
   setRequest();
   await request.waitFor();
-  assert.equal(await title.innerText(), '执行完成', 'request after a task card leaves the preceding segment settled');
+  assert.equal(await title.innerText(), '执行完成', 'a settled local segment keeps its completed label during a separate request');
   assert.equal(await request.count(), 1);
   clearRequest();
   await request.waitFor({ state: 'detached' });
@@ -331,7 +331,7 @@ try {
   await singleThought.locator('summary').click();
   assert.equal(await singleThought.locator('.thinking-body').count(), 0, 'even short single-line thoughts expand and collapse');
   assert.equal(await group.locator('.task-operation').count(), 0, 'subagent operations are outside the process');
-  assert.equal(await title.innerText(), '执行完成', 'a subagent card closes the preceding process');
+  assert.equal(await title.innerText(), '执行完成', 'a subagent card settles only the local process, not the whole user turn');
   assert.equal(await title.evaluate(n => getComputedStyle(n).color), 'rgb(156, 163, 175)');
   assert.equal(await group.locator(':scope > summary > .activity-status').count(), 0, 'ordinary completed segments have no checkmark');
   assert.equal(await group.locator('.activity-overview').evaluate(n => getComputedStyle(n).gridColumnStart), '1', 'completion keeps the text aligned with running state');
@@ -351,7 +351,7 @@ try {
   assert.equal(await narration.evaluate(n => getComputedStyle(n).borderTopWidth), '0px', 'completed narration has no divider above the body');
   publish(first, { id: 'tool-c', role: 'toolResult', toolCallId: 'c', text: '', status: 'running', toolStartedAt: Date.now() });
   await page.waitForFunction(() => document.querySelector('.tool-activity')?.getAttribute('data-settled') === 'true');
-  assert.equal(await title.innerText(), '执行完成');
+  assert.equal(await title.innerText(), '执行完成', 'settled local tools show completion even after stale running deltas');
   assert.equal(await group.locator('.process-status-text.is-active, .thinking-indicator').count(), 0, 'no stale intermediate display above prose');
   publish({ id: 'next', role: 'assistant', runId: 'run', text: '', thinking: '核对配置内容。', thinkingActive: true, streaming: true, status: 'running' });
   await page.waitForFunction(() => document.querySelectorAll('#messages .timeline-row > .tool-activity').length === 2);
@@ -407,6 +407,12 @@ try {
     observer.observe(document.querySelector('#messages')!, { subtree: true, childList: true, attributes: true });
   });
   publish(final);
+  await page.getByText(final.text, { exact: true }).waitFor();
+  assert.equal(await page.locator('.timeline-row > .tool-activity:not(.process-live)').count(), 0, 'streaming final cannot create the delivered outer card');
+  assert.equal(await page.getByText('已检查环境，继续处理配置。', { exact: true }).isVisible(), true);
+  assert.equal(await page.locator('#messages .timeline-row > .task-operation').isVisible(), true);
+  assert.equal(await page.locator('.reply-actions').count(), 0, 'streaming final has no delivery actions');
+  publish({ ...final, streaming: false, status: 'completed' });
   await page.waitForFunction(() => document.querySelectorAll('#messages .timeline-row > .tool-activity').length === 1 && !document.querySelector('#messages .timeline-row > .tool-activity[open]'));
   assert.ok(await page.evaluate(() => {
     const heights = (window as any).foldFrames.map(parseFloat);
@@ -415,8 +421,6 @@ try {
   assert.equal(await group.getAttribute('open'), null);
   assert.equal(await title.innerText(), '执行完成');
   await page.getByText(final.text, { exact: true }).waitFor();
-  assert.equal(await page.locator('.reply-actions').count(), 0, 'final text still streaming has no copy button');
-  publish({ ...final, streaming: false, status: 'completed' });
   await page.getByRole('button', { name: '复制回复的 Markdown 原文' }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('.reply-actions').count(), 1, 'only the finished final delivery can be copied');
   setRequest('next-run');
@@ -465,7 +469,7 @@ try {
   assert.equal(typography.font, '13px'); assert.equal(typography.line, '20px'); assert.ok(typography.paragraphs.every(n => n <= 6));
   assert.ok(await group.locator('.activity-message').evaluateAll(nodes => nodes.every(n => getComputedStyle(n).paddingBottom === '0px')));
   await page.screenshot({ path: join(artifacts, '390-final-expanded.png') });
-  publish({ ...final, text: `${final.text}全部通过。` });
+  publish({ ...final, text: `${final.text}全部通过。`, streaming: false, status: 'completed' });
   assert.ok(await group.getAttribute('open') !== null);
   assert.equal(await page.locator('#prompt').inputValue(), '保留草稿');
   await page.reload(); await group.waitFor();

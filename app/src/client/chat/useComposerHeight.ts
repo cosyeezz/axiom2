@@ -12,11 +12,26 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
     mirror.setAttribute("aria-hidden", "true");
     mirror.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;height:0;min-height:0;max-height:none;overflow:hidden;resize:none";
     document.body.append(mirror);
+    const form = node.closest<HTMLElement>(".composer");
     const resize = () => {
-      const style = getComputedStyle(node);
+      let style = getComputedStyle(node);
       for (const property of ["box-sizing", "width", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width", "border-style", "white-space", "overflow-wrap", "word-break", "tab-size", "text-indent"])
         mirror.style.setProperty(property, style.getPropertyValue(property));
       mirror.value = node.value;
+      if (form) {
+        const layout = getComputedStyle(form);
+        const mobile = layout.getPropertyValue("--composer-mobile-layout").trim() === "1";
+        // Always test the compact column, even after expanding to full width.
+        // Otherwise a soft-wrapped draft could alternate between the two layouts.
+        const compactWidth = parseFloat(layout.gridTemplateColumns.split(/\s+/)[1]);
+        if (mobile && compactWidth > 0) {
+          mirror.style.width = `${compactWidth}px`;
+          const singleLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+          form.toggleAttribute("data-multiline", mirror.scrollHeight > singleLine + 1);
+        } else form.removeAttribute("data-multiline");
+        style = getComputedStyle(node);
+        mirror.style.width = style.width;
+      }
       const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
       const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
       const content = mirror.scrollHeight + (style.boxSizing === "border-box" ? border : -padding);

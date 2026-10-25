@@ -2,7 +2,7 @@ import { loadSkills } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessage } from "../error-message.js";
-import { openCliEnvironment, openCliSkillNames, readOpenCliConfig } from "./opencli-runtime.js";
+import { openCliEnvironment, openCliSkillNames, validateOpenCliPackage, readOpenCliConfig } from "./opencli-runtime.js";
 
 type Resources = ReturnType<typeof loadSkills> & { managed: boolean; env?: NodeJS.ProcessEnv; warning?: string };
 /** Optional integrations must not prevent the main coding agent from starting. */
@@ -10,6 +10,7 @@ export function openCliResources(root: string, cwd: string, environment = proces
   try {
     const config = readOpenCliConfig(root);
     if (!config || config.detached) return { managed: false, skills: [], diagnostics: [] };
+    if (config.runtime) validateOpenCliPackage(config);
     const skillPaths = openCliSkillNames.map(name => join(config.packageRoot, "skills", name, "SKILL.md")).filter(path => existsSync(path));
     const loaded = loadSkills({ cwd, agentDir: join(root, "pi"), skillPaths, includeDefaults: false });
     const skills = loaded.skills.filter(skill => openCliSkillNames.includes(skill.name))

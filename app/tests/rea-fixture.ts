@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ReaDependencies } from "../src/server/integrations/rea.js";
 import type { ReaEngineId } from "../src/shared/rea-engines.js";
 import type { EngineRelease } from "../src/server/integrations/rea-engine-install.js";
+import { managedNodeFixture } from "./fixtures/managed-node.js";
 import { reaSkillName } from "../src/server/integrations/rea-runtime.js";
 
 export function writeReaPackage(packageRoot: string, version: string, serverVersion = version) {
@@ -37,6 +38,7 @@ export function reaFixture() {
   const calls: string[][] = [];
   let latest = "6.7.0", failure = false, mismatch = false, invalidSkill = false, gate: Promise<void> | undefined;
   const dependencies: ReaDependencies = {
+    runtime: managedNodeFixture(() => latest),
     engineRelease: fixtureEngineRelease,
     locateNpm: () => "npm-cli-fixture.js",
     execute: async (args, options) => {

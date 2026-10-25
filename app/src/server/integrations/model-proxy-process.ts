@@ -9,7 +9,7 @@ import type { ProxyInstallation } from "../../shared/model-proxy.js";
 import { atomicProxyJson, proxyDirectory, proxyExecutable, type ProxyEndpoint, type StoredProxyProfile } from "./model-proxy-config.js";
 import { clearKernelRecord, pidAlive, readKernelRecord, spawnKernel, terminateInstalledKernels, terminatePid, writeKernelRecord } from "./model-proxy-kernel.js";
 import { assertProxyCanStart } from "./model-proxy-removal.js";
-import { toolEnvironment } from "./model-proxy-env.js";
+import { componentEnvironment, prepareComponentEnvironment } from "./component-environment.js";
 
 const privateIps = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"];
 export function coreConfiguration(profile: StoredProxyProfile, port: number, token: string, sourcePath: string) {
@@ -84,7 +84,9 @@ export class ProxyProcess {
       const executable = proxyExecutable(this.root, this.profile.kernel, installation);
       const args = this.profile.kernel === "xray" ? ["run", "-config", config] : ["-d", this.directory, "-f", config];
       // 内核由后台直接托管：只记录 PID，不做进程树/命名空间监督。
-      const child = spawnKernel(executable, args, this.directory, toolEnvironment(process.env));
+      const environment = join(this.directory, "environment");
+      prepareComponentEnvironment(environment);
+      const child = spawnKernel(executable, args, this.directory, componentEnvironment(environment));
       if (!child.pid) throw Error("代理内核未能启动，请检查安装。");
       this.pid = child.pid; this.executable = executable;
       writeKernelRecord(this.directory, { pid: child.pid, kernel: this.profile.kernel, executable, startedAt: new Date().toISOString(), profileId: this.profile.id });

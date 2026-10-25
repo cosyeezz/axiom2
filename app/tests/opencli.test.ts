@@ -29,7 +29,7 @@ async function settle(service: OpenCliService) {
 
 test("OpenCLI: install receipt is short, jobs are exclusive and idempotent; official skills load without copying", async () => {
   const f = openCliFixture(), store = new Store(join(f.root, "data"));
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check");
     assert.equal((await settle(service)).version, undefined);
@@ -62,7 +62,7 @@ test("OpenCLI: install receipt is short, jobs are exclusive and idempotent; offi
 
 test("OpenCLI: revision conflicts preserve config; environment and in-place skill updates invalidate worker reuse", async () => {
   const f = openCliFixture(); f.install("1.8.8");
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.refresh"); await settle(service);
     const before = resourceIdentity(f.root, join(f.root, "pi"));
@@ -87,7 +87,7 @@ test("OpenCLI: revision conflicts preserve config; environment and in-place skil
 
 test("OpenCLI: failed update, shutdown and interrupted restart never claim rollback or replay npm", async () => {
   const f = openCliFixture(); f.install("1.8.8"); f.setVersion("1.8.9");
-  let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check"); await settle(service);
     await call(service, "opencli.save", { ...service.snapshot().settings, revision: "" });
@@ -105,7 +105,7 @@ test("OpenCLI: failed update, shutdown and interrupted restart never claim rollb
     assert.equal(service.snapshot().job?.running, false);
     const callCount = f.calls.length;
     writeFileSync(join(f.root, "integrations", "opencli-job.json"), JSON.stringify({ id: "interrupted", kind: "install", running: true, message: "installing" }));
-    service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+    service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
     assert.equal(service.snapshot().job?.running, false);
     assert.ok(service.snapshot().job?.error?.includes("中断"));
     assert.equal(f.calls.length, callCount);
@@ -118,7 +118,7 @@ test("OpenCLI: failed update, shutdown and interrupted restart never claim rollb
 
 test("OpenCLI: private installation is cancellable without a global admission queue", async () => {
   const f = openCliFixture();
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check"); await settle(service);
     f.hold(new Promise(() => {}));
@@ -138,7 +138,7 @@ test("OpenCLI: private installation is cancellable without a global admission qu
 
 test("OpenCLI: installing revalidates the selected version before changing it", async () => {
   const f = openCliFixture(); f.install("1.8.7");
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check"); await settle(service);
     f.install("1.8.9");
@@ -150,14 +150,14 @@ test("OpenCLI: installing revalidates the selected version before changing it", 
 });
 
 test("OpenCLI: closing an installation cancels promptly and never replays on restart", async () => {
-  const f = openCliFixture(); let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const f = openCliFixture(); let service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.check"); await settle(service);
     f.hold(new Promise(() => {}));
     await call(service, "opencli.install", { version: "1.8.8" }); await new Promise<void>(resolve => setImmediate(resolve));
     await service.close(); const before = f.calls.length;
     assert.equal(service.snapshot().job?.running, false); assert.match(service.snapshot().job!.message, /已取消/);
-    service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+    service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
     assert.equal(service.snapshot().job?.running, false); assert.equal(f.calls.length, before);
   } finally { await service.close(); rmSync(f.root, { recursive: true, force: true }); }
 });
@@ -173,7 +173,7 @@ test("OpenCLI process runner separates stdout from npm warnings and terminates t
 
 test("OpenCLI: optional resource failures stay local; failed initial journal write never leaves a phantom job", async () => {
   const f = openCliFixture(); f.install("1.8.8");
-  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, f.execute, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.refresh"); await settle(service);
     await call(service, "opencli.save", { ...service.snapshot().settings, revision: "" });
@@ -205,7 +205,7 @@ test("OpenCLI: optional resource failures stay local; failed initial journal wri
 test("OpenCLI: failed environment checks settle their child before releasing job admission", async () => {
   const f = openCliFixture();
   const calls: string[][] = [];
-  const service = new OpenCliService(f.root, () => {}, async (args) => { calls.push(args); throw Error("npm unavailable"); }, f.locateNpm);
+  const service = new OpenCliService(f.root, () => {}, async (args) => { calls.push(args); throw Error("npm unavailable"); }, f.locateNpm, undefined, undefined, f.runtime);
   try {
     await call(service, "opencli.refresh"); await settle(service);
     assert.equal(calls.length, 1, "sequential probing must not leave root/prefix children behind on first failure");
@@ -215,7 +215,7 @@ test("OpenCLI: failed environment checks settle their child before releasing job
 
 test("OpenCLI: private install runs alongside admitted prompts and leaves execution available", async () => {
   const f = openCliFixture();
-  const app = await startServer({ root: join(f.root, "data"), port: 0, openCli: { execute: f.execute, locateNpm: f.locateNpm } });
+  const app = await startServer({ root: join(f.root, "data"), port: 0, openCli: { execute: f.execute, locateNpm: f.locateNpm, runtime: f.runtime } });
   const ws = new WebSocket(app.origin.replace("http:", "ws:") + "/ws", { headers: { Origin: app.origin } });
   await once(ws, "open");
   const waiting = new Map<string, (value: any) => void>();

@@ -6,7 +6,9 @@ import { withResourceFiles } from "../resource-file-lock.js";
 import { checkEngines, engineHost, engineValidationRevision, listEngines, validEnginePath } from "./rea-engines.js";
 import { engineRelease, prepareEngine, type EngineRelease } from "./rea-engine-install.js";
 import { openHopperInstaller, prepareEngineDownload, reuseEngineDownload, storedEngineDownload } from "./rea-engine-download.js";
-import { engineContractVersion } from "./rea-engine-policy.js";
+import { engineContractVersion, engineContractSupported, reaEngineProfiles } from "./rea-engine-policy.js";
+import { managedNode, type ManagedNodeProvider } from "./managed-node.js";
+import { supervisorEnvironment } from "./component-environment.js";
 import { fileURLToPath } from "node:url";
 import { beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration, builtinRemovalDirectories, inspectBuiltinDirectoryOwnership } from "./builtin-operation.js";
 import { randomUUID } from "node:crypto";
@@ -20,20 +22,20 @@ import { AppError, type Command } from "../../shared/protocol.js";
 import { emptyReaState, reaVersion, type ReaJob, type ReaState } from "../../shared/rea.js";
 import { errorMessage } from "../error-message.js";
 import { executeOpenCli, findNpmCli, newerOpenCli, type OpenCliExecute } from "./opencli.js";
-import { atomicReaJson, inspectReaPackage, inspectReaProgram, reaConfigPath, reaDirectory, reaPackageRoot, reaSupportedNode, readReaConfig, reaEngineDirectoryPattern, reaDownloadDirectoryPattern, reaProgramDirectoryPattern, reaEngineRevision, validReaVersion, type ReaConfig } from "./rea-runtime.js";
+import { atomicReaJson, inspectReaPackage, inspectReaProgram, reaConfigPath, reaDirectory, reaPackageRoot, reaSupportedNode, reaNode, reaProcessEnvironment, readReaConfig, reaEngineDirectoryPattern, reaDownloadDirectoryPattern, reaProgramDirectoryPattern, reaEngineRevision, validReaVersion, type ReaConfig } from "./rea-runtime.js";
 
-export async function diagnoseRea(root: string, packageRoot: string, version: string, signal: AbortSignal) {
+export async function diagnoseRea(root: string, packageRoot: string, version: string, signal: AbortSignal, config = readReaConfig(root)) {
   signal.throwIfAborted(); inspectReaProgram(packageRoot, version);
   const source = import.meta.url.endsWith(".ts");
   const entry = fileURLToPath(new URL(`./rea-diagnostic-worker.${source ? "ts" : "js"}`, import.meta.url));
-  const args = [...(source ? ["--import", import.meta.resolve("tsx")] : []), entry, root, packageRoot, version];
-  const result = await runBuiltinTool("rea", process.execPath, args, { cwd: root, signal, timeout: 45_000, limit: 65536, errorLimit: 65536 });
+  const args = [...(source ? ["--import", import.meta.resolve("tsx")] : []), entry, root, packageRoot, version, JSON.stringify(config)];
+  const result = await runBuiltinTool("rea", process.execPath, args, { cwd: root, env: supervisorEnvironment(), signal, timeout: 45_000, limit: 65536, errorLimit: 65536 });
   if (result.code !== 0) throw Error(errorMessage(result.stderr.toString("utf8"), "REA MCP 检查未完成，请检查安装依赖。", true));
   const value = JSON.parse(result.stdout.toString("utf8"));
   if (typeof value?.text !== "string" || !Number.isSafeInteger(value.toolCount) || value.toolCount < 1 || !Number.isFinite(value.at)) throw Error("REA MCP 检查未返回有效结果。");
   return value as { text: string; toolCount: number; at: number };
 }
-export type ReaDependencies = { execute?: OpenCliExecute; locateNpm?: () => string; diagnose?: typeof diagnoseRea; checkEngines?: typeof checkEngines; prepareEngine?: typeof prepareEngine; engineRelease?: typeof engineRelease; prepareEngineDownload?: typeof prepareEngineDownload; openHopperInstaller?: typeof openHopperInstaller; removal?: IntegrationRemoval };
+export type ReaDependencies = { execute?: OpenCliExecute; locateNpm?: () => string; diagnose?: typeof diagnoseRea; checkEngines?: typeof checkEngines; prepareEngine?: typeof prepareEngine; engineRelease?: typeof engineRelease; prepareEngineDownload?: typeof prepareEngineDownload; openHopperInstaller?: typeof openHopperInstaller; removal?: IntegrationRemoval; runtime?: ManagedNodeProvider };
 export class ReaService {
   private state: ReaState = { ...emptyReaState, nodeVersion: process.version, supported: reaSupportedNode() };
   private operations = new Map<string, { job: ReaJob; controller: AbortController; pending?: Promise<void> }>();
@@ -70,6 +72,7 @@ export class ReaService {
     });
   }
   private load() {
+    this.state.nodeVersion = ""; this.state.runtimeManaged = false; delete this.state.npmVersion;
     delete this.state.version; delete this.state.packageRoot; delete this.state.skillError; delete this.state.mcpError;
     this.state.skillInstalled = false; this.state.mcpInstalled = false;
     try {
@@ -95,6 +98,15 @@ export class ReaService {
       this.state.revision = config.revision; this.state.enabled = config.enabled;
       this.state.removalPending = !!config.removalPending?.some(name => reaProgramDirectoryPattern.test(name));
       this.state.version = config.installation?.version; this.state.packageRoot = reaPackageRoot(this.root, config);
+      this.state.nodeVersion = config.installation?.runtime ? `v${config.installation.runtime.nodeVersion}` : process.version;
+      this.state.runtimeManaged = !!config.installation?.runtime;
+      this.state.npmVersion = config.installation?.runtime?.npmVersion;
+      this.state.supported = true; // Installation support, not legacy runtime compatibility.
+      if (config.installation?.runtime) try { reaNode(this.root, config); }
+      catch (error) { this.state.mcpError = errorMessage(error, "REA 私有运行时不完整，请重新安装。"); }
+      else if (config.installation && engineContractSupported(config.installation.version) && !reaSupportedNode(process.versions.node, reaEngineProfiles[config.installation.version].node)) {
+        this.state.mcpError = `现有共享 Node ${process.version} 不满足 REA ${config.installation.version} 的运行要求；请重新安装或更新以准备兼容的专用环境，无需升级后台 Node。`;
+      }
       this.state.skillInstalled = !!config.installation && config.skillInstalled !== false;
       this.state.mcpInstalled = !!config.installation && config.mcpInstalled !== false;
       if (this.state.skillInstalled && this.state.packageRoot) try { loadReaSkill(this.root, this.root, this.state.packageRoot); }
@@ -148,13 +160,9 @@ export class ReaService {
       atomicReaJson(reaConfigPath(this.root), next);
     }));
   }
-  private run(args: string[], signal: AbortSignal, timeout = 30_000) {
-    const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
-    const pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";
-    const previous = env[pathKey];
-    for (const key of Object.keys(env)) if (key.toUpperCase() === "PATH") delete env[key];
-    env.PATH = [dirname(process.execPath), previous].filter(Boolean).join(delimiter);
-    return (this.dependencies.execute ?? executeOpenCli)(args, { cwd: this.root, env, signal, timeout, tool: "rea" });
+  private run(args: string[], signal: AbortSignal, timeout = 30_000, config = readReaConfig(this.root)) {
+    const env = reaProcessEnvironment(this.root, config);
+    return (this.dependencies.execute ?? executeOpenCli)(args, { cwd: this.root, env, signal, timeout, tool: "rea", nodeExecutable: reaNode(this.root, config) });
   }
   async command(c: Command): Promise<ReaState> {
     if (c.workspaceId || c.sessionId) throw new AppError("INVALID_SCOPE", "REA 使用应用级配置。");
@@ -215,7 +223,6 @@ export class ReaService {
     const removing = kind === "uninstall" || kind === "engine-uninstall" || kind === "clearDownloads";
     if (kind === "clearDownloads" && (typeof p.cleanupRevision !== "string" || !/^[a-f0-9]{64}$/.test(p.cleanupRevision))) throw new AppError("CONFIRM_REQUIRED", "请读取并确认登记下载包范围。");
     if (!removing && !toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
-    if (!removing && !this.state.supported) throw new AppError("NODE_VERSION", "REA 需要 Node.js 22.19+（22.x）、24.11+（24.x）或 26+。");
     const host = engineHost();
     const downloadable = !!engine && (listEngines(current).find(item => item.id === engine)?.installable || engine === "ghidra" && ["darwin", "linux"].includes(host.platform) || engine === "hopper" && host.platform === "darwin");
     if (removing && (p.confirm !== true || (scope ? !this.engineMatches(current, scope, p.revision) : p.revision !== current.revision))) throw new AppError("CONFIRM_REQUIRED", "请读取最新配置并确认卸载；设置和外部组件将保留。");
@@ -223,11 +230,11 @@ export class ReaService {
     const candidate = engine ? this.engineReleases.get(engine) : undefined;
     if (kind === "engine-check") {
       if (!engine || listEngines(current).find(item => item.id === engine)?.status === "unsupported") throw new AppError("UNSUPPORTED_ENGINE", "当前后台平台不支持此组件。");
-      if (current.installation?.version !== engineContractVersion) throw new AppError("UNSUPPORTED_ENGINE", `组件版本策略验证于 REA ${engineContractVersion}，当前 REA 尚未适配。`);
+      if (!engineContractSupported(current.installation?.version)) throw new AppError("UNSUPPORTED_ENGINE", `组件版本策略验证于 REA ${engineContractVersion}/6.8.0，当前 REA 尚未适配。`);
     }
     const cachedInstall = kind === "engine-install" && p.downloaded === true;
     if (kind === "engine-open-installer") {
-      if (current.installation?.version !== engineContractVersion) throw new AppError("UNSUPPORTED_ENGINE", `组件版本策略验证于 REA ${engineContractVersion}，当前 REA 尚未适配。`);
+      if (!engineContractSupported(current.installation?.version)) throw new AppError("UNSUPPORTED_ENGINE", `组件版本策略验证于 REA ${engineContractVersion}，当前 REA 尚未适配。`);
       if (engine !== "hopper" || host.platform !== "darwin" || !["x64", "arm64"].includes(host.arch)) throw new AppError("UNSUPPORTED_ENGINE", "此平台不支持 Hopper 安装入口。");
       if (!this.engineMatches(current, engine, p.revision)) throw new AppError("CONFIGURATION_CONFLICT", "此组件已变化，请刷新后重新确认安装。");
       if (p.confirm !== true || !current.downloads?.hopper || p.version !== current.downloads.hopper.version) throw new AppError("CONFIRM_REQUIRED", "请确认已下载的 Hopper 安装包版本。");
@@ -257,7 +264,7 @@ export class ReaService {
     try { this.notify(job); } catch { job.running = false; this.operations.delete(resource); this.changed(); try { operation.finish(); } finally { operation.close(); } throw new AppError("STORAGE_ERROR", "无法保存操作记录；尚未开始执行。"); }
     active.pending = operation.run(() => Promise.resolve().then(() => runMaintenance(this.root, { id: job.id, resource: scope ? `rea:${scope}` : "rea", label: scope ? `REA ${reaEngineLabels[scope]}` : "REA", action: kind, params: p, cancel: !removing, steps: removing ? ["checking", "removing", "validating"] : kind === "install" ? ["checking", "installing", "validating"] : kind === "engine-install" ? undefined : kind === "engine-download" ? ["checking", "downloading", "verifying", "validating"] : ["checking"] }, controller, async () => {
       bindBuiltinTask();
-      let prepared: string | undefined, reused = false;
+      let prepared: string | undefined, reused = false, installationPublished = false;
       try {
         if (kind === "clearDownloads") {
           const cleanup = () => withResourceFiles([reaConfigPath(this.root)], () => {
@@ -286,7 +293,7 @@ export class ReaService {
           const item = checks.find(item => item.id === engine)!;
           this.state.engines = this.state.engines?.map(previous => previous.id === engine ? item : previous);
           if (downloadable) {
-            const release = await (this.dependencies.engineRelease ?? engineRelease)(engine!, signal, host);
+            const release = await (this.dependencies.engineRelease ?? engineRelease)(engine!, signal, host, undefined, current.installation!.version);
             signal.throwIfAborted();
             let checkedConfig = readReaConfig(this.root);
             if (reaEngineRevision(checkedConfig, engine!) !== engineRevision) throw Error("检查期间此组件配置已变化，请重新检查组件更新。");
@@ -316,7 +323,7 @@ export class ReaService {
           this.notify(job, "正在校验并打开 Hopper 安装映像…");
           await (this.dependencies.openHopperInstaller ?? openHopperInstaller)(this.root, current.downloads!.hopper!, signal);
         } else if (kind === "engine-install") {
-          const release = cachedInstall ? await (this.dependencies.engineRelease ?? engineRelease)(engine!, signal, host) : candidate!.release;
+          const release = cachedInstall ? await (this.dependencies.engineRelease ?? engineRelease)(engine!, signal, host, undefined, current.installation!.version) : candidate!.release;
           if (release.version !== p.version) throw Error("已下载的版本与当前推荐版本不同，请检查更新后重新确认。原安装包已保留。");
           job.recommendation = { version: release.version, reaVersion: current.installation!.version, ...host };
           // A checked equivalent version is a no-op, including external installs.
@@ -369,29 +376,30 @@ export class ReaService {
           }
           }
         } else if (kind === "check") {
-          const npm = (this.dependencies.locateNpm ?? findNpmCli)();
-          const latest = JSON.parse(await this.run([npm, "view", "rea-agents", "dist-tags.latest", "--json", "--registry=https://registry.npmjs.org", "--fetch-retries=0", "--fetch-timeout=20000"], signal));
+          const latest = await (this.dependencies.runtime ?? managedNode).latest("rea-agents", signal);
           if (!validReaVersion(latest)) throw Error("npm 未返回有效的 REA 稳定版本。");
           this.state.latest = latest;
         } else if (kind === "install") {
-          const npm = (this.dependencies.locateNpm ?? findNpmCli)();
+          if (!engineContractSupported(version)) throw Error(`REA ${version} 的配套依赖契约尚未验证，当前版本保持不变。`);
           const directory = `v${version}-${randomUUID()}`;
           prepared = join(reaDirectory(this.root), "versions", directory);
           mkdirSync(prepared, { recursive: true }); trackBuiltinDirectory(prepared);
           // Keep the complete package and npm lock, including native optional dependencies.
           // Each install uses a new prefix; active workers retain their previous version.
-          await this.run([npm, "install", "--prefix", prepared, "--no-audit", "--no-fund", "--omit=dev", "--engine-strict", "--registry=https://registry.npmjs.org", `rea-agents@${version}`], signal, 600_000);
+          const runtime = await (this.dependencies.runtime ?? managedNode).prepare("rea", prepared, "rea-agents", version, signal, text => this.notify(job, text));
+          const next: ReaConfig = { ...current, revision: randomUUID(), installation: { directory, version, runtime: runtime.binding } };
+          await this.run([runtime.npm, "install", "--prefix", prepared, "--global=false", "--no-audit", "--no-fund", "--omit=dev", "--engine-strict", "--registry=https://registry.npmjs.org", `rea-agents@${version}`], signal, 600_000, next);
           signal.throwIfAborted();
           maintenancePhase("validating");
           this.notify(job, "正在检查 REA 技能与 MCP 连接…");
           const packageRoot = join(prepared, "node_modules", "rea-agents");
           inspectReaPackage(packageRoot, version);
           loadReaSkill(this.root, this.root, packageRoot);
-          const diagnostic = await (this.dependencies.diagnose ?? diagnoseRea)(this.root, packageRoot, version, signal);
+          const diagnostic = await (this.dependencies.diagnose ?? diagnoseRea)(this.root, packageRoot, version, signal, next);
           signal.throwIfAborted();
           if (readReaConfig(this.root).revision !== current.revision) throw Error("安装期间配置已变化，未切换当前版本，请重新检查。");
           assertBuiltinFilesSafe();
-          atomicReaJson(reaConfigPath(this.root), { ...current, revision: randomUUID(), installation: { directory, version } }, () => { prepared = undefined; });
+          atomicReaJson(reaConfigPath(this.root), next, () => { prepared = undefined; installationPublished = true; });
           this.state.diagnostic = diagnostic;
         } else {
           const packageRoot = reaPackageRoot(this.root, current);
@@ -403,8 +411,13 @@ export class ReaService {
           : "REA 与技能已接入；已有会话请重新加载技能与 MCP。" : "检查完成。";
       } catch (error) {
         maintenanceFailure(error);
-        job.message = maintenanceCancelled(error, signal) ? kind === "engine-open-installer" ? "操作已取消；安装窗口可能已打开，请在后台 Mac 核实。" : "操作已取消；当前版本保持不变。" : "操作未完成";
-        if (!maintenanceCancelled(error, signal)) job.error = errorMessage(error, "REA 操作失败，请重新检查。");
+        if (installationPublished) {
+          job.message = "新版本已生效，后续确认未完成；已保留安装文件。";
+          job.error = `REA 已切换至 ${version}，但后续确认未完成：${errorMessage(error, "请刷新检查安装与持久化状态。")}`;
+        } else {
+          job.message = maintenanceCancelled(error, signal) ? kind === "engine-open-installer" ? "操作已取消；安装窗口可能已打开，请在后台 Mac 核实。" : "操作已取消；当前版本保持不变。" : "操作未完成";
+          if (!maintenanceCancelled(error, signal)) job.error = errorMessage(error, "REA 操作失败，请重新检查。");
+        }
       } finally {
         try { if (prepared) { assertBuiltinFilesSafe(); rmSync(prepared, { recursive: true, force: true }); forgetBuiltinDirectory(prepared); } }
         finally { this.load(); job.running = false; }

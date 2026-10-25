@@ -15,7 +15,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {connect} from '/transport.ts';
 import {useProcessingList,useProcessingRecord} from '/processing/records.ts';
-import {TitleFeedback} from '/workspaces/TitleFeedback.tsx';
+import {TitleResultCard,useTitleResult} from '/workspaces/TitleFeedback.tsx';
 import {OrganizationFeedback} from '/memory/OrganizationFeedback.tsx';
 import {MemoryTreePage} from '/memory/MemoryTreePage.tsx';
 import {MemoryToolbar} from '/memory/MemoryToolbar.tsx';
@@ -34,8 +34,10 @@ function Probe({index,workspaceId}) {
  const detail=useProcessingRecord(workspaceId,'cache');
  return h('output',{'data-probe':workspaceId+'-'+index},JSON.stringify({list:{data:list.data,error:list.error,stale:list.stale,loading:list.loading},detail:{data:detail.data,error:detail.error,stale:detail.stale,loading:detail.loading}}));
 }
+function TitleFeedback({scope}) {const record=useTitleResult(scope);return record?h(TitleResultCard,{record}):null;}
 function Business({tree}) {return h('main',{},
- h('header',{style:{height:48,display:'flex',alignItems:'center'}},h('strong',{},'会话标题'),h(TitleFeedback,{scope})),
+ h('header',{style:{height:48,display:'flex',alignItems:'center'}},h('strong',{},'会话标题')),
+ h(TitleFeedback,{scope}),
  h(OrganizationFeedback,{workspaceId:'work',tree,openRecords:noAction}),
  h(Tool,{scope,call:{id:'run:call',name:'memory_query',input:JSON.stringify({question:'公开问题'})},message:{id:'assistant',role:'assistant',text:'',status:'running'}}));}
 function Compression({job}) {
@@ -182,17 +184,21 @@ try {
   await memoryPanel.getByRole("button", { name: "全屏画布", exact: true }).waitFor();
   await page.keyboard.press("Escape"); await memoryPanel.waitFor({ state: "detached" });
   assert.equal(await globalButton.evaluate(node => document.activeElement === node), true, "second Escape closes memory and restores the original toolbar trigger");
-  // Actual business entries: lightweight title, queue/current batch, and the ORIGINAL tool row.
+  // Actual business entries: generated-only title result, queue/batch, and the ORIGINAL tool row.
   records.clear(); records.set("title", record("title", "session.title", "生成标题"));
   const organize = record("organize", "memory.organize", "整理本批次"); organize.batch = { purposeIds: ["p1", "p2"], sessionIds: ["s1", "s2"], published: false }; records.set(organize.id, organize);
   const query = record("query", "memory.query", "查询过程"); query.toolCallId = "run:call"; query.runId = "run"; query.state = "failed"; query.error = "模型成功但解析失败"; records.set(query.id, query);
   const tree = { version: 0, roots: [], purposes: [], nameChars: 0, pending: 5, failed: 0, queue: { waiting: 3, eligible: 2, backoff: 1, blocked: 0, oldestQueuedAt: Date.now(), nextBatchAt: Date.now() + 1000, retryAt: Date.now() + 2000 }, activeBatch: { processingId: "organize", purposeIds: ["p1", "p2"], sessionIds: ["s1", "s2"] } };
   const beforeBusiness = count("processing.get"); await render({ mode: "business", tree }); publish("processing:work", { revision: 20 });
-  await page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true }).waitFor();
   await page.getByText("后续等待 3 个目的", { exact: true }).waitFor(); await page.getByText(/正在整理 2 个目的 · 来自 2 个会话/).waitFor();
-  assert.equal(count("processing.get"), beforeBusiness, "ordinary business entry render does not load model bodies");
-  const titleButton = page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true });
-  await titleButton.click(); const titlePanel = page.getByRole("dialog", { name: "标题生成记录", exact: true }); await titlePanel.waitFor();
+  assert.equal(await page.locator('.title-result-card').count(), 0, "running title has no result card or placeholder");
+  assert.equal(count("processing.get"), beforeBusiness, "pending entries do not load model bodies");
+  const generated = records.get("title")!; generated.state = "completed"; generated.outcome = "applied";
+  generated.result = { text: JSON.stringify({ title: "真实生成的标题", applied: true }), truncated: false };
+  publish("processing:work", { revision: "title-generated" });
+  const titleButton = page.getByRole("button", { name: "查看标题生成详情：真实生成的标题", exact: true });
+  await titleButton.waitFor(); assert.equal(await page.locator('header .title-result-card').count(), 0, "old topbar entry is removed");
+  await titleButton.click(); const titlePanel = page.getByRole("dialog", { name: "标题生成详情", exact: true }); await titlePanel.waitFor();
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 }); await settle();
     const geometry = await titlePanel.evaluate(node => { const rect = node.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, height: rect.height, overflow: node.scrollWidth > node.clientWidth + 1 }; });
@@ -210,40 +216,28 @@ try {
   for (const [outcome, label] of [["no_match", "无匹配目的"], ["no_evidence", "无有效依据"], ["incomplete", "结果不完整"]] as const) {
     query.state = "completed"; query.error = null; query.outcome = outcome; publish("processing:work", { revision: outcome }); await tool.getByText(label, { exact: true }).first().waitFor();
   }
-  records.get("title")!.state = "completed"; records.get("title")!.outcome = "not_applied"; publish("processing:work", { revision: 30 });
-  await page.getByRole("button", { name: "标题生成记录：标题记录", exact: true }).waitFor();
-  for (const [state, label, reason, danger] of [
-    ["running", "标题生成中", "处理状态说明", false], ["cancelling", "标题取消中", "取消状态说明", false],
-    ["cancelled", "标题已取消", "取消原因", false], ["invalidated", "标题结果已失效", "结果失效原因", false],
-    ["interrupted", "标题已中断", "中断原因", true], ["failed", "标题生成失败", "处理失败原因", true],
-  ] as const) {
-    const title = records.get("title")!; title.state = state; title.outcome = undefined; title.error = "STATE_REASON_" + state;
-    publish("processing:work", { revision: state });
-    const button = page.getByRole("button", { name: "标题生成记录：" + label, exact: true }); await button.waitFor();
-    await button.click(); await titlePanel.waitFor();
-    const disclosure = titlePanel.locator(".processing-disclosure").first(); await disclosure.locator(":scope > summary").click();
-    await disclosure.getByRole("heading", { name: reason, exact: true }).waitFor();
-    assert.equal(await disclosure.locator(".processing-detail > .processing-failure").count(), danger ? 1 : 0, `only actual failures are red alerts: ${state}`);
-    assert.equal(await disclosure.locator(".processing-detail > .processing-notice").count(), danger ? 0 : 1);
-    if (!danger) assert.equal(await button.evaluate(node => { const sample = document.createElement("span"); sample.style.color = "var(--danger)"; node.append(sample); const red = getComputedStyle(sample).color; sample.remove(); return getComputedStyle(node).color === red; }), false);
-    await page.screenshot({ path: join(artifacts, `title-state-${state}-320.png`) });
-    await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" });
+  // Non-results never grow a success card, even if a model call itself completed.
+  const title = records.get("title")!;
+  for (const state of ["running", "cancelling", "cancelled", "invalidated", "interrupted", "failed"] as const) {
+    title.state = state; title.outcome = undefined; publish("processing:work", { revision: state });
+    await page.locator('.title-result-card').waitFor({ state: 'detached' });
   }
-  // A no-evidence check is not a request or a failed title; keep its explanation open.
-  const title = records.get("title")!; title.state = "running"; title.error = null; publish("processing:work", { revision: "empty-start" });
-  await page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true }).click(); await titlePanel.waitFor();
-  title.state = "completed"; title.outcome = "no_evidence"; title.calls = []; publish("processing:work", { revision: "empty-finish" });
-  await page.getByRole("button", { name: "标题生成记录：标题等待记忆", exact: true }).waitFor();
-  await titlePanel.getByText(/本次未请求标题模型/).waitFor(); assert.equal(await titlePanel.isVisible(), true);
-  await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" });
-  // Unapplied success must also remain inspectable; only an applied result auto-closes.
+  title.state = "completed"; title.outcome = "no_evidence"; title.calls = []; title.result = undefined;
+  publish("processing:work", { revision: "empty-finish" }); await settle();
+  assert.equal(await page.locator('.title-result-card').count(), 0, "empty-memory checks never create cards");
+  // Generated but not adopted is a genuine result, never a claim that the title changed.
+  title.calls = record("title", "session.title").calls;
   for (const outcome of ["not_applied", "applied"] as const) {
-    title.state = "running"; title.outcome = undefined; publish("processing:work", { revision: outcome + "-start" });
-    await page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true }).click(); await titlePanel.waitFor();
-    title.state = "completed"; title.outcome = outcome; publish("processing:work", { revision: outcome + "-finish" });
-    await page.getByRole("button", { name: "标题生成记录：标题记录", exact: true }).waitFor();
-    if (outcome === "applied") await titlePanel.waitFor({ state: "detached" });
-    else { assert.equal(await titlePanel.isVisible(), true); await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" }); }
+    title.outcome = outcome;
+    title.result = { text: JSON.stringify({ title: "真实生成的标题", applied: outcome === "applied" }), truncated: false };
+    publish("processing:work", { revision: outcome });
+    const button = page.getByRole("button", { name: `查看标题生成详情：真实生成的标题${outcome === "not_applied" ? " · 未采用" : ""}`, exact: true });
+    await button.waitFor(); assert.equal(await page.locator('.title-result-card').count(), 1);
+    if (outcome === "not_applied") assert.match(await button.innerText(), /未采用/);
+    await button.click(); await titlePanel.waitFor();
+    if (outcome === "not_applied") await titlePanel.getByText(/标题已生成，但未替换会话名称/).waitFor();
+    await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" });
+    assert.equal(await button.evaluate(node => document.activeElement === node), true);
   }
   await render({ mode: "business", tree: { ...tree, pending: 0, queue: { ...tree.queue, waiting: 0 } } }); await settle();
   assert.equal(await page.getByText(/后续等待/).count(), 0); await page.getByText(/正在整理 2 个目的/).waitFor();
@@ -257,7 +251,7 @@ try {
   assert.equal(await compression.locator('.compression-steps [data-phase="done"]').count(), 3);
   assert.deepEqual(blocked, []); assert.deepEqual(errors, []);
   assert.equal(commands.some(c => /^(prompt|memory\.(query|organize|configure)|compression\.(start|cancel)|task\.)/.test(c.op)), false);
-  console.log("PASS fake-only UI: dedup/serial reads, stale receipts, reconnect, revocation, hidden directory, title flip/focus/four widths, queue/batch, original query card/outcomes, native compression application; no models or mutations");
+  console.log("PASS fake-only UI: dedup/serial reads, stale receipts, reconnect, revocation, hidden directory, generated-only title/focus/four widths, queue/batch, original query card/outcomes, native compression application; no models or mutations");
 } catch (error) {
   await page.screenshot({ path: join(artifacts, "failure.png") }).catch(() => {}); throw error;
 } finally {

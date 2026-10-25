@@ -1,22 +1,24 @@
 import { createHash, randomUUID } from "node:crypto";
+import semver from "semver";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compareEngineVersions, isReaEngineId, type ReaEngineDownload, type ReaEngineId, type ReaEnginePaths } from "../../shared/rea-engines.js";
 import { validEnginePaths } from "./rea-engines.js";
+import { inspectNodeRuntime, validNodeBinding, type NodeRuntimeBinding } from "./managed-node.js";
+import { componentEnvironment } from "./component-environment.js";
 
 export const reaSkillName = "reverse-engineer-anything";
 export const reaDirectory = (root: string) => join(root, "integrations", "rea");
 export const reaConfigPath = (root: string) => join(reaDirectory(root), "config.json");
 export const validReaVersion = (value: unknown): value is string => typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value);
-export function reaSupportedNode(version = process.versions.node) {
-  const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
-  return major === 22 && minor >= 19 || major === 24 && minor >= 11 || major >= 26;
+export function reaSupportedNode(version = process.versions.node, engines = "^22.19.0 || ^24.11.0 || >=26.0.0") {
+  return !!semver.valid(version) && semver.satisfies(version, engines);
 }
 export const reaProgramDirectoryPattern = /^v\d+\.\d+\.\d+-[a-f0-9-]{36}$/;
 export const reaEngineDirectoryPattern = /^(java|ghidra|jadx|wabt)-[a-f0-9-]{36}$/;
 export const reaDownloadDirectoryPattern = /^(ghidra|hopper)-[a-f0-9-]{36}$/;
 export type ManagedReaEngine = { directory: string; path: string; version?: string };
-export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; downloads?: Partial<Record<ReaEngineId, ReaEngineDownload>>; managedEngines?: Partial<Record<ReaEngineId, ManagedReaEngine[]>>; downloadRemovalPending?: string[]; removalPending?: string[]; installation?: { directory: string; version: string } };
+export type ReaConfig = { format: 1; revision: string; enabled: boolean; skillInstalled?: boolean; mcpInstalled?: boolean; engines?: ReaEnginePaths; downloads?: Partial<Record<ReaEngineId, ReaEngineDownload>>; managedEngines?: Partial<Record<ReaEngineId, ManagedReaEngine[]>>; downloadRemovalPending?: string[]; removalPending?: string[]; installation?: { directory: string; version: string; runtime?: NodeRuntimeBinding } };
 // Component confirmations survive commits by other components. Program changes
 // still invalidate every confirmation because they change the REA contract.
 export function reaEngineRevision(config: ReaConfig, id: ReaEngineId) {
@@ -51,7 +53,7 @@ export function readReaConfig(root: string): ReaConfig {
         value.downloadRemovalPending !== undefined && (!Array.isArray(value.downloadRemovalPending) || value.downloadRemovalPending.some((name: unknown) => typeof name !== "string" || !reaDownloadDirectoryPattern.test(name))) ||
         value.removalPending !== undefined && (!Array.isArray(value.removalPending) || value.removalPending.some((name: unknown) => typeof name !== "string" || !reaProgramDirectoryPattern.test(name) && !reaEngineDirectoryPattern.test(name))) ||
         value.installation && (!validReaVersion(value.installation.version) || typeof value.installation.directory !== "string" ||
-          !reaProgramDirectoryPattern.test(value.installation.directory))) throw Error();
+          !reaProgramDirectoryPattern.test(value.installation.directory) || value.installation.runtime !== undefined && !validNodeBinding(value.installation.runtime))) throw Error();
     return value;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { format: 1, revision: "", enabled: true };
@@ -76,6 +78,14 @@ export function atomicReaJson(path: string, value: unknown, onPublished?: () => 
 }
 export function reaPackageRoot(root: string, config = readReaConfig(root)) {
   return config.installation ? join(reaDirectory(root), "versions", config.installation.directory, "node_modules", "rea-agents") : undefined;
+}
+export function reaNode(root: string, config = readReaConfig(root)) {
+  const installation = config.installation;
+  return installation?.runtime ? inspectNodeRuntime(join(reaDirectory(root), "versions", installation.directory), installation.runtime).node : process.execPath;
+}
+export function reaProcessEnvironment(root: string, config = readReaConfig(root), source = process.env) {
+  const prefix = config.installation ? join(reaDirectory(root), "versions", config.installation.directory) : reaDirectory(root);
+  return componentEnvironment(join(prefix, "environment"), source, dirname(reaNode(root, config)));
 }
 export function inspectReaProgram(packageRoot: string, version: string) {
   const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));

@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Memories } from "../src/server/memories.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
-import { purposeFixture, navigation, selection } from "./memory-purpose-fixture.js";
+import { purposeFixture, navigation, selection, matchingCandidates } from "./memory-purpose-fixture.js";
 async function fixture() {
   const f = purposeFixture(); await f.configure({ queryModel: selection });
   const create = (text = "当前来源事实", title = "来源核验") => { const scope = f.create(`# [Completed] ${title}\n## [Completed] 验证结果\n`); f.detail(scope, text); f.memories.scan(scope); return scope; };
@@ -29,7 +29,8 @@ test("legacy duplicates are projected once from the captured index and only curr
     (f.memories as any).scanAsync = async () => { throw Error("query must not scan"); };
     f.memories.runner = { close: async () => {}, execute: async input => {
       const data = JSON.parse(input.prompt);
-      if (data.candidates?.some((candidate: any) => candidate.kind === "purpose")) assert.equal(data.candidates.filter((candidate: any) => candidate.kind === "purpose").length, 1);
+      const candidates = matchingCandidates(input);
+      if (candidates?.some(candidate => candidate.kind === "purpose")) assert.equal(candidates.filter(candidate => candidate.kind === "purpose").length, 1);
       if (data.evidence) { answers++; assert.equal(data.evidence.length, 1); assert.equal(data.evidence[0].content, "新版编号详情依据"); }
       return navigation(input, "新版编号详情依据");
     } };
@@ -57,7 +58,8 @@ test("selecting only an old unnumbered leaf cannot bypass a changed numbered bin
     f.write(f.scope, "# [Completed] 来源核验 〔2〕\n"); f.detail(f.scope, "不得通过旧别名读取"); let answers = 0;
     f.memories.runner = { close: async () => {}, execute: async input => {
       const data = JSON.parse(input.prompt); if (data.evidence) answers++;
-      return data.candidates ? { answer: JSON.stringify(data.candidates.filter((candidate: any) => candidate.kind !== "purpose" || candidate.text === "来源核验").map((candidate: any) => candidate.id)), incomplete: false } : navigation(input);
+      const candidates = matchingCandidates(input);
+      return candidates ? { answer: JSON.stringify(candidates.filter(candidate => candidate.kind !== "purpose" || candidate.text === "来源核验").map(candidate => candidate.id)), incomplete: false } : navigation(input);
     } };
     const result = await f.query(); assert.equal(result.reason, "locator_invalid"); assert.equal(result.answer, ""); assert.equal(answers, 0);
   } finally { await f.close(); }
@@ -69,9 +71,10 @@ test("cold restart reads only selected purposes beyond 24 sources with full deta
     await f.memories.close(); restarted = new Memories(f.store, () => {}); clearInterval((restarted as any).timer); (restarted as any).watcher?.close();
     let calls = 0; restarted.runner = { close: async () => {}, execute: async input => {
       calls++; const data = JSON.parse(input.prompt);
-      if (data.candidates) {
+      const candidates = matchingCandidates(input);
+      if (candidates) {
         assert.ok(!input.prompt.includes("模型迁移验证通过"));
-        return { answer: JSON.stringify(data.candidates.filter((c: any) => c.kind !== "purpose" || c.text === "迁移验证").map((c: any) => c.id)), incomplete: false };
+        return { answer: JSON.stringify(candidates.filter(c => c.kind !== "purpose" || c.text === "迁移验证").map(c => c.id)), incomplete: false };
       }
       assert.equal(data.evidence.length, 1); assert.equal(data.evidence[0].content, "模型迁移验证通过"); return navigation(input, "模型迁移验证通过");
     } };
@@ -128,9 +131,56 @@ for (const action of ["cancel", "timeout", "close"] as const) test(`query prompt
     assert.equal(signal?.aborted, true); release(); await new Promise(r => setImmediate(r));
   } finally { clearInterval(alive); release?.(); await f.close(); }
 });
-test("only [] is a valid empty match, malformed/forged/duplicate IDs fail", async () => {
+test("short-number navigation preserves same-name source bindings and keeps locator metadata audit-only", async () => {
   const f = await fixture(); try {
-    for (const answer of ["", "not JSON", "{}", '["forged"]', "[]"]) {
+    const second = f.create("第二来源独立依据 /project/current.md", "来源核验"); f.publish();
+    const snapshot = f.tree.snapshot(f.workspace.id);
+    const internalIds = snapshot.purposes.map(p => p.id).concat(snapshot.roots.map(n => n.id));
+    let detailCalls = 0, answerCalls = 0, detailCatalog: unknown;
+    f.memories.runner = { close: async () => {}, execute: async input => {
+      const data = JSON.parse(input.prompt), candidates = matchingCandidates(input);
+      if (candidates) {
+        assert.equal(data.candidates, undefined);
+        for (const id of [...internalIds, f.scope.sessionId, second.sessionId]) assert.ok(!input.prompt.includes(id));
+        assert.ok(!input.prompt.includes("details/"));
+        assert.equal((input as any).candidateBindings, undefined);
+        assert.equal(candidates[0]!.id, 1, "every call restarts numbering");
+        if (data.stage === "details") {
+          detailCalls++;
+          detailCatalog = data.catalog;
+          const groups = data.catalog.filter((row: any[]) => row[0] === "G");
+          assert.deepEqual(groups, [["G", 1, "来源核验"], ["G", 2, "来源核验"]]);
+          assert.equal(candidates.length, 2);
+          return { answer: "[2]", incomplete: false };
+        }
+        return navigation(input);
+      }
+      answerCalls++; assert.equal(data.evidence.length, 1);
+      assert.equal(data.evidence[0].content, "第二来源独立依据 /project/current.md");
+      return navigation(input, "第二来源独立依据 /project/current.md");
+    } };
+    const result = await f.query();
+    assert.equal(result.answer, "第二来源独立依据 /project/current.md"); assert.equal(detailCalls, 1); assert.equal(answerCalls, 1);
+    assert.ok(result.readDocuments?.some(document => document.sessionId === second.sessionId && document.path.startsWith("details/")));
+    assert.ok(!result.readDocuments?.some(document => document.sessionId === f.scope.sessionId && document.path.startsWith("details/")));
+    const row = f.store.db.prepare("SELECT body FROM processing_records WHERE kind='memory.query'").get()!;
+    const calls = JSON.parse(String(row.body)).calls;
+    const audited = calls.map((call: any) => JSON.parse(call.input.text)).filter((input: any) => input.candidateBindings);
+    assert.equal(audited.length, 3);
+    const detailAudit = audited.find((input: any) => JSON.parse(input.prompt).stage === "details");
+    assert.deepEqual(JSON.parse(detailAudit.prompt).catalog, detailCatalog, "audit retains the actual model catalog without fragment redaction");
+    assert.deepEqual(detailAudit.candidateBindings.map((binding: any) => binding.number), [1, 2]);
+    assert.notEqual(detailAudit.candidateBindings[0].purposeId, detailAudit.candidateBindings[1].purposeId);
+    const [purposeId, path] = JSON.parse(detailAudit.candidateBindings[1].id);
+    assert.equal(snapshot.purposes.find(p => p.id === purposeId)?.source.sessionId, second.sessionId);
+    assert.ok(result.readDocuments?.some(document => document.sessionId === second.sessionId && document.path === path));
+    assert.deepEqual(f.tree.snapshot(f.workspace.id), snapshot, "projection never rewrites persistent identities");
+  } finally { await f.close(); }
+});
+
+test("only [] is a valid empty match, malformed/forged/duplicate numbers fail", async () => {
+  const f = await fixture(); try {
+    for (const answer of ["", "not JSON", "{}", '["forged"]', '["1"]', "[0]", "[-1]", "[1.5]", "[2]", "[null]", "[true]", "[1,1]", "[]"]) {
       f.memories.runner = { close: async () => {}, execute: async () => ({ answer, incomplete: false }) };
       const result = await f.query(); assert.equal(result.answer, ""); assert.equal(result.incomplete, answer !== "[]");
     }

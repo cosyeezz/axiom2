@@ -67,10 +67,9 @@
 .memory-task-marker>svg{width:16px;height:16px}
 .memory-task-title{flex:1;min-width:0;color:var(--fg-2);font-size:12px;line-height:1.6;overflow-wrap:anywhere;text-align:left}
 .memory-goals>li[data-goal]>.memory-task-row .memory-task-title{font-size:13px;font-weight:550;color:var(--fg)}
-.memory-task-state{font-size:10px;color:var(--task-tone);flex-shrink:0;white-space:nowrap}
 .memory-branch-toggle{display:flex;align-items:center;gap:5px;flex:1;min-width:0;min-height:32px;padding:3px 0;border:0;background:none;color:inherit;border-radius:4px;text-align:left}
 .memory-task-chevron{width:10px;height:10px;flex:0 0 10px;color:var(--muted)}
-.memory-branch-toggle[aria-expanded=true]>.memory-task-chevron{transform:rotate(90deg)}
+.memory-branch-toggle[aria-expanded=true]>.memory-task-chevron{transform:rotate(180deg)}
 .memory-branch-toggle:hover .memory-task-title{color:var(--fg)}
 .memory-branch-disclosure{flex:0 0 22px;justify-content:center}
 .memory-title-open{border:0;padding:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
@@ -104,7 +103,7 @@
 .memory-loading{display:flex;align-items:center;gap:8px;color:var(--muted)}
 .memory-loading>.bubble-loading{width:18px;height:18px;flex:0 0 18px}
 .memory-empty-copy.memory-loading{justify-content:center}
-@media(max-width:480px){.memory-branch{margin-left:5px;padding-left:8px}.memory-task-row{gap:5px}.memory-task-state{font-size:10px}.memory-task-detail-button{gap:0}.memory-task-detail-button>svg{display:block}}
+@media(max-width:480px){.memory-branch{margin-left:5px;padding-left:8px}.memory-task-row{gap:5px}.memory-task-detail-button{gap:0}.memory-task-detail-button>svg{display:block}}
 @media(pointer:coarse),(max-width:640px){.memory-branch-toggle,.memory-task-detail-button,.memory-task-link-button,.memory-context-summary>summary{min-height:44px}.memory-branch-disclosure{flex-basis:44px}.memory-task-detail-button,.memory-task-link-button{min-width:44px;flex-shrink:0}.memory-title-open{display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%}.memory-task-row{min-height:44px}}
 .memory-next{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px 14px;margin:0 20px 18px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;line-height:1.7}
 .memory-next:empty{display:none}

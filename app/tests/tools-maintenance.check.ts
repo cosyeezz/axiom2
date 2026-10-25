@@ -24,7 +24,7 @@ rea.dependencies.prepareEngine = async (_root, id) => {
   engineDirectory = join(root, "integrations", "rea", "engines", `${id}-${randomUUID()}`);
   mkdirSync(engineDirectory, { recursive: true }); return { directory: engineDirectory, path: engineDirectory };
 };
-const app = await startServer({ root, port: 0, dev: true, rea: rea.dependencies, openCli: { execute: opencli.execute, locateNpm: opencli.locateNpm, openExtension: async () => {} } });
+const app = await startServer({ root, port: 0, dev: true, rea: rea.dependencies, openCli: { execute: opencli.execute, runtime: opencli.runtime, locateNpm: opencli.locateNpm, openExtension: async () => {} } });
 const originalActive = app.agents.active.bind(app.agents);
 app.agents.active = (scope, exclude) => active || originalActive(scope, exclude);
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER, headless: true });
@@ -112,7 +112,7 @@ try {
   await panel.getByRole("button", { name: "卸载 REA", exact: true }).click();
   await panel.getByRole("button", { name: "暂不卸载", exact: true }).click();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
-  rea.setLatest("6.7.1");
+  rea.setLatest("6.8.0");
   await panel.getByRole("button", { name: "检查更新", exact: true }).click();
   await panel.getByRole("button", { name: "更新 REA", exact: true }).waitFor();
   rea.fail(); await panel.getByRole("button", { name: "更新 REA", exact: true }).click();

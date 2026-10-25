@@ -3,8 +3,9 @@ import { LocalPath, isLocalPath } from "../LocalPath.js";
 import { MessagePartBody } from "./MessagePartBody.js";
 import { useRememberedDisclosure, useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
-import { runOriginLabels, type ChatMessage, type RunOrigin } from "../../shared/agent.js";
+import type { ChatMessage, RunOrigin } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
+import { taskToolName } from "../../shared/tasks.js";
 import { ProcessIcon } from "./ProcessIcon.js";
 import { ThinkingDots } from "./ThinkingDots.js";
 import { MemoryQueryFeedback, MemoryQueryStage } from "./MemoryQueryFeedback.js";
@@ -55,12 +56,14 @@ function ActivitySummary({ fact, settled = false }: { fact: ActivityFact; settle
   return <>{fact.kind ? <span className="tool-icon" data-tool-icon={fact.icon}><Icon name={`tool-${fact.icon}`} /></span> : <ProcessIcon kind={toolGlyphKind(fact.icon)} />}<span><span className="tool-name">{fact.name}</span> · {fact.target}</span></>;
 }
 
-export function ActivityGroup({ scope, children, requesting = false, awaitingMore = false, activeRunId, messageIds = [], thinkingOnlyIds = [], callsOnlyIds = [], callIds, inline = false, settled = false, animateFold = false, summary, disclosureKey, className = "" }: {
+export function ActivityGroup({ scope, children, requesting = false, awaitingMore = false, activeRunId, messageIds = [], thinkingOnlyIds = [], callsOnlyIds = [], callIds, inline = false, settled = false, animateFold = false, summary, prefixSummary, disclosureKey, className = "" }: {
   scope: Scope; children: React.ReactNode | ((open: boolean, evidence: Set<string>) => React.ReactNode);
   inline?: boolean; settled?: boolean; animateFold?: boolean; requesting?: boolean;
   awaitingMore?: boolean; activeRunId?: string; messageIds?: string[]; thinkingOnlyIds?: string[]; callsOnlyIds?: string[]; callIds?: string[];
   /** Lightweight archived facts render the original header without reading message bodies. */
-  summary?: HistoryGroup["process"]; disclosureKey?: string; className?: string;
+  summary?: HistoryGroup["process"];
+  /** Archived prefix contributes counts/preview, never overrides a live tail's state. */
+  prefixSummary?: HistoryGroup["process"]; disclosureKey?: string; className?: string;
 }) {
   const [open, setOpen] = useRememberedDisclosure(disclosureKey ?? `process:${JSON.stringify([messageIds, thinkingOnlyIds, callsOnlyIds, callIds, inline])}`, animateFold);
   const [folding, setFolding] = useState(animateFold);
@@ -82,8 +85,6 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   const facts = new Map(entries);
   const evidence = new Set(entries.filter(([, fact]) => fact.evidence).map(([id]) => id.slice("message:".length)));
   const items = entries.map(([, fact]) => fact);
-  const originLabel = (summary?.origins ?? [...new Set(items.flatMap(item => item.origin ? [item.origin] : []))])
-    .map(origin => runOriginLabels[origin]).join(" · ");
   // Local tool/task outcomes belong to their rows, not the whole process.
   const messages = items.filter((item) => item.kind === "message");
   // Coalesced cards can span runs. Stale deltas from an earlier run must not
@@ -105,13 +106,22 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   // The current process stays active through recovery; settled history reflects
   // the last assistant outcome without erasing earlier errors from its details.
   const status = summary?.status ?? (settled ? failed ? "failed" : cancelled ? "cancelled" : "completed" : running || requesting || awaitingMore || awaitingRun ? "running" : failed ? "failed" : cancelled ? "cancelled" : unknown || !items.length || !ready ? "unknown" : "completed");
-  const currentOperation = currentItems.filter(fact => fact.name && fact.status === "running").at(-1) ?? currentItems.filter(fact => fact.name).at(-1);
-  const thinking = requesting || !currentOperation || currentOperation.kind === "message" && currentOperation.icon === "thinking";
-  const label = status === "running" ? thinking ? "正在思考" : "调用工具" : status === "completed" ? "执行完成" : status === "failed" ? "执行失败" : status === "cancelled" ? "执行已停止" : "结果待确认";
+  // Transport phases maintain the row, never invent a new thinking activity.
+  // Chronological facts win over stale running flags from an earlier operation.
+  const operationItems = activeRunId && activeRunId !== latestRun ? [] : currentItems;
+  const currentOperation = operationItems.filter(fact => fact.name).at(-1);
+  const thinking = !!currentOperation && currentOperation.kind === "message" && currentOperation.icon === "thinking";
+  // A local segment can finish before final delivery. Its label reflects that
+  // status; only the delivered outer card owns the checkmark and whole-turn fold.
+  const label = status === "running" ? !currentOperation ? "请求中" : thinking ? "正在思考" : "调用工具" : status === "completed" ? "执行完成" : status === "failed" ? "执行失败" : status === "cancelled" ? "执行已停止" : "结果待确认";
   const showStatusIcon = status !== "running" && (!inline || status !== "completed");
-  const succeeded = summary?.succeeded ?? calls.filter(([, fact]) => fact.status === "completed").length;
-  const failedCalls = summary?.failed ?? calls.filter(([, fact]) => fact.status === "failed").length;
-  const [statusChange, setStatusChange] = useState({ status, animateCompletion: false, hasCompleted: status === "completed" });
+  const succeeded = summary?.succeeded ?? (prefixSummary?.succeeded ?? 0) + calls.filter(([, fact]) => fact.status === "completed").length;
+  const failedCalls = summary?.failed ?? (prefixSummary?.failed ?? 0) + calls.filter(([, fact]) => fact.status === "failed").length;
+  const [statusChange, setStatusChange] = useState(() => ({ status,
+    // A newly mounted delivered aggregate is already completed; its explicit
+    // live-fold transition must still play the original slow check drawing.
+    animateCompletion: animateFold && status === "completed" && !matchMedia("(prefers-reduced-motion: reduce)").matches,
+    hasCompleted: status === "completed" }));
   if (statusChange.status !== status) {
     // Facts always determine status; only completion animation is remembered.
     // Resumed activity can reopen the process without replaying completion later.
@@ -124,7 +134,8 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   // Call order, not result arrival or status priority, determines the latest activity.
   const summaries = useMemo<[string, ActivityFact][]>(() => summary?.latest
     ? [["archive:latest", { ...summary.latest, order: [0, 0] }]]
-    : entries.filter(([, fact]) => fact.name), [summary, entries]);
+    : entries.some(([, fact]) => fact.name) ? entries.filter(([, fact]) => fact.name)
+    : prefixSummary?.latest ? [["archive:latest", { ...prefixSummary.latest, order: [0, 0] }]] : [], [summary, prefixSummary, entries]);
   const latest = summaries.at(-1);
   const current = latest?.[1];
   const [previous, setPrevious] = useState<typeof latest>(undefined);
@@ -139,7 +150,7 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
     return () => clearTimeout(timeout);
   }, [previous]);
   return <ActivitySettled.Provider value={settled}>
-    <details ref={card} className={`activity tool-activity${inline ? " process-live" : ""}${className ? ` ${className}` : ""}`} open={open} data-folding={folding || undefined} data-status={status} data-status-icon={showStatusIcon} data-settled={settled || undefined} data-call-count={summary?.calls ?? calls.length}>
+    <details ref={card} className={`activity tool-activity${inline ? " process-live" : ""}${className ? ` ${className}` : ""}`} open={open} data-folding={folding || undefined} data-status={status} data-status-icon={showStatusIcon} data-settled={settled || undefined} data-call-count={summary?.calls ?? (prefixSummary?.calls ?? 0) + calls.length}>
       <summary onClick={(e) => { e.preventDefault(); if (folding) { setFolding(false); setOpen(true); } else setOpen((value) => !value); }}>
         {showStatusIcon && <span className="activity-status" data-state={status} role="img" aria-label={toolStatusLabels[status]} data-tooltip={toolStatusLabels[status]}>
           {status === "completed" ? <CompletedStatusIcon animate={statusChange.animateCompletion} /> :
@@ -147,12 +158,11 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
         </span>}
         <span className="activity-overview">
           <ProcessTitle label={label} active={status === "running"} thinking={thinking} />
-          {originLabel && <small className="process-origin" aria-label={`触发来源：${originLabel}`}>{originLabel}</small>}
         </span>
         {failedCalls > 0 && <span className="process-counts"><span>成功 {succeeded}</span><span data-status={failedCalls ? "failed" : undefined}>失败 {failedCalls}</span></span>}
         {!inline && <Icon name="chevron" />}
           {!inline && (!open || folding) && <span className="activity-ticker" aria-live="polite" aria-atomic="true">
-            {!current && <span className="activity-current">{status === "running" ? <ThinkingDots /> : summary?.preview || "思考与任务记录"}</span>}
+            {!current && <span className="activity-current">{status === "running" ? <ThinkingDots /> : summary?.preview || prefixSummary?.preview || "思考与任务记录"}</span>}
             {previous && <span key={`out-${previous[0]}`} className="activity-current activity-current-out" data-tool={previous[1].name} data-status={previous[1].status} aria-hidden="true"><ActivitySummary fact={previous[1]} settled={settled} /></span>}
             {current && <span key={latest![0]} className={`activity-current${previous ? " activity-current-in" : ""}`} data-tool={current.name} data-status={current.status} data-tooltip={current.kind === "message" && current.icon === "thinking" ? undefined : `${current.name} · ${current.target}`}><ActivitySummary fact={current} settled={settled} /></span>}
           </span>}
@@ -191,7 +201,7 @@ function ToolDetails({ scope, call, message, result }: { scope: Scope; call: Too
     <div className="tool-detail-label" data-tooltip={call.name}>输入参数</div>
     <MessagePartBody scope={scope} message={message} callId={call.id} fallback="无输入参数" />
     <div className="tool-detail-label">执行输出</div>
-    <MessagePartBody scope={scope} message={result} />
+    <MessagePartBody scope={scope} message={result} taskTool={taskToolName(call.name)} />
     {call.name.replace(/^functions\./, "") === "memory_query" && <MemoryQueryFeedback scope={scope} toolCallId={call.id} />}
   </div>;
 }

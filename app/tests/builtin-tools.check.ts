@@ -1,20 +1,22 @@
 import { assertSelectPosition } from "./select-helpers.js";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
 import { AppError } from "../src/shared/protocol.js";
 import { openCliSkillNames, openCliConfigPath } from "../src/server/integrations/opencli-runtime.js";
-import type { OpenCliExecute } from "../src/server/integrations/opencli.js";
+import { executeOpenCli, type OpenCliExecute } from "../src/server/integrations/opencli.js";
+import { managedNodeFixture } from "./fixtures/managed-node.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-tools-ui-"));
-const prefix = join(root, "global"), modules = join(prefix, "node_modules"), packageRoot = join(modules, "@jackwener", "opencli");
+const prefix = join(root, "global"), modules = join(prefix, "node_modules");
 let release!: () => void, installs = 0, doctorFails = false, browserFails = false, browserOpens = 0;
 const gate = new Promise<void>((r) => { release = r; });
-const execute: OpenCliExecute = async (args) => {
-  if (args[1] === "--version") return "11.0.0";
+const execute: OpenCliExecute = async (args, options) => {
+  if (args[0] === "-e") return executeOpenCli(args, options);
+  if (args[1] === "--version") return /(?:^|[\\/])npm-cli\.js$/.test(args[0]) ? "11.0.0" : "1.8.8";
   if (args[1] === "root") return modules;
   if (args[1] === "prefix") return prefix;
   if (args[1] === "view") return '"1.8.8"';
@@ -24,9 +26,18 @@ const execute: OpenCliExecute = async (args) => {
   }
   if (args[1] === "install") {
     installs++; await gate;
+    const candidate = args[args.indexOf("--prefix") + 1], packageRoot = join(candidate, "node_modules", "@jackwener", "opencli");
+    assert.ok(args.includes("--engine-strict"));
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "@jackwener/opencli", version: "1.8.8", bin: { opencli: "cli.js" } }));
-    writeFileSync(join(packageRoot, "cli.js"), "// fixture");
+    const entry = join(packageRoot, "cli.js"), bin = join(candidate, "node_modules", ".bin");
+    writeFileSync(entry, "#!/usr/bin/env node\nconsole.log(require('./package.json').version);\n"); chmodSync(entry, 0o755);
+    mkdirSync(bin, { recursive: true });
+    if (process.platform === "win32") {
+      const node = options.nodeExecutable ?? process.execPath;
+      writeFileSync(join(bin, "opencli.cmd"), `@"${node}" "${entry}" %*\r\n`);
+      writeFileSync(join(bin, "opencli.ps1"), `& '${node.replaceAll("'", "''")}' '${entry.replaceAll("'", "''")}' @args\nexit $LASTEXITCODE\n`);
+    } else symlinkSync(entry, join(bin, "opencli"));
     for (const name of openCliSkillNames) {
       mkdirSync(join(packageRoot, "skills", name), { recursive: true });
       writeFileSync(join(packageRoot, "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: Fixture\n---\nGuide`);
@@ -36,7 +47,7 @@ const execute: OpenCliExecute = async (args) => {
   throw Error("Unexpected fixture command");
 };
 const browserTargets: string[] = [];
-const app = await startServer({ root, port: 0, openCli: { execute, locateNpm: () => "npm-cli.js", openExtension: async (target) => {
+const app = await startServer({ root, port: 0, openCli: { execute, runtime: managedNodeFixture(() => "1.8.8"), locateNpm: () => "npm-cli.js", openExtension: async (target) => {
   browserTargets.push(target);
   browserOpens++;
   if (browserFails) throw new AppError("BROWSER_OPEN_FAILED", "fixture default browser unavailable");
@@ -72,22 +83,18 @@ try {
   const active = app.agents.active.bind(app.agents);
   app.agents.active = (scope, exclude) => waitingForIdle || active(scope, exclude);
   await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).click();
-  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
-  assert.equal(installs, 0);
-  await page.getByRole("button", { name: "取消排队", exact: true }).click();
-  await page.getByText("已取消排队安装。", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "安装 OpenCLI", exact: true }).click();
-  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
-  await page.reload();
-  await page.getByRole("button", { name: "等待空闲…", exact: true }).waitFor();
-  assert.equal(installs, 0, "page reload must preserve the queue without starting npm");
-  await page.screenshot({ path: join(root, "queued-install.png"), fullPage: true });
-  waitingForIdle = false;
   await page.getByRole("button", { name: "正在安装…", exact: true }).waitFor();
   await page.waitForFunction(() => document.body.innerText.includes("正在安装 OpenCLI 1.8.8"));
-  assert.equal(installs, 1);
+  assert.equal(installs, 1, "a separate version may install while existing Agent tasks remain active");
+  await page.reload();
+  await page.getByRole("button", { name: "正在安装…", exact: true }).waitFor();
+  assert.equal(installs, 1, "page reload must preserve the install without starting another npm process");
+  await page.screenshot({ path: join(root, "installing.png"), fullPage: true });
   release();
   await page.waitForFunction(() => document.body.innerText.includes("安装与技能接入已完成"));
+  assert.match(await page.locator("#opencli .tools-facts").innerText(), /组件专用/);
+  assert.ok(JSON.parse(readFileSync(openCliConfigPath(root), "utf8")).runtime);
+  waitingForIdle = false;
   await page.getByLabel("Chrome 配置档案", { exact: true }).fill("work-profile");
   const windowSelect = page.getByRole("combobox", { name: "浏览器窗口", exact: true });
   await windowSelect.click();
@@ -147,6 +154,15 @@ try {
   doctorFails = false;
   await page.getByRole("button", { name: "检测连接", exact: true }).click();
   await page.locator(".tools-diagnostic").waitFor();
+  const managedConfig = readFileSync(openCliConfigPath(root), "utf8"), legacy = JSON.parse(managedConfig);
+  delete legacy.runtime;
+  writeFileSync(openCliConfigPath(root), JSON.stringify(legacy));
+  await page.reload();
+  await page.locator("#opencli .tools-facts").getByText(/旧版共享环境/).waitFor();
+  await page.getByText("现有安装保持不变。重新安装或更新后迁移到版本绑定的独立 Node/npm，不修改系统或 Axiom 后台运行环境。", { exact: true }).waitFor();
+  writeFileSync(openCliConfigPath(root), managedConfig);
+  await page.reload();
+  await page.locator("#opencli .tools-facts").getByText(/组件专用/).waitFor();
   mkdirSync(resolve("test-results"), { recursive: true });
   for (const [width, height] of [[360, 800], [390, 844], [430, 932], [600, 960], [820, 1180], [1024, 768], [1366, 768], [1440, 900], [1920, 1080]]) {
     await page.setViewportSize({ width, height });
@@ -168,5 +184,5 @@ try {
     if ([360, 1440].includes(width)) await page.screenshot({ path: resolve(`test-results/builtin-tools-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
-  console.log("Built-in tools UI passed: queue/cancel/reload/automatic install, persisted settings, drafts/conflicts, remote errors, failed diagnostic recovery, nine responsive widths.");
+  console.log("Built-in tools UI passed: immutable install while Agents are active/reload, private and legacy environments, persisted settings, drafts/conflicts, remote errors, failed diagnostic recovery, nine responsive widths.");
 } finally { release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }

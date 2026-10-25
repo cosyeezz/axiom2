@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../../shared/agent.js";
+import { modelTaskOutput } from "../../shared/task-output.js";
 import { cleanTaskResult, type TaskResult, type TaskTool } from "../../shared/tasks.js";
 import type { ToolStatus } from "../chat/tool-summary.js";
 
@@ -7,6 +8,16 @@ export function callObject(text: string): Record<string, unknown> | null {
     const value: unknown = JSON.parse(text);
     return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
   } catch { return null; }
+}
+
+/** Keep full records for identity/receipt matching, but never label their metadata as execution output. */
+export function taskExecutionText(name: TaskTool | null, output: ChatMessage | null): string {
+  const text = output?.text || output?.error || "尚未记录输出";
+  if (!name || !output || output.error || output.status === "failed" || output.status === "cancelled") return text;
+  // A truncated JSON prefix may expose IDs before the complete record can be projected.
+  if (output.truncated) return "完整输出尚未加载";
+  const value = callObject(text);
+  return value ? JSON.stringify(modelTaskOutput(name, value)) : text;
 }
 
 export function taskCallStatus(result: ChatMessage | null, message: ChatMessage): ToolStatus {

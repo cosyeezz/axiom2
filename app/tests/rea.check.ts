@@ -33,6 +33,8 @@ try {
   await install.click();
   await page.getByText("REA 与技能已接入；已有会话请重新加载技能与 MCP。", { exact: true }).waitFor();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
+  assert.ok(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.runtime);
+  assert.match(await page.locator("#rea .tools-facts").innerText(), /组件专用/);
   assert.match(await page.locator("#rea .tools-diagnostic").innerText(), /1 个工具/);
   const enabled = page.locator("#rea input[type=checkbox]");
   await enabled.uncheck();
@@ -78,9 +80,9 @@ try {
   await installMcp.click();
   await page.getByText("MCP 已安装；已有会话请在技能与 MCP 面板调整选择并重新加载。", { exact: true }).waitFor();
   assert.equal(fixture.calls.filter(args => args[1] === "install").length, 2, "component reinstall must reuse the local package");
-  fixture.setLatest("6.7.1");
+  fixture.setLatest("6.8.0");
   await page.locator("#rea").getByRole("button", { name: "检查更新", exact: true }).click();
-  await page.locator("#rea").getByText("v6.7.1", { exact: true }).waitFor();
+  await page.locator("#rea").getByText("v6.8.0", { exact: true }).waitFor();
   fixture.fail();
   await page.getByRole("button", { name: "更新 REA", exact: true }).click();
   await page.locator("#rea [role=alert]").filter({ hasText: "network failure" }).waitFor();
@@ -88,6 +90,15 @@ try {
   await page.locator("#rea [role=alert]").filter({ hasText: "network failure" }).waitFor();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
   assert.ok(!(await page.locator("#rea").innerText()).includes("secret-value"));
+  const managedConfig = readFileSync(reaConfigPath(root), "utf8"), legacy = JSON.parse(managedConfig);
+  delete legacy.installation.runtime;
+  writeFileSync(reaConfigPath(root), JSON.stringify(legacy));
+  await page.reload();
+  await page.locator("#rea .tools-facts").getByText(/旧版共享环境/).waitFor();
+  await page.getByText("现有安装保持不变。重新安装或更新后使用与目标 REA 版本兼容的独立 Node/npm；不需要升级后台或系统 Node。", { exact: true }).waitFor();
+  writeFileSync(reaConfigPath(root), managedConfig);
+  await page.reload();
+  await page.locator("#rea .tools-facts").getByText(/组件专用/).waitFor();
   mkdirSync(resolve("test-results"), { recursive: true });
   for (const width of [360, 430, 820, 1440]) {
     await page.setViewportSize({ width, height: 900 });

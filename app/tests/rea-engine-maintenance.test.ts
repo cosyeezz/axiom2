@@ -75,7 +75,8 @@ test("versions come from local metadata and REA policy, and newer local builds a
     writeFileSync(join(root, "Contents", "Info.plist"), "<plist><dict><key>CFBundleShortVersionString</key><string>6.6.0</string></dict></plist>");
     assert.equal(installedEngineVersion("hopper", join(root, "Contents", "MacOS", "hopper")), "6.6.0");
     for (const [id, version, compatibility] of [["ghidra", "12.1.5", "compatible"], ["ghidra", "12.2.0", "incompatible"], ["jadx", "0.7.0", "incompatible"], ["wabt", "1.0.42", "compatible"], ["java", "16.0.2", "incompatible"], ["hopper", "6.6.0", "unknown"]] as const) assert.equal(engineVersionPolicy(id, version, "6.7.0").compatibility, compatibility);
-    assert.equal(engineVersionPolicy("ghidra", "12.1.4", "6.8.0").compatibility, "unknown");
+    assert.equal(engineVersionPolicy("ghidra", "12.1.4", "6.8.0").compatibility, "compatible");
+    assert.equal(engineVersionPolicy("ghidra", "12.1.4", "6.9.0").compatibility, "unknown");
     assert.equal(compareEngineVersions("12.1.4", "12.1.5"), -1);
     assert.equal(compareEngineVersions("21.0.13+8", "21.0.13+8-LTS"), 0);
     assert.equal(compareEngineVersions("21.0.13+9.0.LTS", "21.0.13+9-LTS"), 0);
@@ -128,7 +129,7 @@ test("install uses the checked release and rejects forged, expired and unadapted
     await call(service, "rea.engineSave", { engine: "java", revision: service.snapshot().revision, path: "" });
     await assert.rejects(call(service, "rea.engine-install", { engine: "java", revision: service.snapshot().revision, token: next.token, version: next.version }), /先检查/);
     const current = readReaConfig(root);
-    atomicReaJson(reaConfigPath(root), { ...current, revision: randomUUID(), installation: { ...current.installation, version: "6.8.0" } });
+    atomicReaJson(reaConfigPath(root), { ...current, revision: randomUUID(), installation: { ...current.installation, version: "6.9.0" } });
     await assert.rejects(call(service, "rea.engine-check", { engine: "java" }), /尚未适配/);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });

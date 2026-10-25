@@ -1,5 +1,7 @@
 import type { CleanupScope } from "./cleanup-scope.js";
 export const reaEngineContractVersion = "6.7.0";
+export const reaEngineContractVersions = ["6.7.0", "6.8.0"] as const;
+export const supportedReaEngineContract = (version?: string) => reaEngineContractVersions.some(item => item === version);
 export const reaEngineIds = ["java", "ghidra", "hopper", "jadx", "wabt"] as const;
 export type ReaEngineId = typeof reaEngineIds[number];
 export type ReaEnginePaths = Partial<Record<ReaEngineId, string>>;
