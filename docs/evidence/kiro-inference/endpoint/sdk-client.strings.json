@@ -1,0 +1,126 @@
+[
+  {
+    "line": 176,
+    "instruction": "0000000140BEA831: 48 8D 0D 00 5E 19  lea         rcx,[0000000145D80638h]",
+    "offset": "0x5d7f238",
+    "direct": "codewhispererstreamingInvalid client configuration: A behavior major version must be set when sending a request or constructing a client. You must set it during client construction",
+    "pointers": []
+  },
+  {
+    "line": 444,
+    "instruction": "0000000140BEAC0F: 48 8D 05 3A 59 19  lea         rax,[0000000145D80550h]",
+    "offset": "0x5d7f150",
+    "direct": "AmazonCodeWhispererStreamingServiceServiceRuntimePlugin",
+    "pointers": []
+  },
+  {
+    "line": 508,
+    "instruction": "0000000140BEAD07: 48 8D 05 65 58 19  lea         rax,[0000000145D80573h]",
+    "offset": "0x5d7f173",
+    "direct": "ServiceRuntimePlugin",
+    "pointers": []
+  },
+  {
+    "line": 644,
+    "instruction": "0000000140BEAF40: 48 8D 05 79 56 19  lea         rax,[0000000145D805C0h]",
+    "offset": "0x5d7f1c0",
+    "direct": "0",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x140bee130",
+        "text": "UVWSH"
+      },
+      {
+        "at": 24,
+        "va": "0x140be8b70",
+        "text": "UAWAVVWSH"
+      },
+      {
+        "at": 40,
+        "va": "0x140bf0f30",
+        "text": "UVWSH"
+      }
+    ]
+  },
+  {
+    "line": 762,
+    "instruction": "0000000140BEB117: 48 8D 05 62 56 19  lea         rax,[0000000145D80780h]",
+    "offset": "0x5d7f380",
+    "direct": "amzn-codewhisperer-streaming-clientAll required fields have been set",
+    "pointers": []
+  },
+  {
+    "line": 826,
+    "instruction": "0000000140BEB21F: 48 8D 05 9A 52 19  lea         rax,[0000000145D804C0h]",
+    "offset": "0x5d7f0c0",
+    "direct": " ",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x140beeeb0",
+        "text": "UAWAVVWSH"
+      }
+    ]
+  },
+  {
+    "line": 1000,
+    "instruction": "0000000140BEB4A1: 48 8D 05 67 50 19  lea         rax,[0000000145D8050Fh]",
+    "offset": "0x5d7f10f",
+    "direct": "interceptor_stateInvalid client configuration: ",
+    "pointers": []
+  },
+  {
+    "line": 1101,
+    "instruction": "0000000140BEB61E: 48 8D 0D 29 50 19  lea         rcx,[0000000145D8064Eh]",
+    "offset": "0x5d7f24e",
+    "direct": "Invalid client configuration: A behavior major version must be set when sending a request or constructing a client. You must set it during client construction or by enabling the `b",
+    "pointers": []
+  },
+  {
+    "line": 1103,
+    "instruction": "0000000140BEB625: 4C 8D 05 3C 51 19  lea         r8,[0000000145D80768h]",
+    "offset": "0x5d7f368",
+    "direct": "(",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145d80728",
+        "text": "crates\\amzn-codewhisperer-streaming-client\\src\\config.rs"
+      }
+    ]
+  },
+  {
+    "line": 1137,
+    "instruction": "0000000140BEB6C2: 48 8D 05 FF 50 19  lea         rax,[0000000145D807C8h]",
+    "offset": "0x5d7f3c8",
+    "direct": "(",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145d80728",
+        "text": "crates\\amzn-codewhisperer-streaming-client\\src\\config.rs"
+      }
+    ]
+  },
+  {
+    "line": 1140,
+    "instruction": "0000000140BEB6CE: 48 8D 0D CE 50 19  lea         rcx,[0000000145D807A3h]",
+    "offset": "0x5d7f3a3",
+    "direct": "All required fields have been set",
+    "pointers": []
+  },
+  {
+    "line": 1157,
+    "instruction": "0000000140BEB70F: 48 8D 05 2A 4E 19  lea         rax,[0000000145D80540h]",
+    "offset": "0x5d7f140",
+    "direct": " ",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145d80520",
+        "text": "Invalid client configuration: "
+      }
+    ]
+  }
+]

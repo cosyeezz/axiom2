@@ -1,0 +1,8 @@
+{
+  "cwd": "F:/Axiom/axiom2/app",
+  "command": "node --import tsx --import ./tests/vite-assets.mjs ../docs/evidence/kiro-cli-parity/adapter-probe.ts",
+  "exitCode": 0,
+  "checksPassed": 8,
+  "sourceSha256": "667a5696d879f50dd5ce9ae62900465ec63561e25188f1862f80fd7d04809508",
+  "note": "Exit code captured as PROBE_EXIT=0 by PowerShell; pure offline characterization, no transport."
+}

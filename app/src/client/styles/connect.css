@@ -35,6 +35,16 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .startup-private svg { width: 14px; height: 14px; }
 .startup-panel { border: 1px solid #30363b; background: #1b1e21; border-radius: 12px; box-shadow: 0 4px 20px #0001; }
 .startup-device { padding: 20px 22px 16px; }
+.startup-panel [hidden] { display: none !important; }
+.connection-actions.connection-actions-port-only { grid-template-columns: 80px; }
+.startup-target-row:has(.connection-actions-port-only) { grid-template-columns: minmax(0, 1fr) 80px; }
+.connection-primary-area { margin-top: 18px; }
+.connect-primary.connection-primary-button { width: 100%; min-height: 52px; gap: 10px; font-size: 14px !important; }
+.connection-primary-button svg { width: 18px; height: 18px; }
+.connection-primary-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 35px; padding-top: 5px; color: #a8b2b9; font-size: 11px; }
+.connection-primary-meta .connection-text-button { min-height: 32px; padding-block: 0; }
+.connection-primary-area :is(.connect-message, .connect-error) { margin-bottom: 0; }
+@media (max-width: 580px) { .connection-actions-port-only .connection-port input { height: 56px; } }
 .startup-target-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
 .connection-device-field { min-width: 0; }
 .connection-label { display: block; margin-bottom: 8px; color: #a8b2b9; font-size: 11px; line-height: 16px; }
@@ -154,6 +164,7 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
 .connect-details dd { margin: 0; color: #c1c8c2; font-family: var(--font-mono); text-align: right; overflow-wrap: anywhere; }
 .connect-footnote { font-size: 10px; color: #7e898c; line-height: 1.9; margin: 16px 0 0; }
 .connect-error, .connect-message { padding: 10px 12px; border-radius: 6px; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; background: #2a2320; color: #e4b59c; margin: 14px 0 0; }
+.connect-message { background: #252b2f; color: #b9c3ca; }
 .connect-error { background: #352321; color: #f0b1a8; }
 .startup-global-error { margin: 0 20px 20px; display: flex; align-items: center; gap: 10px; }
 .startup-global-error .startup-icon-button { margin-left: auto; }
@@ -285,5 +296,36 @@ body:has(.connect-page) { margin: 0; background: #111315; color-scheme: dark; }
   .connect-dialog-actions { flex-wrap: wrap; }
   .startup-steps > button { gap: 4px; padding: 6px; }
   .startup-resource-actions .startup-icon-button { width: 40px; flex-basis: 40px; }
+}
+/* First-run controls: a short status and the action it belongs to. */
+.startup-update-section { padding-block: 20px 12px; }
+.updates-simple { padding: 0; }
+.updates-simple > h2 { margin: 0 0 6px; font-size: 13px; font-weight: 550; }
+.update-component { padding: 14px 0; }
+.update-component + .update-component { border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); }
+.update-component-row { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; min-width: 0; }
+.update-component-copy { min-width: 0; }
+.update-component-copy h3 { margin: 0; font: inherit; font-size: 13px; font-weight: 500; }
+.update-component-copy p { margin: 3px 0 0; color: #a8b2b9; font-size: 11px; overflow-wrap: anywhere; }
+.update-component-copy p > span { display: inline-block; margin-left: 10px; color: #d4bf9d; }
+.update-component-row > .connect-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.update-component-row .connect-secondary { min-height: 40px; padding: 8px 13px; font-size: 12px; }
+.update-details { border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); margin-top: 0; }
+.update-details > summary, .setup-details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: #a8b2b9; font-size: 11px; }
+.update-recovery { padding-block: 8px; }
+.update-recovery p { color: #a8b2b9; font-size: 12px; }
+.setup-simple { padding: 8px 22px 16px; min-width: 0; }
+.setup-simple > .update-component-row { padding-block: 8px; }
+.setup-simple pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.setup-simple .setup-job { margin-top: 12px; }
+:root[data-theme="light"] {
+  .update-component-copy p, .update-details > summary, .setup-details > summary, .update-recovery p { color: var(--muted); }
+  .update-component-copy p > span { color: var(--accent); }
+}
+@media (max-width: 580px) {
+  .update-component-row { flex-wrap: wrap; gap: 10px; }
+  .update-component-row > .connect-actions { flex: 1 1 100%; }
+  .update-component-row .connect-secondary { flex: 1; min-height: 44px; }
+  .setup-simple { padding-inline: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .startup-spin { animation: none; } .connect-page *, .desktop-workbench-bar button { transition: none !important; } .startup-connect-button:hover:not(:disabled) .connection-plug { transform: none; } }

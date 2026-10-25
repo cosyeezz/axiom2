@@ -1,0 +1,106 @@
+{
+  "axiomOrigin": "http://127.0.0.1:4317",
+  "credentialValuesRead": false,
+  "limitations": [
+    "Only text calls at high and off were exercised live",
+    "Budget 20000 is the adapter policy, not a measured server token limit",
+    "No same-account official CLI comparison, image or tool invocation was performed live",
+    "Main model defaults were not written by the child-only agent.model path",
+    "Thinking content is omitted; only lengths are retained"
+  ],
+  "modelSourceFilesModified": false,
+  "parentSessionId": "4bfeec8c-9178-4d40-91d8-8defeb63d5d2",
+  "results": [
+    {
+      "assistant": {
+        "id": "0644c562-a021-47ac-baf5-813703702887",
+        "phase": "final_answer",
+        "runId": "d4598c94-3415-4c8d-89f2-5de62a04faf9",
+        "selectionChange": {
+          "from": {
+            "id": "gpt-6-astra",
+            "provider": "sky",
+            "thinking": "medium"
+          },
+          "to": {
+            "id": "claude-sonnet-4.5",
+            "provider": "kiro",
+            "thinking": "high"
+          }
+        },
+        "status": "completed",
+        "streaming": false,
+        "text": "AXIOM_KIRO_OK 323",
+        "thinkingLength": 381,
+        "toolCalls": 0,
+        "truncated": true
+      },
+      "durationMs": 7507,
+      "observedAt": "2026-10-25T15:13:38.970Z",
+      "run": {
+        "endedAt": 1792941119304,
+        "error": null,
+        "id": "d4598c94-3415-4c8d-89f2-5de62a04faf9",
+        "phase": null,
+        "reasonCode": null,
+        "resumedFromRunId": null,
+        "retry": null,
+        "selection": {
+          "id": "claude-sonnet-4.5",
+          "provider": "kiro",
+          "thinking": "high"
+        },
+        "sessionId": "791b4d94-d24a-453c-991e-bd3d49d6fafd",
+        "startedAt": 1792941111797,
+        "status": "completed"
+      },
+      "selection": {
+        "id": "claude-sonnet-4.5",
+        "provider": "kiro",
+        "thinking": "high"
+      }
+    },
+    {
+      "assistant": {
+        "id": "06e277a1-e20b-4d1a-910c-01192b09931a",
+        "phase": "final_answer",
+        "runId": "013edceb-8869-440c-b18e-20a8bc3b80b0",
+        "status": "completed",
+        "streaming": false,
+        "text": "AXIOM_KIRO_OFF_OK 621",
+        "thinkingLength": 0,
+        "thinkingLengthReported": false,
+        "toolCalls": 0
+      },
+      "durationMs": 5733,
+      "observedAt": "2026-10-25T15:15:18.143Z",
+      "run": {
+        "endedAt": 1792941260417,
+        "error": null,
+        "id": "013edceb-8869-440c-b18e-20a8bc3b80b0",
+        "phase": null,
+        "reasonCode": null,
+        "resumedFromRunId": null,
+        "retry": null,
+        "selection": {
+          "id": "claude-sonnet-4.5",
+          "provider": "kiro",
+          "thinking": "off"
+        },
+        "sessionId": "791b4d94-d24a-453c-991e-bd3d49d6fafd",
+        "startedAt": 1792941254684,
+        "status": "completed"
+      },
+      "selection": {
+        "id": "claude-sonnet-4.5",
+        "provider": "kiro",
+        "thinking": "off"
+      }
+    }
+  ],
+  "scope": "Actual requests through Axiom native task/agent pipeline, no direct Kiro HTTP client or standalone SDK invocation",
+  "taskDefaultUnchanged": true,
+  "taskId": "ffe867a6-5fc1-43a4-a395-aac81029a81f",
+  "testSessionId": "791b4d94-d24a-453c-991e-bd3d49d6fafd",
+  "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450"
+}

@@ -9,7 +9,7 @@ const nativeProviders = [{
   template: { id: "codebuddy-cn", name: "CodeBuddy 国内版", api: "openai-completions", url: "https://copilot.tencent.com/v2", methods: ["api_key", "oauth"] } satisfies Template,
   load: async () => (await import("./providers/codebuddy-cn.js")).codeBuddyProvider(),
 }, {
-  template: { id: "kiro", name: "kiro", api: "kiro-auth-only", url: "", methods: ["oauth"] } satisfies Template,
+  template: { id: "kiro", name: "kiro", api: "kiro-chat", url: "", methods: ["oauth"] } satisfies Template,
   load: async () => (await import("./providers/kiro.js")).kiroProvider(),
 }, {
   template: { id: "qoder", name: "Qoder", api: "openai-completions", url: "https://api2.qoder.sh", methods: ["api_key", "oauth"] } satisfies Template,
@@ -39,6 +39,16 @@ async function registerModelProvider(runtime: ModelRuntime, providerId: string) 
   runtime.refresh = async () => ({ aborted: false, errors: new Map() });
   try { runtime.registerNativeProvider(provider); }
   finally { runtime.refresh = refresh; }
+  if (providerId === "kiro") {
+    const { assertKiroChatModel } = await import("./providers/kiro-chat-protocol.js");
+    const getAuth = runtime.getAuth.bind(runtime);
+    // Pi composes models.json API overrides above native providers. Reject such
+    // overrides before generic transport dispatch, not just inside native stream().
+    runtime.getAuth = (async (target: Parameters<typeof getAuth>[0] | string, options?: Parameters<typeof getAuth>[1]) => {
+      if (typeof target !== "string" && target.provider === "kiro") assertKiroChatModel(target as Parameters<typeof assertKiroChatModel>[0]);
+      return typeof target === "string" ? getAuth(target, options) : getAuth(target, options);
+    }) as typeof runtime.getAuth;
+  }
 }
 
 type RuntimeOptions = Parameters<typeof ModelRuntime.create>[0] & {

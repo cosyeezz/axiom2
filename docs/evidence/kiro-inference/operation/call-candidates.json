@@ -1,0 +1,20 @@
+[
+  {
+    "target": "0x140b83e60",
+    "refs": [
+      {
+        "offset": 95212155,
+        "va": "0x145acde7b"
+      }
+    ]
+  },
+  {
+    "target": "0x140bc3a40",
+    "refs": [
+      {
+        "offset": 12428250,
+        "va": "0x140bdafda"
+      }
+    ]
+  }
+]

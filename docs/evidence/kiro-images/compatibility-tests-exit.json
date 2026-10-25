@@ -1,0 +1,8 @@
+﻿{
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/images.test.ts tests/model-input.test.ts tests/model-catalog.test.ts tests/model-runtime.test.ts tests/model-config-validation.test.ts tests/model-overrides.test.ts tests/model-copy-runtime.test.ts tests/model-auth-preparation.test.ts",
+    "cwd":  "F:/Axiom/axiom2/app",
+    "exitCode":  0,
+    "startedAt":  "2026-10-25T14:00:55.2229341Z",
+    "finishedAt":  "2026-10-25T14:02:35.7733388Z",
+    "log":  "docs/evidence/kiro-images/compatibility-tests.log"
+}

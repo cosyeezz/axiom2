@@ -1,0 +1,8 @@
+{
+    "cwd":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/kiro-auth.test.ts tests/kiro-callback.test.ts tests/kiro-catalog.test.ts tests/kiro-chat.test.ts tests/kiro-images.test.ts tests/kiro-runtime.test.ts tests/kiro-pooling.test.ts tests/kiro-thinking.test.ts tests/model-default.test.ts",
+    "startedUtc":  "2026-10-25T17:43:07.3039678Z",
+    "endedUtc":  "2026-10-25T17:44:17.4223150Z",
+    "exitCode":  0,
+    "log":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\focused\\test.log"
+}

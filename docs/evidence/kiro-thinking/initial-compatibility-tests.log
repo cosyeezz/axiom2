@@ -1,0 +1,46 @@
+✔ image boundaries, MIME signatures, base64, ordering, and metadata-only views (44.083ms)
+✔ img and legacy native-image mappings keep exact identities (0.5189ms)
+✔ image mapping stays in model context but not live, pending or restored display (1.2388ms)
+✔ images: no WS drafts, native prompt/history, text-only rejection, child live and queued append, restart no replay (23912.6132ms)
+✔ public Pi getAuth completes OAuth persistence before a fresh execution snapshot; later identity changes still reject (79.885ms)
+✔ auth preparation uses the provider-network operation, contains credentials, and honors missing auth/cancellation (5.6721ms)
+✔ real model-network auth preparation returns a boolean only and makes no inference request (2444.401ms)
+✔ OAuth opener passes authorization URLs as data on every platform (2.2531ms)
+✔ catalog fetches the configured baseUrl with pi auth and imports only upstream IDs (15706.5614ms)
+✔ OAuth without a custom endpoint keeps native discovery but never falls back on refresh failure (58.9742ms)
+✔ configuration errors identify provider and URL field without exposing URL credentials (1.9998ms)
+✔ configuration errors locate model, override row and sampling field (1.2432ms)
+✔ provider errors after model validation retain provider scope only (0.4511ms)
+✔ configuration location preserves command authorization error code (0.226ms)
+✔ missing override target identifies exact provider/model and explains how to correct it (0.3859ms)
+✔ runtime validation reports actual protocol and thinking levels at the model location (0.4425ms)
+✔ openai-completions copies preserve local identity, model-scoped auth and signed multi-turn history (5.9006ms)
+✔ openai-responses copies preserve local identity, model-scoped auth and signed multi-turn history (3.2098ms)
+✔ anthropic-messages copies preserve local identity, model-scoped auth and signed multi-turn history (3.0506ms)
+✔ google-generative-ai copies preserve local identity, model-scoped auth and signed multi-turn history (2.9092ms)
+✔ copying a native model preserves built-in headers with case-insensitive explicit override precedence (3.2941ms)
+✔ input capabilities survive save/reload, overlapping overrides and legacy drafts; invalid input never publishes (378.5685ms)
+✔ native catalog input remains inherited until edited, including when a native override is renamed (196.9478ms)
+✔ body text stays verbatim; numeric defaults and validation remain compatible (6.1342ms)
+✔ legacy drafts preserve previously hidden fields; typed drafts delete editable fields only (0.9322ms)
+✔ saved overrides round-trip, merge, reach HTTP with correct types, and can be deleted (736.7553ms)
+✔ unused native providers remain unregistered while their add-provider templates stay visible (18.2364ms)
+✔ an unrelated configured provider does not initialize CodeBuddy (11.6915ms)
+✔ credential-only native providers restore their catalog without a background refresh (30.763ms)
+✔ first explicit native-provider use loads it once without changing model files (13.892ms)
+✔ runtime creation without refresh preserves a cold execution profile; explicit refresh still invalidates it (43.8271ms)
+✔ a cold dynamic native provider must not create a models store during snapshot initialization (28.9608ms)
+✔ PI_OFFLINE="" prevents network refresh even when requested (8.1405ms)
+✔ PI_OFFLINE="1" prevents network refresh even when requested (7.375ms)
+✔ default runtime creation awaits one explicit local refresh with the native provider registered (31.3928ms)
+✔ selection changes require a request, survive old transcripts and ignore menu-only entries (3.2279ms)
+✔ change sits above the matching request or resumed process and is not folded into earlier activity (0.8674ms)
+✔ real worker applies model/effort to the next run, retains active steering settings and persists notices (37525.7832ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 141180.3603

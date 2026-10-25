@@ -21,6 +21,9 @@ jobs:
     uses: ./.github/workflows/android-tailnet.yml
   publish:
     needs: checks
+    concurrency:
+      group: axiom-client-publication
+      cancel-in-progress: false
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
@@ -146,6 +149,18 @@ jobs:
           $names = @('Axiom2-Android.apk','axiom2-android-sdk.aar','android-release.json','SHA256SUMS.txt')
           $files = @($names | ForEach-Object { Join-Path $out $_ })
           $notes = "Android client $env:CLIENT_VERSION. Back at the workbench root directly cycles saved connections in list order, wrapping to the first; overlay and page Back behavior is preserved. Reuses the existing Android signing identity. Backend and desktop clients are unchanged by this Android-only release. Native API 35 emulator checks passed; physical Android installation and cross-device Tailnet are not claimed. Source: $env:GITHUB_SHA."
+          # Share the existing client publisher lock and recheck immediately before creating the tag.
+          $json = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to recheck published Android versions' }
+          foreach ($page in ($json | ConvertFrom-Json)) {
+            foreach ($published in $page) {
+              if (!$published.draft -and !$published.prerelease -and 'Axiom2-Android.apk' -in $published.assets.name) {
+                if ($published.tag_name -notmatch '^(?:android-)?v([0-9]+)\.([0-9]+)\.([0-9]+)$') { throw 'Unrecognized published Android version' }
+                $previous = [long]$Matches[1] * 1000000 + [long]$Matches[2] * 1000 + [long]$Matches[3]
+                if ([long]$env:ANDROID_VERSION_CODE -le $previous) { throw 'A newer or equal Android APK was published during the build; refusing a downgrade' }
+              }
+            }
+          }
           git push origin "$($env:GITHUB_SHA):refs/tags/$($env:ANDROID_RELEASE_TAG)"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot create immutable Android source tag' }
           $tagCommit = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:ANDROID_RELEASE_TAG" --jq '.object.sha'

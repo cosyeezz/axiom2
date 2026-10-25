@@ -1,0 +1,22 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000143616E30: 55                 push        rbp
+  0000000143616E31: 48 89 E5           mov         rbp,rsp
+  0000000143616E34: 0F B6 01           movzx       eax,byte ptr [rcx]
+  0000000143616E37: C1 E0 03           shl         eax,3
+  0000000143616E3A: 48 8D 0D 47 F7 2D  lea         rcx,[000000015B8F6588h]
+                    18
+  0000000143616E41: 48 8B 14 08        mov         rdx,qword ptr [rax+rcx]
+  0000000143616E45: 48 8D 0D 9C F9 2D  lea         rcx,[000000015B8F67E8h]
+                    18
+  0000000143616E4C: 48 8B 04 08        mov         rax,qword ptr [rax+rcx]
+  0000000143616E50: 5D                 pop         rbp
+  0000000143616E51: C3                 ret
+  0000000143616E52: CC                 int         3
+
+  Summary
+
+     5BF1000 .text

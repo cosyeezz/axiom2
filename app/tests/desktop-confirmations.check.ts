@@ -17,7 +17,8 @@ async function scene(options: { recovery?: boolean; interrupted?: boolean; insta
     const task = (kind: string, status = "succeeded") => ({ id: "fixture-" + kind, attemptId: "fixture-attempt", endpoint: "desktop", scope: "界面合成测试，无真实操作", resource: kind, label: kind, action: kind, status, phase: "installing", steps: ["installing"], completedSteps: 1, createdAt: Date.now(), updatedAt: Date.now(), budgets: { headersMs: 30000, idleMs: 60000, installMs: 600000, totalMs: 1200000 }, capabilities: { cancel: false, extend: false } });
     const state = {
       calls: [] as { name: string; action?: string; version?: string | null; confirmed?: boolean }[], unexpected: [] as string[],
-      stopped: false, clientVersion: "0.4.1", recovery: !!options.recovery, job: (options.installer ? { kind: "client", version: "0.4.2", running: false, phase: "ready", message: "安装包已经校验" } : null) as any,
+      makeTask: task,
+      stopped: false, clientVersion: "0.4.1", recovery: !!options.recovery, job: (options.installer ? { kind: "client", version: "0.4.2", running: false, phase: "ready", message: "安装包已经校验", task: task("client") } : null) as any,
       setupJob: options.interrupted ? { id: "fixture-node", action: "node", running: false, phase: "interrupted", message: "安装器状态待核实", lines: [], task: task("node", "interrupted") } : null as any,
       removal: null as any,
     };
@@ -56,8 +57,9 @@ async function scene(options: { recovery?: boolean; interrupted?: boolean; insta
 async function count(page: Page, name: string, action: string) { return page.evaluate(({ name, action }) => (window as any).desktopConfirmFixture.calls.filter((call: any) => call.name === name && call.action === action).length, { name, action }); }
 async function checkUnexpected(page: Page) { assert.deepEqual(await page.evaluate(() => (window as any).desktopConfirmFixture.unexpected), []); }
 async function updates(page: Page) {
-  await page.locator(".startup-maintenance > summary").filter({ hasText: "版本与更新" }).click();
-  await page.getByRole("region", { name: "版本与更新", exact: true }).waitFor();
+  const region = page.getByRole("region", { name: "版本与更新", exact: true });
+  await region.waitFor();
+  assert.equal(await region.locator(".update-component").count(), 3, "all three update components remain visible without opening technical details");
 }
 try {
   {
@@ -76,11 +78,12 @@ try {
     assert.equal(await count(page, "axiom_service", "stop"), 1); await checkUnexpected(page); await page.close(); passed.push("close-service: safe focus, tasks, Escape/backdrop/cancel, explicit submission");
   }
   {
-    const page = await scene(); await updates(page); const trigger = page.getByRole("button", { name: "更新后台服务 · 0.4.2", exact: true });
+    const page = await scene(); await updates(page); const trigger = page.getByRole("button", { name: "更新后台服务", exact: true });
     await trigger.click(); const dialog = page.getByRole("dialog", { name: "更新后台至 0.4.2？", exact: true }), accept = dialog.getByRole("button", { name: "确认更新服务", exact: true });
-    assert.match(await dialog.locator(".confirm-warning").innerText(), /此安装仅用于当前数据目录.*共用安装/);
+    assert.match(await dialog.locator(".confirm-warning").innerText(), /当前数据目录独占此安装.*共用安装/);
+    await dialog.locator("summary").filter({ hasText: "受影响的会话 · 2" }).click();
     assert.match(await dialog.innerText(), /代码检查/);
-    await page.evaluate(() => { (window as any).desktopConfirmFixture.job = { kind: "service", running: true, phase: "installing", message: "已有后台更新正在执行" }; });
+    await page.evaluate(() => { const state = (window as any).desktopConfirmFixture; state.job = { kind: "service", running: true, phase: "installing", message: "已有后台更新正在执行", task: state.makeTask("service", "running") }; });
     await page.clock.runFor(2100); await accept.and(page.locator(":disabled")).waitFor(); assert.equal(await accept.isDisabled(), true, "poll safety gate also disables an already-open confirmation");
     await accept.dispatchEvent("click"); assert.equal(await count(page, "axiom_update", "service"), 0);
     await page.evaluate(() => { (window as any).desktopConfirmFixture.job = null; }); await page.clock.runFor(2100); await accept.and(page.locator(":enabled")).waitFor(); assert.equal(await accept.isEnabled(), true);
@@ -90,19 +93,19 @@ try {
     await checkUnexpected(page); await page.close(); passed.push("service-update: scope warning, tasks, poll invalidation, cancel and version submission");
   }
   {
-    const page = await scene({ installer: true }); await updates(page); await page.getByRole("button", { name: "运行安装器", exact: true }).click();
+    const page = await scene({ installer: true }); await updates(page); await page.getByRole("button", { name: "安装更新", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "打开客户端安装向导？", exact: true }), accept = dialog.getByRole("button", { name: "打开安装向导", exact: true });
     assert.equal(await dialog.locator(".confirm-danger").count(), 0);
     await page.evaluate(() => { (window as any).desktopConfirmFixture.clientVersion = "0.4.2"; }); await page.clock.runFor(2100);
     await accept.and(page.locator(":disabled")).waitFor(); assert.equal(await accept.isDisabled(), true, "stale installer is no longer confirmable");
     await dialog.getByRole("button", { name: "取消", exact: true }).click(); assert.equal(await count(page, "axiom_update", "installer"), 0);
     await page.evaluate(() => { (window as any).desktopConfirmFixture.clientVersion = "0.4.1"; }); await page.clock.runFor(2100);
-    await page.getByRole("button", { name: "运行安装器", exact: true }).click(); await accept.click(); assert.equal(await count(page, "axiom_update", "installer"), 1);
+    await page.getByRole("button", { name: "安装更新", exact: true }).click(); await accept.click(); assert.equal(await count(page, "axiom_update", "installer"), 1);
     await checkUnexpected(page); await page.close(); passed.push("installer: normal action, current-version invalidation, cancel and explicit open");
   }
   {
     const page = await scene({ recovery: true }); await updates(page); const trigger = page.getByRole("button", { name: "恢复旧版本", exact: true });
-    await trigger.click(); const dialog = page.getByRole("dialog", { name: "恢复之前的服务版本？", exact: true }); assert.match(await dialog.locator(".confirm-warning").innerText(), /此安装仅用于当前数据目录.*共用安装/);
+    await trigger.click(); const dialog = page.getByRole("dialog", { name: "恢复之前的服务版本？", exact: true }); assert.match(await dialog.locator(".confirm-warning").innerText(), /当前数据目录独占此安装.*共用安装/);
     await page.keyboard.press("Escape"); assert.equal(await count(page, "axiom_update", "recover"), 0);
     await trigger.click(); await dialog.getByRole("button", { name: "确认恢复", exact: true }).click(); assert.equal(await count(page, "axiom_update", "recover"), 1);
     await checkUnexpected(page); await page.close(); passed.push("recovery: risk warning, cancellation and explicit recovery");
@@ -117,9 +120,8 @@ try {
     await checkUnexpected(page); await page.close(); passed.push("installer-exit: explicit manual confirmation and cancellation");
   }
   {
-    const page = await scene(); await page.locator(".startup-maintenance > summary").filter({ hasText: "卸载与环境清理" }).click();
-    const region = page.getByRole("region", { name: "终端 Pi 卸载", exact: true }), trigger = region.getByRole("button", { name: "卸载此终端 Pi", exact: true });
-    await region.getByRole("button", { name: "预览 Pi 卸载", exact: true }).click();
+    const page = await scene(); await page.locator(".startup-maintenance > summary").filter({ hasText: "组件管理" }).click();
+    const region = page.getByRole("region", { name: "终端 Pi 卸载", exact: true }), trigger = region.getByRole("button", { name: "卸载", exact: true });
     await trigger.click(); const group = region.getByRole("group", { name: "确认 Pi 卸载", exact: true }), accept = group.getByRole("button", { name: "确认卸载", exact: true }); await group.waitFor();
     assert.equal(await accept.isDisabled(), true); await group.getByRole("checkbox").check(); assert.equal(await accept.isEnabled(), true);
     for (const theme of ["dark", "light"]) { await page.evaluate(value => document.documentElement.dataset.theme = value, theme); await page.setViewportSize({ width: 390, height: 844 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)); await page.screenshot({ path: resolve(output, `inline-pi-${theme}-390.png`), fullPage: true }); }

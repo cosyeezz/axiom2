@@ -1,0 +1,7 @@
+Command: node node_modules/typescript/bin/tsc --noEmit
+tests/kiro-images.test.ts(107,22): error TS2769: No overload matches this call.
+  Overload 2 of 2, '(input: string, images?: ImageContent[] | undefined): Promise<void>', gave the following error.
+    Argument of type '(ImageContent | { type: string; text: string; })[]' is not assignable to parameter of type 'string'.
+Exit code: 2
+Command: node node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit
+Exit code: 0

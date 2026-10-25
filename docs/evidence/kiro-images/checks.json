@@ -1,0 +1,211 @@
+{
+  "scope": "Offline implementation, fixtures and production build; no protected API or official executable invocation",
+  "kiro": {
+    "tests": 56,
+    "passed": 56
+  },
+  "compatibility": {
+    "tests": 35,
+    "passed": 35
+  },
+  "typecheckExitCodes": [
+    0,
+    0
+  ],
+  "buildExitCode": 0,
+  "probeChecks": 8,
+  "initialKiro": {
+    "tests": 56,
+    "passed": 54,
+    "exitCode": 1
+  },
+  "localLinks": 141,
+  "parityCheckExitCode": 0,
+  "files": [
+    {
+      "file": "app/src/server/providers/kiro-chat-protocol.ts",
+      "bytes": 11821,
+      "sha256": "667a5696d879f50dd5ce9ae62900465ec63561e25188f1862f80fd7d04809508"
+    },
+    {
+      "file": "app/src/server/providers/kiro-catalog.ts",
+      "bytes": 10495,
+      "sha256": "605d57739d9f3757433c4df9a5d54075b6edc6bd81aa7c163d67f6ea9d341ecc"
+    },
+    {
+      "file": "app/src/server/providers/kiro.ts",
+      "bytes": 2306,
+      "sha256": "8585d7d5cded1394dda25a19a8f9d6e9e60eaeb5a4da1de685e9d8e8c5fdbdad"
+    },
+    {
+      "file": "app/src/server/model-service.ts",
+      "bytes": 37201,
+      "sha256": "2b0d570e5a813f670718aa96e9f9c8604e67eb61222384dd8c3aeb5d396d143e"
+    },
+    {
+      "file": "app/tests/kiro-images.test.ts",
+      "bytes": 11734,
+      "sha256": "797fc168d170adffa5bd8aa9b618be25e5d7bd51e318dab8a3d3c8a524eab36e"
+    },
+    {
+      "file": "app/tests/kiro-chat.test.ts",
+      "bytes": 27033,
+      "sha256": "1a225f9a4bfd6681ed2dfcfb5890e4322cb6fccb69bda28642e113e2669fbfad"
+    },
+    {
+      "file": "app/tests/kiro-catalog.test.ts",
+      "bytes": 17459,
+      "sha256": "ab6aa3ea4d71abd86aeffdf90f73b9a2f5def66bd716b6473c4f2f11ff49b9d3"
+    },
+    {
+      "file": "app/tests/kiro-runtime.test.ts",
+      "bytes": 13654,
+      "sha256": "4c742d6ea68e1ea8db7cfaac8d615d95fb4152769451235eb6895625e0480c04"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-network.cjs",
+      "bytes": 2408,
+      "sha256": "41bcf8f0e2137710a014048493f5d4f54a7aa9bc09ba8f7d4e1b7af5b03c4bd5"
+    },
+    {
+      "file": "docs/kiro-images.md",
+      "bytes": 6240,
+      "sha256": "6277cf01f3037a9dd7ad844449829d0293a3e3d03c3350134056fb74ede9cebc"
+    },
+    {
+      "file": "docs/kiro-auth.md",
+      "bytes": 17242,
+      "sha256": "03329673be4bb4ae93acb05f362469bbfcef569edf717448e93d57e46dd2b670"
+    },
+    {
+      "file": "docs/kiro-catalog-audit.md",
+      "bytes": 15391,
+      "sha256": "1e5fdf36c7ef7156e6b306bf5d04a08b511edf763458ce24bc4560b4efb22ff9"
+    },
+    {
+      "file": "docs/kiro-inference-audit.md",
+      "bytes": 13010,
+      "sha256": "ec0eadf0348758bbda80c29202c50547ab2cda70faac4aca12016220c1388eae"
+    },
+    {
+      "file": "docs/kiro-cli-parity-audit.md",
+      "bytes": 20793,
+      "sha256": "90e879598de503b60e7dcf25bce5dbb040d58f13436b51b67f676d71d047996a"
+    },
+    {
+      "file": "docs/evidence/kiro-images/README.md",
+      "bytes": 5515,
+      "sha256": "082fe72014a8dcf726f0b8cbcc793d15116aaccbacb7e17ab4134b7f1d52cd78"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/README.md",
+      "bytes": 4807,
+      "sha256": "ea1cf442a8ad927017a13428db18751dad6f302b5036f65d084c792d8fdc20f2"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-chat-protocol.js",
+      "bytes": 12017,
+      "sha256": "63a139f5097552e0aa6e187d902b24bf11becfb0a4be635ccb9e152b14dd815e"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-catalog.js",
+      "bytes": 10659,
+      "sha256": "0ad0eec489fe281105bec932b83cf038c8dd44e9d662dfb3d39a0c1fcbc63c84"
+    },
+    {
+      "file": "app/dist/server/providers/kiro.js",
+      "bytes": 2093,
+      "sha256": "60f8532d7c8894926d2a7fe89d0be804fb648f124596d0937681406baa295d6c"
+    },
+    {
+      "file": "docs/evidence/kiro-images/README.md",
+      "bytes": 5515,
+      "sha256": "082fe72014a8dcf726f0b8cbcc793d15116aaccbacb7e17ab4134b7f1d52cd78"
+    },
+    {
+      "file": "docs/evidence/kiro-images/baseline-adapter-probe.json",
+      "bytes": 2753,
+      "sha256": "74f67a7d4a9e0d8cb2b9454ea1d0e1a4b14da37ca913c883047e332563bb3496"
+    },
+    {
+      "file": "docs/evidence/kiro-images/baseline-adapter-probe.ts.txt",
+      "bytes": 6603,
+      "sha256": "20a58232bdbdcc5997c27edb40f22362beb7939c25650cdb28d638fcd2c063f1"
+    },
+    {
+      "file": "docs/evidence/kiro-images/build-exit.json",
+      "bytes": 190,
+      "sha256": "89308173810b23eaff604fecc822dabb1c62f37501c24a32943c25620d33784d"
+    },
+    {
+      "file": "docs/evidence/kiro-images/build.log",
+      "bytes": 16460,
+      "sha256": "4d106907876a592dd006c6a87eb06fc90c34a817c0021bb944442836e25f31bc"
+    },
+    {
+      "file": "docs/evidence/kiro-images/check.cjs",
+      "bytes": 5801,
+      "sha256": "44c54ef8c2724509688d4753b655fe5c85f9f386b37fa39fa7ec95683dcb4161"
+    },
+    {
+      "file": "docs/evidence/kiro-images/compatibility-tests-exit.json",
+      "bytes": 574,
+      "sha256": "c90ed386488b14b6932c1d5aa4a25a2b1e81aebc8a364693f92789c1cd41fbc8"
+    },
+    {
+      "file": "docs/evidence/kiro-images/compatibility-tests.log",
+      "bytes": 3749,
+      "sha256": "d8258f096ceb69bf1c772fdcebba8a1d9797bc4095e32316600703c2f068a4d6"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-kiro-tests-exit.json",
+      "bytes": 533,
+      "sha256": "b2f9ad6371c8ad86e84a2593d3773c163a048a1de89041fb026a631dd80c5fb4"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-kiro-tests.log",
+      "bytes": 6963,
+      "sha256": "766129cb05c1e525a43e11e766a4e47aecfd737a703ac9dd1492df5cd00b90b6"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-typecheck-exit.json",
+      "bytes": 452,
+      "sha256": "ada5b97bec46e1db514851e260b7fe4500f843fc67a15569baa2ec2fc34ddd40"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-typecheck.log",
+      "bytes": 486,
+      "sha256": "76df73ecae8b7b447e424717d4e248f8f2b5e0b9f3124d9519a15f8e98784874"
+    },
+    {
+      "file": "docs/evidence/kiro-images/kiro-tests-exit.json",
+      "bytes": 523,
+      "sha256": "4aab43ab7e06988afec438248635a0eb7d44015deff58aa0f53345025e1d6171"
+    },
+    {
+      "file": "docs/evidence/kiro-images/kiro-tests.log",
+      "bytes": 5651,
+      "sha256": "b5282de0061b3ffbf5a6154c26f1d78040002deb7c8f957e212e2b6b8ab768dc"
+    },
+    {
+      "file": "docs/evidence/kiro-images/parity-check.log",
+      "bytes": 1602,
+      "sha256": "c229be0069743c3c4641f7f3e717221d2fcbc170f00f1d2ca1c840b77b980962"
+    },
+    {
+      "file": "docs/evidence/kiro-images/probe-run.json",
+      "bytes": 384,
+      "sha256": "09cfd7958a72f130e1286a5ae12dff3025ba3a20db41cce7062dcf2b02a915a9"
+    },
+    {
+      "file": "docs/evidence/kiro-images/typecheck-exit.json",
+      "bytes": 556,
+      "sha256": "ddb7f8a444a6d28f05910a7d53268eb1c2a5472db0a0f3417445119d310e592b"
+    },
+    {
+      "file": "docs/evidence/kiro-images/typecheck.log",
+      "bytes": 379,
+      "sha256": "3ef78cca5be24b7381f34a068e60e54c045d7b8e577bcdc756f58c2989fc657a"
+    }
+  ]
+}

@@ -10,23 +10,54 @@
     throw Error("Controller probe condition timed out");
   };
   const button = async (text) => wait(() => [...document.querySelectorAll("button")].find((item) => (item.getAttribute("aria-label") || item.textContent).includes(text) && !item.disabled && item.getClientRects().length));
+  const fixturePort = window.__axiomProbePort;
+  check(Number.isInteger(fixturePort) && fixturePort > 0 && fixturePort <= 65535 && fixturePort !== 4317, "Expected explicit isolated fixture port");
+  const fixtureURL = `http://127.0.0.1:${fixturePort}/`;
+  const setPort = async (port) => {
+    const input = await wait(() => document.querySelector('input[aria-label="本地端口"]:not(:disabled)'));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, String(port));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    await wait(() => input.value === String(port));
+  };
+  const connectFixture = async () => {
+    await setPort(fixturePort);
+    (await button("连接工作台")).click();
+    await wait(async () => {
+      const state = await invoke("snapshot");
+      const view = state.views.find((item) => item.label === "axiom-workbench");
+      return state.current === "workbench" && view?.url === fixtureURL;
+    });
+  };
   const preparation = async () => {
     const details = await wait(() => document.querySelector(".startup-preparation"));
     if (!details.open) details.querySelector("summary").click();
-    await wait(() => details.open);
-    const connect = await wait(() => [...details.querySelectorAll(".startup-steps button")].find((item) => item.textContent.includes("连接工作台") && !item.disabled));
-    connect.click();
+    await wait(() => details.open && details.querySelector('.setup-simple[aria-label="本地连接准备"]')?.getClientRects().length);
+    details.querySelector("summary").click();
+    await wait(() => !details.open);
   };
   const heading = async (text) => {
     const state = { "服务运行中": "running", "服务已停止": "stopped" }[text];
+    const label = { running: "运行中", stopped: "已停止" }[state];
     check(state, `Unknown service state: ${text}`);
-    return wait(() => [...document.querySelectorAll(`.connection-status-tag[data-state="${state}"]`)].some((item) => item.getClientRects().length));
+    // A custom port is navigation-only. Restore the managed controls explicitly.
+    await setPort(4317);
+    return wait(async () => {
+      const visible = [...document.querySelectorAll('.connection-primary-meta > span[role="status"]')].some((item) => item.textContent.trim() === label && item.getClientRects().length);
+      const service = await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "status" });
+      return visible && service.state === state;
+    });
   };
   const observation = async (condition) => wait(async () => {
     const value = (await invoke("snapshot")).observation;
     if (value?.error) throw Error(value.error);
     return value && condition(value) ? value : null;
   });
+  const freshSample = async (condition) => {
+    const sampleId = crypto.randomUUID();
+    await invoke("sample", { sampleId });
+    return observation((value) => value.sampleId === sampleId && condition(value));
+  };
   const bounds = (state) => {
     check(state.windows.length === 1 && state.windows[0] === "pake", "Expected one native window");
     check(state.views.length === 2 && state.current === "workbench", "Expected two views in the workbench presentation");
@@ -38,6 +69,15 @@
     check(Math.abs(innerHeight - 48) <= 2, "Native title bar obscures the navigation bar");
     check(Math.abs(control.width - state.width) <= 2 && Math.abs(workbench.width - state.width) <= 2, "Views must follow native width");
     check(Math.abs(control.height + workbench.height - state.height) <= 2, "Views must cover native height");
+  };
+  const settledBounds = async () => {
+    let lastError;
+    try {
+      return await wait(async () => {
+        const state = await invoke("snapshot");
+        try { bounds(state); return state; } catch (error) { lastError = error; return null; }
+      });
+    } catch (error) { throw Error(`${error}; last native layout assertion: ${lastError}`); }
   };
   const controllerLayouts = [];
   const viewport = () => ({ width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio,
@@ -100,12 +140,12 @@
       void invoke("close"); return;
     }
     await heading("服务已停止");
-    (await button("启动后台服务")).click();
+    (await button("启动服务")).click();
     await heading("服务运行中");
-    (await button("打开工作台")).click();
+    await connectFixture();
     stage = "workbench-initial-observation";
     const before = await observation((value) => value.sample === 1);
-    check(before.denied.length === 4 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
+    check(before.denied.length === 6 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
     check(before.titleIconCount === 0, "The old title connection icon must be removed");
     check(before.titleCopyIconCount === 1, "The title copy button must retain its icon");
     const headerStatus = await wait(() => document.querySelector('.desktop-workbench-status[data-state="connected"]'));
@@ -133,10 +173,9 @@
     const hidden = await invoke("snapshot");
     check(hidden.views.length === 2 && hidden.current === "control", "Returning must retain the hidden workbench");
     check(hidden.views.find((view) => view.label === "pake").height === hidden.height, "Returning must restore full-height controls");
-    (await button("打开工作台")).click();
+    await connectFixture();
     await button("服务与更新");
-    await invoke("sample");
-    const after = await observation((value) => value.sample > before.sample);
+    const after = await freshSample((value) => value.sample > before.sample);
     check(after.token === before.token && after.draft === before.draft && after.scroll === before.scroll, "Switching reloaded the view or lost its state");
     check(JSON.stringify(after.selection) === JSON.stringify(before.selection) && after.focused, "Switching lost selection or keyboard focus");
     if (/Mac/.test(navigator.platform)) {
@@ -144,13 +183,12 @@
       await heading("服务运行中");
       const menu = await invoke("snapshot");
       check(menu.current === "control" && menu.views.length === 2, "Native menu must return to controls without replacing the workbench");
-      (await button("打开工作台")).click();
+      await connectFixture();
       await button("服务与更新");
       await invoke("hide");
       await invoke("dock-hidden");
       await wait(async () => (await invoke("snapshot")).visible);
-      await invoke("sample");
-      const dock = await observation((value) => value.sample > after.sample);
+      const dock = await freshSample((value) => value.sample > after.sample);
       check(dock.token === before.token && dock.draft === before.draft && dock.scroll === before.scroll && dock.focused, "Native menu or Dock reopen lost the working view");
     }
     await invoke("resize");
@@ -161,18 +199,42 @@
         && Math.abs(state.views.reduce((height, view) => height + view.height, 0) - state.height) <= 2;
     });
     bounds(await invoke("snapshot"));
+    stage = "direct-service-lifecycle";
     (await button("服务与更新")).click();
+    await heading("服务运行中");
+    (await button("关闭后台服务")).click();
+    (await button("确认关闭服务")).click();
+    await heading("服务已停止");
+    const directStopped = await invoke("snapshot");
+    check(directStopped.views.length === 2 && directStopped.current === "control", "Stopping must preserve the direct workbench");
+    await wait(async () => await window.__TAURI_INTERNALS__.invoke("axiom_connection") === "disconnected");
+    (await button("启动服务")).click();
+    await heading("服务运行中");
+    await connectFixture();
+    await wait(async () => await window.__TAURI_INTERNALS__.invoke("axiom_connection") === "connected");
+    const directRestarted = await freshSample((value) => value.sample > after.sample);
+    check(directRestarted.token === before.token && directRestarted.draft === before.draft && directRestarted.scroll === before.scroll, "Restarting the endpoint replaced the direct view or lost its state");
+    check(JSON.stringify(directRestarted.selection) === JSON.stringify(before.selection) && directRestarted.focused, "Direct restart lost selection or focus");
+    bounds(await invoke("snapshot"));
+    // Exercise the distinct managed contract too, without replacing the real UI direct-connection stage.
+    stage = "managed-service-lifecycle";
+    (await button("服务与更新")).click();
+    await heading("服务运行中");
+    await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "open" });
+    await settledBounds();
+    (await button("服务与更新")).click();
+    await heading("服务运行中");
     (await button("关闭后台服务")).click();
     (await button("确认关闭服务")).click();
     await heading("服务已停止");
     const stopped = await invoke("snapshot");
-    check(stopped.views.length === 1 && stopped.current === "control", "Stopping must discard the workbench and preserve controls");
-    (await button("启动后台服务")).click();
+    check(stopped.views.length === 1 && stopped.current === "control", "Stopping must discard the managed workbench and preserve controls");
+    (await button("启动服务")).click();
     await heading("服务运行中");
-    (await button("打开工作台")).click();
+    await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "open" });
     await observation((value) => value.token !== before.token);
-    bounds(await invoke("snapshot"));
-    await invoke("finished", { controllerLayouts, header, checks: ["native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
+    await settledBounds();
+    await invoke("finished", { controllerLayouts, header, checks: ["explicit-isolated-ui-endpoint", "direct-restart-preserves-view", "managed-stop-discards-view", "native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
     void invoke("close");
   })().catch(async (error) => {
     console.error(error);

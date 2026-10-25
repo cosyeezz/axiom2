@@ -1,0 +1,12 @@
+✔ model connection pooling: kiro-direct (9043.8256ms)
+✔ model connection pooling: kiro-proxy (9018.8658ms)
+✔ model connection pooling: other-direct (9019.8434ms)
+✔ model connection pooling: kiro-h2 (5949.6538ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33243.5202

@@ -1,0 +1,176 @@
+﻿
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000140AF7630: push        rbp
+  0000000140AF7631: push        r15
+  0000000140AF7633: push        r14
+  0000000140AF7635: push        rsi
+  0000000140AF7636: push        rdi
+  0000000140AF7637: push        rbx
+  0000000140AF7638: sub         rsp,38h
+  0000000140AF763C: lea         rbp,[rsp+30h]
+  0000000140AF7641: mov         rdi,r8
+  0000000140AF7644: mov         rbx,rdx
+  0000000140AF7647: mov         rsi,rcx
+  0000000140AF764A: mov         r14,8000000000000000h
+  0000000140AF7654: mov         r15,qword ptr [r8+48h]
+  0000000140AF7658: lea         rax,[r14+16h]
+  0000000140AF765C: cmp         r15,rax
+  0000000140AF765F: jne         0000000140AF7713
+  0000000140AF7665: cmp         dword ptr [rdi+60h],1
+  0000000140AF7669: jne         0000000140AF78C9
+  0000000140AF766F: lea         rdx,[0000000145D6B9EFh]
+  0000000140AF7676: mov         r8d,0Ah
+  0000000140AF767C: mov         rcx,rbx
+  0000000140AF767F: call        00000001410C81B0
+  0000000140AF7684: movsxd      rcx,dword ptr [rdi+64h]
+  0000000140AF7688: mov         qword ptr [rbp],rcx
+  0000000140AF768C: mov         qword ptr [rbp-8],1
+  0000000140AF7694: lea         rdx,[rbp-8]
+  0000000140AF7698: mov         rcx,rax
+  0000000140AF769B: call        00000001410C4D10
+  0000000140AF76A0: cmp         qword ptr [rdi],r14
+  0000000140AF76A3: je          0000000140AF78D2
+  0000000140AF76A9: lea         rdx,[0000000145D6B9F9h]
+  0000000140AF76B0: mov         r8d,9
+  0000000140AF76B6: mov         rcx,rbx
+  0000000140AF76B9: call        00000001410C81B0
+  0000000140AF76BE: mov         rdx,qword ptr [rdi+8]
+  0000000140AF76C2: mov         r8,qword ptr [rdi+10h]
+  0000000140AF76C6: mov         rcx,rax
+  0000000140AF76C9: call        00000001410C7C90
+  0000000140AF76CE: cmp         qword ptr [rdi+18h],r14
+  0000000140AF76D2: je          0000000140AF78DC
+  0000000140AF76D8: lea         rdx,[0000000145D6B8C6h]
+  0000000140AF76DF: mov         r8d,0Ah
+  0000000140AF76E5: mov         rcx,rbx
+  0000000140AF76E8: call        00000001410C81B0
+  0000000140AF76ED: mov         rdx,qword ptr [rdi+20h]
+  0000000140AF76F1: mov         r8,qword ptr [rdi+28h]
+  0000000140AF76F5: mov         rcx,rax
+  0000000140AF76F8: call        00000001410C7C90
+  0000000140AF76FD: mov         r15,qword ptr [rdi+30h]
+  0000000140AF7701: lea         rax,[r14+1]
+  0000000140AF7705: cmp         r15,rax
+  0000000140AF7708: jne         0000000140AF78E9
+  0000000140AF770E: jmp         0000000140AF7920
+  0000000140AF7713: lea         rdx,[0000000145D6B8B4h]
+  0000000140AF771A: mov         r8d,6
+  0000000140AF7720: mov         rcx,rbx
+  0000000140AF7723: call        00000001410C81B0
+  0000000140AF7728: mov         rcx,r15
+  0000000140AF772B: xor         rcx,r14
+  0000000140AF772E: test        r15,r15
+  0000000140AF7731: mov         edx,16h
+  0000000140AF7736: cmovs       rdx,rcx
+  0000000140AF773A: mov         r8d,9
+  0000000140AF7740: lea         rcx,[0000000145D6C1A8h]
+  0000000140AF7747: movsxd      rdx,dword ptr [rcx+rdx*4]
+  0000000140AF774B: add         rdx,rcx
+  0000000140AF774E: jmp         rdx
+  0000000140AF7750: lea         rdx,[0000000145D6BB2Ch]
+  0000000140AF7757: jmp         0000000140AF78B7
+  0000000140AF775C: lea         rdx,[0000000145D6BBA7h]
+  0000000140AF7763: mov         r8d,0Ah
+  0000000140AF7769: jmp         0000000140AF78B7
+  0000000140AF776E: lea         rdx,[0000000145D6BB8Dh]
+  0000000140AF7775: mov         r8d,6
+  0000000140AF777B: jmp         0000000140AF78B7
+  0000000140AF7780: lea         rdx,[0000000145D6BB80h]
+  0000000140AF7787: mov         r8d,2
+  0000000140AF778D: jmp         0000000140AF78B7
+  0000000140AF7792: lea         rdx,[0000000145D6BB46h]
+  0000000140AF7799: mov         r8d,0Dh
+  0000000140AF779F: jmp         0000000140AF78B7
+  0000000140AF77A4: lea         rdx,[0000000145D6BB82h]
+  0000000140AF77AB: mov         r8d,5
+  0000000140AF77B1: jmp         0000000140AF78B7
+  0000000140AF77B6: lea         rdx,[0000000145D6BB6Fh]
+  0000000140AF77BD: mov         r8d,8
+  0000000140AF77C3: jmp         0000000140AF78B7
+  0000000140AF77C8: lea         rdx,[0000000145D6BB3Ch]
+  0000000140AF77CF: mov         r8d,3
+  0000000140AF77D5: jmp         0000000140AF78B7
+  0000000140AF77DA: lea         rdx,[0000000145D6BB93h]
+  0000000140AF77E1: mov         r8d,14h
+  0000000140AF77E7: jmp         0000000140AF78B7
+  0000000140AF77EC: lea         rdx,[0000000145D6BB3Fh]
+  0000000140AF77F3: mov         r8d,7
+  0000000140AF77F9: jmp         0000000140AF78B7
+  0000000140AF77FE: lea         rdx,[0000000145D6BB5Ch]
+  0000000140AF7805: mov         r8d,0Bh
+  0000000140AF780B: jmp         0000000140AF78B7
+  0000000140AF7810: lea         rdx,[0000000145D6BB35h]
+  0000000140AF7817: mov         r8d,7
+  0000000140AF781D: jmp         0000000140AF78B7
+  0000000140AF7822: lea         rdx,[0000000145D6BBB1h]
+  0000000140AF7829: mov         r8d,0Ah
+  0000000140AF782F: jmp         0000000140AF78B7
+  0000000140AF7834: lea         rdx,[0000000145D6BBDBh]
+  0000000140AF783B: mov         r8d,0Eh
+  0000000140AF7841: jmp         0000000140AF78B7
+  0000000140AF7843: lea         rdx,[0000000145D6BB53h]
+  0000000140AF784A: mov         r8d,6
+  0000000140AF7850: jmp         0000000140AF78B7
+  0000000140AF7852: lea         rdx,[0000000145D6B8BAh]
+  0000000140AF7859: mov         r8d,7
+  0000000140AF785F: jmp         0000000140AF78B7
+  0000000140AF7861: lea         rdx,[0000000145D6BB87h]
+  0000000140AF7868: mov         r8d,6
+  0000000140AF786E: jmp         0000000140AF78B7
+  0000000140AF7870: lea         rdx,[0000000145D6BB59h]
+  0000000140AF7877: mov         r8d,3
+  0000000140AF787D: jmp         0000000140AF78B7
+  0000000140AF787F: lea         rdx,[0000000145D6BBBBh]
+  0000000140AF7886: jmp         0000000140AF78B1
+  0000000140AF7888: lea         rdx,[0000000145D6BB77h]
+  0000000140AF788F: jmp         0000000140AF78B7
+  0000000140AF7891: lea         rdx,[0000000145D6BB67h]
+  0000000140AF7898: mov         r8d,8
+  0000000140AF789E: jmp         0000000140AF78B7
+  0000000140AF78A0: mov         rdx,qword ptr [rdi+50h]
+  0000000140AF78A4: mov         r8,qword ptr [rdi+58h]
+  0000000140AF78A8: jmp         0000000140AF78B7
+  0000000140AF78AA: lea         rdx,[0000000145D6BBCBh]
+  0000000140AF78B1: mov         r8d,10h
+  0000000140AF78B7: mov         rcx,rax
+  0000000140AF78BA: call        00000001410C7C90
+  0000000140AF78BF: cmp         dword ptr [rdi+60h],1
+  0000000140AF78C3: je          0000000140AF766F
+  0000000140AF78C9: cmp         qword ptr [rdi],r14
+  0000000140AF78CC: jne         0000000140AF76A9
+  0000000140AF78D2: cmp         qword ptr [rdi+18h],r14
+  0000000140AF78D6: jne         0000000140AF76D8
+  0000000140AF78DC: mov         r15,qword ptr [rdi+30h]
+  0000000140AF78E0: lea         rax,[r14+1]
+  0000000140AF78E4: cmp         r15,rax
+  0000000140AF78E7: je          0000000140AF7920
+  0000000140AF78E9: lea         rdx,[0000000145D6BA02h]
+  0000000140AF78F0: mov         r8d,0Dh
+  0000000140AF78F6: mov         rcx,rbx
+  0000000140AF78F9: call        00000001410C81B0
+  0000000140AF78FE: cmp         r15,r14
+  0000000140AF7901: mov         r8d,7
+  0000000140AF7907: cmovne      r8,qword ptr [rdi+40h]
+  0000000140AF790C: lea         rdx,[0000000145D6BA0Fh]
+  0000000140AF7913: cmovne      rdx,qword ptr [rdi+38h]
+  0000000140AF7918: mov         rcx,rax
+  0000000140AF791B: call        00000001410C7C90
+  0000000140AF7920: add         r14,2
+  0000000140AF7924: mov         qword ptr [rsi],r14
+  0000000140AF7927: mov         rax,rsi
+  0000000140AF792A: add         rsp,38h
+  0000000140AF792E: pop         rbx
+  0000000140AF792F: pop         rdi
+  0000000140AF7930: pop         rsi
+  0000000140AF7931: pop         r14
+  0000000140AF7933: pop         r15
+  0000000140AF7935: pop         rbp
+  0000000140AF7936: ret
+  0000000140AF7937: int         3
+
+  Summary
+
+     5BF1000 .text

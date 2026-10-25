@@ -1,0 +1,7 @@
+﻿{
+    "exitCode":  0,
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs ../docs/evidence/kiro-thinking/adapter-probe.ts",
+    "cwd":  "F:\\Axiom\\axiom2\\app",
+    "end":  "2026-10-25T14:55:49.6776335Z",
+    "start":  "2026-10-25T14:55:48.3857122Z"
+}

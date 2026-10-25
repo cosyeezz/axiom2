@@ -1,0 +1,22 @@
+{
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.7.0-821ffeb5-817e-4cb1-ae16-b02a42ff56e9/node_modules/rea-agents/scripts/rea.mjs",
+    "decompile",
+    "C:\\Users\\dane\\AppData\\Local\\Temp\\axiom-kiro-catalog-research\\catalog-focused-ghidra-analysis-only.pe",
+    "0x140af7630",
+    "--provider",
+    "ghidra",
+    "--format",
+    "json"
+  ],
+  "environment": {
+    "GHIDRA_INSTALL_DIR": "C:/Users/dane/AppData/Local/Temp/kg1214-68e31578/ghidra_12.1.4_PUBLIC",
+    "JAVA_HOME": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1/jbr",
+    "REA_GHIDRA_SEED_FILE": "C:\\Users\\dane\\AppData\\Local\\Temp\\axiom-kiro-catalog-research\\catalog-focused-seeds.tsv",
+    "REA_GHIDRA_DISABLED_ANALYZERS": "Non-Returning Functions - Discovered"
+  },
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 43836
+}

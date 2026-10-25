@@ -1,0 +1,1286 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "base": 5368709120,
+  "sections": [
+    {
+      "name": ".text",
+      "rva": 4096,
+      "size": 96405504,
+      "off": 1024
+    },
+    {
+      "name": ".rdata",
+      "rva": 96411648,
+      "size": 426651648,
+      "off": 96406528
+    },
+    {
+      "name": ".data",
+      "rva": 523063296,
+      "size": 653312,
+      "off": 523058176
+    },
+    {
+      "name": ".pdata",
+      "rva": 524374016,
+      "size": 4182528,
+      "off": 523711488
+    },
+    {
+      "name": "_RDATA",
+      "rva": 528560128,
+      "size": 4096,
+      "off": 527894016
+    },
+    {
+      "name": ".reloc",
+      "rva": 528564224,
+      "size": 720896,
+      "off": 527898112
+    }
+  ],
+  "method": "Candidate RIP-relative LEA/MOV byte patterns; .pdata owners; not instruction-boundary validated or call-graph proof",
+  "terms": [
+    "AmazonCodeWhispererStreamingService.GenerateAssistantResponse",
+    "GenerateAssistantResponseRequestSerializer",
+    "application/x-amz-json-1.0",
+    "conversationState",
+    "profileArn",
+    "agentMode",
+    "additionalModelRequestFields",
+    "conversationId",
+    "workspaceId",
+    "history",
+    "currentMessage",
+    "chatTriggerType",
+    "MANUAL",
+    "userInputMessage",
+    "userInputMessageContext",
+    "origin",
+    "modelId",
+    "toolResults",
+    "tools",
+    "toolUses",
+    "assistantResponseEvent",
+    "toolUseEvent",
+    "https://runtime.us-east-1.kiro.dev",
+    "https://runtime.eu-central-1.kiro.dev",
+    "https://q.us-east-1.amazonaws.com",
+    "QDeveloperSendMessage",
+    "/sendMessage",
+    "AmazonQDeveloperService.SendMessage",
+    "AmazonQDeveloperStreamingService.SendMessage"
+  ],
+  "targets": [
+    {
+      "term": "AmazonCodeWhispererStreamingService.GenerateAssistantResponse",
+      "offset": 98033078,
+      "offsetHex": "0x5d7ddb6",
+      "rva": 98038198,
+      "va": "0x145d7f1b6",
+      "context": "......................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererStreamingService.GenerateAssistantResponse.....................................valid request......E....W...........>......E....W...........a...p..@....................`..A....p..@.................... ..",
+      "refs": [
+        {
+          "offset": 12429227,
+          "va": "0x140bdb3ab",
+          "bytes": "488d05043e1a05",
+          "owner": {
+            "start": "0x140bdacc0",
+            "end": "0x140bdbae2",
+            "offset": 12427456,
+            "length": 3618
+          }
+        }
+      ]
+    },
+    {
+      "term": "GenerateAssistantResponseRequestSerializer",
+      "offset": 98031936,
+      "offsetHex": "0x5d7d940",
+      "rva": 98037056,
+      "va": "0x145d7ed40",
+      "context": "marshall SupplementaryWebLinksEvent: ..........E....1.......GenerateAssistantResponseRequestSerializerConversationLimitExceededMonthlyRequestCountOverageRequestLimitExceededGenerateAssistantResponseResponseDeserializerGenerateAssistantResponseThrottlingThrottlin",
+      "refs": [
+        {
+          "offset": 12425711,
+          "va": "0x140bda5ef",
+          "bytes": "488d154a471a05",
+          "owner": {
+            "start": "0x140bda5e0",
+            "end": "0x140bda600",
+            "offset": 12425696,
+            "length": 32
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 97906984,
+      "offsetHex": "0x5d5f128",
+      "rva": 97912104,
+      "va": "0x145d60528",
+      "context": "Status Codecorrect type.....................................application/x-amz-json-1.0x-amz-target..................................valid request...p..@....................`..A....p..@....................`..@....`..A.......E.......@.......@.... .",
+      "refs": [
+        {
+          "offset": 10964938,
+          "va": "0x140a75bca",
+          "bytes": "488d0557a92e05",
+          "owner": {
+            "start": "0x140a75750",
+            "end": "0x140a76427",
+            "offset": 10963792,
+            "length": 3287
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 97922560,
+      "offsetHex": "0x5d62e00",
+      "rva": 97927680,
+      "va": "0x145d64200",
+      "context": "pe..hA.E....=...............................................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererService.GetProfile.....................................valid request...hA.E....=...........>...hA.E....=...........a...p..@......",
+      "refs": [
+        {
+          "offset": 11064335,
+          "va": "0x140a8e00f",
+          "bytes": "488d05ea612d05",
+          "owner": {
+            "start": "0x140a8dbf0",
+            "end": "0x140a8e89f",
+            "offset": 11063280,
+            "length": 3247
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 97934600,
+      "offsetHex": "0x5d65d08",
+      "rva": 97939720,
+      "va": "0x145d67108",
+      "context": "ValueNullcorrect type.......................................application/x-amz-json-1.0x-amz-target..................................valid request...p..@....................`..A....p..@.....................Q.@....`..A....`q.E....PS.@.....:.@....09",
+      "refs": [
+        {
+          "offset": 11210303,
+          "va": "0x140ab1a3f",
+          "bytes": "488d05c2562b05",
+          "owner": {
+            "start": "0x140ab1620",
+            "end": "0x140ab22c7",
+            "offset": 11209248,
+            "length": 3239
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 97961736,
+      "offsetHex": "0x5d6c708",
+      "rva": 97966856,
+      "va": "0x145d6db08",
+      "context": ".......E....B...............................................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererService.GetUsageLimits.................................valid request......E....B.......E...>......E....B.......E...a...p..@......",
+      "refs": [
+        {
+          "offset": 11565688,
+          "va": "0x140b08678",
+          "bytes": "488d0589542605",
+          "owner": {
+            "start": "0x140b07f70",
+            "end": "0x140b08f7e",
+            "offset": 11563888,
+            "length": 4110
+          }
+        },
+        {
+          "offset": 11576442,
+          "va": "0x140b0b07a",
+          "bytes": "488d05872a2605",
+          "owner": {
+            "start": "0x140b0a6f0",
+            "end": "0x140b0b8e1",
+            "offset": 11574000,
+            "length": 4593
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 98004064,
+      "offsetHex": "0x5d76c60",
+      "rva": 98009184,
+      "va": "0x145d78060",
+      "context": "e...h..E....F...............................................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererStreamingService.InvokeMCP.....................................valid request...h..E....F...........>...h..E....F...........a...p.",
+      "refs": [
+        {
+          "offset": 12111717,
+          "va": "0x140b8db65",
+          "bytes": "488d05f4a41e05",
+          "owner": {
+            "start": "0x140b8d240",
+            "end": "0x140b8e5f0",
+            "offset": 12109376,
+            "length": 5040
+          }
+        }
+      ]
+    },
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 98033040,
+      "offsetHex": "0x5d7dd90",
+      "rva": 98038160,
+      "va": "0x145d7f190",
+      "context": ".......E....W...............................................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererStreamingService.GenerateAssistantResponse.....................................valid request......E....W...........>......E....W.",
+      "refs": [
+        {
+          "offset": 12428945,
+          "va": "0x140bdb291",
+          "bytes": "488d05f83e1a05",
+          "owner": {
+            "start": "0x140bdacc0",
+            "end": "0x140bdbae2",
+            "offset": 12427456,
+            "length": 3618
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationState",
+      "offset": 97999076,
+      "offsetHex": "0x5d758e4",
+      "rva": 98004196,
+      "va": "0x145d76ce4",
+      "context": "r 'web' cannot be nullUnion did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is requ",
+      "refs": [
+        {
+          "offset": 12071579,
+          "va": "0x140b83e9b",
+          "bytes": "488d15422e1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "profileArn",
+      "offset": 97996072,
+      "offsetHex": "0x5d74d28",
+      "rva": 98001192,
+      "va": "0x145d76128",
+      "context": "orStaterelevantDocumentsuseRelevantDocumentsworkspaceFoldersprofileArninitializenotifications/initializedtools/calltools/listexpected start array or nullmaximum nesting depth exceededurirangetool_use_id was not specified but it is",
+      "refs": [
+        {
+          "offset": 12007300,
+          "va": "0x140b74384",
+          "bytes": "488d159d1d2005",
+          "owner": {
+            "start": "0x140b742f0",
+            "end": "0x140b744a0",
+            "offset": 12007152,
+            "length": 432
+          }
+        }
+      ]
+    },
+    {
+      "term": "profileArn",
+      "offset": 97999093,
+      "offsetHex": "0x5d758f5",
+      "rva": 98004213,
+      "va": "0x145d76cf5",
+      "context": " nullUnion did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when ",
+      "refs": [
+        {
+          "offset": 12071773,
+          "va": "0x140b83f5d",
+          "bytes": "488d15912d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "agentMode",
+      "offset": 97999103,
+      "offsetHex": "0x5d758ff",
+      "rva": 98004223,
+      "va": "0x145d76cff",
+      "context": " did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when building ",
+      "refs": [
+        {
+          "offset": 12071816,
+          "va": "0x140b83f88",
+          "bytes": "488d15702d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "agentMode",
+      "offset": 462227175,
+      "offsetHex": "0x1b8d06e7",
+      "rva": 462232295,
+      "va": "0x15b8d1ae7",
+      "context": "........[............struct GoalIterationResultschemaVersionagentModeworkspacePathscreatedAtlastModifiedAtdataModelVersionmodelIdcreatedReasonkindstruct TestMessageCommand with 3 elements..=..[....).......issuer_urlstruct Externa",
+      "refs": [
+        {
+          "offset": 54630831,
+          "va": "0x14341a5af",
+          "bytes": "488d0d31754b18",
+          "owner": {
+            "start": "0x1434180d0",
+            "end": "0x14341babc",
+            "offset": 54621392,
+            "length": 14828
+          }
+        },
+        {
+          "offset": 54633467,
+          "va": "0x14341affb",
+          "bytes": "488d0de56a4b18",
+          "owner": {
+            "start": "0x1434180d0",
+            "end": "0x14341babc",
+            "offset": 54621392,
+            "length": 14828
+          }
+        }
+      ]
+    },
+    {
+      "term": "agentMode",
+      "offset": 462351149,
+      "offsetHex": "0x1b8eeb2d",
+      "rva": 462356269,
+      "va": "0x15b8eff2d",
+      "context": "pprovalapproveddeniedexecutingcompletedfailedschemaVersionidagentModeworkspacePathscreatedAtlastModifiedAtdataModelVersionmodelIdcreatedReasonToolCallPayloadtoolCallIdtoolName_metatimestamppayloadTombstonePayloadkindeffectiveFrom",
+      "refs": [
+        {
+          "offset": 56367902,
+          "va": "0x1435c271e",
+          "bytes": "488d1508d83218",
+          "owner": {
+            "start": "0x1435c2670",
+            "end": "0x1435c2880",
+            "offset": 56367728,
+            "length": 528
+          }
+        }
+      ]
+    },
+    {
+      "term": "additionalModelRequestFields",
+      "offset": 97972160,
+      "offsetHex": "0x5d6efc0",
+      "rva": 97977280,
+      "va": "0x145d703c0",
+      "context": ".......@.......@....P..@....`.=@.......@....T.....Q..(..@..8additionalModelRequestFieldsSchemaResponse was invalidexpected object key or end object, found: ...E....*.......expected start object or nullmaximum nesting depth exceededlinecharacterrang",
+      "refs": [
+        {
+          "offset": 11669562,
+          "va": "0x140b21c3a",
+          "bytes": "488d157fe72405",
+          "owner": {
+            "start": "0x140b21580",
+            "end": "0x140b231db",
+            "offset": 11667840,
+            "length": 7259
+          }
+        }
+      ]
+    },
+    {
+      "term": "additionalModelRequestFields",
+      "offset": 97999112,
+      "offsetHex": "0x5d75908",
+      "rva": 98004232,
+      "va": "0x145d76d08",
+      "context": "contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when building TaskOverviewRngNoneSomeAccou",
+      "refs": [
+        {
+          "offset": 12071732,
+          "va": "0x140b83f34",
+          "bytes": "488d15cd2d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97910155,
+      "offsetHex": "0x5d5fd8b",
+      "rva": 97915275,
+      "va": "0x145d6118b",
+      "context": ".expected start object or nullmaximum nesting depth exceededconversationId.......p..@....`................v.A....p..@....`..................@.....v.A.......E....`.=@.... ..@.... ..@....`.=@......G@....numberOfGeneratedCharsnumberOfGen",
+      "refs": [
+        {
+          "offset": 10976358,
+          "va": "0x140a78866",
+          "bytes": "488d151e892e05",
+          "owner": {
+            "start": "0x140a78840",
+            "end": "0x140a78a57",
+            "offset": 10976320,
+            "length": 535
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97927432,
+      "offsetHex": "0x5d64108",
+      "rva": 97932552,
+      "va": "0x145d65508",
+      "context": ".....v.A.....T.E....`.=@....pw.@....`v.@....`.=@......G@....conversationIdlinesOfCodeGeneratedcharactersOfCodeGeneratedtoggle was not specified but it is required when building McpConfigurationmessage was not specified but it is requi",
+      "refs": [
+        {
+          "offset": 11160180,
+          "va": "0x140aa5674",
+          "bytes": "488d158dfe2b05",
+          "owner": {
+            "start": "0x140aa5650",
+            "end": "0x140aa57ec",
+            "offset": 11160144,
+            "length": 412
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97947843,
+      "offsetHex": "0x5d690c3",
+      "rva": 97952963,
+      "va": "0x145d6a4c3",
+      "context": ".expected start object or nullmaximum nesting depth exceededconversationId{}found more JSON tokens after completing parsingmessageIdcustomizationArnuserIntentAPPLY_COMMON_BEST_PRACTICESCITE_SOURCESCODE_GENERATIONEXPLAIN_CODE_SELECTION",
+      "refs": [
+        {
+          "offset": 11406216,
+          "va": "0x140ae1788",
+          "bytes": "488d15348d2805",
+          "owner": {
+            "start": "0x140ae1760",
+            "end": "0x140ae1f8e",
+            "offset": 11406176,
+            "length": 2094
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97952985,
+      "offsetHex": "0x5d6a4d9",
+      "rva": 97958105,
+      "va": "0x145d6b8d9",
+      "context": "heCheckpointsPerRequestoriginUNKNOWNjobIdprofileArnmessageIdconversationIduserIddatesubscriptionTierPOOLINGPOWERPROPRO_MAXPRO_PLUSoverageEnabledoverageCapprofileIdnewUserchatAgentModechatAutonomyModechatMessageDurationmodelIdcreditsUs",
+      "refs": [
+        {
+          "offset": 11493267,
+          "va": "0x140af6b93",
+          "bytes": "488d153f4d2705",
+          "owner": {
+            "start": "0x140af6b40",
+            "end": "0x140af7392",
+            "offset": 11493184,
+            "length": 2130
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97957507,
+      "offsetHex": "0x5d6b683",
+      "rva": 97962627,
+      "va": "0x145d6ca83",
+      "context": "quired when building OverageConfigurationmaxResultsnextTokenconversationIdlinesOfCodeAcceptedcharactersOfCodeAcceptedNoneSome............................`#.@....StartArrayoffsetEndArray........................p=.@.....................",
+      "refs": [
+        {
+          "offset": 11539940,
+          "va": "0x140b021e4",
+          "bytes": "488d1598a82605",
+          "owner": {
+            "start": "0x140b021c0",
+            "end": "0x140b0235c",
+            "offset": 11539904,
+            "length": 412
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97966013,
+      "offsetHex": "0x5d6d7bd",
+      "rva": 97971133,
+      "va": "0x145d6ebbd",
+      "context": "LETIONSEDITSuserDecisionReasonEXPLICIT_REJECTIMPLICIT_REJECTconversationIdmessageIdmodificationPercentagehasProjectLevelContextr#typer#type was not specified but it is required when building SubscriptionInfoupgrade_capability was not ",
+      "refs": [
+        {
+          "offset": 11609894,
+          "va": "0x140b13326",
+          "bytes": "488d1590b82505",
+          "owner": {
+            "start": "0x140b13300",
+            "end": "0x140b13560",
+            "offset": 11609856,
+            "length": 608
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97972529,
+      "offsetHex": "0x5d6f131",
+      "rva": 97977649,
+      "va": "0x145d70531",
+      "context": "nd more JSON tokens after completing parsingcustomizationArnconversationIdterminalUserInteractionEventTypeCODEWHISPERER_TERMINAL_COMPLETION_INSERTEDCODEWHISPERER_TERMINAL_TRANSLATION_ACTIONterminalterminalVersionshellshellVersiondurat",
+      "refs": [
+        {
+          "offset": 11682952,
+          "va": "0x140b25088",
+          "bytes": "488d15a2b42405",
+          "owner": {
+            "start": "0x140b25060",
+            "end": "0x140b25c4c",
+            "offset": 11682912,
+            "length": 3052
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97977092,
+      "offsetHex": "0x5d70304",
+      "rva": 97982212,
+      "va": "0x145d71704",
+      "context": "maximum nesting depth exceededexpected start array or null{}conversationIdrequestIdinputLengthnumSelectedLinesnumSuggestionAddCharsnumSuggestionAddLinesnumSuggestionDelCharsnumSuggestionDelLinescodeIntentuserDecisionACCEPTDISMISSREJEC",
+      "refs": [
+        {
+          "offset": 11029646,
+          "va": "0x140a8588e",
+          "bytes": "488d156fbe2e05",
+          "owner": {
+            "start": "0x140a85470",
+            "end": "0x140a8635a",
+            "offset": 11028592,
+            "length": 3818
+          }
+        },
+        {
+          "offset": 11755907,
+          "va": "0x140b36d83",
+          "bytes": "488d157aa92305",
+          "owner": {
+            "start": "0x140b36d30",
+            "end": "0x140b37633",
+            "offset": 11755824,
+            "length": 2307
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97982653,
+      "offsetHex": "0x5d718bd",
+      "rva": 97987773,
+      "va": "0x145d72cbd",
+      "context": "edlinesOfCodeAcceptedcharsOfCodeGeneratedcharsOfCodeAcceptedconversationIdnumberOfAddedCharsnumberOfAddedLinesnumberOfAddedFilesuserDecisionACCEPTREJECTinteractionTypeEDIT_READMEGENERATE_READMEUPDATE_READMEnumberOfNavigationsfolderLev",
+      "refs": [
+        {
+          "offset": 11782324,
+          "va": "0x140b3d4b4",
+          "bytes": "488d1502582305",
+          "owner": {
+            "start": "0x140b3d490",
+            "end": "0x140b3d6f1",
+            "offset": 11782288,
+            "length": 609
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97986480,
+      "offsetHex": "0x5d727b0",
+      "rva": 97991600,
+      "va": "0x145d73bb0",
+      "context": ".......A....8;.E.......@....p..@.......@....`u.@......G@....conversationIdnumberOfAddCharsnumberOfAddLinesnumberOfAddFilesuserDecisionACCEPTREJECTinteractionTypeEDIT_READMEGENERATE_READMEUPDATE_READMEuserIdentitynumberOfNavigationfold",
+      "refs": [
+        {
+          "offset": 11848252,
+          "va": "0x140b4d63c",
+          "bytes": "488d156d652205",
+          "owner": {
+            "start": "0x140b4d620",
+            "end": "0x140b4d91e",
+            "offset": 11848224,
+            "length": 766
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97998668,
+      "offsetHex": "0x5d7574c",
+      "rva": 98003788,
+      "va": "0x145d76b4c",
+      "context": " member valuefound more JSON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants",
+      "refs": [
+        {
+          "offset": 12064640,
+          "va": "0x140b82380",
+          "bytes": "488d15c5471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 460755497,
+      "offsetHex": "0x1b769229",
+      "rva": 460760617,
+      "va": "0x15b76a629",
+      "context": "hMethodproviderexportSessionensureSessionsessionIdtestSeedV1conversationIdimportSessionservice_nameoperation_namepositional_argsparametersregionprofile_namelabelstruct ResourceSettingsstruct Settingstool_nameargsadjacently tagged enum",
+      "refs": [
+        {
+          "offset": 35723765,
+          "va": "0x1422125f5",
+          "bytes": "488d152d805519",
+          "owner": {
+            "start": "0x1422125c0",
+            "end": "0x1422126a2",
+            "offset": 35723712,
+            "length": 226
+          }
+        }
+      ]
+    },
+    {
+      "term": "workspaceId",
+      "offset": 97998682,
+      "offsetHex": "0x5d7575a",
+      "rva": 98003802,
+      "va": "0x145d76b5a",
+      "context": "ound more JSON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionva",
+      "refs": [
+        {
+          "offset": 12064683,
+          "va": "0x140b823ab",
+          "bytes": "488d15a8471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "history",
+      "offset": 97998693,
+      "offsetHex": "0x5d75765",
+      "rva": 98003813,
+      "va": "0x145d76b65",
+      "context": "SON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for",
+      "refs": [
+        {
+          "offset": 12064734,
+          "va": "0x140b823de",
+          "bytes": "488d1580471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "history",
+      "offset": 98018554,
+      "offsetHex": "0x5d7a4fa",
+      "rva": 98023674,
+      "va": "0x145d7b8fa",
+      "context": "........................... .@....ShellStateshell_nameshell_historydslsummarytitleartifact_labelINVALID_TASK_ASSIST_PLAN.................. ..@.....................}.@....expected ValueString or ValueNullC:\\Users\\runneradmin\\.ca",
+      "refs": []
+    },
+    {
+      "term": "currentMessage",
+      "offset": 97998700,
+      "offsetHex": "0x5d7576c",
+      "rva": 98003820,
+      "va": "0x145d76b6c",
+      "context": "ens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage",
+      "refs": [
+        {
+          "offset": 12064973,
+          "va": "0x140b824cd",
+          "bytes": "488d1598461f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "chatTriggerType",
+      "offset": 97998714,
+      "offsetHex": "0x5d7577a",
+      "rva": 98003834,
+      "va": "0x145d76b7a",
+      "context": "leting parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage' cannot be nul",
+      "refs": [
+        {
+          "offset": 12065102,
+          "va": "0x140b8254e",
+          "bytes": "488d1525461f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "MANUAL",
+      "offset": 97998750,
+      "offsetHex": "0x5d7579e",
+      "rva": 98003870,
+      "va": "0x145d76b9e",
+      "context": "eIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage' cannot be nullvalue for 'documentChar' c",
+      "refs": [
+        {
+          "offset": 12065205,
+          "va": "0x140b825b5",
+          "bytes": "488d15e2451f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "userInputMessage",
+      "offset": 98006314,
+      "offsetHex": "0x5d7752a",
+      "rva": 98011434,
+      "va": "0x145d7892a",
+      "context": "..`..@.......@....`.=@......G@....bytesImageSourcenamesourceuserInputMessageContextuserIntentAPPLY_COMMON_BEST_PRACTICESCITE_SOURCESCODE_GENERATIONEXPLAIN_CODE_SELECTIONEXPLAIN_LINE_BY_LINEGENERATE_CLOUDFORMATION_TEMPLATEGENERATE_UNIT_T",
+      "refs": []
+    },
+    {
+      "term": "userInputMessage",
+      "offset": 98010226,
+      "offsetHex": "0x5d78472",
+      "rva": 98015346,
+      "va": "0x145d79872",
+      "context": "r nullmaximum nesting depth exceededassistantResponseMessageuserInputMessageChatMessagenametypeDECLARATIONUSAGEjsonexitCodekeydocumentrangeseverityERRORHINTINFORMATIONWARNINGcodeDescriptiontagsDEPRECATEDUNNECESSARYrelatedInformationdata",
+      "refs": [
+        {
+          "offset": 12192266,
+          "va": "0x140ba160a",
+          "bytes": "488d0561821d05",
+          "owner": {
+            "start": "0x140ba15c0",
+            "end": "0x140ba17ac",
+            "offset": 12192192,
+            "length": 492
+          }
+        }
+      ]
+    },
+    {
+      "term": "userInputMessageContext",
+      "offset": 98006314,
+      "offsetHex": "0x5d7752a",
+      "rva": 98011434,
+      "va": "0x145d7892a",
+      "context": "..`..@.......@....`.=@......G@....bytesImageSourcenamesourceuserInputMessageContextuserIntentAPPLY_COMMON_BEST_PRACTICESCITE_SOURCESCODE_GENERATIONEXPLAIN_CODE_SELECTIONEXPLAIN_LINE_BY_LINEGENERATE_CLOUDFORMATION_TEMPLATEGENERATE_UNIT_TESTSIMP",
+      "refs": [
+        {
+          "offset": 12144989,
+          "va": "0x140b95d5d",
+          "bytes": "488d15c62b1e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "origin",
+      "offset": 97992904,
+      "offsetHex": "0x5d740c8",
+      "rva": 97998024,
+      "va": "0x145d754c8",
+      "context": ".....'.@....user_intent.....P..@.......................@....origin.....@.....................,.@....images.. ..@.......................@....documents....... ..@....................@..@....model_id0.F@.................... !.@..",
+      "refs": [
+        {
+          "offset": 11914752,
+          "va": "0x140b5da00",
+          "bytes": "488d15c17a2105",
+          "owner": {
+            "start": "0x140b5d940",
+            "end": "0x140b5db2f",
+            "offset": 11914560,
+            "length": 495
+          }
+        }
+      ]
+    },
+    {
+      "term": "origin",
+      "offset": 98006551,
+      "offsetHex": "0x5d77617",
+      "rva": 98011671,
+      "va": "0x145d78a17",
+      "context": "STSIMPROVE_CODESHOW_EXAMPLESSUGGEST_ALTERNATE_IMPLEMENTATIONoriginimagesdocumentsmodelIdcachePointclientCacheConfigdescriptioninnerContexteditorStateshellStategitStateenvStateappStudioContextdiagnosticconsoleStateuserSettingsa",
+      "refs": [
+        {
+          "offset": 12147557,
+          "va": "0x140b96765",
+          "bytes": "488d15ab221e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "origin",
+      "offset": 98022208,
+      "offsetHex": "0x5d7b340",
+      "rva": 98027328,
+      "va": "0x145d7c740",
+      "context": "......{@....source...........................-.@....Tracked_originvalue................................@...............................@.............................}.@.............................0.@..........................",
+      "refs": []
+    },
+    {
+      "term": "modelId",
+      "offset": 98006572,
+      "offsetHex": "0x5d7762c",
+      "rva": 98011692,
+      "va": "0x145d78a2c",
+      "context": "XAMPLESSUGGEST_ALTERNATE_IMPLEMENTATIONoriginimagesdocumentsmodelIdcachePointclientCacheConfigdescriptioninnerContexteditorStateshellStategitStateenvStateappStudioContextdiagnosticconsoleStateuserSettingsadditionalContexttoolRe",
+      "refs": [
+        {
+          "offset": 12148948,
+          "va": "0x140b96cd4",
+          "bytes": "488d15511d1e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "toolResults",
+      "offset": 98006733,
+      "offsetHex": "0x5d776cd",
+      "rva": 98011853,
+      "va": "0x145d78acd",
+      "context": "ioContextdiagnosticconsoleStateuserSettingsadditionalContexttoolResultstoolslabel was not specified but it is required when building WebLinkurl was not specified but it is required when building WebLinkCodeWhispererStreaming.Invoke",
+      "refs": [
+        {
+          "offset": 12146780,
+          "va": "0x140b9645c",
+          "bytes": "488d156a261e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "tools",
+      "offset": 97993757,
+      "offsetHex": "0x5d7441d",
+      "rva": 97998877,
+      "va": "0x145d7581d",
+      "context": "sticconsole_stateuser_settingsadditional_contexttool_resultstoolsUserInputMessageContextx-amz-retry-afterexpected ValueString or ValueNullno value was set......................X.E............................Response was inval",
+      "refs": [
+        {
+          "offset": 11973151,
+          "va": "0x140b6be1f",
+          "bytes": "488d15f7992005",
+          "owner": {
+            "start": "0x140b6bba0",
+            "end": "0x140b6be9b",
+            "offset": 11972512,
+            "length": 763
+          }
+        }
+      ]
+    },
+    {
+      "term": "tools",
+      "offset": 97996117,
+      "offsetHex": "0x5d74d55",
+      "rva": 98001237,
+      "va": "0x145d76155",
+      "context": "orkspaceFoldersprofileArninitializenotifications/initializedtools/calltools/listexpected start array or nullmaximum nesting depth exceededurirangetool_use_id was not specified but it is required when building ToolResultconten",
+      "refs": [
+        {
+          "offset": 12007527,
+          "va": "0x140b74467",
+          "bytes": "488d15e71c2005",
+          "owner": {
+            "start": "0x140b742f0",
+            "end": "0x140b744a0",
+            "offset": 12007152,
+            "length": 432
+          }
+        }
+      ]
+    },
+    {
+      "term": "tools",
+      "offset": 97996127,
+      "offsetHex": "0x5d74d5f",
+      "rva": 98001247,
+      "va": "0x145d7615f",
+      "context": "ldersprofileArninitializenotifications/initializedtools/calltools/listexpected start array or nullmaximum nesting depth exceededurirangetool_use_id was not specified but it is required when building ToolResultcontent was not ",
+      "refs": [
+        {
+          "offset": 12007536,
+          "va": "0x140b74470",
+          "bytes": "488d15e81c2005",
+          "owner": {
+            "start": "0x140b742f0",
+            "end": "0x140b744a0",
+            "offset": 12007152,
+            "length": 432
+          }
+        }
+      ]
+    },
+    {
+      "term": "tools",
+      "offset": 98006744,
+      "offsetHex": "0x5d776d8",
+      "rva": 98011864,
+      "va": "0x145d78ad8",
+      "context": "agnosticconsoleStateuserSettingsadditionalContexttoolResultstoolslabel was not specified but it is required when building WebLinkurl was not specified but it is required when building WebLinkCodeWhispererStreaming.InvokeMCPrp",
+      "refs": [
+        {
+          "offset": 12147024,
+          "va": "0x140b96550",
+          "bytes": "488d1581251e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "toolUses",
+      "offset": 98012731,
+      "offsetHex": "0x5d78e3b",
+      "rva": 98017851,
+      "va": "0x145d7a23b",
+      "context": "essageIdcontentsupplementaryWebLinksreferencesfollowupPrompttoolUsescachePointreasoningContentNoneSomeSharedAsyncSleep... ..@.....................I.@.............................wE@....Metadataoperationservice...................",
+      "refs": [
+        {
+          "offset": 12246191,
+          "va": "0x140bae8af",
+          "bytes": "488d1585b91c05",
+          "owner": {
+            "start": "0x140bae5a0",
+            "end": "0x140baf25f",
+            "offset": 12245408,
+            "length": 3263
+          }
+        }
+      ]
+    },
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 460773792,
+      "offsetHex": "0x1b76d9a0",
+      "rva": 460778912,
+      "va": "0x15b76eda0",
+      "context": "s.com...............H.v[....!.................v[............https://runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 462340248,
+      "offsetHex": "0x1b8ec098",
+      "rva": 462345368,
+      "va": "0x15b8ed498",
+      "context": "s.com...............@..[....!..................[............https://runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 460773880,
+      "offsetHex": "0x1b76d9f8",
+      "rva": 460779000,
+      "va": "0x15b76edf8",
+      "context": "ro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us-gov-east-1.kiro.dev..........P.v[....&.................v[............https://runtime.us-go",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 462340336,
+      "offsetHex": "0x1b8ec0f0",
+      "rva": 462345456,
+      "va": "0x15b8ed4f0",
+      "context": "ro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us-gov-east-1.kiro.dev..........H..[....&..................[............https://runtime.us-go",
+      "refs": []
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 99027704,
+      "offsetHex": "0x5e70af8",
+      "rva": 99032824,
+      "va": "0x145e71ef8",
+      "context": "g mock.........E....:................................x.B....https://q.us-east-1.amazonaws.comus-east-1.................E....!..................E............https://q.eu-central-1.amazonaws.com/eu-central-1...............X..E....%...............}..E.....",
+      "refs": []
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 460773704,
+      "offsetHex": "0x1b76d948",
+      "rva": 460778824,
+      "va": "0x15b76ed48",
+      "context": ".ic.gov...............v[....5.................v[............https://q.us-east-1.amazonaws.com...............H.v[....!.................v[............https://runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.e",
+      "refs": [
+        {
+          "offset": 36147467,
+          "va": "0x142279d0b",
+          "bytes": "488d0d36504f19",
+          "owner": {
+            "start": "0x142279cd0",
+            "end": "0x142279fa7",
+            "offset": 36147408,
+            "length": 727
+          }
+        }
+      ]
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 462340160,
+      "offsetHex": "0x1b8ec040",
+      "rva": 462345280,
+      "va": "0x15b8ed440",
+      "context": ".ic.gov................[....5..................[............https://q.us-east-1.amazonaws.com...............@..[....!..................[............https://runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.e",
+      "refs": [
+        {
+          "offset": 56289051,
+          "va": "0x1435af31b",
+          "bytes": "488d0d1ee13318",
+          "owner": {
+            "start": "0x1435af2e0",
+            "end": "0x1435af5b7",
+            "offset": 56288992,
+            "length": 727
+          }
+        }
+      ]
+    },
+    {
+      "term": "QDeveloperSendMessage",
+      "offset": 459479270,
+      "offsetHex": "0x1b6318e6",
+      "rva": 459484390,
+      "va": "0x15b632ce6",
+      "context": "..............@..A....CodewhispererGenerateAssistantResponseQDeveloperSendMessageC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_json-1.0.149\\src\\ser.rs.......,c[....g...........*... F.@.....................|.",
+      "refs": [
+        {
+          "offset": 27784863,
+          "va": "0x141a8029f",
+          "bytes": "488d15402abb19",
+          "owner": {
+            "start": "0x141a80260",
+            "end": "0x141a80637",
+            "offset": 27784800,
+            "length": 983
+          }
+        },
+        {
+          "offset": 27790483,
+          "va": "0x141a81893",
+          "bytes": "488d154c14bb19",
+          "owner": {
+            "start": "0x141a81850",
+            "end": "0x141a81c2b",
+            "offset": 27790416,
+            "length": 987
+          }
+        },
+        {
+          "offset": 28768495,
+          "va": "0x141b704ef",
+          "bytes": "488d15f027ac19",
+          "owner": {
+            "start": "0x141b704b0",
+            "end": "0x141b70887",
+            "offset": 28768432,
+            "length": 983
+          }
+        }
+      ]
+    },
+    {
+      "term": "QDeveloperSendMessage",
+      "offset": 460632014,
+      "offsetHex": "0x1b74afce",
+      "rva": 460637134,
+      "va": "0x15b74c3ce",
+      "context": ".A.......A......G@....CodewhispererGenerateAssistantResponseQDeveloperSendMessageSmithyBuild...Pt[....O...........7....C.@....................`2.C....0.F@.....................j.A............................0d.A.... ..@....................@X.",
+      "refs": [
+        {
+          "offset": 33144856,
+          "va": "0x141f9cc18",
+          "bytes": "488d15aff77a19",
+          "owner": {
+            "start": "0x141f9cbe0",
+            "end": "0x141f9ce8e",
+            "offset": 33144800,
+            "length": 686
+          }
+        }
+      ]
+    },
+    {
+      "term": "QDeveloperSendMessage",
+      "offset": 460708254,
+      "offsetHex": "0x1b75d99e",
+      "rva": 460713374,
+      "va": "0x15b75ed9e",
+      "context": "ne numbers not enabledCodewhispererGenerateAssistantResponseQDeveloperSendMessage........B......................(D............................p.cB....ReqwestConnector...B....0...............@..B............................@.cB....V2025_08_22",
+      "refs": [
+        {
+          "offset": 35153688,
+          "va": "0x142187318",
+          "bytes": "488d157f7a5d19",
+          "owner": {
+            "start": "0x1421872e0",
+            "end": "0x14218758e",
+            "offset": 35153632,
+            "length": 686
+          }
+        }
+      ]
+    },
+    {
+      "term": "QDeveloperSendMessage",
+      "offset": 461433776,
+      "offsetHex": "0x1b80ebb0",
+      "rva": 461438896,
+      "va": "0x15b80ffb0",
+      "context": "cateSetExplicitlyUnsetCodewhispererGenerateAssistantResponseQDeveloperSendMessage...  ().......................[...............[...............[...............[.......................................[............ExecuteCommandworking_dirthe ",
+      "refs": [
+        {
+          "offset": 42741512,
+          "va": "0x1428c3b08",
+          "bytes": "488d15a1c4f418",
+          "owner": {
+            "start": "0x1428c3ad0",
+            "end": "0x1428c3d7e",
+            "offset": 42741456,
+            "length": 686
+          }
+        }
+      ]
+    },
+    {
+      "term": "QDeveloperSendMessage",
+      "offset": 462028296,
+      "offsetHex": "0x1b89fe08",
+      "rva": 462033416,
+      "va": "0x15b8a1208",
+      "context": " ...vibeRunningLoadingCodewhispererGenerateAssistantResponseQDeveloperSendMessageSmithyBuildJsoncannot clone `Sender` -- too many outstanding senders..........[....p...............`.$B....H...............@.&C....Pg.@......................&C.",
+      "refs": [
+        {
+          "offset": 52652415,
+          "va": "0x14323757f",
+          "bytes": "488d15829c6618",
+          "owner": {
+            "start": "0x143237540",
+            "end": "0x1432377f5",
+            "offset": 52652352,
+            "length": 693
+          }
+        },
+        {
+          "offset": 52844780,
+          "va": "0x1432664ec",
+          "bytes": "488d1515ad6318",
+          "owner": {
+            "start": "0x1432664b0",
+            "end": "0x143266762",
+            "offset": 52844720,
+            "length": 690
+          }
+        }
+      ]
+    }
+  ]
+}

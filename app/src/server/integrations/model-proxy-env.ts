@@ -82,7 +82,11 @@ let configured: string | undefined;
 export function configureModelNetwork(root: string, modelsFile: string, provider: string) {
   const url = providerProxyUrl(root, readProviderProxy(modelsFile, provider));
   const noProxy = ["localhost", ".localhost", ".local", "127.0.0.1", "[::1]", "::1", ...localModelHosts(modelsFile, provider)].join(",");
-  const key = JSON.stringify([url ?? "direct", noProxy]);
+  // Kiro tool/user turns often pause longer than Undici's 4s idle default.
+  // Retain idle sockets without extending request deadlines, forcing HTTP/1,
+  // overriding a peer's shorter keep-alive hint, or changing other providers.
+  const poolOptions = provider === "kiro" ? { keepAliveTimeout: 60_000, keepAliveMaxTimeout: 120_000 } : {};
+  const key = JSON.stringify([url ?? "direct", noProxy, poolOptions]);
   if (configured === key) return;
   if (configured !== undefined) throw Error("模型代理环境已改变，需要重新创建执行进程。");
   for (const name of proxyKeys) delete process.env[name];
@@ -93,7 +97,7 @@ export function configureModelNetwork(root: string, modelsFile: string, provider
     // Private configured model endpoints bypass the entry; the built-in core also routes private addresses directly.
     process.env.NO_PROXY = process.env.no_proxy = noProxy;
   }
-  setGlobalDispatcher(url ? new EnvHttpProxyAgent() : new Agent());
+  setGlobalDispatcher(url ? new EnvHttpProxyAgent(poolOptions) : new Agent(poolOptions));
   install();
   configured = key;
 }

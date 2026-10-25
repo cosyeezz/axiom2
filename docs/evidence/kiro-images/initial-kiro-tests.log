@@ -1,0 +1,100 @@
+✔ Kiro distinguishes personal Builder ID from enterprise OIDC and honors slow_down (9.2318ms)
+✔ Kiro OIDC browser PKCE registers the exact redirect and exchanges camelCase fields (1.2302ms)
+✔ Kiro social portal PKCE uses CLI redirect marker, snake_case exchange, and distinct refresh (1.7343ms)
+✔ Kiro OIDC refresh retains region/registration and rotates under the SDK credential lock (2.0087ms)
+✔ Kiro rejects expired registration and malformed/unknown metadata without network (0.6497ms)
+✔ Kiro errors do not expose secrets and failed refresh preserves credentials (1.3402ms)
+✔ Kiro device cancellation and timeout reject late tokens and stop polling (16.1537ms)
+✔ Kiro loopback rejects foreign state, duplicate params and Host without consuming login (36.3903ms)
+✔ Kiro validated denial and wrong login branch terminate immediately with redacted errors (5.5005ms)
+✔ Kiro callback cancellation closes the socket and OIDC accepts manual exact redirect (3.2877ms)
+✔ Kiro uses the CLI AWS JSON POST, origin, and double-serialized pagination (8.5709ms)
+✔ Kiro preserves declared image capability, distinguishes unknown input types and validates metadata (3.93ms)
+✔ Kiro service region follows explicit profile, never the authentication region (1.7366ms)
+✔ Kiro rejects invalid or expired credentials before issuing a request (0.9863ms)
+✔ Kiro errors are sanitized and never retried across profiles or regions (1.5402ms)
+✔ Kiro rejects incomplete, malformed and non-finite catalog metadata (2.777ms)
+✔ Kiro rejects repeated pagination, excessive pages and excessive model counts (4.5911ms)
+✔ Kiro limits declared and streamed response size and aborts stalled bodies (13.1107ms)
+✔ Kiro caches only normalized catalog fields and restores the same credential offline (2.6224ms)
+✔ Kiro image catalog survives offline reopen and V1 text-only caches migrate as unknown without network (1.0289ms)
+✔ Kiro never restores a different login, profile, or unscoped legacy cache (1.4096ms)
+✔ Kiro invalidates warm catalogs when same-scope storage is missing or invalid (1.4136ms)
+✔ Kiro refresh failure retains only same-scope cache and never publishes partial pages (0.998ms)
+✔ Kiro rotated OAuth credentials are re-scoped before network access (1.2256ms)
+✔ Kiro cancelled late responses cannot publish models or write a cache (20.2797ms)
+✔ Kiro native chat sends selected model and full system prompt, uses fixed AWS protocol and hooks (17.5278ms)
+✔ Kiro tool JSON chunks map names back, validate schema and round-trip results without history model/tools (7.3184ms)
+✔ Kiro handles interleaved tools but rejects unended, repeated, unknown and invalid-schema calls (6.0785ms)
+✔ Kiro rejects corrupted CRC, incomplete prelude/frame, wrong media and empty streams (4.3175ms)
+✔ Kiro preserves native reasoning, separate credits and usage absence, rejects filtered responses (1.5654ms)
+✔ Kiro sanitizes HTTP, exception and transport failures, never retries partial output (2.683ms)
+✔ Kiro honors abort and timeout, including transport ignoring an abort and stalled body (22.6013ms)
+✔ Kiro rejects malformed images, orphan tool results and payload identity changes before network (1.1995ms)
+✔ Kiro opaque auth capabilities contain no tokens, are isolated and one-use (1.3543ms)
+✔ Kiro cancels permanently stalled hooks and transports, and releases responses arriving after cancellation (61.0155ms)
+✔ Kiro preserves visible historical reasoning explicitly and rejects old call IDs before completion (1.2339ms)
+✔ Kiro partial usage cannot erase a complete snapshot or pretend missing counters are exact (3.2383ms)
+✔ Kiro explicit European profile selects runtime EU, not its SSO authentication region (0.6394ms)
+✔ Kiro drives a real Pi Agent tool loop and never executes a tool from an errored stream (6.29ms)
+✔ Kiro native OAuth refresh remains serialized and opaque capabilities expire (1.7783ms)
+✔ Kiro parses every AWS header type and rejects malformed, duplicate pseudoheaders and oversized preludes (9.9533ms)
+✔ Kiro enforces request and argument limits, and does not silently override tool choice (60.0499ms)
+✔ Kiro sends current user images in native AWS blob JSON, without mutating the transcript (4.0544ms)
+✔ Kiro preserves image order through adjacent users, current image-only input and historical replay (0.9395ms)
+✔ Kiro serializes all CLI image formats as unchanged base64 bytes, including JPEG alias (0.8698ms)
+✔ Kiro lifts parallel tool images beside native toolResults and preserves IDs, status and text blocks (0.7959ms)
+✔ Kiro validates image formats and canonical base64 without fetching URLs or dropping unknown content (1.1607ms)
+✖ Kiro runs a Pi Agent image prompt and screenshot tool loop, then replays both images on a later turn (7.5668ms)
+✔ Kiro sends Pi read-tool image output through the same native image path (8.807ms)
+✖ Kiro rejects an over-budget image request before transport and still aborts image requests (54.9262ms)
+✔ model connection pooling: kiro-direct (9073.8772ms)
+✔ model connection pooling: kiro-proxy (9106.3935ms)
+✔ model connection pooling: other-direct (9082.6053ms)
+✔ model connection pooling: kiro-h2 (5948.3732ms)
+✔ Kiro live discovery rejects failed or skipped refresh instead of reporting cached success (182.169ms)
+✔ Kiro login and live catalog survive worker/reopen without changing other OAuth providers (9040.6387ms)
+ℹ tests 56
+ℹ suites 0
+ℹ pass 54
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54503.8614
+
+✖ failing tests:
+
+test at tests\kiro-images.test.ts:1:5980
+✖ Kiro runs a Pi Agent image prompt and screenshot tool loop, then replays both images on a later turn (7.5668ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 2
+  
+      at TestContext.<anonymous> (F:\Axiom\axiom2\app\tests\kiro-images.test.ts:108:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\kiro-images.test.ts:1:9004
+✖ Kiro rejects an over-budget image request before transport and still aborts image requests (54.9262ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'error' !== 'aborted'
+  
+      at TestContext.<anonymous> (F:\Axiom\axiom2\app\tests\kiro-images.test.ts:137:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'error',
+    expected: 'aborted',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

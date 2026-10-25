@@ -102,7 +102,7 @@ test("OpenCLI launcher enters private Node only in its child, sanitizes startup 
     assert.equal(env.PATH!.split(delimiter)[0], openCliCommandDirectory(config));
     assert.ok(!env.PATH!.split(delimiter).includes(dirname(runtime.node)), "private Node is not injected into the agent shell PATH");
     const launcher = join(prefix, "commands", process.platform === "win32" ? "opencli.cmd" : "opencli");
-    const result = process.platform === "win32" ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `""${launcher}" "argument space""`], { env, encoding: "utf8", timeout: 10_000 }) : spawnSync(launcher, ["argument space"], { env, encoding: "utf8", timeout: 10_000 });
+    const result = process.platform === "win32" ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `""${launcher}" "argument space""`], { env, windowsVerbatimArguments: true, encoding: "utf8", timeout: 10_000 }) : spawnSync(launcher, ["argument space"], { env, encoding: "utf8", timeout: 10_000 });
     assert.equal(result.status, 0, result.error?.message ?? result.stderr);
     const value = JSON.parse(result.stdout);
     assert.equal(value.execPath, runtime.node); assert.deepEqual(value.args, ["argument space"]);

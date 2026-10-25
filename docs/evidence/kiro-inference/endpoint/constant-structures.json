@@ -1,0 +1,182 @@
+[
+  {
+    "va": "0x15b8ed468",
+    "offset": "0x1b8ec068",
+    "members": [
+      {
+        "at": 0,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 8,
+        "value": "0x15b8ed440",
+        "text": "https://q.us-east-1.amazonaws.com"
+      },
+      {
+        "at": 16,
+        "value": "0x21",
+        "text": null
+      },
+      {
+        "at": 24,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 32,
+        "value": "0x15b8ed0d0",
+        "text": "us-east-1"
+      },
+      {
+        "at": 40,
+        "value": "0x9",
+        "text": null
+      }
+    ]
+  },
+  {
+    "va": "0x15b8ed4c0",
+    "offset": "0x1b8ec0c0",
+    "members": [
+      {
+        "at": 0,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 8,
+        "value": "0x15b8ed498",
+        "text": "https://runtime.us-east-1.kiro.dev"
+      },
+      {
+        "at": 16,
+        "value": "0x22",
+        "text": null
+      },
+      {
+        "at": 24,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 32,
+        "value": "0x15b8ed0d0",
+        "text": "us-east-1"
+      },
+      {
+        "at": 40,
+        "value": "0x9",
+        "text": null
+      }
+    ]
+  },
+  {
+    "va": "0x15b8ed518",
+    "offset": "0x1b8ec118",
+    "members": [
+      {
+        "at": 0,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 8,
+        "value": "0x15b8ed4f0",
+        "text": "https://runtime.eu-central-1.kiro.dev"
+      },
+      {
+        "at": 16,
+        "value": "0x25",
+        "text": null
+      },
+      {
+        "at": 24,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 32,
+        "value": "0x15b8ed130",
+        "text": "eu-central-1"
+      },
+      {
+        "at": 40,
+        "value": "0xc",
+        "text": null
+      }
+    ]
+  },
+  {
+    "va": "0x15b8ed628",
+    "offset": "0x1b8ec228",
+    "members": [
+      {
+        "at": 0,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 8,
+        "value": "0x15b8ed5f8",
+        "text": "https://kiro-runtime.us-iso-east-1.c2s.ic.gov"
+      },
+      {
+        "at": 16,
+        "value": "0x2d",
+        "text": null
+      },
+      {
+        "at": 24,
+        "value": "0x8000000000000000",
+        "text": null
+      },
+      {
+        "at": 32,
+        "value": "0x15b8ed268",
+        "text": "us-iso-east-1"
+      },
+      {
+        "at": 40,
+        "value": "0xd",
+        "text": null
+      }
+    ]
+  },
+  {
+    "va": "0x15b808558",
+    "offset": "0x1b807158",
+    "members": [
+      {
+        "at": 0,
+        "value": "0x140014300",
+        "text": null
+      },
+      {
+        "at": 8,
+        "value": "0x18",
+        "text": null
+      },
+      {
+        "at": 16,
+        "value": "0x8",
+        "text": null
+      },
+      {
+        "at": 24,
+        "value": "0x142790830",
+        "text": null
+      },
+      {
+        "at": 32,
+        "value": "0x141ecdb40",
+        "text": null
+      },
+      {
+        "at": 40,
+        "value": "0x1403dc360",
+        "text": null
+      }
+    ]
+  }
+]

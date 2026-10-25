@@ -1,0 +1,449 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "bytes": 528630968,
+  "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "method": "RIP-relative LEA RAX/RDX plus MOV R8D length before the common JSON-key helper (0x1410c81b0) in previously identified serializers; validate instructions against dumpbin. No caller value/field presence/default proof.",
+  "fields": [
+    {
+      "owner": "user",
+      "field": "content",
+      "instructionVA": "0x140b95cae",
+      "stringVA": "0x145d777be",
+      "keyHelperCallVA": "0x140b95cbe",
+      "fileOffset": 98001854,
+      "length": 7
+    },
+    {
+      "owner": "user",
+      "field": "userInputMessageContext",
+      "instructionVA": "0x140b95d5d",
+      "stringVA": "0x145d7892a",
+      "keyHelperCallVA": "0x140b95d6d",
+      "fileOffset": 98006314,
+      "length": 23
+    },
+    {
+      "owner": "user",
+      "field": "editorState",
+      "instructionVA": "0x140b95dad",
+      "stringVA": "0x145d78a65",
+      "keyHelperCallVA": "0x140b95dbe",
+      "fileOffset": 98006629,
+      "length": 11
+    },
+    {
+      "owner": "user",
+      "field": "shellState",
+      "instructionVA": "0x140b95e42",
+      "stringVA": "0x145d78a70",
+      "keyHelperCallVA": "0x140b95e53",
+      "fileOffset": 98006640,
+      "length": 10
+    },
+    {
+      "owner": "user",
+      "field": "gitState",
+      "instructionVA": "0x140b95ed3",
+      "stringVA": "0x145d78a7a",
+      "keyHelperCallVA": "0x140b95ee4",
+      "fileOffset": 98006650,
+      "length": 8
+    },
+    {
+      "owner": "user",
+      "field": "status",
+      "instructionVA": "0x140b95f15",
+      "stringVA": "0x145d7f79b",
+      "keyHelperCallVA": "0x140b95f26",
+      "fileOffset": 98034587,
+      "length": 6
+    },
+    {
+      "owner": "user",
+      "field": "envState",
+      "instructionVA": "0x140b95f7c",
+      "stringVA": "0x145d78a82",
+      "keyHelperCallVA": "0x140b95f8d",
+      "fileOffset": 98006658,
+      "length": 8
+    },
+    {
+      "owner": "user",
+      "field": "appStudioContext",
+      "instructionVA": "0x140b96011",
+      "stringVA": "0x145d78a8a",
+      "keyHelperCallVA": "0x140b96022",
+      "fileOffset": 98006666,
+      "length": 16
+    },
+    {
+      "owner": "user",
+      "field": "diagnostic",
+      "instructionVA": "0x140b960aa",
+      "stringVA": "0x145d78a9a",
+      "keyHelperCallVA": "0x140b960bb",
+      "fileOffset": 98006682,
+      "length": 10
+    },
+    {
+      "owner": "user",
+      "field": "consoleState",
+      "instructionVA": "0x140b9613f",
+      "stringVA": "0x145d78aa4",
+      "keyHelperCallVA": "0x140b96150",
+      "fileOffset": 98006692,
+      "length": 12
+    },
+    {
+      "owner": "user",
+      "field": "userSettings",
+      "instructionVA": "0x140b96219",
+      "stringVA": "0x145d78ab0",
+      "keyHelperCallVA": "0x140b9622a",
+      "fileOffset": 98006704,
+      "length": 12
+    },
+    {
+      "owner": "user",
+      "field": "hasConsentedToCrossRegionCalls",
+      "instructionVA": "0x140b96266",
+      "stringVA": "0x145d76ab4",
+      "keyHelperCallVA": "0x140b96277",
+      "fileOffset": 97998516,
+      "length": 30
+    },
+    {
+      "owner": "user",
+      "field": "additionalContext",
+      "instructionVA": "0x140b962f1",
+      "stringVA": "0x145d78abc",
+      "keyHelperCallVA": "0x140b96302",
+      "fileOffset": 98006716,
+      "length": 17
+    },
+    {
+      "owner": "user",
+      "field": "name",
+      "instructionVA": "0x140b96364",
+      "stringVA": "0x145d78920",
+      "keyHelperCallVA": "0x140b96378",
+      "fileOffset": 98006304,
+      "length": 4
+    },
+    {
+      "owner": "user",
+      "field": "description",
+      "instructionVA": "0x140b9638d",
+      "stringVA": "0x145d78a4e",
+      "keyHelperCallVA": "0x140b9639d",
+      "fileOffset": 98006606,
+      "length": 11
+    },
+    {
+      "owner": "user",
+      "field": "innerContext",
+      "instructionVA": "0x140b963bc",
+      "stringVA": "0x145d78a59",
+      "keyHelperCallVA": "0x140b963cd",
+      "fileOffset": 98006617,
+      "length": 12
+    },
+    {
+      "owner": "user",
+      "field": "toolResults",
+      "instructionVA": "0x140b9645c",
+      "stringVA": "0x145d78acd",
+      "keyHelperCallVA": "0x140b9646d",
+      "fileOffset": 98006733,
+      "length": 11
+    },
+    {
+      "owner": "user",
+      "field": "tools",
+      "instructionVA": "0x140b96550",
+      "stringVA": "0x145d78ad8",
+      "keyHelperCallVA": "0x140b96561",
+      "fileOffset": 98006744,
+      "length": 5
+    },
+    {
+      "owner": "user",
+      "field": "userIntent",
+      "instructionVA": "0x140b96667",
+      "stringVA": "0x145d78941",
+      "keyHelperCallVA": "0x140b9667c",
+      "fileOffset": 98006337,
+      "length": 10
+    },
+    {
+      "owner": "user",
+      "field": "origin",
+      "instructionVA": "0x140b96765",
+      "stringVA": "0x145d78a17",
+      "keyHelperCallVA": "0x140b96775",
+      "fileOffset": 98006551,
+      "length": 6
+    },
+    {
+      "owner": "user",
+      "field": "name",
+      "instructionVA": "0x140b9681a",
+      "stringVA": "0x145d78920",
+      "keyHelperCallVA": "0x140b96821",
+      "fileOffset": 98006304,
+      "length": 4
+    },
+    {
+      "owner": "user",
+      "field": "description",
+      "instructionVA": "0x140b96841",
+      "stringVA": "0x145d78a4e",
+      "keyHelperCallVA": "0x140b96848",
+      "fileOffset": 98006606,
+      "length": 11
+    },
+    {
+      "owner": "user",
+      "field": "innerContext",
+      "instructionVA": "0x140b96873",
+      "stringVA": "0x145d78a59",
+      "keyHelperCallVA": "0x140b9687a",
+      "fileOffset": 98006617,
+      "length": 12
+    },
+    {
+      "owner": "user",
+      "field": "images",
+      "instructionVA": "0x140b96abb",
+      "stringVA": "0x145d78a1d",
+      "keyHelperCallVA": "0x140b96acb",
+      "fileOffset": 98006557,
+      "length": 6
+    },
+    {
+      "owner": "user",
+      "field": "documents",
+      "instructionVA": "0x140b96bbf",
+      "stringVA": "0x145d78a23",
+      "keyHelperCallVA": "0x140b96bd3",
+      "fileOffset": 98006563,
+      "length": 9
+    },
+    {
+      "owner": "user",
+      "field": "modelId",
+      "instructionVA": "0x140b96cd4",
+      "stringVA": "0x145d78a2c",
+      "keyHelperCallVA": "0x140b96ce4",
+      "fileOffset": 98006572,
+      "length": 7
+    },
+    {
+      "owner": "user",
+      "field": "cachePoint",
+      "instructionVA": "0x140b96d0c",
+      "stringVA": "0x145d78a33",
+      "keyHelperCallVA": "0x140b96d1c",
+      "fileOffset": 98006579,
+      "length": 10
+    },
+    {
+      "owner": "user",
+      "field": "type",
+      "instructionVA": "0x140b96d48",
+      "stringVA": "0x145d83738",
+      "keyHelperCallVA": "0x140b96d59",
+      "fileOffset": 98050872,
+      "length": 4
+    },
+    {
+      "owner": "user",
+      "field": "clientCacheConfig",
+      "instructionVA": "0x140b96dbe",
+      "stringVA": "0x145d78a3d",
+      "keyHelperCallVA": "0x140b96dce",
+      "fileOffset": 98006589,
+      "length": 17
+    },
+    {
+      "owner": "user",
+      "field": "useClientCachingOnly",
+      "instructionVA": "0x140b96e06",
+      "stringVA": "0x145d77372",
+      "keyHelperCallVA": "0x140b96e17",
+      "fileOffset": 98000754,
+      "length": 20
+    },
+    {
+      "owner": "assistant",
+      "field": "messageId",
+      "instructionVA": "0x140bae5d2",
+      "stringVA": "0x145d7a1fe",
+      "keyHelperCallVA": "0x140bae5e2",
+      "fileOffset": 98012670,
+      "length": 9
+    },
+    {
+      "owner": "assistant",
+      "field": "content",
+      "instructionVA": "0x140bae5f7",
+      "stringVA": "0x145d7a207",
+      "keyHelperCallVA": "0x140bae607",
+      "fileOffset": 98012679,
+      "length": 7
+    },
+    {
+      "owner": "assistant",
+      "field": "supplementaryWebLinks",
+      "instructionVA": "0x140bae62e",
+      "stringVA": "0x145d7a20e",
+      "keyHelperCallVA": "0x140bae63e",
+      "fileOffset": 98012686,
+      "length": 21
+    },
+    {
+      "owner": "assistant",
+      "field": "references",
+      "instructionVA": "0x140bae717",
+      "stringVA": "0x145d7a223",
+      "keyHelperCallVA": "0x140bae727",
+      "fileOffset": 98012707,
+      "length": 10
+    },
+    {
+      "owner": "assistant",
+      "field": "followupPrompt",
+      "instructionVA": "0x140bae804",
+      "stringVA": "0x145d7a22d",
+      "keyHelperCallVA": "0x140bae814",
+      "fileOffset": 98012717,
+      "length": 14
+    },
+    {
+      "owner": "assistant",
+      "field": "toolUses",
+      "instructionVA": "0x140bae8af",
+      "stringVA": "0x145d7a23b",
+      "keyHelperCallVA": "0x140bae8bf",
+      "fileOffset": 98012731,
+      "length": 8
+    },
+    {
+      "owner": "assistant",
+      "field": "toolUseId",
+      "instructionVA": "0x140bae923",
+      "stringVA": "0x145d7a6ff",
+      "keyHelperCallVA": "0x140bae937",
+      "fileOffset": 98013951,
+      "length": 9
+    },
+    {
+      "owner": "assistant",
+      "field": "name",
+      "instructionVA": "0x140bae94c",
+      "stringVA": "0x145d7a708",
+      "keyHelperCallVA": "0x140bae95c",
+      "fileOffset": 98013960,
+      "length": 4
+    },
+    {
+      "owner": "assistant",
+      "field": "input",
+      "instructionVA": "0x140bae971",
+      "stringVA": "0x145d7a70c",
+      "keyHelperCallVA": "0x140bae981",
+      "fileOffset": 98013964,
+      "length": 5
+    },
+    {
+      "owner": "assistant",
+      "field": "cachePoint",
+      "instructionVA": "0x140baea08",
+      "stringVA": "0x145d7a243",
+      "keyHelperCallVA": "0x140baea18",
+      "fileOffset": 98012739,
+      "length": 10
+    },
+    {
+      "owner": "assistant",
+      "field": "type",
+      "instructionVA": "0x140baea44",
+      "stringVA": "0x145d83738",
+      "keyHelperCallVA": "0x140baea55",
+      "fileOffset": 98050872,
+      "length": 4
+    },
+    {
+      "owner": "assistant",
+      "field": "reasoningContent",
+      "instructionVA": "0x140baeab5",
+      "stringVA": "0x145d7a24d",
+      "keyHelperCallVA": "0x140baeac5",
+      "fileOffset": 98012749,
+      "length": 16
+    },
+    {
+      "owner": "assistant",
+      "field": "toolUseId",
+      "instructionVA": "0x140baeceb",
+      "stringVA": "0x145d7a6ff",
+      "keyHelperCallVA": "0x140baecf2",
+      "fileOffset": 98013951,
+      "length": 9
+    },
+    {
+      "owner": "assistant",
+      "field": "name",
+      "instructionVA": "0x140baed10",
+      "stringVA": "0x145d7a708",
+      "keyHelperCallVA": "0x140baed17",
+      "fileOffset": 98013960,
+      "length": 4
+    },
+    {
+      "owner": "assistant",
+      "field": "input",
+      "instructionVA": "0x140baed35",
+      "stringVA": "0x145d7a70c",
+      "keyHelperCallVA": "0x140baed3c",
+      "fileOffset": 98013964,
+      "length": 5
+    },
+    {
+      "owner": "reasoning",
+      "field": "redactedContent",
+      "instructionVA": "0x140b80087",
+      "stringVA": "0x145d76adf",
+      "keyHelperCallVA": "0x140b8009a",
+      "fileOffset": 97998559,
+      "length": 15
+    },
+    {
+      "owner": "reasoning",
+      "field": "reasoningText",
+      "instructionVA": "0x140b8012f",
+      "stringVA": "0x145d76ad2",
+      "keyHelperCallVA": "0x140b80142",
+      "fileOffset": 97998546,
+      "length": 13
+    },
+    {
+      "owner": "reasoning",
+      "field": "text",
+      "instructionVA": "0x140b8016e",
+      "stringVA": "0x145d7bc91",
+      "keyHelperCallVA": "0x140b8017f",
+      "fileOffset": 98019473,
+      "length": 4
+    },
+    {
+      "owner": "reasoning",
+      "field": "signature",
+      "instructionVA": "0x140b8019c",
+      "stringVA": "0x145d7bc95",
+      "keyHelperCallVA": "0x140b801ad",
+      "fileOffset": 98019477,
+      "length": 9
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, access, symlink, realpath, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 const { createUpdater } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
-async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean; noBackend?: boolean; noNpm?: boolean; onCommand?: (args: string[], settings: any) => Promise<void> } = {}) {
+async function fixture(t: TestContext, options: { missingEntry?: boolean; missingShim?: boolean; directoryEntry?: boolean; directoryShim?: boolean; wrongVersion?: boolean; linkedNpm?: boolean; noBackend?: boolean; noNpm?: boolean; onCommand?: (args: string[], settings: any) => Promise<void> } = {}) {
   const root = await mkdtemp(join(tmpdir(), "axiom-pi-update-")); t.after(() => rm(root, { recursive: true, force: true }));
   const node = join(root, "node/bin/node"), npm = options.linkedNpm ? join(root, "node/share/npm/bin/npm-cli.js") : join(dirname(node), "node_modules/npm/bin/npm-cli.js");
   const cli = join(root, "service/bin/axiom2.mjs"), prefix = join(root, "global"), modules = join(prefix, process.platform === "win32" ? "node_modules" : "lib/node_modules");
@@ -21,8 +21,14 @@ async function fixture(t: TestContext, options: { missingEntry?: boolean; missin
   const shim = process.platform === "win32" ? join(prefix, "pi.cmd") : join(prefix, "bin/pi");
   const installVersion = async (version: string) => {
     await put(pkgPath, { name: "@earendil-works/pi-coding-agent", version, bin: { pi: "dist/bundle/cli.js" } });
-    if (!options.missingEntry) await put(entry, "fixture");
-    if (!options.missingShim) await put(shim, "fixture");
+    if (options.directoryEntry) await mkdir(entry, { recursive: true });
+    else if (!options.missingEntry) await put(entry, "fixture");
+    if (options.directoryShim) await mkdir(shim, { recursive: true });
+    else if (!options.missingShim) await put(shim, "fixture");
+    if (process.platform !== "win32") {
+      if (!options.missingEntry && !options.directoryEntry) await chmod(entry, 0o755);
+      if (!options.missingShim && !options.directoryShim) await chmod(shim, 0o755);
+    }
   };
   await installVersion("0.85.1");
   const installs: string[][] = []; let fail = false;
@@ -129,7 +135,7 @@ test("pi resolves an npm symlink beside the registered Node outside the usual la
   assert.equal(result.job.phase, "complete", result.job.message);
   assert.equal(f.installs.length, 1);
 });
-for (const options of [{ missingEntry: true }, { missingShim: true }, { wrongVersion: true }]) {
+for (const options of [{ missingEntry: true }, { missingShim: true }, { directoryEntry: true }, { directoryShim: true }, { wrongVersion: true }]) {
   test(`pi does not report success for an unusable CLI: ${Object.keys(options)[0]}`, async t => {
     const f = await fixture(t, options), state = await f.updater.piCheck();
     const result = await f.updater.runJob("pi", state.pi.release.token);
@@ -137,10 +143,30 @@ for (const options of [{ missingEntry: true }, { missingShim: true }, { wrongVer
     assert.match(result.job.message, /命令入口不完整|未通过运行验证/);
     assert.equal(result.pi.cli.version, "1.1.1");
     assert.equal(result.pi.release.token, null, "changed installation requires a fresh check before retry");
-    assert.ok((await f.updater.piCheck()).pi.release.token);
+    const checked = await f.updater.runJob("pi-check");
+    assert.equal(checked.job.kind, "pi-check");
+    assert.ok(checked.pi.release.token);
+    assert.equal(checked.pi.cli.repairRequired, true, "rechecking must not erase a failed CLI validation");
+    const refreshed = await f.updater.piRefresh();
+    assert.equal(refreshed.job.kind, "pi-refresh");
+    assert.equal(refreshed.pi.cli.repairRequired, true);
+    const restarted = createUpdater({ root: f.root });
+    assert.equal((await restarted.status()).pi.cli.repairRequired, true, "repair requirement survives process restart");
     await assert.rejects(access(join(dirname(dirname(f.pkgPath)), ".axiom-pi-update.lock")));
   });
 }
+test("only a fully verified Pi reinstall clears its independent repair requirement", async t => {
+  const options = { wrongVersion: true }, f = await fixture(t, options), state = await f.updater.runJob("pi-check");
+  assert.equal((await f.updater.runJob("pi", state.pi.release.token)).job.phase, "error");
+  const checked = await f.updater.runJob("pi-check");
+  assert.equal(checked.pi.cli.repairRequired, true);
+  options.wrongVersion = false;
+  const result = await f.updater.runJob("pi", checked.pi.release.token);
+  assert.equal(result.job.phase, "complete", result.job.message);
+  assert.equal(result.pi.cli.repairRequired, false);
+  assert.equal((await f.updater.piRefresh()).pi.cli.repairRequired, false);
+  assert.equal(f.installs.length, 2);
+});
 test("changing global modules symlink invalidates pi upgrade confirmation", async t => {
   const f = await fixture(t), a = join(f.root, "a"), b = join(f.root, "b");
   await rm(f.modules, { recursive: true, force: true });
@@ -148,6 +174,27 @@ test("changing global modules symlink invalidates pi upgrade confirmation", asyn
   await symlink(a, f.modules, process.platform === "win32" ? "junction" : "dir");
   const state = await f.updater.piCheck(); await rm(f.modules); await symlink(b, f.modules, process.platform === "win32" ? "junction" : "dir");
   const result = await f.updater.runJob("pi", state.pi.release.token); assert.equal(result.job.phase, "error"); assert.equal(f.installs.length, 0);
+});
+
+for (const stage of ["install", "--version"]) test(`Pi cancellation during ${stage} preserves repair state across subsequent tasks`, { timeout: 10000 }, async t => {
+  let enter!: () => void;
+  const entered = new Promise<void>(resolve => { enter = resolve; });
+  const f = await fixture(t, { onCommand: async (args, options) => {
+    if (args[1] !== stage) return;
+    options.signal.throwIfAborted(); enter();
+    await new Promise<void>((_resolve, reject) => options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+  } });
+  const state = await f.updater.piCheck(), work = f.updater.runJob("pi", state.pi.release.token);
+  await entered;
+  const id = (await f.updater.status()).job.task.id;
+  try {
+    await f.updater.maintenanceControl("cancel", { id });
+    const result = await work;
+    assert.equal(result.job.task.status, "cancelled");
+    assert.equal((await f.updater.piRefresh()).pi.cli.repairRequired, true, "npm may leave a partially changed installation even if package.json still has the previous version");
+    assert.equal((await f.updater.runJob("pi-check")).pi.cli.repairRequired, true);
+    assert.equal((await createUpdater({ root: f.root }).status()).pi.cli.repairRequired, true);
+  } finally { await f.updater.maintenanceControl("cancel", { id }).catch(() => {}); await work; }
 });
 
 for (const stage of ["root", "--version"]) test(`pi ${stage} probe follows live budgets and cancellation without starting more commands`, { timeout: 10000 }, async t => {

@@ -162,7 +162,10 @@ try {
     if (-not $state.nodeReady) { throw '请先安装 Node.js 22.19.0+ 和 npm。' }
     if (-not $state.writable) { throw '用户数据目录不可写。' }
     $env:AXIOM_SETUP_NPM = $state.npm
-    & $state.node $env:AXIOM_SETUP_SERVICE 2>&1 | ForEach-Object { [Console]::Out.WriteLine([string]$_) }
+    # Native stdout/stderr already share the install log. Merging stderr into a
+    # PowerShell pipeline turns normal npm diagnostics into terminating
+    # NativeCommandError records under Windows PowerShell 5.1 + Stop.
+    & $state.node $env:AXIOM_SETUP_SERVICE
     $axiomSetupExit = $LASTEXITCODE
     if ($axiomSetupExit -ne 0) { exit $axiomSetupExit }
 } catch {

@@ -104,8 +104,9 @@ test("Kiro OIDC refresh retains region/registration and rotates under the SDK cr
   } });
   const credentials = new InMemoryCredentialStore(); await credentials.modify("kiro", async () => saved());
   const models = createModels({ credentials }); models.setProvider({ ...kiroProvider(), auth: { oauth } });
-  const result = await Promise.all(Array.from({ length: 6 }, () => models.getAuth("kiro")));
-  assert.equal(count, 1); assert.ok(result.every(r => r?.auth.apiKey === "ACCESS"));
+  const result = await Promise.allSettled(Array.from({ length: 6 }, () => models.getAuth("kiro")));
+  assert.equal(count, 1);
+  assert.ok(result.every(r => r.status === "rejected" && /仅供原生适配器/.test(r.reason.cause?.message)), "refresh works, but OAuth tokens are never derived for inference");
   const stored = await credentials.read("kiro") as KiroCredential;
   assert.equal(stored.authMethod, "identity-center"); assert.equal(stored.clientSecret, "CLIENT-SECRET"); assert.equal(stored.refresh, "REFRESH");
 });

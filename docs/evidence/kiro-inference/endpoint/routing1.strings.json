@@ -1,0 +1,207 @@
+[
+  {
+    "line": 30,
+    "instruction": "0000000142278BF4: 48 8D 15 9F 54 4F  lea         rdx,[000000015B76E09Ah]",
+    "offset": "0x1b76cc9a",
+    "direct": "endpoint",
+    "pointers": []
+  },
+  {
+    "line": 119,
+    "instruction": "0000000142278D65: 0F 10 05 24 60 4F  movups      xmm0,xmmword ptr [000000015B76ED90h]",
+    "offset": "0x1b76d990",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 122,
+    "instruction": "0000000142278D70: 0F 10 05 09 60 4F  movups      xmm0,xmmword ptr [000000015B76ED80h]",
+    "offset": "0x1b76d980",
+    "direct": "!",
+    "pointers": [
+      {
+        "at": 16,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 125,
+    "instruction": "0000000142278D7B: 0F 10 05 EE 5F 4F  movups      xmm0,xmmword ptr [000000015B76ED70h]",
+    "offset": "0x1b76d970",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x15b76ed48",
+        "text": "https://q.us-east-1.amazonaws.com"
+      },
+      {
+        "at": 32,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 131,
+    "instruction": "0000000142278D91: 48 8D 15 DF 18 4F  lea         rdx,[000000015B76A677h]",
+    "offset": "0x1b769277",
+    "direct": "regionprofile_namelabelstruct ResourceSettingsstruct Settingstool_nameargsadjacently tagged enum UseSubagentcommandcontentUseSubagentListAgentsInvokeSubagents",
+    "pointers": []
+  },
+  {
+    "line": 161,
+    "instruction": "0000000142278E05: 0F 10 05 84 5F 4F  movups      xmm0,xmmword ptr [000000015B76ED90h]",
+    "offset": "0x1b76d990",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 164,
+    "instruction": "0000000142278E10: 0F 10 05 69 5F 4F  movups      xmm0,xmmword ptr [000000015B76ED80h]",
+    "offset": "0x1b76d980",
+    "direct": "!",
+    "pointers": [
+      {
+        "at": 16,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 167,
+    "instruction": "0000000142278E1B: 0F 10 05 4E 5F 4F  movups      xmm0,xmmword ptr [000000015B76ED70h]",
+    "offset": "0x1b76d970",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x15b76ed48",
+        "text": "https://q.us-east-1.amazonaws.com"
+      },
+      {
+        "at": 32,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 352,
+    "instruction": "00000001422790E1: 48 8D 0D D0 60 4F  lea         rcx,[000000015B76F1B8h]",
+    "offset": "0x1b76ddb8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b76f190",
+        "text": "Failed to find endpoint for region: "
+      }
+    ]
+  },
+  {
+    "line": 476,
+    "instruction": "00000001422792C1: 4C 8D 3D A0 13 8A  lea         r15,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 494,
+    "instruction": "0000000142279304: 48 8D 0D AD 5E 4F  lea         rcx,[000000015B76F1B8h]",
+    "offset": "0x1b76ddb8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b76f190",
+        "text": "Failed to find endpoint for region: "
+      }
+    ]
+  },
+  {
+    "line": 599,
+    "instruction": "00000001422794A2: 0F 10 05 E7 58 4F  movups      xmm0,xmmword ptr [000000015B76ED90h]",
+    "offset": "0x1b76d990",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 602,
+    "instruction": "00000001422794AD: 0F 10 05 CC 58 4F  movups      xmm0,xmmword ptr [000000015B76ED80h]",
+    "offset": "0x1b76d980",
+    "direct": "!",
+    "pointers": [
+      {
+        "at": 16,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 605,
+    "instruction": "00000001422794B8: 0F 10 05 B1 58 4F  movups      xmm0,xmmword ptr [000000015B76ED70h]",
+    "offset": "0x1b76d970",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x15b76ed48",
+        "text": "https://q.us-east-1.amazonaws.com"
+      },
+      {
+        "at": 32,
+        "va": "0x15b76e9d8",
+        "text": "us-east-1https://management.us-east-1.kiro.dev"
+      }
+    ]
+  },
+  {
+    "line": 692,
+    "instruction": "00000001422795F2: 4C 8D 05 AF 6A 5B  lea         r8,[000000015B8300A8h]",
+    "offset": "0x1b82eca8",
+    "direct": "@",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b830040",
+        "text": "C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\indexmap-2.14.0\\src\\map.rs"
+      }
+    ]
+  },
+  {
+    "line": 697,
+    "instruction": "0000000142279604: 4C 8D 05 9D 6A 5B  lea         r8,[000000015B8300A8h]",
+    "offset": "0x1b82eca8",
+    "direct": "@",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b830040",
+        "text": "C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\indexmap-2.14.0\\src\\map.rs"
+      }
+    ]
+  }
+]

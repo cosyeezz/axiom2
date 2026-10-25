@@ -1,0 +1,159 @@
+[
+  {
+    "line": 141,
+    "instruction": "00000001435AD01B: 48 8D 05 8E F7 33  lea         rax,[000000015B8EC7B0h]",
+    "offset": "0x1b8eb3b0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8ec7a0",
+        "text": "endpointregion"
+      },
+      {
+        "at": 16,
+        "va": "0x15b8ec7a8",
+        "text": "region"
+      }
+    ]
+  },
+  {
+    "line": 146,
+    "instruction": "00000001435AD030: 4C 8D 05 59 F7 33  lea         r8,[000000015B8EC790h]",
+    "offset": "0x1b8eb390",
+    "direct": "EndpointOverrideendpointregion",
+    "pointers": [
+      {
+        "at": 32,
+        "va": "0x15b8ec7a0",
+        "text": "endpointregion"
+      }
+    ]
+  },
+  {
+    "line": 200,
+    "instruction": "00000001435AD0FC: 48 8D 05 A5 F7 33  lea         rax,[000000015B8EC8A8h]",
+    "offset": "0x1b8eb4a8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8ec7d0",
+        "text": "Setting  has empty endpoint or region "
+      },
+      {
+        "at": 16,
+        "va": "0x15b8ec850",
+        "text": " is malformed (expected {\"endpoint\": \"...\", \"region\": \"...\"}):  "
+      }
+    ]
+  },
+  {
+    "line": 258,
+    "instruction": "00000001435AD1DD: 4C 8D 35 84 D4 56  lea         r14,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 329,
+    "instruction": "00000001435AD2EC: 48 8D 05 1D F5 33  lea         rax,[000000015B8EC810h]",
+    "offset": "0x1b8eb410",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8ec7d0",
+        "text": "Setting  has empty endpoint or region "
+      },
+      {
+        "at": 16,
+        "va": "0x15b8ec7d8",
+        "text": " has empty endpoint or region "
+      }
+    ]
+  },
+  {
+    "line": 389,
+    "instruction": "00000001435AD3D9: 4C 8D 35 88 D2 56  lea         r14,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 440,
+    "instruction": "00000001435AD498: 48 8D 3D C9 D1 56  lea         rdi,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 472,
+    "instruction": "00000001435AD50D: 48 8D 05 94 F3 33  lea         rax,[000000015B8EC8A8h]",
+    "offset": "0x1b8eb4a8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8ec7d0",
+        "text": "Setting  has empty endpoint or region "
+      },
+      {
+        "at": 16,
+        "va": "0x15b8ec850",
+        "text": " is malformed (expected {\"endpoint\": \"...\", \"region\": \"...\"}):  "
+      }
+    ]
+  },
+  {
+    "line": 529,
+    "instruction": "00000001435AD5ED: 4C 8D 35 7C 82 80  lea         r14,[000000015BDB5870h]",
+    "offset": "0x1bdb4470",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15bdb5880",
+        "text": " span="
+      }
+    ]
+  },
+  {
+    "line": 601,
+    "instruction": "00000001435AD6ED: 48 8D 3D 74 CF 56  lea         rdi,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 625,
+    "instruction": "00000001435AD746: 48 8D 05 C3 F0 33  lea         rax,[000000015B8EC810h]",
+    "offset": "0x1b8eb410",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8ec7d0",
+        "text": "Setting  has empty endpoint or region "
+      },
+      {
+        "at": 16,
+        "va": "0x15b8ec7d8",
+        "text": " has empty endpoint or region "
+      }
+    ]
+  },
+  {
+    "line": 683,
+    "instruction": "00000001435AD82F: 4C 8D 35 3A 80 80  lea         r14,[000000015BDB5870h]",
+    "offset": "0x1bdb4470",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15bdb5880",
+        "text": " span="
+      }
+    ]
+  }
+]

@@ -1,0 +1,79 @@
+[
+  {
+    "name": "runtime1",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x142278780,0x142278ba7",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "runtime2",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x1435add80,0x1435ae1a7",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "q1",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x142279cd0,0x142279fa7",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "q2",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x1435af2e0,0x1435af5b7",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "override1",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x142277ac0,0x1422782c8",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "management1",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x142278350,0x142278777",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  },
+  {
+    "name": "routing1",
+    "args": [
+      "/nologo",
+      "/disasm",
+      "/range:0x142278bb0,0x142279644",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exit": 0,
+    "stderr": ""
+  }
+]

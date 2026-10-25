@@ -37,6 +37,11 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: npm ci
       - run: npm --prefix app run build:desktop
+      - name: Capture macOS production inputs
+        if: runner.os == 'macOS'
+        env:
+          AXIOM_REGRESSION_REF: ${{ github.sha }}
+        run: node scripts/native-source-proof.mjs capture
       - run: node scripts/build-desktop.mjs --targets ${{ runner.os == 'macOS' && 'universal' || 'x64' }}
       - name: Verify native resources
         env:
@@ -71,6 +76,7 @@ jobs:
           fi
           ditto "$bundle" "$RUNNER_TEMP/axiom-macos-smoke/Axiom2.app"
           (cd app && shasum -a 256 Axiom2.dmg > SHA256SUMS-macos)
+          node scripts/native-source-proof.mjs seal-production
       - name: Smoke test macOS controller window
         if: runner.os == 'macOS'
         shell: bash
@@ -126,6 +132,7 @@ jobs:
           set -euo pipefail
           target="$(node -p 'process.arch === "arm64" ? "arm64" : "x64"')"
           node scripts/build-desktop.mjs --targets "$target" --test-instance
+          node scripts/native-source-proof.mjs verify
       - name: Check macOS single-window WebViews and service lifecycle
         if: runner.os == 'macOS'
         shell: bash

@@ -1,0 +1,904 @@
+[
+  {
+    "line": 188,
+    "instruction": "00000001415B9209: 48 8D 15 C0 BC 8B  lea         rdx,[0000000145E74ED0h]",
+    "offset": "0x5e73ad0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      }
+    ]
+  },
+  {
+    "line": 301,
+    "instruction": "00000001415B93AB: 4C 8D 05 9E 8E 8B  lea         r8,[0000000145E72250h]",
+    "offset": "0x5e70e50",
+    "direct": "Os::new: Database::new_with_workspace failed",
+    "pointers": []
+  },
+  {
+    "line": 346,
+    "instruction": "00000001415B944E: 48 8D 15 2B 8E 8B  lea         rdx,[0000000145E72280h]",
+    "offset": "0x5e70e80",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 485,
+    "instruction": "00000001415B9655: 48 8D 0D 8C 89 8B  lea         rcx,[0000000145E71FE8h]",
+    "offset": "0x5e70be8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71fc0",
+        "text": "Using custom endpoint for API key"
+      }
+    ]
+  },
+  {
+    "line": 554,
+    "instruction": "00000001415B9759: 48 8D 15 88 B7 8B  lea         rdx,[0000000145E74EE8h]",
+    "offset": "0x5e73ae8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      }
+    ]
+  },
+  {
+    "line": 619,
+    "instruction": "00000001415B9840: 4C 8D 05 09 8B 8B  lea         r8,[0000000145E72350h]",
+    "offset": "0x5e70f50",
+    "direct": "Os::new: TelemetryThread::new failed",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 681,
+    "instruction": "00000001415B9928: 48 8D 15 49 8A 8B  lea         rdx,[0000000145E72378h]",
+    "offset": "0x5e70f78",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1136,
+    "instruction": "00000001415B9F8B: 4C 8D 05 8F 65 33  lea         r8,[000000015B8F0521h]",
+    "offset": "0x1b8ef121",
+    "direct": "auth.idc.start-urlapi.codewhisperer.profiletelemetry-cognito-credentialstelemetry-cognito-identity-idBEGIN IMMEDIATESELECT value FROM ",
+    "pointers": []
+  },
+  {
+    "line": 1253,
+    "instruction": "00000001415BA147: 0F 10 05 FA 7D 8B  movups      xmm0,xmmword ptr [0000000145E71F48h]",
+    "offset": "0x5e70b48",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71f19",
+        "text": "us-east-1"
+      }
+    ]
+  },
+  {
+    "line": 1256,
+    "instruction": "00000001415BA152: 0F 10 05 DF 7D 8B  movups      xmm0,xmmword ptr [0000000145E71F38h]",
+    "offset": "0x5e70b38",
+    "direct": "!",
+    "pointers": [
+      {
+        "at": 16,
+        "va": "0x145e71f19",
+        "text": "us-east-1"
+      }
+    ]
+  },
+  {
+    "line": 1259,
+    "instruction": "00000001415BA15D: 0F 10 05 C4 7D 8B  movups      xmm0,xmmword ptr [0000000145E71F28h]",
+    "offset": "0x5e70b28",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x145e71ef8",
+        "text": "https://q.us-east-1.amazonaws.comus-east-1"
+      },
+      {
+        "at": 32,
+        "va": "0x145e71f19",
+        "text": "us-east-1"
+      }
+    ]
+  },
+  {
+    "line": 1262,
+    "instruction": "00000001415BA167: 0F 10 05 22 7E 8B  movups      xmm0,xmmword ptr [0000000145E71F90h]",
+    "offset": "0x5e70b90",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x145e71f58",
+        "text": "https://q.eu-central-1.amazonaws.com/eu-central-1"
+      },
+      {
+        "at": 32,
+        "va": "0x145e71f7d",
+        "text": "eu-central-1"
+      }
+    ]
+  },
+  {
+    "line": 1265,
+    "instruction": "00000001415BA172: 0F 10 05 27 7E 8B  movups      xmm0,xmmword ptr [0000000145E71FA0h]",
+    "offset": "0x5e70ba0",
+    "direct": "%",
+    "pointers": [
+      {
+        "at": 16,
+        "va": "0x145e71f7d",
+        "text": "eu-central-1"
+      }
+    ]
+  },
+  {
+    "line": 1268,
+    "instruction": "00000001415BA17D: 0F 10 05 2C 7E 8B  movups      xmm0,xmmword ptr [0000000145E71FB0h]",
+    "offset": "0x5e70bb0",
+    "direct": "}",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71f7d",
+        "text": "eu-central-1"
+      }
+    ]
+  },
+  {
+    "line": 1344,
+    "instruction": "00000001415BA29C: 4C 8D 25 C5 03 56  lea         r12,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 1363,
+    "instruction": "00000001415BA2DF: 48 8D 0D 02 7D 8B  lea         rcx,[0000000145E71FE8h]",
+    "offset": "0x5e70be8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71fc0",
+        "text": "Using custom endpoint for API key"
+      }
+    ]
+  },
+  {
+    "line": 1494,
+    "instruction": "00000001415BA4CC: 48 8D 0D 2D AA 8B  lea         rcx,[0000000145E74F00h]",
+    "offset": "0x5e73b00",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      }
+    ]
+  },
+  {
+    "line": 1498,
+    "instruction": "00000001415BA4DD: 48 8D 0D 54 7D 8B  lea         rcx,[0000000145E72238h]",
+    "offset": "0x5e70e38",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1501,
+    "instruction": "00000001415BA4E9: 48 8D 0D 48 7D 8B  lea         rcx,[0000000145E72238h]",
+    "offset": "0x5e70e38",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1510,
+    "instruction": "00000001415BA50A: 48 8D 0D EF A9 8B  lea         rcx,[0000000145E74F00h]",
+    "offset": "0x5e73b00",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e74e8a",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs"
+      }
+    ]
+  },
+  {
+    "line": 1516,
+    "instruction": "00000001415BA522: 48 8D 0D 1F 8E 8B  lea         rcx,[0000000145E73348h]",
+    "offset": "0x5e71f48",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e73300",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\host_config.rs"
+      }
+    ]
+  },
+  {
+    "line": 1522,
+    "instruction": "00000001415BA53A: 48 8D 0D 07 8E 8B  lea         rcx,[0000000145E73348h]",
+    "offset": "0x5e71f48",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e73300",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\host_config.rs"
+      }
+    ]
+  },
+  {
+    "line": 1530,
+    "instruction": "00000001415BA559: 48 8D 0D 00 7B 8B  lea         rcx,[0000000145E72060h]",
+    "offset": "0x5e70c60",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72018",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\profile.rs"
+      }
+    ]
+  },
+  {
+    "line": 1538,
+    "instruction": "00000001415BA578: 48 8D 0D E1 7A 8B  lea         rcx,[0000000145E72060h]",
+    "offset": "0x5e70c60",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72018",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\profile.rs"
+      }
+    ]
+  },
+  {
+    "line": 1546,
+    "instruction": "00000001415BA597: 48 8D 0D EA 8E 8B  lea         rcx,[0000000145E73488h]",
+    "offset": "0x5e72088",
+    "direct": "(4",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e73428",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\legacy_sink.rs"
+      }
+    ]
+  },
+  {
+    "line": 1554,
+    "instruction": "00000001415BA5B6: 48 8D 0D CB 8E 8B  lea         rcx,[0000000145E73488h]",
+    "offset": "0x5e72088",
+    "direct": "(4",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e73428",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\legacy_sink.rs"
+      }
+    ]
+  },
+  {
+    "line": 1564,
+    "instruction": "00000001415BA5DC: 48 8D 0D ED 7B 8B  lea         rcx,[0000000145E721D0h]",
+    "offset": "0x5e70dd0",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1574,
+    "instruction": "00000001415BA602: 48 8D 0D C7 7B 8B  lea         rcx,[0000000145E721D0h]",
+    "offset": "0x5e70dd0",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1590,
+    "instruction": "00000001415BA63D: 48 8D 0D 3C 76 8B  lea         rcx,[0000000145E71C80h]",
+    "offset": "0x5e70880",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1606,
+    "instruction": "00000001415BA678: 48 8D 0D 01 76 8B  lea         rcx,[0000000145E71C80h]",
+    "offset": "0x5e70880",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1760,
+    "instruction": "00000001415BA8B0: 48 8D 15 A1 78 8B  lea         rdx,[0000000145E72158h]",
+    "offset": "0x5e70d58",
+    "direct": "8!",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72138",
+        "text": "Trying GetProfile for API key"
+      }
+    ]
+  },
+  {
+    "line": 1835,
+    "instruction": "00000001415BA9D5: 4C 8D 3D 8C FC 55  lea         r15,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 1891,
+    "instruction": "00000001415BAAA8: 48 8D 1D B9 FB 55  lea         rbx,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 1910,
+    "instruction": "00000001415BAAEB: 48 8D 0D 66 76 8B  lea         rcx,[0000000145E72158h]",
+    "offset": "0x5e70d58",
+    "direct": "8!",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72138",
+        "text": "Trying GetProfile for API key"
+      }
+    ]
+  },
+  {
+    "line": 1982,
+    "instruction": "00000001415BABFD: 48 8D 35 6C AC 7F  lea         rsi,[000000015BDB5870h]",
+    "offset": "0x1bdb4470",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15bdb5880",
+        "text": " span="
+      }
+    ]
+  },
+  {
+    "line": 2289,
+    "instruction": "00000001415BB057: 0F 10 05 5A 71 8B  movups      xmm0,xmmword ptr [0000000145E721B8h]",
+    "offset": "0x5e70db8",
+    "direct": "orted for IPC mock",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2292,
+    "instruction": "00000001415BB062: 0F 10 05 3F 71 8B  movups      xmm0,xmmword ptr [0000000145E721A8h]",
+    "offset": "0x5e70da8",
+    "direct": "api_key not supported for IPC mock",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2295,
+    "instruction": "00000001415BB06D: 0F 10 05 24 71 8B  movups      xmm0,xmmword ptr [0000000145E72198h]",
+    "offset": "0x5e70d98",
+    "direct": "get_profile_for_api_key not supported for IPC mock",
+    "pointers": []
+  },
+  {
+    "line": 2529,
+    "instruction": "00000001415BB3BD: 48 8D 15 04 6D 8B  lea         rdx,[0000000145E720C8h]",
+    "offset": "0x5e70cc8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e720a8",
+        "text": "GetProfile failed for API key"
+      }
+    ]
+  },
+  {
+    "line": 2614,
+    "instruction": "00000001415BB505: 4C 8D 3D 5C F1 55  lea         r15,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 2699,
+    "instruction": "00000001415BB63E: 48 8D 15 43 6B 8B  lea         rdx,[0000000145E72188h]",
+    "offset": "0x5e70d88",
+    "direct": "h!",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72168",
+        "text": "Failed to create ApiClient"
+      }
+    ]
+  },
+  {
+    "line": 2784,
+    "instruction": "00000001415BB785: 4C 8D 3D DC EE 55  lea         r15,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 2835,
+    "instruction": "00000001415BB847: 4C 8D 35 1A EE 55  lea         r14,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 2847,
+    "instruction": "00000001415BB872: 48 8D 0D 4F 68 8B  lea         rcx,[0000000145E720C8h]",
+    "offset": "0x5e70cc8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e720a8",
+        "text": "GetProfile failed for API key"
+      }
+    ]
+  },
+  {
+    "line": 2933,
+    "instruction": "00000001415BB9B5: 48 8D 3D B4 9E 7F  lea         rdi,[000000015BDB5870h]",
+    "offset": "0x1bdb4470",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15bdb5880",
+        "text": " span="
+      }
+    ]
+  },
+  {
+    "line": 3064,
+    "instruction": "00000001415BBBA6: 4C 8D 35 BB EA 55  lea         r14,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 3078,
+    "instruction": "00000001415BBBD8: 48 8D 0D A9 65 8B  lea         rcx,[0000000145E72188h]",
+    "offset": "0x5e70d88",
+    "direct": "h!",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72168",
+        "text": "Failed to create ApiClient"
+      }
+    ]
+  },
+  {
+    "line": 3164,
+    "instruction": "00000001415BBD1B: 48 8D 3D 4E 9B 7F  lea         rdi,[000000015BDB5870h]",
+    "offset": "0x1bdb4470",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15bdb5880",
+        "text": " span="
+      }
+    ]
+  },
+  {
+    "line": 3241,
+    "instruction": "00000001415BBE3A: 48 8D 0D 57 62 8B  lea         rcx,[0000000145E72098h]",
+    "offset": "0x5e70c98",
+    "direct": "x ",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72078",
+        "text": "GetProfile succeeded for API keyx "
+      }
+    ]
+  },
+  {
+    "line": 3359,
+    "instruction": "00000001415BBFEC: 48 8D 0D 35 61 8B  lea         rcx,[0000000145E72128h]",
+    "offset": "0x5e70d28",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e720f8",
+        "text": "GetProfile failed on all endpoints for API key"
+      }
+    ]
+  },
+  {
+    "line": 3432,
+    "instruction": "00000001415BC105: 4C 8D 3D 5C E5 55  lea         r15,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 3452,
+    "instruction": "00000001415BC14B: 48 8D 0D D6 5F 8B  lea         rcx,[0000000145E72128h]",
+    "offset": "0x5e70d28",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e720f8",
+        "text": "GetProfile failed on all endpoints for API key"
+      }
+    ]
+  },
+  {
+    "line": 3643,
+    "instruction": "00000001415BC3FA: 4C 8D 05 97 5E 8B  lea         r8,[0000000145E72298h]",
+    "offset": "0x5e70e98",
+    "direct": "Os::new: ApiClient::new failed",
+    "pointers": [
+      {
+        "at": 32,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 3756,
+    "instruction": "00000001415BC5A4: 4C 8D 05 25 5D 8B  lea         r8,[0000000145E722D0h]",
+    "offset": "0x5e70ed0",
+    "direct": "Os::new: BuilderIdToken::load failed",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 3802,
+    "instruction": "00000001415BC64E: 48 8D 15 A3 5C 8B  lea         rdx,[0000000145E722F8h]",
+    "offset": "0x5e70ef8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 3851,
+    "instruction": "00000001415BC700: 48 8D 15 B1 5B 8B  lea         rdx,[0000000145E722B8h]",
+    "offset": "0x5e70eb8",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 3964,
+    "instruction": "00000001415BC892: 48 8D 0D E7 85 8B  lea         rcx,[0000000145E74E80h]",
+    "offset": "0x5e73a80",
+    "direct": "aws-us-govC:\\a\\kiro-cli\\kiro-cli\\crates\\kiro-telemetry-host\\src\\thread.rs",
+    "pointers": []
+  },
+  {
+    "line": 4106,
+    "instruction": "00000001415BCAAB: 48 8D 05 EE 92 8B  lea         rax,[0000000145E75DA0h]",
+    "offset": "0x5e749a0",
+    "direct": "service configC:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-client\\src\\operation\\get_profile.rs",
+    "pointers": []
+  },
+  {
+    "line": 4206,
+    "instruction": "00000001415BCC68: 48 8D 0D 21 67 8B  lea         rcx,[0000000145E73390h]",
+    "offset": "0x5e71f90",
+    "direct": "https://client-telemetry.us-east-1.amazonaws.comus-east-1:820fd6d1-95c0-4ca4-bffb-3f01d32da842",
+    "pointers": []
+  },
+  {
+    "line": 4245,
+    "instruction": "00000001415BCCF2: 48 8D 05 3F 5E 08  lea         rax,[000000015B642B38h]",
+    "offset": "0x1b641738",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x141bad400",
+        "text": "UAWAVVWSH"
+      },
+      {
+        "at": 32,
+        "va": "0x141ecda00",
+        "text": "UVWSH"
+      }
+    ]
+  },
+  {
+    "line": 4352,
+    "instruction": "00000001415BCE81: 48 8D 3D 91 50 8B  lea         rdi,[0000000145E71F19h]",
+    "offset": "0x5e70b19",
+    "direct": "us-east-1",
+    "pointers": []
+  },
+  {
+    "line": 4398,
+    "instruction": "00000001415BCF37: 0F 10 05 C2 64 8B  movups      xmm0,xmmword ptr [0000000145E73400h]",
+    "offset": "0x5e72000",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x145e73390",
+        "text": "https://client-telemetry.us-east-1.amazonaws.comus-east-1:820fd6d1-95c0-4ca4-bffb-3f01d32da842"
+      },
+      {
+        "at": 24,
+        "va": "0x145e733c0",
+        "text": "us-east-1:820fd6d1-95c0-4ca4-bffb-3f01d32da842"
+      }
+    ]
+  },
+  {
+    "line": 4401,
+    "instruction": "00000001415BCF42: 0F 10 05 C7 64 8B  movups      xmm0,xmmword ptr [0000000145E73410h]",
+    "offset": "0x5e72010",
+    "direct": "0",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x145e733c0",
+        "text": "us-east-1:820fd6d1-95c0-4ca4-bffb-3f01d32da842"
+      }
+    ]
+  },
+  {
+    "line": 4442,
+    "instruction": "00000001415BCFD9: 48 8D 15 90 64 8B  lea         rdx,[0000000145E73470h]",
+    "offset": "0x5e72070",
+    "direct": "(4",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e73428",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\legacy_sink.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e73428",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\telemetry\\legacy_sink.rs"
+      }
+    ]
+  },
+  {
+    "line": 5014,
+    "instruction": "00000001415BD7E6: 4C 8D 05 23 4B 8B  lea         r8,[0000000145E72310h]",
+    "offset": "0x5e70f10",
+    "direct": "Os::new: build_v2_host_config failed",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 5059,
+    "instruction": "00000001415BD889: 48 8D 15 A8 4A 8B  lea         rdx,[0000000145E72338h]",
+    "offset": "0x5e70f38",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72200",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\os\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 5212,
+    "instruction": "00000001415BDABE: 4C 8D 25 A3 CB 55  lea         r12,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 5226,
+    "instruction": "00000001415BDAF1: 48 8D 0D A0 45 8B  lea         rcx,[0000000145E72098h]",
+    "offset": "0x5e70c98",
+    "direct": "x ",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e72078",
+        "text": "GetProfile succeeded for API keyx "
+      }
+    ]
+  },
+  {
+    "line": 5432,
+    "instruction": "00000001415BDDE6: 48 8D 05 E3 81 2B  lea         rax,[000000015B875FD0h]",
+    "offset": "0x1b874bd0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b875f9c",
+        "text": "crates\\chat-cli-v2\\src\\aws_common\\http_client.rs"
+      }
+    ]
+  },
+  {
+    "line": 5435,
+    "instruction": "00000001415BDDF2: 48 8D 0D 87 81 2B  lea         rcx,[000000015B875F80h]",
+    "offset": "0x1b874b80",
+    "direct": "failed to create http clientcrates\\chat-cli-v2\\src\\aws_common\\http_client.rs",
+    "pointers": []
+  },
+  {
+    "line": 5437,
+    "instruction": "00000001415BDDF9: 4C 8D 0D 48 B7 2B  lea         r9,[000000015B879548h]",
+    "offset": "0x1b878148",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x142fde330",
+        "text": "UAWAVVWSH"
+      }
+    ]
+  },
+  {
+    "line": 5456,
+    "instruction": "00000001415BDE46: 48 8D 05 33 44 33  lea         rax,[000000015B8F2280h]",
+    "offset": "0x1b8f0e80",
+    "direct": "0\"",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 5461,
+    "instruction": "00000001415BDE59: 4C 8D 0D 38 44 33  lea         r9,[000000015B8F2298h]",
+    "offset": "0x1b8f0e98",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  }
+]

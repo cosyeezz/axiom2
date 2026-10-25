@@ -3,3 +3,7 @@
 # (the Windows default) that would otherwise mark the whole tree stale.
 # Binaries are auto-detected and left untouched.
 * text=auto eol=lf
+
+# Kiro evidence manifests hash captured raw bytes, including original line endings.
+/docs/evidence/kiro-*/** -text whitespace=cr-at-eol
+/docs/evidence/kiro-*/**/*.log -whitespace

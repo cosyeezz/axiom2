@@ -95,7 +95,7 @@ html[data-theme="light"] {
   .device-trigger, .device-option, .startup-content-heading h2 { color: var(--fg); }
   .startup-brand-version, .startup-overline, .connect-eyebrow { color: var(--warn); }
   .connect-local, .startup-title p, .startup-title h1 span:first-child, .startup-private,
-  .connection-label, .target-connect .connect-footnote, .connection-service-detail, .connection-text-button,
+  .connection-label, .target-connect .connect-footnote, .connection-service-detail, .connection-text-button, .connection-primary-meta,
   .startup-preparation > summary > svg, .device-symbol, .device-name small, .device-option small,
   .device-kind, .device-trigger > svg, .device-menu-caption, .device-menu-caption span,
   .device-menu-caption .startup-icon-button, .device-menu-note, .device-option > svg,
@@ -135,6 +135,7 @@ html[data-theme="light"] {
   .startup-command { background: var(--bg); }
   .connection-field input:focus { border-color: var(--accent); }
   .connect-message, .connect-update-progress, .setup-job { background: #f5eddf; color: #78561e; }
+  .connect-message { background: var(--bg); color: var(--muted); }
   .connect-error, .connect-update-progress.has-error, .setup-job.has-error { background: #faece8; color: var(--danger-text); }
   .connection-stop:hover:not(:disabled) { color: var(--danger-text); }
   .connect-dialog { color: var(--fg); }

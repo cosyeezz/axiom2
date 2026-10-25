@@ -1,0 +1,255 @@
+{
+  "passed": true,
+  "command": "node docs/evidence/kiro-thinking/check.cjs",
+  "cwd": "F:\\Axiom\\axiom2",
+  "node": "v24.19.0",
+  "scope": "Offline Kiro thinking configuration/stream implementation, no protected API or CLI execution",
+  "kiroAndSelection": {
+    "tests": 82,
+    "passed": 82
+  },
+  "compatibility": {
+    "tests": 38,
+    "passed": 38
+  },
+  "typecheckExitCodes": [
+    0,
+    0
+  ],
+  "buildExitCode": 0,
+  "protocolProbe": {
+    "checks": 8,
+    "passed": 8,
+    "fresh": true
+  },
+  "initialKiro": {
+    "tests": 80,
+    "passed": 78,
+    "exitCode": 1
+  },
+  "frozenManifest": {
+    "files": 79,
+    "bytes": 3141440,
+    "unchanged": true
+  },
+  "imageProtocolUnchanged": true,
+  "localLinks": 130,
+  "scopedDiffExitCode": 0,
+  "files": [
+    {
+      "file": "app/src/server/providers/kiro-thinking.ts",
+      "bytes": 5593,
+      "sha256": "80cce09f6ef304c87e16119d56db5a2e6b0c132b615983646e0a0fb467ad7f47"
+    },
+    {
+      "file": "app/src/server/providers/kiro-thinking-stream.ts",
+      "bytes": 4438,
+      "sha256": "1603340b565ae5e2b0591fe8fce357719c01f0563fd74d1255c40a5788c1abc5"
+    },
+    {
+      "file": "app/src/server/providers/kiro-chat.ts",
+      "bytes": 19697,
+      "sha256": "0750e92f3d3e1f71e6dc517c98ed33838392b855d66024708aec139e3edf3b2e"
+    },
+    {
+      "file": "app/src/server/providers/kiro-chat-protocol.ts",
+      "bytes": 11821,
+      "sha256": "667a5696d879f50dd5ce9ae62900465ec63561e25188f1862f80fd7d04809508"
+    },
+    {
+      "file": "app/src/server/providers/kiro-catalog.ts",
+      "bytes": 10569,
+      "sha256": "803c557f307b14c934e3c1951795b7f24760f268a75089495c6ab95c6c5a9d12"
+    },
+    {
+      "file": "app/src/server/providers/kiro.ts",
+      "bytes": 2306,
+      "sha256": "8585d7d5cded1394dda25a19a8f9d6e9e60eaeb5a4da1de685e9d8e8c5fdbdad"
+    },
+    {
+      "file": "app/src/server/model-service.ts",
+      "bytes": 37327,
+      "sha256": "0748960e3b930576c874931c0b372bef2206a239f5bbfa1063bac3799b502f10"
+    },
+    {
+      "file": "app/tests/kiro-thinking.test.ts",
+      "bytes": 21513,
+      "sha256": "7dfa851d8637f64f19ab721de30d084b23e5adea7e44bd848c0944df763f6b57"
+    },
+    {
+      "file": "app/tests/model-default.test.ts",
+      "bytes": 14772,
+      "sha256": "fd241f773a46b26e21995be57a39f0ba479f7e2b136c1ba8318c8baa6cd11abe"
+    },
+    {
+      "file": "docs/kiro-thinking.md",
+      "bytes": 8626,
+      "sha256": "045e4e318c4c611908ac177477628ed88132c9ecce8b25bc5b78caa9142a271f"
+    },
+    {
+      "file": "docs/kiro-auth.md",
+      "bytes": 17562,
+      "sha256": "1a00aba097e012a84b3961ccdea2a0e9840f394005407f2c81bac77912c2d090"
+    },
+    {
+      "file": "docs/kiro-inference-audit.md",
+      "bytes": 13462,
+      "sha256": "947fc5cc0e8a8b6a41e9c8ba0f46b46a00be494ae962e7e789a4b67bb8a490ce"
+    },
+    {
+      "file": "docs/kiro-catalog-audit.md",
+      "bytes": 15533,
+      "sha256": "345232d10b5d84bb4068364aebfc55aa0d2d6c74019e5a7d0c0f0847cffe4216"
+    },
+    {
+      "file": "docs/kiro-cli-parity-audit.md",
+      "bytes": 21337,
+      "sha256": "86fd272c24631923190632889368f8db0d1d64fe96fb1d41b60b688856d2aa66"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/README.md",
+      "bytes": 6101,
+      "sha256": "fb835cd9305bb1146c2abfbcf15526ea31e364335999ee4efa0fd6e5a2e1eb97"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-thinking.js",
+      "bytes": 5231,
+      "sha256": "050bb023dca3a7c8ea4555cf33c1281bf66898d60350666e03ee7e5de88555d0"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-thinking-stream.js",
+      "bytes": 5198,
+      "sha256": "d37f2c94ac910f181bdbd776bc69e46b8b321a6f805d7b58acdc965488b19641"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-chat.js",
+      "bytes": 23290,
+      "sha256": "716413837e1e40ddefcf592544746f6f7af85c906bc920cb0d1abcadb72b16ae"
+    },
+    {
+      "file": "app/dist/server/providers/kiro-catalog.js",
+      "bytes": 10733,
+      "sha256": "9144bff5f10c3a0767e834ee44a4d791ea91ad7e885b6f2980f6bbe8aee65699"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/README.md",
+      "bytes": 6101,
+      "sha256": "fb835cd9305bb1146c2abfbcf15526ea31e364335999ee4efa0fd6e5a2e1eb97"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe-exit.json",
+      "bytes": 279,
+      "sha256": "16be37ca89cf54d8e301736add4011691f86aeddfb8bb47246f229c916bb42a0"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.json",
+      "bytes": 3027,
+      "sha256": "0659612acedbf6d887db5902703244a0cba76a2abff9efff04db44c7cd624525"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.log",
+      "bytes": 6242,
+      "sha256": "17db6b63bb5bd6202ae0afa79f1e3ecce0770702f866fbdb257696ab83e2af01"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.ts",
+      "bytes": 6899,
+      "sha256": "7bb2ec78a00566809f5e1382a89697f1ddd67248368f500e8ea6e6e04a644c45"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/build-exit.json",
+      "bytes": 195,
+      "sha256": "53b6408754cd998684d946bc743bcfab456b2bfefa34a128e20aa7702f7a9ab8"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/build.log",
+      "bytes": 16954,
+      "sha256": "dd06db4dbdd5c3cd72722edbf19122f9b556137fdec04309f987bf34b92c0ecf"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/check.cjs",
+      "bytes": 5685,
+      "sha256": "2625939367356385907d231caf24135afadb266c639393abb640cde356285b7d"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-exit.json",
+      "bytes": 530,
+      "sha256": "cbd00a08549ab0580bc4bea2c6c3275596412ac65bc62b67ba921faa19ea27c4"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-full.log",
+      "bytes": 442,
+      "sha256": "fa98c878aed8e4d0dfe17f882d2495807afcc17da6af61afa4fbffc187e8977e"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-server.log",
+      "bytes": 229,
+      "sha256": "cf9542f735d79fb011531f9e8fa8f9bd6dd0a7feec4c22c9d7fafe7da4e66e8a"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-compatibility-tests.log",
+      "bytes": 4085,
+      "sha256": "d9d205b6fdc08211952d040c38985ce1ad02053a03e40e95e0a617152978bf7c"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "383b87b325b8f49020f8619763f623abbe52712195437251664df29fcc901c02"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-kiro-tests.log",
+      "bytes": 9433,
+      "sha256": "15bc728cb2390776eae30c5c1f3889ebc199e0c29228d18f3bfe7e4dfa37024c"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-typecheck-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-typecheck-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-validation-exit.json",
+      "bytes": 1080,
+      "sha256": "22f03a49a7063d0d08c9ad58d70bdcf5836df83c272ceec908f4b99f4ebb7920"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "e86b8fb1ef441efc663ab8c1a996e6e88576e3ee954c8024e946ddef16bf3b17"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/kiro-tests.log",
+      "bytes": 8505,
+      "sha256": "a87a47b7c5e8cb62924697fb7574cbd3a59e2a491e3e74c21b49ab8b94fa37e1"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/pre-es2023-fix-kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "9d7d43c52539a1f9f126dc8fa4e5925a993d73eebc4bb39d6bc6931d62bcd54b"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/pre-es2023-fix-kiro-tests.log",
+      "bytes": 8512,
+      "sha256": "b1cd17c72dd0b9d9255594732979401aaa8fecda10ac188a0cef8f29e4ef987b"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-exit.json",
+      "bytes": 530,
+      "sha256": "fabafee2061df85286e5068b57e455262760534a33e77b7b9ea2f67317ad6d69"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

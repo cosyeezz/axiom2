@@ -1,0 +1,7 @@
+﻿{
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/kiro-auth.test.ts tests/kiro-callback.test.ts tests/kiro-catalog.test.ts tests/kiro-chat.test.ts tests/kiro-images.test.ts tests/kiro-runtime.test.ts tests/kiro-pooling.test.ts tests/kiro-thinking.test.ts tests/model-default.test.ts",
+    "cwd":  "F:/Axiom/axiom2/app",
+    "start":  "2026-10-25T14:53:32.5612218+00:00",
+    "end":  "2026-10-25T14:54:43.0559680+00:00",
+    "exitCode":  0
+}
