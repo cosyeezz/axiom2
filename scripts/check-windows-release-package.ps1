@@ -142,6 +142,20 @@ public static class AxiomReleaseWindow {
   if (Product-IsRegistered) { throw 'Refusing to replace a pre-existing product on the runner' }
   if (Test-Path -LiteralPath $installDirectory) { throw 'Refusing a pre-existing installation directory' }
   $result.portable = Check-Window $exe 'portable'
+  # Tauri patches the MSI bundle type into its packaged executable. Bind the
+  # installed bytes to the immutable MSI itself, not to the portable EXE.
+  $adminDirectory = Join-Path $work 'msi-image'
+  $adminLog = Join-Path $work 'admin-extract.log'
+  $result.adminExtractExit = Invoke-Msi "/a `"$msi`" /qn /norestart TARGETDIR=`"$adminDirectory`" /l*v `"$adminLog`""
+  if ($result.adminExtractExit -notin @(0, 3010)) { throw "MSI administrative extraction failed: $($result.adminExtractExit)" }
+  if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $result.msiSha256) { throw 'Source MSI changed during administrative extraction' }
+  $adminExecutables = @(Get-ChildItem -LiteralPath $adminDirectory -Recurse -Filter '*.exe' -File -ErrorAction Stop)
+  if ($adminExecutables.Count -ne 1) { throw "Expected exactly one executable in the MSI image, found $($adminExecutables.Count)" }
+  $adminExe = $adminExecutables[0]
+  $adminVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($adminExe.FullName)
+  if ($adminVersion.ProductVersion -notmatch $pattern -or $adminVersion.FileVersion -notmatch $pattern) { throw 'MSI payload PE version differs from the release' }
+  $result.msiPayloadSha256 = (Get-FileHash $adminExe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  $result.msiPayloadName = $adminExe.Name
   $installLog = Join-Path $work 'install.log'
   $uninstallLog = Join-Path $work 'uninstall.log'
   $attempted = $true
@@ -149,8 +163,10 @@ public static class AxiomReleaseWindow {
   if ($result.installExit -notin @(0, 3010)) { throw "MSI installation failed: $($result.installExit)" }
   if (-not (Product-IsRegistered)) { throw 'MSI product is not registered after installation' }
   $candidates = @(Get-ChildItem -LiteralPath $installDirectory -Recurse -Filter '*.exe' -File)
-  $installedExe = $candidates | Where-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -eq $result.exeSha256 } | Select-Object -First 1
-  if (-not $installedExe) { throw 'Installed payload does not match the verified portable executable' }
+  if ($candidates.Count -ne 1) { throw "Expected exactly one installed executable, found $($candidates.Count)" }
+  $installedExe = $candidates[0]
+  $result.installedPayloadSha256 = (Get-FileHash $installedExe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($installedExe.Name -ne $result.msiPayloadName -or $result.installedPayloadSha256 -ne $result.msiPayloadSha256) { throw 'Installed payload does not match the verified MSI image' }
   $result.installedExecutable = $installedExe.FullName
   $result.installed = Check-Window $installedExe.FullName 'installed'
 } catch {
