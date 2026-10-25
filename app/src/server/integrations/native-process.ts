@@ -5,7 +5,7 @@ import { runTool, type ToolRunOptions } from "./tool-process.js";
 export type NativeRunOptions = Omit<ToolRunOptions, "cwd" | "beforeStart"> & { environmentDirectory?: string };
 /** Native components share supervision, never RTK-specific settings or databases. */
 export async function runNative(file: string, args: string[], options: NativeRunOptions): Promise<Buffer> {
-  options.signal?.throwIfAborted();
+  if (options.signal?.aborted) { options.onStopped?.("not-started"); throw options.signal.reason; }
   const { environmentDirectory = join(options.root, "environment"), ...runOptions } = options;
   prepareComponentEnvironment(environmentDirectory);
   const env = componentEnvironment(environmentDirectory, { ...process.env, ...options.env });

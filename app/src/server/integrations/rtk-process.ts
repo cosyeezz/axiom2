@@ -6,7 +6,7 @@ export { assertToolProcessesStopped } from "./tool-process.js";
 
 export type RtkRun = (file: string, args: string[], options: Omit<ToolRunOptions, "cwd" | "beforeStart">) => Promise<Buffer>;
 export const runRtk: RtkRun = async (file, args, options) => {
-  options.signal?.throwIfAborted();
+  if (options.signal?.aborted) { options.onStopped?.("not-started"); throw options.signal.reason; }
   const directory = rtkDirectory(options.root), state = join(directory, "environment");
   prepareComponentEnvironment(state);
   const result = await runTool(file, args, { ...options, errorOutput: options.errorOutput ?? (options.output === "tail" ? "tail" : "structured"), env: {

@@ -5,6 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { delimiter, dirname, join } from "node:path";
 import { StdioTransport } from "@earendil-works/pi-mcp";
 import { componentEnvironment, prepareComponentEnvironment, supervisorEnvironment } from "../src/server/integrations/component-environment.js";
+import { runNative } from "../src/server/integrations/native-process.js";
+import { runRtk } from "../src/server/integrations/rtk-process.js";
 import { inspectNodeRuntime, recordNodeRuntime, runtimeReceipt, selectNodeRelease } from "../src/server/integrations/managed-node.js";
 import { inspectNodeLauncher, writeNodeLauncher } from "../src/server/integrations/node-launcher.js";
 import { modelToolTransport } from "../src/server/integrations/model-proxy-tools.js";
@@ -36,6 +38,17 @@ test("component child environments are independent and do not mutate system or o
     assert.equal(supervisor.NODE_OPTIONS, undefined); assert.equal(supervisor.NODE_PATH, undefined);
     assert.equal(supervisor.PATH, source.PATH, "supervisors do not run under a component Node");
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const [name, run] of [["RTK", runRtk], ["native component", runNative]] as const) test(`${name} reports a pre-aborted command as not-started without preparing its environment`, async () => {
+  const parent = temporary(), root = join(parent, "not-created"), reason = Error("cancel before environment preparation");
+  const controller = new AbortController(); controller.abort(reason);
+  const proofs: string[] = [];
+  try {
+    await assert.rejects(run(process.execPath, [], { root, signal: controller.signal, onStopped: proof => proofs.push(proof) }), error => error === reason);
+    assert.deepEqual(proofs, ["not-started"]);
+    assert.equal(existsSync(root), false);
+  } finally { rmSync(parent, { recursive: true, force: true }); }
 });
 
 test("private Node selection uses exact target engines and a matching official LTS asset, never the backend Node", () => {
