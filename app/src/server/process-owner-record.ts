@@ -227,8 +227,11 @@ export function recoverProcessOwner(path: string): boolean {
   if (!canRecoverProcessOwner(path)) return false;
   try {
     rmSync(path);
-    const directory = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
-    try { fsyncSync(directory); } finally { closeSync(directory); }
+    // Match journal persistence: Windows cannot fsync directory descriptors.
+    if (process.platform !== "win32") {
+      const directory = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
+      try { fsyncSync(directory); } finally { closeSync(directory); }
+    }
     return true;
   } catch { return false; }
 }

@@ -142,8 +142,12 @@ test("Kiro honors abort and timeout, including transport ignoring an abort and s
     late.abort(); return new Response(new ReadableStream({ cancel() { lateCancel = true; } }));
   }, { signal: late.signal });
   assert.equal(result.result.stopReason, "aborted"); assert.ok(lateCancel);
-  const timed = await run(user(), async () => new Response(new ReadableStream(), { headers: { "content-type": "application/vnd.amazon.eventstream" } }), { timeoutMs: 10 });
-  assert.equal(timed.result.stopReason, "error"); assert.match(timed.result.errorMessage!, /超时/);
+  // The fake body has no socket; AbortSignal.timeout does not keep Node alive.
+  const keepAlive = setInterval(() => {}, 100);
+  try {
+    const timed = await run(user(), async () => new Response(new ReadableStream(), { headers: { "content-type": "application/vnd.amazon.eventstream" } }), { timeoutMs: 10 });
+    assert.equal(timed.result.stopReason, "error"); assert.match(timed.result.errorMessage!, /超时/);
+  } finally { clearInterval(keepAlive); }
 });
 
 test("Kiro rejects malformed images, orphan tool results and payload identity changes before network", async () => {
