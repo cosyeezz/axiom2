@@ -74,7 +74,7 @@ mod platform {
     struct FileInformation { attributes: u32, times: [u32; 6], volume: u32, size: [u32; 2], links: u32, index: [u32; 2] }
     #[link(name = "kernel32")]
     extern "system" {
-        fn MoveFileW(existing: *const u16, target: *const u16) -> i32;
+        fn SetFileInformationByHandle(file: *mut std::ffi::c_void, class: i32, information: *const std::ffi::c_void, size: u32) -> i32;
         fn GetFileInformationByHandle(handle: *mut std::ffi::c_void, information: *mut FileInformation) -> i32;
     }
     fn single_link(file: &File) -> io::Result<bool> {
@@ -82,10 +82,21 @@ mod platform {
         if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 { return Err(io::Error::last_os_error()); }
         Ok(unsafe { info.assume_init() }.links == 1)
     }
-    fn commit(temporary: &Path, target: &Path) -> io::Result<()> {
-        let source: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
-        let destination: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
-        if unsafe { MoveFileW(source.as_ptr(), destination.as_ptr()) } == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+    fn commit(file: &File, parent: &File, target: &str) -> io::Result<()> {
+        #[repr(C)]
+        struct RenameInformation { replace: u8, root: *mut std::ffi::c_void, length: u32, name: [u16; 1] }
+        let name: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().collect();
+        let offset = std::mem::offset_of!(RenameInformation, name);
+        let size = offset + name.len() * 2;
+        let mut storage = vec![0usize; (size + std::mem::size_of::<usize>() - 1) / std::mem::size_of::<usize>()];
+        let info = storage.as_mut_ptr().cast::<RenameInformation>();
+        unsafe {
+            (*info).replace = 0;
+            (*info).root = parent.as_raw_handle();
+            (*info).length = (name.len() * 2) as u32;
+            std::ptr::copy_nonoverlapping(name.as_ptr(), storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(), name.len());
+            if SetFileInformationByHandle(file.as_raw_handle(), 3, storage.as_ptr().cast(), size as u32) == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+        }
     }
     pub(super) fn publish(path: &Path, files: &[(&str, &str)]) -> io::Result<()> {
         if path.components().any(|part| matches!(part, Component::Prefix(prefix) if matches!(prefix.kind(), std::path::Prefix::UNC(..) | std::path::Prefix::VerbatimUNC(..) | std::path::Prefix::DeviceNS(..)))) { return Err(invalid()); }
@@ -109,12 +120,12 @@ mod platform {
             let target = path.join(name);
             let temporary = path.join(staging_name());
             #[cfg(test)] eprintln!("bundled: creating staging {:?}", temporary);
-            let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+            let mut file = OpenOptions::new().access_mode(0x40000000 | 0x00010000).share_mode(0).create_new(true).open(&temporary)?;
             #[cfg(test)] eprintln!("bundled: staging opened");
             let written = file.write_all(source.as_bytes()).and_then(|_| file.sync_all());
-            drop(file);
             #[cfg(test)] eprintln!("bundled: committing to {:?}", target);
-            let result = written.and_then(|_| commit(&temporary, &target));
+            let result = written.and_then(|_| commit(&file, guards.last().ok_or_else(invalid)?, name));
+            drop(file);
             #[cfg(test)] eprintln!("bundled: commit result {:?}", result);
             if result.is_err() { let _ = fs::remove_file(&temporary); }
             match result {
