@@ -43,6 +43,70 @@ test('Windows Node 22 package validation has bounded time for installation and c
   assert.match(block, /- run: npm ci\n      - run: npm run check:package/);
 });
 
+function nativeBuildFixture(t) {
+  const root = mkdtempSync(join(tmpdir(), 'axiom-release-native-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const put = (path, bytes = 'fixture') => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), bytes);
+  };
+  put('.gitignore', readFileSync(new URL('../.gitignore', import.meta.url)));
+  put('package.json', readFileSync(new URL('../package.json', import.meta.url)));
+  put('native/axiom-owner.c');
+  put('bin/service.mjs');
+  const generated = ['x64', 'arm64'].flatMap(arch => ['axiom-owner', 'manifest.json'].map(name => `bin/native/linux-${arch}/${name}`));
+  return { root, put, generated };
+}
+
+test('release clean gates ignore only generated helpers and retain tracked and unexpected changes', (t) => {
+  const { root, put, generated } = nativeBuildFixture(t);
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=Release Test', '-c', 'user.email=release-test@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const status = () => git('status', '--porcelain');
+  git('init');
+  git('config', 'core.autocrlf', 'false');
+  git('add', '.gitignore', 'package.json', 'native/axiom-owner.c', 'bin/service.mjs');
+  git('commit', '-m', 'source');
+  assert.equal(status(), '');
+  for (const path of generated) put(path);
+  assert.equal(status(), '', 'both architectures may be built or downloaded before publish');
+  for (const path of ['native/axiom-owner.c', 'bin/service.mjs']) {
+    put(path, 'changed source');
+    assert.notEqual(status(), '', `${path} must remain visible`);
+    git('add', path);
+    assert.notEqual(status(), '', `${path} must remain visible when staged`);
+    put(path);
+    git('add', path);
+    assert.equal(status(), '');
+  }
+  for (const path of ['bin/native/new-source.c', 'bin/native/linux-x64/payload', 'bin/native/linux-arm64/axiom-owner.123.tmp', 'bin/native/linux-other/axiom-owner', 'elsewhere/bin/native/linux-x64/axiom-owner', 'unexpected']) {
+    put(path);
+    assert.notEqual(status(), '', `${path} must not be hidden by generated-file rules`);
+    rmSync(join(root, path));
+    assert.equal(status(), '');
+  }
+  git('add', '-f', generated[0]);
+  git('commit', '-m', 'track a helper to verify ignored paths cannot hide tracked changes');
+  put(generated[0], 'changed tracked helper');
+  assert.notEqual(status(), '', 'ignore rules must not suppress tracked helper modifications');
+});
+
+test('npm pack retains both native helpers and manifests despite generated-file ignore rules', (t) => {
+  const { root, put, generated } = nativeBuildFixture(t);
+  // Exercise the real package inclusion rules, not build hooks absent from this fixture.
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  delete pkg.scripts;
+  put('package.json', JSON.stringify(pkg));
+  for (const path of generated) put(path);
+  // Fixed arguments only: Windows requires a shell to execute npm.cmd.
+  const output = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '--dry-run', '--json', '--ignore-scripts', '--offline'], {
+    cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32',
+    env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
+  });
+  const [packed] = JSON.parse(output);
+  const files = new Set(packed.files.map(file => file.path));
+  for (const path of generated) assert.ok(files.has(path), `${path} must remain in the release package`);
+});
+
 function evidenceFixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'axiom-package-evidence-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

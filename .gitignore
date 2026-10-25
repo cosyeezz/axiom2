@@ -8,6 +8,11 @@ dist/
 Thumbs.db
 .pi/mcp.json
 artifacts/
+# Generated Linux helpers; keep unexpected native files visible to release checks.
+/bin/native/linux-x64/axiom-owner
+/bin/native/linux-x64/manifest.json
+/bin/native/linux-arm64/axiom-owner
+/bin/native/linux-arm64/manifest.json
 *.tgz
 *.sqlite
 *.sqlite-shm
