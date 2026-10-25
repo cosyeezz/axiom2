@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "vite";
-import { chromium, type WebSocketRoute } from "playwright";
+import { chromium, type Page, type WebSocketRoute } from "playwright";
 import { emptyAgent, emptyThread, type ChatMessage } from "../src/shared/agent.js";
 import { emptyTasks } from "../src/shared/tasks.js";
 import { emptyCostTotals } from "../src/shared/costs.js";
@@ -45,9 +45,9 @@ const snapshots = new Map<string, unknown>([
 ]);
 const publish = (name: string, data: unknown) => { snapshots.set(name, data);socket!.send(JSON.stringify({ type: "snapshot", scope: name, streamId: "fixture", seq: ++seq, data })); };
 const prompts = () => commands.filter(c => c.op === "prompt");
-page.on("pageerror", e => errors.push(e.message));
-try {
-  await page.route("**/*", route => {
+const routeFixture = async (target: Page) => {
+  target.on("pageerror", e => errors.push(e.message));
+  await target.route("**/*", route => {
     const url = new URL(route.request().url());
     if (url.origin !== new URL(origin).origin) { blocked.push(url.href);return route.abort(); }
     if (url.pathname === "/question-check") return route.fulfill({ contentType: "text/html", body: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@id/virtual:question-fixture"></script></body></html>' });
@@ -57,7 +57,7 @@ try {
     if (url.pathname.startsWith("/api/")) { blocked.push(url.pathname);return route.abort(); }
     return route.continue();
   });
-  await page.routeWebSocket("**/*", s => {
+  await target.routeWebSocket("**/*", s => {
     if (new URL(s.url()).pathname !== "/ws") { blocked.push(s.url());s.close();return; }
     socket = s;s.send(JSON.stringify({ type: "hello", streamId: "fixture" }));
     s.onMessage(raw => {
@@ -76,6 +76,9 @@ try {
       else { blocked.push(c.op);reply(null); }
     });
   });
+};
+try {
+  await routeFixture(page);
   await page.goto(origin + "question-check?workspaceId=work&sessionId=session");
   await page.locator('[data-connected="true"]').waitFor({ state: "attached" });
   await page.locator(".model-question input").first().waitFor({ state: "attached" });
@@ -94,13 +97,14 @@ try {
     await page.waitForFunction(() => {
       const panel = document.querySelector('.model-question-popover')?.getBoundingClientRect();
       const composer = document.querySelector('.composer')?.getBoundingClientRect();
-      return panel && composer && Math.abs(panel.width - composer.width) <= 1 &&
+      return panel && composer && Math.abs(panel.width - Math.min(composer.width, innerWidth - 24, 680)) <= 1 &&
         Math.abs(panel.bottom - (composer.top - 8)) <= 1 && panel.top >= 11;
     });
     const panel = await popup.boundingBox(), composer = await page.locator('.composer').boundingBox();
     assert.ok(panel && composer);assert.ok(panel.y >= 11, 'popup stays inside viewport');
     assert.ok(Math.abs(panel.y + panel.height - (composer.y - 8)) <= 1, 'popup anchored 8px above input');
-    assert.ok(Math.abs(panel.width - composer.width) <= 1, 'popup matches composer width');
+    assert.ok(Math.abs(panel.width - Math.min(composer.width, page.viewportSize()!.width - 24, 680)) <= 1, 'popup has a readable 680px cap and shrinks with Composer');
+    assert.ok(Math.abs(panel.x - Math.max(12, composer.x)) <= 1, 'popup keeps the Composer leading edge');
   };
   await geometry();
   assert.equal(await page.locator('.log-row .model-question, .log-row input, .log-row textarea').count(), 0, 'no interactive question card in transcript');
@@ -142,12 +146,13 @@ try {
     return { option: option.getBoundingClientRect().height, input: input.getBoundingClientRect().height,
       radius: getComputedStyle(el).borderRadius, font: getComputedStyle(option.querySelector('.model-question-label')!).fontSize };
   });
-  assert.equal(density.option, 32);assert.equal(density.input, 36);
-  assert.equal(density.radius, '8px');assert.equal(density.font, '14px');
-  assert.equal(await fields.nth(0).getByRole('textbox', { name: '你希望采用哪种实现方式？：其他答案或补充', exact: true }).count(), 1);
+  assert.equal(density.option, 36);assert.equal(density.input, 44);
+  assert.equal(density.radius, '12px');assert.equal(density.font, '14px');
+  assert.equal(await fields.nth(0).getByRole('textbox', { name: '你希望采用哪种实现方式？： 其他答案或补充', exact: true }).count(), 1);
   assert.equal(await page.locator('.model-question-heading').count(), 0);
   assert.equal(await popup.evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
   assert.equal(await page.locator('.model-question').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
+  assert.equal(await popup.getByRole('button', { name: '发送回答', exact: true }).evaluate(el => getComputedStyle(el).transitionProperty), 'none', 'reduced motion also applies to the action button');
   // A preceding disclosure click uses pointer modality; enter keyboard modality
   // before checking :focus-visible on the programmatically focused native input.
   await page.keyboard.press('Tab');
@@ -168,7 +173,11 @@ try {
   assert.equal(await fields.nth(1).locator("input:checked").count(), 2);
   await fields.nth(2).locator("textarea").fill("先做内部验收，再分批上线");
   await fields.nth(0).locator("textarea").fill("优先可维护性");
+  const customBeforeClear = await fields.nth(0).locator('textarea').boundingBox();
   await fields.nth(0).getByRole('button', { name: '清除选择', exact: true }).click();
+  const customAfterClear = await fields.nth(0).locator('textarea').boundingBox();
+  assert.equal(customAfterClear!.width, customBeforeClear!.width, 'clear choice never changes input width');
+  assert.equal(customAfterClear!.y, customBeforeClear!.y, 'clear choice never shifts the input');
   assert.equal(await fields.nth(0).locator('input:checked').count(), 0);
   assert.equal(await fields.nth(0).locator('textarea').inputValue(), '优先可维护性');
   await fields.nth(0).locator('label.model-question-option').nth(1).click();
@@ -196,8 +205,15 @@ try {
     await page.screenshot({ path: join(artifacts, `questions-${theme}-${width}.png`), fullPage: true });
   }
   await page.setViewportSize({ width: 390, height: 520 });await geometry();
-  assert.ok(await popup.evaluate(el => el.scrollHeight > el.clientHeight), 'short viewport scrolls within popup');
-  await popup.getByRole('button', { name: '发送回答', exact: true }).scrollIntoViewIfNeeded();await geometry();
+  const body = popup.locator('.model-question-body');
+  assert.ok(await body.evaluate(el => el.scrollHeight > el.clientHeight), 'short viewport scrolls only question content');
+  const footerBeforeScroll = await popup.locator('.model-question-footer').boundingBox();
+  await body.evaluate(el => { el.scrollTop = el.scrollHeight; });await geometry();
+  assert.deepEqual(await popup.locator('.model-question-footer').boundingBox(), footerBeforeScroll, 'send actions stay fixed outside the content scroller');
+  assert.ok(await popup.getByRole('button', { name: '发送回答', exact: true }).evaluate(el => {
+    const button = el.getBoundingClientRect(), panel = el.closest('.model-question-popover')!.getBoundingClientRect();
+    return button.top >= panel.top && button.bottom <= panel.bottom;
+  }), 'send action remains fully visible on a short screen');
   await page.setViewportSize({ width: 1440, height: 1100 });
   // A newer user message makes the old question historical, never a popup.
   publish("thread:work:session", { ...emptyThread, ids: ["answer", "new-user"] });
@@ -250,13 +266,20 @@ try {
     assert.equal(await popup.count(), 0);await noExtraUI();
     assert.equal(prompts().length, before, `${mode} must not replay`);
   }
-  // A separate touch context verifies hit targets and iOS-safe input sizing.
-  const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const touchPage = await touch.newPage();
-  const css = await page.evaluate(() => [...document.querySelectorAll('style')].map(el => el.textContent).join('\n'));
-  await touchPage.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><form class="model-question"><details class="model-question-details"><summary>选项说明</summary><dl><dt>触控选项</dt><dd>触控说明</dd></dl></details><label class="model-question-option"><span class="model-question-label">触控选项</span></label><textarea rows="1"></textarea><div class="model-question-custom"><button>清除选择</button></div><footer class="model-question-actions"><button class="btn">发送回答</button></footer></form>`);
-  assert.ok(await touchPage.locator('.model-question-option, button, summary').evaluateAll(els => els.every(el => el.getBoundingClientRect().height >= 44)));
-  assert.equal(await touchPage.locator('textarea').evaluate(el => getComputedStyle(el).fontSize), '16px');
+  // Exercise the real React/Composer popup on a coarse pointer, not copied markup.
+  const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce', serviceWorkers: 'block' });
+  const touchPage = await touch.newPage();await routeFixture(touchPage);
+  await touchPage.goto(origin + 'question-check?workspaceId=work&sessionId=session');
+  await touchPage.waitForFunction(() => !(document.querySelector('.model-question fieldset') as HTMLFieldSetElement)?.disabled);
+  await touchPage.locator('.model-question-option').first().tap();
+  assert.equal(await touchPage.locator('.model-question input').first().isChecked(), true);
+  assert.equal(await touchPage.locator('.model-question-option').first().evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-tap-highlight-color')), 'rgba(0, 0, 0, 0)', 'native tap flash never obscures the themed selected state');
+  assert.ok(await touchPage.locator('.model-question .model-question-option, .model-question button, .model-question summary').evaluateAll(els => els.every(el => el.getBoundingClientRect().height >= 44)));
+  assert.equal(await touchPage.locator('.model-question textarea').first().evaluate(el => getComputedStyle(el).fontSize), '16px');
+  for (const theme of ['dark', 'light']) {
+    await touchPage.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await touchPage.screenshot({ path: join(artifacts, `touch-${theme}-390.png`), fullPage: true });
+  }
   await touch.close();
   // Presentation screenshots use realistic copy; stress-copy checks above remain intact.
   promptMode = 'accepted';await page.reload();
@@ -267,15 +290,21 @@ try {
   await page.waitForFunction(() => !document.querySelector('.log-row'));
   await noExtraUI();
   const firstTag = fields.nth(0).locator('label.model-question-option').first();
+  assert.equal(await page.getByRole('button', { name: '发送回答', exact: true }).isDisabled(), true, 'empty answers cannot be sent');
+  assert.equal(await popup.locator('.model-question-progress').textContent(), '0 / 3 已回答');
   const beforeSelect = await firstTag.boundingBox();
   await firstTag.click();
   assert.equal((await firstTag.boundingBox())!.width, beforeSelect!.width, 'selection must not resize a Tag');
+  assert.equal(await popup.locator('.model-question-progress').textContent(), '1 / 3 已回答');
+  assert.equal(await page.getByRole('button', { name: '发送回答', exact: true }).isDisabled(), true, 'incomplete answers retain the existing submission gate');
   const flow = await fields.nth(1).locator('.model-question-option').evaluateAll(els => els.map(el => ({ x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width })));
   assert.equal(flow[0].y, flow[1].y, 'short Tags share a row');assert.ok(flow[1].x > flow[0].x);
   assert.ok(flow[0].width < 180, 'Tags use content width, not stretched rows');
   await fields.nth(1).locator('label.model-question-option').first().click();
   await fields.nth(1).locator('label.model-question-option').nth(1).click();
   await fields.nth(2).locator('label.model-question-option').first().click();
+  assert.equal(await popup.locator('.model-question-progress').textContent(), '3 / 3 已回答');
+  assert.equal(await page.getByRole('button', { name: '发送回答', exact: true }).isEnabled(), true);
   await fields.nth(0).locator('summary').click();
   for (const [theme, width] of [['dark', 1440], ['light', 390], ['dark', 320]] as const) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -283,6 +312,22 @@ try {
     await geometry();
     await page.screenshot({ path: join(artifacts, `popup-${theme}-${width}.png`), fullPage: true });
   }
+  // Reproduce the user's single-question example at an ultrawide Composer width.
+  await page.setViewportSize({ width: 3120, height: 1000 });
+  await page.evaluate(() => { document.querySelector<HTMLElement>('main.workspace')!.style.maxWidth = 'none'; });
+  const instanceText = '<Question type="single">\n目标模型配置在哪个 Axiom 实例？\n1. 当前主实例（4317）\n  目标模型已添加在当前连接的 Axiom 中。\n2. 另一个实例\n  目标模型配置在其他端口或设备上。\n</Question>';
+  publish('messages:work:session', [{ ...message, text: instanceText }]);
+  await fields.nth(0).locator('.model-question-label').filter({ hasText: '当前主实例' }).waitFor();
+  await geometry();
+  assert.equal((await popup.boundingBox())!.width, 680, 'ultrawide Composer never stretches the question panel');
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await popup.screenshot({ path: join(artifacts, `instance-${theme}-empty.png`) });
+    await fields.nth(0).locator('label.model-question-option').first().click();
+    await popup.screenshot({ path: join(artifacts, `instance-${theme}-selected.png`) });
+    await fields.nth(0).getByRole('button', { name: '清除选择', exact: true }).click();
+  }
+  await page.screenshot({ path: join(artifacts, 'instance-light-ultrawide.png'), fullPage: true });
   // Manual fallback remains owned by a child modal even without any trigger button.
   await page.addInitScript(() => { Object.defineProperty(HTMLElement.prototype, 'showPopover', { value: undefined, configurable: true }); });
   await page.reload();await popup.waitFor();
@@ -295,5 +340,5 @@ try {
   assert.equal(await popup.isVisible(), true);assert.equal(await page.locator('dialog[open]').count(), 1);
   await noExtraUI();
   assert.deepEqual(errors, []);assert.deepEqual(blocked, []);
-  console.log(`PASS: minimal Composer-owned popup, no collapse/reopen buttons or transcript question notice/record, pure questions leave no reply row; unanswered panel survives outside clicks/Escape, modal-owned manual fallback; anchored 8px above input with matching width, viewport bounds/internal scroll; inert descriptions, keyboard disclosure, accessible links, expanded-state/answer remount retention; header-free wrapping Tags, 32px desktop/44px touch, native radio/checkbox; exact ordinary prompt, draft preserved, auto-close/no duplicate on accepted/UNCERTAIN/failure; historical/incomplete fail closed; ten theme/width layouts. Artifacts: ${artifacts}`);
+  console.log(`PASS: minimal Composer-owned popup, no collapse/reopen buttons or transcript question notice/record, pure questions leave no reply row; unanswered panel survives outside clicks/Escape, modal-owned manual fallback; anchored 8px above input with 680px readable width cap, viewport bounds/content scroll with fixed actions; inert descriptions, keyboard disclosure, accessible links, expanded-state/answer remount retention; header-free wrapping Tags, 36px desktop/44px real-component touch, native radio/checkbox; exact ordinary prompt, draft preserved, auto-close/no duplicate on accepted/UNCERTAIN/failure; historical/incomplete fail closed; ten theme/width layouts. Artifacts: ${artifacts}`);
 } finally { await browser.close();await server.close(); }

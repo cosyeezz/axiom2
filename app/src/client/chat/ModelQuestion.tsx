@@ -4,6 +4,7 @@ import { emptyTasks, taskActive, tasksScope } from "../../shared/tasks.js";
 import { modelQuestionsReply, parseModelQuestions, questionAnswered, questionIsCurrent, questionMessageComplete, type ModelQuestion } from "../../shared/model-question.js";
 import type { Configuration, Scope } from "../../shared/protocol.js";
 import { scopeCurrent, scopeSnapshot, useConnectionState, useScope } from "../transport.js";
+import { Icon } from "../Icon.js";
 import { getComposerEdit, useComposerEditRevision } from "./composer-edit.js";
 import { pendingMessages, useOptimistic } from "./optimistic.js";
 import { useSubmission } from "./useSubmission.js";
@@ -53,34 +54,48 @@ export function ModelQuestionCard({ scope, messageId, questions, enabled = false
       pendingMessages(scope).some(item => item.state !== "failed") || getComposerEdit(scope)) return;
     void submit("prompt", { draft: { text, attachment: null }, onStart: () => update({ submitted: true }) });
   }}>
-    {questions.map((question, position) => <fieldset key={position} disabled={disabled}>
-      <legend><span className="model-question-number">{String(position + 1).padStart(2, "0")}</span><span className="model-question-title">{question.question}</span><span className="model-question-hint">{question.type === "single" ? "单选" : "多选"}</span></legend>
+    <div className="model-question-body">
+    {questions.map((question, position) => <fieldset key={position} disabled={disabled} data-answered={questionAnswered(question, state.answers[position]) || undefined}>
+      <legend><span className="model-question-number" aria-hidden="true">{String(position + 1).padStart(2, "0")}</span><span className="model-question-caption"><span className="model-question-title">{question.question}</span><span className="model-question-hint">{question.type === "single" ? "单选" : "多选"}</span></span></legend>
+      <div className="model-question-content">
       <div className="model-question-options">{question.options.map((option, choice) => {
         const checked = state.answers[position].selected.includes(choice);
         return <label key={choice} className="model-question-option" data-selected={checked || undefined}>
           <input type={question.type === "single" ? "radio" : "checkbox"} name={`${id}-${position}`} aria-describedby={question.descriptions?.[choice] ? `${id}-${position}-${choice}-description` : undefined} checked={checked} onChange={() => answer(position, { selected: question.type === "single" ? [choice] : checked ? state.answers[position].selected.filter(i => i !== choice) : [...state.answers[position].selected, choice] })} />
-          <span className="model-question-mark" aria-hidden="true">{checked && question.type === "multiple" ? "✓" : ""}</span><span className="model-question-label">{option}</span>
+          <span className="model-question-mark" aria-hidden="true">{checked && question.type === "multiple" && <Icon name="check" />}</span><span className="model-question-label">{option}</span>
         </label>;
       })}</div>
       {question.descriptions?.some(Boolean) && <details className="model-question-details" open={state.expanded[position]} onToggle={event => {
         const open = event.currentTarget.open;
         if (open !== state.expanded[position]) update({ expanded: state.expanded.map((value, i) => i === position ? open : value) });
       }}>
-        <summary>选项说明</summary>
+        <summary><Icon name="chevron-right" />选项说明</summary>
         <dl>{question.options.map((option, choice) => question.descriptions?.[choice] ? <div key={choice} data-selected={state.answers[position].selected.includes(choice) || undefined}>
           <dt>{option}</dt><dd id={`${id}-${position}-${choice}-description`}>{question.descriptions[choice]}</dd>
         </div> : null)}</dl>
       </details>}
       <div className="model-question-custom">
-        <label className="screen-reader" htmlFor={`${id}-${position}-custom`}>{question.question}：其他答案或补充</label>
-        <textarea id={`${id}-${position}-custom`} value={state.answers[position].text} maxLength={4000} rows={1} placeholder="其他答案或补充…" onChange={event => answer(position, { text: event.target.value })} />
-        {state.answers[position].selected.length > 0 && !disabled && <button type="button" onClick={() => answer(position, { selected: [] })}>清除选择</button>}
+        <div className="model-question-custom-heading">
+          <label htmlFor={`${id}-${position}-custom`}><span className="screen-reader">{question.question}：</span>其他答案或补充<span className="model-question-optional" aria-hidden="true">选填</span></label>
+          {state.answers[position].selected.length > 0 && !disabled && <button type="button" onClick={() => answer(position, { selected: [] })}>清除选择</button>}
+        </div>
+        <textarea id={`${id}-${position}-custom`} value={state.answers[position].text} maxLength={4000} rows={1} placeholder="也可以直接输入你的回答…" onChange={event => answer(position, { text: event.target.value })} />
+      </div>
       </div>
     </fieldset>)}
-    {current && <footer className="model-question-actions"><span>{answered} / {questions.length} 已回答</span><button type="submit" className="btn btn-primary" disabled={disabled || !text}>{busy ? "正在发送…" : state.submitted ? "已交给发送队列" : "发送回答"}</button></footer>}
-    <p className="model-question-status" role="status">{state.submitted ? "回答已交给发送队列；如发送失败，可在下方恢复。结果未确认时不会重复发送。" : !current ? "历史提问，仅供查看。" :
-      !connected ? "连接后可回复。" : active ? "会话仍在执行，结束后可回复。" : pendingReply ? "正在确认已发送的消息，请勿重复提交。" :
-      !selected ? "请先选择可用模型。" : getComposerEdit(scope) ? "请先完成或取消消息编辑。" : null}</p>
-    {error && <p className="execution-alert" role="alert">{error}</p>}
+    </div>
+    <footer className="model-question-footer">
+      {current && <div className="model-question-actions">
+        <div className="model-question-progress" aria-live="polite" aria-atomic="true">
+          <span className="model-question-progress-track" aria-hidden="true"><span style={{ width: `${answered / questions.length * 100}%` }} /></span>
+          <span><strong>{answered}</strong> / {questions.length} 已回答</span>
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={disabled || !text}><span>{busy ? "正在发送…" : state.submitted ? "已交给发送队列" : "发送回答"}</span><Icon name="arrow-up" /></button>
+      </div>}
+      <p className="model-question-status" role="status">{state.submitted ? "回答已交给发送队列；如发送失败，可在下方恢复。结果未确认时不会重复发送。" : !current ? "历史提问，仅供查看。" :
+        !connected ? "连接后可回复。" : active ? "会话仍在执行，结束后可回复。" : pendingReply ? "正在确认已发送的消息，请勿重复提交。" :
+        !selected ? "请先选择可用模型。" : getComposerEdit(scope) ? "请先完成或取消消息编辑。" : null}</p>
+      {error && <p className="execution-alert" role="alert">{error}</p>}
+    </footer>
   </form>;
 }

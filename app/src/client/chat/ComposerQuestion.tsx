@@ -52,7 +52,8 @@ function QuestionPopover({ id, anchor, children }: { id: string; anchor: HTMLFor
       const width = viewport?.width ?? window.innerWidth;
       const rect = anchor.getBoundingClientRect();
       const bottom = Math.min(rect.top - 8, top + (viewport?.height ?? window.innerHeight) - 8);
-      const panelWidth = Math.max(0, Math.min(rect.width, width - 24));
+      // A readable question panel, not a second full-width Composer on large screens.
+      const panelWidth = Math.max(0, Math.min(rect.width, width - 24, 680));
       node.style.left = `${Math.max(left + 12, Math.min(rect.left, left + width - panelWidth - 12))}px`;
       node.style.bottom = `${window.innerHeight - bottom}px`;
       node.style.width = `${panelWidth}px`;
