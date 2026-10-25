@@ -248,13 +248,13 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
 }
 function optionalMemorySubscription(scope: string) {
   const [kind, workspaceId, sessionId] = scope.split(":");
-  if (kind !== "memory" && kind !== "memory-tree" && kind !== "memory-catalog") return false;
+  if (kind !== "memory" && kind !== "memory-tree" && kind !== "memory-catalog" && kind !== "processing") return false;
   const previous = cache.get(scope);
   cache.set(scope, { streamId: previous?.streamId ?? "", seq: previous?.seq ?? 0, synthetic: true,
     generation: connection.generation, received: ++received,
     // Optional memory subscription failures must not affect the connection, but
     // callers still need to distinguish an unavailable source from a missing one.
-    data: kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-tree" ? { version: 0, roots: [], purposes: [], nameChars: 0, pending: 0, failed: 0, unavailable: true } : [] });
+    data: kind === "processing" ? null : kind === "memory" ? { ...emptyMemoryView({ workspaceId, sessionId }), reason: "unavailable" as const } : kind === "memory-tree" ? { version: 0, roots: [], purposes: [], nameChars: 0, pending: 0, failed: 0, unavailable: true } : [] });
   listeners.get(scope)?.forEach((fn) => fn());
   return true;
 }
@@ -314,6 +314,8 @@ export function renderedContextReady(scope: { workspaceId: string; sessionId: st
   });
 }
 export function scopeSnapshot<T>(scope: string): T | undefined { return cache.get(scope)?.data as T | undefined; }
+/** Old cached facts cannot confirm current authorization or state after a reconnect. */
+export function scopeCurrent(scope: string) { return connection.connected && cache.get(scope)?.generation === connection.generation; }
 export function useScope<T>(scope: string | null, fallback: T): T {
   const listen = useCallback(
     (fn: () => void) => (scope ? subscribeScope(scope, fn) : () => {}),

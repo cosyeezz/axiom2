@@ -1,4 +1,5 @@
 import { ProcessingRecords } from "./processing-records.js";
+import { processingScope, type ProcessingContext } from "../shared/processing.js";
 import { MemoryPipeline } from "./memory-pipeline.js";
 import { emptyMemoryTree, memoryTopicBlock, memoryTreeScope, type MemoryTopicSnapshot } from "../shared/memory-tree.js";
 import { thinkingLevels } from "../shared/agent.js";
@@ -42,7 +43,7 @@ type StoredMemoryCatalogEntry = MemoryCatalogEntry & {
   dependencies?: { sessionId: string; path: string; revision: string }[];
 };
 type ScanWorkerResult = { kind: "scan"; files: MemoryView["files"]; entry: string };
-type OrganizationWork = { controller: AbortController; done?: Promise<void> };
+type OrganizationWork = { controller: AbortController; done?: Promise<void>; active?: { workspaceId: string; processingId: string; purposeIds: string[]; sessionIds: string[] } };
 export class Memories {
   private timer: ReturnType<typeof setInterval>;
   private watcher?: FSWatcher;
@@ -67,14 +68,20 @@ export class Memories {
   private opening = false;
   readonly records: ProcessingRecords;
   readonly pipeline: MemoryPipeline;
-  tree(workspaceId: string) { this.organizationOwner(workspaceId); return this.pipeline.tree.tree(workspaceId); }
+  private stopRecordObservation: () => void;
+  tree(workspaceId: string) {
+    this.organizationOwner(workspaceId);
+    const active = this.organizationWork?.active, batch = active?.workspaceId === workspaceId ? active : undefined;
+    return { ...this.pipeline.tree.tree(workspaceId, Date.now(), batch?.purposeIds),
+      ...(batch ? { activeBatch: { processingId: batch.processingId, purposeIds: batch.purposeIds, sessionIds: batch.sessionIds } } : {}) };
+  }
   topicSnapshot(workspaceId: string): MemoryTopicSnapshot {
     return { version: 2, workspaceId, text: memoryTopicBlock(this.tree(workspaceId).roots) };
   }
   publishTree(workspaceId: string) {
     // Revocation can happen while a model is in flight. Clear subscribers rather
     // than throwing from failure handling or exposing an unauthorized snapshot.
-    this.publish(memoryTreeScope(workspaceId), this.store.workspace(workspaceId).authorized ? this.pipeline.tree.tree(workspaceId) : emptyMemoryTree());
+    this.publish(memoryTreeScope(workspaceId), this.store.workspace(workspaceId).authorized ? this.tree(workspaceId) : emptyMemoryTree());
     // The catalog projects classification errors too; update it with the tree
     // so failures and successful retries do not require reopening the page.
     this.publishCatalog(workspaceId);
@@ -98,6 +105,12 @@ export class Memories {
       CREATE TABLE IF NOT EXISTS memory_usage(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,kind TEXT NOT NULL,provider TEXT,model TEXT,usage TEXT,createdAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS memory_usage_session ON memory_usage(sessionId);`);
     this.records = ProcessingRecords.for(store);
+    this.stopRecordObservation = this.records.observe(workspaceId => {
+      if (this.closed) return;
+      let data: unknown = null;
+      try { data = this.records.invalidation(workspaceId); } catch { /* Revocation clears shared client caches. */ }
+      this.publish(processingScope(workspaceId), data);
+    });
     this.pipeline = new MemoryPipeline(this);
     const root = memoryRoot(store.root);
     try { mkdirSync(root, { recursive: true, mode: 0o700 }); }
@@ -713,13 +726,13 @@ export class Memories {
     if (changed.size) await this.scanTargetsAsync([...changed.values()], signal);
     return failures;
   }
-  async query(scope: Scope, question: string, signal?: AbortSignal, parentLease?: LeaseRef): Promise<MemoryQueryResult> {
+  async query(scope: Scope, question: string, signal?: AbortSignal, parentLease?: LeaseRef, context: Pick<ProcessingContext, "runId" | "toolCallId"> = {}): Promise<MemoryQueryResult> {
     const timeoutMs = this.preferences().timeoutMs;
     const deadlineAt = Date.now() + timeoutMs;
     const timeout = AbortSignal.timeout(timeoutMs);
     const querySignal = AbortSignal.any([this.controller.signal, timeout, ...(signal ? [signal] : [])]);
     this.owner(scope);
-    const processingId = this.records.start(scope, "memory.query", `记忆查询：${question.slice(0, 160)}`);
+    const processingId = this.records.start(scope, "memory.query", `记忆查询：${question.slice(0, 160)}`, undefined, undefined, false, context);
     try {
       querySignal.throwIfAborted();
       if (!question.trim()) throw new AppError("INVALID_INPUT", "请提供查询问题");
@@ -766,13 +779,20 @@ export class Memories {
         await this.applyCorrections(workspace.id, work.controller.signal);
         const batch = this.pipeline.tree.batch(workspace.id);
         if (!batch.length) continue;
+        const scope = { workspaceId: workspace.id, sessionId: batch[0].source.sessionId }, processingId = this.pipeline.startOrganization(batch);
+        work.active = { workspaceId: workspace.id, processingId, purposeIds: batch.map(purpose => purpose.id), sessionIds: [...new Set(batch.map(purpose => purpose.source.sessionId))] };
+        this.publishTree(workspace.id);
         try {
-          const scope = { workspaceId: workspace.id, sessionId: batch[0].source.sessionId };
-          await this.pipeline.organize(batch, this.preferences().organizerModel ?? this.selection(scope), work.controller.signal);
+          this.records.stage(processingId, "选择分类模型");
+          await this.pipeline.organize(batch, this.preferences().organizerModel ?? this.selection(scope), work.controller.signal, processingId);
         } catch (error) {
+          this.records.failure(processingId, error, work.controller.signal);
           this.pipeline.tree.failure(batch, error);
           this.publishTree(workspace.id);
           if (work.controller.signal.aborted) break;
+        } finally {
+          work.active = undefined;
+          this.publishTree(workspace.id);
         }
       }
     })().finally(() => {
@@ -835,6 +855,7 @@ export class Memories {
   }
   async close() {
     this.closed = true;
+    this.stopRecordObservation();
     clearInterval(this.timer);
     if (this.organizerScheduled) clearImmediate(this.organizerScheduled);
     if (this.scanDelay) clearTimeout(this.scanDelay);

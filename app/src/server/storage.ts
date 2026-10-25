@@ -100,7 +100,7 @@ export class Store {
         this.db.exec(`ALTER TABLE sessions ADD COLUMN resultVersion INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE sessions ADD COLUMN readVersion INTEGER NOT NULL DEFAULT 0;
           UPDATE sessions SET resultVersion=CASE WHEN unread=1 THEN 1 ELSE 0 END;`);
-      for (const column of ["phase", "retry", "reasonCode", "resumedFromRunId"])
+      for (const column of ["phase", "retry", "reasonCode", "resumedFromRunId", "origin"])
         if (!this.db.prepare("PRAGMA table_info(runs)").all().some((c) => c.name === column))
           this.db.exec(`ALTER TABLE runs ADD COLUMN ${column} TEXT`);
       this.db.exec(`CREATE TABLE IF NOT EXISTS session_results(

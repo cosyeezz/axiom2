@@ -21,7 +21,8 @@ function fixture() {
   for (const [path, content] of files) writeFileSync(join(directory, path), content);
   const requests: MemoryExecution[] = [], reads: string[] = [];
   let resolve!: (value: MemoryExecutionResult) => void;
-  const memories = { store: {
+  const memories = { owner: () => { if (!exists) throw Error("deleted"); },
+    records: { start: () => "title-processing", stage: () => {}, annotate: () => {}, callStart: () => "title-call", callFinish: () => {}, finish: () => {}, failure: () => {} }, store: {
     root,
     workspace: () => ({ authorized: true }),
     requestTitle: () => { if (!exists) throw Error("deleted"); return pending; },

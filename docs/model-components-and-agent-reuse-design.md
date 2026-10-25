@@ -1,10 +1,12 @@
 # Axiom 模型组件盘点与子代理复用设计
 
-[已确认的任务体验与布局](background-model-task-experience-plan.md) · [讨论交接](agent-execution-component-discussion.md) · [当前记忆机制](memory-tree-query.md) · [历史查询讨论](memory-refactor/02-purpose-query-requirements.md) · [目的索引联动覆盖](memory-refactor/purpose-flow-coverage.md) · [现有处理记录](processing-records.md)
+[已确认的任务体验与布局](background-model-task-experience-plan.md) · [后续隔离实现与验证](background-model-task-experience-implementation.md) · [讨论交接](agent-execution-component-discussion.md) · [当前记忆机制](memory-tree-query.md) · [历史查询讨论](memory-refactor/02-purpose-query-requirements.md) · [目的索引联动覆盖](memory-refactor/purpose-flow-coverage.md) · [现有处理记录](processing-records.md)
 
 ## 1. 范围与结论
 
-**状态：源码盘点与技术建议；体验和布局已另行定稿，技术接口未批准，本通用组件方案未实施。**本文结合交接文档，盘点当时工作树中需要模型能力的用途，区分源码快照、业务要求和建议改动。盘点阶段仅静态审计及新增本文；后续仅补充体验方案、文档衔接并对齐并行更新的记忆业务定案，没有修改产品代码、调用真实业务模型、运行产品测试、迁移或清空数据、重启、提交或部署。盘点时实际安装的 Pi 为 **1.1.0**；工作树存在大量并行修改，本文不是正式后台已加载这些源码的证明。
+**原盘点阶段状态：源码盘点与技术建议；体验和布局已另行定稿，当时技术接口未批准，本通用组件方案未实施。**本文结合交接文档，盘点当时工作树中需要模型能力的用途，区分源码快照、业务要求和建议改动。盘点阶段仅静态审计及新增本文；其后文档定稿阶段仅补充体验方案、文档衔接并对齐并行更新的记忆业务定案，没有修改产品代码、调用真实业务模型、运行产品测试、迁移或清空数据、重启、提交或部署。盘点时实际安装的 Pi 为 **1.1.0**；工作树存在大量并行修改，本文不是正式后台已加载这些源码的证明。
+
+**后续获授权的隔离实现：**现有过程、错误和状态反馈已另行在独立 Worktree 接入，具体实现及验证见[实现与接入说明](background-model-task-experience-implementation.md)，未合并或部署到正在使用的后台。本文件保留盘点与候选设计的历史语义，不把通用执行器重构、查询子会话或新业务操作一并视为已批准。
 
 后续讨论已确认两种执行模式、实时反馈要求和业务卡片位置，详见[任务体验与布局方案](background-model-task-experience-plan.md)，以该文为当前体验与布局依据。**本文全篇源码判断均保留原盘点时间语义，不代表并行改动后的实现进度**；包括第2节、后续“当前”代码判断和候选改动地图，接入前均须重核，不能把“本通用方案未实施”推为其他会话的记忆改造未实施。
 

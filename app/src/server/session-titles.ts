@@ -29,9 +29,12 @@ export class SessionTitles {
     const controller = new AbortController();
     state.controller = controller;
     state.provider = run.selection.provider;
+    let processingId: string | undefined, callId: string | undefined;
     state.job = Promise.resolve().then(async () => {
       const store = this.memories.store;
       if (controller.signal.aborted || !store.workspace(scope.workspaceId).authorized || !store.requestTitle(scope) || !this.memories.runner) return;
+      processingId = this.memories.records.start(scope, "session.title", "根据会话记忆生成标题", undefined, undefined, false, { runId: run.id, groupId: run.id });
+      this.memories.records.stage(processingId, "读取标题资料", run.selection);
       const captured: Array<{ path: string; revision: string }> = [];
       let chars = 0;
       const read = (path: string) => {
@@ -51,19 +54,44 @@ export class SessionTitles {
       };
       const entry = read("MEMORY.md");
       const body = memoryBody(entry).trim();
-      if (!body || !body.split(/\r?\n/).some(line => line.trim() && !placeholderLines.has(line.trim()))) return;
+      if (!body || !body.split(/\r?\n/).some(line => line.trim() && !placeholderLines.has(line.trim()))) {
+        this.memories.records.annotate(processingId, { outcome: "no_evidence" });
+        this.memories.records.stage(processingId, "无需生成：尚无有效记忆资料");
+        this.memories.records.finish(processingId, "completed"); return;
+      }
       const details = availableMemoryDetails(memoryDirectory(store.root, scope.sessionId), entry)
         .map(({ node, path }) => ({ heading: node.title, content: read(path) }));
+      this.memories.records.stage(processingId, "复核标题资料");
       for (const file of captured) if (this.memories.read(scope, file.path, 0, 1).revision !== file.revision) throw Error("标题资料已变化");
       controller.signal.throwIfAborted();
       state.attempts++;
+      const prompt = JSON.stringify({ memory: entry, details });
+      this.memories.records.stage(processingId, "准备标题请求");
+      callId = this.memories.records.callStart(processingId, "生成会话标题", { systemPrompt, prompt }, run.selection);
       const result = await this.memories.runner.execute({ scope, selection: run.selection, kind: "title", systemPrompt,
-        prompt: JSON.stringify({ memory: entry, details }), signal: controller.signal, deadlineAt: Date.now() + 30000,
+        prompt, signal: controller.signal, deadlineAt: Date.now() + 30000, processingId, processingCallId: callId,
         read: () => { throw Error("标题请求不允许工具读取"); },
       });
+      this.memories.records.callFinish(processingId, callId, result.answer, result.incomplete ? "标题响应不完整" : undefined);
+      controller.signal.throwIfAborted();
+      this.memories.records.stage(processingId, "校验标题结果");
       const title = !result.incomplete && !/[\r\n]/.test(result.answer.trim()) && validSessionTitle(result.answer);
-      if (!controller.signal.aborted && !this.closed && !state.cancelled && title && store.workspace(scope.workspaceId).authorized && store.generatedTitle(scope, title)) this.changed(scope);
-    }).catch(() => {}).finally(() => { state.job = undefined; state.controller = undefined; });
+      if (!title) throw Error(result.incomplete ? "标题响应不完整，保留原标题" : "标题格式无效，保留原标题");
+      this.memories.owner(scope);
+      if (this.closed || state.cancelled) throw new DOMException("标题生成已取消", "AbortError");
+      this.memories.records.stage(processingId, "应用会话标题");
+      const applied = store.generatedTitle(scope, title);
+      this.memories.records.annotate(processingId, { outcome: applied ? "applied" : "not_applied" });
+      this.memories.records.stage(processingId, applied ? "标题已生效" : "标题已被取代，本次未应用");
+      this.memories.records.finish(processingId, "completed", undefined, { title, applied });
+      if (applied) this.changed(scope);
+    }).catch(error => {
+      // Preserve best-effort isolation, not silent failure: the original run continues.
+      if (processingId) {
+        if (callId) this.memories.records.callFinish(processingId, callId, undefined, error);
+        this.memories.records.failure(processingId, error, controller.signal);
+      }
+    }).finally(() => { state.job = undefined; state.controller = undefined; });
   }
   cancel(scope: Scope) {
     const state = this.states.get(scope.sessionId);

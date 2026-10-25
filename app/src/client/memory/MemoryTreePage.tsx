@@ -8,6 +8,7 @@ import { MemoryFilter } from "./MemoryFilter.js";
 import { publicMemoryError } from "./memory-errors.js";
 import type { ProcessingOpening } from "../pages/ProcessingPage.js";
 import { MemoryMindMap } from "./MemoryMindMap.js";
+import { OrganizationFeedback } from "./OrganizationFeedback.js";
 import { memoryMapNodes, type MemoryMapNode } from "./memory-map-layout.js";
 import "../styles/memory-tree.css";
 function NumberSetting({ label, value, min = 1, max = 1000000, save }: { label: string; value: number; min?: number; max?: number; save: (value: number) => Promise<void> }) {
@@ -16,7 +17,7 @@ function NumberSetting({ label, value, min = 1, max = 1000000, save }: { label: 
   return <label>{label}<input type="number" min={min} max={max} step={1} required value={draft} onChange={(e) => setDraft(e.target.value)}
     onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={(e) => { if (e.currentTarget.reportValidity() && Number(draft) !== value) void save(Number(draft)).catch(() => {}); }} /></label>;
 }
-export function MemoryTreePage({ workspaceId, workspaces, select, open, openRecords, fullscreen, toggleFullscreen }: { workspaceId: string; workspaces: Workspace[]; select: (id: string) => void; open: (scope: Scope, path: string) => void; openRecords: (initial: ProcessingOpening) => void; fullscreen?: boolean; toggleFullscreen?: () => void }) {
+export function MemoryTreePage({ workspaceId, workspaces, select, open, openRecords, fullscreen, toggleFullscreen, visible = true }: { workspaceId: string; workspaces: Workspace[]; select: (id: string) => void; open: (scope: Scope, path: string) => void; openRecords: (initial: ProcessingOpening) => void; fullscreen?: boolean; toggleFullscreen?: () => void; visible?: boolean }) {
   const tree = useScope<(MemoryTree & { unavailable?: boolean }) | null>(memoryTreeScope(workspaceId), null);
   const catalog = useScope<MemoryCatalogEntry[] | null>(memoryCatalogScope(workspaceId), null);
   const [query, setQuery] = useState(""), [selected, setSelected] = useState<string>();
@@ -49,6 +50,7 @@ export function MemoryTreePage({ workspaceId, workspaces, select, open, openReco
       <button className="btn" aria-label="记忆设置" aria-expanded={settings} onClick={() => setSettings(!settings)}>设置</button>
     </div>
     <div className="memory-tree-status"><span>{tree?.roots.length ?? 0} 个一级分类 · {tree?.purposes.length ?? 0} 个目的 · 目录 {tree?.nameChars ?? 0}/{memoryDirectoryMaxChars} 字{pending ? ` · 待整理 ${pending} 个目的` : ""}</span></div>
+    {visible && <OrganizationFeedback workspaceId={workspaceId} tree={tree} openRecords={openRecords} />}
     {error && <p role="alert">{error}</p>}
     {!!failures.length && <details className="memory-tree-errors"><summary>整理出错 {failures.length}</summary>{failures.map((entry) => <p key={entry.id}>{entry.sourceTitle ?? entry.title}：{publicMemoryError(entry.organizationError!)} <button className="btn" onClick={() => openRecords({ kind: "memory.organize", sessionId: entry.sessionId, id: entry.processingId, legacyError: publicMemoryError(entry.organizationError!) })}>查看详情</button></p>)}</details>}
     {settings && <div className="memory-tree-settings"><h3>全局记忆设置</h3>{prefs ? <fieldset disabled={busy}>

@@ -5,8 +5,14 @@ export interface MemoryPurpose {
 }
 /** Directories have children; purpose leaves carry a stable program-allocated ID. */
 export interface MemoryIndexNode { id: string; name: string; children: MemoryIndexNode[]; purposeId?: string }
+export interface MemoryQueueSummary {
+  waiting: number; eligible: number; backoff: number; blocked: number;
+  oldestQueuedAt: number | null; nextBatchAt: number | null; retryAt: number | null;
+}
 export interface MemoryTree {
   version: number; roots: MemoryIndexNode[]; purposes: MemoryPurpose[]; nameChars: number; pending: number; failed: number;
+  queue?: MemoryQueueSummary;
+  activeBatch?: { processingId: string; purposeIds: string[]; sessionIds: string[] };
 }
 export interface MemoryTopicSnapshot { version: 2; workspaceId: string; text: string }
 export const memoryBatchSize = 50;

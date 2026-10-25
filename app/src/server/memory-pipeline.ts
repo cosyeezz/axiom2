@@ -52,10 +52,16 @@ export class MemoryPipeline {
       return result;
     } catch (error) { if (id && callId) this.memories.records.callFinish(id, callId, undefined, error); throw error; }
   }
-  async organize(batch: QueuedPurpose[], selection: Selection, signal: AbortSignal) {
+  startOrganization(batch: QueuedPurpose[]) {
+    const scope = { workspaceId: batch[0].workspaceId, sessionId: batch[0].source.sessionId };
+    return this.memories.records.start(scope, "memory.organize", `批量分类 ${batch.length} 个已完成目的`, undefined, undefined, false,
+      { batch: { purposeIds: batch.map(purpose => purpose.id), sessionIds: [...new Set(batch.map(purpose => purpose.source.sessionId))], published: false } });
+  }
+  async organize(batch: QueuedPurpose[], selection: Selection, signal: AbortSignal, recordId?: string) {
     if (!batch.length) return;
     const scope = { workspaceId: batch[0].workspaceId, sessionId: batch[0].source.sessionId };
-    const processingId = this.memories.records.start(scope, "memory.organize", `批量分类 ${batch.length} 个已完成目的`);
+    const processingId = recordId ?? this.startOrganization(batch), originalBatch = batch;
+    const batchContext = (published = false) => ({ purposeIds: originalBatch.map(purpose => purpose.id), sessionIds: [...new Set(originalBatch.map(purpose => purpose.source.sessionId))], published, skipped: originalBatch.length - batch.length });
     const guard = () => {
       signal.throwIfAborted();
       for (const purpose of batch) {
@@ -64,6 +70,7 @@ export class MemoryPipeline {
       }
     };
     try {
+      this.memories.records.stage(processingId, "核对批次来源", selection);
       // Preserve pre-request audit failures while isolating invalid locators:
       // a removed/reopened goal must not poison other completed purposes.
       batch = batch.filter(purpose => {
@@ -73,8 +80,9 @@ export class MemoryPipeline {
           this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal)); return true;
         } catch (error) { signal.throwIfAborted(); this.tree.suspend(purpose, error); return false; }
       });
+      this.memories.records.annotate(processingId, { batch: batchContext() });
       if (!batch.length) {
-        this.memories.records.finish(processingId, "failed", "全部目的定位已失效，未请求模型");
+        this.memories.records.finish(processingId, "invalidated", "全部目的定位已失效，未请求模型");
         this.memories.publishTree(scope.workspaceId); return;
       }
       guard();
@@ -89,12 +97,18 @@ export class MemoryPipeline {
       this.memories.records.stage(processingId, "批量语义分类", selection);
       const result = await this.execute({ scope, selection, kind: "organize", signal, processingId,
         systemPrompt: memoryOrganizerPrompt, prompt }, "批量语义分类");
+      this.memories.records.stage(processingId, "校验分类结果");
       if (result.incomplete) throw new AppError("MEMORY_BUDGET", "批分类未完整完成，队列保留");
       const roots = this.tree.classify(result.answer, purposes);
+      this.memories.records.stage(processingId, "复核目的来源");
       guard();
-      this.tree.publish(scope.workspaceId, batch, roots, snapshot.version);
+      this.memories.records.stage(processingId, "原子发布分类");
+      this.tree.publish(scope.workspaceId, batch, roots, snapshot.version, () => {
+        this.memories.records.annotate(processingId, { outcome: "applied", batch: batchContext(true) });
+        this.memories.records.stage(processingId, "分类已发布");
+        this.memories.records.finish(processingId, "completed", undefined, { publishedPurposeIds: batch.map(purpose => purpose.id), indexVersion: snapshot.version + 1 });
+      });
       this.memories.publishTree(scope.workspaceId);
-      this.memories.records.finish(processingId, "completed");
     } catch (error) {
       this.tree.failure(batch, error); this.memories.publishTree(scope.workspaceId);
       this.memories.records.failure(processingId, error, signal); throw error;
@@ -110,6 +124,7 @@ export class MemoryPipeline {
   }
   private async queryIndex(scope: Scope, question: string, selection: Selection, signal: AbortSignal, deadlineAt: number, parentLease: LeaseRef | undefined, processingId: string): Promise<MemoryQueryResult> {
     this.memories.owner(scope); signal.throwIfAborted();
+    this.memories.records.stage(processingId, "读取已发布目的索引", selection);
     // Capture once, at invocation, before any model call. No session-directory
     // restriction, no rescan, and no switching versions midway through a query.
     const snapshot = this.tree.snapshot(scope.workspaceId), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
@@ -119,9 +134,11 @@ export class MemoryPipeline {
       signal.throwIfAborted();
       if (!candidates.length) return [] as string[];
       if (++turns >= this.memories.preferences().maxTurns) throw new AppError("MEMORY_BUDGET", "索引导航轮数达到上限，查询未完成");
-      this.memories.records.stage(processingId, stage, selection);
-      const result = await this.execute({ ...base, systemPrompt: memoryMatchPrompt, prompt: JSON.stringify({ question, stage, candidates }) }, stage);
+      const label = stage === "directories" ? "匹配目录与目的" : "选择记忆详情";
+      this.memories.records.stage(processingId, label, selection);
+      const result = await this.execute({ ...base, systemPrompt: memoryMatchPrompt, prompt: JSON.stringify({ question, stage, candidates }) }, label);
       signal.throwIfAborted();
+      this.memories.records.stage(processingId, "校验索引导航结果");
       if (result.incomplete) throw new AppError("MEMORY_UNAVAILABLE", "索引导航未完整完成");
       const selected: unknown = JSON.parse(result.answer), allowed = new Set(candidates.map(candidate => candidate.id));
       if (!Array.isArray(selected) || selected.some(id => typeof id !== "string" || !allowed.has(id)) || new Set(selected).size !== selected.length)
@@ -138,7 +155,11 @@ export class MemoryPipeline {
       }
       frontier = next;
     }
-    if (!chosen.size) return empty;
+    if (!chosen.size) {
+      this.memories.records.annotate(processingId, { outcome: "no_match" });
+      this.memories.records.stage(processingId, "无匹配目的"); return empty;
+    }
+    this.memories.records.stage(processingId, "读取匹配目的与详情提纲");
     const documents = new Map<string, MemoryDocument & { sessionId: string }>();
     const read = (sessionId: string, path: string) => {
       const key = JSON.stringify([sessionId, path]);
@@ -162,6 +183,7 @@ export class MemoryPipeline {
     // A title alone is not evidence. An empty detail selection is a genuine miss,
     // but still verify that the consulted locators were not changed in flight.
     const evidence: Array<{ purpose: string; heading: string; state: string; content: string }> = [];
+    this.memories.records.stage(processingId, "读取选中详情及直接文本依据");
     for (const id of selectedDetails) {
       const detail = details.get(id)!;
       const document = read(detail.purpose.source.sessionId, detail.path);
@@ -176,12 +198,19 @@ export class MemoryPipeline {
       }
     }
     const readDocuments = [...documents.values()].map(({ sessionId, path, revision }) => ({ sessionId, path, revision }));
-    if (!evidence.length) { this.verify(scope, readDocuments); return { ...empty, readDocuments }; }
+    if (!evidence.length) {
+      this.memories.records.stage(processingId, "复核查询依据"); this.verify(scope, readDocuments);
+      this.memories.records.annotate(processingId, { outcome: "no_evidence" });
+      this.memories.records.stage(processingId, "目的已匹配，但无有效依据"); return { ...empty, readDocuments };
+    }
     this.memories.records.stage(processingId, "归纳原文答案", selection);
     const result = await this.execute({ ...base, systemPrompt: memoryAnswerPrompt,
       prompt: JSON.stringify({ question, outlines, evidence }) }, "归纳原文答案");
     signal.throwIfAborted();
+    this.memories.records.stage(processingId, "复核查询依据");
     this.verify(scope, readDocuments);
+    if (result.incomplete) this.memories.records.annotate(processingId, { outcome: "incomplete" });
+    this.memories.records.stage(processingId, result.incomplete ? "查询结果不完整" : "查询结果已核验");
     return { ...result, scope, indexVersion: snapshot.version,
       sources: [...new Map(readDocuments.map(({ sessionId, revision }) => [sessionId, { sessionId, revision }])).values()], readDocuments };
   }

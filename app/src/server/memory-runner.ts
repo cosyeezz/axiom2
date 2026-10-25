@@ -43,15 +43,21 @@ export class PooledMemoryRunner implements MemoryRunner {
     const timeoutError = () => Error(`记忆执行时限已到（${Math.round((input.deadlineAt ? remaining : preferences.timeoutMs) / 1000)} 秒，含排队）；请在记忆设置中提高执行时限后重试`);
     const signal = AbortSignal.any([controller.signal, timeout, ...(input.signal ? [input.signal] : [])]);
     signal.throwIfAborted();
+    const stage = (name: string) => { if (input.processingId) this.memories.records.stage(input.processingId, name, input.selection); };
+    stage("准备模型配置");
     const cwd = this.memories.store.workspace(input.scope.workspaceId).path;
     const environment=this.profiles.prepare({entry:'memory',cwd,modelDir:this.models.dir,modelsRaw:await this.models.raw(),selection:input.selection,mode:this.pool.mode});
     let lease:ExecutionLease|undefined;
     try {
-      lease=await this.pool.acquire({environment,kind:input.kind==='title'?'session-title':input.kind==='query'?'memory-query':'memory-organize',requestStartedAtMonoMs,signal,deadlineAt,parentLease:input.parentLease,memory:{concurrency:preferences.concurrency,queue:preferences.queue}});
+      stage("等待执行资源");
+      lease=await this.pool.acquire({environment,kind:input.kind==='title'?'session-title':input.kind==='query'?'memory-query':'memory-organize',requestStartedAtMonoMs,signal,deadlineAt,parentLease:input.parentLease,memory:{concurrency:preferences.concurrency,queue:preferences.queue},beforeExecute:()=>this.memories.owner(input.scope)});
       if(!environment.current())throw Error('记忆模型配置已变化，请重试');
+      stage("准备执行环境");
       const child=await lease.ensureReady();
       signal.throwIfAborted();
       if(!environment.current())throw Error('记忆模型配置在准备期间变化，请重试');
+      this.memories.owner(input.scope);
+      stage("准备发送模型请求");
       const revisionAware = input as RevisionAwareExecution;
       return await this.observe(child,lease,revisionAware,signal,{kind:input.kind,executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,systemPrompt:input.systemPrompt});
     } catch(error) {
@@ -82,11 +88,15 @@ export class PooledMemoryRunner implements MemoryRunner {
               .run(id,input.scope.sessionId,input.kind,event.provider,event.model,event.usage?JSON.stringify(event.usage):null,Date.now());
             this.memories.publish(`costs:${input.scope.workspaceId}:${input.scope.sessionId}`,{revision:Date.now()});
           }
-          if (event.type === 'model_call' && input.processingId && input.processingCallId) this.memories.records.callSent(input.processingId, input.processingCallId);
+          if (event.type === 'model_call' && input.processingId && input.processingCallId) {
+            this.memories.records.callSent(input.processingId, input.processingCallId);
+            this.memories.records.stage(input.processingId, '模型请求已发出，等待响应');
+          }
           if (event.type === 'model_result' && input.processingId && input.processingCallId) {
             const result = event.result;
             this.memories.records.callFinish(input.processingId, input.processingCallId, result,
               result?.stopReason === 'error' || result?.stopReason === 'aborted' ? result.errorMessage || '模型请求失败' : undefined, result?.usage);
+            this.memories.records.stage(input.processingId, result?.stopReason === 'error' || result?.stopReason === 'aborted' ? '模型响应错误' : '已收到模型响应');
           }
           if(signal.aborted)return;
           if(event.type==='read'||event.type==='revision')throw Error('独立记忆请求不允许工具读取');
@@ -94,6 +104,7 @@ export class PooledMemoryRunner implements MemoryRunner {
             if(typeof event.answer!=='string'||input.kind==='organize'&&!event.answer||event.answer.length>32000||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
             if(event.incompleteReason !== undefined && (typeof event.incompleteReason !== 'string' || !Object.hasOwn(memoryIncompleteMessages,event.incompleteReason)))throw Error('记忆未完成原因无效');
             result={answer:event.answer,incomplete:event.incomplete,...(event.incompleteReason ? {incompleteReason:event.incompleteReason as MemoryIncompleteReason} : {})};
+            if (input.processingId) this.memories.records.stage(input.processingId, '清理执行环境');
             reap=setTimeout(()=>{failure=Error('记忆清理未完成');void this.pool.retire(lease.ref,'cleanup_timeout');},1500);
           }
           if(event.type==='failed'){failure=Error(typeof event.error==='string'?event.error:'记忆执行失败');void this.pool.retire(lease.ref,'memory_failed');}

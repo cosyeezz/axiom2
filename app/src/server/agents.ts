@@ -20,7 +20,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Store, type SessionRestorePosition } from "./storage.js";
 import { ModelService } from "./model-service.js";
 import { configuration } from "./models.js";
-import { boundedMessage, openTranscript } from "./transcript.js";
+import { boundedMessage, openTranscript, toolKey } from "./transcript.js";
 import { messagePart } from "./message-part.js";
 import {
   AppError,
@@ -234,7 +234,7 @@ export class Agents {
             if (Object.keys(params).some(key => key !== "question")) throw new AppError("INVALID_INPUT", "记忆查询仅接受question");
             const parentLease = this.runs.lease(scope, run.id);
             if (!parentLease) throw new AppError("AGENT_STOPPED", "父执行已经结束");
-            const data = await this.memories.query(scope, question, controller.signal, parentLease);
+            const data = await this.memories.query(scope, question, controller.signal, parentLease, { runId: run.id, toolCallId: toolKey(run.id, event.callId) });
             if (!controller.signal.aborted) this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: true, data });
           } catch (error) {
             this.signal(scope, run.id, { type: "task-reply", key: event.key, ok: false, error: errorMessage(error, "记忆查询失败") });
@@ -606,6 +606,10 @@ export class Agents {
           error: null,
           phase: "initializing",
           resumedFromRunId: internal.memoryContinuation?.expectedRunId ?? (typeof p.expectedRunId === "string" ? p.expectedRunId : null),
+          ...(!internal.task ? { origin: internal.notification ? "task_notification" as const
+            : internal.memoryContinuation ? "memory_continuation" as const
+            : internal.compressionPreparation ? "compression_preparation" as const
+            : resuming ? "manual_resume" as const : undefined } : {}),
         };
         this.store.db.exec("BEGIN IMMEDIATE");
         try {
@@ -613,7 +617,7 @@ export class Agents {
         if (!internal.task) this.store.requestTitle(scope,
           internal.notification || resuming || internal.memoryContinuation || internal.compressionPreparation ? undefined : (typeof p.text === "string" && p.text.trim() ? p.text : images.length ? "[图片]" : prompt));
         this.store.db
-          .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId) VALUES(?,?,?,?,?,?,?)")
+          .prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt,phase,resumedFromRunId,origin) VALUES(?,?,?,?,?,?,?,?)")
           .run(
             id,
             scope.sessionId,
@@ -622,6 +626,7 @@ export class Agents {
             run.startedAt,
             run.phase!,
             run.resumedFromRunId ?? null,
+            run.origin ?? null,
           );
         // Task ownership/input handoff must commit with the run, not after it.
         internal.onCommit?.(run);

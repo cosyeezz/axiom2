@@ -1,4 +1,4 @@
-import type { ChatMessage, ThreadIndex } from "./agent.js";
+import type { ChatMessage, RunOrigin, ThreadIndex } from "./agent.js";
 import type { ToolIcon } from "./tool-summary.js";
 
 export type ThreadGroup = NonNullable<ThreadIndex["groups"]>[number];
@@ -9,6 +9,8 @@ export interface HistoryGroup extends ThreadGroup {
   process?: {
     status: "completed" | "failed" | "cancelled";
     calls: number;
+    /** Explicit run metadata only; opening history does not create a run. */
+    origins?: RunOrigin[];
     failed: number;
     succeeded?: number;
     /** Settled archives own an outer status card; their inner process stays inline. */

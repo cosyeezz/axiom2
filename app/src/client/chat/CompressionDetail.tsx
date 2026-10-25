@@ -18,6 +18,7 @@ import { useSettingsPopover } from "../useSettingsPopover.js";
 export function compressionStatusLabel(job: Compression) {
   if (job.state === "completed") return job.phase === "done" ? "已应用" : "应用状态待核实";
   if (job.state !== "running") return compressionLabels[job.state];
+  if (job.stage) return job.stage;
   return {
     snapshot: "等待安全点快照",
     summarizing: "后台生成原生摘要",
@@ -93,7 +94,7 @@ export function CompressionDetail({
   const steps = [
     [
       "等待安全点快照",
-      !job || job.phase === "snapshot"
+      !job || !job.messageCount
         ? "等待会话安全边界，保存完整上下文快照；不打断当前请求"
         : `快照包含 ${job.messageCount} 条上下文消息；快照后的新增消息单独保留`,
     ],
@@ -186,6 +187,7 @@ export function CompressionDetail({
               核实压缩状态（不重发）
             </button>
           )}
+          {job?.stage && job.state !== "running" && <p className="meta">最后阶段：{job.stage}</p>}
           <dl className="compression-facts">
             <div>
               <dt>所属会话</dt>
@@ -219,7 +221,7 @@ export function CompressionDetail({
           <h3>处理阶段</h3>
           <ol className="compression-steps">
             {steps.map(([heading, description], i) => {
-              const current = Math.min(2, {
+              const current = job?.phase === "snapshot" && job.messageCount > 0 ? 1 : Math.min(2, {
                 snapshot: 0,
                 summarizing: 1,
                 applying: 2,

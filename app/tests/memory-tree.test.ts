@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { memoryPurposes } from "../src/shared/memory-purposes.js";
 import { memoryBatchWaitMs, memoryTopicBlock } from "../src/shared/memory-tree.js";
 import { purposeFixture } from "./memory-purpose-fixture.js";
+import { ProcessingRecords } from "../src/server/processing-records.js";
+import type { ProcessingRecord } from "../src/shared/processing.js";
 
 test("only completed H1 purposes in heading-only status trees qualify", () => {
   const entry = "# [Completed] 数据库发布\n## [Completed] 验证事务\n# [In progress] 部署\n## [Completed] 检查依赖\n# [Completed] 矛盾状态\n## [Waiting] 审批\n# [Completed] 保留失败尝试\n## [Abandoned] ~~旧方案~~\n### [In progress] ~~旧实现~~\n## [Completed] 新方案\n";
@@ -49,6 +51,46 @@ test("atomic publication preserves old purpose IDs, rejects stale versions and d
     assert.throws(() => f.tree.publish(f.workspace.id, batch, after.roots, after.version), { code: "REVISION_CONFLICT" });
     assert.deepEqual(f.tree.snapshot(f.workspace.id), after);
   } finally { await f.close(); }
+});
+test("publication and application receipt roll back together on callback or commit failure", async () => {
+  for (const failure of ["callback", "commit"] as const) {
+    const f = purposeFixture(); let stop: (() => void) | undefined;
+    const exec = f.store.db.exec.bind(f.store.db);
+    try {
+      const scope = f.create(); f.memories.scan(scope);
+      const records = ProcessingRecords.for(f.store), id = records.start(scope, "memory.organize", "事务回执");
+      const batch = f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), before = f.tree.snapshot(f.workspace.id);
+      const roots = f.tree.classify(JSON.stringify([{ name: "事务", children: batch.map(p => ({ purposeId: p.id })) }]), batch);
+      const body = () => String(f.store.db.prepare("SELECT body FROM processing_records WHERE id=?").get(id)!.body);
+      const beforeBody = body(), beforeQueue = f.tree.entries(f.workspace.id);
+      await new Promise(resolve => setImmediate(resolve));
+      const observed: { version: number; state: string }[] = [];
+      let publishing = false;
+      stop = records.observe(workspaceId => {
+        assert.equal(publishing, false, "observers run after the synchronous transaction ends");
+        const record = records.command({ requestId: "fixture", op: "processing.get", workspaceId, params: { id } }) as ProcessingRecord;
+        observed.push({ version: f.tree.snapshot(workspaceId).version, state: record.state });
+      });
+      if (failure === "commit") f.store.db.exec = (sql: string) => { if (sql === "COMMIT") throw Error("injected commit failure"); return exec(sql); };
+      publishing = true;
+      assert.throws(() => f.tree.publish(f.workspace.id, batch, roots, before.version, () => {
+        records.annotate(id, { outcome: "applied" }); records.finish(id, "completed");
+        assert.equal(observed.length, 0);
+        if (failure === "callback") throw Error("injected callback failure");
+      }), new RegExp(`injected ${failure} failure`));
+      publishing = false; f.store.db.exec = exec;
+      assert.deepEqual(f.tree.snapshot(f.workspace.id), before); assert.deepEqual(f.tree.entries(f.workspace.id), beforeQueue);
+      assert.equal(body(), beforeBody, "receipt bytes roll back with the native index and queue");
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(observed, [{ version: before.version, state: "running" }], "a payload-free rollback invalidation never reveals uncommitted success");
+      observed.length = 0; publishing = true;
+      f.tree.publish(f.workspace.id, batch, roots, before.version, () => { records.annotate(id, { outcome: "applied" }); records.finish(id, "completed"); });
+      assert.equal(observed.length, 0); publishing = false;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(observed, [{ version: before.version + 1, state: "completed" }]);
+      assert.equal(JSON.parse(body()).outcome, "applied"); assert.equal(f.tree.entries(f.workspace.id).filter(p => p.processedAt === null).length, 0);
+    } finally { stop?.(); f.store.db.exec = exec; await f.close(); }
+  }
 });
 test("count and oldest enqueue age share exact 50/30-minute boundaries", async () => {
   const f = purposeFixture(); try {

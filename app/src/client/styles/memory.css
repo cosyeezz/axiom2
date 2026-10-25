@@ -9,6 +9,10 @@
 .memory-todo-toggle,.memory-global{display:flex;align-items:center;justify-content:center;width:44px;min-width:44px;height:44px;padding:0;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--fg-2);background:transparent}
 .memory-todo-toggle{width:auto;padding:0 8px;gap:6px}
 .memory-todo-percent{font-family:var(--font-mono);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.memory-global{position:relative}
+.memory-global-badge{position:absolute;right:7px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 2px var(--bg)}
+.memory-global-badge[data-state=active]{background:var(--accent)}
+.memory-global-badge[data-state=error]{background:var(--danger)}
 .memory-todo-toggle>svg,.memory-global>svg{display:block;width:18px;height:18px;flex:0 0 18px;stroke-width:2}
 .memory-todo-toggle:hover:not(:disabled),.memory-global:hover:not(:disabled){color:var(--fg);background:color-mix(in srgb,var(--fg) 8%,transparent);border-color:var(--border)}
 .memory-todo-toggle[aria-expanded=true]{color:var(--accent-hover);background:color-mix(in srgb,var(--fg) 8%,transparent)}

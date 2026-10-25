@@ -98,6 +98,10 @@ export class Compressions {
     this.records.syncCompression(live.scope, live.job);
     this.agents.publish(compressionScope(live.scope), live.job);
   }
+  private stage(live: Live, stage: string) {
+    if (live.job.state !== "running" || live.job.stage === stage) return;
+    live.job.stage = stage; this.save(live);
+  }
   private selection(value: unknown, config: Configuration): Selection {
     const selection = object(value);
     if (Object.keys(selection).some((key) => !["provider", "id", "thinking"].includes(key)) ||
@@ -157,6 +161,7 @@ export class Compressions {
       this.store.session(scope.workspaceId, scope.sessionId);
       const id = this.records.start(scope, "compression", autoRunId ? "自动压缩" : "手动压缩", processingId);
       try {
+      this.records.stage(id, "校验压缩条件与模型配置");
       const check = () => {
         if (this.agents.reloads.active(scope)) throw new AppError("COMPRESSION_BUSY", "会话正在重载，请等待完成后压缩。");
         if (this.closing || epoch !== (this.epochs.get(scope.sessionId) ?? 0))
@@ -196,7 +201,7 @@ export class Compressions {
         file: join(this.directory, `${id}.jsonl`), modelsFile: join(this.directory, `${id}.json`), selection,
       };
       const job: Compression = {
-        id, requestId: c.requestId, trigger: autoRunId ? "auto" : "manual", state: "running", phase: "snapshot", startedAt: Date.now(), endedAt: null,
+        id, requestId: c.requestId, trigger: autoRunId ? "auto" : "manual", state: "running", phase: "snapshot", stage: "等待安全点快照", startedAt: Date.now(), endedAt: null,
         messageCount: 0, before: null, after: null, summary: "", error: null, selection, usage: null,
       };
       const live: Live = {
@@ -290,7 +295,7 @@ export class Compressions {
           this.finish(live, "failed", `会话快照保存失败：${compressionError(event.error)}；未开始生成摘要。`);
         else this.snapshot(live, event.snapshot);
       }
-      if (event.type === "compression-queued") { live.job.phase = "applying"; this.save(live); }
+      if (event.type === "compression-queued") { live.job.phase = "applying"; this.stage(live, "等待新的会话安全点校验并应用"); }
       if (event.type === "compression-applied") {
         if (event.ok && this.applied(scope, live.job.id)) this.finish(live, "completed");
         else this.finish(live, "failed", `摘要应用失败：${compressionError(event.error)}；未应用此摘要。`);
@@ -313,7 +318,10 @@ export class Compressions {
         if (!run) return;
         if (live.entry) {
           if (this.agents.signal(scope, run.id, { type: "compression-apply", id: job.id, snapshot: live.snapshot, entry: live.entry })) live.applyRun = run.id;
-        } else this.agents.signal(scope, run.id, { type: "compression-snapshot", id: job.id });
+        } else {
+          this.stage(live, "等待会话安全点保存快照");
+          this.agents.signal(scope, run.id, { type: "compression-snapshot", id: job.id });
+        }
         // If already finishing, close/settled will retry against the idle manager.
       } else if (!live.entry && !this.agents.info(scope).task) {
         if (live.preparing) return;
@@ -322,6 +330,7 @@ export class Compressions {
           if (live.cancel || this.live.get(scope.sessionId) !== live)
             throw new AppError("COMPRESSION_STOPPED", "压缩已取消，未启动记忆维护。");
         };
+        this.stage(live, "主会话正在整理记忆，等待安全快照");
         live.preparing = Promise.resolve().then(() => {
           validate();
           return this.agents.command({ op: "prompt", requestId: `compression-memory-${job.id}`, ...scope }, {
@@ -344,6 +353,7 @@ export class Compressions {
             this.finish(live, "failed", "无法释放保活会话；未保存快照或应用摘要。");
         });
       } else if (live.entry && live.snapshot) {
+        this.stage(live, "校验快照兼容性并应用摘要");
         applyCompression(this.manager(scope), live.snapshot, live.entry, job.id);
         if (!this.applied(scope, job.id)) throw Error("Not persisted");
         this.updateUsage(live);
@@ -359,6 +369,7 @@ export class Compressions {
     live.job.messageCount = messages.filter((m) => ["user", "assistant", "custom", "toolResult"].includes(m.role)).length;
     if (!live.job.messageCount) throw Error("Empty snapshot");
     live.job.before = messages.reduce((total, message) => total + estimateTokens(message), 0);
+    this.stage(live, "快照已保存，准备摘要执行");
     this.launch(live);
     this.save(live);
   }
@@ -370,12 +381,16 @@ export class Compressions {
     const { input } = live;
     let environment: ReturnType<Agents["profiles"]["prepare"]> | undefined;
     try {
+      this.stage(live, "准备压缩执行环境");
       environment = this.agents.profiles.prepare({ entry: "compression", cwd: input.cwd, modelDir: this.agents.models.dir,
         modelsRaw: readFileSync(input.modelsFile, "utf8"), selection: input.selection, mode: this.agents.pool.mode });
+      this.stage(live, "等待摘要执行资源");
       const lease = await this.agents.pool.acquire({ environment, kind: "compression-summary", requestStartedAtMonoMs: live.requestStartedAtMonoMs, signal: live.controller.signal });
       live.lease = lease;
+      this.stage(live, "启动摘要执行环境");
       const child = await lease.ensureReady();
       if (live.cancel || !environment.current()) throw Error("摘要执行已取消或配置已变化");
+      this.stage(live, "准备生成原生摘要");
       await this.observe(live, child, lease);
     } catch (error) {
       if (live.lease) await this.agents.pool.retire(live.lease.ref, "compression_failed");
@@ -393,20 +408,27 @@ export class Compressions {
     child.on("message", (event: any) => {
       if (!sameLease(event.lease, lease.ref)) return;
       try {
-        if (event.type === "model_call") { this.records.callStart(job.id, "生成摘要", event.input, input.selection, event.id); this.records.callSent(job.id, event.id); }
-        if (event.type === "model_result") this.records.callFinish(job.id, event.id, event.output, event.error, event.usage);
+        if (event.type === "model_call") {
+          this.records.callStart(job.id, "生成摘要", event.input, input.selection, event.id); this.records.callSent(job.id, event.id);
+          if (!live.cancel) this.stage(live, "模型请求已发出，等待摘要响应");
+        }
+        if (event.type === "model_result") {
+          this.records.callFinish(job.id, event.id, event.output, event.error, event.usage);
+          if (!live.cancel) this.stage(live, event.error ? "摘要模型请求出错" : "已收到摘要模型响应");
+        }
         if (event.type === "closed") live.closed = true;
         // A stopped request can still report real usage before its worker exits.
         if (event.type === "billing") { job.billing = event.billing; this.save(live); }
         if (live.cancel) return;
-        if (event.type === "phase") { job.phase = "summarizing"; this.save(live); }
+        if (event.type === "phase") { job.phase = "summarizing"; this.stage(live, "生成原生摘要"); }
         if (event.type === "completed") {
+          this.stage(live, "校验原生摘要结果");
           if (!event.entry || event.entry.type !== "compaction" || !event.entry.summary?.trim()) throw Error("Missing native compaction");
           live.entry = event.entry;
           const summary = String(event.entry.summary);
           job.summary = summary.slice(0, 64000) + (summary.length > 64000 ? "\n…（摘要预览超过 64,000 字符，已截断）" : "");
           job.before = event.before; job.after = event.after; job.usage = event.usage;
-          this.save(live);
+          this.stage(live, "摘要已生成，等待执行环境退出");
           reap = setTimeout(() => child.kill("SIGKILL"), 2000);
         }
         if (event.type === "failed" || event.type === "cancelled") {
@@ -433,7 +455,7 @@ export class Compressions {
           : `压缩进程中断（${signal ? `信号 ${signal}` : `退出码 ${code ?? "未知"}`}），未收到有效压缩结果。`));
       else {
         job.phase = "applying";
-        this.save(live);
+        this.stage(live, "等待新的会话安全点校验并应用");
         this.advance(live);
       }
     });
@@ -469,7 +491,7 @@ export class Compressions {
     // even if telemetry or a late acknowledgement failed afterwards.
     if (state !== "completed" && this.applied(live.scope, live.job.id)) state = "completed";
     live.job.state = state; live.job.endedAt = Date.now(); live.job.error = state === "completed" ? null : error;
-    if (state === "completed") { live.job.phase = "done"; live.job.appliedAt = Date.now(); this.agents.refresh(live.scope); }
+    if (state === "completed") { live.job.phase = "done"; live.job.stage = "摘要已应用"; live.job.appliedAt = Date.now(); this.agents.refresh(live.scope); }
     this.save(live);
     this.live.delete(live.scope.sessionId);
     if (state === "completed") {
@@ -487,6 +509,7 @@ export class Compressions {
     if (!live) return;
     live.cancel = true;
     this.records.cancelling(live.job.id);
+    this.stage(live, "正在取消，等待安全点确认");
     live.controller.abort();
     // Abort the billable summarization first, even if the live agent is too busy
     // to acknowledge cancellation of its queued apply within the deadline.

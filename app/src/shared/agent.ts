@@ -36,6 +36,16 @@ export interface RetrySettings {
   maxAgentDelayMs: number;
   provider: { maxRetries?: number; maxRetryDelayMs: number; timeoutMs?: number };
 }
+export const runOriginLabels = {
+  task_notification: "任务结果通知后续跑",
+  memory_continuation: "按记忆进度续跑",
+  compression_preparation: "压缩前记忆维护",
+  manual_resume: "手动继续执行",
+} as const;
+export type RunOrigin = keyof typeof runOriginLabels;
+/** Only explicit host facts have a source; legacy runs stay unknown. */
+export const readRunOrigin = (value: unknown): RunOrigin | undefined =>
+  typeof value === "string" && Object.hasOwn(runOriginLabels, value) ? value as RunOrigin : undefined;
 export interface Run {
   id: string;
   sessionId: string;
@@ -55,6 +65,8 @@ export interface Run {
   phase?: RunPhase | null;
   retry?: RetryInfo | null;
   resumedFromRunId?: string | null;
+  /** Display-only source. Never grants continuation permission or changes billing. */
+  origin?: RunOrigin;
 }
 export interface EnvironmentTool {
   name: string;
@@ -158,6 +170,8 @@ export interface ChatMessage {
   /** Display metadata from an actual model request, never the menu draft. */
   selectionChange?: SelectionChange;
   runId?: string;
+  /** Read-only projection from the owning run, not model-supplied transcript content. */
+  runOrigin?: RunOrigin;
 }
 /** One hidden message field, always returned in full. */
 export interface MessagePart {

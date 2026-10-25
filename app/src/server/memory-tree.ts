@@ -4,6 +4,7 @@ import { emptyMemoryTree, memoryBatchSize, memoryBatchWaitMs, memoryContextPurpo
   type MemoryPurpose, type MemoryIndexNode, type MemoryTree } from "../shared/memory-tree.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
 import { AppError, type Scope } from "../shared/protocol.js";
+import { processingError } from "./processing-records.js";
 
 export interface QueuedPurpose extends MemoryPurpose {
   workspaceId: string; queuedAt: number; processedAt: number | null; retryAfter: number; blocked: boolean; error?: string;
@@ -64,9 +65,15 @@ export class MemoryTreeStore {
     const row = this.store.db.prepare("SELECT body FROM memory_purpose_indexes WHERE workspaceId=?").get(workspaceId);
     return row ? JSON.parse(String(row.body)) as MemoryTree : emptyMemoryTree();
   }
-  tree(workspaceId: string): MemoryTree {
-    const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null && !purpose.blocked);
-    return { ...this.snapshot(workspaceId), pending: pending.length, failed: pending.filter(purpose => purpose.error).length };
+  tree(workspaceId: string, now = Date.now(), activeIds: readonly string[] = []): MemoryTree {
+    const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null), active = new Set(activeIds);
+    const waiting = pending.filter(purpose => !active.has(purpose.id));
+    const eligible = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter <= now), backoff = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter > now);
+    return { ...this.snapshot(workspaceId), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
+      queue: { waiting: waiting.length, eligible: eligible.length, backoff: backoff.length, blocked: waiting.filter(purpose => purpose.blocked).length,
+        oldestQueuedAt: eligible[0]?.queuedAt ?? null,
+        nextBatchAt: eligible.length >= memoryBatchSize ? now : eligible.length ? eligible[0].queuedAt + memoryBatchWaitMs : null,
+        retryAt: backoff.length ? Math.min(...backoff.map(purpose => purpose.retryAfter)) : null } };
   }
   /** Validate the whole proposed tree and bind every leaf ourselves. No lossy truncation. */
   classify(answer: string, purposes: MemoryPurpose[]): MemoryIndexNode[] {
@@ -97,7 +104,7 @@ export class MemoryTreeStore {
   modelTree(roots: MemoryIndexNode[]): unknown[] {
     return roots.map(node => node.purposeId ? { purposeId: node.purposeId } : { name: node.name, children: this.modelTree(node.children) });
   }
-  publish(workspaceId: string, batch: QueuedPurpose[], roots: MemoryIndexNode[], expectedVersion: number) {
+  publish(workspaceId: string, batch: QueuedPurpose[], roots: MemoryIndexNode[], expectedVersion: number, recordApplied?: () => void) {
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
       const previous = this.snapshot(workspaceId);
@@ -112,16 +119,19 @@ export class MemoryTreeStore {
         .run(workspaceId, tree.version, JSON.stringify(tree));
       const update = this.store.db.prepare("UPDATE memory_purposes SET processedAt=?,error=NULL,retryAfter=0 WHERE id=? AND processedAt IS NULL AND blocked=0");
       for (const purpose of batch) if (!update.run(Date.now(), purpose.id).changes) throw new AppError("REVISION_CONFLICT", "目的已被其他整理领取");
+      // This callback must remain synchronous: the original queue/index transaction
+      // also commits its diagnostic application fact before returning to the event loop.
+      recordApplied?.();
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
   }
   failure(batch: QueuedPurpose[], error: unknown) {
     const update = this.store.db.prepare("UPDATE memory_purposes SET error=?,retryAfter=? WHERE id=? AND processedAt IS NULL AND blocked=0");
-    for (const purpose of batch) update.run(error instanceof Error ? error.message.slice(0, 1000) : "批分类失败", Date.now() + 60_000, purpose.id);
+    for (const purpose of batch) update.run(processingError(error instanceof Error ? error : "批分类失败").slice(0, 1000), Date.now() + 60_000, purpose.id);
   }
   suspend(purpose: QueuedPurpose, error: unknown) {
     this.store.db.prepare("UPDATE memory_purposes SET blocked=1,error=? WHERE id=? AND processedAt IS NULL")
-      .run(error instanceof Error ? error.message : "目的定位失效", purpose.id);
+      .run(processingError(error instanceof Error ? error : "目的定位失效"), purpose.id);
   }
   /** Revoke affected derived leaves atomically before correcting raw bytes.
    * A crash cannot leave a stale published leaf; a later valid scan reuses IDs. */

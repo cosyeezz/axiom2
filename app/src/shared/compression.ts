@@ -25,6 +25,8 @@ export interface Compression {
   trigger?: "manual" | "auto";
   state: "running" | "completed" | "cancelled" | "failed" | "interrupted";
   phase: "snapshot" | "summarizing" | "applying" | "done";
+  /** Real execution boundary within the original phase, not estimated progress. */
+  stage?: string;
   appliedAt?: number | null;
   startedAt: number;
   endedAt: number | null;

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
-import type { ChatMessage } from "../shared/agent.js";
+import type { ChatMessage, RunOrigin } from "../shared/agent.js";
 import type { HistoryGroup, HistoryIndex } from "../shared/history.js";
 import { threadGroups } from "../shared/thread-layout.js";
 import { toolSummary } from "../shared/tool-summary.js";
@@ -13,7 +13,7 @@ export interface HistoryProjection {
   bytes: number;
 }
 /** Physical compaction events delimit disjoint UI ranges, independently of model keep boundaries. */
-export function historyProjection(manager: SessionManager, _source: string): HistoryProjection {
+export function historyProjection(manager: SessionManager, _source: string, origins: ReadonlyMap<string, RunOrigin> = new Map()): HistoryProjection {
   const branch = manager.getBranch();
   const positions = new Map(branch.map((entry, i) => [entry.id, i]));
   const checkpoints = branch.filter(entry => entry.type === "compaction");
@@ -25,6 +25,8 @@ export function historyProjection(manager: SessionManager, _source: string): His
     while (bucket < checkpoints.length && positions.get(checkpoints[bucket].id)! < position) bucket++;
     const message = chatMessage(entry.message, entry.id);
     if (!message) continue;
+    const origin = message.runId && origins.get(message.runId);
+    if (origin) message.runOrigin = origin;
     messages.set(message.id, message);
     if (bucket < buckets.length) buckets[bucket].push(message);
   }
@@ -51,6 +53,7 @@ export function historyProjection(manager: SessionManager, _source: string): His
         ...(folded ? { process: {
           status: last?.error || last?.status === "failed" ? "failed" as const : last?.status === "cancelled" ? "cancelled" as const : "completed" as const,
           calls: calls.length,
+          ...(items.some(item => item.runOrigin) ? { origins: [...new Set(items.flatMap(item => item.runOrigin ? [item.runOrigin] : []))] } : {}),
           inline: !group.folded,
           failed: calls.filter(call => messages.get(`tool-${call.id}`)?.status === "failed").length,
           succeeded: calls.filter(call => messages.get(`tool-${call.id}`)?.status === "completed").length,

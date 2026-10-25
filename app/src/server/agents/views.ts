@@ -6,9 +6,11 @@ import {
   agentScope,
   threadScope,
   messageScope,
+  readRunOrigin,
   type AgentInfo,
   type ChatMessage,
   type Run,
+  type RunOrigin,
   type ThreadIndex,
 } from "../../shared/agent.js";
 import { threadGroups } from "../../shared/thread-layout.js";
@@ -46,6 +48,15 @@ export class AgentViews {
   readonly queues = new Map<string, NonNullable<AgentInfo["queue"]>>();
   private owner(scope: Scope) {
     return this.store.session(scope.workspaceId, scope.sessionId);
+  }
+  private origins(scope: Scope): Map<string, RunOrigin> {
+    return new Map(this.store.db.prepare("SELECT id,origin FROM runs WHERE sessionId=? AND origin IS NOT NULL").all(scope.sessionId)
+      .flatMap(row => { const origin = readRunOrigin(row.origin); return origin ? [[String(row.id), origin] as const] : []; }));
+  }
+  private source(scope: Scope, message: ChatMessage, origins?: ReadonlyMap<string, RunOrigin>): ChatMessage {
+    const origin = message.runId ? origins ? origins.get(message.runId)
+      : readRunOrigin(this.store.db.prepare("SELECT origin FROM runs WHERE id=? AND sessionId=?").get(message.runId, scope.sessionId)?.origin) : undefined;
+    return origin || message.runOrigin ? { ...message, runOrigin: origin } : message;
   }
   info(scope: Scope): AgentInfo {
     this.owner(scope);
@@ -90,6 +101,7 @@ export class AgentViews {
             ...run,
             selection: JSON.parse(String(run.selection)),
             retry: run.retry ? JSON.parse(String(run.retry)) : null,
+            origin: readRunOrigin(run.origin),
           } as unknown as Run)
         : null,
     };
@@ -104,7 +116,8 @@ export class AgentViews {
       const manager = row?.file
         ? openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path, { readOnly: true })
         : null;
-      const list = manager ? transcriptMessages(manager) : [];
+      const origins = this.origins(scope);
+      const list = manager ? transcriptMessages(manager).map(message => this.source(scope, message, origins)) : [];
       messages = new Map(list.map((m) => [m.id, m]));
       for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
       this.messages.set(scope.sessionId, messages);
@@ -164,7 +177,9 @@ export class AgentViews {
     const source = `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
     let saved = this.originals.get(scope.sessionId);
     if (saved?.source !== source) {
-      const list = file ? transcriptMessages(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), true) : [];
+      const origins = this.origins(scope);
+      const list = file ? transcriptMessages(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), true)
+        .map(message => this.source(scope, message, origins)) : [];
       const bytes = list.reduce((total, message) => total + 256 + 2 * (message.id.length + message.text.length +
         (message.thinking?.length ?? 0) + (message.error?.length ?? 0) + (message.calls?.reduce((sum, call) => sum + call.input.length, 0) ?? 0)), 0);
       saved = { source, messages: new Map(list.map((message) => [message.id, message])), bytes };
@@ -193,7 +208,7 @@ export class AgentViews {
     const source = `${file}:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
     let saved = this.histories.get(scope.sessionId);
     if (saved?.source !== source) {
-      saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source) };
+      saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source, this.origins(scope)) };
       this.histories.delete(scope.sessionId);
       if (saved.projection.bytes <= 32 * 1024 * 1024) {
         while ([...this.histories.values()].reduce((sum, value) => sum + value.projection.bytes, saved.projection.bytes) > 32 * 1024 * 1024)
@@ -244,6 +259,7 @@ export class AgentViews {
   }
   messageChanged(scope: Scope, message: ChatMessage) {
     this.owner(scope);
+    message = this.source(scope, message);
     const messages = this.messages.peek(scope.sessionId) ??
       (this.observed(threadScope(scope)) || this.observed(`messages:${scope.workspaceId}:${scope.sessionId}`) ? this.transcript(scope) : undefined);
     const previous = messages?.get(message.id) ?? this.transient.get(scope.sessionId)?.get(message.id);

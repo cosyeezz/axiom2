@@ -1,6 +1,7 @@
 /* Shared typography; right-hand tools keep their edge drawers. */
 dialog.toolbar-detail-panel{position:fixed;inset:auto auto min(var(--settings-bottom,64px),calc(100dvh - 80px)) clamp(12px,var(--toolbar-panel-left,12px),calc(100vw - min(var(--toolbar-panel-width,520px),100vw - 24px) - 12px));box-sizing:border-box;margin:0;padding:0;width:var(--toolbar-panel-width,min(520px,calc(100vw - 24px)));height:auto;max-width:calc(100vw - 24px);max-height:min(680px,var(--toolbar-panel-height,calc(100dvh - 88px)),calc(100dvh - min(var(--settings-bottom,64px),100dvh - 80px) - 12px));border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);color:var(--fg-2);box-shadow:0 12px 40px #0007;font:13px/1.65 var(--font-body);}
 dialog.toolbar-detail-panel[data-popover-open]{display:flex;flex-direction:column}
+dialog.toolbar-detail-panel.toolbar-detail-below{top:var(--toolbar-panel-top,80px);bottom:auto;max-height:min(680px,var(--toolbar-panel-height,calc(100dvh - 100px)))}
 dialog.toolbar-detail-panel::backdrop{background:transparent;pointer-events:none}
 dialog.toolbar-detail-panel.toolbar-detail-drawer{inset:0 0 auto auto;width:min(520px,100vw);max-width:100vw;max-height:none;height:max(0px,calc(100dvh - var(--settings-bottom,64px)));border:0;border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0;background:var(--bg);box-shadow:-12px 0 36px #0004}
 dialog.toolbar-detail-drawer[data-popover-open]{animation:toolbar-drawer-enter .18s ease-out}

@@ -20,6 +20,7 @@ import { DeletedSessions } from "../workspaces/DeletedSessions.js";
 import { WorkspacePicker } from "../workspaces/WorkspacePicker.js";
 import { useWorkspaceView } from "../workspaces/useWorkspaceView.js";
 import { pickWorkspaceFolder, Title } from "../workspaces/WorkspaceControls.js";
+import { TitleFeedback } from "../workspaces/TitleFeedback.js";
 import "../styles/workbench.css";
 import "../styles/chat.css";
 const androidClient = /^#axiom-native=\d+$/.test(location.hash);
@@ -257,6 +258,7 @@ export default function Workbench() {
                 <PanelIcon />
               </button>
               <Title workspace={viewedWorkspace} scope={view} onError={setError} />
+              {view?.sessionId && <TitleFeedback key={scopeKey(view)} scope={view} />}
             </div>
             <button className="mobile-reading-toggle icon-btn" aria-label="收起工作台，只看对话" onClick={toggleReading}><Icon name="scan" /></button>
           </header>

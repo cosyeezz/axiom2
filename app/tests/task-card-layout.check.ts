@@ -20,8 +20,11 @@ mkdirSync(process.env.AXIOM_PI_DIR);
 const app = await startServer({ root, port: 0, dev: !process.env.AXIOM_TEST_PRODUCTION });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, reducedMotion: "reduce" });
-const errors: string[] = [];
+const errors: string[] = [], commands: { op: string; sessionId?: string }[] = [];
 page.on("pageerror", error => errors.push(error.message));
+page.on("websocket", socket => socket.on("framesent", ({ payload }) => {
+  const frame = JSON.parse(String(payload)); if (frame.op) commands.push(frame);
+}));
 page.setDefaultTimeout(10000);
 try {
   const workspace = app.store.execute({ requestId: crypto.randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
@@ -116,12 +119,10 @@ try {
     await check(main, `main-touch-${width}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await main.screenshot({ path: join(artifacts, "main-mobile.png") });
-  const original = page.getByRole("button", { name: "原始会话", exact: true });
-  await original.click();
-  await page.getByText("正在查看原始会话", { exact: true }).waitFor();
-  await check(main, "main-original-touch");
-  await original.click();
+  await page.screenshot({ path: join(artifacts, "main-mobile.png") });
+  // The baseline replaced the global original-view toggle with inline history.
+  // This fixture has no compaction; do not restore an obsolete product control.
+  assert.equal(await page.getByRole("button", { name: "原始会话", exact: true }).count(), 0);
   await page.locator(`[data-task-id="${taskIds[0]}"] > button`).click();
   const child = page.getByRole("dialog", { name: "子代理会话", exact: true });
   assert.equal(await child.locator(".subagent-dialog-heading strong").innerText(), "验证子任务卡片");
@@ -134,20 +135,20 @@ try {
   await child.getByText("后续追加要求保持在时间线", { exact: true }).waitFor();
   for (const width of [320, 360, 390, 430, 820, 1440]) { await page.setViewportSize({ width, height: 1000 }); await check(child, `child-touch-${width}`); }
   await page.setViewportSize({ width: 390, height: 844 });
-  await child.locator(".thread-content").screenshot({ path: join(artifacts, "child-mobile.png") });
+  await page.screenshot({ path: join(artifacts, "child-mobile.png") });
   await child.getByRole("button", { name: "任务说明", exact: true }).click();
   await page.waitForFunction(() => document.activeElement?.matches("[data-task-brief]"));
   assert.equal(await brief.getAttribute("data-collapsed"), "false");
   const position = await child.locator(".thread").evaluate(el => el.scrollTop);
+  const rows = Number(await child.locator(".virtual-timeline").getAttribute("data-total-rows"));
   put(childScope, { id: "late-progress", role: "assistant", text: "说明查看期间新增消息" });
-  await child.getByText("说明查看期间新增消息", { exact: true }).waitFor();
+  // While reading the brief, the new tail is legitimately outside the virtual window.
+  await page.waitForFunction(count => Number(document.querySelector(".subagent-dialog .virtual-timeline")?.getAttribute("data-total-rows")) === count + 1, rows);
   assert.ok(Math.abs(await child.locator(".thread").evaluate(el => el.scrollTop) - position) < 2, "new messages do not pull brief navigation to the bottom");
   await page.screenshot({ path: join(artifacts, "child-brief-mobile.png") });
   await brief.getByRole("button", { name: "收起任务说明", exact: true }).click();
   assert.equal(await brief.getAttribute("data-collapsed"), "true");
-  await child.getByRole("button", { name: "原始会话", exact: true }).click();
-  await child.getByText("正在查看原始会话", { exact: true }).waitFor();
-  await check(child, "child-original-touch");
+  assert.equal(await child.getByRole("button", { name: "原始会话", exact: true }).count(), 0);
   assert.equal(await child.locator(".task-brief").count(), 1);
   await child.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
   await page.locator(`[data-task-id="${legacy.id}"] > button`).click();
@@ -156,19 +157,30 @@ try {
   assert.deepEqual(await child.locator(".task-brief h3").allTextContents(), ["任务目标"]);
   await child.getByRole("button", { name: "关闭子代理会话，返回主对话", exact: true }).click();
   put(scope, { id: "final", role: "assistant", text: "布局检查结束", status: "completed", phase: "final_answer" });
-  const aggregate = main.locator(":scope > .tool-activity:not(.process-live)");
+  const aggregate = main.locator('[data-timeline-key^="live:final-process:"] > .tool-activity:not(.process-live)');
+  await aggregate.waitFor();
+  assert.equal(await aggregate.count(), 1, "one settled process card owns the existing operations");
+  assert.equal(await aggregate.getAttribute("open"), null);
+  assert.equal(await aggregate.getAttribute("data-status"), "completed");
   await aggregate.locator(":scope > summary").click();
+  assert.equal(await aggregate.getAttribute("open"), "");
   await check(main, "main-folded-history-touch");
   const operation = main.locator('.task-operation[data-tool="append"]').first();
   await operation.locator("summary").first().click();
   await operation.locator(".task-call-detail").waitFor();
   await aggregate.locator(":scope > summary").click();
+  assert.equal(await aggregate.getAttribute("open"), null);
+  assert.equal(await main.locator(".task-call-detail").count(), 0);
   await aggregate.locator(":scope > summary").click();
+  assert.equal(await aggregate.getAttribute("open"), "");
   await check(main, "main-reopened-history-touch");
   assert.equal(await main.locator(".task-call-detail").count(), 0);
   assert.equal(await page.locator("#i-subagent-open path").getAttribute("d"), "M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6m10 0l-9 9m3-9h6v6");
+  assert.ok(commands.some(command => command.op === "agent.history.index" && command.sessionId === scope.sessionId));
+  assert.ok(commands.some(command => command.op === "agent.history.index" && command.sessionId === childScope.sessionId));
+  assert.ok(!commands.some(command => ["agent.original", "prompt", "agent.resume", "task.create", "task.append", "task.cancel"].includes(command.op)), "viewing existing cards only reads the current history contract, never executes tasks");
   assert.deepEqual(errors, []);
-  console.log("PASS: touch main/child/original/history, long multiline inputs, waiting/failed/unsynced delegation, gray/red icons, W14, no counts or right-side status.");
+  console.log("PASS: touch main/child/inline-history, task brief and legacy input, long multiline inputs, waiting/failed/unsynced delegation, gray/red icons, W14, no counts or right-side status.");
 } catch (error) {
   await page.screenshot({ path: join(artifacts, "failure.png") }).catch(() => {});
   throw error;

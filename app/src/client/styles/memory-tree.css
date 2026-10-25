@@ -17,6 +17,12 @@ dialog.memory-tree-fullscreen.toolbar-detail-panel>.memory-dialog-body{padding:0
 .memory-tree-toolbar>.memory-filter-trigger{width:auto;max-width:240px}
 .memory-tree-toolbar>input{flex:1;min-width:160px;border:1px solid var(--border);border-radius:8px;padding:9px 12px;background:var(--surface);color:inherit}
 .memory-tree-status{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.memory-organization-feedback{min-width:0;font-size:12px;overflow-wrap:anywhere}
+.memory-organization-feedback:empty{display:none}
+.memory-queue-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 12px;padding:12px;border:1px solid var(--border);border-radius:8px}
+.memory-queue-summary small{width:100%;color:var(--muted)}
+.memory-batch-feedback{padding:10px 14px;border:1px solid var(--border);border-radius:8px}
+.memory-batch-feedback>small{color:var(--muted)}
 .memory-tree-workspace{display:flex;flex:1;min-height:320px;gap:12px}
 /* Quiet, open space: only the central topic has a surface; branches are ink and lines. */
 .memory-tree-canvas{position:relative;isolation:isolate;flex:1;min-width:0;min-height:320px;overflow:hidden;border:1px solid var(--border-soft);border-radius:16px;background-color:color-mix(in srgb,var(--bg) 65%,var(--surface));background-image:radial-gradient(circle,color-mix(in srgb,var(--muted) 16%,transparent) .7px,transparent .8px);background-size:24px 24px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;overscroll-behavior:contain}

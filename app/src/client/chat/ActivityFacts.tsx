@@ -13,7 +13,7 @@ export function messageFacts(message: ChatMessage, order: number, get: (id: stri
   const entries: [string, ActivityFact][] = [[`message:${message.id}`, {
     name: message.thinkingActive && message.streaming ? "thinking" : !message.calls?.length && message.thinking ? "thought" : message.taskNotice ? "subagent" : "",
     icon: message.taskNotice ? "agents" : "thinking", target: message.taskNotice ? message.text : message.thinking ?? "",
-    kind: message.taskNotice ? "notice" : "message", evidence: !!message.taskNotice || !!message.calls?.some((call) => taskToolName(call.name)), runId: message.runId, order: [order, -1],
+    kind: message.taskNotice ? "notice" : "message", evidence: !!message.taskNotice || !!message.calls?.some((call) => taskToolName(call.name)), runId: message.runId, origin: message.runOrigin, order: [order, -1],
     status: message.error || message.status === "failed" || message.taskNotice === "failed" || message.taskNotice === "interrupted" ? "failed" :
       message.status === "cancelled" || message.taskNotice === "cancelled" ? "cancelled" : message.streaming || message.status === "running" ? "running" : "completed",
   }]];

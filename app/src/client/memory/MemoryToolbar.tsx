@@ -7,7 +7,8 @@ import { BubbleLoadingIcon } from "../StatusIcons.js";
 import { MetricDetail } from "../chat/MetricDetail.js";
 import { useSettingsPopover } from "../useSettingsPopover.js";
 import type { ContextMemoryInfo, UsageTools } from "../chat/Usage.js";
-import { command, useScope } from "../transport.js";
+import { command, scopeCurrent, useConnectionState, useScope } from "../transport.js";
+import { memoryTreeScope, type MemoryTree } from "../../shared/memory-tree.js";
 import type { Scope, Workspace } from "../../shared/protocol.js";
 import { emptyMemoryView, memoryScope, memoryCatalogScope, memoryBudgetLimits, type MemoryPreferences as Preferences, type MemoryView, type MemoryCatalogEntry, type MemoryReason } from "../../shared/memory.js";
 import { ModelPicker } from "../chat/ModelPicker.js";
@@ -216,6 +217,11 @@ type MemoryLocation = { scope: Scope; path: string; title?: string };
 type MemoryOpening = { scope: Scope | null; trigger: HTMLButtonElement; path?: string };
 export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: { scope: Scope | null; workspaces: Workspace[]; children: (tools: UsageTools) => ReactNode; navigationGuard?: { current: (action: () => void) => void } }) {
   const [opened, setOpened] = useState<MemoryOpening | null>(null);
+  const globalWorkspace = scope?.workspaceId ?? workspaces[0]?.id, globalScope = globalWorkspace ? memoryTreeScope(globalWorkspace) : null;
+  const globalTree = useScope<(MemoryTree & { unavailable?: boolean }) | null>(globalScope, null), connection = useConnectionState();
+  const globalCurrent = connection.connected && !!globalScope && scopeCurrent(globalScope);
+  const globalBadge = !globalCurrent || globalTree?.unavailable ? null : globalTree?.activeBatch ? "active" : globalTree?.failed || globalTree?.queue?.blocked ? "error" : globalTree?.queue?.waiting ? "waiting" : null;
+  const globalStatus = !globalCurrent ? "整理状态待确认" : globalTree?.unavailable ? "整理状态暂不可用" : globalBadge === "active" ? `正在整理 ${globalTree!.activeBatch!.purposeIds.length} 个目的` : globalBadge === "error" ? `整理异常 ${globalTree?.failed || globalTree?.queue?.blocked}` : globalBadge === "waiting" ? `等待整理 ${globalTree!.queue!.waiting} 个目的` : "";
   const guarded = useRef<(action: () => void) => void>((action) => action());
   useLayoutEffect(() => {
     if (!navigationGuard) return;
@@ -229,7 +235,7 @@ export function MemoryToolbar({ scope, workspaces, children, navigationGuard }: 
   return <>
     {children({
       session: (context) => scope?.sessionId ? <Todo key={scope.sessionId} scope={scope} context={context} openMemory={(trigger, path) => open(scope, trigger, path)} /> : <button className="memory-todo-toggle context-memory-control action-icon" aria-label="上下文与会话记忆" data-od-id="context-capacity" data-tooltip="创建会话后查看上下文与记忆" disabled><ContextMemoryIcon percent={context.percent} /></button>,
-      global: <button className="memory-global action-icon" aria-label="全局记忆" data-tooltip="全局记忆" aria-expanded={!!opened && !opened.scope} aria-haspopup="dialog" disabled={!workspaces.length} onClick={(event) => open(null, event.currentTarget)}><MemoryIcon name="book" /></button>,
+      global: <button className="memory-global action-icon" aria-label="全局记忆" aria-description={globalStatus || undefined} data-tooltip={`全局记忆${globalStatus ? ` · ${globalStatus}` : ""}`} aria-expanded={!!opened && !opened.scope} aria-haspopup="dialog" disabled={!workspaces.length} onClick={(event) => open(null, event.currentTarget)}><MemoryIcon name="book" />{globalBadge && <i className="memory-global-badge" data-state={globalBadge} aria-hidden="true" />}</button>,
     })}
     {opened && <MemoryPanel key={`${opened.scope?.sessionId ?? "global"}`} opening={opened} workspace={scope?.workspaceId} workspaces={workspaces} guarded={guarded} onClose={() => setOpened(null)} />}
   </>;
@@ -297,7 +303,7 @@ function MemoryPanel({ opening, workspace, workspaces, guarded, onClose }: { ope
     <header><div className="memory-panel-title"><MemoryIcon name="book" /><div><h2 id="memory-heading">{target ? "会话记忆" : "全局记忆"}</h2><p>{target ? target.title ?? "当前会话" : "主题、事项与关联来源文件"}</p></div></div><button ref={close} className="icon-btn" aria-label="关闭记忆" data-tooltip="返回会话（Esc）" onClick={() => ask(onClose)}><MemoryIcon name="close" /></button></header>
     {pending && <div className="memory-unsaved" role="alert">尚有未保存编辑。<button className="btn" onClick={() => setPending(null)}>继续编辑</button><button className="btn" onClick={() => { const action = pending; setDirty(false); setPending(null); action(); }}>放弃编辑并继续</button></div>}
     <div ref={body} className="compression-body memory-dialog-body">
-      <div hidden={!!target || !!records}>{(catalogVisited || !target) && (workspaceId ? <MemoryTreePage key={workspaceId} workspaceId={workspaceId} workspaces={workspaces} select={setWorkspaceId} fullscreen={mapFullscreen} toggleFullscreen={() => setMapFullscreen(value => !value)} openRecords={openRecords} open={(scope, path) => navigate([{ scope, path }])} /> : <p>暂无工作空间</p>)}</div>
+      <div hidden={!!target || !!records}>{(catalogVisited || !target) && (workspaceId ? <MemoryTreePage key={workspaceId} workspaceId={workspaceId} visible={!target && !records} workspaces={workspaces} select={setWorkspaceId} fullscreen={mapFullscreen} toggleFullscreen={() => setMapFullscreen(value => !value)} openRecords={openRecords} open={(scope, path) => navigate([{ scope, path }])} /> : <p>暂无工作空间</p>)}</div>
       {records && <ProcessingPage key={workspaceId} workspaceId={workspaceId} initial={records} onBack={() => setRecords(null)} />}
       <div hidden={!!records}>{target && <><button className="btn" disabled={dirty} onClick={() => openRecords({ sessionId: target.scope.sessionId })}>处理记录</button><Detail key={target.scope.sessionId} scope={target.scope} path={target.path} dirty={dirty} dirtyChange={setDirty} onReady={() => { if (body.current) body.current.scrollTop = positions.current.get(key) ?? 0; }} navigate={(path) => { if (path !== target.path) navigate([...history, { scope: target.scope, path, title: target.title }]); }} /></>}</div>
     </div>

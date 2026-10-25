@@ -136,6 +136,7 @@ export async function startServer(
     if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
     if (scope === "authentication") return null;
     const parts = scope.split(":");
+    if (parts.length === 2 && parts[0] === "processing") return agents.memories.records.invalidation(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-tree") return agents.memories.tree(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-catalog") return agents.memories.catalog(parts[1]);
     if (parts.length === 2 && parts[0] === "sessions")

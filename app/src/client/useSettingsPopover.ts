@@ -3,7 +3,7 @@ import { openPopover, popoverHost } from "./popover.js";
 import "./styles/toolbar-details.css";
 
 /** A non-modal settings sheet keeps its toolbar reachable, including inside a child dialog. */
-export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => void, placement: "drawer" | "anchored" = "drawer") {
+export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => void, placement: "drawer" | "anchored" | "auto" = "drawer") {
   const panel = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   const dismiss = useEffectEvent(onClose);
@@ -18,12 +18,16 @@ export function useSettingsPopover(trigger: HTMLButtonElement, onClose: () => vo
       const viewport = window.visualViewport;
       const top = viewport?.offsetTop ?? 0, left = viewport?.offsetLeft ?? 0;
       const width = viewport?.width ?? window.innerWidth;
-      const bottom = Math.max(top + 80, toolbar.getBoundingClientRect().top - 8);
+      const rect = toolbar.getBoundingClientRect(), viewportBottom = top + (viewport?.height ?? window.innerHeight);
+      const below = placement === "auto" && rect.top - top < 280 && viewportBottom - rect.bottom > rect.top - top;
+      const bottom = Math.max(top + 80, rect.top - 8);
+      node.classList.toggle("toolbar-detail-below", below);
+      node.style.setProperty("--toolbar-panel-top", `${Math.max(top + 12, rect.bottom + 8)}px`);
       const preferredWidth = node.classList.contains("cache-detail") ? 360 : node.classList.contains("cost-popover") ? 480 : 520;
       const panelWidth = Math.min(preferredWidth, width - 24);
       node.style.setProperty("--settings-bottom", `${Math.max(12, window.innerHeight - bottom)}px`);
       node.style.setProperty("--toolbar-panel-left", `${Math.max(left + 12, Math.min(trigger.getBoundingClientRect().left, left + width - panelWidth - 12))}px`);
-      node.style.setProperty("--toolbar-panel-height", `${Math.max(68, bottom - top - 12)}px`);
+      node.style.setProperty("--toolbar-panel-height", `${Math.max(68, below ? viewportBottom - rect.bottom - 20 : bottom - top - 12)}px`);
       node.style.setProperty("--toolbar-panel-width", `${panelWidth}px`);
     };
     const restoreFocus = () => {

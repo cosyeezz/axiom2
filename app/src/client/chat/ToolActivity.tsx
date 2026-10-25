@@ -3,10 +3,11 @@ import { LocalPath, isLocalPath } from "../LocalPath.js";
 import { MessagePartBody } from "./MessagePartBody.js";
 import { useRememberedDisclosure, useThreadMessage } from "./OriginalConversation.js";
 import { Icon } from "../components.js";
-import { type ChatMessage } from "../../shared/agent.js";
+import { runOriginLabels, type ChatMessage, type RunOrigin } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ProcessIcon } from "./ProcessIcon.js";
 import { ThinkingDots } from "./ThinkingDots.js";
+import { MemoryQueryFeedback, MemoryQueryStage } from "./MemoryQueryFeedback.js";
 import { Markdown } from "./Markdown.js";
 import "../styles/activity-status.css";
 import { useActivityFacts } from "./ActivityFacts.js";
@@ -16,7 +17,7 @@ import type { HistoryGroup } from "../../shared/history.js";
 import { toolPreview, toolStatusLabels, toolSummary, ordinaryToolStatus, type ToolCall, type ToolStatus } from "./tool-summary.js";
 
 import type { ToolIcon } from "../../shared/tool-summary.js";
-export type ActivityFact = { name: string; icon: ToolIcon | "thinking"; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; runId?: string; order: readonly [number, number] };
+export type ActivityFact = { name: string; icon: ToolIcon | "thinking"; target: string; status: ToolStatus; startedAt?: number; durationMs?: number; kind?: "message" | "notice"; evidence?: boolean; runId?: string; origin?: RunOrigin; order: readonly [number, number] };
 export const ActivityExpanded = createContext(true);
 export const ActivitySettled = createContext(false);
 
@@ -81,6 +82,8 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
   const facts = new Map(entries);
   const evidence = new Set(entries.filter(([, fact]) => fact.evidence).map(([id]) => id.slice("message:".length)));
   const items = entries.map(([, fact]) => fact);
+  const originLabel = (summary?.origins ?? [...new Set(items.flatMap(item => item.origin ? [item.origin] : []))])
+    .map(origin => runOriginLabels[origin]).join(" · ");
   // Local tool/task outcomes belong to their rows, not the whole process.
   const messages = items.filter((item) => item.kind === "message");
   // Coalesced cards can span runs. Stale deltas from an earlier run must not
@@ -144,6 +147,7 @@ export function ActivityGroup({ scope, children, requesting = false, awaitingMor
         </span>}
         <span className="activity-overview">
           <ProcessTitle label={label} active={status === "running"} thinking={thinking} />
+          {originLabel && <small className="process-origin" aria-label={`触发来源：${originLabel}`}>{originLabel}</small>}
         </span>
         {failedCalls > 0 && <span className="process-counts"><span>成功 {succeeded}</span><span data-status={failedCalls ? "failed" : undefined}>失败 {failedCalls}</span></span>}
         {!inline && <Icon name="chevron" />}
@@ -188,6 +192,7 @@ function ToolDetails({ scope, call, message, result }: { scope: Scope; call: Too
     <MessagePartBody scope={scope} message={message} callId={call.id} fallback="无输入参数" />
     <div className="tool-detail-label">执行输出</div>
     <MessagePartBody scope={scope} message={result} />
+    {call.name.replace(/^functions\./, "") === "memory_query" && <MemoryQueryFeedback scope={scope} toolCallId={call.id} />}
   </div>;
 }
 
@@ -216,6 +221,7 @@ export const Tool = memo(function Tool({ scope, call, message, messageOrder = 0,
         <ProcessIcon kind={toolGlyphKind(summary.icon)} active={active} />
         <span className={`process-status-text${active ? " is-active" : ""}`}>
           <span className="tool-action-label"><strong className="tool-name">{summary.label}</strong>{!open && " · "}</span>{!open && (targetPath ? <LocalPath path={targetPath} scope={scope}><code className="tool-target">{summary.target}</code></LocalPath> : <code className="tool-target" data-tooltip={summary.target}>{summary.target}</code>)}
+          {call.name.replace(/^functions\./, "") === "memory_query" && <MemoryQueryStage scope={scope} toolCallId={call.id} enabled={groupOpen && (active || open)} />}
           {summary.detail && <span className="tool-input-detail"> · {detailPath || isLocalPath(summary.detail) && !summary.detail.endsWith("…") ? <LocalPath path={detailPath ?? summary.detail} scope={scope}>{summary.detail}</LocalPath> : summary.detail}</span>}
         </span>
         {status === "failed" && !open && <span className="tool-input-detail" data-tooltip={preview}>{preview}</span>}
