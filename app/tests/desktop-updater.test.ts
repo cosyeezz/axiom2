@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, rename, access } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 const { createUpdater, newer, execute } = await import(new URL("../desktop/updater.mjs", import.meta.url).href);
 const base = "https://github.com/cosyeezz/axiom2/releases/download/";
 const oldVersion = "0.2.3", nextVersion = "0.3.0";
@@ -333,6 +334,71 @@ test("an already-ready concurrent service prevents package replacement even with
   assert.match(result.job.message, /服务实例已变化/);
   assert.equal(await f.installedVersion(), oldVersion);
   assert.equal(f.state(), "running");
+});
+
+test("verified client installer survives unrelated Pi jobs, release checks and updater restart", async t => {
+  const f = await fixture(t);
+  await f.updater.check(); await f.updater.runJob("client", nextVersion);
+  const initial = await f.updater.installer();
+  assert.equal((await f.updater.status()).clientInstaller.version, nextVersion);
+  await f.updater.piRefresh();
+  assert.equal((await f.updater.status()).job.kind, "pi-refresh");
+  assert.deepEqual(await f.updater.installer(), initial);
+  await f.updater.runJob("check");
+  const restarted = createUpdater({ root: f.root, command: f.command, fetcher: f.fetcher });
+  assert.deepEqual(await restarted.installer(), initial);
+  await writeFile(initial.installer, "tampered");
+  await assert.rejects(restarted.installer(), /安装包已变化/);
+  const after = await restarted.status();
+  assert.equal(after.clientInstaller, null);
+  assert.equal(after.job.kind, "check"); assert.equal(after.job.phase, "complete", "invalid artifact cannot overwrite an unrelated current task");
+});
+
+test("legacy ready jobs migrate their installer before an unrelated task replaces them", async t => {
+  const f = await fixture(t);
+  await f.updater.check(); await f.updater.runJob("client", nextVersion);
+  const original = await f.updater.installer();
+  const db = new DatabaseSync(join(f.root, "updates/jobs.sqlite"));
+  try { db.prepare('DELETE FROM client_installer').run(); } finally { db.close(); }
+  await f.updater.piRefresh();
+  assert.equal((await f.updater.status()).job.kind, "pi-refresh");
+  assert.deepEqual(await createUpdater({ root: f.root }).installer(), original);
+});
+
+test("failed newer client download retains the previously verified installer", async t => {
+  const f = await fixture(t);
+  await f.updater.check(); await f.updater.runJob("client", nextVersion);
+  const original = await f.updater.installer(), version = "0.4.0", expected = Buffer.from("a different newer installer");
+  f.release.tag_name = `v${version}`;
+  for (const asset of f.release.assets) {
+    asset.browser_download_url = `${base}v${version}/${asset.name}`;
+    if (asset.name === "Axiom2.msi") { asset.digest = `sha256:${digest(expected)}`; asset.size = expected.length; }
+  }
+  await f.updater.check();
+  const result = await f.updater.runJob("client", version);
+  assert.equal(result.job.phase, "error");
+  assert.equal(result.clientInstaller.version, nextVersion);
+  assert.deepEqual(await f.updater.installer(), original);
+  assert.equal((await f.updater.status()).job.phase, "error", "starting a valid old artifact must not mutate the failed download job");
+});
+
+for (const damage of ["invalid-json", "bad-url", "missing-file"]) test(`invalid installer state is isolated from unrelated tasks: ${damage}`, async t => {
+  const f = await fixture(t);
+  await f.updater.check(); await f.updater.runJob("client", nextVersion);
+  const original = await f.updater.installer(); await f.updater.piRefresh();
+  if (damage === "missing-file") await rm(original.installer);
+  else {
+    const db = new DatabaseSync(join(f.root, "updates/jobs.sqlite"));
+    try {
+      let body = "{";
+      if (damage === "bad-url") { const value = JSON.parse((db.prepare('SELECT body FROM client_installer WHERE id=1').get() as any).body); value.asset.url = "https://example.com/installer.msi"; body = JSON.stringify(value); }
+      db.prepare('UPDATE client_installer SET body=? WHERE id=1').run(body);
+    } finally { db.close(); }
+  }
+  assert.equal((await f.updater.status()).clientInstaller, null);
+  await assert.rejects(f.updater.installer());
+  const state = await f.updater.status();
+  assert.equal(state.job.kind, "pi-refresh"); assert.equal(state.job.phase, "complete");
 });
 
 test("client installer is rehashed before handing it to the native launcher", async (t) => {

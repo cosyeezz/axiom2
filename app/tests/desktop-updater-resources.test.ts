@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {readFile} from 'node:fs/promises';
+const root=new URL('../../',import.meta.url),desktop=new URL('../desktop/',import.meta.url);
+const updater=await readFile(new URL('updater.mjs',desktop),'utf8'),bridge=await readFile(new URL('axiom_service.rs',desktop),'utf8'),build=await readFile(new URL('scripts/build-desktop.mjs',root),'utf8');
+const relativeImports=[...updater.matchAll(/from\s*['"]\.\/([^'"]+)['"]/g)].map(match=>match[1]);
+const resources=new Set([...bridge.matchAll(/\("([^"\n]+)",\s*include_str!\("[^"\n]+"\)\)/g)].map(match=>match[1]));
+test('every direct updater relative import is in the native runtime resource manifest',()=>{for(const path of relativeImports)assert.ok(resources.has(path),`missing native updater runtime resource: ${path}`);});
+test('the desktop template copies the atomic JSON module used by the updater',()=>{const copy=build.match(/for \(const name of \[([^]*?"axiom_service_record\.rs"[^]*?)\]\) await cp\(join\(repo, "app\/desktop", name\)/)?.[1];assert.ok(copy?.includes('"atomic-json.mjs"'),'atomic-json.mjs must reach generated Rust include_str source');});
+test('atomic JSON module depends only on Node built-ins',async()=>{const source=await readFile(new URL('atomic-json.mjs',desktop),'utf8');const imports=[...source.matchAll(/from\s*['"]([^'"]+)['"]/g)].map(match=>match[1]);assert.ok(imports.length>0);assert.ok(imports.every(path=>path.startsWith('node:')));});

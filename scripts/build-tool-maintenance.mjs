@@ -1,4 +1,7 @@
-import { build } from 'esbuild';
+import { createRequire } from 'node:module';
+// The desktop sources and their build dependencies may be installed under app/
+// without a second node_modules tree at the repository root.
+const { build } = createRequire(new URL('../app/package.json', import.meta.url))('esbuild');
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');

@@ -205,8 +205,13 @@ export class OpenCliService {
       const actual = await this.run([validated.entry, "--version"], 30_000, candidate);
       const matchesVersion = (value: unknown) => typeof value === "string" && value.trim().replace(/^(?:opencli\s+)?v?/i, "") === version;
       if (!matchesVersion(actual)) throw Error("安装后的命令版本未通过校验。");
-      const shims: unknown = JSON.parse(await this.run(openCliShimProbe(candidate), 30_000, candidate));
-      if (!Array.isArray(shims) || shims.length !== (process.platform === "win32" ? 2 : 1) || !shims.every(matchesVersion)) throw Error("OpenCLI 实际命令入口的版本未通过校验，原接入保持不变。");
+      // Windows npm shims are regular files, not target-checked symlinks. Validate
+      // them as well as our private-Node commands before publishing this version.
+      const probeConfigs = process.platform === "win32" ? [candidate, { ...candidate, runtime: undefined }] : [candidate];
+      for (const probeConfig of probeConfigs) {
+        const shims: unknown = JSON.parse(await this.run(openCliShimProbe(probeConfig), 30_000, candidate));
+        if (!Array.isArray(shims) || shims.length !== (process.platform === "win32" ? 2 : 1) || !shims.every(matchesVersion)) throw Error("OpenCLI 实际命令入口的版本未通过校验，原接入保持不变。");
+      }
       this.controller!.signal.throwIfAborted();
       if ((readOpenCliConfig(this.root)?.revision ?? "") !== revision) throw Error("接入配置已变化，未切换新版本；请重新读取后重试。");
       assertBuiltinFilesSafe();

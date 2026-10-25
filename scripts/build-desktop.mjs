@@ -54,7 +54,7 @@ if (testInstance) {
 await writeFile(join(template, "src-tauri/src/axiom_service.rs"), bridge);
 await writeFile(join(template, "src-tauri/src/axiom_views.rs"), views);
 await cp(join(repo, "app/desktop/axiom_connection.rs"), join(template, "src-tauri/src/axiom_connection.rs"));
-for (const name of ["axiom_service_record.rs", "axiom_archive.rs", "axiom_bundled.rs", "axiom_environment.rs", "axiom_environment_fs.rs", "axiom_environment_process.rs", "axiom_theme.js", "axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs", "archive-cleanup.mjs", "desktop-native.mjs", "native-helper.json", "tool-cleanup.mjs", "tool-cleanup-status.mjs", "service-removal.mjs", "service-admission.mjs", "pi-removal.mjs", "maintenance.mjs", "service-start.mjs", "updater-supervision.mjs", "updater-reconciliation.mjs", "setup-runtime.json"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
+for (const name of ["axiom_service_record.rs", "axiom_archive.rs", "axiom_bundled.rs", "axiom_environment.rs", "axiom_environment_fs.rs", "axiom_environment_process.rs", "axiom_theme.js", "axiom_remote.rs", "axiom_setup.rs", "setup.ps1", "setup.sh", "setup-service.mjs", "setup-reconciliation.mjs", "archive-cleanup.mjs", "desktop-native.mjs", "native-helper.json", "tool-cleanup.mjs", "tool-cleanup-status.mjs", "service-removal.mjs", "service-admission.mjs", "pi-removal.mjs", "maintenance.mjs", "atomic-json.mjs", "service-start.mjs", "updater-supervision.mjs", "updater-reconciliation.mjs", "setup-runtime.json"]) await cp(join(repo, "app/desktop", name), join(template, "src-tauri/src", name));
 await buildToolMaintenance(join(template, "src-tauri/src/tool-maintenance.mjs"));
 // Ship the supervisor with Linux clients so uninstall can run without a network
 // or an intact backend. Generation is offline; release runners build it first.
@@ -116,7 +116,7 @@ lib = lib.replace(closeMarker, closeMarker + (testInstance ? '\n            if m
                 }
             }
             if _window.label() == "pake" && matches!(_event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
-                let _ = axiom_views::layout(_window.app_handle());
+                axiom_views::request_layout(_window.app_handle());
             }
 `);
 // Adding a child makes get_webview_window return None. Native lifetime handlers

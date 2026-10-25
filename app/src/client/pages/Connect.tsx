@@ -6,10 +6,11 @@ import DesktopUpdates from "./DesktopUpdates.js";
 import DesktopEnvironment from "./DesktopEnvironment.js";
 import { BrandMark } from "../BrandMark.js";
 import type { ConnectionHealth } from "../transport.js";
-import SetupWizard, { type PreparationDetection } from "./SetupWizard.js";
+import SetupWizard, { type PreparationDetection, type SetupControls } from "./SetupWizard.js";
 import { ConnectionIcon } from "./ConnectionIcon.js";
-import RemoteConnect from "./RemoteConnect.js";
-import { desktopInvoke, remember, stored } from "./desktop-bridge.js";
+import RemoteConnect, { type ConnectionControls } from "./RemoteConnect.js";
+import InstallProgress from "./InstallProgress.js";
+import { desktopInvoke, isDesktopResponsePending, remember, stored } from "./desktop-bridge.js";
 import DeviceSelect from "./DeviceSelect.js";
 import { IconButton } from "./StartupControls.js";
 import "../styles/connect.css";
@@ -51,17 +52,22 @@ export default function Connect() {
   useEffect(() => { if (!updateAvailable) setUpdateSeen(false); }, [updateAvailable]);
   const showDot = notice || (updateAvailable && !updateSeen);
   const revision = useRef(0);
+  const selection = useRef(device);
+  const navigation = useRef<Promise<void> | null>(Promise.resolve());
+  const selectionEpoch = useRef(0);
+  const setup = useRef<SetupControls>(null), connector = useRef<ConnectionControls>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState<Action | null>(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
+  const [errorPending, setErrorPending] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const pending = useRef<Promise<void> | null>(null);
   const requested = useRef(false);
 
   async function act(action: Action, quiet = false) {
     if (quiet ? pending.current || requested.current : requested.current) return;
-    if (!quiet) { requested.current = true; setBusy(action); setError(""); }
+    if (!quiet) { requested.current = true; setBusy(action); setError(""); setErrorPending(false); }
     // Status polling has a bounded IPC deadline. Reserve the user action while
     // waiting so a poll cannot discard a confirmed start/stop/open request.
     if (pending.current) await pending.current;
@@ -71,9 +77,12 @@ export default function Connect() {
         const result = await invoke(action);
         setService(result); setServiceUncertain(false);
         if (observed === revision.current && result.desktopView) setView(result.desktopView);
-        if (!quiet) setError("");
+        if (observed === revision.current) setError("");
       }
-      catch (err) { setServiceUncertain(true); setError(err instanceof Error ? err.message : String(err)); }
+      catch (err) {
+        setServiceUncertain(true);
+        if (observed === revision.current) { setErrorPending(action === "status" || isDesktopResponsePending(err)); setError(err instanceof Error ? err.message : String(err)); }
+      }
     })();
     pending.current = request;
     try { await request; }
@@ -147,13 +156,58 @@ export default function Connect() {
     return () => window.clearInterval(timer);
   }, []);
   const running = service?.state === "running";
-  const blocked = !!busy || updating || installing || remoteBusy;
+  const localConnecting = mode === "local" && remoteBusy;
+  const blocked = !!busy || updating || installing || localConnecting;
   const starting = service?.state === "starting";
   const missing = service?.state === "missing";
   const serviceState = serviceUncertain ? "unknown" : service?.state || "checking";
   const serviceLabel = updating ? "更新中" : busy === "start" ? "启动中" : busy === "stop" ? "关闭中" : serviceState === "unknown" ? "待核实" : serviceState === "checking" ? "检查中" : ({ running: "运行中", stopped: "已停止", starting: "启动中", stopping: "退出中", missing: "未安装", unmanaged: "端口占用" } as const)[serviceState];
   const detectionUnknown = detection.checking || detection.failed || !detection.environment;
-  const preparationTags = [{ name: "Node.js", ready: detection.environment?.nodeReady }, { name: "npm", ready: detection.environment?.nodeReady }, { name: "Tailscale", ready: detection.environment?.tailscale }];
+  const customPort = connectionPort !== "4317";
+  // Connecting an already healthy endpoint is navigation, not another maintenance write.
+  const connectOnly = customPort || running && !serviceUncertain;
+  const primaryBlocked = !!busy && busy !== "status" || localConnecting || !connectOnly && (updating || installing);
+  const primaryBusy = !!busy && busy !== "status" || remoteBusy || !connectOnly && (installing || updating || starting || missing && detection.checking);
+  const readyToInstall = !detectionUnknown && detection.environment!.nodeReady && detection.environment!.writable;
+  const needsRecovery = missing && !customPort && detection.attention && !detection.uncertain && !detection.job?.running;
+  function showRecovery() { setPreparation(true); requestAnimationFrame(() => document.getElementById("setup-recovery")?.focus()); }
+  const primaryLabel = connectOnly ? remoteBusy ? "连接中…" : "连接工作台" : installing ? detection.uncertain ? "正在核实安装结果…" : "正在安装…" : updating ? "正在更新…" : busy === "start" || starting ? "正在启动…" : busy === "stop" || service?.state === "stopping" ? "正在关闭…" : remoteBusy ? "连接中…" : customPort ? "连接工作台" : serviceUncertain || !service ? "检查服务状态" : missing ? "安装并启动服务" : service.state === "stopped" ? "启动服务" : "连接工作台";
+  function primaryAction() {
+    if (primaryBlocked) return;
+    if (customPort) connector.current?.connect();
+    else if (serviceUncertain || !service) void act("status");
+    else if (missing) setup.current?.installService();
+    else if (service.state === "stopped") void act("start");
+    else connector.current?.connect();
+  }
+  function invalidateNavigation() {
+    const epoch = selectionEpoch.current;
+    const next = desktopInvoke<void>("axiom_controls"); navigation.current = next;
+    void next.catch(cause => {
+      if (selectionEpoch.current !== epoch || navigation.current !== next) return;
+      navigation.current = null; // A retry must establish a fresh native barrier, not reuse a rejected one.
+      setErrorPending(true); setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return next;
+  }
+  async function beforeConnect() {
+    const epoch = selectionEpoch.current;
+    await (navigation.current ?? invalidateNavigation());
+    if (epoch !== selectionEpoch.current) throw Error("所选设备已变化，请连接当前设备。");
+  }
+  function selectDevice(value: string) {
+    if (value === selection.current) return;
+    selection.current = value; ++selectionEpoch.current; ++revision.current;
+    setDevice(value); setRemoteBusy(false); setError("");
+    remember("axiom.connection.mode", value === "local" ? "local" : "remote");
+    // controls() advances the native revision before returning to the control view.
+    // Wait for this barrier before allowing another target to open.
+    void invalidateNavigation();
+  }
+  const installJob = detection.job;
+  const transfer = installJob?.task?.transfer;
+  const installProgress = installJob?.progress ?? (transfer && { name: "服务安装包", downloaded: transfer.received, total: transfer.total, speed: transfer.bytesPerSecond || 0, startedAt: installJob?.task?.startedAt || installJob?.task?.createdAt || transfer.updatedAt, updatedAt: transfer.updatedAt, lastByteAt: transfer.updatedAt });
+  const installFailed = !detection.uncertain && !installJob?.running && installJob?.task?.status !== "unknown" && installJob?.task?.status !== "interrupted" && installJob?.phase === "error";
   const connectionLabel = connection === "connected" ? "后台服务已连接" : connection === "disconnected" ? "后台服务已断开" : "后台服务确认中";
   return (
     <>
@@ -175,32 +229,26 @@ export default function Connect() {
     </nav>
     <main className="connect-page" hidden={view === "workbench"}>
       <header className="connect-header"><span className="connect-brand"><BrandMark size={31} /><span>AXIOM<span className="startup-brand-version">2</span></span></span><span className="connect-header-actions"><span className="connect-local">你的私有工作台</span><ThemeToggle /></span></header>
-      <div className="startup-title"><h1><span>就绪之后，</span><span>专注创造。</span></h1><p>连接你的设备，继续项目、会话与任务。</p></div>
+      <div className="startup-title"><h1>服务与更新</h1><p>连接设备，管理本机服务与组件。</p></div>
       <section className="startup-panel" aria-label="连接与准备">
         <div className="startup-device">
-          <RemoteConnect local={mode === "local"} target={device === "manual" || device === "local" ? "" : device} disabled={remoteBusy || installing || (!!busy && busy !== "status") || updating} onBusy={setRemoteBusy} onPortChange={setConnectionPort} onOpen={url => { setRemoteUrl(mode === "remote" ? url : ""); revision.current++; setView("workbench"); setConnection("checking"); lastConnection.current = "checking"; }}><DeviceSelect value={device} disabled={remoteBusy || installing || updating || (!!busy && busy !== "status")} onChange={value => { setDevice(value); remember("axiom.connection.mode", value === "local" ? "local" : "remote"); setError(""); }} /></RemoteConnect>
-          {mode === "local" && <section className="connection-service" aria-label="本地服务控制">
-            <div className="connection-service-row">
-              <div className="connection-service-copy"><div className="connection-service-heading">本地服务<span className="connection-status-tag" data-state={serviceState} role="status"><Icon name={serviceState === "running" && !busy && !updating ? "circle-check" : serviceState === "unknown" ? "circle-help" : starting || busy || updating || serviceState === "checking" ? "loader-circle" : "circle-help"} className={starting || busy || updating || serviceState === "checking" ? "startup-spin" : ""} />{serviceLabel}</span></div>
-                <p className="connection-service-detail">{(service?.url || "http://127.0.0.1:4317/").replace(/^https?:\/\//, "").replace(/\/$/, "")}{running && !serviceUncertain && <span> · {service.active.length}{service.active.length >= 20 ? "+" : ""} 个运行中的会话</span>}</p>
-              </div>
-              <div className="connection-service-actions"><button className="connection-text-button" aria-label="刷新服务状态" disabled={!!busy || updating} onClick={() => void act("status")}><Icon name="refresh-cw" className={busy === "status" ? "startup-spin" : ""} /><span>检查状态</span></button><span className="connection-action-divider" aria-hidden="true" />
-                {running || starting ? <button className="connection-text-button connection-stop" aria-label="关闭后台服务" disabled={blocked || serviceUncertain} onClick={() => setConfirm(true)}><Icon name="power" /><span>{starting ? "取消启动" : "关闭服务"}</span></button> : missing ? <button className="connection-text-button" disabled={blocked} onClick={() => setPreparation(true)}><Icon name="download" /><span>安装服务</span></button> : <button className="connection-text-button" aria-label="启动后台服务" disabled={blocked || serviceUncertain || service?.state !== "stopped"} onClick={() => void act("start")}><Icon name="power" /><span>启动服务</span></button>}
-              </div>
-            </div>
-            {connectionPort !== "4317" && <p className="connection-service-hint">上方连接端口为 {connectionPort || "—"}；这里管理的本地后台使用 4317 端口。</p>}
-            {service?.message && <p className="connect-message">{service.message}</p>}
-          </section>}
+          <RemoteConnect controls={connector} local={mode === "local"} target={device === "manual" || device === "local" ? "" : device} disabled={mode === "local" ? primaryBlocked : false} beforeConnect={beforeConnect} onBusy={setRemoteBusy} onPortChange={setConnectionPort} onPrimaryAction={primaryAction} primaryAction={mode === "local" ? <div className="connection-primary-area">
+            <button ref={openButton} type="submit" className="connect-primary connection-primary-button" disabled={primaryBlocked || !customPort && (starting || service?.state === "stopping")}><Icon name={primaryBusy ? "loader-circle" : missing && !customPort ? "download" : service?.state === "stopped" && !customPort ? "power" : "arrow-right"} className={primaryBusy ? "startup-spin" : ""} /><span>{primaryLabel}</span></button>
+            <div className="connection-primary-meta"><span role="status">{customPort ? "连接此端口上已有的服务" : installing ? "安装在后台继续，可以切换设备" : needsRecovery ? "自动处理上次未完成的安装" : missing ? readyToInstall ? "点击即可安装" : "自动准备环境并安装服务" : serviceLabel}</span>{(running || starting) && !customPort && <button type="button" className="connection-text-button connection-stop" aria-label="关闭后台服务" disabled={blocked || serviceUncertain} onClick={() => setConfirm(true)}><Icon name="power" />{starting ? "取消启动" : "关闭服务"}</button>}</div>
+            {detection.feedback && <p className={detection.feedback.neutral ? "connect-message" : "connect-error"} role={detection.feedback.neutral ? "status" : "alert"}>{detection.feedback.message}</p>}
+            {(installing || detection.uncertain || installFailed) && <div className={installFailed ? "connect-error" : "connect-message"} role={installFailed ? "alert" : "status"}>{detection.uncertain ? "安装请求正在核实，可能仍在执行，请勿重复安装。" : installJob?.message}<InstallProgress value={installProgress} running={!!installJob?.running} /></div>}
+          </div> : undefined} onOpen={url => { if (selection.current !== device) return; setRemoteUrl(mode === "remote" ? url : ""); revision.current++; setView("workbench"); setConnection("checking"); lastConnection.current = "checking"; }}><DeviceSelect value={device} disabled={false} onChange={selectDevice} /></RemoteConnect>
+          {mode === "remote" && installing && <p className="connect-message" role="status">本机安装仍在后台进行，切换设备不会中断。</p>}
         </div>
-        {mode === "local" && <details className="startup-maintenance"><summary><Icon name="sliders-horizontal" />版本与更新 · Pi 引擎<span>{updateAvailable ? "发现新版本" : "按需查看"}</span><Icon name="chevron-down" /></summary>{!service ? <p className="connect-update-detail">正在读取本地服务状态…</p> : <DesktopUpdates service={service} serviceBusy={!!busy || installing || remoteBusy} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} />}{service?.log && <p className="connect-log">服务日志：<code>{service.log}</code></p>}</details>}
-        {mode === "local" && <details className="startup-maintenance"><summary><Icon name="search" />卸载与环境清理<span>安装前检查</span><Icon name="chevron-down" /></summary><DesktopEnvironment /></details>}
-        {detection.attention && <div className="maintenance-warning startup-recovery-notice" role="status"><Icon name="circle-help" /><span>安装结果待核实，请先查看记录并检查实际状态。</span><button className="maintenance-text-button" onClick={() => { setPreparation(true); requestAnimationFrame(() => document.getElementById("setup-recovery")?.focus()); }}>查看安装记录<Icon name="chevron-right" /></button></div>}
-        <details className="startup-preparation" open={preparation || installing} onToggle={event => setPreparation(event.currentTarget.open)}><summary><ConnectionIcon name="package" />安装与准备<span className="preparation-tags">{preparationTags.map(tag => <span key={tag.name} className="preparation-tag" data-state={detectionUnknown ? "unknown" : tag.ready ? "ready" : "missing"} aria-label={tag.name + (detection.checking ? "：检测中" : detectionUnknown ? "：待核实" : tag.ready ? "：已检测到" : "：未就绪")}><Icon name={detectionUnknown ? "circle-help" : tag.ready ? "check" : "minus"} />{tag.name}</span>)}</span><Icon name="chevron-down" /></summary>
-          <SetupWizard remote={mode === "remote"} service={service} blocked={!!busy || updating || remoteBusy} onBusy={setInstalling} onComplete={() => void act("status")} onDetection={setDetection}>
-            <section><div className="startup-content-heading"><h2>连接工作台</h2></div><p className="startup-description">在上方选择设备、核对端口，点击「连接」。已有后台或开发服务无需完成安装步骤即可直接连接。</p><p className="connect-footnote">{mode === "remote" ? "远程连接无需在本机安装 Node.js 或 Axiom 后台。设备在线不代表目标服务已经启动。" : "本地服务的状态、检查与启停位于连接区下方。关闭服务会停止正在运行的任务，不会随系统登录自动启动。"}</p>{mode === "local" && running && <div className="startup-step-actions"><button ref={openButton} className="connect-secondary" disabled={blocked || serviceUncertain} onClick={() => void act("open")}>打开工作台</button></div>}</section>
-          </SetupWizard>
+        <section className="startup-maintenance startup-update-section" hidden={mode !== "local"}>
+          <DesktopUpdates service={service} serviceBusy={!!busy || installing || localConnecting} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} onInstallService={primaryAction} />
+        </section>
+        <details className="startup-maintenance" hidden={mode !== "local"}><summary><Icon name="package" />组件管理<Icon name="chevron-down" /></summary><DesktopEnvironment environment={detection.environment} serviceState={service?.state} /></details>
+        {detection.attention && <div className="maintenance-warning startup-recovery-notice" role="status"><Icon name="circle-help" /><span>上次安装需要核实。</span><button className="maintenance-text-button" onClick={showRecovery}>核实并恢复<Icon name="chevron-right" /></button></div>}
+        <details className="startup-preparation" open={preparation} onToggle={event => setPreparation(event.currentTarget.open)}><summary><ConnectionIcon name="package" />环境与安装<span>{detection.checking ? "检查中" : detectionUnknown ? "待检查" : readyToInstall ? "已就绪" : "需要准备"}</span><Icon name="chevron-down" /></summary>
+          <SetupWizard controls={setup} remote={mode === "remote"} service={service} blocked={!!busy || updating || localConnecting} onBusy={setInstalling} onComplete={() => void act("status")} onDetection={setDetection} />
         </details>
-        {error && <p className="connect-error startup-global-error" role="alert">{error}<IconButton label="重新读取服务状态" icon="refresh-cw" disabled={!!busy} onClick={() => void act("status")} /></p>}
+        {error && <p className={errorPending ? "connect-message startup-global-error" : "connect-error startup-global-error"} role={errorPending ? "status" : "alert"}>{error}<IconButton label="重新读取服务状态" icon="refresh-cw" disabled={!!busy} onClick={() => void act("status")} /></p>}
       </section>
       <footer className="connect-footer"><span><ConnectionIcon name="privacy" />文件和任务留在你的电脑上</span><span>关闭客户端不会停止服务</span></footer>
       {confirm && <ConfirmDialog title="关闭后台服务？" danger cancelLabel="继续运行" confirmLabel="确认关闭服务"
