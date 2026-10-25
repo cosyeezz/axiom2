@@ -52,7 +52,9 @@ page.on("pageerror", e => errors.push(e.message));
 try {
   await page.route("**/*", route => {
     const url = new URL(route.request().url());
-    if (url.origin !== new URL(origin).origin || url.pathname.startsWith("/api/")) { blocked.push(url.href); return route.abort(); }
+    if (url.origin !== new URL(origin).origin) { blocked.push(url.href); return route.abort(); }
+    if (url.pathname === "/api/status") return route.fulfill({ json: {} });
+    if (url.pathname.startsWith("/api/")) { blocked.push(url.href); return route.abort(); }
     if (url.pathname === "/title-result-check") return route.fulfill({ contentType: "text/html", body: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>.app{display:block!important}</style></head><body><div id="root"></div><script type="module" src="/@id/virtual:title-result"></script></body></html>' });
     if (url.pathname === "/@vite/client") return route.fulfill({ contentType: "application/javascript", body: `const styles=new Map();export function updateStyle(id,c){let n=styles.get(id);if(!n){n=document.createElement('style');document.head.append(n);styles.set(id,n)}n.textContent=c}export function removeStyle(id){styles.get(id)?.remove();styles.delete(id)}export function createHotContext(){return {accept(){},dispose(){},prune(){},invalidate(){},on(){},off(){},send(){},data:{}}}export const injectQuery=u=>u;` });
     return route.continue();
