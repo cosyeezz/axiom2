@@ -7,7 +7,14 @@ $attempted = $false
 $productCode = $null
 $installDirectory = Join-Path $env:RUNNER_TEMP 'axiom-release-installed'
 function Invoke-Com($object, [string] $name, [Reflection.BindingFlags] $flags, [object[]] $arguments) {
-  return $object.GetType().InvokeMember($name, $flags, $null, $object, $arguments)
+  # Reflection bypasses PowerShell's COM adapter: do not marshal PSObject wrappers.
+  [object[]] $nativeArguments = @($arguments | ForEach-Object { $_.PSObject.BaseObject })
+  try {
+    return $object.GetType().InvokeMember($name, $flags, $null, $object, $nativeArguments)
+  } catch {
+    $types = ($nativeArguments | ForEach-Object { if ($null -eq $_) { 'null' } else { $_.GetType().FullName } }) -join ', '
+    throw "MSI COM $name($types): $($_.Exception.Message)"
+  }
 }
 function Product-IsRegistered {
   foreach ($root in @('Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall', 'Registry::HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')) {
