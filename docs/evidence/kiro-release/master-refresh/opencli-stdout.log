@@ -1,0 +1,27 @@
+✔ extension page launches once per receipt without an installation; rejects foreign scope and arbitrary targets (108.989ms)
+✔ extension pages use fixed HTTPS targets with platform launchers (0.4098ms)
+✔ OpenCLI: migration preserves external files and old versions, reload replaces environment (5207.6866ms)
+✔ OpenCLI: candidate cannot publish over configuration changes or with missing disabled skills (2563.8172ms)
+✔ OpenCLI: uninstall uses admission, preserves external files and prevents automatic global reconnection (4879.9957ms)
+✔ OpenCLI: failed file removal is persisted before deletion and retried after restart (2530.7109ms)
+✔ OpenCLI: rejects linked-package before switching its current installation (217.6244ms)
+✔ OpenCLI: rejects wrong-shim before switching its current installation (2272.5285ms)
+✔ OpenCLI: rejects wrong-skill before switching its current installation (271.4806ms)
+✔ OpenCLI: install receipt is short, jobs are exclusive and idempotent; official skills load without copying (2594.2632ms)
+✔ OpenCLI: revision conflicts preserve config; environment and in-place skill updates invalidate worker reuse (145.5507ms)
+✔ OpenCLI: failed update, shutdown and interrupted restart never claim rollback or replay npm (405.8666ms)
+✔ OpenCLI: private installation is cancellable without a global admission queue (2480.4733ms)
+✔ OpenCLI: installing revalidates the selected version before changing it (116.3125ms)
+✔ OpenCLI: closing an installation cancels promptly and never replays on restart (191.2505ms)
+✔ OpenCLI process runner separates stdout from npm warnings and terminates timed out processes (343.2838ms)
+✔ OpenCLI: optional resource failures stay local; failed initial journal write never leaves a phantom job (146.1341ms)
+✔ OpenCLI: failed environment checks settle their child before releasing job admission (46.7234ms)
+✔ OpenCLI: private install runs alongside admitted prompts and leaves execution available (3284.9096ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39690.7199

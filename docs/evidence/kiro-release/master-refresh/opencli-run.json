@@ -1,0 +1,10 @@
+{
+  "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/opencli.test.ts tests/opencli-private.test.ts tests/opencli-browser.test.ts",
+  "executable": "C:\\Program Files\\nodejs\\node.exe",
+  "cwd": "F:/Axiom/axiom-kiro-delivery-4bfeec8c/app",
+  "startedUtc": "2026-10-25T17:54:44.733Z",
+  "finishedUtc": "2026-10-25T17:55:24.485Z",
+  "exitCode": 0,
+  "signal": null,
+  "error": null
+}
