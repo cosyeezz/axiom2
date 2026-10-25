@@ -1,6 +1,7 @@
 name: Android Tailnet checks
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: ['verify/android-tailnet-*']
@@ -19,6 +20,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

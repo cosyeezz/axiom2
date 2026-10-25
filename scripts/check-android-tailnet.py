@@ -45,7 +45,7 @@ def main():
     aapt = tools / ('aapt2' + suffix)
     out = Path(args.output).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    for name in ['classes', 'generated', 'dex']:
+    for name in ['classes', 'generated', 'dex', 'history-check']:
         target = out / name
         if target.exists():
             shutil.rmtree(target)
@@ -54,6 +54,8 @@ def main():
     qr_jar = android / 'libs/core-3.5.3.jar'
     if hashlib.sha256(qr_jar.read_bytes()).hexdigest() != '8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82':
         raise RuntimeError('ZXing dependency checksum mismatch')
+    run([javac, '--release', '8', '-encoding', 'UTF-8', '-d', out / 'history-check', android / 'app/src/main/java/com/axiom2/android/ConnectionHistory.java', android / 'tests-jvm/ConnectionHistoryCheck.java'])
+    run([java, '-cp', out / 'history-check', 'com.axiom2.android.ConnectionHistoryCheck'])
     namespace = 'http://schemas.android.com/apk/res/android'
     ET.register_namespace('android', namespace)
     manifest = ET.parse(android / 'app/src/main/AndroidManifest.xml')
