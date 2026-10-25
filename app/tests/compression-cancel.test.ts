@@ -27,6 +27,10 @@ test("cancellation confirmation belongs to the worker run, not the whole compres
       return true;
     },
   };
+  // This fixture isolates run ownership from persistence, like applied/finish
+  // below. stage() still executes, but its save() needs no database here.
+  const savedStages: string[] = [];
+  coordinator.save = (value: any) => { savedStages.push(value.job.stage); };
   coordinator.applied = () => false;
   coordinator.finish = (_live: unknown, state: string) => {
     finished = state;
@@ -35,6 +39,7 @@ test("cancellation confirmation belongs to the worker run, not the whole compres
   const stopping = coordinator.stop(scope);
   await new Promise<void>((resolve) => setImmediate(resolve));
   try {
+    assert.deepEqual(savedStages, ["正在取消，等待安全点确认"]);
     assert.deepEqual(signals, [{ runId: "run-B", value: { type: "compression-cancel", id: "job" } }]);
     assert.equal(finished, undefined, "A's exit must not acknowledge cancellation of B's queued apply");
     coordinator.event(scope, "run-B", { type: "compression-cancelled", id: "job", applied: false });
