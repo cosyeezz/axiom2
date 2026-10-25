@@ -10,6 +10,19 @@ export function revealPopupOption(panel: HTMLElement | null, index: number) {
   else if (optionBox.bottom > menuBox.bottom) panel.scrollTop += optionBox.bottom - menuBox.bottom + 4;
 }
 
+/** A portalled menu must not outlive a trigger clipped out of its scroll container. */
+export function popupAnchorVisible(anchor: HTMLElement) {
+  const rect = anchor.getBoundingClientRect(), viewport = window.visualViewport;
+  let left = viewport?.offsetLeft ?? 0, top = viewport?.offsetTop ?? 0;
+  let right = left + (viewport?.width ?? innerWidth), bottom = top + (viewport?.height ?? innerHeight);
+  for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+    if (/auto|scroll|hidden|clip/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+    if (/auto|scroll|hidden|clip/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+  }
+  return rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom;
+}
+
 /** Position a portalled layer in the visible viewport while retaining a modal's ownership.
  * Popovers are opened before measuring so the first frame uses their actual height. */
 export function useAnchoredPopup(anchor: HTMLElement | null, {

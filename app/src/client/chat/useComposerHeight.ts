@@ -20,11 +20,10 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
       mirror.value = node.value;
       if (form) {
         const layout = getComputedStyle(form);
-        const mobile = layout.getPropertyValue("--composer-mobile-layout").trim() === "1";
-        // Always test the compact column, even after expanding to full width.
-        // Otherwise a soft-wrapped draft could alternate between the two layouts.
+        // Always test the compact column on desktop and mobile, even after
+        // expanding to full width; otherwise a soft wrap can oscillate layouts.
         const compactWidth = parseFloat(layout.gridTemplateColumns.split(/\s+/)[1]);
-        if (mobile && compactWidth > 0) {
+        if (compactWidth > 0) {
           mirror.style.width = `${compactWidth}px`;
           const singleLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
           form.toggleAttribute("data-multiline", mirror.scrollHeight > singleLine + 1);

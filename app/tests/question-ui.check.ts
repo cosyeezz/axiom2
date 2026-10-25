@@ -85,31 +85,37 @@ try {
   await page.waitForFunction(() => !(document.querySelector('.model-question fieldset') as HTMLFieldSetElement)?.disabled);
   await page.waitForFunction(() => (document.querySelector('#prompt') as HTMLTextAreaElement)?.value === '保留这个未发送的草稿');
   const fields = page.locator(".model-question fieldset");assert.equal(await fields.count(), 3);
-  const popup = page.locator('.model-question-popover');
-  assert.equal(await page.getByRole('dialog', { name: '模型提问', exact: true }).count(), 1);
+  const popup = page.locator('.model-question-dock');
+  assert.equal(await page.getByRole('region', { name: '模型提问', exact: true }).count(), 1);
   const noExtraUI = async () => {
-    assert.equal(await page.getByRole('button', { name: /^(收起|回答问题)/ }).count(), 0, 'no collapse or reopen button');
+    assert.equal(await page.locator('.model-question-toggle').count(), await popup.count(), 'one collapse control only while a question exists');
     assert.equal(await page.locator('.composer-question-entry, .composer-question-trigger, .model-question-record').count(), 0, 'no question notices or records');
   };
   await noExtraUI();
   const geometry = async () => {
-    // ResizeObserver and viewport listeners intentionally position on the next frame.
-    await page.waitForFunction(() => {
-      const panel = document.querySelector('.model-question-popover')?.getBoundingClientRect();
-      const composer = document.querySelector('.composer')?.getBoundingClientRect();
-      return panel && composer && Math.abs(panel.width - Math.min(composer.width, innerWidth - 24, 680)) <= 1 &&
-        Math.abs(panel.bottom - (composer.top - 8)) <= 1 && panel.top >= 11;
-    });
+    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     const panel = await popup.boundingBox(), composer = await page.locator('.composer').boundingBox();
-    assert.ok(panel && composer);assert.ok(panel.y >= 11, 'popup stays inside viewport');
-    assert.ok(Math.abs(panel.y + panel.height - (composer.y - 8)) <= 1, 'popup anchored 8px above input');
-    assert.ok(Math.abs(panel.width - Math.min(composer.width, page.viewportSize()!.width - 24, 680)) <= 1, 'popup has a readable 680px cap and shrinks with Composer');
-    assert.ok(Math.abs(panel.x - Math.max(12, composer.x)) <= 1, 'popup keeps the Composer leading edge');
+    const thread = await page.locator('.fixture-thread').boundingBox();
+    assert.ok(panel && composer && thread);
+    assert.ok(thread.y + thread.height <= panel.y + 1, 'answering area reserves room, never covers planning');
+    assert.ok(Math.abs(panel.y + panel.height - (composer.y - 8)) <= 1, 'dock keeps an 8px input gap');
+    assert.ok(Math.abs(panel.width - composer.width) <= 1, 'dock aligns with the full Composer width');
+    assert.ok(Math.abs(panel.x - composer.x) <= 1, 'dock keeps the Composer leading edge');
+    assert.ok(await popup.locator('.model-question-dock-content').evaluate(el => el.getBoundingClientRect().height <= Math.min(420, innerHeight * .38) + 1), 'long questions are bounded instead of filling the viewport');
   };
   await geometry();
   assert.equal(await page.locator('.log-row .model-question, .log-row input, .log-row textarea').count(), 0, 'no interactive question card in transcript');
   assert.equal(await page.locator('.log-row .reply-body').textContent(), '先确认这几个方向，再开始实现。', 'only ordinary prose remains in transcript');
-  assert.equal(await popup.evaluate(el => el.closest('.composer-area') === null), true, 'portal escapes composer overflow/contain');
+  assert.equal(await popup.evaluate(el => !!el.closest('.composer-area')), true, 'in-flow dock belongs to composer rather than overlaying planning');
+  await popup.locator('.model-question-toggle').click();
+  assert.equal(await popup.locator('.model-question-dock-content').isVisible(), false);
+  await page.evaluate(() => (window as any).renderFixture('unmounted'));
+  await popup.waitFor({ state: 'detached' });
+  await page.evaluate(() => (window as any).renderFixture());
+  await popup.waitFor();
+  assert.equal(await popup.locator('.model-question-dock-content').isVisible(), false, 'collapsed state survives remount');
+  await popup.locator('.model-question-toggle').click();
+  await geometry();
   // With no reopen entry, outside clicks/Escape must not strand unanswered questions.
   await page.locator('#prompt').click();
   assert.equal(await popup.isVisible(), true);
@@ -144,7 +150,7 @@ try {
   const density = await page.locator('.model-question').evaluate(el => {
     const option = el.querySelector('.model-question-option')!, input = el.querySelector('textarea')!;
     return { option: option.getBoundingClientRect().height, input: input.getBoundingClientRect().height,
-      radius: getComputedStyle(el).borderRadius, font: getComputedStyle(option.querySelector('.model-question-label')!).fontSize };
+      radius: getComputedStyle(el.closest('.model-question-dock')!).borderRadius, font: getComputedStyle(option.querySelector('.model-question-label')!).fontSize };
   });
   assert.equal(density.option, 36);assert.equal(density.input, 44);
   assert.equal(density.radius, '12px');assert.equal(density.font, '14px');
@@ -211,7 +217,7 @@ try {
   await body.evaluate(el => { el.scrollTop = el.scrollHeight; });await geometry();
   assert.deepEqual(await popup.locator('.model-question-footer').boundingBox(), footerBeforeScroll, 'send actions stay fixed outside the content scroller');
   assert.ok(await popup.getByRole('button', { name: '发送回答', exact: true }).evaluate(el => {
-    const button = el.getBoundingClientRect(), panel = el.closest('.model-question-popover')!.getBoundingClientRect();
+    const button = el.getBoundingClientRect(), panel = el.closest('.model-question-dock')!.getBoundingClientRect();
     return button.top >= panel.top && button.bottom <= panel.bottom;
   }), 'send action remains fully visible on a short screen');
   await page.setViewportSize({ width: 1440, height: 1100 });
@@ -319,7 +325,7 @@ try {
   publish('messages:work:session', [{ ...message, text: instanceText }]);
   await fields.nth(0).locator('.model-question-label').filter({ hasText: '当前主实例' }).waitFor();
   await geometry();
-  assert.equal((await popup.boundingBox())!.width, 680, 'ultrawide Composer never stretches the question panel');
+  assert.ok(await fields.nth(0).evaluate(el => el.getBoundingClientRect().width <= 960), 'ultrawide question content keeps a readable line length');
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
     await popup.screenshot({ path: join(artifacts, `instance-${theme}-empty.png`) });
@@ -331,14 +337,13 @@ try {
   // Manual fallback remains owned by a child modal even without any trigger button.
   await page.addInitScript(() => { Object.defineProperty(HTMLElement.prototype, 'showPopover', { value: undefined, configurable: true }); });
   await page.reload();await popup.waitFor();
-  await page.waitForFunction(() => document.querySelector('.model-question-popover')?.hasAttribute('data-popover-fallback'));
   await page.evaluate(() => (window as any).modalFixture());
-  await page.waitForFunction(() => document.querySelector('.model-question-popover')?.parentElement instanceof HTMLDialogElement);
+  await page.waitForFunction(() => !!document.querySelector('.model-question-dock')?.closest('dialog'));
   await page.locator('#prompt').click();assert.equal(await popup.isVisible(), true);
   await fields.nth(0).locator('label.model-question-option').first().click();
   assert.equal(await fields.nth(0).locator('input').first().isChecked(), true, 'modal-owned fallback remains interactive');
   assert.equal(await popup.isVisible(), true);assert.equal(await page.locator('dialog[open]').count(), 1);
   await noExtraUI();
   assert.deepEqual(errors, []);assert.deepEqual(blocked, []);
-  console.log(`PASS: minimal Composer-owned popup, no collapse/reopen buttons or transcript question notice/record, pure questions leave no reply row; unanswered panel survives outside clicks/Escape, modal-owned manual fallback; anchored 8px above input with 680px readable width cap, viewport bounds/content scroll with fixed actions; inert descriptions, keyboard disclosure, accessible links, expanded-state/answer remount retention; header-free wrapping Tags, 36px desktop/44px real-component touch, native radio/checkbox; exact ordinary prompt, draft preserved, auto-close/no duplicate on accepted/UNCERTAIN/failure; historical/incomplete fail closed; ten theme/width layouts. Artifacts: ${artifacts}`);
+  console.log(`PASS: in-flow question dock never covers planning, full-width alignment, bounded scrolling with fixed actions, collapsible/remount-safe answers; keyboard, descriptions, focus, ordinary prompt/draft preservation, no duplicate submissions, incomplete/historical fail closed, native and no-popover modal, touch, ten theme/width layouts. Artifacts: ${artifacts}`);
 } finally { await browser.close();await server.close(); }

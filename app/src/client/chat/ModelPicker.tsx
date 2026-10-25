@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useAnchoredPopup } from "../useAnchoredPopup.js";
+import { popupAnchorVisible, useAnchoredPopup } from "../useAnchoredPopup.js";
 import { closePopover } from "../popover.js";
 import { command, useScope } from "../transport.js";
 import { Icon } from "../components.js";
@@ -66,8 +66,30 @@ export function ModelPicker({
   useEffect(() => {
     if (!floating) return;
     const outside = (event: PointerEvent) => { if (!details.current?.contains(event.target as Node) && !panel.current?.contains(event.target as Node)) close(false); };
+    let frame = 0;
+    const follow = (event: Event) => {
+      if (event.target instanceof Node && panel.current?.contains(event.target)) return;
+      // Responsive navigation can temporarily unmount/reposition the trigger
+      // during resize. Inspect the settled layout, not the intermediate frame.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => {
+          const trigger = details.current?.querySelector<HTMLElement>("summary");
+          if (!trigger || !popupAnchorVisible(trigger)) close(false);
+        });
+      });
+    };
     document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    window.addEventListener("scroll", follow, true);
+    window.addEventListener("resize", follow);
+    window.visualViewport?.addEventListener("resize", follow);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("scroll", follow, true);
+      window.removeEventListener("resize", follow);
+      window.visualViewport?.removeEventListener("resize", follow);
+    };
   }, [floating]);
   const effortId = useId();
   useEffect(() => {

@@ -122,6 +122,10 @@ try {
   page.on("pageerror", e => errors.push(e.message));
   await page.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
   await page.goto(app.origin);
+  await page.locator('#prompt').waitFor();
+  // History is virtualized and initially follows the tail; mount the first row
+  // through the real navigation control before inspecting its disclosure.
+  await page.getByRole('button', { name: '回到最上', exact: true }).click();
   await page.locator(".compaction-card").waitFor();
   await page.locator("#prompt").fill("保留我的草稿");
   for (const width of [1440, 390, 360]) {
@@ -157,7 +161,7 @@ try {
       await header.click();
       if (await parent.count()) await parent.locator(":scope > summary").click();
     }
-    const group = page.locator('#messages > .tool-activity[data-call-count="1"]').first();
+    const group = page.locator('#messages .timeline-row > .tool-activity[data-call-count="1"]').first();
     const groupHeader = group.locator(":scope > summary");
     await expandInPlace(group);
     const inner = group.locator(".thinking-block");
@@ -206,7 +210,7 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator("#messages > .tool-activity").last().locator(":scope > summary").click();
+  await page.locator("#messages .timeline-row > .tool-activity").last().locator(":scope > summary").click();
   await page.getByRole("button", { name: "打开子会话：检查长内容" }).click();
   const dialog = page.getByRole("dialog", { name: "子代理会话", exact: true });
   const childThread = dialog.locator(".thread");
@@ -242,8 +246,8 @@ try {
   views.messageChanged(scope, { id: "tail-tools", role: "assistant", text: "", thinking: longText, calls: [call("tail-read", "read", { path: "tail.ts", context: longText })] });
   views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "completed" });
   views.flush(scope);
-  const tailGroup = page.locator("#messages > .tool-activity").last();
-  await page.waitForFunction(() => [...document.querySelectorAll('#messages > .tool-activity')].at(-1)?.getAttribute('data-call-count') === '1');
+  const tailGroup = page.locator("#messages .timeline-row > .tool-activity").last();
+  await page.waitForFunction(() => [...document.querySelectorAll('#messages .timeline-row > .tool-activity')].at(-1)?.getAttribute('data-call-count') === '1');
   await tailGroup.locator(":scope > summary").waitFor();
   await page.locator("#thread").evaluate(node => { node.scrollTop = node.scrollHeight; });
   await settled(page);
@@ -308,9 +312,9 @@ try {
   views.messageChanged(scope, { id: "tool-nested-read", role: "toolResult", toolCallId: "nested-read", text: longText, status: "completed" });
   views.messageChanged(scope, { id: "nested-final", role: "assistant", text: "嵌套场景的最终回复", phase: "final_answer", status: "completed" }); views.flush(scope);
   await page.getByText("嵌套场景的最终回复", { exact: true }).waitFor();
-  const folded = page.locator("#messages > .tool-activity:not(.process-live)").last();
+  const folded = page.locator("#messages .timeline-row > .tool-activity:not(.process-live)").last();
   await folded.locator(":scope > summary").waitFor();
-  await page.waitForFunction(() => ![...document.querySelectorAll('#messages > .tool-activity:not(.process-live)')].at(-1)?.hasAttribute("data-folding"));
+  await page.waitForFunction(() => ![...document.querySelectorAll('#messages .timeline-row > .tool-activity:not(.process-live)')].at(-1)?.hasAttribute("data-folding"));
   await page.locator("#thread").evaluate(node => { node.scrollTop = node.scrollHeight; }); await settled(page);
   await expandInPlace(folded);
   const nestedProcess = folded.locator('.process-live[data-call-count="1"]');

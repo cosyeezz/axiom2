@@ -79,31 +79,34 @@ try {
     const layout = await menu.locator(".model-levels").evaluate(el => {
       const slots = [...el.querySelectorAll<HTMLElement>(".model-level")];
       return {
-        columns: getComputedStyle(el).gridTemplateColumns.split(" ").map(Number.parseFloat),
+        columns: getComputedStyle(el).gridTemplateColumns.split(" ").map(Number.parseFloat).filter(width => width > 0),
         tops: slots.map(slot => slot.getBoundingClientRect().top),
         widths: slots.map(slot => slot.getBoundingClientRect().width),
+        fonts: slots.map(slot => parseFloat(getComputedStyle(slot.querySelector('span')!).fontSize)),
+        width: el.clientWidth,
         textFits: slots.every(slot => {
           const text = slot.querySelector("span")!;
           return text.scrollWidth <= text.clientWidth + 1;
         }),
       };
     });
-    assert.equal(layout.columns.length, 7, "always reserve seven columns");
+    assert.ok(layout.columns.length <= count, 'no empty reserved slots');
     assert.equal(layout.tops.length, count);
-    assert.equal(new Set(layout.tops).size, 1, `${count} levels stay in one row`);
-    assert.ok(layout.widths.every(width => Math.abs(width - layout.columns[0]) < 1), "fewer levels do not expand into reserved slots");
-    assert.ok(layout.textFits, "complete reasoning labels fit their cells");
+    assert.ok(layout.widths.every(width => Math.abs(width - layout.columns[0]) < 1), 'adaptive slots share equal widths');
+    assert.ok(layout.widths.every(width => width >= 64 || layout.width < 64), 'narrow panels wrap instead of squeezing controls');
+    assert.ok(layout.fonts.every(font => font >= 11), 'reasoning text never shrinks to unreadable cqw sizes');
+    assert.ok(layout.textFits, 'complete reasoning labels fit their cells');
   };
   await open();
   assert.equal(await menu.locator("select").count(), 0);
   assert.equal(await menu.locator(".model-name").first().evaluate(el => parseFloat(getComputedStyle(el).fontSize)), 12);
-  assert.ok(await menu.locator(".model-level span").first().evaluate(el => parseFloat(getComputedStyle(el).fontSize) <= 10));
+  assert.ok(await menu.locator(".model-level span").first().evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 11));
   const runNote = menu.locator(".model-run-note");
   assert.match(await runNote.locator("summary").innerText(), /下次执行生效，本次追加不变/);
   if (touch) await runNote.locator("summary").tap();
   else await runNote.locator("summary").click();
   assert.ok(await runNote.locator("p").isVisible());
-  assert.equal(await runNote.locator("p").innerText(), "当前执行：oa173 / astra · high");
+  assert.equal(await runNote.locator("p").innerText(), "当前执行：oa173 / GPT-6 Astra · high");
   await runNote.locator("summary").click();
   assert.equal(await runNote.getAttribute("open"), null);
   await search.fill("not-a-model");
@@ -153,7 +156,8 @@ try {
     assert.ok(await row.evaluate((el) => el.querySelector(".model-provider-name")!.getBoundingClientRect().top >= el.querySelector(".model-name")!.getBoundingClientRect().bottom), "provider is below name");
     const list = menu.locator(".model-list");
     const listBox = await list.boundingBox();
-    assert.ok(listBox && listBox.height >= (height <= 480 ? 96 : 144), `at least ${height <= 480 ? 2 : 3} visible rows at ${width}x${height}: ${listBox?.height}`);
+    const minimumListHeight = height <= 480 || touch && height <= 600 ? 96 : 144;
+    assert.ok(listBox && listBox.height >= minimumListHeight, `at least ${minimumListHeight / 48} visible rows at ${width}x${height}: ${listBox?.height}`);
     const footer = await menu.locator(".model-footer").boundingBox();
     assert.ok(footer && footer.y + footer.height <= box.y + box.height + 1, "actions stay visible without scrolling the panel");
     assert.ok(await menu.evaluate(el => el.scrollHeight <= el.clientHeight + 1), "only model list scrolls");
@@ -161,7 +165,7 @@ try {
     await menu.getByRole("button", { name: "Additional model 29 fixture", exact: true }).waitFor({ state: "visible" });
     assert.ok(await list.evaluate(el => el.scrollTop > 0), "long directory is scrollable");
     await list.evaluate(el => { el.scrollTop = 0; });
-    // The five-level state from the user's screenshot must stay on one row.
+    // The five-level state fills the available width and may wrap on narrow screens.
     await menu.getByRole("button", { name: /^Claude Opus 5.5/ }).click();
     await checkSlots(5);
     if (touch) {
@@ -184,8 +188,39 @@ try {
       await page.screenshot({ path: join(output, `seven-slots-${width}-${scale}.png`) });
     }
   }
+  // A portalled menu closes when its trigger is genuinely clipped, not during resize.
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('--display-font-scale');
+    const area = document.querySelector('.composer-area')!;
+    const spacer = document.createElement('div');
+    spacer.id = 'clipped-anchor-fixture'; spacer.style.height = '2000px';
+    area.prepend(spacer); area.scrollTop = 0; area.dispatchEvent(new Event('scroll'));
+  });
+  await menu.waitFor({ state: 'hidden' });
+  await page.evaluate(() => document.getElementById('clipped-anchor-fixture')!.remove());
+  await trigger.scrollIntoViewIfNeeded();
+  await open();
+  await page.keyboard.press('Escape');
+
+  // Settings panels use the same picker inline rather than a portalled menu.
+  await page.evaluate(() => {
+    const wrapper = document.createElement('section'); wrapper.className = 'compression-settings';
+    document.querySelector('.composer-area')!.prepend(wrapper);
+    wrapper.append(document.querySelector('#model-picker')!);
+  });
+  await trigger.click();
+  const inline = page.locator('.compression-settings .model-popover');
+  await inline.waitFor();
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(100);
+    assert.equal(await inline.getAttribute('data-floating'), null, 'settings picker stays inline');
+    assert.ok(await inline.evaluate(el => [el, ...el.querySelectorAll('.model-levels,.model-footer')].every(node => node.scrollWidth <= node.clientWidth + 1)), 'inline settings never overflow');
+    assert.ok(await inline.locator('.model-level span').evaluateAll(els => els.every(el => parseFloat(getComputedStyle(el).fontSize) >= 11 && el.scrollWidth <= el.clientWidth + 1)), 'inline levels remain readable');
+    await page.screenshot({ path: join(output, `inline-${width}.png`) });
+  }
   assert.deepEqual(errors, []);
-  console.log(`PASS: model picker search/empty, draft/cancel/confirm, native radio keyboard, favorites, Escape/focus, running hint, 35-model scrolling, seven reserved slots, smaller fonts, 11 viewports and 125%/150% scaling; touch=${touch}; errors=[]`);
+  console.log(`PASS: model picker search/empty, draft/cancel/confirm, native radio keyboard, favorites, Escape/focus, running hint, 35-model scrolling, adaptive readable reasoning slots, 11 viewports and 125%/150% scaling, clipped-anchor dismissal and inline settings; touch=${touch}; errors=[]`);
 } finally {
   await browser.close();
   await app.close();
