@@ -88,6 +88,13 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   const record = () => {
     const el = scrollElement();
     if (!el || !hasLayout() || positioning.current) return;
+    // A native disclosure can shrink before ResizeObserver updates the window.
+    // The browser may temporarily clamp scrollTop while following rows are
+    // still estimated. Do not replace the reading anchor with that clamp.
+    for (const row of root.current?.querySelectorAll<HTMLElement>(':scope > [data-timeline-key]') ?? []) {
+      const measured = heights.current.get(row.dataset.timelineKey!);
+      if (measured !== undefined && Math.abs(row.getBoundingClientRect().height - measured) > .5) return;
+    }
     const { rows, offsets } = geometry.current;
     const top = el.scrollTop - topInScroller();
     const i = rows.findIndex((_, i) => offsets[i + 1] > top);

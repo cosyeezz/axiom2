@@ -156,7 +156,7 @@ try {
       assert.equal(await block.getAttribute("open"), null, "sticky header collapses its own block");
       await settled(page);
       const collapsed = await page.locator("#thread").evaluate(node => ({ scroll: node.scrollTop, max: node.scrollHeight - node.clientHeight }));
-      assert.ok(Math.abs(collapsed.scroll - Math.min(beforeCollapse, collapsed.max)) < 2, "collapse preserves reading position except for necessary range clamping");
+      assert.ok(Math.abs(collapsed.scroll - Math.min(beforeCollapse, collapsed.max)) < 2, `collapse preserves reading position except for necessary range clamping: ${JSON.stringify({ width, selector, beforeCollapse, collapsed })}`);
       await expandInPlace(block, true);
       await header.click();
       if (await parent.count()) await parent.locator(":scope > summary").click();
@@ -195,13 +195,17 @@ try {
     await pinned(tool.locator(":scope > summary"), await pinned(groupHeader));
     await tool.locator(":scope > summary").click();
     await expandInPlace(tool);
-    // Closing the process releases thinking content and resets nested expansion.
+    // Closing the process releases content but preserves remembered expansion.
     await groupHeader.click();
     assert.equal(await group.locator(".thinking-body").count(), 0);
     assert.equal(await group.getAttribute("open"), null);
     await expandInPlace(group);
-    assert.equal(await group.locator(".tool-call[open], .tool-detail").count(), 0, "tool details remain collapsed on reopening");
-    assert.equal(await inner.locator(".thinking-body").count(), 0, "thinking remains collapsed on reopening");
+    assert.equal(await tool.getAttribute('open'), '', 'tool expansion is remembered on reopening');
+    assert.equal(await tool.locator('.tool-detail').count(), 1);
+    assert.equal(await inner.locator('.thinking-body').count(), 1, 'thinking expansion is remembered on reopening');
+    // Restore a clean state for the next viewport without discarding user state.
+    await tool.locator(':scope > summary').click();
+    await inner.locator(':scope > summary').click();
     await groupHeader.click();
     await page.setViewportSize({ width, height: 900 });
     const delegation = page.locator(".delegation-card");
@@ -225,6 +229,8 @@ try {
   await dialog.locator(".task-results > details > summary").click();
   await settled(page);
   assert.equal(await childThread.evaluate(node => node.scrollTop), beforeDelivery, "delivery collapse preserves child reading position");
+  // The child also virtualizes history; navigate before querying its first row.
+  await dialog.getByRole('button', { name: '回到最上', exact: true }).click();
   const childBlock = dialog.locator(".thinking-block");
   const childGroup = dialog.locator(".tool-activity");
   await expandInPlace(childGroup);
@@ -246,6 +252,7 @@ try {
   views.messageChanged(scope, { id: "tail-tools", role: "assistant", text: "", thinking: longText, calls: [call("tail-read", "read", { path: "tail.ts", context: longText })] });
   views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "completed" });
   views.flush(scope);
+  await page.getByRole('button', { name: '回到最下', exact: true }).click();
   const tailGroup = page.locator("#messages .timeline-row > .tool-activity").last();
   await page.waitForFunction(() => [...document.querySelectorAll('#messages .timeline-row > .tool-activity')].at(-1)?.getAttribute('data-call-count') === '1');
   await tailGroup.locator(":scope > summary").waitFor();
@@ -301,17 +308,20 @@ try {
   views.messageChanged(scope, { id: "tool-tail-read", role: "toolResult", toolCallId: "tail-read", text: longText, status: "completed" });
   views.messageChanged(scope, { ...runningMessage, thinkingActive: false }); views.flush(scope);
   await page.waitForFunction(() => [...document.querySelectorAll('.tool-call')].find(node => node.textContent?.includes('tail.ts'))?.getAttribute('data-status') === 'completed');
+  if (await tailTool.getAttribute('open') !== null) await tailTool.locator(':scope > summary').click();
+  if (await tailThinking.getAttribute('open') !== null) await tailThinking.locator(':scope > summary').click();
   await expandInPlace(tailTool);
   await expandInPlace(tailThinking);
   await page.screenshot({ path: join(artifacts, "running-expansion-in-place.png") });
   // The reported case: a folded final process exposes another process row at the bottom.
-  await page.setViewportSize({ width: 390, height: 540 });
   views.messageChanged(scope, { id: "nested-user", role: "user", text: "检查底部多层展开" });
   views.messageChanged(scope, { id: "nested-process", role: "assistant", text: "过程中的说明", thinking: "这是一段简短思考", phase: "commentary", status: "completed",
     calls: [call("nested-read", "read", { path: "nested.ts", context: longText })] });
   views.messageChanged(scope, { id: "tool-nested-read", role: "toolResult", toolCallId: "nested-read", text: longText, status: "completed" });
   views.messageChanged(scope, { id: "nested-final", role: "assistant", text: "嵌套场景的最终回复", phase: "final_answer", status: "completed" }); views.flush(scope);
+  await page.getByRole('button', { name: '回到最下', exact: true }).click();
   await page.getByText("嵌套场景的最终回复", { exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 540 });
   const folded = page.locator("#messages .timeline-row > .tool-activity:not(.process-live)").last();
   await folded.locator(":scope > summary").waitFor();
   await page.waitForFunction(() => ![...document.querySelectorAll('#messages .timeline-row > .tool-activity:not(.process-live)')].at(-1)?.hasAttribute("data-folding"));
