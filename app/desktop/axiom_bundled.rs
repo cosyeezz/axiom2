@@ -89,15 +89,20 @@ mod platform {
         Ok(unsafe { info.assume_init() }.links == 1)
     }
     fn commit(file: &File, target: &str) -> io::Result<()> {
+        // Native FileRenameInformation (10): NULL root + a simple name renames
+        // within the source directory, without reopening an ancestor for write.
+        // MoveFileW would conflict with our deliberately deny-write/delete guards.
+        // https://learn.microsoft.com/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information
         #[repr(C)]
         struct RenameInformation { replace: u8, root: *mut std::ffi::c_void, length: u32, name: [u16; 1] }
         let name: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().collect();
         let offset = std::mem::offset_of!(RenameInformation, name);
-        let size = offset + name.len() * 2;
-        let mut storage = vec![0usize; (size + std::mem::size_of::<usize>() - 1) / std::mem::size_of::<usize>()];
+        let size = offset.checked_add(name.len().checked_mul(2).ok_or_else(invalid)?).filter(|size| *size <= u32::MAX as usize).ok_or_else(invalid)?;
+        // usize storage supplies C-compatible pointer alignment and zeroed padding.
+        let mut storage = vec![0usize; size.div_ceil(std::mem::size_of::<usize>())];
         let info = storage.as_mut_ptr().cast::<RenameInformation>();
         unsafe {
-            (*info).replace = 0;
+            (*info).replace = 0; // Atomic, never replace an existing destination.
             (*info).root = std::ptr::null_mut();
             (*info).length = (name.len() * 2) as u32;
             std::ptr::copy_nonoverlapping(name.as_ptr(), storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(), name.len());
@@ -107,7 +112,7 @@ mod platform {
         }
     }
     pub(super) fn publish(path: &Path, files: &[(&str, &str)]) -> io::Result<()> {
-        if path.components().any(|part| matches!(part, Component::Prefix(prefix) if matches!(prefix.kind(), std::path::Prefix::UNC(..) | std::path::Prefix::VerbatimUNC(..) | std::path::Prefix::DeviceNS(..)))) { return Err(invalid()); }
+        if path.components().any(|part| matches!(part, Component::Prefix(prefix) if matches!(prefix.kind(), std::path::Prefix::UNC(..) | std::path::Prefix::VerbatimUNC(..) | std::path::Prefix::DeviceNS(..)))) || files.iter().any(|(name, _)| name.contains([':', '\0'])) { return Err(invalid()); }
         let mut guards = Vec::new(); let mut current = PathBuf::new();
         for part in path.components() {
             current.push(part.as_os_str());
@@ -117,9 +122,7 @@ mod platform {
             if !matches!(part, Component::RootDir) {
                 match fs::create_dir(&current) { Ok(()) => {}, Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}, Err(e) => return Err(e) }
             }
-            #[cfg(test)] eprintln!("bundled: opening ancestor {:?}", current);
             let guard = OpenOptions::new().read(true).share_mode(1).custom_flags(0x02000000 | 0x00200000).open(&current)?;
-            #[cfg(test)] eprintln!("bundled: held ancestor {:?}", current);
             let info = guard.metadata()?;
             if !info.is_dir() || info.file_attributes() & 0x400 != 0 { return Err(invalid()); }
             guards.push(guard);
@@ -127,14 +130,12 @@ mod platform {
         for (name, source) in files {
             let target = path.join(name);
             let temporary = path.join(staging_name());
-            #[cfg(test)] eprintln!("bundled: creating staging {:?}", temporary);
+            // Keep the newly created source exclusive through the rename. DELETE
+            // access is required by NtSetInformationFile, not granted to other handles.
             let mut file = OpenOptions::new().write(true).access_mode(0x40000000 | 0x00010000).share_mode(0).create_new(true).open(&temporary)?;
-            #[cfg(test)] eprintln!("bundled: staging opened");
             let written = file.write_all(source.as_bytes()).and_then(|_| file.sync_all());
-            #[cfg(test)] eprintln!("bundled: committing to {:?}", target);
             let result = written.and_then(|_| commit(&file, name));
             drop(file);
-            #[cfg(test)] eprintln!("bundled: commit result {:?}", result);
             if result.is_err() { let _ = fs::remove_file(&temporary); }
             match result {
                 Ok(()) => {},
@@ -155,6 +156,59 @@ mod platform {
 mod windows_tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn publication_rejects_stream_names_before_creating_directories() {
+        let root = std::env::temp_dir().join(staging_name());
+        for name in ["entry.mjs:stream", "entry\0.mjs"] {
+            assert!(publish(&root, &[(name, "unsafe")]).is_err());
+            assert!(!root.exists());
+        }
+    }
+    fn junction(link: &Path, target: &Path) {
+        assert!(std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(link).arg(target).status().unwrap().success());
+    }
+    #[test]
+    fn publication_rejects_reparse_ancestors_and_targets() {
+        let root = std::env::temp_dir().join(staging_name()); fs::create_dir(&root).unwrap();
+        let outside = root.join("outside"); fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("sentinel"), "keep").unwrap();
+        let files = [("entry.mjs", "release-owned")];
+        let alias = root.join("alias"); junction(&alias, &outside);
+        assert!(publish(&alias, &files).is_err());
+        fs::remove_dir(&alias).unwrap();
+        let path = publish(&root, &files).unwrap();
+        fs::remove_file(path.join("entry.mjs")).unwrap();
+        junction(&path.join("entry.mjs"), &outside);
+        assert!(publish(&root, &files).is_err());
+        fs::remove_dir(path.join("entry.mjs")).unwrap();
+        fs::remove_dir(&path).unwrap(); junction(&path, &outside);
+        assert!(publish(&root, &files).is_err());
+        fs::remove_dir(&path).unwrap();
+        assert_eq!(fs::read_to_string(outside.join("sentinel")).unwrap(), "keep");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn concurrent_publication_never_exposes_partial_files() {
+        let root = std::env::temp_dir().join(staging_name()); fs::create_dir(&root).unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8).map(|_| { let root = root.clone(); let barrier = barrier.clone(); std::thread::spawn(move || {
+            barrier.wait(); publish(&root, &[("entry.mjs", "complete-source")])
+        }) }).collect();
+        let mut successes = 0;
+        for thread in threads {
+            match thread.join().unwrap() {
+                Ok(path) => { successes += 1; assert_eq!(fs::read_to_string(path.join("entry.mjs")).unwrap(), "complete-source"); },
+                // A winning source can still be exclusively open when a loser
+                // validates the existing target. Sharing conflicts fail closed.
+                Err(error) => assert_eq!(error.raw_os_error(), Some(32)),
+            }
+        }
+        assert!(successes > 0);
+        let path = publish(&root, &[("entry.mjs", "complete-source")]).unwrap();
+        assert_eq!(fs::read_dir(path).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn publication_rejects_identical_hard_links() {
         let root = std::env::temp_dir().join(staging_name()); fs::create_dir(&root).unwrap();
