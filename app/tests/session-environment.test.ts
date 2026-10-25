@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "./temporary.js";
-import { createAgentSession, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultPackageManager, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { previewEnvironment, runtimeEnvironment } from "../src/server/session-environment.js";
 import { environmentResourceOptions } from "../src/server/environment-resources.js";
 import { installAxiomPrompt } from "../src/server/axiom-prompt.js";
@@ -95,8 +95,15 @@ test("session-free preview uses native prompt generation and identical execution
   } finally { f.cleanup(); }
 });
 
-test("preloading never launches extension/MCP or installs missing packages and omits credentials", async () => {
-  const f = fixture();
+for (const offline of [false, true]) test(`preloading never launches extension/MCP or installs missing packages and omits credentials (offline=${offline})`, async t => {
+  const f = fixture(), previousOffline = process.env.PI_OFFLINE;
+  // Pi 1.1.0 skips onMissing entirely in offline mode. Test both paths explicitly,
+  // without ever allowing the online warning path to install or access the network.
+  if (offline) process.env.PI_OFFLINE = '1'; else delete process.env.PI_OFFLINE;
+  const network = t.mock.method(globalThis, 'fetch', async () => { throw Error('Fixture forbids network'); });
+  // Version-bound safety guard: resolve() calls this private installation boundary directly.
+  const installation = t.mock.method(DefaultPackageManager.prototype as unknown as { installParsedSource(): Promise<void> },
+    'installParsedSource', async () => { throw Error('Fixture forbids installation'); });
   try {
     const marker = join(f.root, "extension-ran");
     mkdirSync(join(f.cwd, ".pi", "extensions"));
@@ -116,8 +123,13 @@ test("preloading never launches extension/MCP or installs missing packages and o
       assert.equal(JSON.stringify(preview).includes(secret), false);
     assert.equal(preview.extensions, 0);
     assert.ok(preview.warnings.some(text => text.includes("未启动 session")));
-    assert.ok(catalog.warnings.some(text => text.includes("尚未安装")));
-  } finally { f.cleanup(); }
+    if (!offline) assert.ok(catalog.warnings.some(text => text.includes("尚未安装")));
+    assert.equal(network.mock.callCount(), 0, 'discovery and preview never attempt network requests');
+    assert.equal(installation.mock.callCount(), 0, 'discovery and preview never attempt package installation');
+  } finally {
+    if (previousOffline === undefined) delete process.env.PI_OFFLINE; else process.env.PI_OFFLINE = previousOffline;
+    network.mock.restore(); installation.mock.restore(); f.cleanup();
+  }
 });
 
 test("agent.environment preserves empty-session semantics, scope ownership and existing snapshots", async () => {

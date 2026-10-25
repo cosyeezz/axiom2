@@ -2,10 +2,11 @@ import { modelProxyRevision, providerProxyUrl, parseProviderProxy } from "./inte
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Selection } from "../shared/agent.js";
 import { resourceIdentity, resourceIdentityAsync } from "./agents/resource-identity.js";
+import { rejectExecution, type ExecutionRejection, type RejectionObserver } from "./execution-diagnostics.js";
 
 export type WorkerEntry = "agent" | "memory" | "compression";
 export type ReuseMode = "single-use" | "same-session" | "cross-binding";
@@ -52,9 +53,9 @@ export interface PreparedEnvironment {
   readonly prewarmAllowed?: boolean;
   readonly provider?: string;
   readonly configRevision: string;
-  current(checkResources?: boolean): boolean;
-  currentAsync?(signal?: AbortSignal): Promise<boolean>;
-  snapshotValid(): boolean;
+  current(checkResources?: boolean, onReject?: RejectionObserver): boolean;
+  currentAsync?(signal?: AbortSignal, onReject?: RejectionObserver): Promise<boolean>;
+  snapshotValid(onReject?: RejectionObserver): boolean;
   retain(): void;
   release(): void;
 }
@@ -81,7 +82,8 @@ export class ExecutionProfiles {
     const workerPath = fileURLToPath(new URL(`./${input.entry === "agent" ? "agent" : input.entry === "memory" ? "memory" : "compression"}-worker.${source ? "ts" : "js"}`, import.meta.url));
     const modelDigest = digest(stable(JSON.parse(input.modelsRaw)));
     const modelFiles = ["models.json", "auth.json", "models-store.json"].map(name => join(input.modelDir, name));
-    const configRevision = digest(stable(modelFiles.map(jsonRevision)));
+    const modelRevisions = modelFiles.map(jsonRevision);
+    const configRevision = digest(stable(modelRevisions));
     const settingsFiles = [join(this.root, "pi", "settings.json"), join(input.cwd, ".pi", "settings.json")];
     const settings = input.entry === "agent" ? settingsFiles.map(jsonRevision) : [];
     const localResources = () => {
@@ -95,7 +97,7 @@ export class ExecutionProfiles {
           throw Error('External configured resources require cold binding');
       }
     };
-    const resources = () => { localResources(); return input.entry === 'agent' ? resourceIdentity(input.cwd, join(this.root, 'pi')) : 'fixed-resources-v1'; };
+    const resources = (onReject?: RejectionObserver) => { localResources(); return input.entry === 'agent' ? resourceIdentity(input.cwd, join(this.root, 'pi'), onReject) : 'fixed-resources-v1'; };
     let resourceVersion: string, verifiable = true;
     try { localResources(); resourceVersion = captured?.version ?? resources(); verifiable = captured?.verifiable ?? true; }
     catch { resourceVersion = randomUUID(); verifiable = false; }
@@ -123,26 +125,56 @@ export class ExecutionProfiles {
     }
     snapshot.refs++;
     const owned = snapshot;
-    const current = (checkResources = true) => {
-      try { const revisions = modelFiles.map(jsonRevision), currentModels = revisions[0];
-        return (input.capabilities?.files.every(file => capabilityFileDigest(file.path) === file.digest) ?? true) &&
-        (currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) === modelDigest &&
-        configRevision === digest(stable(revisions)) && proxyRevision === digest(modelProxyRevision(this.root)) &&
-        (input.entry !== "agent" || stable(settingsFiles.map(jsonRevision)) === stable(settings) && (!checkResources || !verifiable || resources() === resourceVersion)); }
-      catch { return false; }
+    const modelChecks = ['models', 'auth', 'models_store'] as const;
+    const current = (checkResources = true, onReject?: RejectionObserver) => {
+      let check: ExecutionRejection['check'] = 'model_config', resource: ExecutionRejection['resource'];
+      let scanRejection: Readonly<ExecutionRejection> = { check: 'resource_scan', cause: 'other' };
+      try {
+        // Keep the original eager model reads and subsequent short-circuit order.
+        const revisions = modelFiles.map((file, index) => { check = modelChecks[index]; return jsonRevision(file); }), currentModels = revisions[0];
+        check = 'capability_file';
+        if (!(input.capabilities?.files.every(file => {
+          const name = basename(file.path);
+          resource = name === 'settings.json' ? 'settings' : name === 'mcp.json' ? 'mcp' : name === 'SKILL.md' ? 'skills' : 'other';
+          return capabilityFileDigest(file.path) === file.digest;
+        }) ?? true)) return rejectExecution(onReject, { check, resource });
+        check = 'models';
+        if ((currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) !== modelDigest) return rejectExecution(onReject, { check });
+        check = 'model_config';
+        if (configRevision !== digest(stable(revisions))) return rejectExecution(onReject, { check: modelChecks[revisions.findIndex((value, index) => value !== modelRevisions[index])] ?? check });
+        check = 'proxy';
+        if (proxyRevision !== digest(modelProxyRevision(this.root))) return rejectExecution(onReject, { check });
+        if (input.entry === 'agent') {
+          check = 'settings';
+          if (stable(settingsFiles.map(jsonRevision)) !== stable(settings)) return rejectExecution(onReject, { check });
+          if (checkResources && verifiable) {
+            check = 'resource_scan';
+            if (resources(rejection => { scanRejection = rejection; }) !== resourceVersion) return rejectExecution(onReject, { check: 'resource_digest' });
+          }
+        }
+        return true;
+      } catch { return rejectExecution(onReject, check === 'resource_scan' ? scanRejection : { check }); }
     };
     return Object.freeze({ profileHash, entry: input.entry, reuse, cwd: input.cwd, root: this.root, modelDir: input.modelDir,
       modelsFile: snapshot.path, workerPath, execArgv, env, environmentWarm: input.entry === "memory" && input.mode === "D",
       provider, configRevision, prewarmAllowed: verifiable,
       current,
-      currentAsync: async (signal?: AbortSignal) => {
-        if (signal?.aborted || !current(false)) return false;
+      currentAsync: async (signal?: AbortSignal, onReject?: RejectionObserver) => {
+        if (signal?.aborted) return rejectExecution(onReject, { check: 'aborted', stage: 'pre_io' });
+        if (!current(false, rejection => { rejectExecution(onReject, { ...rejection, stage: 'pre_io' }); })) return false;
         if (input.entry !== 'agent' || !verifiable) return true;
-        try { localResources(); const version = await resourceIdentityAsync(input.cwd, join(this.root, 'pi'), signal);
-          return !signal?.aborted && version === resourceVersion && current(false); }
-        catch { return false; }
+        let scanRejection: Readonly<ExecutionRejection> = { check: 'resource_scan', cause: 'other' };
+        try {
+          localResources(); const version = await resourceIdentityAsync(input.cwd, join(this.root, 'pi'), signal, rejection => { scanRejection = rejection; });
+          if (signal?.aborted) return rejectExecution(onReject, { check: 'aborted', stage: 'post_io' });
+          if (version !== resourceVersion) return rejectExecution(onReject, { check: 'resource_digest', stage: 'post_io' });
+          return current(false, rejection => { rejectExecution(onReject, { ...rejection, stage: 'post_io' }); });
+        } catch { return rejectExecution(onReject, signal?.aborted ? { check: 'aborted', stage: 'post_io' } : scanRejection); }
       },
-      snapshotValid: () => { try { return owned.valid && jsonRevision(owned.path) === modelDigest; } catch { return false; } },
+      snapshotValid: (onReject?: RejectionObserver) => {
+        try { return owned.valid && jsonRevision(owned.path) === modelDigest || rejectExecution(onReject, { check: 'snapshot' }); }
+        catch { return rejectExecution(onReject, { check: 'snapshot' }); }
+      },
       retain: () => { if (owned.refs <= 0) throw Error("Execution snapshot already released"); owned.refs++; },
       release: () => {
         if (owned.refs <= 0 || --owned.refs !== 0) return;

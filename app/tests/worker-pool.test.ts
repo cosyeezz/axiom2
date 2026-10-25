@@ -5,6 +5,7 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { ExecutionPool, type ExecutionLease, type PoolLimits } from "../src/server/execution-pool.js";
 import type { PreparedEnvironment, ExecutionMode } from "../src/server/execution-profile.js";
+import type { RejectionObserver } from "../src/server/execution-diagnostics.js";
 
 function harness(t: TestContext, max = 3, limits: Partial<PoolLimits> = {}, mode: ExecutionMode = "managed") {
   const children: any[] = [];
@@ -302,6 +303,80 @@ test('single-use session writers remain owned throughout retirement before the n
   (child as any).close(); await release;
   const second = await next; assert.notEqual(second.ref.instanceId, first.ref.instanceId);
   await h.pool.retire(second.ref, 'end');
+});
+
+for (const domain of ['verify', 'configuration', 'snapshot', 'business'] as const) {
+  test(`binding rejection diagnostics preserve deny and cleanup semantics: ${domain}`, async t => {
+    const h = harness(t), metrics: unknown[] = []; let binding = false;
+    h.pool.onMetric = metric => { if (metric.phase === 'binding_rejected') metrics.push(metric); };
+    const environment = { ...h.environment(),
+      currentAsync: async (_signal?: AbortSignal, onReject?: RejectionObserver) => {
+        if (domain !== 'verify') return true;
+        onReject?.({ check: 'resource_scan', stage: 'resource_open', cause: 'metadata', changed: 32, path: 'PRIVATE_CANARY' } as any);
+        return false;
+      },
+      current: (_resources?: boolean, onReject?: RejectionObserver) => {
+        if (!binding || domain !== 'configuration') return true;
+        onReject?.({ check: 'auth' }); return false;
+      },
+      snapshotValid: () => !(binding && domain === 'snapshot'),
+    };
+    const lease = await h.acquire('same', { environment, beforeExecute: () => { if (domain === 'business') throw Error('PRIVATE_CANARY'); } });
+    const child: any = await lease.ensureReady(); binding = true;
+    child.emit('message', { type: 'binding_ready', lease: lease.ref }); await turn();
+    assert.deepEqual(child.messages.filter((message: any) => message.type === 'execution_permit').map((message: any) => message.allowed), [false]);
+    assert.equal(child.messages.some((message: any) => message.type === 'shutdown'), false);
+    assert.equal(h.pool.isActive(lease.ref), false); assert.equal(h.pool.stats().total, 1);
+    const rejection = domain === 'verify' ? { check: 'resource_scan', stage: 'resource_open', cause: 'metadata', changed: 32 } : { check: domain === 'configuration' ? 'auth' : domain === 'business' ? 'before_execute' : 'snapshot' };
+    assert.deepEqual(metrics, [{ phase: 'binding_rejected', rejection }]);
+    assert.equal(JSON.stringify(metrics).includes('PRIVATE_CANARY'), false);
+    child.close(); await lease.released;
+  });
+}
+
+for (const phase of ['verify', 'configuration', 'snapshot'] as const) for (const malformed of ['null', 'getter'] as const) for (const allowed of [true, false]) {
+  test(`malformed ${malformed} diagnostics cannot change ${phase} admission=${allowed}`, async t => {
+    const h = harness(t), metrics: unknown[] = []; let binding = false;
+    h.pool.onMetric = metric => { if (metric.phase === 'binding_rejected') metrics.push(metric); };
+    const input = malformed === 'null' ? null : new Proxy({}, { get() { throw Error('PRIVATE_CANARY'); } });
+    const probe = (stage: typeof phase, observer?: RejectionObserver) => {
+      if (!binding || stage !== phase) return true;
+      observer?.(input as any); return allowed;
+    };
+    const environment = { ...h.environment(), currentAsync: async (_signal?: AbortSignal, observer?: RejectionObserver) => probe('verify', observer),
+      current: (_resources?: boolean, observer?: RejectionObserver) => probe('configuration', observer), snapshotValid: (observer?: RejectionObserver) => probe('snapshot', observer) };
+    const lease = await h.acquire('same', { environment }), child: any = await lease.ensureReady(); binding = true;
+    child.emit('message', { type: 'binding_ready', lease: lease.ref }); await turn();
+    assert.deepEqual(child.messages.filter((message: any) => message.type === 'execution_permit').map((message: any) => message.allowed), [allowed]);
+    assert.equal(h.pool.isActive(lease.ref), allowed);
+    assert.equal(metrics.length, allowed ? 0 : 1);
+    assert.equal(JSON.stringify(metrics).includes('PRIVATE_CANARY'), false);
+    child.close(); await lease.released;
+  });
+}
+
+test('a throwing diagnostic observer cannot prevent denial or retirement', async t => {
+  const h = harness(t); let valid = true;
+  const lease = await h.acquire('same', { environment: { ...h.environment(), current: () => valid } }), child: any = await lease.ensureReady();
+  h.pool.onMetric = metric => { if (metric.phase === 'binding_rejected') throw Error('PRIVATE_CANARY'); };
+  valid = false; child.emit('message', { type: 'binding_ready', lease: lease.ref }); await turn();
+  assert.equal(child.messages.find((message: any) => message.type === 'execution_permit')?.allowed, false);
+  assert.equal(h.pool.isActive(lease.ref), false); child.close(); await lease.released;
+});
+
+test('overlapping binding validations keep their own first rejection', async t => {
+  const h = harness(t), complete: (() => void)[] = [], rejections: unknown[] = [];
+  const environment = { ...h.environment(), currentAsync: (_signal?: AbortSignal, onReject?: RejectionObserver) => new Promise<boolean>(resolve => {
+    const check = complete.length === 0 ? 'auth' : 'models_store';
+    complete.push(() => { onReject?.({ check }); resolve(false); });
+  }) };
+  h.pool.onMetric = metric => { if (metric.phase === 'binding_rejected') rejections.push(metric.rejection); };
+  const one = await h.acquire('same', { environment }), first: any = await one.ensureReady();
+  const two = await h.acquire('same', { environment }), second: any = await two.ensureReady();
+  first.emit('message', { type: 'binding_ready', lease: one.ref }); second.emit('message', { type: 'binding_ready', lease: two.ref });
+  complete[1](); await turn(); complete[0](); await turn();
+  assert.deepEqual(rejections, [{ check: 'models_store' }, { check: 'auth' }]);
+  first.close(); second.close(); await Promise.all([one.released, two.released]);
 });
 
 test('maintenance rejects active leases and waits for physical worker close before removing files', async t => {

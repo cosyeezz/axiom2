@@ -8,6 +8,7 @@ import { join, relative } from "node:path";
 import { startServer } from "../src/server/index.js";
 import { running } from "../src/shared/agent.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
+import { safeExecutionRejection, type ExecutionRejection } from "../src/server/execution-diagnostics.js";
 const wait = async (check: () => boolean) => {
   const end = Date.now() + 25000;
   while (!check()) { if (Date.now() > end) throw Error("fixture timed out"); await new Promise(resolve => setTimeout(resolve, 25)); }
@@ -93,8 +94,20 @@ test("all catalog skills stay manually usable, automatic selection controls the 
     pi.on("agent_start", () => pi.registerMcpServer("late", { url: "${base}/mcp-unused", exposure: "direct" }));
   };`);
   let app: Awaited<ReturnType<typeof startServer>> | undefined;
+  const bindingRejections: Readonly<ExecutionRejection>[] = [];
+  const observeRejections = () => {
+    const previousMetric = app!.agents.pool.onMetric;
+    app!.agents.pool.onMetric = metric => {
+      previousMetric?.(metric);
+      if (metric.phase === 'binding_rejected' && metric.rejection && bindingRejections.length < 16)
+        bindingRejections.push(safeExecutionRejection(metric.rejection as ExecutionRejection));
+    };
+  };
+  const assertCompleted = (scope: { workspaceId: string; sessionId: string }) =>
+    assert.equal(app!.agents.info(scope).run?.status, 'completed', `binding_rejections=${JSON.stringify(bindingRejections)}`);
   try {
     app = await startServer({ root, port: 0 });
+    observeRejections();
     const w = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: cwd, authorized: true } }) as Workspace;
     const s = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: w.id }) as Session;
     const scope = { workspaceId: w.id, sessionId: s.id };
@@ -123,7 +136,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
     await app.agents.command({ op: "agent.model", requestId: randomUUID(), ...scope, params: { selection } });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "Use selected MCP" } });
     await wait(() => !running(app!.agents.info(scope).run));
-    assert.equal(app.agents.info(scope).run?.status, "completed", app.agents.info(scope).run?.error ?? undefined);
+    assertCompleted(scope);
     assert.equal(app.agents.capabilities.state(scope).locked, true);
     assert.equal(connections, 1); assert.equal(calls, 1); assert.equal(blockedConnections, 0);
     assert.ok(discoveryCount() > 0, "extension resource discovery actually ran");
@@ -138,7 +151,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
       params: { revision: app.agents.capabilities.state(scope).revision, catalogRevision: catalog.revision, skills: [], mcp: [] } }), { code: "CAPABILITIES_LOCKED" });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "Continue" } });
     await wait(() => !running(app!.agents.info(scope).run));
-    assert.equal(app.agents.info(scope).run?.status, "completed");
+    assertCompleted(scope);
     assertRequestSelection(requests.at(-1), true);
     assert.deepEqual([...app.agents.info(scope).environment!.skills].sort(), allSkillNames);
     assert.equal(blockedConnections, 0);
@@ -149,25 +162,26 @@ test("all catalog skills stay manually usable, automatic selection controls the 
     const before = connections, discoveryBeforeEmpty = discoveryCount();
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params: { text: "No optional capabilities" } });
     await wait(() => !running(app!.agents.info(emptyScope).run));
-    assert.equal(app.agents.info(emptyScope).run?.status, "completed");
+    assertCompleted(emptyScope);
     assert.deepEqual([...app.agents.info(emptyScope).environment!.skills].sort(), allSkillNames);
     assert.equal(connections, before); assert.equal(blockedConnections, 0);
     assert.ok(discoveryCount() > discoveryBeforeEmpty, "empty selection also rejects actual extension discovery");
     assertRequestSelection(requests.at(-1), false);
     const discoveryBeforeRestart = discoveryCount();
     await app.close(); app = await startServer({ root, port: 0 });
+    observeRejections();
     assert.equal(app.agents.capabilities.state(scope).locked, true);
     assert.deepEqual(app.agents.capabilities.state(scope).selection, { skills: selectedIds, mcp: ["chosen"] });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "Continue after restart" } });
     await wait(() => !running(app!.agents.info(scope).run));
-    assert.equal(app.agents.info(scope).run?.status, "completed");
+    assertCompleted(scope);
     assert.deepEqual([...app.agents.info(scope).environment!.skills].sort(), allSkillNames);
     assertRequestSelection(requests.at(-1), true);
     const connectionsBeforeEmptyRestart = connections;
     assert.deepEqual(app.agents.capabilities.state(emptyScope).selection, { skills: [], mcp: [] });
     await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params: { text: "Remain empty after restart" } });
     await wait(() => !running(app!.agents.info(emptyScope).run));
-    assert.equal(app.agents.info(emptyScope).run?.status, "completed");
+    assertCompleted(emptyScope);
     assert.deepEqual([...app.agents.info(emptyScope).environment!.skills].sort(), allSkillNames);
     assertRequestSelection(requests.at(-1), false);
     assert.equal(connections, connectionsBeforeEmptyRestart);
@@ -180,7 +194,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
       const beforeRequests = requests.length;
       await app.agents.command({ op: "prompt", requestId: randomUUID(), ...emptyScope, params });
       await wait(() => !running(app!.agents.info(emptyScope).run));
-      assert.equal(app.agents.info(emptyScope).run?.status, "completed");
+      assertCompleted(emptyScope);
       assert.ok(requests.length > beforeRequests);
       const request = requests.at(-1);
       assert.match(JSON.stringify(request.messages.filter((message: any) => message.role === "user").at(-1)), /MANUAL_ONLY_BODY/);

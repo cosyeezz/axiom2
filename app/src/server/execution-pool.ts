@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { AppError } from "../shared/protocol.js";
 import type { ExecutionMode, PreparedEnvironment } from "./execution-profile.js";
 import { sameLease, type LeaseRef } from "./execution-protocol.js";
+import { rejectExecution, safeExecutionRejection, type ExecutionRejection, type RejectionObserver } from "./execution-diagnostics.js";
 export type ExecutionKind = "agent" | "memory-query" | "memory-organize" | "session-title" | "compression-summary";
 export interface PoolLimits {
   maxLiveProcesses: number; maxIdleRetained: number; targetReadyTotal: number; nestedLeafReserve: number;
@@ -208,10 +209,10 @@ export class ExecutionPool {
       } finally { clearTimeout(timeout); }
     })();void i.ready.catch(()=>{});return i.ready;
   }
-  private verify(i: Instance): Promise<boolean> {
+  private verify(i: Instance, onReject?: RejectionObserver): Promise<boolean> {
     const pending = (async () => {
-      try { return await (i.environment.currentAsync?.(i.validationAbort.signal) ?? i.environment.current()); }
-      catch { return false; }
+      try { return await (i.environment.currentAsync?.(i.validationAbort.signal, onReject) ?? i.environment.current(true, onReject)); }
+      catch { return rejectExecution(onReject, { check: 'verification' }); }
     })();
     this.validations.add(pending);
     void pending.then(() => this.validations.delete(pending));
@@ -220,16 +221,28 @@ export class ExecutionPool {
   private async permit(i: Instance, ref: LeaseRef) {
     const lease = i.lease;
     if (!lease || !sameLease(lease.ref, ref) || !this.isActive(ref)) return;
-    const verified = await this.verify(i);
+    let rejection: Readonly<ExecutionRejection> | undefined;
+    // Per invocation, not instance state: overlapping validations cannot overwrite this rejection.
+    const observe: RejectionObserver = value => {
+      try { rejection ??= safeExecutionRejection(value); } catch { /* Diagnostics cannot change a custom environment's admission. */ }
+    };
+    const verified = await this.verify(i, observe);
     // Validation yields to cancellation and process close. Never apply its result to a successor.
     if (i.lease !== lease || i.state !== 'leased' || !i.child) return;
-    let allowed = verified && this.isActive(ref) && i.environment.current(false) && i.environment.snapshotValid();
-    if (allowed) { try { lease.request.beforeExecute?.(); } catch { allowed = false; } }
+    let allowed = (verified || rejectExecution(observe, { check: 'verification' })) &&
+      (this.isActive(ref) || rejectExecution(observe, { check: 'lease_inactive' })) &&
+      (i.environment.current(false, observe) || rejectExecution(observe, { check: 'verification', stage: 'configuration' })) &&
+      (i.environment.snapshotValid(observe) || rejectExecution(observe, { check: 'snapshot' }));
+    if (allowed) { try { lease.request.beforeExecute?.(); } catch { allowed = rejectExecution(observe, { check: 'before_execute' }); } }
     try { i.child.send({type:'execution_permit',lease:ref,allowed},error=>{if(error)void this.retireInstance(i,'send_failed');}); }
     catch { void this.retireInstance(i,'send_failed'); return; }
     // A denied permit already makes the run fail and close itself. Sending
     // shutdown as well can cancel it or close IPC before its failure is sent.
-    if (!allowed) void this.retireInstance(i,'binding_changed',false);
+    if (!allowed) {
+      // This diagnostic has no IDs, hashes, paths or arbitrary exception fields.
+      rejectExecution(value => this.onMetric?.({ phase: 'binding_rejected', rejection: value }), rejection ?? { check: 'verification' });
+      void this.retireInstance(i,'binding_changed',false);
+    }
   }
   private releaseOwner(i:Instance) {
     const lease=i.lease;if(!lease)return;
