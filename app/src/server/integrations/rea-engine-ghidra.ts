@@ -6,22 +6,24 @@ import { downloadEngineFile, smallText, type EngineFetch } from "./rea-engine-in
 import { discoverEnginePaths, engineEnvironment, engineHost, type EngineHost } from "./rea-engines.js";
 import { maintenancePhase } from "../maintenance.js";
 import { runEngine, type EngineRun } from "./rea-engine-process.js";
-import { readReaConfig } from "./rea-runtime.js";
+import { reaDirectory, reaProcessEnvironment, readReaConfig } from "./rea-runtime.js";
 
 export async function ghidraBuildEnvironment(root: string, signal: AbortSignal, run: EngineRun = runEngine, host = engineHost()) {
-  const paths = discoverEnginePaths(readReaConfig(root).engines);
+  const config = readReaConfig(root), paths = discoverEnginePaths(config.engines);
   if (!paths.java) throw Error("安装 Ghidra 需要 JDK 21，请先安装上方的 JDK 21。");
-  const env: NodeJS.ProcessEnv = { ...engineEnvironment(paths), PATH: [join(paths.java, "bin"), process.env.PATH].filter(Boolean).join(delimiter) };
+  const base = reaProcessEnvironment(root, config);
+  const env: NodeJS.ProcessEnv = { ...base, ...engineEnvironment(paths), PATH: [join(paths.java, "bin"), base.PATH].filter(Boolean).join(delimiter) };
+  const environmentDirectory = join(reaDirectory(root), "environment", "engines", "ghidra");
   const java = join(paths.java, "bin", "java");
-  const version = await run(java, ["-XshowSettings:properties", "-version"], { cwd: root, env, signal });
+  const version = await run(java, ["-XshowSettings:properties", "-version"], { cwd: root, env, environmentDirectory, signal });
   const properties = version.stdout + version.stderr;
-  const modules = await run(java, ["--list-modules"], { cwd: root, env, signal });
+  const modules = await run(java, ["--list-modules"], { cwd: root, env, environmentDirectory, signal });
   if (version.code || modules.code || Number(/java\.version\s*=\s*(\d+)/.exec(properties)?.[1] ?? 0) < 21 || !/sun\.arch\.data\.model\s*=\s*64\b/.test(properties) || !/^jdk.compiler@/m.test(modules.stdout))
     throw Error("安装 Ghidra 需要完整的 64 位 JDK 21+，请先检查或安装上方的 JDK 21。");
   const architecture = /os\.arch\s*=\s*(\S+)/.exec(properties)?.[1];
   if (!(host.arch === "arm64" ? ["aarch64", "arm64"] : ["amd64", "x86_64"]).includes(architecture ?? "")) throw Error("JDK 的 CPU 架构与后台 Mac 不匹配，请安装与后台架构一致的 JDK 21。");
   for (const args of [["--find", "clang"], ["--find", "clang++"], ["--show-sdk-path"]]) {
-    const result = await run("/usr/bin/xcrun", args, { cwd: root, signal });
+    const result = await run("/usr/bin/xcrun", args, { cwd: root, env, environmentDirectory, signal });
     if (result.code || !result.stdout.trim()) throw Error("安装 Ghidra 需要 Xcode Command Line Tools；请在后台 Mac 的终端运行 xcode-select --install，完成后重试安装。已有安装包会保留。");
   }
   return env;
@@ -50,7 +52,7 @@ export async function buildGhidraNatives(root: string, home: string, directory: 
   maintenancePhase("installing");
   notify("正在构建 Ghidra 本机组件，可能需要几分钟…");
   const result = await run("/bin/sh", [gradle, "--project-dir", project, "--no-daemon", "--offline", "--console=plain", "buildNatives"], {
-    cwd: root, signal, timeout: 600_000,
+    cwd: root, signal, timeout: 600_000, environmentDirectory: join(directory, "environment"),
     env: { ...env, GRADLE_USER_HOME: join(directory, "gradle-home"), GRADLE_OPTS: "", JAVA_OPTS: "", JAVA_TOOL_OPTIONS: "", _JAVA_OPTIONS: "", JDK_JAVA_OPTIONS: "" },
   });
   if (result.code) throw Error(`Ghidra 原生组件构建失败：${(result.stderr || result.stdout).slice(-3000)}`);
@@ -63,7 +65,8 @@ export async function buildGhidraNatives(root: string, home: string, directory: 
     const suffix = relative(home, realpathSync(binary));
     if (isAbsolute(suffix) || suffix === ".." || suffix.startsWith(`..${sep}`)) throw Error("Ghidra 构建产物超出安装目录。");
     accessSync(binary, constants.X_OK);
-    const architecture = await run("/usr/bin/lipo", ["-verify_arch", host.arch === "arm64" ? "arm64" : "x86_64", binary], { cwd: root, signal });
-    if (architecture.code) throw Error(`Ghidra 本机组件 ${executable} 不匹配后台 Mac 的 CPU 架构。`);
+    // -verify_arch consumes all following arguments as architectures, so the input must come first.
+    const architecture = await run("/usr/bin/lipo", [binary, "-verify_arch", host.arch === "arm64" ? "arm64" : "x86_64"], { cwd: root, env, environmentDirectory: join(directory, "environment"), signal });
+    if (architecture.code) throw Error(`Ghidra 本机组件 ${executable} 架构校验失败（预期 ${host.arch}，退出码 ${architecture.code}）：${(architecture.stderr || architecture.stdout).trim().slice(-1500) || "未返回诊断信息，请核实构建产物。"}`);
   }
 }

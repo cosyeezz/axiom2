@@ -23,7 +23,8 @@
 /* Start compact, then grow the mobile input as its text wraps. */
 .app:is(.mobile-workbench,.android-workbench) .composer{--display-font-scale:1;--composer-mobile-layout:1;grid-template-columns:44px minmax(0,1fr) auto auto;grid-template-rows:minmax(44px,auto);align-items:end;gap:4px;padding:5px 8px}
 .app:is(.mobile-workbench,.android-workbench) .composer textarea{grid-column:2;grid-row:1;align-self:center;height:40px;min-height:40px;max-height:148px;min-width:0;font-size:16px;line-height:22px;padding:8px 4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
-.app:is(.mobile-workbench,.android-workbench) .composer .model-picker{grid-column:3;grid-row:1;min-width:0;max-width:80px;margin:0;justify-self:end}
+.app:is(.mobile-workbench,.android-workbench) .composer :is(.model-picker,.composer-model-controls){grid-column:3;grid-row:1;min-width:0;margin:0;justify-self:end}
+.app:is(.mobile-workbench,.android-workbench) .composer .model-picker{max-width:80px}
 .app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary{min-width:44px;max-width:80px;padding-inline:6px;gap:4px}
 .app:is(.mobile-workbench,.android-workbench) .composer .model-picker>summary>span{max-width:50px}
 .app:is(.mobile-workbench,.android-workbench) .composer :is(.send,.composer-actions){grid-column:4;grid-row:1}
@@ -31,7 +32,7 @@
 /* Expanded drafts use all the space above a bottom-aligned control row. */
 .app:is(.mobile-workbench,.android-workbench) .composer[data-multiline]{grid-template-rows:auto 44px;row-gap:0}
 .app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] textarea{grid-column:1/-1;grid-row:1;width:100%}
-.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] :is(.attachment-picker,#attach,.model-picker,.send,.composer-actions),.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] .composer-tools>.row>.btn{grid-row:2}
+.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] :is(.attachment-picker,#attach,.model-picker,.composer-model-controls,.send,.composer-actions),.app:is(.mobile-workbench,.android-workbench) .composer[data-multiline] .composer-tools>.row>.btn{grid-row:2}
 .app:is(.mobile-workbench,.android-workbench) .usage{--toolbar-icon-size:16px;--toolbar-gap:8px;flex-wrap:nowrap;gap:8px;padding:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;font-size:10px}
 .app:is(.mobile-workbench,.android-workbench) :is(.usage-row,.usage-settings,.context-controls){flex-wrap:nowrap;flex:0 0 auto;gap:8px;max-width:none;width:auto;min-height:44px;white-space:nowrap}
 .app:is(.mobile-workbench,.android-workbench) .usage-settings{gap:0}
@@ -54,9 +55,10 @@
 .app:is(.mobile-workbench,.android-workbench) .thread-navigation[data-empty=true]{display:none}
 @media (max-height:400px) {
   /* In a keyboard-sized viewport, keep typing and sending before the scrollable
-     attachment, clear-draft and tool rows rather than pushing the form below it. */
+     attachment and tool rows rather than pushing the form below them. */
   .app:is(.mobile-workbench,.android-workbench) .composer-area>.container{display:flex;flex-direction:column}
   .app:is(.mobile-workbench,.android-workbench) .composer-area .composer{order:-1;flex-shrink:0}
+  .app:is(.mobile-workbench,.android-workbench) .composer textarea{max-height:min(148px,22dvh)}
 }
 @media (pointer:coarse) {
   .sidebar :is(.search input,.session-title-input,.workspace-name-input),.model-search input,:is(.annotation-editor,.annotation-supplement) textarea,.memory-dialog :is(input:not([type=radio]):not([type=checkbox]),textarea,select),.auth-browser-step .input,.auto-compression-field input,.processing-filters :is(input,select) { font-size:max(16px,calc(16px * var(--display-font-scale,1))); }
@@ -73,7 +75,7 @@
   .composer-area .container .attachment-picker .attach-button { grid-area:1/1; }
   .composer-area .container .composer :is(#attach,.attach-button,.send) { width:2.75rem; min-width:2.75rem; height:2.75rem; min-height:2.75rem; }
   .composer-area .container .composer :is(#attach,.attach-button,.send) svg { max-width:70%; max-height:70%; }
-  .composer-area .container .composer .model-picker { grid-column:1; grid-row:2; min-width:0; max-width:100%; margin:0; justify-self:stretch; }
+  .composer-area .container .composer :is(.model-picker,.composer-model-controls) { grid-column:1; grid-row:2; min-width:0; max-width:100%; margin:0; justify-self:stretch; }
   .composer-area .container .composer .model-picker > summary { min-width:0; max-width:100%; min-height:2.75rem; padding-inline:4px; }
   .composer-area .container .composer .model-picker > summary > span { max-width:100%; }
   .composer-area .container .composer :is(.send,.composer-actions) { grid-column:3; grid-row:2; }

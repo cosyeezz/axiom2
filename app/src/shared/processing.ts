@@ -4,6 +4,8 @@ export type ProcessingOutcome = "applied" | "not_applied" | "no_match" | "no_evi
 /** References to existing execution facts, never a second task or accounting source. */
 export interface ProcessingContext {
   runId?: string; toolCallId?: string; groupId?: string; outcome?: ProcessingOutcome;
+  /** Existing visible message at the moment this metadata process was triggered. */
+  anchorMessageId?: string;
   batch?: { purposeIds: string[]; sessionIds: string[]; published: boolean; skipped?: number };
 }
 export type ProcessingState = "running" | "cancelling" | "completed" | "failed" | "cancelled" | "interrupted" | "invalidated";

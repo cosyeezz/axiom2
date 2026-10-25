@@ -56,7 +56,8 @@ export function historyProjection(manager: SessionManager, _source: string, orig
       const latest = calls.at(-1);
       const latestSummary = latest && toolSummary(latest);
       const folded = !!group.folded;
-      return { ...group, revision: digest(group.ids), estimatedHeight: folded ? 82 : group.activity ? 60 : Math.min(680, 92 + Math.ceil((items[0]?.text.length ?? 0) / 75) * 24),
+      const messageRunIds = Object.fromEntries(items.flatMap(item => item.runId ? [[item.id, item.runId]] : []));
+      return { ...group, ...(Object.keys(messageRunIds).length ? { messageRunIds, runIds: [...new Set(Object.values(messageRunIds))] } : {}), revision: digest(group.ids), estimatedHeight: folded ? 82 : group.activity ? 60 : Math.min(680, 92 + Math.ceil((items[0]?.text.length ?? 0) / 75) * 24),
         ...(group.activity ? { process: {
           status: last?.error || last?.status === "failed" ? "failed" as const : last?.status === "cancelled" ? "cancelled" as const : "completed" as const,
           calls: calls.length,

@@ -1,5 +1,18 @@
 import type { ProcessingRecord, ProcessingSummary } from "./processing.js";
 
+/** Empty-memory checks are not title generations; genuine attempts include errors. */
+export function titleProcessCandidate(item: ProcessingSummary) {
+  return item.kind === "session.title" && item.outcome !== "no_evidence" &&
+    (item.state !== "completed" || item.outcome === "applied" || item.outcome === "not_applied");
+}
+
+export interface TitlePosition { ids: string[]; runIds?: string[] }
+/** No unknown-record fallback to the current tail. Older records identify only a run. */
+export function titleCardPosition(item: ProcessingSummary, positions: TitlePosition[]) {
+  if (item.anchorMessageId) return positions.findLastIndex(position => position.ids.includes(item.anchorMessageId!));
+  return item.runId ? positions.findIndex(position => position.runIds?.includes(item.runId!)) : -1;
+}
+
 /** A finished check is not necessarily a model-generated title. */
 export function titleCardCandidate(item: ProcessingSummary) {
   return item.kind === "session.title" && item.state === "completed" &&

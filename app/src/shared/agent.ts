@@ -185,6 +185,8 @@ export interface ThreadIndex {
     id: string;
     ids: string[];
     activity: boolean;
+    /** Existing execution identities, without hydrating archived message bodies. */
+    runIds?: string[];
     /** A finished final-answer body; available even while its virtual row is unmounted. */
     delivery?: boolean;
     /** A confirmed final reply folds all preceding process content in this segment. */

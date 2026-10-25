@@ -13,17 +13,19 @@ export const classification = (input: Pick<MemoryExecution, "prompt">, name = "�
 /** Independently decode the model-facing protocol for fake semantic selections. */
 export const matchingCandidates = (input: Pick<MemoryExecution, "prompt">) => {
   const data = JSON.parse(input.prompt);
-  if (!Array.isArray(data.catalog)) return undefined;
-  const groups = new Map<number, string>();
-  const candidates: { id: number; text: string; kind?: string; purpose?: string; state?: string }[] = [];
-  for (const row of data.catalog) {
-    if (row[0] === "G") { groups.set(row[1], row[2]); continue; }
-    candidates.push(data.stage === "directories"
-      ? { id: row[0], kind: row[1] === "D" ? "directory" : "purpose", text: row[2] }
-      : { id: row[0], purpose: groups.get(row[1]), state: row[2], text: row[3] });
-  }
-  return candidates;
+  if (typeof data.catalog !== "string") return undefined;
+  assertCatalogPrefix(data.catalog);
+  const lines: string[] = data.catalog.split("\n").slice(1), stack: string[] = [];
+  return lines.filter(Boolean).map((line, index) => {
+    const depth = (line.length - line.trimStart().length) / 2, text = line.trimStart();
+    stack.length = depth; stack.push(text);
+    const next = lines[index + 1];
+    return { id: stack.join(" / "), text, kind: next && next.length - next.trimStart().length > depth * 2 ? "directory" : "purpose" };
+  });
 };
+function assertCatalogPrefix(catalog: string) {
+  if (!catalog.startsWith("目录：\n")) throw Error("fixture expected a complete plain-text directory");
+}
 export const navigation = (input: Pick<MemoryExecution, "prompt">, answer = "原文验证通过") => {
   const candidates = matchingCandidates(input);
   return { answer: candidates ? JSON.stringify(candidates.map(c => c.id)) : answer, incomplete: false };

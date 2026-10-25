@@ -90,7 +90,10 @@ export function threadGroups(messages: ChatMessage[], options: { archived?: bool
   // Compaction and run completion are not deliveries. Archived and live
   // fragments follow the same explicit, completed final-answer boundary.
   const folded = foldDeliveredFragments(foldFinalProcesses(groups, messages), messages);
-  return mergeAdjacentProcesses(folded);
+  return mergeAdjacentProcesses(folded).map(group => {
+    const runIds = [...new Set(group.ids.flatMap(id => byId.get(id)?.runId ? [byId.get(id)!.runId!] : []))];
+    return runIds.length ? { ...group, runIds } : group;
+  });
 }
 
 /** Status and run ownership belong to the contents, not to adjacent card boundaries.

@@ -17,6 +17,7 @@ import { CompressionSummary } from "./CompressionSummary.js";
 import { MessageImages } from "./MessageImages.js";
 import { ActivityExpanded, ActivityGroup, Tool } from "./ToolActivity.js";
 import { Thinking } from "./Thinking.js";
+import { parseModelQuestions, questionMessageComplete } from "../../shared/model-question.js";
 import { CopyReply } from "./CopyReply.js";
 function FullMessageControl({ loading, error, load }: { loading?: boolean; error?: string; load: () => Promise<void> }) {
   return <div className="message-full-control">
@@ -95,7 +96,12 @@ export const Message = memo(function Message({
   if (m.taskNotice) return null;
   // Body and process slices subscribe to the same message without moving text
   // when a later tool call or a disclosure toggle arrives.
+  // Only the authoritative preview can authorize removing question text. A local
+  // full-text expansion must remain readable if the Composer cannot answer it.
+  const questions = !inActivity && source && questionMessageComplete(source) ? parseModelQuestions(source.text) : null;
   const hasProcess = inActivity || !!(!hideThinking && (m.thinking || m.thinkingActive || m.calls?.length));
+  // Questions live only above the Composer; do not leave an empty reply or notice.
+  if (questions && !questions.text && !m.images?.length && !hasProcess) return null;
   const process = (expanded: boolean, part: "thinking" | "calls" | "all" = "all") => <>
     {part !== "calls" && expanded && !hideThinking && !callsOnly && (m.thinking || m.thinkingActive) && <Thinking scope={scope} message={m} text={m.thinking ?? ""} active={!!m.thinkingActive && !!m.streaming} />}
     {part !== "thinking" && !hideThinking && !thinkingOnly && m.calls?.map((call, callOrder) => {
@@ -122,7 +128,7 @@ export const Message = memo(function Message({
           className={`message-body${m.role === "assistant" && m.text ? " reply-body" : ""}${m.images?.length ? " has-image-attachments" : ""}`}
           data-delivery-start={!inActivity && threadDelivery(m) ? m.id : undefined}
         >
-          {m.text && <div className="markdown">{m.role === "assistant" && !inActivity ?
+          {questions ? questions.text && <div className="markdown"><Markdown text={questions.text} images={{ scope, messageId: id }} /></div> : m.text && <div className="markdown">{m.role === "assistant" && !inActivity ?
             <AnnotatedReply scope={scope} messageId={id} text={m.text} streaming={m.streaming} /> :
             <Markdown text={m.text} images={m.role === "assistant" ? { scope, messageId: id } : undefined} streaming={m.streaming} />}</div>}
           <MessageImages key={`${scope.workspaceId}:${scope.sessionId}:${id}`} images={m.images} scope={scope} messageId={id} />

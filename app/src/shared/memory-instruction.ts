@@ -1,3 +1,5 @@
+import { modelQuestionInstruction } from "./model-question.js";
+
 export function memoryInstruction(path: string) {
   return `Session memory file: ${path}
 Detail directory: ${path.replace(/[/\\][^/\\]+$/, "")}/details
@@ -12,6 +14,8 @@ Each task tree consists only of nested headings with statuses. Both goals and ex
 ## Understanding and planning
 
 Identify the user's intent, task goal, expected deliverables, scope, and key constraints. If missing information would affect the direction of work, investigate or ask the user first. Once the information is sufficient, briefly explain your full understanding of the request, then plan and execute. Do not turn unconfirmed assumptions into task goals.
+
+${modelQuestionInstruction}
 
 Once the goal is clear, summarize it in a heading. Organize the main steps needed to achieve it as nested headings in an execution tree beneath it. Together they form a task tree whose steps, when completed, fulfill the goal.
 

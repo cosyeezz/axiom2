@@ -610,7 +610,7 @@ test("query records each authorized external read without dispatching post-valid
     const result = await f.memories.query(f.scope, "共享依据");
     const documentRequest = requests.filter((request) => request.kind !== "scan");
     assert.equal(documentRequest.length, 0, "query does not rehash documents after the Agent returns");
-    assert.equal(result.readDocuments?.length, 6, "each source entry, selected detail and authorized external reference are recorded");
+    assert.equal(result.readDocuments?.length, 4, "each selected detail and authorized external reference is recorded without reading source outlines");
   } finally { await f.close(); }
 });
 test("batch classification has no arbitrary source reads and failed batches retain every pending purpose", async (t) => {

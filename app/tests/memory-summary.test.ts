@@ -79,6 +79,6 @@ test("query reads complete selected details and direct explicit text links witho
       if (data.evidence) assert.equal(data.evidence.find((e: any) => e.content.startsWith("验证通过")).content.length, 20000);
       return navigation(input, "修复已验证通过。");
     } };
-    const result = await f.memories.query(scope, "资料浏览进展"); assert.equal(result.answer, "修复已验证通过。"); assert.equal(calls, 4); assert.equal(result.readDocuments?.length, 3);
+    const result = await f.memories.query(scope, "资料浏览进展"); assert.equal(result.answer, "修复已验证通过。"); assert.equal(calls, 2); assert.equal(result.readDocuments?.length, 2);
   } finally { await f.close(); }
 });

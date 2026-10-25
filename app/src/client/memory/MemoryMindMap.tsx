@@ -80,24 +80,27 @@ export function MemoryMindMap({ roots, query, workspaceName, loading, unavailabl
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) { event.preventDefault(); update({ ...view, x: view.x + (event.key === "ArrowLeft" ? 60 : event.key === "ArrowRight" ? -60 : 0), y: view.y + (event.key === "ArrowUp" ? 60 : event.key === "ArrowDown" ? -60 : 0) }); }
       else if (["+", "=", "-", "0"].includes(event.key)) { event.preventDefault(); if (event.key === "0") fit(layout.width, layout.height); else zoomAt(view.scale + (event.key === "-" ? -.1 : .1)); }
     }}>
-    <div className="memory-map-heading"><MapIcon name="map" /><span>记忆地图</span>{query.trim() && <small>{layout.positions.filter(node => node.kind === "Purpose").length} 个目的匹配</small>}</div>
+    <div className="memory-map-heading"><MapIcon name="map" /><span>记忆地图</span>{query.trim() && <small>{layout.positions.length} 个节点</small>}</div>
     <div className="memory-map-actions">{hasNodes && <><button aria-label="展开全部记忆" data-tooltip="展开全部" disabled={!!query.trim()} onClick={expandAll}><MapIcon name="expand" /></button><button aria-label="收起全部记忆" data-tooltip="收起全部" disabled={!!query.trim()} onClick={collapseAll}><MapIcon name="collapse" /></button></>}{toggleFullscreen && <button aria-label={fullscreen ? "退出全屏画布" : "全屏画布"} aria-pressed={fullscreen} data-tooltip={fullscreen ? "退出全屏（Esc）" : "全屏画布"} onClick={toggleFullscreen}><MapIcon name={fullscreen ? "exit-fullscreen" : "fullscreen"} /></button>}</div>
     {loading ? <p role="status">正在读取记忆树…</p> : unavailable ? <p role="alert">记忆树暂不可用，请稍后重试。</p> : !hasNodes ? <div className="memory-tree-empty"><MapIcon name="map" /><h3>让记忆慢慢生长</h3><p>已完成的目的整理后，会在这里长成可以探索的分支。</p></div> : !layout.positions.length ? <div className="memory-tree-empty"><h3>没有匹配的记忆</h3><p>试试其他分类、目的或来源文件关键词。</p></div> : <div className="memory-tree-stage" style={{ width: layout.width, height: layout.height, transform: `translate(${view.x}px,${view.y}px) scale(${view.scale})` }}>
       <svg width={layout.width} height={layout.height} aria-hidden="true">{layout.edges.map(edge => <path key={edge.id} d={edge.path} style={{ stroke: tones[edge.branch % tones.length] }} />)}</svg>
       <div className="memory-map-root" style={{ width: layout.root.width, transform: `translate(${layout.root.x}px,${layout.root.y}px)` }}><MapIcon name="map" /><span><small>全局记忆</small><strong title={workspaceName}>{workspaceName}</strong></span></div>
-      {layout.positions.map(node => <button key={node.id} ref={element => { if (element) buttons.current.set(node.id, element); else buttons.current.delete(node.id); }}
-        className="memory-tree-node" data-kind={node.kind} data-side={node.side} data-selected={selected === node.id || undefined} data-branch={node.parent ? undefined : "root"}
-        style={{ width: node.width, transform: `translate(${node.x}px,${node.y}px)`, "--branch-tone": tones[node.branch % tones.length] } as CSSProperties}
-        title={node.label} aria-label={`${node.kind === "Purpose" ? "目的" : "分类"} ${node.label}${node.children.length ? ` · ${node.children.length} 个分支` : ""}`}
-        aria-expanded={node.children.length ? node.open : undefined} aria-disabled={node.children.length && !!query.trim() ? true : undefined} aria-pressed={node.purpose ? selected === node.id : undefined}
-        onKeyDown={event => navigate(event, node)} onFocus={event => { if (event.currentTarget.matches(":focus-visible")) reveal(node.x, node.y, node.width, mapNodeHeight); }}
-        onClick={() => { if (node.purpose) onSelect(node.id); else if (node.children.length) toggle(node); }}>
-        <span className="memory-map-label"><strong>{node.label}</strong>{node.kind === "Purpose" && <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M5 3h7v7M12 3l-8 8" /></svg>}</span>
-        <span className="memory-map-line" />
-        {node.children.length > 0 && <span className="memory-map-toggle" aria-hidden="true">{node.open ? "−" : <span>{node.children.length}</span>}</span>}
-      </button>)}
+      {layout.positions.map(node => <div key={node.id}
+        className="memory-tree-node" data-kind={node.kind} data-side={node.side} data-selected={selected === node.id || undefined} data-branch={node.parent !== undefined ? undefined : "root"}
+        style={{ width: node.width, transform: `translate(${node.x}px,${node.y}px)`, "--branch-tone": tones[node.branch % tones.length] } as CSSProperties}>
+        <button className="memory-map-select" ref={element => { if (element) buttons.current.set(node.id, element); else buttons.current.delete(node.id); }}
+          title={node.titlePath ?? node.label} aria-label={`查看 ${node.label} · ${node.documents?.length ?? 0} 份直属文档`}
+          aria-pressed={selected === node.id} onKeyDown={event => navigate(event, node)}
+          onFocus={event => { if (event.currentTarget.matches(":focus-visible")) reveal(node.x, node.y, node.width, mapNodeHeight); }}
+          onClick={() => onSelect(node.id)}>
+          <span className="memory-map-label"><strong>{node.label}</strong>{!!node.documents?.length && <small className="memory-map-document-count" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M4 2h5l3 3v9H4zM9 2v4h3M6 9h4M6 11h4" /></svg>{node.documents.length}</small>}</span>
+          <span className="memory-map-line" />
+        </button>
+        {node.children.length > 0 && <button className="memory-map-toggle" aria-label={`${node.open ? "收起" : "展开"} ${node.label} 的分支`}
+          aria-expanded={node.open} disabled={!!query.trim()} onClick={() => toggle(node)}>{node.open ? "−" : <span>{node.children.length}</span>}</button>}
+      </div>)}
     </div>}
     <div className="memory-tree-zoom"><button aria-label="缩小记忆树" disabled={view.scale <= .05} onClick={() => zoomAt(view.scale - .1)}>−</button><span aria-live="polite">{Math.round(view.scale * 100)}%</span><button aria-label="放大记忆树" disabled={view.scale >= 2} onClick={() => zoomAt(view.scale + .1)}>＋</button><i /><button aria-label="适合画布" data-tooltip="适合画布（0）" onClick={() => fit(layout.width, layout.height)}><MapIcon name="fit" /></button><button className="memory-map-reset" onClick={() => fit(layout.width, layout.height, true)}>重置视图</button></div>
-    <p className="memory-map-help" id="memory-map-help"><span className="memory-map-desktop-help">拖动平移 · Ctrl / ⌘ + 滚轮缩放 · 点击分支展开</span><span className="memory-map-touch-help">拖动探索分支 · 双指缩放</span></p>
+    <p className="memory-map-help" id="memory-map-help"><span className="memory-map-desktop-help">拖动平移 · Ctrl / ⌘ + 滚轮缩放 · 点击节点看文档 · 点击圆钮展开</span><span className="memory-map-touch-help">拖动探索分支 · 双指缩放</span></p>
   </div>;
 }

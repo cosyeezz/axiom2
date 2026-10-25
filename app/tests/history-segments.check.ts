@@ -81,13 +81,6 @@ try {
   const top = () => boundary(false), bottom = () => boundary(true);
   const card = (id: string) => page.locator(`[data-compaction-id="${id}"]`);
   const originals = (id: string) => card(id).getByRole("button", { name: "展开会话原文", exact: true });
-  const collapseRange = async (id: string) => {
-    await top();
-    const row = page.locator(`[data-history-segments~="${id}"]`).first();
-    for (let i = 0; i < 40 && !await row.count(); i++) { await page.locator("#thread").evaluate(n => { n.scrollTop += 350; }); await settle(); }
-    await row.scrollIntoViewIfNeeded(); await settle();
-    await page.locator(`[data-collapse-segment="${id}"]`).click(); await settle();
-  };
   await page.getByText("当前对话始终可见。", { exact: true }).waitFor(); await settle();
   assert.equal(await page.getByRole("button", { name: "原始会话", exact: true }).count(), 0);
   assert.ok(operations.some(command => command.op === "agent.history.index"));
@@ -177,10 +170,9 @@ try {
   await finalCard.scrollIntoViewIfNeeded(); await settle();
   await page.screenshot({ path: join(artifacts, "desktop-final-original-hierarchy.png") });
   await finalCard.locator(":scope > summary").click(); await top();
-  await collapseRange(fixture.compressions[0]);
-  assert.equal(await originals(fixture.compressions[0]).getAttribute("aria-expanded"), "false");
+  assert.equal(await page.locator(".history-range-controls,.history-range-collapse").count(), 0, "expanded history exposes no collapse button");
   await page.reload(); await page.getByText("当前对话始终可见。", { exact: true }).waitFor(); await settle(); await top();
-  assert.equal(await originals(fixture.compressions[0]).getAttribute("aria-expanded"), "false", "manual collapse survives view reload");
+  assert.equal(await card(fixture.compressions[0]).count(), 0, "existing expansion cache still survives view reload");
   for (let i = 0; i < 25 && !await deliveryRow.count(); i++) { await page.locator("#thread").evaluate(n => { n.scrollTop += 400; }); await settle(); }
   await assertDeliveryActions();
   await deliveryRow.getByRole("button", { name: "从此处创建分支" }).focus();
@@ -204,16 +196,10 @@ try {
     await page.screenshot({ path: join(artifacts, `layout-${width}-${height}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  // Confirm the exact user-approved C-close / B-open behavior through the real UI.
   await top();
-  await collapseRange(fixture.compressions[2]);
   const choices = () => page.evaluate(scope => JSON.parse(sessionStorage.getItem(`axiom:history-ranges:${scope.workspaceId}:${scope.sessionId}`) ?? "{}"), scope);
-  const closedC = await choices();
-  assert.deepEqual(fixture.compressions.map(id => closedC[id]), [false, false, false, true, true], "closing C closes A/B/C and leaves D/E open");
-  await top();
-  await originals(fixture.compressions[1]).click(); await settle();
-  const openedB = await choices();
-  assert.deepEqual(fixture.compressions.map(id => openedB[id]), [false, true, true, true, true], "opening B opens B/C/D/E");
+  const opened = await choices();
+  assert.deepEqual(fixture.compressions.map(id => opened[id]), [true, true, true, true, true], "all manually opened ranges remain open");
   const mountedKeys = await page.locator("[data-timeline-key]").evaluateAll(nodes => nodes.map(node => node.getAttribute("data-timeline-key")));
   assert.equal(new Set(mountedKeys).size, mountedKeys.length, "live/archive keys are unique");
   await page.locator(`[data-session-id="${long.id}"] button.history-item`).click();
@@ -264,13 +250,7 @@ try {
   for (const key of selected.keys) assert.equal(await page.locator(`[data-timeline-key="${key}"]`).count(), 1, "all selected rows stay mounted");
   assert.equal(await page.evaluate(() => getSelection()?.toString()), selected.text, "selection text survives window recycling");
   await page.evaluate(() => getSelection()?.removeAllRanges()); await settle();
-  await page.locator(".history-range-collapse").first().dispatchEvent("click"); await settle(); await settle();
-  const collapseTarget = await page.evaluate(() => {
-    const active = document.activeElement as HTMLElement;
-    const thread = document.querySelector("#thread")!.getBoundingClientRect(), rect = active.getBoundingClientRect();
-    return { focused: active.matches(".history-disclosure"), visible: rect.top >= thread.top && rect.bottom <= thread.bottom };
-  });
-  assert.deepEqual(collapseTarget, { focused: true, visible: true }, "range collapse moves focus to the nearby visible card");
+  assert.equal(await page.locator(".history-range-controls,.history-range-collapse,[data-collapse-segment]").count(), 0, "long-history reading has no collapse controls");
   await bottom(); await page.getByText("当前对话始终可见。", { exact: true }).waitFor();
   assert.equal(await page.locator("button").filter({ hasText: "加载更多" }).count(), 0);
   const catalogueReads = operations.filter(command => command.op === "agent.history.index").length;

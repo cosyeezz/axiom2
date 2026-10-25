@@ -7,6 +7,7 @@ import { openCliSkillNames } from "./integrations/opencli-runtime.js";
 import type { openCliResources } from "./integrations/opencli-resources.js";
 import type { reaResources } from "./integrations/rea-resources.js";
 import { memoryInstruction } from "../shared/memory.js";
+import { modelQuestionInstruction } from "../shared/model-question.js";
 import { piDevelopmentSkillPath } from "./axiom-prompt.js";
 
 export interface EnvironmentResourceInput {
@@ -38,9 +39,9 @@ export function environmentResourceOptions(input: EnvironmentResourceInput, buil
         diagnostics: [...base.diagnostics, ...development.diagnostics, ...opencli?.diagnostics ?? [], ...rea?.diagnostics ?? []] };
     },
     appendSystemPromptOverride: (base) => [...base, "When referencing files, use Markdown links: [filename](path)", ...(input.task
-      ? [childPolicy]
+      ? [childPolicy, modelQuestionInstruction]
       : [
-          ...(input.memoryPath ? [memoryInstruction(input.memoryPath)] : []),
+          ...(input.memoryPath ? [memoryInstruction(input.memoryPath)] : [modelQuestionInstruction]),
           "Split work suitable for delegation into independent subtasks, prioritizing parallel execution for independent tests. Provide the background, goal, scope, constraints, and deliverables. For test tasks, also provide the working directory, commands or test scope, and prerequisites; coordinate separate ports, temporary directories, and output paths. Run tasks sequentially when they depend on each other or compete for shared resources.\n\nDo not modify files while tests covering them are running. After delegating, continue independent work without polling. When a completion notification arrives, use read_result to retrieve the corresponding result and check the evidence, actual commands, exit codes, key results, and unverified items. Rerun affected checks after relevant files change; do not repeat passed checks when the files are unchanged. Recheck current files before applying research recommendations. The main agent makes code changes.",
         ])],
   };

@@ -1,11 +1,13 @@
 import { Fragment, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { nextDelivery, type ScrollDirection } from "./delivery-navigation.js";
-import { createPortal } from "react-dom";
-import { FoldIcon } from "../StatusIcons.js";
 
 export interface TimelineNavigation {
   step: (direction: ScrollDirection) => boolean;
   cancel: () => void;
+  /** Owns the viewport for an explicit jump to a physical edge. */
+  edge: (target: "top" | "bottom") => void;
+  /** The jump's own scrolling must not be mistaken for a manual gesture. */
+  edgeActive: () => boolean;
 }
 
 export interface TimelineRow {
@@ -18,11 +20,8 @@ export interface TimelineRow {
   revision?: string;
   /** The card disappears on expansion; anchor to its first source message. */
   expandTo?: string;
-  ranges?: { id: string; label: string; key: string; collapse: () => void }[];
   segmentId?: string;
-  collapseKey?: string;
   render: () => ReactNode;
-  collapse?: () => void;
 }
 /** A composer's caret must not invalidate an unrelated history window. */
 function selectedRows(root: HTMLElement | null) {
@@ -48,13 +47,23 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   // reactivate an already-handled editor request that is still present in props.
   const [reveal, setReveal] = useState(editReveal);
   const deliveryCursor = useRef<string | null>(null);
+  // Rows above the viewport mount while a jump to an edge is in flight. Restoring
+  // the old anchor there would stop the jump short of the physical edge, which
+  // looks like a jump to a nearby delivery instead of the real top or bottom.
+  const edgeHold = useRef<"top" | "bottom" | null>(null);
+  const edgeFrame = useRef(0);
+  const releaseEdge = () => {
+    edgeHold.current = null;
+    cancelAnimationFrame(edgeFrame.current);
+    edgeFrame.current = 0;
+  };
+  useLayoutEffect(() => () => releaseEdge(), []);
   useLayoutEffect(() => { deliveryCursor.current = null; setReveal(editReveal); }, [editReveal?.key, editReveal?.revision]);
   const heights = useRef(new Map<string, number>());
   const [viewport, setViewport] = useState({ top: 0, height: 800 });
   const [, invalidate] = useState(0);
-  const anchor = useRef<{ key: string; offset: number; fallback?: string; messageId?: string } | null>(null);
+  const anchor = useRef<{ key: string; offset: number; messageId?: string } | null>(null);
   const positioning = useRef(false);
-  const collapseFocus = useRef<string | null>(null);
   const expandFocus = useRef<string | null>(null);
   const signature = rows.map(row => `${row.key}:${row.revision ?? ""}`).join("\n");
   const previousSignature = useRef(signature);
@@ -82,7 +91,7 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const { rows, offsets } = geometry.current;
     const top = el.scrollTop - topInScroller();
     const i = rows.findIndex((_, i) => offsets[i + 1] > top);
-    if (i >= 0) anchor.current = { key: rows[i].key, offset: offsets[i] - top, fallback: rows[i].collapseKey, messageId: rows[i].messageIds?.[0] };
+    if (i >= 0) anchor.current = { key: rows[i].key, offset: offsets[i] - top, messageId: rows[i].messageIds?.[0] };
   };
   const measureViewport = () => {
     const el = scrollElement();
@@ -92,12 +101,11 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   };
   const restore = () => {
     const el = scrollElement(), saved = anchor.current;
-    if (!el || !saved || following.current || !hasLayout()) return;
+    if (!el || !saved || following.current || !hasLayout() || edgeHold.current) return;
     const { rows, offsets } = geometry.current;
     let i = rows.findIndex(row => row.key === saved.key);
     const fallback = i < 0;
     if (i < 0 && saved.messageId) i = rows.findIndex(row => row.messageIds?.includes(saved.messageId!));
-    if (i < 0 && saved.fallback) i = rows.findIndex(row => row.key === saved.fallback);
     if (i < 0) return;
     const offset = fallback ? Math.max(0, Math.min(24, saved.offset)) : saved.offset;
     const top = topInScroller() + offsets[i] - offset;
@@ -105,10 +113,41 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     if (scrollPosition) scrollPosition.current = el.scrollTop;
   };
   useImperativeHandle(navigation, () => ({
-    cancel: () => { deliveryCursor.current = null; positioning.current = false; setReveal(undefined); },
+    cancel: () => { releaseEdge(); deliveryCursor.current = null; positioning.current = false; setReveal(undefined); },
+    edgeActive: () => edgeHold.current !== null,
+    edge: target => {
+      const el = scrollElement();
+      if (!el) return;
+      releaseEdge();
+      edgeHold.current = target;
+      positioning.current = true;
+      // Mounting and measurement happen over several frames. Keep the anchor
+      // untouched until the edge and the measured height both stop changing.
+      let previousHeight = -1, previousTop = -1, stable = 0, frames = 0;
+      const settle = () => {
+        edgeFrame.current = 0;
+        const current = scrollElement();
+        if (!current || edgeHold.current !== target || ++frames > 240) { releaseEdge(); positioning.current = false; record(); return; }
+        const top = current.scrollTop, moving = Math.abs(top - previousTop) > .5;
+        previousTop = top;
+        const edge = target === "top" ? 0 : current.scrollHeight - current.clientHeight;
+        if (Math.abs(edge - top) > .5) {
+          // A smooth jump is still travelling. Only re-assert the edge once it
+          // stops, when newly mounted rows have displaced the final position.
+          if (!moving) current.scrollTo({ top: edge, behavior: "instant" });
+          stable = 0;
+        } else stable = current.scrollHeight === previousHeight ? stable + 1 : 0;
+        previousHeight = current.scrollHeight;
+        if (stable >= 2) { releaseEdge(); positioning.current = false; record(); return; }
+        edgeFrame.current = requestAnimationFrame(settle);
+      };
+      edgeFrame.current = requestAnimationFrame(settle);
+    },
     step: direction => {
       const el = scrollElement(), node = root.current;
       if (!el || !node || !hasLayout()) return false;
+      // Stepping returns to delivery control after a jump to an edge.
+      releaseEdge(); positioning.current = false;
       const { rows, offsets } = geometry.current;
       const origin = topInScroller(), scrollerTop = el.getBoundingClientRect().top;
       const mounted = new Map([...node.querySelectorAll<HTMLElement>("[data-delivery-start]")].map(body =>
@@ -208,11 +247,6 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
       const row = key && root.current?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(key)}"]`);
       if (row) { row.tabIndex = -1; row.focus({ preventScroll: true }); expandFocus.current = null; }
     }
-    if (collapseFocus.current) {
-      const key = collapseFocus.current;
-      const card = root.current?.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(key)}"] .history-disclosure`);
-      if (card) { card.focus({ preventScroll: true }); collapseFocus.current = null; }
-    }
   });
   useLayoutEffect(() => {
     const node = root.current;
@@ -253,46 +287,18 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   }
   // Navigation targets mount individually; do not pin every intervening row.
   if (reveal) pinned.add(reveal.key);
-  if (collapseFocus.current) pinned.add(collapseFocus.current);
   const expandedKey = expandFocus.current && rows.find(row => row.messageIds?.includes(expandFocus.current!))?.key;
   if (expandedKey) pinned.add(expandedKey);
   const overscan = Math.max(600, viewport.height);
   const visible = rows.map((row, i) => ({ row, i })).filter(({ row, i }) =>
     offsets[i + 1] >= viewport.top - overscan && offsets[i] <= viewport.top + viewport.height + overscan || pinned.has(row.key));
   let end = 0;
-  const shell = root.current?.closest<HTMLElement>(".thread-shell");
-  const shellBounds = shell?.getBoundingClientRect();
-  const threadBounds = scrollElement()?.getBoundingClientRect();
-  const base = (threadBounds?.top ?? 0) - (shellBounds?.top ?? 0);
-  const mobile = !!shell?.closest(".mobile-workbench,.android-workbench") || matchMedia("(max-width: 700px)").matches;
-  const ranges = new Map<string, { range: NonNullable<TimelineRow["ranges"]>[number]; top: number; distance: number }>();
-  for (const { row, i } of visible) {
-    if (offsets[i + 1] <= viewport.top || offsets[i] >= viewport.top + viewport.height) continue;
-    const start = Math.max(offsets[i], viewport.top), end = Math.min(offsets[i + 1], viewport.top + viewport.height);
-    const distance = Math.max(0, start - viewport.top - viewport.height / 2, viewport.top + viewport.height / 2 - end);
-    for (const range of row.ranges ?? []) if (!ranges.has(range.id)) ranges.set(range.id, {
-      range, top: base + Math.max(8, start - viewport.top + 20), distance,
-    });
-  }
-  const controls = [...ranges.values()];
-  const current = controls.reduce<typeof controls[number] | undefined>((best, next) => !best || next.distance < best.distance ? next : best, undefined);
-  const nav = shell?.querySelector<HTMLElement>(".thread-navigation")?.getBoundingClientRect();
-  const controlTops: number[] = [];
-  const collapse = (range: NonNullable<TimelineRow["ranges"]>[number]) => {
-    following.current = false;
-    deliveryCursor.current = null;
-    positioning.current = true;
-    anchor.current = { key: range.key, offset: 24 };
-    collapseFocus.current = range.key;
-    setReveal(previous => ({ key: range.key, selector: `[data-timeline-key="${CSS.escape(range.key)}"] .history-disclosure`, revision: (previous?.revision ?? 0) + 1 }));
-    range.collapse();
-  };
-  return <><div ref={root} className="virtual-timeline" data-total-rows={rows.length} data-window-top={Math.round(viewport.top)}>
+  return <div ref={root} className="virtual-timeline" data-total-rows={rows.length} data-window-top={Math.round(viewport.top)}>
     {visible.map(({ row, i }) => {
       const gap = offsets[i] - end; end = offsets[i + 1];
       return <Fragment key={row.key}>
         {gap > 0 && <div className="timeline-spacer" style={{ height: gap }} aria-hidden="true" />}
-        <div data-timeline-key={row.key} data-history-segment={row.segmentId} data-history-segments={row.ranges?.map(range => range.id).join(" ") || undefined} className="timeline-row"
+        <div data-timeline-key={row.key} data-history-segment={row.segmentId} className="timeline-row"
           onClickCapture={event => {
             if (!(event.target instanceof Element) || !event.target.closest("[data-history-expand]")) return;
             following.current = false; deliveryCursor.current = null; positioning.current = false; setReveal(undefined);
@@ -304,22 +310,5 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
       </Fragment>;
     })}
     {offsets.at(-1)! - end > 0 && <div className="timeline-spacer" style={{ height: offsets.at(-1)! - end }} aria-hidden="true" />}
-  </div>{shell && createPortal(<div className="history-range-controls" data-mobile={mobile || undefined} aria-label="历史范围收起">
-    {(mobile ? current ? [current] : [] : controls).map(({ range, top }) => {
-      if (!mobile) {
-        const height = shellBounds?.height ?? viewport.height;
-        const preferred = Math.max(4, Math.min(top, height - 48));
-        const options = [preferred, ...Array.from({ length: Math.max(0, Math.floor((height - 8) / 46)) }, (_, i) => 4 + 46 * i)]
-          .filter(y => y + 44 <= height - 4 && !controlTops.some(other => Math.abs(other - y) < 46)
-            && !(nav && shellBounds && nav.width > 0 && nav.height > 0 && y + 44 > nav.top - shellBounds.top - 4 && y < nav.bottom - shellBounds.top + 4))
-          .sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred));
-        if (!options.length) return null;
-        top = options[0]; controlTops.push(top);
-      }
-      return <button key={range.id} type="button" className="history-range-collapse" data-collapse-segment={range.id}
-        style={mobile ? undefined : { top }} aria-label={range.label} data-tooltip={range.label} onClick={() => collapse(range)}>
-        <span aria-hidden="true"><FoldIcon /></span>
-      </button>;
-    })}
-  </div>, shell)}</>;
+  </div>;
 }

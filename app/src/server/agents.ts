@@ -212,7 +212,20 @@ export class Agents {
     this.unwatchConfiguration = models.watchConfiguration(() => { void this.pool.invalidate().catch(() => {}); });
     this.memories = new Memories(store, publish, openMemoryFile, undefined, undefined, observed);
     this.memories.runner = new ColdMemoryRunner(this.memories, models, this.pool, this.profiles);
-    this.titles = new SessionTitles(this.memories, scope => this.changed(scope));
+    this.titles = new SessionTitles(this.memories, scope => this.changed(scope), (scope, runId) => {
+      const messages = [...this.views.transcript(scope).values()];
+      // Only a visible native message is a usable trigger anchor. Tool results,
+      // stream placeholders and task notices never become standalone rows.
+      return messages.findLast(message => message.runId === runId && !message.taskNotice && !message.compression &&
+        (message.role === "user" || message.role === "assistant" && !!(message.text.trim() || message.thinking || message.calls?.length)))?.id;
+    }, {
+      startedAt: scope => {
+        const row = this.store.db.prepare("SELECT MIN(startedAt) AS startedAt FROM runs WHERE sessionId=? AND origin IS NULL").get(scope.sessionId);
+        return row?.startedAt == null ? undefined : Number(row.startedAt);
+      },
+      // Include the first user message even after compaction, on the current branch only.
+      messages: scope => this.views.original(scope).values(),
+    });
     this.views = new AgentViews(store, publish, observed);
     this.runs = new AgentRuns(store, this.views, publish, this.pool);
     this.compressions = new Compressions(this);
@@ -220,6 +233,7 @@ export class Agents {
     this.reloads = new SessionReloads(this);
     this.runs.onEvent = (scope, run, event) => {
       if (event.type === "provider_request") this.titles.request(scope, run);
+      if (event.type === "message") this.titles.message(scope, run, event.message);
       this.reloads.event(scope, run.id, event);
       this.compressions.event(scope, run.id, event);
       if (event.type === "memory-cancel") this.memoryQueries.get(event.key)?.controller.abort();
@@ -639,7 +653,7 @@ export class Agents {
           .run(run.startedAt, scope.sessionId);
         this.store.db.exec("COMMIT");
         } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
-        if (!internal.task) this.titles.start(scope, run.id);
+        if (!internal.task) this.titles.start(scope, run);
         if (capabilities) this.capabilities.changed(scope);
         this.publish(threadScope(scope), this.thread(scope));
         // Invoke now: launch installs pending synchronously before its first await.

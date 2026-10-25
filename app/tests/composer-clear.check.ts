@@ -87,11 +87,31 @@ try {
   async function geometry(page: Page) {
     return page.locator("#prompt").evaluate((node) => ({ height: node.getBoundingClientRect().height, width: node.clientWidth, scrollWidth: node.scrollWidth, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, maxHeight: parseFloat(getComputedStyle(node).maxHeight) }));
   }
-  for (const [width, height] of [[320, 800], [360, 800], [390, 844], [430, 932], [390, 320], [1440, 900]]) {
+  async function assertClearLayout() {
+    const button = (await clear.boundingBox())!, form = (await page.locator(".composer").boundingBox())!;
+    const model = (await page.locator(".composer .model-picker").boundingBox())!;
+    assert.ok(await clear.evaluate(node => !!node.closest("form.composer")), "clear is inside the composer");
+    assert.ok(button.x >= form.x && button.x + button.width <= form.x + form.width, "clear stays within input border");
+    assert.ok(button.y >= form.y && button.y + button.height <= form.y + form.height, "clear stays within input height");
+    assert.ok(button.x + button.width <= model.x, "clear is immediately before the model display");
+    assert.ok(model.x - button.x - button.width <= 4, "clear and model form one compact group");
+    assert.ok(Math.abs(button.y + button.height / 2 - model.y - model.height / 2) <= 1, "clear aligns with model");
+    assert.equal(await clear.innerText(), "", "clear is icon-only");
+    assert.equal(await clear.locator("use").getAttribute("href"), "#i-eraser", "clear uses an eraser rather than a close icon");
+  }
+  for (const [width, height] of [[320, 800], [360, 800], [390, 844], [430, 932], [390, 320], [740, 900], [1024, 900], [1440, 900]]) {
     await page.setViewportSize({ width, height });
+    await page.waitForTimeout(100);
+    const emptyForm = (await page.locator(".composer").boundingBox())!, emptyInput = (await input.boundingBox())!;
     await input.fill("短");
     await page.waitForTimeout(100);
     const short = await geometry(page);
+    const filledForm = (await page.locator(".composer").boundingBox())!, filledInput = (await input.boundingBox())!;
+    assert.equal(filledForm.x, emptyForm.x, "showing clear never moves the input border right");
+    assert.equal(filledForm.width, emptyForm.width, "showing clear never shrinks the composer");
+    assert.equal(filledInput.x, emptyInput.x, "showing clear never moves the text start right");
+    await assertClearLayout();
+    if (width === 1440) await page.locator(".composer").screenshot({ path: join(artifacts, "desktop-single-line.png") });
     await input.fill("这是需要真正自动换行的长文本。".repeat(12));
     await page.waitForTimeout(100);
     const long = await geometry(page);
@@ -104,8 +124,7 @@ try {
     await input.fill("第一行\n第二行\n第三行");
     await page.waitForTimeout(60);
     assert.ok((await geometry(page)).height > short.height, "explicit newline grows input too");
-    const button = await clear.boundingBox(), form = await page.locator(".composer").boundingBox();
-    assert.ok(button && form && button.y + button.height <= form.y + 1, "clear lives above input, not inside its text column");
+    await assertClearLayout();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await page.screenshot({ path: join(artifacts, `${width}x${height}.png`) });
     await assertCleared();
@@ -118,7 +137,7 @@ try {
   assert.equal(await input.inputValue(), "", "cleared draft stays empty after reload");
   assert.equal(await clear.count(), 0);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, checks: ["conditional clear", "whitespace", "all draft resources", "resource-only drafts", "edit and scope isolation", "focus restoration", "six viewport wrapping/growth/collapse", "unbroken text", "explicit newlines", "reload"], artifacts }));
+  console.log(JSON.stringify({ passed: true, checks: ["conditional clear", "whitespace", "all draft resources", "resource-only drafts", "edit and scope isolation", "focus restoration", "eight viewport wrapping/growth/collapse", "clear before model inside composer", "stable border and text start", "unbroken text", "explicit newlines", "reload"], artifacts }));
 } finally {
   await browser.close(); await app.close();
   if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi;

@@ -263,7 +263,7 @@ test("natural-language organization output records a successful call and a faile
     tree.publish(f.scope.workspaceId, batch, tree.classify(classification({ prompt: JSON.stringify({ purposes: batch }) }).answer, batch), tree.snapshot(f.scope.workspaceId).version);
     memories.runner = { close: async () => {}, execute: async input => navigation(input, "当前事实") };
     await memories.pipeline.query(f.scope, "当前事实", selection, new AbortController().signal, Date.now() + 10000);
-    const query = f.get(f.list({ kind: "memory.query" }).items[0]!.id); assert.equal(query.state, "completed"); assert.deepEqual(query.calls.map((c) => c.stage), ["匹配目录与目的", "匹配目录与目的", "选择记忆详情", "归纳原文答案"]); assert.ok(query.calls.every((c) => c.state === "completed"));
+    const query = f.get(f.list({ kind: "memory.query" }).items[0]!.id); assert.equal(query.state, "completed"); assert.deepEqual(query.calls.map((c) => c.stage), ["全树一次匹配", "归纳原文答案"]); assert.ok(query.calls.every((c) => c.state === "completed"));
     assert.equal(query.result?.truncated, false);
   } finally { await memories.close(); f.close(); }
 });

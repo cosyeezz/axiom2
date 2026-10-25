@@ -4,6 +4,8 @@ import type { ToolIcon } from "./tool-summary.js";
 export type ThreadGroup = NonNullable<ThreadIndex["groups"]>[number];
 /** No message bodies or tool arguments in the history catalogue. */
 export interface HistoryGroup extends ThreadGroup {
+  /** Identity-only ownership lets metadata boundaries split a mixed-run range without reading bodies. */
+  messageRunIds?: Record<string, string>;
   revision?: string;
   estimatedHeight: number;
   process?: {

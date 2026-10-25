@@ -160,9 +160,14 @@ try {
     const completed = savedConfig().downloads, before = downloads;
     versions.ghidra = "12.1.6"; versions.hopper = "6.6.2";
     for (const id of ["ghidra", "hopper"]) downloadGates.set(id, downloadGate());
-    for (const id of ["ghidra", "hopper"] as const) {
+    // Reverse the order as well: a lower card must not block the upper card.
+    for (const id of ["hopper", "ghidra"] as const) {
       await (await prepareDownload(id)).getByRole("button", { name: "确认下载", exact: true }).click();
       await downloadGates.get(id)!.entered;
+      if (id === "hopper") {
+        assert.equal(await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).isEnabled(), true);
+        assert.equal(await section.getByRole("button", { name: "检查JADX Headless更新", exact: true }).isEnabled(), true);
+      }
     }
     await page.reload(); await cancelGhidra.waitFor(); await cancelHopper.waitFor();
     assert.equal(downloads, before + 2, "refresh restores jobs without repeating downloads");

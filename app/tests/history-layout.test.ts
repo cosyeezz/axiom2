@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { processSlices } from "../src/shared/process-layout.js";
 import { historyFlow, historyProcessSummary } from "../src/shared/history-layout.js";
+import { titleCardPosition } from "../src/shared/title-card.js";
 import type { HistoryGroup, HistorySegment, ThreadGroup } from "../src/shared/history.js";
 
 const activity = (id: string, extra: Partial<HistoryGroup> = {}): HistoryGroup => ({ id, ids: [id], activity: true, folded: true,
@@ -74,4 +75,78 @@ test("stable first-source identity survives streaming additions and changing sou
   const after = historyFlow([{ ...a, revision: "new" }], open("a"), [activity("tail", { ids: ["tail", "delta"] })]);
   assert.equal(before[0].key, after[0].key);
   assert.deepEqual(after[0].kind === "messages" && after[0].group.ids, ["first", "tail", "delta"]);
+});
+
+test("title anchors split a growing live process without waiting for prose", () => {
+  const breaks = new Set(["trigger"]);
+  const live = (ids: string[]): ThreadGroup[] => [{ id: "process:old", ids, activity: true, runIds: ["run"] }];
+  const before = historyFlow([], open(), live(["old", "trigger"]), breaks);
+  assert.equal(before[0].kind === "messages" && before[0].boundary, true, "settle the prefix even before the next message");
+  const after = historyFlow([], open(), live(["old", "trigger", "thinking", "tool"]), breaks);
+  assert.deepEqual(after.map(row => row.kind === "messages" && row.group.ids), [["old", "trigger"], ["thinking", "tool"]]);
+  assert.equal(before[0].key, after[0].key);
+  assert.equal(after[1].kind === "messages" && after[1].boundary, undefined);
+  const more = historyFlow([], open(), live(["old", "trigger", "thinking", "tool", "more"]), breaks);
+  assert.equal(after[1].key, more[1].key, "streaming tail retains its own identity");
+  assert.equal(historyFlow([], open(), live(["old", "trigger", "thinking", "tool"])).length, 1, "no metadata boundary leaves normal continuity unchanged");
+});
+
+test("title splits retain contribution masks, notices, task visibility and delivery evidence", () => {
+  const change = { from: { provider: "p", id: "a", thinking: "off" as const }, to: { provider: "p", id: "b", thinking: "off" as const } };
+  const group: ThreadGroup = { id: "final-process:thought", ids: ["thought", "trigger", "calls", "mixed"], activity: true, folded: true,
+    thinkingOnlyIds: ["thought"], callsOnlyIds: ["calls"], bodyHiddenIds: ["mixed"], hasTasks: true, selectionChange: change };
+  const rows = historyFlow([], open(), [group], new Set(["trigger", "calls"]));
+  const parts = rows.flatMap(row => row.kind === "messages" ? [row.group] : []);
+  assert.deepEqual(parts.map(part => part.ids), [["thought", "trigger"], ["calls"], ["mixed"]]);
+  assert.deepEqual(parts.map(part => part.thinkingOnlyIds), [["thought"], [], []]);
+  assert.deepEqual(parts.map(part => part.callsOnlyIds), [[], ["calls"], []]);
+  assert.deepEqual(parts.map(part => part.bodyHiddenIds), [[], [], ["mixed"]]);
+  assert.deepEqual(parts.map(part => part.selectionChange), [change, undefined, undefined]);
+  assert.ok(parts.every(part => part.folded && part.hasTasks));
+  assert.equal(group.ids.length, 4, "never mutate the source catalogue");
+});
+
+test("title boundary follows the last contribution of a shared assistant message", () => {
+  const rows = historyFlow([], open(), [
+    { id: "thinking:shared", ids: ["shared"], activity: true, thinkingOnlyIds: ["shared"] },
+    { id: "shared", ids: ["shared"], activity: false },
+    { id: "calls:shared", ids: ["shared", "next"], activity: true, callsOnlyIds: ["shared"] },
+  ], new Set(["shared"]));
+  assert.deepEqual(rows.map(row => row.kind === "messages" && row.group.ids), [["shared"], ["shared"], ["shared"], ["next"]]);
+  assert.deepEqual(rows.map(row => row.kind === "messages" && !!row.boundary), [false, false, true, false]);
+  const position = titleCardPosition({ id: "title", kind: "session.title", anchorMessageId: "shared" } as any,
+    rows.map(row => ({ ids: row.kind === "messages" ? row.group.ids : [] })));
+  assert.equal(position, 2);
+});
+
+test("expanded archive title boundaries keep original lazy read ranges and block live remerging", () => {
+  const archive = segment("s", [activity("original", { ids: ["a", "trigger", "b"] })]);
+  const rows = historyFlow([archive], open("s"), [{ id: "live", ids: ["c"], activity: true }], new Set(["trigger"]));
+  assert.deepEqual(rows.map(row => row.kind === "messages" && row.group.ids), [["a", "trigger"], ["b", "c"]]);
+  for (const row of rows) if (row.kind === "messages") {
+    const source = row.sources[0];
+    assert.equal(source.kind, "archive");
+    if (source.kind === "archive") {
+      assert.equal(source.readGroupId, "original");
+      assert.equal(source.group.process, undefined, "do not double-count an unsplit archive summary");
+    }
+  }
+  const closed = historyFlow([archive], open(), [{ id: "live", ids: ["c"], activity: true }], new Set(["trigger"]));
+  assert.deepEqual(closed.map(row => row.kind), ["card", "messages"], "closed history remains catalogue-only");
+  assert.equal(rows[0].kind === "messages" && rows[0].boundary, true);
+});
+
+test("split mixed-run ownership keeps legacy titles with their own run", () => {
+  const group: ThreadGroup = { id: "process:a", ids: ["a", "b", "c"], activity: true, runIds: ["A", "B"] };
+  const owners: Record<string, string> = { a: "A", b: "B", c: "B" };
+  const live = historyFlow([], open(), [group], new Set(["a"]), id => owners[id]);
+  const archive = historyFlow([segment("s", [activity("process:a", { ...group, messageRunIds: owners })])], open("s"), [], new Set(["a"]));
+  for (const rows of [live, archive]) {
+    const positions = rows.flatMap(row => row.kind === "messages" ? [{ ids: row.group.ids, runIds: row.sources.flatMap(source => source.group.runIds ?? []) }] : []);
+    assert.deepEqual(positions.map(position => position.runIds), [["A"], ["B"]]);
+    assert.equal(titleCardPosition({ runId: "B" } as any, positions), 1, "run B legacy title must not attach to run A prefix");
+    assert.equal(titleCardPosition({ anchorMessageId: "a" } as any, positions), 0);
+  }
+  const oldCatalogue = historyFlow([segment("s", [activity("process:a", group)])], open("s"), [], new Set(["a"]));
+  assert.ok(oldCatalogue.every(row => row.kind === "messages" && row.group.runIds?.length === 0), "old mixed-run catalogues cannot invent partial ownership");
 });

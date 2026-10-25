@@ -22,10 +22,10 @@ function ReadStatus({ loading, error, retry }: { loading: boolean; error: string
   return error ? <p className="execution-alert" role="alert">{error} <button type="button" className="btn" onClick={retry}>重新加载</button></p>
     : loading ? <p className="history-loading" role="status">正在读取会话原文…</p> : null;
 }
-function ArchiveBody({ scope, segmentId, group, store, initialTaskInputId, enabled = true }: {
-  scope: Scope; segmentId: string; group: HistoryGroup; store: HistoryStore; initialTaskInputId?: string | null; enabled?: boolean;
+function ArchiveBody({ scope, segmentId, group, store, initialTaskInputId, enabled = true, readGroupId }: {
+  scope: Scope; segmentId: string; group: HistoryGroup; store: HistoryStore; initialTaskInputId?: string | null; enabled?: boolean; readGroupId?: string;
 }) {
-  const range = useHistoryRange(store, segmentId, group.id, enabled);
+  const range = useHistoryRange(store, segmentId, readGroupId ?? group.id, enabled);
   return <>{!range.ready && <ReadStatus loading={!range.error} error={range.error} retry={range.retry} />}
     {range.ready && (group.activity ? <ProcessFlow scope={scope} group={group} settled
       archiveExpanded={!!group.process && !group.folded && !group.process.hasTasks} contentsOnly={!!group.process} />
@@ -69,10 +69,10 @@ function HistoryCard({ scope, segment, toggle, store }: { scope: Scope; segment:
     {summary && <CompactionInfo scope={scope} segment={segment} store={store} />}
   </article>;
 }
-export function useHistoryRows({ scope, index, history, renderLive, initialTaskInputId, reveal }: {
+export function useHistoryRows({ scope, index, history, renderLive, initialTaskInputId, reveal, processBreaks }: {
   scope: Scope | null; index: ThreadIndex; history: ReturnType<typeof useHistoryConversation>;
-  renderLive: (group: ThreadGroup, position: number, groups: ThreadGroup[]) => React.ReactNode; initialTaskInputId?: string | null;
-  reveal?: { messageId: string; revision: number };
+  renderLive: (group: ThreadGroup, position: number, groups: ThreadGroup[], boundary: boolean) => React.ReactNode; initialTaskInputId?: string | null;
+  reveal?: { messageId: string; revision: number }; processBreaks?: ReadonlySet<string>;
 }) {
   const storageKey = `axiom:history-ranges:${scope?.workspaceId}:${scope?.sessionId}`;
   const expansions = useRef<SegmentExpansion | null>(null);
@@ -109,7 +109,8 @@ export function useHistoryRows({ scope, index, history, renderLive, initialTaskI
     const message = scopeSnapshot<ChatMessage>(messageScope(scope, group.id)) ?? history.store.get(group.id);
     return !!message && threadDelivery(message);
   };
-  const flow = historyFlow(segments, expansions.current.open, groups);
+  const flow = historyFlow(segments, expansions.current.open, groups, processBreaks,
+    id => scope ? (scopeSnapshot<ChatMessage>(messageScope(scope, id)) ?? history.store.get(id))?.runId : undefined);
   const previousFlow = useRef<HistoryFlow[] | null>(null);
   const completed = useRef(new Set<string>());
   // Match contributions, not storage IDs: a live delivery can turn several
@@ -131,27 +132,33 @@ export function useHistoryRows({ scope, index, history, renderLive, initialTaskI
     const { group, sources } = entry;
     const archiveSources = sources.filter(source => source.kind === "archive");
     const segment = archiveSources[0]?.segment;
-    const ranges = [...new Map(archiveSources.map(source => [source.segment.id, source.segment])).values()].map(segment => ({
-      id: segment.id, label: `收起第 ${segment.compression.number} 段会话原文`, key: `compression:${segment.id}`,
-      collapse: () => toggle(segment.id, false),
-    }));
     rows.push({ key: entry.key, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group),
       estimate: group.activity ? 84 : archiveSources[0]?.group.estimatedHeight ?? 180,
-      segmentId: segment?.id, collapseKey: segment ? `compression:${segment.id}` : undefined, ranges,
+      segmentId: segment?.id,
       revision: sources.map(source => source.kind === "archive" ? source.group.revision ?? source.segment.revision ?? "" : source.group.ids.join(",")).join("/"),
       render: () => {
         const source = sources[0];
-        if (sources.length === 1 && source.kind === "live") return <Fragment>{renderLive(group, source.position, groups)}</Fragment>;
+        if (sources.length === 1 && source.kind === "live") return <Fragment>{renderLive(group, source.position, groups, !!entry.boundary)}</Fragment>;
         return <>{group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
-          {sources.length > 1 ? <HistoryProcess scope={scope} group={group} sources={sources} store={history.store} index={index}
-            tail={sources.some(source => source.kind === "live" && source.position === groups.length - 1)} animateFold={folding.has(entry.key)} />
+          {sources.length > 1 || source.kind === "archive" && source.readGroupId ? <HistoryProcess scope={scope} group={group} sources={sources} store={history.store} index={index}
+            tail={!entry.boundary && sources.some(source => source.kind === "live" && source.position === groups.length - 1)} animateFold={folding.has(entry.key)} />
             : source.kind === "archive" ? source.group.process
               ? <ArchivedProcess scope={scope} segmentId={source.segment.id} group={source.group} store={history.store} initialTaskInputId={initialTaskInputId} animateFold={folding.has(entry.key)} />
-              : <ArchiveBody scope={scope} segmentId={source.segment.id} group={source.group} store={history.store} initialTaskInputId={initialTaskInputId} /> : null}</>;
+              : <ArchiveBody scope={scope} segmentId={source.segment.id} group={source.group} readGroupId={source.readGroupId} store={history.store} initialTaskInputId={initialTaskInputId} /> : null}</>;
       },
     });
   }
-  // Original ranges stay open across a new compaction; only explicit user actions close them.
+  // Original ranges stay open across new compactions and while reading.
   useEffect(() => { if (!scope) expansions.current = null; }, [scope?.sessionId]);
-  return { rows, groups, segments };
+  const titlePositions = flow.map(entry => {
+    const sourceGroups = entry.kind === "card" ? entry.segment.groups : entry.sources.map(source => source.group);
+    return { ids: entry.kind === "card" ? entry.segment.messageIds : entry.group.ids,
+      runIds: [...new Set(sourceGroups.flatMap(group => group.runIds ?? group.ids.flatMap(id => {
+        const message = scope ? scopeSnapshot<ChatMessage>(messageScope(scope, id)) ?? history.store.get(id) : undefined;
+        return message?.runId ? [message.runId] : [];
+      })))],
+    };
+  });
+  const tail = flow.at(-1);
+  return { rows, groups, segments, titlePositions, tailBoundary: tail?.kind === "messages" && !!tail.boundary };
 }

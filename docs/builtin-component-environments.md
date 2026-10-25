@@ -89,7 +89,7 @@ OpenCLI 的 Agent PATH **只增加 `commands/`**，不加入私有 Node/npm 目�
 
 ## 验证入口
 
-- `app/tests/component-environments.test.ts`：不污染宿主/其他语言环境、目标 engines/LTS/资产选择、完整运行时篡改检测、真实 launcher 子进程与 literal MCP 环境。
+- `app/tests/component-environments.test.ts`：不污染宿主/其他语言环境、原生组件启动前取消的未启动确认与无目录副作用、目标 engines/LTS/资产选择、完整运行时篡改检测、真实 launcher 子进程与 literal MCP 环境。
 - `app/tests/component-publication.test.ts`：状态残留、旧共享 Node 的 patch 兼容性与修复入口、未知契约拒绝、发布后 fsync 故障、Ghidra 版本拼写。
 - 现有 `rea*.test.ts` / `opencli*.test.ts`：离线私有 Node fixture、安装/更新回滚、取消/冲突、技能/MCP 与卸载保护。
 - 现有 RTK、模型代理和 tool-process 测试：原生安装/监督/归属/清理回归。

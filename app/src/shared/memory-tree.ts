@@ -3,8 +3,18 @@ export interface MemoryPurpose {
   id: string; text: string;
   source: { sessionId: string; path: "MEMORY.md"; key: string };
 }
-/** Directories have children; purpose leaves carry a stable program-allocated ID. */
-export interface MemoryIndexNode { id: string; name: string; children: MemoryIndexNode[]; purposeId?: string }
+export interface MemoryDocumentRef {
+  sessionId: string; path: string; title: string; state: string;
+  purposeIds: string[]; ancestors: Array<{ title: string; state: string }>;
+}
+/** Published nodes may have both children and directly associated documents.
+ * Numeric database identities are strings at the transport boundary (including "0").
+ * purposeId remains only for the legacy organizer's lossless source tree. */
+export interface MemoryIndexNode {
+  id: string; name: string; children: MemoryIndexNode[]; purposeId?: string;
+  titlePath?: string; parentId?: string; depth?: number; ancestorIds?: string[];
+  purposeIds?: string[]; documentRefs?: MemoryDocumentRef[];
+}
 export interface MemoryQueueSummary {
   waiting: number; eligible: number; backoff: number; blocked: number;
   oldestQueuedAt: number | null; nextBatchAt: number | null; retryAt: number | null;

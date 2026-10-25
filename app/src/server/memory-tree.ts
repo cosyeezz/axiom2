@@ -6,6 +6,7 @@ import { memoryPurposes } from "../shared/memory-purposes.js";
 import { canonicalMemoryPurpose, locateMemoryPurpose, queryMemorySnapshot } from "../shared/memory-purpose-locator.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { processingError } from "./processing-records.js";
+import { MemoryNodeStore } from "./memory-nodes.js";
 
 export interface QueuedPurpose extends MemoryPurpose {
   workspaceId: string; queuedAt: number; processedAt: number | null; retryAfter: number; blocked: boolean; error?: string;
@@ -13,8 +14,9 @@ export interface QueuedPurpose extends MemoryPurpose {
 }
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
 export class MemoryTreeStore {
+  readonly nodes: MemoryNodeStore;
   constructor(private store: Store) {
-    // No old-format migration, deletion or dual writes. Old tables remain untouched.
+    // Keep the original purpose queue and organizer projection for compatibility.
     store.db.exec(`CREATE TABLE IF NOT EXISTS memory_purposes(
       id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,sourceKey TEXT NOT NULL,
@@ -23,6 +25,35 @@ export class MemoryTreeStore {
       CREATE INDEX IF NOT EXISTS memory_purposes_pending ON memory_purposes(workspaceId,processedAt,blocked,retryAfter,queuedAt);
       CREATE TABLE IF NOT EXISTS memory_purpose_indexes(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
       version INTEGER NOT NULL,body TEXT NOT NULL);`);
+    this.nodes = new MemoryNodeStore(store);
+    // Metadata-only backfill: never scan source files on a query or constructor.
+    // The normal successful source scan supplies actual document references.
+    for (const row of store.db.prepare("SELECT workspaceId,body FROM memory_purpose_indexes").all()) {
+      const workspaceId = String(row.workspaceId);
+      if (this.nodes.initialized(workspaceId)) continue;
+      store.db.exec("BEGIN IMMEDIATE");
+      try { this.nodes.publish(JSON.parse(String(row.body)), workspaceId); store.db.exec("COMMIT"); }
+      catch (error) { store.db.exec("ROLLBACK"); throw error; }
+    }
+  }
+  nodeSnapshot(workspaceId: string): MemoryTree {
+    return this.nodes.snapshot(workspaceId, this.snapshot(workspaceId));
+  }
+  /** Runs before applyScan's unchanged fast path, including already-known goals. */
+  syncDocuments(scope: Scope, entry: string, files: readonly { path: string }[]) {
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      const previous = this.snapshot(scope.workspaceId), live = this.entries(scope.workspaceId).filter(purpose => !purpose.blocked);
+      const changed = this.nodes.syncSource(scope, entry, files, live);
+      const published = new Set(previous.purposes.map(purpose => purpose.id));
+      const refresh = changed.some(id => published.has(id));
+      if (refresh) {
+        const next = { ...previous, version: previous.version + 1 };
+        this.store.db.prepare("UPDATE memory_purpose_indexes SET version=?,body=? WHERE workspaceId=?").run(next.version, JSON.stringify(next), scope.workspaceId);
+        this.nodes.publish(next, scope.workspaceId);
+      }
+      this.store.db.exec("COMMIT"); return refresh;
+    } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
   }
   /** Keep derived leaves coherent with a completed source scan, never during a query.
    * Raw task titles/files are immutable here; revoked IDs remain available for safe reuse.
@@ -84,7 +115,7 @@ export class MemoryTreeStore {
     const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null), active = new Set(activeIds);
     const waiting = pending.filter(purpose => !active.has(purpose.id));
     const eligible = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter <= now), backoff = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter > now);
-    return { ...queryMemorySnapshot(this.snapshot(workspaceId)), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
+    return { ...this.nodeSnapshot(workspaceId), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
       queue: { waiting: waiting.length, eligible: eligible.length, backoff: backoff.length, blocked: waiting.filter(purpose => purpose.blocked).length,
         oldestQueuedAt: eligible[0]?.queuedAt ?? null,
         nextBatchAt: eligible.length >= memoryBatchSize ? now : eligible.length ? eligible[0].queuedAt + memoryBatchWaitMs : null,
@@ -102,7 +133,7 @@ export class MemoryTreeStore {
         const purpose = remaining.get(node.purposeId)!; remaining.delete(purpose.id);
         return { id: purpose.id, name: purpose.text, purposeId: purpose.id, children: [] };
       }
-      if (keys !== "children,name" || typeof node.name !== "string" || !node.name.trim() || /[\r\n<>]/.test(node.name) ||
+      if (keys !== "children,name" || typeof node.name !== "string" || !/^[\p{Script=Han}A-Za-z]+$/u.test(node.name) ||
         ["其他", "通用", "未分类", "优化", "处理", "开发"].includes(node.name.trim()) || !Array.isArray(node.children) || !node.children.length)
         throw Error("目录必须名称具体且包含子节点；不能返回来源信息或四字段记录");
       const name = node.name.trim(), current = [...path, name];
@@ -134,6 +165,7 @@ export class MemoryTreeStore {
         .run(workspaceId, tree.version, JSON.stringify(tree));
       const update = this.store.db.prepare("UPDATE memory_purposes SET processedAt=?,error=NULL,retryAfter=0 WHERE id=? AND processedAt IS NULL AND blocked=0");
       for (const purpose of batch) if (!update.run(Date.now(), purpose.id).changes) throw new AppError("REVISION_CONFLICT", "目的已被其他整理领取");
+      this.nodes.publish(tree, workspaceId);
       // This callback must remain synchronous: the original queue/index transaction
       // also commits its diagnostic application fact before returning to the event loop.
       recordApplied?.();
@@ -168,6 +200,7 @@ export class MemoryTreeStore {
         const roots = prune(old.roots), next = { ...old, version: old.version + 1, roots,
           purposes: old.purposes.filter(purpose => !ids.has(purpose.id)), nameChars: Array.from(roots.map(root => root.name).join("\n")).length };
         this.store.db.prepare(`INSERT INTO memory_purpose_indexes VALUES(?,?,?) ON CONFLICT(workspaceId) DO UPDATE SET version=excluded.version,body=excluded.body`).run(workspaceId, next.version, JSON.stringify(next));
+        this.nodes.publish(next, workspaceId);
       }
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }

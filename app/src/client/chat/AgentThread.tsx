@@ -8,7 +8,8 @@ import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
-import { TitleResultCard, useTitleResult } from "../workspaces/TitleFeedback.js";
+import { TitleProcessCard, useTitleProcesses } from "../workspaces/TitleFeedback.js";
+import { titleCardPosition } from "../../shared/title-card.js";
 import { Message } from "./Message.js";
 import { ProcessFlow } from "./ProcessFlow.js";
 import { ModelRequestStatus, pendingModelActivity } from "./ProcessStatus.js";
@@ -43,7 +44,7 @@ function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
 type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number };
 function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0 }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
-  const titleResult = useTitleResult(scope);
+  const titleProcesses = useTitleProcesses(scope);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
   const threadReceived = useScopeOrder(scope?.sessionId ? threadScope(scope) : null);
@@ -143,12 +144,29 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     measure();
   }, [historyReceived]);
   useEffect(() => {
+    const thread = scroller.current;
+    const composer = thread?.closest(".workspace")?.querySelector<HTMLElement>(":scope > .composer-area");
+    let viewportHeight = thread?.clientHeight ?? 0;
+    let composerHeight = composer?.getBoundingClientRect().height ?? 0;
     const observer = new ResizeObserver(() => {
-      if (bottom.current && !selectingMessages()) scrollToBottom();
+      const height = thread?.clientHeight ?? 0;
+      const draftHeight = composer?.getBoundingClientRect().height ?? 0;
+      const displaced = Math.min(viewportHeight - height, draftHeight - composerHeight);
+      viewportHeight = height;
+      composerHeight = draftHeight;
+      if (!selectingMessages()) {
+        if (bottom.current) scrollToBottom();
+        else if (thread && displaced > 0 && composer?.contains(document.activeElement)) {
+          // While drafting during history reading, lift the visible dialogue with
+          // the growing input. Preserve its lower edge, not a forced jump to tail.
+          thread.scrollTop += displaced;
+          scrollPosition.current = thread.scrollTop;
+        }
+      }
       measure();
     });
     if (content.current) observer.observe(content.current);
-    if (scroller.current) observer.observe(scroller.current);
+    if (thread) observer.observe(thread);
     return () => observer.disconnect();
   }, []);
   const visiblePending = pending.filter((item) => !item.queued);
@@ -181,16 +199,26 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
   useLayoutEffect(() => { previousGroups.current = liveGroups; }, [liveGroups]);
   const editReveal = editing && historyReceived && history.ready ? { messageId: editing.target.messageId, revision: editing.revision } : undefined;
-  const { rows: historyRows, groups, segments } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal,
-    renderLive: (group, groupIndex, currentGroups) => <Fragment>
+  const processBreaks = new Set(titleProcesses.items.flatMap(item => item.anchorMessageId ? [item.anchorMessageId] : []));
+  const { rows: historyRows, groups, segments, titlePositions, tailBoundary } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal, processBreaks,
+    renderLive: (group, groupIndex, currentGroups, boundary) => <Fragment>
       {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
-      {group.activity ? <ThreadActivityGroup scope={scope!} group={group} tail={groupIndex === currentGroups.length - 1} index={index} animateFold={folding.has(group.id)} />
+      {group.activity ? <ThreadActivityGroup scope={scope!} group={group} tail={!boundary && groupIndex === currentGroups.length - 1} index={index} animateFold={folding.has(group.id)} />
         : <Message scope={scope!} id={group.id} initialTaskInputId={task?.initialInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
     </Fragment> });
-  // A session-level result lives outside folded model/tool processes and remains
-  // available in reading mode. It never impersonates a delivery or native message.
-  const rows: TimelineRow[] = titleResult ? [...historyRows, { key: `title:${titleResult.id}`, estimate: 86,
-    revision: String(titleResult.endedAt), render: () => <TitleResultCard record={titleResult} /> }] : historyRows;
+  // Keep metadata beside the existing trigger row, never inside a folded process
+  // and never reattach an unknown historical record to the current conversation tail.
+  const titleRows = new Map<number, TimelineRow[]>();
+  for (const item of titleProcesses.items) {
+    const position = titleCardPosition(item, titlePositions);
+    if (position < 0) continue;
+    const entries = titleRows.get(position) ?? [];
+    entries.push({ key: `title:${item.id}`, estimate: 74,
+      revision: `${item.state}:${item.stage}:${item.endedAt}:${item.outcome}:${titleProcesses.stale}`,
+      render: () => <TitleProcessCard item={item} stale={titleProcesses.stale} /> });
+    titleRows.set(position, entries);
+  }
+  const rows: TimelineRow[] = historyRows.flatMap((row, position) => [row, ...(titleRows.get(position) ?? [])]);
   const revealKey = editReveal && rows.find(row => row.messageIds?.includes(editReveal.messageId))?.key;
   const cancelNavigation = () => { timelineNavigation.current?.cancel(); setStepping(null); };
   const scroll = (target: "top" | "bottom" | ScrollDirection) => {
@@ -207,9 +235,12 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
     smoothBottomTarget.current = direction === "down" && behavior === "smooth" ? el.scrollHeight - el.clientHeight : null;
     el.scrollTo({ top: direction === "up" ? 0 : el.scrollHeight, behavior });
+    // A physical edge is not a delivery: the virtual window keeps owning this jump
+    // so rows it mounts above or below cannot restore an older reading anchor.
+    timelineNavigation.current?.edge(direction === "up" ? "top" : "bottom");
   };
   return <div className="thread-shell">
-    <section ref={scroller} className="thread" id={nested ? undefined : "thread"} aria-label="消息记录"
+    <section ref={scroller} className="thread" id={nested ? undefined : "thread"} tabIndex={-1} aria-label="消息记录"
       onWheel={() => { manualScroll.current = performance.now(); cancelNavigation(); }}
       onTouchMove={() => { manualScroll.current = performance.now(); cancelNavigation(); }}
       onPointerDown={(event) => {
@@ -232,7 +263,9 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         const delta = n.scrollTop - scrollPosition.current;
         const movedDown = delta > 0;
         if (Math.abs(delta) > 1) {
-          cancelNavigation();
+          // Our own jump to a physical edge keeps owning the viewport until the
+          // mounted rows settle; its scroll events are not a new gesture.
+          if (!timelineNavigation.current?.edgeActive()) cancelNavigation();
           if (performance.now() - manualScroll.current < 1500) {
             manualScroll.current = performance.now();
             showNavigation(delta > 0 ? "down" : "up");
@@ -268,8 +301,8 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
           </small>
           {item.state === "failed" && <RestoreSubmission scope={scope} id={item.id} nested={nested} />}</div>
         </article>)}
-        {scope?.sessionId && (pendingModelActivity(index) && !groups.at(-1)?.activity && (!groups.at(-1)?.delivery || index.runPhase !== "generating") ||
-          !activeStatus(index.runStatus) && pending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus />}
+        {scope?.sessionId && (pendingModelActivity(index) && (tailBoundary || !groups.at(-1)?.activity && (!groups.at(-1)?.delivery || index.runPhase !== "generating")) ||
+          !activeStatus(index.runStatus) && pending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus tool={tailBoundary && index.runPhase === "executing_tools"} />}
         {historyReceived && !task && !groups.length && !segments.length && !pending.length && !index.error && !history.loading && !history.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>

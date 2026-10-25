@@ -47,6 +47,11 @@ try {
     return { title, scope };
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  // Unrelated concurrent edits must not reload this isolated scroll fixture.
+  await page.route("**/@vite/client", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("async function handleMessage(payload) {", "async function handleMessage(payload) { return;") });
+  });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(scope => sessionStorage.setItem("view", JSON.stringify(scope)), sessions[0].scope);
@@ -60,13 +65,44 @@ try {
     await page.getByText(`${target.title} 消息 99`, { exact: false }).waitFor();
     await atBottom(page, `switch to ${target.title}`);
   }
+  // Draft growth must move visible output up, not clip its lower edge.
+  const input = page.locator("#prompt");
+  const viewportHeight = () => page.locator("#thread").evaluate(el => el.clientHeight);
+  const viewportEnd = () => page.locator("#thread").evaluate(el => el.scrollTop + el.clientHeight);
+  await input.fill("短输入");
+  await settled(page);
+  const shortHeight = await viewportHeight();
+  await input.fill("多行输入向上增长\n".repeat(25));
+  await atBottom(page, "composer growth while following");
+  assert.ok(await viewportHeight() < shortHeight, "composer growth shrinks the thread viewport");
+  const threadBox = (await page.locator("#thread").boundingBox())!;
+  const composerBox = (await page.locator(".composer-area").boundingBox())!;
+  assert.ok(threadBox.y + threadBox.height <= composerBox.y + 1, "composer stays outside the dialogue viewport");
+  await page.getByRole("button", { name: "清空输入", exact: true }).click();
+  await atBottom(page, "composer collapse while following");
+  const maxTop = await page.locator("#thread").evaluate(el => el.scrollHeight - el.clientHeight);
+  await readHistory(page, maxTop - 120);
+  const readingEnd = await viewportEnd();
+  await input.fill("阅读时输入增高\n".repeat(25));
+  await settled(page);
+  assert.ok(Math.abs(await viewportEnd() - readingEnd) < 2, "draft growth preserves the visible dialogue lower edge without jumping to tail");
+  await input.fill("");
+  await settled(page);
+  const resume = page.getByRole("button", { name: "回到最下", exact: true });
+  // Collapsing the draft may already expose the tail in the larger viewport.
+  if (await resume.isEnabled()) await resume.click();
+  await atBottom(page, "resume after drafting while reading");
   // Reading history must stop following later output.
   await readHistory(page, 200);
   await settled(page);
   const before = await page.locator("#thread").evaluate(el => el.scrollTop);
   views.messageChanged(sessions[1].scope, { id: "new-output", role: "assistant", text: "新增流式消息\n\n".repeat(40) });
   views.flush(sessions[1].scope);
-  await page.getByText("新增流式消息", { exact: false }).first().waitFor();
+  // Offscreen rows are intentionally unmounted while reading virtual history.
+  await page.waitForFunction(async scope => {
+    const path = "/transport.ts";
+    return (await import(/* @vite-ignore */ path)).scopeSnapshot(`thread:${scope.workspaceId}:${scope.sessionId}`)?.ids.includes("new-output");
+  }, sessions[1].scope);
   await settled(page);
   assert.equal(await page.locator("#thread").evaluate(el => el.scrollTop), before, "streaming preserves manual history position");
   // A selection elsewhere in the workbench must not block a newly opened thread.
@@ -87,7 +123,10 @@ try {
   const selectedTop = await page.locator("#thread").evaluate(el => el.scrollTop);
   views.messageChanged(sessions[0].scope, { id: "selected-output", role: "assistant", text: "选中正文时的新输出\n\n".repeat(30) });
   views.flush(sessions[0].scope);
-  await page.getByText("选中正文时的新输出", { exact: false }).first().waitFor();
+  await page.waitForFunction(async scope => {
+    const path = "/transport.ts";
+    return (await import(/* @vite-ignore */ path)).scopeSnapshot(`thread:${scope.workspaceId}:${scope.sessionId}`)?.ids.includes("selected-output");
+  }, sessions[0].scope);
   await settled(page);
   assert.equal(await page.locator("#thread").evaluate(el => el.scrollTop), selectedTop, "conversation selection protects scroll position");
   await page.evaluate(() => getSelection()!.removeAllRanges());
@@ -156,10 +195,11 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator("#toggle-history").click();
   await page.locator(`.history-row[data-session-id="${sessions[1].scope.sessionId}"] .history-item`).click();
-  await page.getByText(`${sessions[1].title} 消息 99`, { exact: false }).waitFor();
+  // Session B now ends in the later streamed output; message 99 is offscreen.
+  await page.getByText("新增流式消息", { exact: false }).first().waitFor();
   await atBottom(page, "mobile session switch");
   assert.deepEqual(errors, []);
-  console.log("PASS: initial history, cold/warm and mobile session switches, late-layout scroll race, manual history reading, scoped selection protection, idle/queued submission, reconciliation, post-send streaming, pending removal");
+  console.log("PASS: initial history, cold/warm and mobile session switches, composer growth/collapse and visible reading lower edge, late-layout scroll race, manual history reading, scoped selection protection, idle/queued submission, reconciliation, post-send streaming, pending removal");
 } finally {
   await browser.close(); await app.close();
   if (previousPi === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previousPi;

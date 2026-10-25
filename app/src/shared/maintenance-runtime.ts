@@ -55,7 +55,9 @@ export class MaintenanceExecution {
   }
 }
 
-const networkFailure = (error: unknown) => error instanceof TypeError ? Object.assign(new MaintenanceError("network", error.message || "下载连接失败，请检查网络后重试。"), { cause: error }) : error;
+// Fetch/undici can surface only `TypeError: terminated` when a response body
+// breaks. Keep the cause for diagnostics, never persist its raw text/URLs in UI.
+const networkFailure = (error: unknown) => error instanceof TypeError ? Object.assign(new MaintenanceError("network", "下载连接失败或中断，请检查网络后重试。"), { cause: error }) : error;
 
 /** Header and stream-idle budgets are independent. No timer is inferred from installer console silence. */
 export async function maintenanceFetch(url: string, init: RequestInit = {}, execution?: MaintenanceExecution, budgets: MaintenanceBudgets = defaultMaintenanceBudgets, fetcher: typeof fetch = fetch): Promise<Response> {

@@ -206,7 +206,7 @@
 @container (max-width: 620px) {
   .composer { column-gap: 4px; }
   .composer textarea { grid-column: 2 / -1; }
-  .composer .model-picker { grid-column: 2 / 4; grid-row: 2; justify-self: start; margin: 0; min-width: 0; }
+  .composer :is(.model-picker, .composer-model-controls) { grid-column: 2 / 4; grid-row: 2; justify-self: start; margin: 0; min-width: 0; }
   .composer .model-picker > summary > span { max-width: 140px; }
   .composer .send, .composer .composer-actions { grid-column: 4; grid-row: 2; }
 }
@@ -276,10 +276,14 @@
   max-height: none;
   overflow: visible;
 }
-.composer-draft-actions { display: flex; justify-content: flex-end; padding: 0 2px 4px; }
-.composer-clear { min-height: 44px; padding: 4px 8px; gap: 6px; color: var(--muted); font-size: 12px; }
-.composer-clear:hover:not(:disabled) { color: var(--fg); }
-.composer-clear svg { width: 16px; height: 16px; }
+.composer-model-controls { grid-column: 3; grid-row: 1; display: flex; align-items: center; min-width: 0; max-width: 100%; gap: 2px; }
+.composer-model-controls > .model-picker { min-width: 0; }
+@media (max-width: 760px) {
+  .composer-model-controls { grid-column: 2 / 4; grid-row: 2; justify-self: start; }
+}
+.composer-clear { flex: 0 0 44px; padding: 0; border-radius: 50%; color: var(--muted); }
+.composer-clear:hover:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.composer-clear svg { width: 18px; height: 18px; --icon-stroke: 1.5px; }
 .composer { position: relative; }
 .attachment-picker { grid-column: 1; grid-row: 1; position: relative; display: grid; width: 44px; height: 44px; }
 .file-completion {

@@ -15,7 +15,7 @@ function HistoryProcessBody({ scope, group, sources, store, settled, awaitingMor
   settled: boolean; awaitingMore: boolean; activeRunId?: string; requesting: boolean; inline: boolean;
 }) {
   const archives = sources.filter(source => source.kind === "archive");
-  const range = useHistoryRanges(store, archives.map(source => ({ segmentId: source.segment.id, groupId: source.group.id })));
+  const range = useHistoryRanges(store, archives.map(source => ({ segmentId: source.segment.id, groupId: source.readGroupId ?? source.group.id })));
   return <>{!range.ready && (range.error
     ? <p className="execution-alert" role="alert">{range.error} <button type="button" className="btn" onClick={range.retry}>重新加载</button></p>
     : <p className="history-loading" role="status">正在读取会话原文…</p>)}
@@ -41,7 +41,7 @@ export function HistoryProcess({ scope, group, sources, store, index, tail, anim
   const inline = !group.folded;
   // Only pure tools/thinking may use a local lazy disclosure. A task-bearing
   // undelivered flow must hydrate its visible range and expose its task cards.
-  if (inline && sources.some(source => source.kind === "live" ? source.group.hasTasks : source.group.process?.hasTasks)) {
+  if (inline && sources.some(source => source.group.hasTasks || source.kind === "archive" && source.group.process?.hasTasks)) {
     return <HistoryProcessBody scope={scope} group={group} sources={sources} store={store} settled={settled}
       awaitingMore={awaitingMore} activeRunId={active ? index.runId : undefined} requesting={requesting} inline={false} />;
   }

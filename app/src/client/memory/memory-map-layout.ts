@@ -1,8 +1,10 @@
-import type { MemoryIndexNode, MemoryPurpose } from "../../shared/memory-tree.js";
+import type { MemoryDocumentRef, MemoryIndexNode, MemoryPurpose } from "../../shared/memory-tree.js";
+import { memoryNodePath, uniqueMemoryDocuments } from "../../shared/memory-directory.js";
 
 export type MemoryMapNode = {
   id: string; label: string; kind: "Directory" | "Purpose"; parent?: string;
   purpose?: MemoryPurpose; children: MemoryMapNode[];
+  titlePath?: string; documents?: MemoryDocumentRef[]; sources?: MemoryPurpose[];
 };
 export type MapPosition = MemoryMapNode & { x: number; y: number; width: number; side: -1 | 1; branch: number; open: boolean };
 export const mapNodeHeight = 64;
@@ -10,13 +12,18 @@ const gap = 48, rowGap = 22, rootWidth = 180;
 function labelWidth(node: MemoryMapNode) {
   // Keep short topics compact; long titles wrap to two lines instead of creating card-sized columns.
   const text = Array.from(node.label).reduce((width, char) => width + (/[^\u0000-\u00ff]/u.test(char) ? 14 : 7.5), 0);
-  return Math.min(216, Math.max(112, text + 30 + (node.kind === "Purpose" ? 20 : 0)));
+  return Math.min(216, Math.max(112, text + 30 + (node.documents?.length ? 44 : node.kind === "Purpose" ? 20 : 0)));
 }
 export function memoryMapNodes(roots: MemoryIndexNode[], purposes: MemoryPurpose[]): MemoryMapNode[] {
   const byId = new Map(purposes.map(purpose => [purpose.id, purpose]));
-  const visit = (node: MemoryIndexNode, parent?: string): MemoryMapNode => ({ id: node.id, label: node.name,
-    kind: node.purposeId ? "Purpose" : "Directory", parent, purpose: node.purposeId ? byId.get(node.purposeId) : undefined,
-    children: node.children.map(child => visit(child, node.id)) });
+  const visit = (node: MemoryIndexNode, parent?: string, titles: string[] = []): MemoryMapNode => {
+    const purposeIds = node.purposeIds ?? (node.purposeId ? [node.purposeId] : []), parts = [...titles, node.name];
+    return { id: node.id, label: node.name, kind: purposeIds.length ? "Purpose" : "Directory", parent,
+      purpose: node.purposeId ? byId.get(node.purposeId) : undefined,
+      titlePath: node.titlePath ?? memoryNodePath(parts), documents: uniqueMemoryDocuments(node.documentRefs ?? []),
+      sources: purposeIds.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
+      children: node.children.map(child => visit(child, node.id, parts)) };
+  };
   return roots.map(root => visit(root));
 }
 /** Measure visible subtrees first, then center each parent over its children. */
@@ -24,7 +31,7 @@ export function layoutMemoryMap(roots: MemoryMapNode[], expanded: ReadonlySet<st
   const search = query.trim().toLocaleLowerCase(), matches = new Set<string>(), heights = new Map<string, number>();
   const measure = (node: MemoryMapNode): number => {
     const children = node.children.map(child => measure(child));
-    const match = !search || `${node.label} ${node.purpose?.source.path ?? ""}`.toLocaleLowerCase().includes(search) || node.children.some(child => matches.has(child.id));
+    const match = !search || `${node.label} ${node.purpose?.source.path ?? ""} ${(node.documents ?? []).map(ref => `${ref.title} ${ref.path}`).join(" ")}`.toLocaleLowerCase().includes(search) || node.children.some(child => matches.has(child.id));
     if (!match) return 0;
     matches.add(node.id);
     const shown = (search || expanded.has(node.id)) ? children.filter(Boolean) : [];
@@ -58,7 +65,7 @@ export function layoutMemoryMap(roots: MemoryMapNode[], expanded: ReadonlySet<st
   const root = { x: offsetX - rootWidth / 2, y: height / 2 - mapNodeHeight / 2 + offsetY, width: rootWidth };
   const byId = new Map(positions.map(node => [node.id, node]));
   const edges = positions.map(node => {
-    const parent = node.parent ? byId.get(node.parent) : undefined;
+    const parent = node.parent !== undefined ? byId.get(node.parent) : undefined;
     const from = parent ?? root;
     const x1 = node.side === 1 ? from.x + from.width : from.x, y1 = from.y + mapNodeHeight / 2;
     const x2 = node.side === 1 ? node.x : node.x + node.width, y2 = node.y + mapNodeHeight / 2;

@@ -116,7 +116,7 @@ export function memoryPath(directory: string, input: string) {
     throw new AppError("MEMORY_PATH", "记忆资料不能通过链接越过读取边界");
   return actual;
 }
-export function memoryFiles(directory: string): MemoryFile[] {
+export function memoryFiles(directory: string, options: { skipUnavailable?: boolean } = {}): MemoryFile[] {
   const files: MemoryFile[] = [];
   let visited = 0;
   const visit = (dir: string) => {
@@ -124,13 +124,19 @@ export function memoryFiles(directory: string): MemoryFile[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) throw new AppError("MEMORY_PATH", "记忆目录包含符号链接，未生成索引");
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) visit(path);
-      else if (entry.isFile() && extname(path).toLowerCase() !== ".jsonl") {
-        if (files.length >= 2000) throw new AppError("MEMORY_LIMIT", "记忆资料超过单次扫描 2000 个文件预算");
-        const stat = statSync(memoryPath(directory, relative(directory, path)));
-        // Large artifacts use filesystem metadata, text sources use actual bytes.
-        const revision = stat.size <= 4 * 1024 * 1024 ? digest(readMemoryBytes(path)) : digest(`${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`);
-        files.push({ path: relative(directory, path).split(sep).join("/"), revision, size: stat.size, updatedAt: stat.mtimeMs });
+      try {
+        if (entry.isDirectory()) visit(path);
+        else if (entry.isFile() && extname(path).toLowerCase() !== ".jsonl") {
+          if (files.length >= 2000) throw new AppError("MEMORY_LIMIT", "记忆资料超过单次扫描 2000 个文件预算");
+          const stat = statSync(memoryPath(directory, relative(directory, path)));
+          // Large artifacts use filesystem metadata, text sources use actual bytes.
+          const revision = stat.size <= 4 * 1024 * 1024 ? digest(readMemoryBytes(path)) : digest(`${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`);
+          files.push({ path: relative(directory, path).split(sep).join("/"), revision, size: stat.size, updatedAt: stat.mtimeMs });
+        }
+      } catch (error) {
+        // Only declaration discovery opts in. Normal source scans stay strict;
+        // unsafe links, revision conflicts and program errors always propagate.
+        if (!options.skipUnavailable || !["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
       }
     }
   };
@@ -161,7 +167,12 @@ export function readMemoryBytes(path: string, maxBytes = 4 * 1024 * 1024) {
 export function readMemoryTextSnapshot(path: string, maxBytes = 4 * 1024 * 1024): Pick<MemoryTextSnapshot, "revision" | "content"> {
   const bytes = readMemoryBytes(path, maxBytes);
   if (bytes.includes(0)) throw new AppError("MEMORY_BINARY", "此产物不是文本，请使用支持的预览方式");
-  return { revision: digest(bytes), content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+  try { return { revision: digest(bytes), content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) }; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ERR_ENCODING_INVALID_ENCODED_DATA")
+      throw new AppError("MEMORY_BINARY", "此产物不是有效的 UTF-8 文本");
+    throw error;
+  }
 }
 export function replaceMemoryFile(path: string, revision: string, content: string) {
   const before = lstatSync(path);

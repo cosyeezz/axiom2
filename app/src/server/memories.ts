@@ -4,8 +4,8 @@ import { MemoryPipeline } from "./memory-pipeline.js";
 import { emptyMemoryTree, memoryTopicBlock, memoryTreeScope, type MemoryTopicSnapshot } from "../shared/memory-tree.js";
 import { thinkingLevels } from "../shared/agent.js";
 import type { LeaseRef } from "./execution-protocol.js";
-import { statSync, lstatSync, mkdirSync, watch, existsSync, type FSWatcher } from "node:fs";
-import { join, resolve, extname } from "node:path";
+import { accessSync, constants, statSync, lstatSync, mkdirSync, watch, existsSync, type FSWatcher } from "node:fs";
+import { basename, dirname, join, resolve, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import type { Store } from "./storage.js";
@@ -35,6 +35,8 @@ export interface MemoryExecution {
   kind: "query" | "organize" | "title";
 }
 export interface MemoryRunner { execute(input: MemoryExecution): Promise<MemoryExecutionResult>; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
+/** Query-local authority receipt; never published in model input or client results. */
+export interface MemoryReadAccess { actual: string; external: boolean }
 /** 持久目录的内部字段不属于前端目录协议。 */
 type StoredMemoryCatalogEntry = MemoryCatalogEntry & {
   sourceTitle?: string;
@@ -56,6 +58,7 @@ export class Memories {
   private scanDelay?: ReturnType<typeof setTimeout>;
   private lastSafetySweep = 0;
   private cachedViews = new Map<string, MemoryView>();
+  private readAccesses = new WeakMap<MemoryDocument, MemoryReadAccess>();
   private generations = new Map<string, number>();
   private completedGenerations = new Map<string, number>();
   private scanWaiters = new Map<string, Map<number, Set<{ resolve: () => void; reject: (error: Error) => void }>>>();
@@ -476,7 +479,8 @@ export class Memories {
     if (!view.error) {
       const reconciled = this.pipeline.tree.reconcile(scope, view.entry);
       const enqueued = this.pipeline.tree.enqueue(scope, view.entry);
-      if (reconciled || enqueued) this.publishTree(scope.workspaceId);
+      const documentsChanged = this.pipeline.tree.syncDocuments(scope, view.entry, view.files);
+      if (reconciled || enqueued || documentsChanged) this.publishTree(scope.workspaceId);
     }
     this.scheduleOrganization();
     const sourceTitle = view.progress.title || String(this.owner(scope).title);
@@ -577,23 +581,65 @@ export class Memories {
     try { path = memoryPath(directory, input); }
     catch (failure) {
       // External files require an actual explicit link from this source and current workspace ownership.
-      const candidate = resolve(directory, input), workspace = realpathSync(this.store.workspace(scope.workspaceId).path);
-      const actual = realpathSync(candidate);
-      const managedAttachment = [scope.sessionId, ...this.store.db.prepare("SELECT sessionId FROM tasks WHERE workspaceId=? AND parentSessionId=?").all(scope.workspaceId, scope.sessionId).map((r) => String(r.sessionId))]
-        .some((id) => within(resolve(this.store.root, "attachments", scope.workspaceId, id), actual));
-      const picked = this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='picked_images'").get()
-        ? !!this.store.db.prepare("SELECT 1 FROM picked_images WHERE sessionId=? AND path=?").get(scope.sessionId, process.platform === "win32" ? actual.toLowerCase() : actual) : false;
-      if (extname(actual).toLowerCase() === ".jsonl" || !(managedAttachment || picked || within(workspace, actual) && !within(realpathSync(this.store.root), actual) && !within(memoryRoot(this.store.root), actual) && !within(legacyMemoryRoot(this.store.root), actual))) throw failure;
-      const files = memoryFiles(directory).filter((f) => /\.(md|txt)$/i.test(f.path));
-      // Re-hash every link declaration before reusing parsed links: an edit,
-      // deletion or replacement cannot retain external-file authority.
-      const sourceRevision = digest(JSON.stringify(files.map((f) => [f.path, f.revision])));
-      const explicit = () => files.flatMap((f) => referencedPaths(join(directory, f.path), textFile(memoryPath(directory, f.path))));
-      const allowed = links?.links(scope.sessionId, sourceRevision, explicit) ?? explicit();
+      const actual = realpathSync(resolve(directory, input));
+      if (!this.externalBoundary(scope, actual)) throw failure;
+      const allowed = this.externalDeclarations(scope, links);
       if (!allowed.some((link) => { try { return realpathSync(link) === actual; } catch { return false; } })) throw failure;
       path = actual;
     }
     return path;
+  }
+  private externalBoundary(scope: Scope, actual: string) {
+    const workspace = realpathSync(this.store.workspace(scope.workspaceId).path);
+    const managedAttachment = [scope.sessionId, ...this.store.db.prepare("SELECT sessionId FROM tasks WHERE workspaceId=? AND parentSessionId=?").all(scope.workspaceId, scope.sessionId).map(r => String(r.sessionId))]
+      .some(id => within(resolve(this.store.root, "attachments", scope.workspaceId, id), actual));
+    const picked = this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='picked_images'").get()
+      ? !!this.store.db.prepare("SELECT 1 FROM picked_images WHERE sessionId=? AND path=?").get(scope.sessionId, process.platform === "win32" ? actual.toLowerCase() : actual) : false;
+    return extname(actual).toLowerCase() !== ".jsonl" && (managedAttachment || picked || within(workspace, actual) && !within(realpathSync(this.store.root), actual) && !within(memoryRoot(this.store.root), actual) && !within(legacyMemoryRoot(this.store.root), actual));
+  }
+  private externalDeclarations(scope: Scope, links?: MemoryLinkCache) {
+    const directory = memoryDirectory(this.store.root, scope.sessionId);
+    // Skipped files are absent from the signature and cannot retain old authority.
+    // Normal directory scans remain strict; only declaration discovery opts in.
+    const files = memoryFiles(directory, { skipUnavailable: true }).filter(f => /\.(md|txt)$/i.test(f.path));
+    const sourceRevision = digest(JSON.stringify(files.map(f => [f.path, f.revision])));
+    const explicit = () => files.flatMap(f => {
+      try { return referencedPaths(join(directory, f.path), textFile(memoryPath(directory, f.path))); }
+      catch (error) {
+        if (["ENOENT", "ENOTDIR", "EACCES", "EPERM", "MEMORY_BINARY"].includes((error as NodeJS.ErrnoException).code ?? "")) return [];
+        throw error;
+      }
+    });
+    return links?.links(scope.sessionId, sourceRevision, explicit) ?? explicit();
+  }
+  readAccessFor(document: MemoryDocument): MemoryReadAccess {
+    const access = this.readAccesses.get(document);
+    if (!access) throw new AppError("MEMORY_READ_FAILED", "读取结果缺少内部路径凭据");
+    return { ...access };
+  }
+  /** Recheck authority independently of target existence, without rereading evidence. */
+  verifyReadAccess(scope: Scope, input: string, receipt: MemoryReadAccess) {
+    this.owner(scope);
+    if (receipt.external) {
+      if (!this.externalBoundary(scope, receipt.actual) || !this.externalDeclarations(scope).some(link => {
+        try { return realpathSync(link) === receipt.actual; }
+        catch (error) {
+          // Only a declaration naming the captured canonical path can authorize
+          // a disappeared target. Never guess a missing symlink's former identity.
+          if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return resolve(link) === receipt.actual;
+          if (["EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
+          throw error;
+        }
+      })) throw new AppError("MEMORY_PATH", "外部资料的显式读取授权已撤销");
+    }
+    // ENOENT is tolerated only here, after all independent authority checks.
+    try {
+      const actual = receipt.external ? memoryPath(dirname(receipt.actual), basename(receipt.actual)) : memoryPath(memoryDirectory(this.store.root, scope.sessionId), input);
+      if (actual !== receipt.actual) throw new AppError("MEMORY_PATH", "资料的实际路径已变化");
+      accessSync(actual, constants.R_OK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
   read(scope: Scope, input = "MEMORY.md", offset = 0, limit = 16000, options: { includeImage?: boolean } = {}): MemoryDocument {
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 16000) throw new AppError("INVALID_INPUT", "读取分页范围无效");
@@ -605,11 +651,15 @@ export class Memories {
       return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: "图片产物", offset: 0, nextOffset: null,
         ...(options.includeImage === false ? {} : { image: `data:image/${mime};base64,${data.toString("base64")}` }) };
     }
-    const data = readMemoryBytes(path), content = new TextDecoder("utf-8", { fatal: true }).decode(data);
+    const { revision, content } = readMemoryTextSnapshot(path);
     if (within(directory, path) && this.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId).some((c) => content.includes(String(c.target))))
       throw new AppError("MEMORY_CORRECTION_PENDING", "资料包含待清理的明确否定条目，旧内容暂不可查询");
-    return { path: input, revision: digest(data), size: stat.size, updatedAt: stat.mtimeMs, content: content.slice(offset, offset + limit), offset,
+    const document: MemoryDocument = { path: input, revision, size: stat.size, updatedAt: stat.mtimeMs, content: content.slice(offset, offset + limit), offset,
       nextOffset: content.length > offset + limit ? offset + limit : null };
+    // Bind authority to the exact canonical path used for these bytes, not a
+    // separate path resolution before or after the read (external FS can race).
+    this.readAccesses.set(document, { actual: path, external: !within(directory, path) });
+    return document;
   }
   private readCached(scope: Scope, input: string, offset: number | undefined, limit: number | undefined, cache: MemoryTextCache, links: MemoryLinkCache): MemoryDocument {
     const pageOffset = offset ?? 0, pageLimit = limit ?? 16000;
@@ -617,11 +667,11 @@ export class Memories {
     if (/\.(png|jpg|jpeg|gif|webp)$/i.test(path)) return this.read(scope, input, pageOffset, pageLimit, { includeImage: false });
     const key = `${scope.workspaceId}\u0000${scope.sessionId}\u0000${input}`;
     const snapshot = () => {
-      const actual = this.localPath(scope, input, links), bytes = readMemoryBytes(actual), content = new TextDecoder("utf-8", { fatal: true }).decode(bytes), stat = statSync(actual);
+      const actual = this.localPath(scope, input, links), { revision, content } = readMemoryTextSnapshot(actual), stat = statSync(actual);
       const directory = memoryDirectory(this.store.root, scope.sessionId);
       if (within(directory, actual) && this.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId).some((c) => content.includes(String(c.target))))
         throw new AppError("MEMORY_CORRECTION_PENDING", "资料包含待清理的明确否定条目，旧内容暂不可查询");
-      return { revision: digest(bytes), content, size: stat.size, updatedAt: stat.mtimeMs };
+      return { revision, content, size: stat.size, updatedAt: stat.mtimeMs };
     };
     return { path: input, ...cache.read(key, pageOffset, pageLimit, () => digest(readMemoryBytes(this.localPath(scope, input, links))), snapshot) };
   }

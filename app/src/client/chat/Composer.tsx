@@ -19,6 +19,7 @@ import { AnnotationTray } from "./ReplyAnnotations.js";
 import { clearSentAnnotations } from "./reply-annotations.js";
 import { messageLengthError, messageTextLimit } from "./message-limit.js";
 import { SteeringQueue } from "./SteeringQueue.js";
+import { ComposerQuestion } from "./ComposerQuestion.js";
 const noConfig: Configuration = {
   revision: "",
   providerCount: 0,
@@ -54,6 +55,7 @@ export function Composer({
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null);
   const [reading, setReading] = useState(false);
+  const [questionAnchor, setQuestionAnchor] = useState<HTMLFormElement | null>(null);
   const lastEscape = useRef<number | null>(null);
   useEffect(() => { lastEscape.current = null; }, [scope.workspaceId, scope.sessionId]);
   const completion = useFileCompletion(scope, draft.text, input);
@@ -99,21 +101,13 @@ export function Composer({
           <span>正在修改所选消息 · 重新发送后将从这里继续对话</span>
           <button type="button" className="btn" disabled={busy || reading} onClick={() => cancelComposerEdit(scope)}>取消修改</button>
         </div>}
-        {canClear && <div className="composer-draft-actions">
-          <button type="button" className="btn btn-ghost composer-clear" aria-label="清空输入"
-            data-tooltip="清空文字、附件、图片和技能引用" disabled={busy || reading}
-            onClick={() => {
-              updateDraft(scope, { text: "", attachment: null, attachments: [], images: [], skills: [] });
-              setError("");
-              lastEscape.current = null;
-              input.current?.focus({ preventScroll: true });
-            }}><Icon name="trash-2" /><span>清空输入</span></button>
-        </div>}
         <div className="composer-resources" aria-label="技能与待发送附件">
           <SkillCards skills={draft.skills} scope={scope} onRemove={id => updateDraft(scope, { skills: getDraft(scope).skills?.filter(skill => skill.id !== id) })} />
           <AttachmentList scope={scope} draft={draft} reading={reading} />
         </div>
+        <ComposerQuestion scope={scope} anchor={questionAnchor} editing={!!editing} />
         <form
+          ref={setQuestionAnchor}
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
@@ -177,7 +171,17 @@ export function Composer({
           <div className="composer-tools">
             <div className="row">
               <AttachmentPicker scope={scope} nested={nested} input={input} onBusy={setReading} onError={setError} />
-              <ModelPicker scope={scope} nested={nested} />
+              <div className="composer-model-controls">
+                {canClear && <button type="button" className="icon-btn composer-clear" aria-label="清空输入"
+                  data-tooltip="清空输入（文字、附件、图片和技能引用）" disabled={busy || reading}
+                  onClick={() => {
+                    updateDraft(scope, { text: "", attachment: null, attachments: [], images: [], skills: [] });
+                    setError("");
+                    lastEscape.current = null;
+                    input.current?.focus({ preventScroll: true });
+                  }}><Icon name="eraser" /></button>}
+                <ModelPicker scope={scope} nested={nested} />
+              </div>
             </div>
             <button
               className={`btn btn-primary send${active ? " is-running" : ""}`}

@@ -17,9 +17,9 @@ export function useProcessingNow(active: boolean) {
   }, [active]);
   return now;
 }
-function Payload({ label, value }: { label: string; value?: ProcessingPayload }) {
+export function Payload({ label, value, open }: { label: string; value?: ProcessingPayload; open?: boolean }) {
   const [copied, setCopied] = useState("");
-  return <details className="processing-payload"><summary>{label}{value?.truncated ? "（记录已截断）" : ""}</summary>{value ? <><button className="btn" onClick={() => void navigator.clipboard.writeText(value.text).then(() => setCopied("已复制"), () => setCopied("复制失败，请选中文本复制"))}>复制{label}</button>{copied && <span role="status">{copied}</span>}<pre>{value.text || "（空内容）"}</pre>{value.truncated && <p>该内容超过记录上限，仅保存前 2,000,000 个字符。</p>}</> : <p>未记录</p>}</details>;
+  return <details className="processing-payload" open={open}><summary>{label}{value?.truncated ? "（记录已截断）" : ""}</summary>{value ? <><button className="btn" onClick={() => void navigator.clipboard.writeText(value.text).then(() => setCopied("已复制"), () => setCopied("复制失败，请选中文本复制"))}>复制{label}</button>{copied && <span role="status">{copied}</span>}<pre>{value.text || "（空内容）"}</pre>{value.truncated && <p>该内容超过记录上限，仅保存前 2,000,000 个字符。</p>}</> : <p>未记录</p>}</details>;
 }
 export function ProcessingSummaryLine({ item }: { item: ProcessingSummary }) {
   const now = useProcessingNow(processingActive(item.state));

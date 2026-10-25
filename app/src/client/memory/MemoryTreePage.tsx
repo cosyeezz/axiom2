@@ -8,6 +8,7 @@ import { MemoryFilter } from "./MemoryFilter.js";
 import { publicMemoryError } from "./memory-errors.js";
 import type { ProcessingOpening } from "../pages/ProcessingPage.js";
 import { MemoryMindMap } from "./MemoryMindMap.js";
+import { MemoryNodeInspector } from "./MemoryNodeInspector.js";
 import { OrganizationFeedback } from "./OrganizationFeedback.js";
 import { memoryMapNodes, type MemoryMapNode } from "./memory-map-layout.js";
 import "../styles/memory-tree.css";
@@ -64,9 +65,7 @@ export function MemoryTreePage({ workspaceId, workspaces, select, open, openReco
     <div className="memory-tree-workspace">
       <MemoryMindMap key={workspaceId} roots={roots} query={query} workspaceName={workspaces.find(workspace => workspace.id === workspaceId)?.name ?? "记忆"}
         loading={!tree} unavailable={tree?.unavailable} selected={selected} onSelect={setSelected} fullscreen={fullscreen} toggleFullscreen={toggleFullscreen} />
-      {chosen?.purpose && <aside className="memory-tree-inspector" aria-label="记忆详情"><header><h3>{chosen.label}</h3><button className="btn" aria-label="关闭记忆详情" onClick={() => setSelected(undefined)}>关闭</button></header>
-        <article><p>{chosen.purpose.text}</p><h4>原始目的记忆</h4><button className="memory-tree-source" onClick={() => open({ workspaceId, sessionId: chosen.purpose!.source.sessionId }, chosen.purpose!.source.path)}>{chosen.purpose.source.path}</button><p className="meta">索引只用于定位，事实与过程请读取原文详情。</p></article>
-      </aside>}
+      {chosen && <MemoryNodeInspector key={chosen.id} node={chosen} workspaceId={workspaceId} catalog={catalog ?? []} open={open} close={() => setSelected(undefined)} />}
     </div>
   </section>;
 }

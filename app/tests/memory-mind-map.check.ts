@@ -27,13 +27,13 @@ try {
   const settled = () => page.waitForTimeout(100);
   await page.locator(".memory-tree-node").first().waitFor(); await settled();
   assert.equal(await page.locator(".memory-tree-node").count(), 6);
-  const product = page.getByRole("button", { name: /分类 产品与交互/ });
+  const product = page.getByRole("button", { name: /^(展开|收起) 产品与交互 的分支$/ });
   await product.click(); assert.equal(await product.getAttribute("aria-expanded"), "true");
-  const category = page.getByRole("button", { name: /分类 全局记忆画布/ }); await category.focus();
+  const category = page.getByRole("button", { name: /^查看 全局记忆画布/ }); await category.focus();
   await page.keyboard.press("ArrowRight"); await settled();
   assert.equal(await page.locator('[data-kind="Purpose"]').count(), 2);
   await page.keyboard.press("ArrowRight"); await settled();
-  assert.match(await page.locator(":focus").getAttribute("aria-label") ?? "", /目的 思维导图/);
+  assert.match(await page.locator(":focus").getAttribute("aria-label") ?? "", /查看 思维导图/);
   await page.keyboard.press("Enter"); assert.equal(await page.locator(":focus").getAttribute("aria-pressed"), "true");
   await product.click(); assert.equal(await page.locator('[data-kind="Purpose"]').count(), 0);
   await page.getByLabel("搜索记忆").fill("必要的原文"); await settled();

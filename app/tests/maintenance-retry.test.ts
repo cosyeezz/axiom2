@@ -41,7 +41,21 @@ test("network failure before headers retries but consumed streams never restart 
   calls = 0; let pulls = 0;
   const broken: typeof fetch = async () => { calls++; return new Response(new ReadableStream({ pull(stream) { if (!pulls++) stream.enqueue(new Uint8Array([65])); else stream.error(new TypeError("interrupted")); } })); };
   const response = await maintenanceFetch("https://fixture.invalid", {}, undefined, undefined, broken);
-  await assert.rejects(response.text(), /interrupted/); assert.equal(calls, 1);
+  await assert.rejects(response.text(), { code: "network", message: "下载连接失败或中断，请检查网络后重试。" }); assert.equal(calls, 1);
   const truncated = await maintenanceFetch("https://fixture.invalid", {}, undefined, undefined, async () => new Response("short", { headers: { "content-length": "20" } }));
   await assert.rejects(truncated.text(), { code: "network" });
+});
+test("terminated downloads retain the cause but show a safe actionable network error", async () => {
+  const cause = Object.assign(new Error("socket closed https://user:secret@fixture.invalid/private?token=secret"), { code: "UND_ERR_SOCKET" });
+  const terminated = new TypeError("terminated", { cause });
+  const response = await maintenanceFetch("https://fixture.invalid", {}, undefined, undefined, async () => new Response(new ReadableStream({ start(stream) { stream.error(terminated); } })));
+  await assert.rejects(response.arrayBuffer(), error => {
+    assert.ok(error instanceof MaintenanceError);
+    assert.equal(error.code, "network"); assert.match(error.message, /下载连接失败或中断.*重试/);
+    assert.doesNotMatch(error.message, /terminated|secret|fixture\.invalid/);
+    assert.equal((error as Error).cause, terminated); return true;
+  });
+  let calls = 0;
+  await assert.rejects(maintenanceFetch("https://fixture.invalid", { method: "POST" }, undefined, undefined, async () => { calls++; throw terminated; }), { code: "network", message: "下载连接失败或中断，请检查网络后重试。" });
+  assert.equal(calls, 1, "no retries for non-idempotent requests");
 });

@@ -1,40 +1,46 @@
-import { relative } from "node:path";
-import type { Memories, MemoryExecution } from "./memories.js";
+import { basename, relative } from "node:path";
+import type { Memories, MemoryExecution, MemoryReadAccess } from "./memories.js";
 import { MemoryTreeStore, type QueuedPurpose } from "./memory-tree.js";
 import { memoryDirectory, referencedPaths } from "./memory-files.js";
 import { memoryOrganizerPrompt, memoryMatchPrompt, memoryAnswerPrompt } from "../shared/memory-prompts.js";
-import { projectMemoryCandidates, type MemoryMatchCandidate } from "../shared/memory-query-projection.js";
-import type { MemoryPurpose, MemorySource, MemoryIndexNode } from "../shared/memory-tree.js";
+import { projectMemoryTree } from "../shared/memory-query-projection.js";
+import { uniqueMemoryDocuments } from "../shared/memory-directory.js";
+import type { MemoryPurpose, MemoryDocumentRef } from "../shared/memory-tree.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { type MemoryDocument, type MemoryQueryResult } from "../shared/memory.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
-import { locateMemoryPurpose, queryMemorySnapshot } from "../shared/memory-purpose-locator.js";
-import { availableMemoryDetails } from "./memory-detail-files.js";
+import { locateMemoryPurpose } from "../shared/memory-purpose-locator.js";
 import type { Selection } from "../shared/agent.js";
 import type { LeaseRef } from "./execution-protocol.js";
 
 export class MemoryPipeline {
   readonly tree: MemoryTreeStore;
   constructor(private memories: Memories) { this.tree = new MemoryTreeStore(memories.store); }
-  private full(scope: Scope, path: string, signal?: AbortSignal): MemoryDocument {
-    let content = "", offset = 0, first: MemoryDocument | undefined;
+  private full(scope: Scope, path: string, signal?: AbortSignal): MemoryDocument & { access: MemoryReadAccess } {
+    let content = "", offset = 0, first: MemoryDocument | undefined, access: MemoryReadAccess | undefined;
     do {
       signal?.throwIfAborted();
       const page = this.memories.read(scope, path, offset, 16000, { includeImage: false });
       if (page.image || page.content === "图片产物") throw new AppError("MEMORY_READ_FAILED", "记忆查询只读取文本资料");
-      if (first && page.revision !== first.revision) throw new AppError("REVISION_CONFLICT", "资料读取期间已变化");
-      first ??= page; content += page.content;
+      const pageAccess = this.memories.readAccessFor(page);
+      if (first && (page.revision !== first.revision || pageAccess.actual !== access!.actual || pageAccess.external !== access!.external))
+        throw new AppError("REVISION_CONFLICT", "资料读取期间正文或实际路径已变化");
+      first ??= page; access ??= pageAccess; content += page.content;
       if (page.nextOffset === null) break;
       offset = page.nextOffset;
     } while (true);
-    return { ...first!, content, offset: 0, nextOffset: null };
+    return { ...first!, content, offset: 0, nextOffset: null, access: access! };
   }
-  private verify(scope: Scope, documents: MemorySource[]) {
+  private verify(scope: Scope, documents: Array<MemoryDocument & { sessionId: string; access: MemoryReadAccess }>, refs: MemoryDocumentRef[]) {
     this.memories.owner(scope);
-    for (const source of documents) {
-      this.memories.owner({ workspaceId: scope.workspaceId, sessionId: source.sessionId });
-      if (this.memories.read({ workspaceId: scope.workspaceId, sessionId: source.sessionId }, source.path, 0, 1, { includeImage: false }).revision !== source.revision)
-        throw new AppError("REVISION_CONFLICT", "读取依据已变化，结果未发布");
+    const live = new Set(this.tree.entries(scope.workspaceId).filter(purpose => !purpose.blocked && purpose.processedAt !== null).map(purpose => purpose.id));
+    if (refs.some(ref => !ref.purposeIds.some(id => live.has(id))))
+      throw new AppError("MEMORY_LOCATOR_INVALID", "资料来源已撤销，结果未发布");
+    const corrections = this.memories.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId);
+    for (const document of documents) {
+      this.memories.verifyReadAccess({ workspaceId: scope.workspaceId, sessionId: document.sessionId }, document.path, document.access);
+      if (corrections.some(row => document.content.includes(String(row.target))))
+        throw new AppError("MEMORY_CORRECTION_PENDING", "资料已被明确否定，结果未发布");
     }
   }
   private locate(purpose: MemoryPurpose, document: MemoryDocument, peers: readonly MemoryPurpose[]) {
@@ -44,11 +50,11 @@ export class MemoryPipeline {
       throw new AppError("MEMORY_LOCATOR_INVALID", "原目的定位已失效；不能猜测来源或使用旧目录回答");
     return found;
   }
-  private async execute(input: Omit<MemoryExecution, "read">, stage: string, candidates?: readonly MemoryMatchCandidate[]) {
+  private async execute(input: Omit<MemoryExecution, "read">, stage: string, candidates?: ReturnType<typeof projectMemoryTree>["bindings"]) {
     const id = input.processingId;
     // Bindings are audit data only, never part of the model input or worker request.
     const callId = id ? this.memories.records.callStart(id, stage, { systemPrompt: input.systemPrompt, prompt: input.prompt,
-      ...(candidates ? { candidateBindings: candidates.map((candidate, index) => ({ number: index + 1, ...candidate })) } : {}) }, input.selection) : undefined;
+      ...(candidates ? { candidateBindings: candidates } : {}) }, input.selection) : undefined;
     try {
       if (!this.memories.runner) throw new AppError("MEMORY_UNAVAILABLE", "记忆执行器不可用");
       const result = await this.memories.runner.execute({ ...input, processingCallId: callId, read: () => { throw Error("分类与查询模型不提供任意文件读取工具"); } });
@@ -128,96 +134,80 @@ export class MemoryPipeline {
   }
   private async queryIndex(scope: Scope, question: string, selection: Selection, signal: AbortSignal, deadlineAt: number, parentLease: LeaseRef | undefined, processingId: string): Promise<MemoryQueryResult> {
     this.memories.owner(scope); signal.throwIfAborted();
-    this.memories.records.stage(processingId, "读取已发布目的索引", selection);
-    // Capture once, at invocation, before any model call. No session-directory
-    // restriction, no rescan, and no switching versions midway through a query.
-    const snapshot = queryMemorySnapshot(this.tree.snapshot(scope.workspaceId)), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
+    this.memories.records.stage(processingId, "读取完整目录快照", selection);
+    // The directory AND its references are captured once. Never rescan sources,
+    // re-enter classification, or switch to a newly published tree mid-query.
+    const snapshot = this.tree.nodeSnapshot(scope.workspaceId), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
     const empty: MemoryQueryResult = { answer: "", scope, incomplete: false, sources: [], indexVersion: snapshot.version };
-    let turns = 0;
-    const match = async (stage: string, candidates: MemoryMatchCandidate[]) => {
-      signal.throwIfAborted();
-      if (!candidates.length) return [] as string[];
-      if (++turns >= this.memories.preferences().maxTurns) throw new AppError("MEMORY_BUDGET", "索引导航轮数达到上限，查询未完成");
-      const label = stage === "directories" ? "匹配目录与目的" : "选择记忆详情";
-      this.memories.records.stage(processingId, label, selection);
-      const projection = projectMemoryCandidates(candidates);
-      const result = await this.execute({ ...base, systemPrompt: memoryMatchPrompt, prompt: JSON.stringify({ question, stage, catalog: projection.catalog }) }, label, candidates);
-      signal.throwIfAborted();
-      this.memories.records.stage(processingId, "校验索引导航结果");
-      if (result.incomplete) throw new AppError("MEMORY_UNAVAILABLE", "索引导航未完整完成");
-      try { return projection.resolve(result.answer); }
-      catch { throw new AppError("MEMORY_UNAVAILABLE", "索引导航返回无效、越界或重复编号"); }
-    };
-    let frontier = snapshot.roots;
-    const chosen = new Set<string>();
-    while (frontier.length) {
-      const selected = new Set(await match("directories", frontier.map(node => ({ id: node.id, text: node.name, kind: node.purposeId ? "purpose" : "directory" }))));
-      const next: MemoryIndexNode[] = [];
-      for (const node of frontier) if (selected.has(node.id)) {
-        if (node.purposeId) chosen.add(node.purposeId); else next.push(...node.children);
-      }
-      frontier = next;
-    }
-    if (!chosen.size) {
+    if (!snapshot.roots.length) return empty;
+    const projection = projectMemoryTree(snapshot.roots);
+    const knownReferences = new Map(this.tree.nodes.documentReferences(scope.workspaceId).map(ref => [JSON.stringify([ref.sessionId, ref.path]), ref]));
+    this.memories.records.stage(processingId, "全树一次匹配", selection);
+    const matched = await this.execute({ ...base, systemPrompt: memoryMatchPrompt,
+      prompt: JSON.stringify({ question, catalog: projection.catalog }) }, "全树一次匹配", projection.bindings);
+    signal.throwIfAborted();
+    if (matched.incomplete) throw new AppError("MEMORY_UNAVAILABLE", "目录匹配未完整完成");
+    const selected = projection.resolve(matched.answer);
+    if (!selected.length) {
+      this.memories.owner(scope);
       this.memories.records.annotate(processingId, { outcome: "no_match" });
-      this.memories.records.stage(processingId, "无匹配目的"); return empty;
+      this.memories.records.stage(processingId, "无匹配目录"); return empty;
     }
-    this.memories.records.stage(processingId, "读取匹配目的与详情提纲");
-    const documents = new Map<string, MemoryDocument & { sessionId: string }>();
+    const refs = uniqueMemoryDocuments(selected.flatMap(node => node.documentRefs ?? []));
+    const verifiedRefs = new Map(refs.map(ref => [JSON.stringify([ref.sessionId, ref.path]), ref]));
+    const documents = new Map<string, MemoryDocument & { sessionId: string; access: MemoryReadAccess }>();
     const read = (sessionId: string, path: string) => {
       const key = JSON.stringify([sessionId, path]);
-      let value = documents.get(key);
-      if (!value) { value = { ...this.full({ workspaceId: scope.workspaceId, sessionId }, path, signal), sessionId }; documents.set(key, value); }
-      return value;
-    };
-    const details = new Map<string, { purpose: MemoryPurpose; path: string; heading: string; state: string }>();
-    const outlines: Array<{ purpose: string; content: string }> = [];
-    const located = new Set<string>();
-    for (const purpose of snapshot.purposes.filter(purpose => chosen.has(purpose.id))) {
-      const entry = read(purpose.source.sessionId, "MEMORY.md"), heading = this.locate(purpose, entry, snapshot.purposes);
-      // Old and reference-annotated leaves can coexist in historical snapshots.
-      // Validate every selected locator, but read the same current goal only once.
-      const key = JSON.stringify([purpose.source.sessionId, heading.key]);
-      if (located.has(key)) continue;
-      located.add(key);
-      outlines.push({ purpose: purpose.text, content: heading.content });
-      const directory = memoryDirectory(this.memories.store.root, purpose.source.sessionId);
-      for (const { node, path } of availableMemoryDetails(directory, entry.content)) {
-        if (node.line < heading.line || node.line >= heading.endLine) continue;
-        const id = JSON.stringify([purpose.id, path]);
-        details.set(id, { purpose, path, heading: node.title, state: node.abandoned ? "已放弃" : node.state ?? "" });
+      if (documents.has(key)) return documents.get(key)!;
+      try {
+        const value = { ...this.full({ workspaceId: scope.workspaceId, sessionId }, path, signal), sessionId };
+        documents.set(key, value); return value;
+      } catch (error) {
+        signal.throwIfAborted();
+        // Ordinary unavailable files are misses; path, authorization, paging,
+        // model and program errors remain real execution failures.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (["ENOENT", "ENOTDIR", "EACCES", "EPERM", "MEMORY_BINARY"].includes(code ?? "")) return undefined;
+        throw error;
       }
-    }
-    const selectedDetails = await match("details", [...details].map(([id, detail]) => ({ id, text: detail.heading, state: detail.state, purposeId: detail.purpose.id, purpose: detail.purpose.text })));
-    // A title alone is not evidence. An empty detail selection is a genuine miss,
-    // but still verify that the consulted locators were not changed in flight.
-    const evidence: Array<{ purpose: string; heading: string; state: string; content: string }> = [];
-    this.memories.records.stage(processingId, "读取选中详情及直接文本依据");
-    for (const id of selectedDetails) {
-      const detail = details.get(id)!;
-      const document = read(detail.purpose.source.sessionId, detail.path);
-      evidence.push({ purpose: detail.purpose.text, heading: detail.heading, state: detail.state, content: document.content });
-      const root = memoryDirectory(this.memories.store.root, detail.purpose.source.sessionId);
-      // Resolve direct references relative to the selected independent file.
-      for (const file of referencedPaths(`${root}/${detail.path}`, document.content).filter(file => /\.(md|txt)$/i.test(file))) {
+    };
+    this.memories.records.stage(processingId, "批量读取关联文档");
+    this.verify(scope, [], refs);
+    const evidence = new Map<string, { purposes: string[]; heading: string; state: string; ancestors: MemoryDocumentRef["ancestors"]; content: string; linkedFrom?: string }>();
+    const add = (ref: MemoryDocumentRef, document: MemoryDocument & { sessionId: string }, linkedFrom?: string) => {
+      if (!document.content.trim()) return;
+      evidence.set(JSON.stringify([document.sessionId, document.path]), {
+        purposes: snapshot.purposes.filter(purpose => ref.purposeIds.includes(purpose.id)).map(purpose => purpose.text),
+        heading: ref.title, state: ref.state, ancestors: ref.ancestors, content: document.content, ...(linkedFrom ? { linkedFrom } : {}) });
+    };
+    for (const ref of refs) {
+      const document = read(ref.sessionId, ref.path);
+      if (!document) continue;
+      add(ref, document);
+      const root = memoryDirectory(this.memories.store.root, ref.sessionId);
+      for (const file of referencedPaths(`${root}/${ref.path}`, document.content).filter(file => /\.(md|txt)$/i.test(file))) {
         const path = relative(root, file).replaceAll("\\", "/");
-        if (path === detail.path || path === "MEMORY.md") continue;
-        const reference = read(detail.purpose.source.sessionId, path);
-        evidence.push({ purpose: detail.purpose.text, heading: detail.heading, state: detail.state, content: reference.content });
+        if (path === ref.path || path === "MEMORY.md") continue;
+        const key = JSON.stringify([ref.sessionId, path]), bound = knownReferences.get(key);
+        if (bound) { this.verify(scope, [], [bound]); verifiedRefs.set(key, bound); }
+        const reference = read(ref.sessionId, path);
+        // A linked task detail retains its own purpose/state, not the linking
+        // task's identity. Unbound reference material has no asserted task state.
+        if (reference) add(bound ?? { ...ref, path, title: basename(file), state: "", ancestors: [] }, reference, ref.path);
       }
     }
     const readDocuments = [...documents.values()].map(({ sessionId, path, revision }) => ({ sessionId, path, revision }));
-    if (!evidence.length) {
-      this.memories.records.stage(processingId, "复核查询依据"); this.verify(scope, readDocuments);
+    if (!evidence.size) {
+      this.verify(scope, [...documents.values()], [...verifiedRefs.values()]);
       this.memories.records.annotate(processingId, { outcome: "no_evidence" });
-      this.memories.records.stage(processingId, "目的已匹配，但无有效依据"); return { ...empty, readDocuments };
+      this.memories.records.stage(processingId, "目录已匹配，但无有效依据"); return { ...empty, readDocuments };
     }
     this.memories.records.stage(processingId, "归纳原文答案", selection);
     const result = await this.execute({ ...base, systemPrompt: memoryAnswerPrompt,
-      prompt: JSON.stringify({ question, outlines, evidence }) }, "归纳原文答案");
+      prompt: JSON.stringify({ question, evidence: [...evidence.values()] }) }, "归纳原文答案");
     signal.throwIfAborted();
-    this.memories.records.stage(processingId, "复核查询依据");
-    this.verify(scope, readDocuments);
+    // Check authority/corrections, not later byte revisions of already-read files.
+    this.verify(scope, [...documents.values()], [...verifiedRefs.values()]);
     if (result.incomplete) this.memories.records.annotate(processingId, { outcome: "incomplete" });
     this.memories.records.stage(processingId, result.incomplete ? "查询结果不完整" : "查询结果已核验");
     return { ...result, scope, indexVersion: snapshot.version,

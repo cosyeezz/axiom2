@@ -63,10 +63,7 @@ try {
   assert.equal(await cards.count(), 0, "expanded cards and summary controls leave the DOM entirely");
   assert.equal(await page.locator(".history-summary-disclosure,.history-range-row").count(), 0);
   assert.equal(await processes.count(), 1); assert.equal(await processes.getAttribute("data-call-count"), "4");
-  assert.equal(await page.locator(".history-range-collapse").count(), 4, "desktop has an icon for every visible source segment");
-  for (const button of await page.locator(".history-range-collapse").all()) {
-    assert.equal((await button.innerText()).trim(), ""); assert.equal(await button.locator("svg").count(), 1);
-  }
+  assert.equal(await page.locator(".history-range-controls,.history-range-collapse").count(), 0, "expanded history has no floating collapse control");
   const processGroupIds = new Set(views.historyIndex(scope).segments.flatMap(segment => segment.groups.filter(group => group.activity).map(group => group.id)));
   const processReads = () => reads.filter(frame => frame.op === "agent.history.read" && processGroupIds.has(frame.params.groupId));
   assert.equal(processReads().length, 0);
@@ -96,31 +93,16 @@ try {
   await page.waitForFunction(() => !!document.querySelector(".joined-process:not(.process-live)"));
   assert.equal(await processes.getAttribute("data-status"), "completed");
 
-  // Collapsing C closes A/B/C only, preserving D and the live source in a single card.
-  await page.locator(`[data-collapse-segment="${compressions[2]}"]`).click(); await settle();
   const choices = () => page.evaluate(scope => JSON.parse(sessionStorage.getItem(`axiom:history-ranges:${scope.workspaceId}:${scope.sessionId}`) ?? "{}"), scope);
-  const closed = await choices(); assert.deepEqual(compressions.map(id => closed[id]), [false, false, false, true]);
-  assert.equal(await processes.count(), 1);
-  const focus = await page.evaluate(() => ({ card: document.activeElement?.closest("[data-compaction-id]")?.getAttribute("data-compaction-id"),
-    visible: (() => { const r = document.activeElement!.getBoundingClientRect(), s = document.querySelector("#thread")!.getBoundingClientRect(); return r.top >= s.top && r.bottom <= s.bottom; })() }));
-  assert.deepEqual(focus, { card: compressions[2], visible: true });
-  await page.locator(`[data-compaction-id="${compressions[1]}"]`).getByRole("button", { name: "展开会话原文", exact: true }).click(); await settle();
-  const opened = await choices(); assert.deepEqual(compressions.map(id => opened[id]), [false, true, true, true]);
+  const opened = await choices(); assert.deepEqual(compressions.map(id => opened[id]), [true, true, true, true], "opened history stays open");
   assert.equal(await processes.count(), 1);
   for (const [width, height] of [[1440, 1000], [820, 900], [390, 844], [390, 480]]) {
     await page.setViewportSize({ width, height });
     const expand = page.getByRole("button", { name: "展开工作台", exact: true }); if (await expand.isVisible()) await expand.click();
     await top();
-    const icons = page.locator(".history-range-collapse");
-    assert.equal(await icons.count(), width <= 700 ? 1 : 3);
-    const geometry = await page.evaluate(() => {
-      const nav = document.querySelector(".thread-navigation")!, nr = nav.getBoundingClientRect();
-      const controls = [...document.querySelectorAll(".history-range-collapse")].map(button => button.getBoundingClientRect());
-      return { overflow: document.documentElement.scrollWidth > innerWidth + 1,
-        navOverlap: getComputedStyle(nav).display !== "none" && controls.some(r => r.left < nr.right && r.right > nr.left && r.top < nr.bottom && r.bottom > nr.top),
-        controlOverlap: controls.some((r, i) => controls.some((s, j) => j > i && r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top)) };
-    });
-    assert.deepEqual(geometry, { overflow: false, navOverlap: false, controlOverlap: false }, `controls at ${width}x${height}`);
+    await processes.hover(); await settle();
+    assert.equal(await page.locator(".history-range-controls,.history-range-collapse,[data-collapse-segment]").count(), 0, `no collapse controls after hover at ${width}x${height}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `no overflow at ${width}x${height}`);
     await page.screenshot({ path: join(artifacts, `${width}-${height}-seamless.png`) });
   }
   await page.reload(); await processes.waitFor(); await settle();
@@ -130,7 +112,7 @@ try {
   assert.ok(!reads.some(frame => ["prompt", "agent.fork"].includes(frame.op)));
   assert.deepEqual(errors, []);
   writeFileSync(join(artifacts, "report.json"), JSON.stringify({ scope, compressions, reads: reads.filter(frame => frame.op === "agent.history.read"), errors }, null, 2));
-  console.log(`PASS archive/archive/live coalescing, both levels, masks, lazy reads, mixed live status, pure icons, continuous collapse/focus, responsive navigation, refresh; artifacts ${artifacts}`);
+  console.log(`PASS archive/archive/live coalescing, both levels, masks, lazy reads, mixed live status, no collapse controls, responsive navigation, refresh; artifacts ${artifacts}`);
 } finally {
   if (browser) for (const page of browser.contexts().flatMap(context => context.pages())) {
     await page.screenshot({ path: join(artifacts, "last-state.png") }).catch(() => {});

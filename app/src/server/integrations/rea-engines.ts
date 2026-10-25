@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, realpathSync, statSync } from "node:
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, win32, posix } from "node:path";
 import { reaEngineIds, type ReaEngineId, type ReaEnginePaths, type ReaEngineState } from "../../shared/rea-engines.js";
-import { inspectReaProgram, reaEngineRevision, reaNode, reaProcessEnvironment, type ReaConfig } from "./rea-runtime.js";
+import { inspectReaProgram, reaEngineRevision, reaDirectory, reaNode, reaProcessEnvironment, type ReaConfig } from "./rea-runtime.js";
 import { runEngine, type EngineRun } from "./rea-engine-process.js";
 import { maintenanceProcessSupported } from "../maintenance-process.js";
 import { engineContractVersion, engineContractSupported, engineVersionPolicy, ghidraVersion, installedEngineVersion, managedEngineVersion, verifiedJadxVersion, wabtVersion } from "./rea-engine-policy.js";
@@ -86,6 +86,7 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
     if (only && item.id !== only) continue;
     signal.throwIfAborted(); item.checkedAt = Date.now();
     if (item.status === "unsupported" || !item.path) continue;
+    const environmentDirectory = join(reaDirectory(root), "environment", "engines", item.id);
     try {
       if (!existsSync(item.path)) { item.status = "missing"; item.detail = "配置路径不存在，请检查后台电脑上的路径。"; continue; }
       if (item.id === "hopper") {
@@ -95,14 +96,14 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
         item.status = "detected"; item.detail = "启动程序存在；未启动 GUI，版本、许可及实际桥接需在使用时验证。";
       } else if (item.id === "java") {
         const executable = binary(join(item.path, "bin"), "java");
-        const version = await run(executable, ["-XshowSettings:properties", "-version"], { cwd: root, env, signal });
-        const modules = await run(executable, ["--list-modules"], { cwd: root, env, signal });
+        const version = await run(executable, ["-XshowSettings:properties", "-version"], { cwd: root, env, environmentDirectory, signal });
+        const modules = await run(executable, ["--list-modules"], { cwd: root, env, environmentDirectory, signal });
         item.version = installedEngineVersion(item.id, item.path) ?? /java.version\s*=\s*([^\s]+)/.exec(version.stderr + version.stdout)?.[1];
         if (version.code || modules.code || !/^jdk.compiler@/m.test(modules.stdout) || !item.version || Number(item.version.split(".")[0]) < 17) throw Error("需要 JDK 17+ 且包含 jdk.compiler；推荐 JDK 21。Ghidra 另按安装声明验证 Java 范围。");
         item.status = "ready"; item.detail = "Java 属性与编译模块检查通过；Ghidra 兼容性请同时查看其检测结果。";
       } else if (item.id === "wabt") {
         for (const name of ["wasm-validate", "wasm-objdump", "wasm2wat"]) {
-          const result = await run(binary(item.path, name), ["--version"], { cwd: root, env, signal });
+          const result = await run(binary(item.path, name), ["--version"], { cwd: root, env, environmentDirectory, signal });
           if (name === "wasm-validate") item.version = /^\d+\.\d+\.\d+$/.test(result.stdout.trim()) ? result.stdout.trim() : undefined;
           if (result.code || result.stderr.trim() || result.stdout.trim() !== wabtVersion) throw Error(`${name} 需为 ${wabtVersion} 且匹配后台系统架构。`);
         }
@@ -110,7 +111,7 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
       } else {
         if (!packageRoot || !engineContractSupported(config.installation?.version)) throw Error(`当前检测契约验证于 REA ${engineContractVersion}；请先安装该版本或等待适配新版本。`);
         const { entry } = inspectReaProgram(packageRoot, config.installation.version);
-        const result = await run(reaNode(root, config), [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, signal, timeout: 60_000 });
+        const result = await run(reaNode(root, config), [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, environmentDirectory, signal, timeout: 60_000 });
         const report = JSON.parse(result.stdout);
         if (![0, 1].includes(result.code) || !Array.isArray(report.scope_checks) || !report.scope_checks.length || typeof report.healthy !== "boolean") throw Error("REA 未返回有效的组件检查报告。");
         const failed = report.scope_checks.filter((check: { ok?: boolean }) => check.ok !== true);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 import { PooledMemoryRunner } from "../src/server/memory-runner.js";
 import { ModelService } from "../src/server/model-service.js";
@@ -33,19 +33,69 @@ test("cross-revision entry paging isolates an invalid purpose before any classif
     await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal); assert.equal(calls, 0); assert.equal(f.tree.entries(f.workspace.id)[0].blocked, true); assert.equal(f.tree.snapshot(f.workspace.id).roots.length, 0);
   } finally { await f.close(); }
 });
-for (const change of ["delete", "revoke", "rewrite"] as const) test(`query rejects ${change} of external evidence before publication`, async () => {
+for (const change of ["delete", "revoke", "rewrite", "revoke-delete"] as const) test(`query checks authority but retains captured evidence after external ${change}`, async () => {
   const f = purposeFixture(); try {
-    await f.configure({ queryModel: selection }); const scope = f.create(), external = join(f.project, "basis.md"); writeFileSync(external, "v1"); const d = f.detail(scope, `[依据](${external})`); f.memories.scan(scope); f.publish();
+    await f.configure({ queryModel: selection }); const scope = f.create(), attachment = join(f.root, "attachments", f.workspace.id, scope.sessionId); mkdirSync(attachment, { recursive: true });
+    const external = join(attachment, "basis.md"); writeFileSync(external, "v1"); const d = f.detail(scope, `[依据](${external})`); f.memories.scan(scope); f.publish();
+    let answers = 0;
     f.memories.runner = { close: async () => {}, execute: async input => {
       const data = JSON.parse(input.prompt); if (data.evidence) {
-        assert.ok(data.evidence.some((e: any) => e.content === "v1"));
+        answers++; assert.ok(data.evidence.some((e: any) => e.content === "v1"));
         if (change === "delete") rmSync(external);
-        else if (change === "revoke") { const details = join(memoryDirectory(f.root, scope.sessionId), d.path); writeFileSync(details, readFileSync(details, "utf8").replace(`[依据](${external})`, "撤销引用")); }
+        else if (change.startsWith("revoke")) { const details = join(memoryDirectory(f.root, scope.sessionId), d.path); writeFileSync(details, readFileSync(details, "utf8").replace(`[依据](${external})`, "撤销引用")); if (change === "revoke-delete") rmSync(external); }
         else writeFileSync(external, "v2");
       }
-      return navigation(input, `不应发布的v1 ${d.path}`);
+      return navigation(input, `捕获的v1 ${d.path}`);
     } };
-    const result = await f.memories.query(scope, "依据"); assert.equal(result.answer, ""); assert.equal(result.incomplete, true);
+    const result = await f.memories.query(scope, "依据"); assert.equal(answers, 1, "the external file must actually have been read before changing it");
+    assert.equal(result.incomplete, change.startsWith("revoke"));
+    assert.equal(result.answer, change.startsWith("revoke") ? "" : `捕获的v1 ${d.path}`);
+  } finally { await f.close(); }
+});
+for (const fault of ["nul", "invalid-utf8", "unreadable"] as const) test(`unrelated ${fault} declaration does not hide a valid external reference`, async () => {
+  const f = purposeFixture(); try {
+    await f.configure({ queryModel: selection }); const scope = f.create(), directory = memoryDirectory(f.root, scope.sessionId);
+    const attachment = join(f.root, "attachments", f.workspace.id, scope.sessionId); mkdirSync(attachment, { recursive: true });
+    const external = join(attachment, "basis.md"); writeFileSync(external, "EXTERNAL_VALID"); f.detail(scope, `[依据](${external})`);
+    const bad = join(directory, "references", "unrelated.md"); mkdirSync(join(directory, "references"), { recursive: true }); writeFileSync(bad, "unrelated");
+    f.memories.scan(scope); f.publish();
+    if (fault === "unreadable") chmodSync(bad, 0);
+    else writeFileSync(bad, fault === "nul" ? Buffer.from([65, 0, 66]) : Buffer.from([0xff, 0xfe]));
+    let answers = 0;
+    f.memories.runner = { close: async () => {}, execute: async input => {
+      const data = JSON.parse(input.prompt); if (data.evidence) { answers++; assert.ok(data.evidence.some((e: any) => e.content === "EXTERNAL_VALID")); }
+      return navigation(input, "有效外部依据");
+    } };
+    const result = await f.memories.query(scope, "依据");
+    assert.equal(answers, 1); assert.equal(result.incomplete, false); assert.equal(result.answer, "有效外部依据"); assert.equal(result.readDocuments?.length, 2);
+  } finally { await f.close(); }
+});
+for (const timing of ["before-read", "between-pages"] as const) test(`external alias switch ${timing} cannot detach authority from captured bytes`, async () => {
+  const f = purposeFixture(); try {
+    await f.configure({ queryModel: selection }); const scope = f.create(), directory = memoryDirectory(f.root, scope.sessionId);
+    const attachment = join(f.root, "attachments", f.workspace.id, scope.sessionId); mkdirSync(attachment, { recursive: true });
+    const a = join(attachment, "a.md"), b = join(attachment, "b.md"), alias = join(attachment, "alias.md");
+    writeFileSync(a, timing === "between-pages" ? "same".repeat(5000) : "BODY_A");
+    writeFileSync(b, timing === "between-pages" ? "same".repeat(5000) : "BODY_B"); symlinkSync(a, alias);
+    const d = f.detail(scope, `[别名](${alias}) [保留A](${a})`); f.memories.scan(scope); f.publish();
+    const aliasPath = relative(directory, alias).replaceAll("\\", "/"), originalRead = f.memories.read.bind(f.memories); let switched = false, answers = 0;
+    const swap = () => { rmSync(alias); symlinkSync(b, alias); switched = true; };
+    f.memories.read = (...args) => {
+      if (args[1] === aliasPath && !switched && timing === "before-read") swap();
+      const page = originalRead(...args);
+      if (args[1] === aliasPath && !switched && timing === "between-pages") swap();
+      return page;
+    };
+    f.memories.runner = { close: async () => {}, execute: async input => {
+      const data = JSON.parse(input.prompt); if (data.evidence) {
+        answers++; assert.ok(data.evidence.some((e: any) => e.content === "BODY_B"));
+        const detail = join(directory, d.path); writeFileSync(detail, readFileSync(detail, "utf8").replace(`[别名](${alias})`, "撤销B的别名授权"));
+      }
+      return navigation(input, "不可发布的B正文");
+    } };
+    const result = await f.memories.query(scope, "依据");
+    assert.equal(switched, true); assert.equal(answers, timing === "before-read" ? 1 : 0);
+    assert.equal(result.incomplete, true); assert.equal(result.answer, "");
   } finally { await f.close(); }
 });
 test("pooled direct API isolates classification/navigation/evidence, uses no tools and only system+user", { timeout: 60000 }, async () => {
@@ -62,12 +112,12 @@ test("pooled direct API isolates classification/navigation/evidence, uses no too
   try {
     await f.configure({ queryModel: selection }); const scope = f.create(), directory = memoryDirectory(f.root, scope.sessionId); f.detail(scope, "DETAIL_SENTINEL [依据](../references/basis.md)"); mkdirSync(join(directory, "references"), { recursive: true }); writeFileSync(join(directory, "references/basis.md"), "字".repeat(20000)); f.memories.scan(scope);
     await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal); assert.equal(payloads.length, 1);
-    const result = await f.memories.query(scope, "读取情况"); assert.equal(result.answer, "已读取完整依据。"); assert.equal(payloads.length, 5); assert.equal(result.readDocuments?.length, 3);
+    const result = await f.memories.query(scope, "读取情况"); assert.equal(result.answer, "已读取完整依据。"); assert.equal(payloads.length, 3); assert.equal(result.readDocuments?.length, 2);
     for (const payload of payloads) { assert.ok(!payload.tools?.length); assert.deepEqual(payload.messages.map((m: any) => m.role), ["system", "user"]); }
     for (const payload of payloads.slice(0, -1)) assert.ok(!JSON.stringify(payload).includes("DETAIL_SENTINEL")); assert.ok(JSON.stringify(payloads.at(-1)).includes("DETAIL_SENTINEL"));
     for (const payload of payloads.slice(1, -1)) {
       const user = JSON.parse(payload.messages[1].content);
-      assert.ok(Array.isArray(user.catalog)); assert.equal(user.candidates, undefined);
+      assert.equal(typeof user.catalog, "string"); assert.ok(user.catalog.startsWith("目录：\n")); assert.equal(user.candidates, undefined);
       assert.ok(!JSON.stringify(payload).includes("candidateBindings"));
       assert.ok(!JSON.stringify(user).includes(scope.sessionId));
       assert.ok(!JSON.stringify(user).includes("details/"));

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -81,8 +82,13 @@ async function ghidraFixture(root: string, mode = "success") {
       }
       return ok;
     }
-    assert.equal(file, "/usr/bin/lipo"); assert.deepEqual(args.slice(0, 2), ["-verify_arch", process.arch === "arm64" ? "arm64" : "x86_64"]);
-    return { ...ok, code: mode === "architecture" ? 1 : 0 };
+    assert.equal(file, "/usr/bin/lipo");
+    assert.match(args[0], /\/(decompile|sleigh|lzfse|demangler_gnu_v2_24|demangler_gnu_v2_41)$/);
+    assert.deepEqual(args.slice(1), ["-verify_arch", process.arch === "arm64" ? "arm64" : "x86_64"]);
+    // Exercise the actual Mac CLI parser with a real Mach-O, not just a mocked argv assertion.
+    const verified = spawnSync(file, [process.execPath, ...args.slice(1)], { encoding: "utf8" });
+    assert.equal(verified.status, 0, verified.stderr);
+    return { ...ok, code: mode === "architecture" ? 1 : 0, stderr: mode === "architecture" ? "fixture lipo architecture diagnostic" : "" };
   };
   return { data, release, cached, fetcher, fetches, run, commands };
 }
@@ -124,7 +130,7 @@ test("cached Ghidra uses a verified private ZIP, offline Gradle and all five arc
 });
 
 test("cached Ghidra failures preserve the original package and clean unpublished candidates", mac, async () => {
-  for (const [mode, message] of [["clt", /xcode-select/], ["url", /发行地址/], ["checksum", /SHA-256/], ["build", /compiler failure/], ["missing-native", /sleigh/], ["architecture", /CPU 架构/], ["corrupt", /校验失败/]]) {
+  for (const [mode, message] of [["clt", /xcode-select/], ["url", /发行地址/], ["checksum", /SHA-256/], ["build", /compiler failure/], ["missing-native", /sleigh/], ["architecture", /decompile 架构校验失败.*预期.*退出码 1.*fixture lipo architecture diagnostic/], ["corrupt", /校验失败/]]) {
     const root = temporary();
     try {
       const fixture = await ghidraFixture(root, mode as string);
