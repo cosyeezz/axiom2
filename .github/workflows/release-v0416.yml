@@ -1,0 +1,188 @@
+name: Validate and publish pinned Axiom2 v0.4.16
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: axiom-pinned-release-v0416
+  cancel-in-progress: false
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f0e993109169ddbb63331aaf25882ed7904789bb
+      - name: Record pinned product revision
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/build-native.mjs
+      - name: Configure namespace test environment
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - run: node --test native/owner.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-ownership-${{ runner.arch }}
+          path: bin/native/
+          if-no-files-found: error
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        node: ['22.19.0', '24']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 30 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f0e993109169ddbb63331aaf25882ed7904789bb
+      - name: Load reviewed cancellation test fixture only
+        shell: bash
+        env:
+          AXIOM_FIXTURE_REF: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = f0e993109169ddbb63331aaf25882ed7904789bb
+          git fetch --no-tags --depth=1 origin "$AXIOM_FIXTURE_REF"
+          git show "$AXIOM_FIXTURE_REF:app/tests/compression-cancel.test.ts" > app/tests/compression-cancel.test.ts
+          test "$(git diff --name-only)" = app/tests/compression-cancel.test.ts
+          git diff -- app/tests/compression-cancel.test.ts
+          echo "Product: $(git rev-parse HEAD); test fixture revision: $AXIOM_FIXTURE_REF"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install fd for native file completion tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y fd-find ;;
+            macOS) brew install fd ;;
+          esac
+      - name: Install fd on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'fd.zip'
+          Invoke-WebRequest 'https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7') { throw 'fd checksum mismatch' }
+          $directory = Join-Path $env:RUNNER_TEMP 'fd'
+          Expand-Archive $archive $directory
+          $binary = Get-ChildItem $directory -Filter fd.exe -Recurse | Select-Object -First 1
+          if (-not $binary) { throw 'fd.exe missing' }
+          & $binary.FullName --version
+          $binary.DirectoryName >> $env:GITHUB_PATH
+      - name: Configure Linux namespace test environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - run: npm ci
+      - run: node --test scripts/auto-release.test.mjs
+      - run: npm test
+        env:
+          AXIOM_TEST_CARGO_FETCH: '1'
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        node: ['22.19.0', '24']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && matrix.node == '22.19.0' && 45 || 30 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f0e993109169ddbb63331aaf25882ed7904789bb
+      - name: Record pinned product revision
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Configure Linux namespace test environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - run: npm ci
+      - run: npm run check:package
+  publish:
+    needs: [native, validate, package]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/verify/release-v0416' && github.repository == 'cosyeezz/axiom2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f0e993109169ddbb63331aaf25882ed7904789bb
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Configure Linux namespace test environment
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Record clean product and pinned release state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = f0e993109169ddbb63331aaf25882ed7904789bb
+          test -z "$(git status --porcelain --untracked-files=no)"
+          node --input-type=module - <<'JS'
+          import {writeFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {verifyTag,assertVersions} from './scripts/auto-release.mjs';
+          const state={skip:false,source:'012dd121a926b3843cc31c585c72b1512f9e9417',tag:'v0.4.16',version:'0.4.16',commit:'f0e993109169ddbb63331aaf25882ed7904789bb'};
+          verifyTag(state.tag,state.source);assertVersions(process.cwd(),state.version);
+          writeFileSync(join(process.env.RUNNER_TEMP,'axiom-release-state.json'),JSON.stringify(state)+'\n');
+          console.log(JSON.stringify(state));
+          JS
+      - run: npm ci
+      - name: Include both Linux ownership helpers from this validated run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-ownership-*
+          path: bin/native/
+          merge-multiple: true
+      - name: Restore native executable permissions
+        run: chmod 755 bin/native/linux-*/axiom-owner
+      - name: Validate and retain the exact release package
+        env:
+          AXIOM_VERIFIED_PACKAGE_DIR: ${{ runner.temp }}/axiom-release-assets
+        run: npm run check:package
+      - name: Publish and verify complete backend release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/auto-release.mjs publish "$RUNNER_TEMP/axiom-release-state.json" "$RUNNER_TEMP/axiom-release-assets"
+      - name: Preserve release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-release-diagnostics
+          path: |
+            ${{ runner.temp }}/axiom-release-state.json
+            ${{ runner.temp }}/axiom-release-assets/
+          if-no-files-found: ignore
+          retention-days: 7
