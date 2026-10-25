@@ -208,6 +208,11 @@ jobs:
       - run: npm --prefix app run build:desktop
       # Linux --targets selects the package format; CPU architecture follows the runner.
       - run: node scripts/build-desktop.mjs --targets deb
+      - name: Normalize Linux artifact filenames
+        run: |
+          # Pake lowercases Linux product names; publish one consistent artifact schema.
+          mv app/axiom2.deb app/Axiom2.deb
+          mv app/axiom2-binary app/Axiom2-binary
       - name: Check native supervisor and offline cleanup
         env:
           # Fetch pinned test compiler dependencies once; fixture tests use --offline.
