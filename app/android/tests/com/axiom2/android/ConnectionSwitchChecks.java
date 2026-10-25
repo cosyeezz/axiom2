@@ -99,12 +99,42 @@ final class ConnectionSwitchChecks {
         test.runOnMainSync(() -> web.evaluateJavascript(script, value -> { result.set(value); done.countDown(); }));
         check(done.await(10, TimeUnit.SECONDS), "WebView JavaScript timed out"); return result.get();
     }
+    private static String page(String url) {
+        android.net.Uri uri = android.net.Uri.parse(url);
+        return uri.getScheme() + "://" + uri.getAuthority() + uri.getPath();
+    }
+    private static boolean nativeHistory(Instrumentation test, AxiomWebView web, String endpoint, String path, int index, int size) {
+        AtomicReference<Boolean> result = new AtomicReference<>(false);
+        test.runOnMainSync(() -> {
+            android.webkit.WebBackForwardList list = web.copyBackForwardList();
+            result.set(list.getCurrentIndex() == index && list.getSize() == size
+                && page(list.getCurrentItem().getUrl()).equals(endpoint + path)
+                && web.canGoBack() == (index > 0)
+                && (index == 0 || page(list.getItemAtIndex(index - 1).getUrl()).equals(endpoint + "/")));
+        }); return result.get();
+    }
+    private static String navigation(Instrumentation test, MainActivity activity, AxiomWebView web) {
+        AtomicReference<String> result = new AtomicReference<>();
+        test.runOnMainSync(() -> {
+            android.webkit.WebBackForwardList list = web.copyBackForwardList();
+            List<String> urls = new ArrayList<>();
+            for (int i = 0; i < list.getSize(); i++) urls.add(list.getItemAtIndex(i).getUrl());
+            result.set("url=" + web.getUrl() + ", index=" + list.getCurrentIndex() + ", history=" + urls + ", last=" + prefs(activity).getString("last", ""));
+        }); return result.get();
+    }
     private static void ready(Instrumentation test, MainActivity activity, String endpoint) throws Exception {
         waitFor(() -> {
             AtomicReference<Boolean> done = new AtomicReference<>(false);
             test.runOnMainSync(() -> { try { done.set((Boolean) get(activity, "loaded") && endpoint.equals(prefs(activity).getString("last", ""))); } catch (Exception e) { throw new AssertionError(e); } });
             return done.get();
         }, "Workstation did not become ready: " + endpoint);
+    }
+    private static void rootReady(Instrumentation test, MainActivity activity, AxiomWebView web, String endpoint) throws Exception {
+        ready(test, activity, endpoint);
+        try {
+            waitFor(() -> nativeHistory(test, web, endpoint, "/", 0, 1)
+                && "true".equals(javascript(test, web, "location.origin === '" + endpoint + "' && location.pathname === '/'")), "Root history did not settle");
+        } catch (AssertionError failure) { throw new AssertionError(failure.getMessage() + ": " + navigation(test, activity, web), failure); }
     }
     static void realWebView(Instrumentation test) throws Exception {
         try (Workstation first = new Workstation(); Workstation second = new Workstation(); Workstation third = new Workstation(); Workstation delayed = new Workstation()) {
@@ -115,7 +145,7 @@ final class ConnectionSwitchChecks {
                     prefs(activity).edit().putString("history", saved).putString("last", a).commit();
                     ((TextView) get(activity, "address")).setText(a); ((View) get(activity, "retry")).performClick();
                 } catch (Exception e) { throw new AssertionError(e); } });
-                ready(test, activity, a);
+                rootReady(test, activity, web, a);
                 test.runOnMainSync(() -> {
                     web.requestFocus();
                     ((android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(), 0);
@@ -132,19 +162,30 @@ final class ConnectionSwitchChecks {
                 test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
                 waitFor(() -> "false".equals(javascript(test, web, "document.body.classList.contains('history-open')")), "Back did not collapse history sidebar");
                 test.runOnMainSync(() -> web.loadUrl(a + "/nested"));
-                waitFor(() -> "true".equals(javascript(test, web, "location.pathname === '/nested'")), "Nested page not loaded");
+                waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + a + "' && location.pathname === '/nested'")) && nativeHistory(test, web, a, "/nested", 1, 2), "Nested page did not reach native history");
                 test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
-                waitFor(() -> "true".equals(javascript(test, web, "location.pathname === '/'")), "Page Back did not precede switching");
+                waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + a + "' && location.pathname === '/'")), "Page Back did not precede switching");
                 check(prefs(activity).getString("last", "").equals(a), "Page Back changed connection");
+                waitFor(() -> nativeHistory(test, web, a, "/", 0, 2), "Page Back did not reach native root history");
                 for (String expected : new String[]{b, c, a, b, c, a}) {
-                    test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); ready(test, activity, expected);
+                    test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); rootReady(test, activity, web, expected);
                     test.runOnMainSync(() -> check(!web.canGoBack(), "Cross-workstation history leaked into Back"));
                     check(prefs(activity).getString("history", "").equals(saved), "Real cycle reordered saved endpoints");
                     if (expected.equals(b)) {
                         javascript(test, web, "history.pushState(null, '', '/secondary')");
+                        // The renderer's evaluate callback can precede the native history update.
+                        waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/secondary'")) && nativeHistory(test, web, b, "/secondary", 1, 2), "Second workstation pushState did not reach native history");
+                        String before = navigation(test, activity, web);
                         test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
-                        waitFor(() -> "true".equals(javascript(test, web, "location.pathname === '/'")), "Second workstation page history was skipped");
-                        check(prefs(activity).getString("last", "").equals(b), "Second workstation page Back switched connections");
+                        try {
+                            waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/'")), "Second workstation page history was skipped");
+                            check(prefs(activity).getString("last", "").equals(b), "Second workstation page Back switched connections");
+                            ready(test, activity, b);
+                            waitFor(() -> nativeHistory(test, web, b, "/", 0, 2), "Second workstation Back did not settle at root");
+                            check(prefs(activity).getString("history", "").equals(saved), "Page Back reordered saved connections");
+                        } catch (AssertionError failure) {
+                            throw new AssertionError(failure.getMessage() + "; before: " + before + "; after: " + navigation(test, activity, web), failure);
+                        }
                     }
                 }
                 delayed.blockStatus();
