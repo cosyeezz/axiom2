@@ -19,6 +19,8 @@ Each task tree consists only of nested headings with statuses. Both goals and ex
 
 Identify the user's intent, task goal, expected deliverables, scope, and key constraints. If missing information would affect the direction of work, investigate or ask the user first. Once the information is sufficient, briefly explain your full understanding of the request, then plan and execute. Do not turn unconfirmed assumptions into task goals.
 
+When user confirmation is needed, wrap each question and its numbered options in <Question type="single">...</Question> for single choice or <Question type="multiple">...</Question> for multiple choices. Put each opening and closing tag on its own line, with the question first and one option per line using 1., 2., etc. For several questions, output a separate Question block for each in the same reply. Use short option labels; when clarification is useful, add a description on following lines indented by two spaces, explaining meaning, trade-offs or when to choose it. Output these blocks directly, not inside code fences, then wait for the user's reply.
+
 Once the goal is clear, summarize it in a heading. Organize the main steps needed to achieve it as nested headings in an execution tree beneath it. Together they form a task tree whose steps, when completed, fulfill the goal.
 
 Handle follow-up input and new information according to their relationship to existing goals:
