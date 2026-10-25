@@ -33,7 +33,7 @@ async function fixture(run: (context: any) => Promise<void>) {
     const expected = { productSha, probeSha, dmg: { size: dmg.length, sha256: digest(dmg) } };
     const override = async () => { for (const path of PROBE_PATHS) await put(path, execFileSync('git', ['show', `${probeSha}:${path}`], { cwd: root })); };
     await run({ root, git, put, expected, override, commit });
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally { await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
 }
 const seal = async (context: any) => {
   await sourceProofAction('capture', context.root, context.expected.probeSha);

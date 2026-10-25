@@ -112,7 +112,7 @@ test("pooled direct memory requests isolate bindings, record usage and cancel bo
     await providerStarted;
     const queued = execute(b), queuedDone = assert.rejects(queued, /取消|超时/);
     await waitForQueued();
-    await assert.rejects(runner.stopProviders(["fixture"], false), { code: "ACTIVE_RUNS" });
+    await assert.rejects(runner.stopProviders(["fixture"], false), { code: "ACTIVE_RUNS_CONFIRMATION_REQUIRED" });
     const beforeLogout = requests.length;
     await runner.stopProviders(["fixture"], true);
     await Promise.all([runningDone, queuedDone]);

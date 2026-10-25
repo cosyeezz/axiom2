@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { startServer } from "../src/server/index.js";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "../src/server/request-selection.js";
 import { threadGroups } from "../src/shared/thread-layout.js";
 import { running, type Selection, type ChatMessage } from "../src/shared/agent.js";
@@ -79,7 +80,12 @@ test("real worker applies model/effort to the next run, retains active steering 
   let summaries = 0;
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    const body = JSON.parse(raw); bodies.push(body);
+    const body = JSON.parse(raw);
+    if ((body.messages ?? []).some((message: any) => ["system", "developer"].includes(message.role) && typeof message.content === "string" && message.content.includes("为会话生成简明标题"))) {
+      replyToFixtureTitle(body, res);
+      return;
+    }
+    bodies.push(body);
     if (failNext) {
       failNext = false;
       res.writeHead(400, { "Content-Type": "application/json" });

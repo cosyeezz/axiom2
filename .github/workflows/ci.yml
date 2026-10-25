@@ -43,8 +43,9 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
         node: ['22.19.0', '24']
     runs-on: ${{ matrix.os }}
-    # Node 22 on Windows was still advancing through test 822 at the old 30-minute limit.
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 30 }}
+    # Windows Node 22 was still completing test 1750 at the 45-minute job limit.
+    # Give that lane bounded headroom without relaxing any test assertions.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && matrix.node == '22.19.0' && 60 || matrix.os == 'windows-latest' && 45 || 30 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
