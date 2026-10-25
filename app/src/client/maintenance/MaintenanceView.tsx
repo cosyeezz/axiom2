@@ -57,7 +57,7 @@ export function MaintenanceTaskView({ task, connected = true, onCancel, onExtend
   const elapsed = Math.max(0, (task.finishedAt ?? now) - (task.startedAt ?? task.createdAt));
   const cancel = async () => { setSending(true); setError(""); try { await onCancel?.(); } catch (error) { setError(error instanceof Error ? error.message : "取消请求未确认，请核实任务。"); } finally { setSending(false); } };
   const reconcile = async () => { if (sending) return; setSending(true); setError(""); try { await onReconcile?.(); } catch (cause) { setError(cause instanceof Error ? cause.message : "原任务退出尚未确认，记录仍保留。"); } finally { setSending(false); } };
-  const title = waiting ? "等待执行条件" : active ? `${maintenancePhaseLabels[task.phase]}中` : task.status === "succeeded" ? "任务完成" : `${maintenancePhaseLabels[task.phase]}${task.status === "cancelled" ? "已取消" : "未完成"}`;
+  const title = task.status === "unknown" || task.status === "interrupted" ? "任务结果待核实" : waiting ? "等待执行条件" : active ? `${maintenancePhaseLabels[task.phase]}中` : task.status === "succeeded" ? "任务完成" : `${maintenancePhaseLabels[task.phase]}${task.status === "cancelled" ? "已取消" : "未完成"}`;
   return <div className="maintenance-task" data-status={task.status} data-compact={compact || undefined}>
     <div className="maintenance-task-heading">
       <span className="maintenance-state-icon"><TaskStatusIcon task={task} /></span>
@@ -73,12 +73,12 @@ export function MaintenanceTaskView({ task, connected = true, onCancel, onExtend
       <progress aria-label="当前下载进度" max={100} value={percent} />
       <dl className="maintenance-metrics"><div><dt>已下载</dt><dd>{bytes(transfer.received)}{transfer.total && <small> / {bytes(transfer.total)}</small>}</dd></div><div><dt>传输速度</dt><dd>{rate ? `${bytes(rate)}/s` : transfer.connection === "finished" ? "下载结束" : !connected ? "待核实" : transfer.connection === "retrying" ? `等待重试（${transfer.attempt}/2）` : transfer.connection === "connecting" ? "正在连接" : !fresh ? "等待数据" : "正在测量"}</dd></div><div><dt>下载剩余</dt><dd>{rate && transfer.total ? `约 ${duration(Math.max(0, transfer.total - transfer.received) / rate * 1000)}` : "—"}</dd></div></dl>
     </div>}
-    {task.message && (!task.error || !showError) && <p className="maintenance-message">{task.message}</p>}
+    {task.message && (task.status !== "failed" || !task.error || !showError) && <p className="maintenance-message">{task.message}</p>}
     {waiting && !task.message && <p className="maintenance-message">正在核实资源占用，满足条件后开始。</p>}
-    {showError && !error && task.error && <p className="maintenance-error" role="alert"><Icon name="circle-alert" /><span><span className="maintenance-error-kind">{errorLabels[task.error.code]} · {maintenancePhaseLabels[task.error.phase]}</span>{task.error.message}</span></p>}
+    {showError && task.status === "failed" && task.error && <p className="maintenance-error" role="alert"><Icon name="circle-alert" /><span><span className="maintenance-error-kind">{errorLabels[task.error.code]} · {maintenancePhaseLabels[task.error.phase]}</span>{task.error.message}</span></p>}
     {(task.status === "interrupted" || task.status === "unknown") && <p className="maintenance-warning"><Icon name="circle-help" /><span>先到来源页面核实结果，再决定是否重试。</span></p>}
     {task.status === "unknown" && onReconcile && <button className="maintenance-text-button" disabled={!connected || sending} onClick={() => void reconcile()}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button>}
-    {showError && error && <p className="maintenance-error" role="alert"><Icon name="circle-alert" /><span>{error}</span></p>}
+    {showError && error && <p className="maintenance-warning" role="status"><Icon name="circle-help" /><span>{error}</span></p>}
     {!compact && <details className="maintenance-details maintenance-task-details"><summary><Icon name="sliders-horizontal" /><span>{active ? "时限与任务详情" : "查看任务详情"}</span><Icon name="chevron-down" /></summary><div className="maintenance-details-body">
       {active && task.capabilities.extend && onExtend ? <BudgetEditor value={task.budgets} running disabled={!connected} onSave={onExtend} /> : <dl className="maintenance-metrics">{(Object.keys(maintenanceBudgetLabels) as (keyof MaintenanceBudgets)[]).map(key => <div key={key}><dt>{maintenanceBudgetLabels[key]}</dt><dd>{duration(task.budgets[key])}</dd></div>)}</dl>}
       <dl className="maintenance-record">{transfer && <><div><dt>下载来源</dt><dd>{transfer.source ?? "未提供"}</dd></div><div><dt>网络路线</dt><dd>{task.endpoint === "browser" ? "由浏览器管理，具体路线未提供" : "执行端未提供"}</dd></div></>}<div><dt>作用范围</dt><dd>{task.scope}</dd></div><div><dt>最后更新</dt><dd>{new Date(task.updatedAt).toLocaleString()}</dd></div><div><dt>任务编号</dt><dd>{task.id}</dd></div><div><dt>尝试编号</dt><dd>{task.attemptId}</dd></div>{!active && transfer && <div><dt>接收数据</dt><dd>{bytes(transfer.received)}</dd></div>}</dl>

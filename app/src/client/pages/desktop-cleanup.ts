@@ -96,8 +96,9 @@ export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFam
     } else { error ||= value.cleanupError; job = value.job?.id === jobId ? value.job : undefined; const kernel = row.params.kernel as ProxyKernel; removed = !value.installations[kernel] && !value.cleanup?.[kernel]?.paths.length; pending = !!value.removalPending?.[kernel]; }
   }
   if (job?.running) return { state: 'running', message: job.message };
-  if (job?.error || error) return { state: 'failed', message: job?.error || error! };
+  // A family-wide warning (or another task's failure) cannot settle this request.
   if (!synchronous && !job) return { state: 'unknown', message: '未找到此次受理的任务记录，无法确认完成；请核实维护历史。' };
+  if (job?.error || synchronous && error) return { state: 'failed', message: job?.error || error! };
   if (pending || !removed) return { state: 'failed', message: '仍发现程序、配置引用或待清理文件；本项清理尚未完成。' };
   return { state: 'verified', message: '已复读当前状态并核实选定范围；保留项与外部来源仍需分别检查。' };
 }

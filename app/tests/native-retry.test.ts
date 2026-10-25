@@ -1,6 +1,7 @@
 // Real pi workers against loopback only; never uses personal model credentials.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
@@ -24,7 +25,9 @@ test("native retries, cancellation, persisted recovery, single tool effects and 
   const requests: any[] = [];
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    const body = JSON.parse(raw); requests.push(body); count++;
+    const body = JSON.parse(raw);
+    if (replyToFixtureTitle(body, res)) return;
+    requests.push(body); count++;
     const failure = mode === "exhaust" || mode === "stop" || (mode === "tool-exhaust" && count > 1) || (["retry", "rate", "steer", "retry-tool"].includes(mode) && count === 1) || (mode === "tool" && count === 2);
     if (failure || mode === "auth") {
       res.writeHead(mode === "auth" ? 401 : mode === "rate" ? 429 : 503, { "Content-Type": "application/json" });

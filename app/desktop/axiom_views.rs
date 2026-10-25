@@ -63,6 +63,34 @@ pub fn revision() -> u64 { REVISION.load(Ordering::Acquire) }
 pub fn begin_request() -> u64 { REVISION.fetch_add(1, Ordering::AcqRel) + 1 }
 const BAR_HEIGHT: f64 = 48.0;
 static OPEN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+static LAYOUT_PENDING: AtomicBool = AtomicBool::new(false);
+static LAYOUT_DIRTY: AtomicBool = AtomicBool::new(false);
+static CONTROLLER_LAYOUT_CONFIGURED: AtomicBool = AtomicBool::new(false);
+type LayoutKey = (i32, i32, u32, u32, u32, bool, bool, bool);
+static LAST_LAYOUT: std::sync::Mutex<Option<LayoutKey>> = std::sync::Mutex::new(None);
+
+// Native resize/page-load callbacks can run inside a WebView2 COM call while
+// Wry holds its dispatcher locks. Do not call native getters/setters there.
+// run_on_main_thread alone is not a deferral: Wry runs it inline on that thread.
+pub fn request_layout(app: &AppHandle) {
+    LAYOUT_DIRTY.store(true, Ordering::Release);
+    if LAYOUT_PENDING.swap(true, Ordering::AcqRel) { return; }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        struct Pending;
+        impl Drop for Pending { fn drop(&mut self) { LAYOUT_PENDING.store(false, Ordering::Release); } }
+        let pending = Pending;
+        let result = loop {
+            LAYOUT_DIRTY.store(false, Ordering::Release);
+            let result = on_main(&app, |app| layout(app).map_err(|error| error.to_string()));
+            if result.is_err() || !LAYOUT_DIRTY.load(Ordering::Acquire) { break result; }
+        };
+        drop(pending);
+        // Close the race with a request arriving immediately before releasing
+        // pending. Any follow-up must also pass through the event queue.
+        if result.is_ok() && LAYOUT_DIRTY.load(Ordering::Acquire) { request_layout(&app); }
+    });
+}
 // Execute mutations on the native event loop. No mutex required by a menu/close
 // callback may be held while a background caller waits for a Tauri getter.
 fn on_main(app: &AppHandle, operation: impl FnOnce(&AppHandle) -> Result<(), String> + Send + 'static) -> Result<(), String> {
@@ -140,15 +168,25 @@ pub fn layout(app: &AppHandle) -> tauri::Result<()> {
     if size.width == 0 || size.height == 0 { return Ok(()); }
     let bar = ((BAR_HEIGHT * window.scale_factor()?).round() as u32).min(size.height.saturating_sub(1));
     let active = WORKBENCH.load(Ordering::Acquire);
-    if let Some(control) = app.get_webview("pake") {
-        control.set_auto_resize(false)?;
+    let control = app.get_webview("pake");
+    let workbench = app.get_webview("axiom-workbench");
+    let key = (origin.x, origin.y, size.width, size.height, bar, active, control.is_some(), workbench.is_some());
+    // Layout itself may produce resize notifications. Identical bounds must be
+    // a no-op, and no cache guard may be held across a native call.
+    if LAST_LAYOUT.lock().is_ok_and(|previous| *previous == Some(key)) { return Ok(()); }
+    if let Some(control) = control {
+        if !CONTROLLER_LAYOUT_CONFIGURED.load(Ordering::Acquire) {
+            control.set_auto_resize(false)?;
+            CONTROLLER_LAYOUT_CONFIGURED.store(true, Ordering::Release);
+        }
         control.set_bounds(Rect { position: origin.into(),
             size: PhysicalSize::new(size.width, if active { bar } else { size.height }).into() })?;
     }
-    if let Some(workbench) = app.get_webview("axiom-workbench") {
+    if let Some(workbench) = workbench {
         workbench.set_bounds(Rect { position: PhysicalPosition::new(origin.x, origin.y + bar as i32).into(),
             size: PhysicalSize::new(size.width, size.height - bar).into() })?;
     }
+    if let Ok(mut previous) = LAST_LAYOUT.lock() { *previous = Some(key); }
     Ok(())
 }
 
@@ -294,7 +332,7 @@ pub fn watch_control(view: &Webview) {
     static WATCHING: AtomicBool = AtomicBool::new(false);
     if view.label() == "pake" && !WATCHING.swap(true, Ordering::AcqRel) {
         watch_renderer(view);
-        let _ = layout(view.app_handle());
+        request_layout(view.app_handle());
     }
 }
 fn watch_renderer(view: &Webview) {

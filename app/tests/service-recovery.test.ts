@@ -1,6 +1,7 @@
 // Local SQLite and loopback model only; never uses personal model credentials.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import { createServer, type ServerResponse } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "./temporary.js";
@@ -120,7 +121,9 @@ test("ten interrupted sessions auto-resume with bounded concurrency; user stop a
   };
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    const body = JSON.parse(raw); hits++; requests.push(body);
+    const body = JSON.parse(raw);
+    if (replyToFixtureTitle(body, res)) return;
+    hits++; requests.push(body);
     if (JSON.stringify(body.messages).includes("fixture-fail-auth")) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: { message: "invalid api key", type: "authentication_error" } })); return;

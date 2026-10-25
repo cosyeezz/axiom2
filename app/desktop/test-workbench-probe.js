@@ -21,11 +21,11 @@
     const thread = document.getElementById("thread"); thread.scrollTop = 237;
     const token = crypto.randomUUID(); let sample = 0;
     const denied = [];
-    for (const [name, args] of [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}], ["axiom_connection", {}]]) {
+    for (const [name, args] of [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}], ["axiom_connection", {}], ["axiom_local", { port: 0 }], ["axiom_remote", { address: "127.0.0.1", port: 0 }]]) {
       try { await window.__TAURI_INTERNALS__.invoke(name, args); denied.push(false); }
       catch (error) { denied.push(/内置页面|not allowed|not permitted|denied/i.test(String(error))); }
     }
-    window.__axiomProbeSample = () => invoke("record", { token, sample: ++sample, draft: input.value,
+    window.__axiomProbeSample = (sampleId) => invoke("record", { token, sample: ++sample, sampleId, draft: input.value,
       selection: [input.selectionStart, input.selectionEnd], scroll: thread.scrollTop,
       focused: document.hasFocus() && document.activeElement === input, denied,
       titleIconCount: document.querySelectorAll('.title-heading .connection-status svg').length,

@@ -10,8 +10,10 @@ fn open_lock(path: &std::path::Path) -> Result<fs::File, String> {
     fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path).map_err(|e| e.to_string())
 }
 fn registry_lock() -> Result<fs::File, String> {
-    let dir = crate::axiom_service::data_root()?.join("setup");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    registry_lock_at(&crate::axiom_service::data_root()?.join("setup"))
+}
+fn registry_lock_at(dir: &std::path::Path) -> Result<fs::File, String> {
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let file = open_lock(&dir.join("registry.lock"))?;
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
@@ -128,6 +130,9 @@ fn snapshot_job_at(dir: &std::path::Path, mut job: Value, current: bool) -> Resu
     } else if busy && job["task"]["phase"] == "installing" && job["task"]["capabilities"]["cancel"] == false && job["action"] != "service" {
         job["task"]["capabilities"]["extend"] = json!(true);
     }
+    if !service_pending && job["phase"] == "error" && job["task"]["reconciliation"]["writerStopped"] == true && job["task"]["reconciliation"]["parentExited"] == true {
+        job["message"] = job["task"]["message"].clone();
+    }
     Ok(job)
 }
 fn history_at(dir: &std::path::Path) -> Result<Value, String> {
@@ -239,7 +244,7 @@ fn script(action: &str) -> Result<Command, String> {
     let helper = dir.join(concat!("setup-service-", env!("CARGO_PKG_VERSION"), ".mjs"));
     let helper_source = include_str!("setup-service.mjs");
     if fs::read_to_string(&helper).ok().as_deref() != Some(helper_source) { fs::write(&helper, helper_source).map_err(|e| e.to_string())?; }
-    for (name, source) in [("service-admission.mjs", include_str!("service-admission.mjs")), ("service-removal.mjs", include_str!("service-removal.mjs")), ("pi-removal.mjs", include_str!("pi-removal.mjs")), ("maintenance.mjs", include_str!("maintenance.mjs")), ("service-start.mjs", include_str!("service-start.mjs")), ("setup-runtime.json", include_str!("setup-runtime.json"))] {
+    for (name, source) in [("setup-reconciliation.mjs", include_str!("setup-reconciliation.mjs")), ("service-admission.mjs", include_str!("service-admission.mjs")), ("service-removal.mjs", include_str!("service-removal.mjs")), ("pi-removal.mjs", include_str!("pi-removal.mjs")), ("maintenance.mjs", include_str!("maintenance.mjs")), ("service-start.mjs", include_str!("service-start.mjs")), ("setup-runtime.json", include_str!("setup-runtime.json"))] {
         let path = dir.join(name);
         if fs::read_to_string(&path).ok().as_deref() != Some(source) { fs::write(path, source).map_err(|e| e.to_string())?; }
     }
@@ -258,6 +263,122 @@ pub fn runtime_node() -> Result<std::path::PathBuf, String> {
     let node = std::path::PathBuf::from(state["node"].as_str().ok_or("未找到 Node.js 路径，请重新验证运行环境。")?);
     if !node.is_absolute() || !node.is_file() { return Err("Node.js 路径不可用，请重新验证运行环境。".into()); }
     Ok(node)
+}
+// Recovery holds the task's OS lease, not the registry, while subprocesses run.
+// Candidate detection schedules a check; only the strict helper authorizes release.
+struct ServiceRecoveryAttempt { key: String, id: String, running: bool, error: Option<String>, attempts: u8, retry_at: Option<Instant> }
+static SERVICE_RECOVERY: std::sync::Mutex<Option<ServiceRecoveryAttempt>> = std::sync::Mutex::new(None);
+fn recovery_single_link(file: &fs::File) -> bool {
+    #[cfg(windows)] {
+        use std::os::windows::io::AsRawHandle;
+        #[repr(C)]
+        struct FileInfo { attributes: u32, created: [u32; 2], accessed: [u32; 2], written: [u32; 2], volume: u32, size_high: u32, size_low: u32, links: u32, index_high: u32, index_low: u32 }
+        #[link(name = "kernel32")]
+        unsafe extern "system" { fn GetFileInformationByHandle(handle: *mut std::ffi::c_void, info: *mut FileInfo) -> i32; }
+        let mut info: FileInfo = unsafe { std::mem::zeroed() };
+        unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) != 0 && info.links == 1 && info.attributes & 0x400 == 0 }
+    }
+    #[cfg(unix)] { use std::os::unix::fs::MetadataExt; file.metadata().is_ok_and(|info| info.nlink() == 1) }
+    #[cfg(not(any(windows, unix)))] { let _ = file; false }
+}
+fn recovery_record(path: &std::path::Path) -> Option<Value> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 524288 { return None; }
+    let mut options = fs::OpenOptions::new(); options.read(true);
+    #[cfg(windows)] { use std::os::windows::fs::OpenOptionsExt; options.custom_flags(0x00200000); }
+    let file = options.open(path).ok()?;
+    if !file.metadata().ok()?.is_file() || !recovery_single_link(&file) { return None; }
+    let mut bytes = Vec::new(); file.take(524289).read_to_end(&mut bytes).ok()?;
+    if bytes.len() > 524288 { return None; }
+    serde_json::from_slice(&bytes).ok()
+}
+fn recovery_directory(path: &std::path::Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| {
+        #[cfg(windows)] { use std::os::windows::fs::MetadataExt; if metadata.file_attributes() & 0x400 != 0 { return false; } }
+        metadata.is_dir() && !metadata.file_type().is_symlink()
+    })
+}
+fn recovery_uuid(value: &Value) -> bool {
+    value.as_str().is_some_and(|text| text.len() == 36 && text.bytes().enumerate().all(|(i, b)| if [8, 13, 18, 23].contains(&i) { b == b'-' } else { b.is_ascii_digit() || (b'a'..=b'f').contains(&b) }))
+}
+fn service_recovery_candidate(dir: &std::path::Path, job: &Value) -> Option<String> {
+    if job["action"] != "service" || job["phase"] != "interrupted" || job["running"] != false || job["task"]["phase"] != "installing" { return None; }
+    let id = job["id"].as_str()?;
+    let parts: Vec<_> = id.split('-').collect();
+    if parts.len() != 2 || parts.iter().any(|part| part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit())) || !recovery_directory(dir) || !recovery_directory(&dir.join(id)) { return None; }
+    let owner = recovery_record(&dir.join("service-owner.json"))?;
+    let pid = |value: &Value| value.as_u64().is_some_and(|pid| (2..=u32::MAX as u64).contains(&pid));
+    if owner["format"] != 1 || !recovery_uuid(&owner["id"]) || owner["state"] != "armed" || owner["identity"]["platform"] != "win32" || !pid(&owner["hostPid"]) || !pid(&owner["identity"]["workerPid"]) { return None; }
+    let runtimes: Vec<_> = fs::read_dir(dir.join(id)).ok()?.filter_map(Result::ok).filter(|entry| entry.file_name().to_string_lossy().starts_with("runtime-")).collect();
+    if runtimes.len() != 1 || !recovery_directory(&runtimes[0].path()) { return None; }
+    let command = runtimes[0].path().join("command");
+    if !recovery_directory(&command) { return None; }
+    let request = recovery_record(&command.join("request.json"))?;
+    let ready = recovery_record(&command.join("ready.json"))?;
+    let cleaned = recovery_record(&command.join("cleaned.json"))?;
+    if !recovery_uuid(&request["nonce"]) || request["taskId"] != id || request["attemptId"] != id || request["parentPid"] != owner["hostPid"] || ready["pid"] != owner["identity"]["workerPid"] || ready["nonce"] != request["nonce"] || cleaned["nonce"] != request["nonce"] || cleaned["writerStopped"] != true || cleaned["parentExited"] != true { return None; }
+    Some(format!("{id}:{}:{}", owner["id"].as_str()?, request["nonce"].as_str()?))
+}
+fn reconcile_service_install_at(dir: &std::path::Path, id: &str, work: impl FnOnce() -> Result<(), String>) -> Result<Value, String> {
+    let registry = registry_lock_at(dir)?;
+    let job = snapshot_at(dir)?.ok_or("没有待核实的后台安装任务")?;
+    if job["action"] != "service" || job["phase"] != "interrupted" || job["running"] == true || job["id"] != id { return Err("安装任务仍在运行或身份已变化，请重新读取进度。".into()); }
+    let lease = open_lock(&dir.join(id).join("owner.lock"))?;
+    lease.try_lock().map_err(|_| "安装观察进程尚未退出，已保留占用。")?;
+    drop(registry);
+    let result = work();
+    // No new claimant can replace this job while its lease is held. Publish
+    // the final view under the short registry transaction, after releasing ours.
+    let _registry = registry_lock_at(dir)?;
+    let current: Value = serde_json::from_slice(&fs::read(dir.join("job.json")).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    if current["id"] != id { return Err("安装任务身份已变化，请重新读取进度。".into()); }
+    drop(lease);
+    result?;
+    Ok(json!({"job":snapshot_at(dir)?}))
+}
+fn reconcile_service_install(id: &str) -> Result<Value, String> {
+    let root = crate::axiom_service::data_root()?;
+    reconcile_service_install_at(&root.join("setup"), id, || {
+        let node = runtime_node()?;
+        let mut command = Command::new(node);
+        command.arg(root.join("setup/setup-reconciliation.mjs")).arg(id).env("AXIOM_DATA_DIR", &root);
+        capture(&mut command, 20).map(|_| ())
+    })
+}
+fn recovery_retryable(error: &str) -> bool {
+    ["安装状态正被其他客户端读取", "安装观察进程尚未退出", "后台正在安装、更新或卸载", "读取状态超时", "读取命令输出超时", "读取错误输出超时"].iter().any(|message| error.contains(message))
+}
+fn recovery_due(previous: Option<&ServiceRecoveryAttempt>, key: &str, now: Instant) -> bool {
+    previous.is_none_or(|state| !state.running && (state.key != key || state.attempts < 3 && state.retry_at.is_some_and(|time| now >= time)))
+}
+fn status_with_service_recovery() -> Result<Value, String> {
+    let dir = crate::axiom_service::data_root()?.join("setup");
+    let mut job = snapshot()?;
+    if cfg!(windows) { if let Some(ref mut current) = job {
+        let candidate = service_recovery_candidate(&dir, current);
+        let id = current["id"].as_str().ok_or("安装任务编号无效")?.to_string();
+        let mut attempt = SERVICE_RECOVERY.lock().map_err(|_| "安装核实状态不可用")?;
+        let schedule = candidate.as_ref().filter(|key| recovery_due(attempt.as_ref(), key, Instant::now())).cloned();
+        if let Some(ref key) = schedule {
+            let attempts = attempt.as_ref().filter(|state| state.key == *key).map_or(1, |state| state.attempts + 1);
+            *attempt = Some(ServiceRecoveryAttempt { key: key.clone(), id: id.clone(), running: true, error: None, attempts, retry_at: None });
+        }
+        if let Some(ref state) = *attempt { if state.id == id && (state.running || candidate.as_ref() == Some(&state.key)) {
+            current["recovery"] = json!({"state":if state.running || state.retry_at.is_some() && state.attempts < 3 { "checking" } else { "blocked" },"message":state.error});
+        } }
+        drop(attempt);
+        if let Some(key) = schedule {
+            std::thread::spawn(move || {
+                let result = reconcile_service_install(&id);
+                if let Ok(mut state) = SERVICE_RECOVERY.lock() { if let Some(ref mut state) = *state { if state.key == key {
+                    state.running = false;
+                    state.error = result.err().map(|error| error.chars().take(2000).collect::<String>());
+                    state.retry_at = state.error.as_ref().filter(|error| recovery_retryable(error) && state.attempts < 3).map(|_| Instant::now() + Duration::from_secs(2u64.pow(state.attempts as u32)));
+                } } }
+            });
+        }
+    } }
+    Ok(json!({"job":job,"budgets":read_budgets(&dir)}))
 }
 fn valid_budgets(value: &Value) -> bool {
     value.as_object().is_some_and(|map| map.len() == 4 && ["headersMs","idleMs","installMs","totalMs"].iter().all(|key| value[*key].as_u64().is_some_and(|n| (1000..=86_400_000).contains(&n))))
@@ -332,13 +453,20 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         }).await.map_err(|e| e.to_string())?;
     }
     if action == "history" { return tauri::async_runtime::spawn_blocking(|| { let _registry = registry_lock()?; history_at(&crate::axiom_service::data_root()?.join("setup")) }).await.map_err(|e| e.to_string())?; }
-    if action == "status" { return tauri::async_runtime::spawn_blocking(|| Ok(json!({"job":snapshot()?,"budgets":read_budgets(&crate::axiom_service::data_root()?.join("setup"))}))).await.map_err(|e| e.to_string())?; }
+    if action == "status" { return tauri::async_runtime::spawn_blocking(status_with_service_recovery).await.map_err(|e| e.to_string())?; }
+    if action == "reconcile-service" {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let payload = maintenance.unwrap_or(json!({}));
+            reconcile_service_install(payload["id"].as_str().ok_or("安装任务编号无效")?)
+        }).await.map_err(|e| e.to_string())?;
+    }
     if action == "acknowledge-interruption" {
         if confirmed != Some(true) { return Err("请先确认系统安装器已经全部退出。".into()); }
         return tauri::async_runtime::spawn_blocking(|| {
         let _registry = registry_lock()?;
         let job = snapshot_unlocked()?.ok_or("没有待处理的安装任务")?;
         if job["phase"] != "interrupted" { return Err("当前任务不需要解除占用。".into()); }
+        if job["action"] == "service" { return Err("后台安装必须核实进程退出回执，不能仅靠人工确认解除占用。".into()); }
         let dir = crate::axiom_service::data_root()?.join("setup").join(job["id"].as_str().ok_or("安装任务编号无效")?);
         fs::write(dir.join("result.txt"), "1").map_err(|e| e.to_string())?;
         fs::write(dir.join("acknowledged.json"), r#"{"installerExitConfirmed":true}"#).map_err(|e| e.to_string())?;
@@ -350,6 +478,14 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
             let text = capture(&mut script("check")?, 20)?;
             serde_json::from_str::<Value>(text.trim()).map_err(|_| "环境检测未返回有效状态。".into())
         }).await.map_err(|e| e.to_string())?;
+    }
+    if action == "uninstall-settings" {
+        // Fixed OS destination only; opening Settings is not an uninstall receipt.
+        #[cfg(windows)] {
+            webview.app_handle().opener().open_url("ms-settings:appsfeatures", None::<&str>).map_err(|e| e.to_string())?;
+            return Ok(json!({"opened":true}));
+        }
+        #[cfg(not(windows))] return Err("请使用系统或原安装方式卸载 Tailscale。".into());
     }
     if action == "open-node" || action == "open-tailscale" {
         let url = if action == "open-node" { "https://nodejs.org/en/download" } else { "https://tailscale.com/download" };
@@ -467,6 +603,73 @@ mod tests {
         assert_eq!(tasks.len(), 102);
         assert_eq!(tasks.iter().filter(|task| task["status"] == "unknown").count(), 2);
         assert!(!tasks.iter().any(|task| task["id"] == "456-3"));
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn recovery_does_not_hold_registry_and_final_snapshot_releases_own_lease() {
+        let root = test_root(); let files = root.join("123-456"); fs::create_dir_all(&files).unwrap();
+        fs::write(root.join("job.json"), r#"{"id":"123-456","action":"service","running":true}"#).unwrap();
+        fs::write(root.join("service-owner.json"), "{}").unwrap();
+        fs::write(files.join("task.json"), r#"{"id":"123-456","status":"unknown","phase":"installing"}"#).unwrap();
+        let (ready_send, ready) = std::sync::mpsc::channel(); let (finish, finish_read) = std::sync::mpsc::channel();
+        let worker_root = root.clone();
+        let worker = std::thread::spawn(move || reconcile_service_install_at(&worker_root, "123-456", || {
+            ready_send.send(()).unwrap(); finish_read.recv_timeout(Duration::from_secs(5)).unwrap();
+            fs::write(worker_root.join("123-456/task.json"), r#"{"id":"123-456","status":"failed","phase":"installing","message":"已凭退出回执解除占用","reconciliation":{"writerStopped":true,"parentExited":true}}"#).unwrap();
+            fs::write(worker_root.join("123-456/result.txt"), "1").unwrap(); fs::remove_file(worker_root.join("service-owner.json")).unwrap(); Ok(())
+        }));
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        let started = Instant::now(); let registry = registry_lock_at(&root).unwrap();
+        assert!(started.elapsed() < Duration::from_millis(500), "a slow recovery must not block status readers");
+        assert!(lease_busy(&files.join("owner.lock")).unwrap(), "recovery retains the task lease while work is running");
+        assert_eq!(snapshot_at(&root).unwrap().unwrap()["running"], true); drop(registry);
+        finish.send(()).unwrap(); let final_view = worker.join().unwrap().unwrap();
+        assert_eq!(final_view["job"]["running"], false); assert_eq!(final_view["job"]["phase"], "error");
+        assert!(!lease_busy(&files.join("owner.lock")).unwrap()); fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn failed_recovery_retains_owner_and_releases_only_its_lease() {
+        let root = test_root(); let files = root.join("123-456"); fs::create_dir_all(&files).unwrap();
+        fs::write(root.join("job.json"), r#"{"id":"123-456","action":"service","running":true}"#).unwrap();
+        fs::write(root.join("service-owner.json"), "{\"original\":true}").unwrap();
+        fs::write(files.join("task.json"), r#"{"id":"123-456","status":"unknown","phase":"installing"}"#).unwrap();
+        assert!(reconcile_service_install_at(&root, "123-456", || Err("后台正在安装、更新或卸载".into())).is_err());
+        assert!(root.join("service-owner.json").exists()); assert!(!lease_busy(&files.join("owner.lock")).unwrap());
+        assert_eq!(snapshot_at(&root).unwrap().unwrap()["phase"], "interrupted"); fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn automatic_recovery_retries_only_transient_errors_with_a_bound() {
+        let now = Instant::now();
+        let mut state = ServiceRecoveryAttempt { key:"key".into(), id:"123-456".into(), running:true, error:None, attempts:1, retry_at:None };
+        assert!(!recovery_due(Some(&state), "other", now));
+        state.running = false; assert!(!recovery_due(Some(&state), "key", now));
+        assert!(recovery_retryable("后台正在安装、更新或卸载，请等待当前维护完成。"));
+        assert!(!recovery_retryable("安装恢复凭据已变化，已保留占用。"));
+        state.retry_at = Some(now + Duration::from_secs(2));
+        assert!(!recovery_due(Some(&state), "key", now)); assert!(recovery_due(Some(&state), "key", now + Duration::from_secs(3)));
+        state.attempts = 3; assert!(!recovery_due(Some(&state), "key", now + Duration::from_secs(3)));
+        assert!(recovery_due(Some(&state), "new-proof", now));
+    }
+    #[test]
+    fn recovery_candidate_requires_typed_identity_and_single_link_records() {
+        let root = test_root(); let command = root.join("123-456/runtime-test/command"); fs::create_dir_all(&command).unwrap();
+        let nonce = "c2e83aa2-eeb2-4079-84be-46357bbdf045";
+        let mut owner = json!({"format":1,"id":"c3bb7fb7-a288-487d-9ac3-1e131014f76a","state":"armed","hostPid":123,"identity":{"platform":"win32","workerPid":456}});
+        let request = json!({"nonce":nonce,"taskId":"123-456","attemptId":"123-456","parentPid":123});
+        fs::write(command.join("request.json"), serde_json::to_vec(&request).unwrap()).unwrap();
+        fs::write(command.join("ready.json"), serde_json::to_vec(&json!({"nonce":nonce,"pid":456})).unwrap()).unwrap();
+        fs::write(command.join("cleaned.json"), serde_json::to_vec(&json!({"nonce":nonce,"writerStopped":true,"parentExited":true})).unwrap()).unwrap();
+        let job = json!({"id":"123-456","action":"service","running":false,"phase":"interrupted","task":{"phase":"installing"}});
+        let publish = |value: &Value| fs::write(root.join("service-owner.json"), serde_json::to_vec(value).unwrap()).unwrap();
+        publish(&owner); assert!(service_recovery_candidate(&root, &job).is_some());
+        owner["hostPid"] = Value::Null; publish(&owner); assert!(service_recovery_candidate(&root, &job).is_none());
+        owner["hostPid"] = json!("123"); publish(&owner); assert!(service_recovery_candidate(&root, &job).is_none());
+        owner["hostPid"] = json!(123); owner["id"] = json!("not-a-uuid"); publish(&owner); assert!(service_recovery_candidate(&root, &job).is_none());
+        owner["id"] = json!("c3bb7fb7-a288-487d-9ac3-1e131014f76a"); publish(&owner);
+        fs::hard_link(root.join("service-owner.json"), root.join("linked-owner.json")).unwrap();
+        assert!(service_recovery_candidate(&root, &job).is_none(), "multiply linked records do not schedule a subprocess");
+        fs::remove_file(root.join("linked-owner.json")).unwrap(); assert!(service_recovery_candidate(&root, &job).is_some());
+        fs::create_dir_all(root.join("123-456/runtime-other")).unwrap(); assert!(service_recovery_candidate(&root, &job).is_none());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
