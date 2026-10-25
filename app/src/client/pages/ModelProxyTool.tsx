@@ -99,9 +99,9 @@ export function ModelProxyTool({ active }: { active: boolean }) {
           <p className="field-help">当前：{state.installations[kernel] ? `v${state.installations[kernel]!.version}` : "未安装"} · 最新：{state.latest[kernel] ? `v${state.latest[kernel]}` : "尚未检查"}</p>
           {!state.managed && <p className="field-help">当前平台暂不提供内核下载、校验与版本自检；已安装的内核仍可启动线路。</p>}
           <div className="tools-actions"><button className="btn" title={state.managed ? undefined : "当前平台不提供内核下载与版本自检"} disabled={busy || !state.managed} onClick={() => void action("modelProxy.check", { kernel })}>检查 {kernel === "xray" ? "Xray" : "mihomo"} 更新</button><button className="btn btn-primary" title={state.managed ? undefined : "当前平台不提供内核下载与版本自检"} disabled={busy || !state.managed || !latest || upToDate} onClick={() => void action("modelProxy.install", { kernel, version: latest })}>{upToDate ? "已是最新版本" : installed ? "安装已确认版本" : "安装内核"}</button>{(installed || state.removalPending?.[kernel]) && <button className="btn" disabled={busy} onClick={() => setUninstall({ kernel, revision: state.revision })}><Icon name="trash-2" />{state.removalPending?.[kernel] ? "清理残留文件" : "卸载内核"}</button>}</div>
-          {uninstall?.kernel === kernel && <div className="tools-conflict" role="group" aria-label={`确认卸载 ${kernel}`}>
+          {uninstall?.kernel === kernel && <div className="tools-conflict inline-confirmation" role="group" aria-label={`确认卸载 ${kernel}`}>
             <p>停止使用 {kernel} 的线路并删除托管程序，正在使用这些线路的模型请求会中断。订阅、节点与供应商绑定保留；重新安装后可手动启动线路。</p>
-            <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const revision = uninstall.revision; setUninstall(undefined); void action("modelProxy.uninstall", { kernel, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button></div>
+            <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button><button className="btn confirm-danger" disabled={busy} onClick={() => { const revision = uninstall.revision; setUninstall(undefined); void action("modelProxy.uninstall", { kernel, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button></div>
           </div>}
         </BackendMaintenance>; })}
         <ProxyImporterMaintenance state={state} connected={connection.connected} />
@@ -119,7 +119,7 @@ export function ModelProxyTool({ active }: { active: boolean }) {
             <button className="btn" disabled={busy || !!draft} onClick={() => { setDraft({ revision: state.revision, id: profile.id, name: profile.name, kernel: profile.kernel, format: profile.kernel === "xray" && !profile.node ? "native" : "share", node: profile.node, source: "" }); setFeedback(undefined); }}>编辑</button>
             <button className="btn btn-ghost" disabled={busy || !!draft} onClick={() => setRemoving(profile.id)}>删除</button>
           </div>
-          {removing === profile.id && <div className="tools-conflict" role="alert"><p>删除「{profile.name}」会停止线路；已选择它的供应商需要重新配置。</p><button className="btn" disabled={busy} onClick={() => void action("modelProxy.remove", { id: profile.id })}>确认删除</button><button className="btn btn-ghost" disabled={busy} onClick={() => setRemoving(undefined)}>取消</button></div>}
+          {removing === profile.id && <div className="tools-conflict inline-confirmation" role="alert"><p>删除「{profile.name}」会停止线路；已选择它的供应商需要重新配置。</p><div className="tools-actions"><button className="btn" disabled={busy} onClick={() => setRemoving(undefined)}>取消</button><button className="btn confirm-danger" disabled={busy} onClick={() => void action("modelProxy.remove", { id: profile.id })}>确认删除</button></div></div>}
         </div>; })}
         {!draft && <button className="btn" disabled={busy} onClick={() => { setDraft({ revision: state.revision, name: "", kernel: "xray", format: "share", node: "", source: "" }); setRemoving(undefined); setFeedback(undefined); }}>添加线路</button>}
         {draft && <ProxyProfileEditor draft={draft} setDraft={setDraft} state={state} busy={busy} conflict={conflict}

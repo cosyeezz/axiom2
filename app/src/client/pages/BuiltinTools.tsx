@@ -114,9 +114,9 @@ export default function BuiltinTools() {
                 <button className="btn btn-primary" disabled={busy || !!state.supportError || !state.latest || !!draft || (!!state.version && state.version !== state.latest && !update)} onClick={() => void action("opencli.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? update ? "更新 OpenCLI" : "重新安装" : "安装 OpenCLI"}</button>
                 {(state.configured || state.removalPending || state.version) && <button className="btn" disabled={busy || !!draft} onClick={() => setUninstall({ revision: state.revision, cleanupRevision: state.cleanup?.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留文件" : state.managed ? "卸载 OpenCLI" : "移除接入"}</button>}
               </div>
-              {uninstall && <div className="tools-conflict" role="group" aria-label="确认移除 OpenCLI">
+              {uninstall && <div className="tools-conflict inline-confirmation" role="group" aria-label="确认移除 OpenCLI">
                 <p>移除 Axiom 接入并清理托管程序。接入设置、Chrome 扩展与外部安装保留。等待已准入任务完成后自动移除；等待期间可在任务面板取消。</p>
-                <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const confirmation = uninstall; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, ...confirmation }); }}><Icon name="trash-2" />确认移除</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button></div>
+                <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button><button className="btn confirm-danger" disabled={busy} onClick={() => { const confirmation = uninstall; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, ...confirmation }); }}><Icon name="trash-2" />确认移除</button></div>
               </div>}
               <p className="field-help tools-help">先检查更新，再安装已确认的版本。新版本安装到独立目录，验证成功后用于后续执行；现有任务继续使用原版本。可在任务面板取消安装或延长时间。外部 npm 安装保留，如需卸载请使用原安装方式。</p>
               {!!state.cleanupUnverified?.length && <p className="field-help">另有 {state.cleanupUnverified.length} 个旧程序目录缺少归属证明，将保留，不阻塞当前程序卸载。</p>}

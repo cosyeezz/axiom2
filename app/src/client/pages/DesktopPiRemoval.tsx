@@ -62,11 +62,11 @@ export default function DesktopPiRemoval({ onRescan }: { onRescan: () => Promise
     {ownJob && job.task && <MaintenanceTaskView task={job.task} connected onCancel={() => act('cancel', { id: job.task!.id })} onExtend={budgets => act('extend', { id: job.task!.id, budgets })} onReconcile={() => act('reconcile', { id: job.task!.id })} />}
     {items && <ul className="environment-locations">{items.map((item, index) => <li key={index}><div className="environment-location-title"><span>{item.label}</span><span>{labels[item.state]}</span></div>{item.path && <code>{item.path}</code>}{item.note && <p className="connect-update-detail">{item.note}</p>}</li>)}</ul>}
     {ready && !confirmed && <button className="connect-secondary" disabled={busy} onClick={() => { setConfirmed(preview!); setClosed(false); }}>卸载此终端 Pi</button>}
-    {confirmed && <div className="environment-confirm" role="group" aria-label="确认 Pi 卸载">
+    {confirmed && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认 Pi 卸载">
       <p>将卸载终端 Pi {confirmed.version}：</p><code>{confirmed.packageRoot}</code>
       <p>程序和 npm 命令入口将被移除，设置及共享缓存保留。外部终端任务不会自动结束。</p>
       <label><input type="checkbox" checked={closed} onChange={event => setClosed(event.target.checked)} /><span>我已关闭使用此安装的终端会话，并确认上述范围</span></label>
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy || !closed} onClick={() => void remove()}>确认卸载</button><button className="connect-secondary" disabled={busy} onClick={() => setConfirmed(null)}>返回</button></div>
+      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setConfirmed(null)}>取消</button><button className="connect-secondary confirm-danger" disabled={busy || !closed} onClick={() => void remove()}>确认卸载</button></div>
     </div>}
     {job?.kind === 'pi-uninstall' && job.cleanup && <p className="connect-update-detail">{job.cleanup.complete ? '所列程序路径已移除；保留及未核实项仍需分别处理。' : '仍有残留；请核实任务详情并重新预览。'} 下方环境扫描用于继续检查其他安装与残留。</p>}
   </section>;

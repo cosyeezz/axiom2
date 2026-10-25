@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../theme.js";
 import { Icon } from "../Icon.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import DesktopUpdates from "./DesktopUpdates.js";
 import DesktopEnvironment from "./DesktopEnvironment.js";
 import { BrandMark } from "../BrandMark.js";
@@ -12,6 +13,7 @@ import { desktopInvoke, remember, stored } from "./desktop-bridge.js";
 import DeviceSelect from "./DeviceSelect.js";
 import { IconButton } from "./StartupControls.js";
 import "../styles/connect.css";
+import "../styles/confirmation-inline.css";
 
 type View = "control" | "workbench";
 type Service = { desktopView?: View; state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };
@@ -56,8 +58,6 @@ export default function Connect() {
   const [confirm, setConfirm] = useState(false);
   const pending = useRef<Promise<void> | null>(null);
   const requested = useRef(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const stopButton = useRef<HTMLButtonElement>(null);
 
   async function act(action: Action, quiet = false) {
     if (quiet ? pending.current || requested.current : requested.current) return;
@@ -146,10 +146,6 @@ export default function Connect() {
     const timer = window.setInterval(() => { void act("status", true); }, 3000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (confirm) dialog.current?.showModal();
-    else if (dialog.current?.open) { dialog.current.close(); stopButton.current?.focus(); }
-  }, [confirm]);
   const running = service?.state === "running";
   const blocked = !!busy || updating || installing || remoteBusy;
   const starting = service?.state === "starting";
@@ -189,7 +185,7 @@ export default function Connect() {
                 <p className="connection-service-detail">{(service?.url || "http://127.0.0.1:4317/").replace(/^https?:\/\//, "").replace(/\/$/, "")}{running && !serviceUncertain && <span> · {service.active.length}{service.active.length >= 20 ? "+" : ""} 个运行中的会话</span>}</p>
               </div>
               <div className="connection-service-actions"><button className="connection-text-button" aria-label="刷新服务状态" disabled={!!busy || updating} onClick={() => void act("status")}><Icon name="refresh-cw" className={busy === "status" ? "startup-spin" : ""} /><span>检查状态</span></button><span className="connection-action-divider" aria-hidden="true" />
-                {running || starting ? <button ref={stopButton} className="connection-text-button connection-stop" aria-label="关闭后台服务" disabled={blocked || serviceUncertain} onClick={() => setConfirm(true)}><Icon name="power" /><span>{starting ? "取消启动" : "关闭服务"}</span></button> : missing ? <button className="connection-text-button" disabled={blocked} onClick={() => setPreparation(true)}><Icon name="download" /><span>安装服务</span></button> : <button className="connection-text-button" aria-label="启动后台服务" disabled={blocked || serviceUncertain || service?.state !== "stopped"} onClick={() => void act("start")}><Icon name="power" /><span>启动服务</span></button>}
+                {running || starting ? <button className="connection-text-button connection-stop" aria-label="关闭后台服务" disabled={blocked || serviceUncertain} onClick={() => setConfirm(true)}><Icon name="power" /><span>{starting ? "取消启动" : "关闭服务"}</span></button> : missing ? <button className="connection-text-button" disabled={blocked} onClick={() => setPreparation(true)}><Icon name="download" /><span>安装服务</span></button> : <button className="connection-text-button" aria-label="启动后台服务" disabled={blocked || serviceUncertain || service?.state !== "stopped"} onClick={() => void act("start")}><Icon name="power" /><span>启动服务</span></button>}
               </div>
             </div>
             {connectionPort !== "4317" && <p className="connection-service-hint">上方连接端口为 {connectionPort || "—"}；这里管理的本地后台使用 4317 端口。</p>}
@@ -207,12 +203,12 @@ export default function Connect() {
         {error && <p className="connect-error startup-global-error" role="alert">{error}<IconButton label="重新读取服务状态" icon="refresh-cw" disabled={!!busy} onClick={() => void act("status")} /></p>}
       </section>
       <footer className="connect-footer"><span><ConnectionIcon name="privacy" />文件和任务留在你的电脑上</span><span>关闭客户端不会停止服务</span></footer>
-      <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(false)} onClose={() => setConfirm(false)} aria-labelledby="stop-title">
-        <h2 id="stop-title">关闭后台服务？</h2>
-        <p>{service?.active.length ? `当前有 ${service.active.length}${service.active.length >= 20 ? "+" : ""} 个会话正在执行任务，关闭服务会中断这些任务。` : "关闭后将返回服务控制页，尚未结束的任务将被停止。"}项目和会话记录会保留。</p>
+      {confirm && <ConfirmDialog title="关闭后台服务？" danger cancelLabel="继续运行" confirmLabel="确认关闭服务"
+        description={<>{service?.active.length ? `当前有 ${service.active.length}${service.active.length >= 20 ? "+" : ""} 个会话正在执行任务，关闭服务会中断这些任务。` : "关闭后将返回服务控制页，尚未结束的任务将被停止。"}项目和会话记录会保留。</>}
+        confirmDisabled={blocked || serviceUncertain} onClose={() => setConfirm(false)}
+        onConfirm={() => { setConfirm(false); void act("stop"); }}>
         {!!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
-        <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(false)}>继续运行</button><button className="connect-danger" onClick={() => { setConfirm(false); void act("stop"); }}>确认关闭服务</button></div>
-      </dialog>
+      </ConfirmDialog>}
     </main>
     </>
   );

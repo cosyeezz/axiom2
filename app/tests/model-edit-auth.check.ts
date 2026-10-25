@@ -82,7 +82,7 @@ try {
   await discard.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(await page.locator("#new-model-name").inputValue(), "实际修改");
   await cancel.click();
-  await discard.getByRole("button", { name: "确认", exact: true }).click();
+  await discard.getByRole("button", { name: "放弃编辑", exact: true }).click();
   await editor.waitFor({ state: "detached" });
   assert.ok(await save.isDisabled());
 
@@ -119,7 +119,7 @@ try {
   await remove.click();
   const deletion = page.getByRole("dialog", { name: "删除模型草稿？", exact: true });
   assert.match(await deletion.innerText(), /授权和其他模型保持不变/);
-  await deletion.getByRole("button", { name: "确认", exact: true }).click();
+  await deletion.getByRole("button", { name: "删除草稿", exact: true }).click();
   await save.click();
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();
   await noDialog();

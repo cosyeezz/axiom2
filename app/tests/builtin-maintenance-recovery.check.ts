@@ -14,7 +14,7 @@ cli.install("1.8.7");
 for (const tool of ["rea", "opencli"] as const) {
   const operation = beginBuiltinOperation(cli.root, tool); operation.close();
 }
-const app = await startServer({ root: cli.root, port: 0, dev: true, rea: rea.dependencies, openCli: { execute: cli.execute, runtime: cli.runtime, locateNpm: cli.locateNpm } });
+const app = await startServer({ root: cli.root, port: 0, rea: rea.dependencies, openCli: { execute: cli.execute, runtime: cli.runtime, locateNpm: cli.locateNpm } });
 let browser: Browser | undefined, socket: WebSocket | undefined, blocked = false;
 Object.defineProperty(app.agents, "maintenancePending", { configurable: true, get: () => blocked });
 try {
@@ -26,7 +26,16 @@ try {
   await recovery.waitFor();
   assert.equal(await panel.getByRole("button", { name: "安装 REA", exact: true }).isEnabled(), true, "stale pending must not disable installation");
   await recovery.locator("summary").click();
-  await recovery.getByRole("button", { name: "确认受控停止并核实", exact: true }).click();
+  const pending = builtinPendingOperation(cli.root, "rea");
+  const cancelRecovery = recovery.getByRole("button", { name: "暂不停止", exact: true });
+  const forceRecovery = recovery.getByRole("button", { name: "确认受控停止并核实", exact: true });
+  assert.equal(await forceRecovery.evaluate(button => button.classList.contains("confirm-danger")), true);
+  assert.equal(await cancelRecovery.evaluate(button => button.nextElementSibling?.textContent), "确认受控停止并核实");
+  await cancelRecovery.click();
+  assert.equal(await recovery.locator("details").getAttribute("open"), null);
+  assert.equal(builtinPendingOperation(cli.root, "rea"), pending, "cancelling recovery must preserve the interrupted operation");
+  await recovery.locator("summary").click();
+  await forceRecovery.click();
   await recovery.waitFor({ state: "detached" });
   assert.equal(builtinPendingOperation(cli.root, "rea"), undefined);
   await panel.getByRole("button", { name: "安装 REA", exact: true }).click();

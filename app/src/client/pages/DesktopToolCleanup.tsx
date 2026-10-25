@@ -114,14 +114,14 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
       <div><strong>{row.label}</strong>{row.warning && <p className="connect-update-detail">{row.warning}</p>}</div>
       <button className="connect-secondary" disabled={busy || !!pending || (!row.available && !row.readOnly)} onClick={() => void run(() => inspect(row))}>{row.readOnly ? '查看只读范围' : row.available ? row.op.startsWith('rtk.cleanup') || row.op === 'rea.clearDownloads' ? '查看数据清理范围' : '查看卸载范围' : '当前不可自动清理'}</button>
     </div>)}
-    {preview && <div className="environment-confirm" role="group" aria-label="确认工具清理范围">
+    {preview && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认工具清理范围">
       <strong>{preview.label}</strong><p>{preview.readOnly ? '只读范围（不会删除）：' : '将执行：'}</p><ul>{preview.scope.map((item, i) => <li key={i}>{item}</li>)}</ul>
       <p>保留：</p><ul>{preview.retained.map((item, i) => <li key={i}>{item}</li>)}</ul>
       {preview.warning && <p className="environment-issue">{preview.warning}</p>}
       {preview.credentials && <label><input type="checkbox" checked={credentials} onChange={event => setCredentials(event.target.checked)} /><span>同时清除此 MCP 的专属凭据（仍被共享引用的凭据保留）</span></label>}
       <p className="connect-update-detail">执行时再次核对配置版本、所列目录身份和占用；发生变化会拒绝本次操作，需要重新查看范围。</p>
       <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setPreview(undefined)}>返回</button>
-      {!preview.readOnly && preview.available && <button className="connect-secondary" disabled={busy} onClick={() => void run(remove)}>确认清理所列范围</button>}</div>
+      {!preview.readOnly && preview.available && <button className="connect-secondary confirm-danger" disabled={busy} onClick={() => void run(remove)}>确认清理所列范围</button>}</div>
     </div>}
     {pending && <div className="environment-confirm" aria-live="polite">
       <strong>{pending.row.label} · {pending.result?.state === 'verified' ? '选定范围已核实' : pending.result?.state === 'running' ? '处理中' : '尚未完成核实'}</strong>

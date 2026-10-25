@@ -4,6 +4,7 @@ import { BudgetEditor, MaintenanceTaskView } from "../maintenance/MaintenanceVie
 import { defaultMaintenanceBudgets, type MaintenanceTask, type MaintenanceBudgets } from "../../shared/maintenance.js";
 import { desktopInvoke } from "./desktop-bridge.js";
 import { Icon } from "../Icon.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import InstallProgress from "./InstallProgress.js";
 import { CommandLine, IconButton, ResourceLink } from "./StartupControls.js";
 type Environment = { nodeReady: boolean; nodeVersion: string; writable: boolean; tailscale: boolean; platform: string };
@@ -29,7 +30,6 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const [historyOpen, setHistoryOpen] = useState(false);
   const workflow = useRef<HTMLElement>(null);
   const [confirmRecovery, setConfirmRecovery] = useState(false);
-  const recoveryDialog = useRef<HTMLDialogElement>(null), recoveryButton = useRef<HTMLButtonElement>(null);
   const windows = /Win/i.test(navigator.platform);
   const pending = useRef(false), alive = useRef(true), jobEpoch = useRef(0), checkEpoch = useRef(0);
   const wasRunning = useRef(false);
@@ -80,10 +80,8 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   }
   const interrupted = job?.phase === "interrupted" || job?.task?.status === "unknown" || job?.task?.status === "interrupted";
   useEffect(() => {
-    if (confirmRecovery && interrupted) recoveryDialog.current?.showModal();
-    else if (recoveryDialog.current?.open) { recoveryDialog.current.close(); recoveryButton.current?.focus(); }
     if (!interrupted) setConfirmRecovery(false);
-  }, [confirmRecovery, interrupted]);
+  }, [interrupted]);
   const disabled = running || interrupted || uncertain || submitting || blocked;
   const installed = !!service && ["running", "stopped", "starting", "stopping"].includes(service.state);
   const steps = remote ? [{ id: "network", title: "连接环境", detail: "Tailscale", done: !!environment?.tailscale }, { id: "connect", title: "连接工作台", detail: "验证目标服务", done: false }] : [{ id: "runtime", title: "运行环境", detail: "Node.js · npm", done: !!environment?.nodeReady && !!environment.writable }, { id: "service", title: "后台服务", detail: "安装与校验", done: installed }, { id: "connect", title: "连接工作台", detail: "启动与验证", done: service?.state === "running" }];
@@ -108,15 +106,14 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       {job?.task && <MaintenanceTaskView task={job.task} showError={!historyOpen} onCancel={() => control("cancel", { id: job.id })} onExtend={budgets => control("extend", { id: job.id, budgets })} />}
       <details className="maintenance-details"><summary>首次安装下载设置</summary><BudgetEditor value={budgets} onSave={budgets => control("defaults", { budgets })} /><p className="maintenance-note">系统安装器管理自己的下载与安装过程，无法提供实时字节或安全取消时，仅显示阶段和用时。</p></details>
       {(running || job?.phase === "error" || interrupted || uncertain) && <div id="setup-recovery" tabIndex={-1} className={`setup-job ${job?.phase === "error" || interrupted ? "has-error" : ""}`} role="status"><div>{running && <Icon name="loader-circle" className="startup-spin" />}<span>{uncertain ? "操作结果尚未确认，请先重新读取进度，避免重复安装。" : job?.message}</span><IconButton label="重新读取安装进度" icon="refresh-cw" onClick={() => void status().catch(cause => setError(String(cause)))} /></div>{!job?.task && <InstallProgress value={job?.progress} running={running} />}{running && !job?.task && job?.startedAt && <p className="connect-footnote">已用 {Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000))} 秒{job.logUpdatedAt ? ` · 最近输出于 ${Math.max(0, Math.floor((Date.now() - job.logUpdatedAt) / 1000))} 秒前` : " · 等待执行器输出"}{!job.progress && "；此阶段无可计算的总进度。"}</p>}{!!job?.lines.length && <details open={running || job.phase === "error"}><summary>执行详情{typeof job.exitCode === "number" ? ` · 退出码 ${job.exitCode}` : ""}</summary><pre>{job.lines.join("\n").replaceAll("@@phase:", "")}</pre></details>}</div>}
-      {interrupted && !running && (job?.action === "service" ? <button className="connect-secondary" disabled={submitting || blocked} onClick={() => { onComplete(); void status().catch(cause => setError(String(cause))); }}>重新核实后台状态</button> : <button ref={recoveryButton} className="connect-secondary" disabled={submitting || blocked} onClick={() => setConfirmRecovery(true)}>确认安装器退出后解除占用</button>)}
+      {interrupted && !running && (job?.action === "service" ? <button className="connect-secondary" disabled={submitting || blocked} onClick={() => { onComplete(); void status().catch(cause => setError(String(cause))); }}>重新核实后台状态</button> : <button className="connect-secondary" disabled={submitting || blocked} onClick={() => setConfirmRecovery(true)}>确认安装器退出后解除占用</button>)}
       {error && !historyOpen && <p className="connect-error" role="alert">{error}</p>}
       {running && <p className="connect-footnote">请保持客户端打开，并完成系统请求的安装授权。</p>}
     </div>
     {historyOpen && <DesktopTaskCenter kind="setup" current={job?.task} onClose={() => setHistoryOpen(false)} onSource={() => { setHistoryOpen(false); window.requestAnimationFrame(() => workflow.current?.focus()); }} onChanged={() => { void status().catch(cause => setError(String(cause))); }} />}
-    <dialog ref={recoveryDialog} className="connect-dialog" onCancel={() => setConfirmRecovery(false)} onClose={() => setConfirmRecovery(false)} aria-labelledby="recovery-title" aria-describedby="recovery-description">
-      <h2 id="recovery-title">确认安装器已退出？</h2>
-      <p id="recovery-description">请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。</p>
-      <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirmRecovery(false)}>取消</button><button className="connect-danger" disabled={submitting || blocked || !interrupted} onClick={() => { setConfirmRecovery(false); void action("acknowledge-interruption"); }}>我已确认安装器全部退出</button></div>
-    </dialog>
+    {confirmRecovery && interrupted && <ConfirmDialog title="确认安装器已退出？" danger
+      description="请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。"
+      confirmLabel="我已确认安装器全部退出" confirmDisabled={submitting || blocked || uncertain || !interrupted}
+      onClose={() => setConfirmRecovery(false)} onConfirm={() => { setConfirmRecovery(false); void action("acknowledge-interruption"); }} />}
   </section>;
 }

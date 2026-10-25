@@ -2,6 +2,7 @@ import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useEffect, useRef, useState } from "react";
 import { LocalPath, ResourceLocation, PathNotice } from "../LocalPath.js";
 import { SettingsSidebar } from "../components.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import { PathInput } from "../FilePicker.js";
 import { JsonPathInput } from "../JsonPathInput.js";
 import { skillImportName } from "../../shared/skill-import.js";
@@ -133,7 +134,7 @@ export default function Resources() {
     else if (operation.target === selected && selected) void load(selected);
   }, [state.jobs, state.job, operations]);
   useEffect(() => {
-    if (modal) dialog.current?.showModal();
+    if (modal?.kind === "rename") dialog.current?.showModal();
     else if (dialog.current?.open) { dialog.current.close(); trigger.current?.focus(); }
   }, [modal]);
   useEffect(() => {
@@ -229,10 +230,28 @@ export default function Resources() {
         </article>
       </div>
     </main>
-    <dialog ref={dialog} className="resources-dialog" aria-labelledby="resource-dialog-title" onCancel={() => setModal(undefined)} onClose={() => setModal(undefined)}>
-      <h2 id="resource-dialog-title">{modal?.kind === "rename" ? `修改 ${modal.item.name} 的名称` : modal?.kind === "remove" ? `${modal.item.removalPending ? "继续清理" : modal.force || modal.clearCredentials ? "删除" : "卸载"} ${modal.item.name}？` : modal?.kind === "move" || modal?.kind === "copy" ? `${modal.kind === "copy" ? "复制" : "移动"}${modal.overwrite ? "并覆盖" : ""} ${modal.item.name}？` : modal?.kind === "template" ? `使用${modal.template}配置模板？` : "放弃未保存的修改？"}</h2>
-      {modal?.kind === "rename" ? <><div className="field"><label htmlFor="resource-rename-name">新名称</label><input id="resource-rename-name" className="input" autoFocus value={renameName} maxLength={modal.item.kind === "mcp" ? 128 : 200} onChange={event => setRenameName(event.target.value)} /></div><p>{modal.item.kind === "skill" ? "同步修改技能内部名称、目录或文件名及关联配置，完整保留正文和附属文件。" : "同步修改 MCP 配置名称、关联选择和登录凭据；继承此全局连接的项目覆盖也会更新。"}</p></> : modal?.kind === "remove" ? <><p>作用范围：{scopeName(modal.item.scopeId)}。将执行以下清理：</p><ul>{(modal.force ? modal.item.deleteCleanup ?? modal.item.cleanup : modal.item.cleanup).map((line, i) => <li key={i}><PathNotice text={line} /></li>)}</ul>{modal.force && <p>永久删除技能文件及整个所属目录，包含脚本和附件，无法撤销。</p>}<p>{modal.item.note}</p><p>历史会话内容保留。确认后立即按上述范围清理；已有会话中的旧技能目录或连接可通过重载更新。</p>{modal.item.kind === "mcp" && <label className="resources-confirm-check"><input type="checkbox" checked={!!modal.clearCredentials} onChange={event => setModal({ ...modal, clearCredentials: event.target.checked })} /><span>同时清理此 MCP 的登录凭据</span></label>}</> : modal?.kind === "move" || modal?.kind === "copy" ? <><p>将{modal.item.kind === "mcp" ? " MCP" : "技能"}从「{scopeName(modal.item.scopeId)}」{modal.kind === "copy" ? "复制" : "移动"}到「{scopeName(modal.destinationScopeId)}」。</p><p>{modal.kind === "copy" ? "原资源会保留，目标范围将获得独立副本。" : "成功后将移除原范围的资源。"}{modal.item.kind === "mcp" ? "连接配置和应用安装的依赖会保留，外部程序与同名、同 URL 的登录状态仍共享。" : "正文与附属文件会一并保留。"}</p><p className={modal.overwrite ? "tools-error" : undefined}>{modal.overwrite ? "已启用覆盖：目标范围内的同名资源将被完整替换，旧配置、正文和附属文件将被移除。" : "目标范围存在同名资源时会停止操作，保留已有内容。"}</p><p>已有会话可在操作完成后重载资源。</p></> : <p>{modal?.kind === "template" ? "当前 MCP 连接配置将被模板替换，其他输入保留。" : "当前编辑尚未保存。继续操作将放弃这些修改。"}</p>}
-      <div className="resources-dialog-actions"><button className="btn" autoFocus={modal?.kind !== "rename"} onClick={() => setModal(undefined)}>{modal?.kind === "remove" || modal?.kind === "move" || modal?.kind === "copy" || modal?.kind === "rename" ? "取消" : "继续编辑"}</button><button className={`btn ${modal?.kind === "rename" ? "btn-primary" : "resources-danger"}`} disabled={busy || modal?.kind === "rename" && (!renameName.trim() || renameName.trim() === modal.item.name)} onClick={() => { const action = modal; setModal(undefined); if (action?.kind === "rename") void act("resources.rename", { id: action.item.id, name: renameName.trim(), revision: action.revision }); else if (action?.kind === "remove") void act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision, clearCredentials: action.clearCredentials === true, force: action.force === true }); else if (action?.kind === "move" || action?.kind === "copy") void act(`resources.${action.kind}`, { id: action.item.id, destinationScopeId: action.destinationScopeId, revision: action.revision, overwrite: action.overwrite }); else if (action && "run" in action) action.run(); }}>{modal?.kind === "rename" ? "保存名称" : modal?.kind === "remove" ? modal.item.removalPending ? "确认清理" : modal.force || modal.clearCredentials ? "确认删除" : "确认卸载" : modal?.kind === "move" || modal?.kind === "copy" ? `确认${modal.kind === "copy" ? "复制" : "移动"}${modal.overwrite ? "并覆盖" : ""}` : modal?.kind === "template" ? "替换配置" : "放弃修改"}</button></div>
+    <dialog ref={dialog} className="resources-dialog" aria-labelledby="resource-dialog-title" onCancel={() => setModal(undefined)} onClose={() => setModal(current => current?.kind === "rename" ? undefined : current)}>
+      {modal?.kind === "rename" && <>
+        <h2 id="resource-dialog-title">修改 {modal.item.name} 的名称</h2>
+        <div className="field"><label htmlFor="resource-rename-name">新名称</label><input id="resource-rename-name" className="input" autoFocus value={renameName} maxLength={modal.item.kind === "mcp" ? 128 : 200} onChange={event => setRenameName(event.target.value)} /></div>
+        <p>{modal.item.kind === "skill" ? "同步修改技能内部名称、目录或文件名及关联配置，完整保留正文和附属文件。" : "同步修改 MCP 配置名称、关联选择和登录凭据；继承此全局连接的项目覆盖也会更新。"}</p>
+        <div className="resources-dialog-actions"><button className="btn" onClick={() => setModal(undefined)}>取消</button><button className="btn btn-primary" disabled={busy || !renameName.trim() || renameName.trim() === modal.item.name} onClick={() => { const action = modal; setModal(undefined); void act("resources.rename", { id: action.item.id, name: renameName.trim(), revision: action.revision }); }}>保存名称</button></div>
+      </>}
     </dialog>
+    {modal && modal.kind !== "rename" && <ConfirmDialog key={modal.kind}
+      title={modal.kind === "remove" ? `${modal.item.removalPending ? "继续清理" : modal.force || modal.clearCredentials ? "删除" : "卸载"} ${modal.item.name}？` : modal.kind === "move" || modal.kind === "copy" ? `${modal.kind === "copy" ? "复制" : "移动"}${modal.overwrite ? "并覆盖" : ""} ${modal.item.name}？` : modal.kind === "template" ? `使用${modal.template}配置模板？` : "放弃未保存的修改？"}
+      description={modal.kind === "remove" ? <><p>作用范围：{scopeName(modal.item.scopeId)}。将执行以下清理：</p><ul>{(modal.force ? modal.item.deleteCleanup ?? modal.item.cleanup : modal.item.cleanup).map((line, i) => <li key={i}><PathNotice text={line} /></li>)}</ul><p>{modal.item.note}</p><p>历史会话内容保留。确认后立即按上述范围清理；已有会话中的旧技能目录或连接可通过重载更新。</p>{modal.item.kind === "mcp" && <label className="resources-confirm-check"><input type="checkbox" checked={!!modal.clearCredentials} onChange={event => setModal({ ...modal, clearCredentials: event.target.checked })} /><span>同时清理此 MCP 的登录凭据</span></label>}</> : modal.kind === "move" || modal.kind === "copy" ? <><p>将{modal.item.kind === "mcp" ? " MCP" : "技能"}从「{scopeName(modal.item.scopeId)}」{modal.kind === "copy" ? "复制" : "移动"}到「{scopeName(modal.destinationScopeId)}」。</p><p>{modal.kind === "copy" ? "原资源会保留，目标范围将获得独立副本。" : "成功后将移除原范围的资源。"}{modal.item.kind === "mcp" ? "连接配置和应用安装的依赖会保留，外部程序与同名、同 URL 的登录状态仍共享。" : "正文与附属文件会一并保留。"}</p>{!modal.overwrite && <p>目标范围存在同名资源时会停止操作，保留已有内容。</p>}<p>已有会话可在操作完成后重载资源。</p></> : modal.kind === "template" ? "当前 MCP 连接配置将被模板替换，其他输入保留。" : "当前编辑尚未保存。继续操作将放弃这些修改。"}
+      warning={modal.kind === "remove" && modal.force ? "永久删除技能文件及整个所属目录，包含脚本和附件，无法撤销。" : (modal.kind === "move" || modal.kind === "copy") && modal.overwrite ? "已启用覆盖：目标范围内的同名资源将被完整替换，旧配置、正文和附属文件将被移除。" : undefined}
+      danger={modal.kind === "remove" || modal.kind === "discard" || modal.kind === "template" || ((modal.kind === "move" || modal.kind === "copy") && modal.overwrite)}
+      cancelLabel={modal.kind === "discard" || modal.kind === "template" ? "继续编辑" : "取消"}
+      confirmLabel={modal.kind === "remove" ? modal.item.removalPending ? "确认清理" : modal.force || modal.clearCredentials ? "确认删除" : "确认卸载" : modal.kind === "move" || modal.kind === "copy" ? `确认${modal.kind === "copy" ? "复制" : "移动"}${modal.overwrite ? "并覆盖" : ""}` : modal.kind === "template" ? "替换配置" : "放弃修改"}
+      confirmDisabled={busy}
+      onClose={() => setModal(current => current === modal ? undefined : current)}
+      onConfirm={() => {
+        const action = modal; setModal(undefined);
+        if (action.kind === "remove") void act("resources.remove", { id: action.item.id, confirm: true, revision: action.revision, clearCredentials: action.clearCredentials === true, force: action.force === true });
+        else if (action.kind === "move" || action.kind === "copy") void act(`resources.${action.kind}`, { id: action.item.id, destinationScopeId: action.destinationScopeId, revision: action.revision, overwrite: action.overwrite });
+        else if ("run" in action) action.run();
+      }} />}
   </div>;
 }

@@ -1,5 +1,6 @@
 import { DesktopTaskCenter } from "../maintenance/DesktopTaskCenter.js";
 import { Icon } from "../Icon.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import { BudgetEditor, MaintenanceTaskView } from "../maintenance/MaintenanceView.js";
 import { defaultMaintenanceBudgets, type MaintenanceTask, type MaintenanceBudgets } from "../../shared/maintenance.js";
 import { useEffect, useRef, useState } from "react";
@@ -44,8 +45,6 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const requested = useRef(false);
   const previousRunning = useRef(false);
   const manualError = useRef(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const trigger = useRef<HTMLElement | null>(null);
   const latest = update?.release?.version;
   const running = !!update?.job?.running;
   const backendBusy = (running && update?.job?.kind !== "client") || busy === "service" || busy === "recover" || busy === "pi";
@@ -55,12 +54,25 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const piReady = !!pi?.cli && !pi.cli.error && !pi.cli.legacy;
   const piRetry = update?.job?.kind === "pi" && ["error", "interrupted"].includes(update.job.phase) && pi?.cli?.version === pi?.release?.version;
   const piError = error?.action.startsWith("pi");
+  const installerVersion = update?.job?.kind === "client" && update.job.phase === "ready" ? update.job.version ?? latest : undefined;
+  const installerReady = newer(installerVersion, update?.clientVersion);
+  const actionDisabled = {
+    service: disabled || !update?.managed || !!update.recovery || !newer(latest, update.serviceVersion) || !["running", "stopped"].includes(service?.state || ""),
+    recover: disabled || !update?.recovery,
+    installer: disabled || !installerReady,
+    pi: disabled || !pi?.release?.token || !piReady || (!!pi.cli?.version && !piNewer && !piRetry),
+  };
+  // Apply current safety gates without replacing the Pi version/token already reviewed.
+  const confirmationDisabled = (action: "service" | "recover" | "installer" | "pi") => action === "pi"
+    ? disabled || !confirmedPi.current?.token || !pi?.release?.token || !piReady || (!!pi.cli?.version && !newer(confirmedPi.current.version, pi.cli.version) && !piRetry)
+    : actionDisabled[action];
   const progress = <>{update?.job?.task ? <MaintenanceTaskView task={update.job.task} onReconcile={() => control("reconcile", { id: update.job!.task!.id })} showError={!historyOpen} connected onCancel={() => control("cancel", { id: update.job!.task!.id })} onExtend={budgets => control("extend", { id: update.job!.task!.id, budgets })} /> : update?.job && <><p className={`connect-update-progress ${update.job.phase === "error" || update.job.phase === "interrupted" ? "has-error" : ""}`} role="status" aria-live="polite">{running && <span className="connect-update-pulse" aria-hidden="true" />}{update.job.message}</p><InstallProgress value={update.job.download} running={running}  /></>}{update?.job?.kind === "pi" && <>{running && <p className="connect-footnote">{update.execution?.updatedAt ? `最近日志输出于 ${Math.max(0, Math.floor((Date.now() - update.execution.updatedAt) / 1000))} 秒前；无新输出不代表下载已停止。` : "等待 npm 输出；安装期间无法计算整体百分比。"}</p>}{!!update.execution?.lines.length && <details open={running || update.job.phase === "error"}><summary>执行详情</summary><pre className="connect-update-log">{update.execution.lines.join("\n")}</pre></details>}</>}</>;
   async function control(action: UpdateAction, payload: Record<string, unknown>) {
     const result = await invoke(action, JSON.stringify(payload)); setUpdate(result);
   }
   async function act(action: UpdateAction, quiet = false) {
     if (quiet ? pending.current || requested.current : requested.current) return;
+    if ((action === "service" || action === "recover" || action === "installer" || action === "pi") && confirmationDisabled(action)) return;
     // Reserve manual actions while a status poll finishes, including confirmed installs.
     if (!quiet) { requested.current = true; setBusy(action); setError(null); manualError.current = false; }
     if (pending.current) await pending.current;
@@ -90,16 +102,12 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   useEffect(() => { onBusyChange(backendBusy); }, [backendBusy, onBusyChange]);
   const available = newer(latest, update?.serviceVersion) || newer(latest, update?.clientVersion) || (piReady && piNewer);
   useEffect(() => { onAvailableChange(available); }, [available, onAvailableChange]);
-  useEffect(() => {
-    if (confirm) dialog.current?.showModal();
-    else if (dialog.current?.open) { dialog.current.close(); trigger.current?.focus(); }
-  }, [confirm]);
   const ask = (action: "service" | "recover" | "installer" | "pi") => {
+    if (actionDisabled[action]) return;
     if (action === "pi") {
       if (!pi?.release?.token || !piReady) return;
       confirmedPi.current = { token: pi.release.token, version: pi.release.version, installed: !!pi.cli?.version, packageRoot: pi.cli?.packageRoot };
     }
-    trigger.current = document.activeElement as HTMLElement;
     setConfirm(action);
   };
   return (
@@ -113,10 +121,10 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       {update?.job?.kind !== "pi" && progress}
       {error && !historyOpen && !piError && error.message !== update?.job?.message && <p className="connect-error" role="alert">{error.message}</p>}
       <div className="connect-actions">
-        <button className="connect-secondary" disabled={disabled || !update?.managed || update.recovery || !newer(latest, update.serviceVersion) || !["running", "stopped"].includes(service?.state || "")} onClick={() => ask("service")}>更新后台服务{newer(latest, update?.serviceVersion) ? ` · ${latest}` : ""}</button>
+        <button className="connect-secondary" disabled={actionDisabled.service} onClick={() => ask("service")}>更新后台服务{newer(latest, update?.serviceVersion) ? ` · ${latest}` : ""}</button>
         {update?.clientSupported && update.release?.assets?.["Axiom2.msi"] && <button className="connect-secondary" disabled={disabled || !newer(latest, update.clientVersion)} onClick={() => void act("client")}>下载客户端更新</button>}
-        {update?.job?.kind === "client" && update.job.phase === "ready" && <button className="connect-secondary" disabled={disabled} onClick={() => ask("installer")}>运行安装器</button>}
-        {update?.recovery && <button className="connect-secondary" disabled={disabled} onClick={() => ask("recover")}>恢复旧版本</button>}
+        {update?.job?.kind === "client" && update.job.phase === "ready" && <button className="connect-secondary" disabled={actionDisabled.installer} onClick={() => ask("installer")}>运行安装器</button>}
+        {update?.recovery && <button className="connect-secondary" disabled={actionDisabled.recover} onClick={() => ask("recover")}>恢复旧版本</button>}
       </div>
       <section className="connect-pi" aria-labelledby="pi-heading" aria-busy={busy?.startsWith("pi") || (running && update?.job?.kind === "pi")}>
         <div className="connect-updates-heading"><h3 id="pi-heading">Pi 引擎</h3><IconButton label="刷新 Pi 安装状态" icon="refresh-cw" spinning={busy === "pi-refresh"} disabled={disabled} onClick={() => void act("pi-refresh")} /></div>
@@ -132,7 +140,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
         {error && !historyOpen && piError && error.message !== update?.job?.message && <p className="connect-error" role="alert">{error.message}</p>}
         <div className="connect-actions">
           <button className="connect-secondary" disabled={disabled} onClick={() => void act("pi-check")}>{busy === "pi-check" ? "正在检查…" : "检查 Pi 更新"}</button>
-          <button className="connect-secondary" disabled={disabled || !pi?.release?.token || !piReady || (!!pi.cli?.version && !piNewer && !piRetry)} onClick={() => ask("pi")}>{busy === "pi" || (running && update?.job?.kind === "pi") ? "正在安装…" : piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"}{pi?.release && (!pi.cli?.version || piNewer) ? ` · ${pi.release.version}` : ""}</button>
+          <button className="connect-secondary" disabled={actionDisabled.pi} onClick={() => ask("pi")}>{busy === "pi" || (running && update?.job?.kind === "pi") ? "正在安装…" : piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"}{pi?.release && (!pi.cli?.version || piNewer) ? ` · ${pi.release.version}` : ""}</button>
         </div>
         {pi?.cli?.packageRoot && <details className="connect-pi-location"><summary>终端安装位置</summary><p className="connect-log"><LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p><p className="connect-update-detail">使用本机检测到的 Node.js 对应的 npm 全局目录；已有后台时沿用其 Node.js。</p></details>}
       </section>
@@ -140,14 +148,17 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       <p className="connect-update-detail">桌面客户端、Node.js、Tailscale 与终端 Pi 使用系统或原包管理器卸载；应用内 Pi 随后台版本管理。</p>
       {update?.log && <p className="connect-log">更新日志：<LocalPath path={update.log} onOpen={() => desktopInvoke("axiom_reveal_path", { path: update.log })} /></p>}
       {historyOpen && <DesktopTaskCenter kind="update" current={update?.job?.task} onClose={() => setHistoryOpen(false)} onSource={() => { setHistoryOpen(false); window.requestAnimationFrame(() => section.current?.focus()); }} onChanged={() => void act("status", true)} />}
-      <dialog ref={dialog} className="connect-dialog" onCancel={() => setConfirm(null)} onClose={() => setConfirm(null)} aria-labelledby="update-title">
-        <h2 id="update-title">{confirm === "pi" ? `${confirmedPi.current?.installed ? "更新" : "安装"}终端 Pi ${confirmedPi.current?.version}？` : confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : `更新后台至 ${latest}？`}</h2>
-        <p>{confirm === "pi" ? "将安装所选版本的终端 Pi，保留模型、认证、技能和 MCP 配置。请先结束正在使用此安装的终端 Pi 会话，完成后重新打开。应用内 Pi 随后台服务更新。" : confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "受管理后台正在运行的任务将结束，其工作台视图会关闭；直接连接的开发或远程工作台保留。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}</p>
-        {confirm === "pi" && confirmedPi.current?.packageRoot && <p className="connect-log">安装位置：<LocalPath path={confirmedPi.current.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: confirmedPi.current!.packageRoot })} /></p>}
-        {confirm !== "installer" && confirm !== "pi" && <p>应用内更新与恢复要求此安装仅用于当前数据目录。多个数据目录共用安装时，请停止所有相关服务并使用原安装方式更新；各数据目录使用独立安装目录后才能使用此功能。</p>}
+      {confirm && <ConfirmDialog
+        title={confirm === "pi" ? `${confirmedPi.current?.installed ? "更新" : "安装"}终端 Pi ${confirmedPi.current?.version}？` : confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : `更新后台至 ${latest}？`}
+        description={confirm === "pi" ? "将安装所选版本的终端 Pi，保留模型、认证、技能和 MCP 配置。请先结束正在使用此安装的终端 Pi 会话，完成后重新打开。应用内 Pi 随后台服务更新。" : confirm === "installer" ? "安装包已经校验。打开安装向导后，本客户端会关闭，后台服务继续运行。请按向导完成安装，再打开 Axiom2。" : "受管理后台正在运行的任务将结束，其工作台视图会关闭；直接连接的开发或远程工作台保留。项目和会话数据会保留；程序切换失败会尝试恢复旧版本。请先保存需要保留的工作。"}
+        warning={confirm !== "installer" && confirm !== "pi" ? "应用内更新与恢复要求此安装仅用于当前数据目录。多个数据目录共用安装时，请停止所有相关服务并使用原安装方式更新；各数据目录使用独立安装目录后才能使用此功能。" : undefined}
+        danger={confirm === "service" || confirm === "recover"} confirmDisabled={confirmationDisabled(confirm)}
+        cancelLabel={confirm === "service" ? "暂不更新" : "取消"}
+        confirmLabel={confirm === "pi" ? confirmedPi.current?.installed ? "确认更新 Pi" : "确认安装 Pi" : confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : "确认更新服务"}
+        onClose={() => setConfirm(null)} onConfirm={() => { setConfirm(null); void act(confirm); }}>
+        {confirm === "pi" && confirmedPi.current?.packageRoot && <p className="confirm-location">安装位置：<LocalPath path={confirmedPi.current.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: confirmedPi.current!.packageRoot })} /></p>}
         {confirm !== "installer" && confirm !== "pi" && !!service?.active.length && <ul>{service.active.map((title, index) => <li key={index}>{title || "未命名会话"}</li>)}</ul>}
-        <div className="connect-dialog-actions"><button className="connect-secondary" autoFocus onClick={() => setConfirm(null)}>{confirm === "pi" ? "取消" : "暂不更新"}</button><button className="connect-primary" onClick={() => { const action = confirm; setConfirm(null); if (action) void act(action); }}>{confirm === "pi" ? confirmedPi.current?.installed ? "确认更新 Pi" : "确认安装 Pi" : confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : "确认更新服务"}</button></div>
-      </dialog>
+      </ConfirmDialog>}
     </section>
   );
 }

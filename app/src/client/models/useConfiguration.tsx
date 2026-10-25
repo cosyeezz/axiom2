@@ -20,6 +20,15 @@ const empty: Configuration = {
   available: [],
   dataRoot: "",
 };
+export type ConfigurationDecision = {
+  title: string;
+  text: string;
+  confirmLabel: string;
+  danger?: boolean;
+  subject?: string;
+  warning?: string;
+  proceed: () => void;
+};
 export function useConfiguration() {
   const config = useScope("configuration", empty),
     connection = useConnection();
@@ -50,11 +59,7 @@ export function useConfiguration() {
   const feedback = notice.message, feedbackError = notice.error;
   const setFeedback = (message: string, error = false) => setNotice({ message, error });
   const [copyFeedback, setCopyFeedback] = useState("");
-  const [decision, setDecision] = useState<{
-    title: string;
-    text: string;
-    proceed: () => void;
-  } | null>(null);
+  const [decision, setDecision] = useState<ConfigurationDecision | null>(null);
   const p = providers.find((p) => p.id === selected);
   const dirty = draftSnapshot(providers) !== draftSnapshot(savedProviders);
   const editorDirty =
@@ -189,13 +194,14 @@ export function useConfiguration() {
               : e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED"
                 ? "停止受影响的执行？"
                 : "允许执行配置命令？",
-          text:
-            e.message +
-            (e.code === "LOGOUT_CONFIRMATION_REQUIRED"
+          text: e.message,
+          confirmLabel: e.code === "LOGOUT_CONFIRMATION_REQUIRED" ? "退出并保存" : e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED" ? "停止并保存" : "允许命令并保存",
+          danger: e.code !== "COMMAND_AUTHORIZATION_REQUIRED",
+          warning: e.code === "LOGOUT_CONFIRMATION_REQUIRED"
               ? "受影响供应商及其模型的请求头覆盖也将清除，以移除备用认证来源；外部环境变量不改写。"
               : e.code === "COMMAND_AUTHORIZATION_REQUIRED"
                 ? "只应允许你自己配置并理解的命令。"
-                : "停止不回滚已修改的项目文件。"),
+                : "停止不回滚已修改的项目文件。",
           proceed: () =>
             void save(
               confirmLogout || e.code === "LOGOUT_CONFIRMATION_REQUIRED",
@@ -221,6 +227,8 @@ export function useConfiguration() {
     }
     setDecision({
       title: "放弃当前模型编辑？",
+      confirmLabel: "放弃编辑",
+      danger: true,
       text: "当前行内编辑尚未完成。确认将丢弃这部分输入，其他供应商和模型草稿仍保留。取消可继续编辑。",
       proceed,
     });
@@ -293,6 +301,8 @@ export function useConfiguration() {
       if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
         setDecision({
           title: "停止受影响的执行并退出认证？",
+          confirmLabel: "停止并退出认证",
+          danger: true,
           text: e.message + "停止不回滚项目文件；供应商和模型配置保留。",
           proceed: () => void logoutProvider(provider, true),
         });
@@ -304,6 +314,9 @@ export function useConfiguration() {
   const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
       title: "删除供应商？",
+      confirmLabel: provider.originalId ? "删除供应商" : "移除草稿",
+      danger: true,
+      subject: provider.name || provider.providerId,
       text: provider.originalId
         ? "立即退出该供应商，删除其模型与受管理认证；同供应商会话将需要重新选择模型。未保存的其他修改不会一并提交。"
         : "仅移除尚未发布的供应商草稿。",
@@ -339,6 +352,8 @@ export function useConfiguration() {
           if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
             setDecision({
               title: "停止受影响的执行？",
+              confirmLabel: "停止并继续删除",
+              danger: true,
               text: e.message + "停止不回滚项目文件。",
               proceed: () => removeProvider(provider, true),
             });
