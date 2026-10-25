@@ -1,0 +1,115 @@
+✔ Kiro distinguishes personal Builder ID from enterprise OIDC and honors slow_down (8.1624ms)
+✔ Kiro OIDC browser PKCE registers the exact redirect and exchanges camelCase fields (1.1343ms)
+✔ Kiro social portal PKCE uses CLI redirect marker, snake_case exchange, and distinct refresh (1.6527ms)
+✔ Kiro OIDC refresh retains region/registration and rotates under the SDK credential lock (1.9119ms)
+✔ Kiro rejects expired registration and malformed/unknown metadata without network (0.6029ms)
+✔ Kiro errors do not expose secrets and failed refresh preserves credentials (1.2218ms)
+✔ Kiro device cancellation and timeout reject late tokens and stop polling (15.5061ms)
+✔ Kiro loopback rejects foreign state, duplicate params and Host without consuming login (33.5474ms)
+✔ Kiro validated denial and wrong login branch terminate immediately with redacted errors (5.2122ms)
+✔ Kiro callback cancellation closes the socket and OIDC accepts manual exact redirect (3.152ms)
+✔ Kiro uses the CLI AWS JSON POST, origin, and double-serialized pagination (8.3613ms)
+✔ Kiro preserves declared image capability, distinguishes unknown input types and validates metadata (2.4442ms)
+✔ Kiro service region follows explicit profile, never the authentication region (1.5146ms)
+✔ Kiro rejects invalid or expired credentials before issuing a request (0.5621ms)
+✔ Kiro errors are sanitized and never retried across profiles or regions (1.3616ms)
+✔ Kiro rejects incomplete, malformed and non-finite catalog metadata (2.3166ms)
+✔ Kiro rejects repeated pagination, excessive pages and excessive model counts (6.3071ms)
+✔ Kiro limits declared and streamed response size and aborts stalled bodies (12.3575ms)
+✔ Kiro caches only normalized catalog fields and restores the same credential offline (2.9969ms)
+✔ Kiro image catalog survives offline reopen and V1 text-only caches migrate as unknown without network (1.394ms)
+✔ Kiro never restores a different login, profile, or unscoped legacy cache (1.4004ms)
+✔ Kiro invalidates warm catalogs when same-scope storage is missing or invalid (1.4066ms)
+✔ Kiro refresh failure retains only same-scope cache and never publishes partial pages (1.1204ms)
+✔ Kiro rotated OAuth credentials are re-scoped before network access (1.2849ms)
+✔ Kiro cancelled late responses cannot publish models or write a cache (35.8359ms)
+✔ Kiro native chat sends selected model and full system prompt, uses fixed AWS protocol and hooks (17.0496ms)
+✔ Kiro tool JSON chunks map names back, validate schema and round-trip results without history model/tools (8.1148ms)
+✔ Kiro handles interleaved tools but rejects unended, repeated, unknown and invalid-schema calls (6.4364ms)
+✔ Kiro rejects corrupted CRC, incomplete prelude/frame, wrong media and empty streams (4.3579ms)
+✔ Kiro preserves native reasoning, separate credits and usage absence, rejects filtered responses (1.4465ms)
+✔ Kiro sanitizes HTTP, exception and transport failures, never retries partial output (2.3584ms)
+✔ Kiro honors abort and timeout, including transport ignoring an abort and stalled body (40.9408ms)
+✔ Kiro rejects malformed images, orphan tool results and payload identity changes before network (1.0361ms)
+✔ Kiro opaque auth capabilities contain no tokens, are isolated and one-use (1.6013ms)
+✔ Kiro cancels permanently stalled hooks and transports, and releases responses arriving after cancellation (107.5942ms)
+✔ Kiro preserves visible historical reasoning explicitly and rejects old call IDs before completion (1.6344ms)
+✔ Kiro partial usage cannot erase a complete snapshot or pretend missing counters are exact (3.5098ms)
+✔ Kiro explicit European profile selects runtime EU, not its SSO authentication region (0.6054ms)
+✔ Kiro drives a real Pi Agent tool loop and never executes a tool from an errored stream (5.506ms)
+✔ Kiro native OAuth refresh remains serialized and opaque capabilities expire (1.7935ms)
+✔ Kiro parses every AWS header type and rejects malformed, duplicate pseudoheaders and oversized preludes (6.0212ms)
+✔ Kiro enforces request and argument limits, and does not silently override tool choice (58.1533ms)
+✔ Kiro sends current user images in native AWS blob JSON, without mutating the transcript (2.6602ms)
+✔ Kiro preserves image order through adjacent users, current image-only input and historical replay (0.59ms)
+✔ Kiro serializes all CLI image formats as unchanged base64 bytes, including JPEG alias (0.6323ms)
+✔ Kiro lifts parallel tool images beside native toolResults and preserves IDs, status and text blocks (0.6214ms)
+✔ Kiro validates image formats and canonical base64 without fetching URLs or dropping unknown content (0.7702ms)
+✔ Kiro runs a Pi Agent image prompt and screenshot tool loop, then replays both images on a later turn (19.8494ms)
+✔ Kiro sends Pi read-tool image output through the same native image path (8.8401ms)
+✔ Kiro rejects an over-budget image request before transport and still aborts image requests (34.0581ms)
+✔ model connection pooling: kiro-direct (9092.1098ms)
+✔ model connection pooling: kiro-proxy (9077.6409ms)
+✔ model connection pooling: other-direct (9061.7839ms)
+✔ model connection pooling: kiro-h2 (5965.2521ms)
+✔ Kiro live discovery rejects failed or skipped refresh instead of reporting cached success (164.113ms)
+✔ Kiro login and live catalog survive worker/reopen without changing other OAuth providers (9146.118ms)
+✔ Kiro compatibility profiles expose only implemented levels, not generic name guesses (1.5224ms)
+✔ Kiro adaptive levels reach real root output_config and control tags, including empty system prompts (26.6189ms)
+✔ Kiro budget grades are distinct requests and an explicit budget is sent exactly, without native effort (2.2316ms)
+✔ Kiro off does not inject Claude controls or override literal user tags; GPT explicit off uses native none (1.8753ms)
+✔ Kiro GPT profiles use reasoning.effort, never Claude output_config or XML budget tags (7.2198ms)
+✔ Kiro rejects unsupported grades and invalid budgets before fetch, never silently defaults high (2.7005ms)
+✔ Kiro unknown models require explicit user reasoning capability, retain native IDs and never guess effort support (0.4631ms)
+✔ Kiro leading thinking tags split at every boundary preserve Unicode and balanced thought/text events (22.6913ms)
+✔ Kiro tag parsing preserves ordinary quotes/code, CRLF, partial tags and malformed closing text (1.6164ms)
+✔ Kiro native reasoning events still preserve signatures, and off leaves XML text unparsed (1.8083ms)
+✔ Kiro tag EOF and tool boundaries never invent an answer or a max_tokens stop reason (11.5134ms)
+✔ Kiro real Agent forwards each grade through an image/tool loop, with no tool execution from damaged streams (6.1405ms)
+✖ Kiro catalog/cache restoration upgrades adapter thinking metadata without changing vision or issuing offline requests (4.008ms)
+✔ model default: no confirmed selection leaves new sessions unset (306.6575ms)
+✔ model default: upgrade restores the last confirmed main model without relying on session update time (399.9095ms)
+✔ model default: legacy sessions without receipts restore a main model, never a child model (306.62ms)
+✔ model default: new sessions copy provider, model ID and thinking without changing existing sessions (317.345ms)
+✖ model default: Kiro thinking-only selections and edited capability survive reopen without network (192.9147ms)
+✔ model default: invalid model, thinking and malformed selection cannot overwrite the default (384.97ms)
+✔ model default: survives restart and is application-wide across workspaces (353.7009ms)
+✔ model default: child session confirmations do not change the application default (289.4286ms)
+✔ model default: replaying old confirmation and creation receipts cannot roll back selections (291.6717ms)
+✔ model default: preference write failures roll back the session selection atomically (389.2056ms)
+✔ model default: unavailable saved default is retained, never substituted, and rejected on send (284.7987ms)
+ℹ tests 80
+ℹ suites 0
+ℹ pass 78
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62974.9317
+
+✖ failing tests:
+
+test at tests\kiro-thinking.test.ts:3:10357
+✖ Kiro catalog/cache restoration upgrades adapter thinking metadata without changing vision or issuing offline requests (4.008ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (F:\Axiom\axiom2\app\tests\kiro-thinking.test.ts:227:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\model-default.test.ts:1:5016
+✖ model default: Kiro thinking-only selections and edited capability survive reopen without network (192.9147ms)
+  Error: pi 配置校验失败；原文件未覆盖。
+      at ModelService.load (F:\Axiom\axiom2\app\src\server\model-service.ts:190:13)
+      at async ModelService.readConfiguration (F:\Axiom\axiom2\app\src\server\model-service.ts:290:19) {
+    code: 'CONFIG_READ_FAILED'
+  }

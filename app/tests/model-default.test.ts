@@ -1,13 +1,15 @@
 // Local selection/persistence regression tests; no model requests or remote credentials.
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Store } from "../src/server/storage.js";
 import { ModelService } from "../src/server/model-service.js";
 import { Agents } from "../src/server/agents.js";
+import { kiroThinkingModel } from "../src/server/providers/kiro-thinking.js";
+import { kiroCatalogScope } from "../src/server/providers/kiro-catalog.js";
 import type { Selection } from "../src/shared/agent.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
@@ -199,6 +201,33 @@ test("model default: new sessions copy provider, model ID and thinking without c
   await f.select(main, thinkingOnly);
   assert.deepEqual(f.selection(f.create()), thinkingOnly);
   assert.deepEqual(f.selection(inherited), first);
+});
+
+test("model default: Kiro thinking-only selections and edited capability survive reopen without network", async (t) => {
+  const f = fixture(t), pi = dirname(f.modelsPath), root = dirname(pi);
+  const id = "claude-opus-4.6", config = JSON.parse(readFileSync(f.modelsPath, "utf8"));
+  config.providers.kiro = { modelOverrides: { [id]: { name: id } } };
+  writeFileSync(f.modelsPath, JSON.stringify(config));
+  const authPath = join(pi, "auth.json"), auth = JSON.parse(readFileSync(authPath, "utf8"));
+  auth.kiro = { type: "oauth", access: "ISOLATED-ACCESS", refresh: "ISOLATED-REFRESH", expires: Date.now() + 3600000, authMethod: "builder-id", authRegion: "us-east-1" };
+  writeFileSync(authPath, JSON.stringify(auth));
+  const cachedModel = { id, name: id, api: "kiro-chat", provider: "kiro", baseUrl: "https://q.us-east-1.amazonaws.com", ...kiroThinkingModel(id), input: ["text", "image"], kiroSupportedInputTypes: ["TEXT", "IMAGE"], contextWindow: 200000, maxTokens: 8192, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+  writeFileSync(join(pi, "models-store.json"), JSON.stringify({ kiro: { models: [cachedModel], checkedAt: Date.now(), cacheVersion: 2, cacheScope: kiroCatalogScope(auth.kiro) } }));
+  const service = new ModelService(root), draft = await service.read();
+  const entry = draft.providers.find(provider => provider.providerId === "kiro")!.models[0];
+  assert.deepEqual(entry.levels, ["none", "low", "medium", "high", "max"]);
+  entry.levels = ["none", "low", "high"];
+  await service.save(draft);
+  const saved = await new ModelService(root).read();
+  assert.deepEqual(saved.providers.find(provider => provider.providerId === "kiro")!.models[0].levels, ["none", "low", "high"]);
+  const main = f.create(), high = { provider: "kiro", id, thinking: "high" } satisfies Selection;
+  await f.select(main, high);
+  assert.deepEqual(f.selection(f.create()), high);
+  await f.restart();
+  assert.deepEqual(f.selection(main), high); assert.deepEqual(f.selection(f.create()), high);
+  await assert.rejects(f.select(main, { ...high, thinking: "medium" }), { code: "MODEL_UNAVAILABLE" });
+  await f.select(main, { ...high, thinking: "low" });
+  assert.deepEqual(f.selection(f.create()), { ...high, thinking: "low" });
 });
 
 test("model default: invalid model, thinking and malformed selection cannot overwrite the default", async (t) => {

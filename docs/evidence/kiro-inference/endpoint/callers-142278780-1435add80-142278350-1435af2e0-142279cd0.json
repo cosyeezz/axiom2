@@ -1,0 +1,62 @@
+[
+  {
+    "target": "0x1435add80",
+    "va": "0x1415b55db",
+    "offset": 22759899,
+    "kind": "call",
+    "owner": {
+      "start": "0x1415b4be0",
+      "end": "0x1415b76fe"
+    }
+  },
+  {
+    "target": "0x1435af2e0",
+    "va": "0x1415b95ee",
+    "offset": 22776302,
+    "kind": "call",
+    "owner": {
+      "start": "0x1415b8f70",
+      "end": "0x1415bdf80"
+    }
+  },
+  {
+    "target": "0x142278780",
+    "va": "0x1416a61d4",
+    "offset": 23746004,
+    "kind": "call",
+    "owner": {
+      "start": "0x1416a5b60",
+      "end": "0x1416a7f8f"
+    }
+  },
+  {
+    "target": "0x142278350",
+    "va": "0x1416a6241",
+    "offset": 23746113,
+    "kind": "call",
+    "owner": {
+      "start": "0x1416a5b60",
+      "end": "0x1416a7f8f"
+    }
+  },
+  {
+    "target": "0x142279cd0",
+    "va": "0x1416ed5bf",
+    "offset": 24037823,
+    "kind": "call",
+    "owner": {
+      "start": "0x1416eaca0",
+      "end": "0x1416f0f61"
+    }
+  },
+  {
+    "target": "0x142279cd0",
+    "va": "0x142277b28",
+    "offset": 36138792,
+    "kind": "call",
+    "owner": {
+      "start": "0x142277ac0",
+      "end": "0x1422782c8"
+    }
+  }
+]

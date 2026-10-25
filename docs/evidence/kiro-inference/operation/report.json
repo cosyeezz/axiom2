@@ -1,0 +1,504 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "size": 528630968,
+  "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "hashVerifiedAfterDisassembly": true,
+  "method": "Read-only static bytes and Microsoft dumpbin; no execution/network/account access/REA",
+  "extra": [
+    {
+      "va": "0x145d777be",
+      "offset": 98001854,
+      "offsetHex": "0x5d763be",
+      "text": "content",
+      "bytes": "636f6e74656e74"
+    },
+    {
+      "va": "0x145d7f190",
+      "offset": 98033040,
+      "offsetHex": "0x5d7dd90",
+      "text": "application/x-amz-json-1.0",
+      "bytes": "6170706c69636174696f6e2f782d616d7a2d6a736f6e2d312e30"
+    },
+    {
+      "va": "0x145d7f1aa",
+      "offset": 98033066,
+      "offsetHex": "0x5d7ddaa",
+      "text": "x-amz-target",
+      "bytes": "782d616d7a2d746172676574"
+    },
+    {
+      "va": "0x145d7f1b6",
+      "offset": 98033078,
+      "offsetHex": "0x5d7ddb6",
+      "text": "AmazonCodeWhispererStreamingService.GenerateAssistantResponse",
+      "bytes": "416d617a6f6e436f646557686973706572657253747265616d696e67536572766963652e47656e6572617465417373697374616e74526573706f6e7365"
+    }
+  ],
+  "confirmedStaticCalls": [
+    [
+      "0x140bdb488",
+      "0x145acddf0"
+    ],
+    [
+      "0x145acde7b",
+      "0x140b83e60"
+    ],
+    [
+      "0x140b83ee2",
+      "0x140b82340"
+    ],
+    [
+      "0x140b82515",
+      "0x140ba15c0"
+    ],
+    [
+      "0x140ba1654",
+      "0x140b95c80"
+    ]
+  ],
+  "targetReference": {
+    "instruction": "0x140bdb3ab",
+    "targetVA": "0x145d7f1b6",
+    "length": 61,
+    "headerKeyVA": "0x145d7f1aa",
+    "headerKeyLength": 12,
+    "helperCall": "0x140bdb3dc -> 0x140bea350"
+  },
+  "fields": [
+    {
+      "term": "application/x-amz-json-1.0",
+      "offset": 98004064,
+      "offsetHex": "0x5d76c60",
+      "rva": 98009184,
+      "va": "0x145d78060",
+      "context": "e...h..E....F...............................................application/x-amz-json-1.0x-amz-targetAmazonCodeWhispererStreamingService.InvokeMCP.....................................valid request...h..E....F...........>...h..E....F...........a...p.",
+      "refs": [
+        {
+          "offset": 12111717,
+          "va": "0x140b8db65",
+          "bytes": "488d05f4a41e05",
+          "owner": {
+            "start": "0x140b8d240",
+            "end": "0x140b8e5f0",
+            "offset": 12109376,
+            "length": 5040
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationState",
+      "offset": 97999076,
+      "offsetHex": "0x5d758e4",
+      "rva": 98004196,
+      "va": "0x145d76ce4",
+      "context": "r 'web' cannot be nullUnion did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is requ",
+      "refs": [
+        {
+          "offset": 12071579,
+          "va": "0x140b83e9b",
+          "bytes": "488d15422e1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "profileArn",
+      "offset": 97999093,
+      "offsetHex": "0x5d758f5",
+      "rva": 98004213,
+      "va": "0x145d76cf5",
+      "context": " nullUnion did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when ",
+      "refs": [
+        {
+          "offset": 12071773,
+          "va": "0x140b83f5d",
+          "bytes": "488d15912d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "agentMode",
+      "offset": 97999103,
+      "offsetHex": "0x5d758ff",
+      "rva": 98004223,
+      "va": "0x145d76cff",
+      "context": " did not contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when building ",
+      "refs": [
+        {
+          "offset": 12071816,
+          "va": "0x140b83f88",
+          "bytes": "488d15702d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "additionalModelRequestFields",
+      "offset": 97999112,
+      "offsetHex": "0x5d75908",
+      "rva": 98004232,
+      "va": "0x145d76d08",
+      "context": "contain a valid variant.conversationStateprofileArnagentModeadditionalModelRequestFieldslabel was not specified but it is required when building TaskOverviewdescription was not specified but it is required when building TaskOverviewRngNoneSomeAccou",
+      "refs": [
+        {
+          "offset": 12071732,
+          "va": "0x140b83f34",
+          "bytes": "488d15cd2d1f05",
+          "owner": {
+            "start": "0x140b83e60",
+            "end": "0x140b84037",
+            "offset": 12071520,
+            "length": 471
+          }
+        }
+      ]
+    },
+    {
+      "term": "conversationId",
+      "offset": 97998668,
+      "offsetHex": "0x5d7574c",
+      "rva": 98003788,
+      "va": "0x145d76b4c",
+      "context": " member valuefound more JSON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants",
+      "refs": [
+        {
+          "offset": 12064640,
+          "va": "0x140b82380",
+          "bytes": "488d15c5471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "workspaceId",
+      "offset": 97998682,
+      "offsetHex": "0x5d7575a",
+      "rva": 98003802,
+      "va": "0x145d76b5a",
+      "context": "ound more JSON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionva",
+      "refs": [
+        {
+          "offset": 12064683,
+          "va": "0x140b823ab",
+          "bytes": "488d15a8471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "history",
+      "offset": 97998693,
+      "offsetHex": "0x5d75765",
+      "rva": 98003813,
+      "va": "0x145d76b65",
+      "context": "SON tokens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for",
+      "refs": [
+        {
+          "offset": 12064734,
+          "va": "0x140b823de",
+          "bytes": "488d1580471f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "currentMessage",
+      "offset": 97998700,
+      "offsetHex": "0x5d7576c",
+      "rva": 98003820,
+      "va": "0x145d76b6c",
+      "context": "ens after completing parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage",
+      "refs": [
+        {
+          "offset": 12064973,
+          "va": "0x140b824cd",
+          "bytes": "488d1598461f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "chatTriggerType",
+      "offset": 97998714,
+      "offsetHex": "0x5d7577a",
+      "rva": 98003834,
+      "va": "0x145d76b7a",
+      "context": "leting parsingconversationIdworkspaceIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage' cannot be nul",
+      "refs": [
+        {
+          "offset": 12065102,
+          "va": "0x140b8254e",
+          "bytes": "488d1525461f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "MANUAL",
+      "offset": 97998750,
+      "offsetHex": "0x5d7579e",
+      "rva": 98003870,
+      "va": "0x145d76b9e",
+      "context": "eIdhistorycurrentMessagechatTriggerTypeDIAGNOSTICINLINE_CHATMANUALcustomizationArnagentContinuationIdagentTaskTypespectaskvibeencountered mixed variants in unionvalue for 'documentPage' cannot be nullvalue for 'documentChar' c",
+      "refs": [
+        {
+          "offset": 12065205,
+          "va": "0x140b825b5",
+          "bytes": "488d15e2451f05",
+          "owner": {
+            "start": "0x140b82340",
+            "end": "0x140b82956",
+            "offset": 12064576,
+            "length": 1558
+          }
+        }
+      ]
+    },
+    {
+      "term": "userInputMessage",
+      "offset": 98010226,
+      "offsetHex": "0x5d78472",
+      "rva": 98015346,
+      "va": "0x145d79872",
+      "context": "r nullmaximum nesting depth exceededassistantResponseMessageuserInputMessageChatMessagenametypeDECLARATIONUSAGEjsonexitCodekeydocumentrangeseverityERRORHINTINFORMATIONWARNINGcodeDescriptiontagsDEPRECATEDUNNECESSARYrelatedInformationdata",
+      "refs": [
+        {
+          "offset": 12192266,
+          "va": "0x140ba160a",
+          "bytes": "488d0561821d05",
+          "owner": {
+            "start": "0x140ba15c0",
+            "end": "0x140ba17ac",
+            "offset": 12192192,
+            "length": 492
+          }
+        }
+      ]
+    },
+    {
+      "term": "userInputMessageContext",
+      "offset": 98006314,
+      "offsetHex": "0x5d7752a",
+      "rva": 98011434,
+      "va": "0x145d7892a",
+      "context": "..`..@.......@....`.=@......G@....bytesImageSourcenamesourceuserInputMessageContextuserIntentAPPLY_COMMON_BEST_PRACTICESCITE_SOURCESCODE_GENERATIONEXPLAIN_CODE_SELECTIONEXPLAIN_LINE_BY_LINEGENERATE_CLOUDFORMATION_TEMPLATEGENERATE_UNIT_TESTSIMP",
+      "refs": [
+        {
+          "offset": 12144989,
+          "va": "0x140b95d5d",
+          "bytes": "488d15c62b1e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "origin",
+      "offset": 98006551,
+      "offsetHex": "0x5d77617",
+      "rva": 98011671,
+      "va": "0x145d78a17",
+      "context": "STSIMPROVE_CODESHOW_EXAMPLESSUGGEST_ALTERNATE_IMPLEMENTATIONoriginimagesdocumentsmodelIdcachePointclientCacheConfigdescriptioninnerContexteditorStateshellStategitStateenvStateappStudioContextdiagnosticconsoleStateuserSettingsa",
+      "refs": [
+        {
+          "offset": 12147557,
+          "va": "0x140b96765",
+          "bytes": "488d15ab221e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "modelId",
+      "offset": 98006572,
+      "offsetHex": "0x5d7762c",
+      "rva": 98011692,
+      "va": "0x145d78a2c",
+      "context": "XAMPLESSUGGEST_ALTERNATE_IMPLEMENTATIONoriginimagesdocumentsmodelIdcachePointclientCacheConfigdescriptioninnerContexteditorStateshellStategitStateenvStateappStudioContextdiagnosticconsoleStateuserSettingsadditionalContexttoolRe",
+      "refs": [
+        {
+          "offset": 12148948,
+          "va": "0x140b96cd4",
+          "bytes": "488d15511d1e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "toolResults",
+      "offset": 98006733,
+      "offsetHex": "0x5d776cd",
+      "rva": 98011853,
+      "va": "0x145d78acd",
+      "context": "ioContextdiagnosticconsoleStateuserSettingsadditionalContexttoolResultstoolslabel was not specified but it is required when building WebLinkurl was not specified but it is required when building WebLinkCodeWhispererStreaming.Invoke",
+      "refs": [
+        {
+          "offset": 12146780,
+          "va": "0x140b9645c",
+          "bytes": "488d156a261e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "tools",
+      "offset": 98006744,
+      "offsetHex": "0x5d776d8",
+      "rva": 98011864,
+      "va": "0x145d78ad8",
+      "context": "agnosticconsoleStateuserSettingsadditionalContexttoolResultstoolslabel was not specified but it is required when building WebLinkurl was not specified but it is required when building WebLinkCodeWhispererStreaming.InvokeMCPrp",
+      "refs": [
+        {
+          "offset": 12147024,
+          "va": "0x140b96550",
+          "bytes": "488d1581251e05",
+          "owner": {
+            "start": "0x140b95c80",
+            "end": "0x140b97aa4",
+            "offset": 12144768,
+            "length": 7716
+          }
+        }
+      ]
+    },
+    {
+      "term": "toolUses",
+      "offset": 98012731,
+      "offsetHex": "0x5d78e3b",
+      "rva": 98017851,
+      "va": "0x145d7a23b",
+      "context": "essageIdcontentsupplementaryWebLinksreferencesfollowupPrompttoolUsescachePointreasoningContentNoneSomeSharedAsyncSleep... ..@.....................I.@.............................wE@....Metadataoperationservice...................",
+      "refs": [
+        {
+          "offset": 12246191,
+          "va": "0x140bae8af",
+          "bytes": "488d1585b91c05",
+          "owner": {
+            "start": "0x140bae5a0",
+            "end": "0x140baf25f",
+            "offset": 12245408,
+            "length": 3263
+          }
+        }
+      ]
+    }
+  ],
+  "endpointCandidates": [
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 460773792,
+      "offsetHex": "0x1b76d9a0",
+      "rva": 460778912,
+      "va": "0x15b76eda0",
+      "context": "s.com...............H.v[....!.................v[............https://runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 462340248,
+      "offsetHex": "0x1b8ec098",
+      "rva": 462345368,
+      "va": "0x15b8ed498",
+      "context": "s.com...............@..[....!..................[............https://runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 460773880,
+      "offsetHex": "0x1b76d9f8",
+      "rva": 460779000,
+      "va": "0x15b76edf8",
+      "context": "ro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us-gov-east-1.kiro.dev..........P.v[....&.................v[............https://runtime.us-go",
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 462340336,
+      "offsetHex": "0x1b8ec0f0",
+      "rva": 462345456,
+      "va": "0x15b8ed4f0",
+      "context": "ro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us-gov-east-1.kiro.dev..........H..[....&..................[............https://runtime.us-go",
+      "refs": []
+    }
+  ],
+  "unknown": [
+    "Full endpoint selection and operation-to-endpoint binding",
+    "HTTP method and URI path not independently traced",
+    "Authentication headers and per-account routing",
+    "Required/default field values and selected model availability",
+    "Response EventStream framing and runtime success",
+    "QDeveloperSendMessage enum text does not prove a SendMessage network operation"
+  ],
+  "artifacts": [
+    "strings.json",
+    "xrefs.json",
+    "operation.asm.txt",
+    "body-wrapper.asm.txt",
+    "body.asm.txt",
+    "conversation.asm.txt",
+    "message.asm.txt",
+    "user.asm.txt",
+    "dumpbin-runs.json"
+  ]
+}

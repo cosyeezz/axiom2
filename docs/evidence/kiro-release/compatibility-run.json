@@ -1,0 +1,7 @@
+{
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/images.test.ts tests/model-input.test.ts tests/model-catalog.test.ts tests/model-runtime.test.ts tests/model-config-validation.test.ts tests/model-overrides.test.ts tests/model-copy-runtime.test.ts tests/model-auth-preparation.test.ts tests/model-switch.test.ts tests/model-network.test.ts tests/model-oauth-config.test.ts tests/model-oauth.test.ts tests/qoder-runtime.test.ts tests/codebuddy-runtime.test.ts",
+    "cwd":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+    "startedUtc":  "2026-10-25T17:44:30.9708399Z",
+    "finishedUtc":  "2026-10-25T17:47:39.1122956Z",
+    "exitCode":  0
+}

@@ -1,0 +1,406 @@
+{
+  "source": {
+    "version": "Kiro CLI Windows 2.12.0",
+    "bytes": 528630968,
+    "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a"
+  },
+  "method": "Read-only PE bytes and dumpbin; not REA or runtime proof",
+  "scope": "79 copied static research files; excludes root README.md, this manifest, and subsequent validation/ records",
+  "files": [
+    {
+      "path": "defense-notes.md",
+      "bytes": 14256,
+      "sha256": "2dff200ee1fee6258a341be3b11a2d19957e865521e81e0c0e42e1756438ab86"
+    },
+    {
+      "path": "endpoint/annotate.cjs",
+      "bytes": 1274,
+      "sha256": "4390ab5d9d7ce4c57a3b27902f2334d3b1483a0de9c42577ac11fcc1cab50cb0"
+    },
+    {
+      "path": "endpoint/apikey2.asm.txt",
+      "bytes": 323416,
+      "sha256": "3871ae22ecdffc4a622ecfb4f57bfbf7df0b28b2eb36219b6f69943441ecc88f"
+    },
+    {
+      "path": "endpoint/apikey2.run.json",
+      "bytes": 301,
+      "sha256": "66cb4ed1072793c1f380f96a12ce68bf81d1d6b08966b1d01247cfb9018a3332"
+    },
+    {
+      "path": "endpoint/apikey2.strings.json",
+      "bytes": 24814,
+      "sha256": "a72b5d41d64d152ff2829aaa731015acbf422d4513b84a08c9c0937d43acb589"
+    },
+    {
+      "path": "endpoint/callers.cjs",
+      "bytes": 1046,
+      "sha256": "c44bbb4456304d3138dc41b269b18e465280c10de78c04731d57d99b498dc2b6"
+    },
+    {
+      "path": "endpoint/callers-140bdacc0.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "endpoint/callers-142278780-1435add80-142278350-1435af2e0-142279cd0.json",
+      "bytes": 1112,
+      "sha256": "bb305c0c24e8f93dd7352f38e1caa149e994a1c94615dcca15502ec2332cf157"
+    },
+    {
+      "path": "endpoint/config-build2.asm.txt",
+      "bytes": 3770,
+      "sha256": "79666a6e3ccc62b0fcb8baf0d22dc43df9ab2f1792746b8fe9cf129cffbd7f1d"
+    },
+    {
+      "path": "endpoint/config-build2.run.json",
+      "bytes": 301,
+      "sha256": "04057a152e1661e50a29345a81d867dcc47de67e77488dfd97b2cb422ee0908b"
+    },
+    {
+      "path": "endpoint/config-build2.strings.json",
+      "bytes": 287,
+      "sha256": "c5a1d2212d8d611c4b4aada2aaa0ac16af23674206abc1123c45f95c838a777a"
+    },
+    {
+      "path": "endpoint/config-setter.asm.txt",
+      "bytes": 5128,
+      "sha256": "a627cbc3b584be17e0522729c180551081a0497098a4ddcdaebca8ae652e75d8"
+    },
+    {
+      "path": "endpoint/config-setter.run.json",
+      "bytes": 301,
+      "sha256": "3b36e19d5678ebecfe932ec2c26425783ca08362b3b470aa35ded21b47aeb43f"
+    },
+    {
+      "path": "endpoint/constant-structures.json",
+      "bytes": 3209,
+      "sha256": "ecae5383440abaca4c58f57477fa4847224293f13a4632e1ecbc0d97f7259571"
+    },
+    {
+      "path": "endpoint/constructor1.asm.txt",
+      "bytes": 145137,
+      "sha256": "da5e55c5956fde37507af29dccbd6b1a52551887a9ed3181395a5181b0e1f298"
+    },
+    {
+      "path": "endpoint/constructor1.run.json",
+      "bytes": 301,
+      "sha256": "d3b767124d7c4154c167db46e7f83a006557fdce9e72dd53c5c1e5ac8ea90dfd"
+    },
+    {
+      "path": "endpoint/constructor2.asm.txt",
+      "bytes": 172410,
+      "sha256": "7d54a4e90bd7160c0a7241fe894a724f60c948221b579150d8adee07f9a73980"
+    },
+    {
+      "path": "endpoint/constructor2.run.json",
+      "bytes": 301,
+      "sha256": "2a392359efbc87ed214adad1bfbffcd469d0d27d997dc7eaf16ba64d7fe2c6b1"
+    },
+    {
+      "path": "endpoint/constructor2.strings.json",
+      "bytes": 11208,
+      "sha256": "f66ffb77a62477edf5130fdfb498d6c85090094aeb79684699adf611688e01f7"
+    },
+    {
+      "path": "endpoint/disasm.cjs",
+      "bytes": 913,
+      "sha256": "252389ece9fe946d4ff5f976183164989bd992686683eeda6f557cf15dab8363"
+    },
+    {
+      "path": "endpoint/dump.cjs",
+      "bytes": 623,
+      "sha256": "aececd5b357281e0ecf874ca9622899b409d04a12fe56683d1be68900399c86b"
+    },
+    {
+      "path": "endpoint/dumpbin-runs.json",
+      "bytes": 1520,
+      "sha256": "feb7f164afc88a4318429cbcac8c8891cfec2d416dfa2d98cecd5e20680b9f41"
+    },
+    {
+      "path": "endpoint/endpoint-followup.md",
+      "bytes": 7935,
+      "sha256": "bb3bdddb02227c1eee79aa290faeb99b6afb7e22a138eaeb1d5db156cbd8d59a"
+    },
+    {
+      "path": "endpoint/endpoint-setter2.asm.txt",
+      "bytes": 4951,
+      "sha256": "e083b7fcdb27f6bd3990a423ad6abda436cdeb5ae4b28f2c975c2552ad5038a8"
+    },
+    {
+      "path": "endpoint/endpoint-setter2.run.json",
+      "bytes": 301,
+      "sha256": "9a9e75fa72137f6d39a20441e229abc19f8f08303d7d579486df5809fe367965"
+    },
+    {
+      "path": "endpoint/endpoint-setter2.strings.json",
+      "bytes": 373,
+      "sha256": "25dbcdd0621357f6da4c6944608d035489b0230c174ccbe4fae926625f2a9262"
+    },
+    {
+      "path": "endpoint/endpoint-xrefs.json",
+      "bytes": 44284,
+      "sha256": "ba8ca89244544c41be58272d5c29e8d4bd4ae31c9cc61d0f52ab5813e58e41d5"
+    },
+    {
+      "path": "endpoint/keys.cjs",
+      "bytes": 520,
+      "sha256": "5c7b922006449af62bce1a786f8db2abd7ce1005214b0a2aad8713c896e3a151"
+    },
+    {
+      "path": "endpoint/management1.asm.txt",
+      "bytes": 18550,
+      "sha256": "13e782d6d18346c3fecfb050e092eebe3606cf0a7e1cc357fb6b9a0454dd464e"
+    },
+    {
+      "path": "endpoint/override1.asm.txt",
+      "bytes": 32207,
+      "sha256": "a53cf0341fccad6ee705d321bb830ebb2796ce942a893b4059e53ca3e6b5d1ec"
+    },
+    {
+      "path": "endpoint/override2.asm.txt",
+      "bytes": 43522,
+      "sha256": "a979ef0fc43c96bca6f3ee345620d7cc6f2e761056a9e76a8706ba1a1984d93d"
+    },
+    {
+      "path": "endpoint/override2.run.json",
+      "bytes": 301,
+      "sha256": "a533830a9b8597e41a107f1a23d046d88e4493b6ce7e4a18b5bba8f8545d21a7"
+    },
+    {
+      "path": "endpoint/override2.strings.json",
+      "bytes": 4259,
+      "sha256": "b615265c405f962e67591b4ec4d60c592c58331fe75b7c7313c328b699d72ad4"
+    },
+    {
+      "path": "endpoint/owner.cjs",
+      "bytes": 408,
+      "sha256": "81b6ba2ae9b7f75ae740e9b56ca91063a04e30a7712f47f2a4c3119019d9afb6"
+    },
+    {
+      "path": "endpoint/q1.asm.txt",
+      "bytes": 11863,
+      "sha256": "8d8b282ed0075eabf714fd8c56f1eb18e493853b93bb1dc4477dbe40ddeae13b"
+    },
+    {
+      "path": "endpoint/q2.asm.txt",
+      "bytes": 11863,
+      "sha256": "92931899d57c7128aa8f29fce75905780ca3454af7364770204ef99c16151d87"
+    },
+    {
+      "path": "endpoint/range.cjs",
+      "bytes": 1214,
+      "sha256": "19df036a6ebc69a958a844e4f0dc5311347e9c3d7321b10c5b58b8f73969dcf6"
+    },
+    {
+      "path": "endpoint/range-refs.json",
+      "bytes": 103517,
+      "sha256": "8765ab094aa7e6decb0f6dbe8070d8d75c307fbd9d586ddcf9594f4e15b2c90d"
+    },
+    {
+      "path": "endpoint/resolver-vtable-method.asm.txt",
+      "bytes": 4683,
+      "sha256": "06c372ae19c5d88496bb53492567de96e7f233b0ef513dcfb24b97b8037a7211"
+    },
+    {
+      "path": "endpoint/resolver-vtable-method.run.json",
+      "bytes": 301,
+      "sha256": "2ca3423ccfd8c0acafc47bb9041f665f66e8a3751f75106132daf8e94c5c739a"
+    },
+    {
+      "path": "endpoint/resolver-vtable-method.strings.json",
+      "bytes": 460,
+      "sha256": "fa54c380dbaa693236185dd2ee77707d5e71f84f0887fc8314eddb8cd7d5ec36"
+    },
+    {
+      "path": "endpoint/routing1.asm.txt",
+      "bytes": 43877,
+      "sha256": "7a4d6936e781dd2c59647027a48c1ba82479f2095e2fb7c00348fba37dce1a5a"
+    },
+    {
+      "path": "endpoint/routing1.strings.json",
+      "bytes": 5558,
+      "sha256": "1b86c4168096306184c3f4775e469ce67fe5f00f242c170ba423361fa8d51004"
+    },
+    {
+      "path": "endpoint/routing2.asm.txt",
+      "bytes": 47111,
+      "sha256": "2a7b96d7c9880aed0aee0ec46d369c3d54a1d398945a44684c4fb038123d1639"
+    },
+    {
+      "path": "endpoint/routing2.run.json",
+      "bytes": 301,
+      "sha256": "5af1f705748c427b04a5a29b503180e739f42d7ba1b81bf8b3989b4465b88b6d"
+    },
+    {
+      "path": "endpoint/routing2.strings.json",
+      "bytes": 5029,
+      "sha256": "f85d39afe41c88d601ef298b1e4517a8aef3999b1a0d15c57f6b3a9d13ce54d7"
+    },
+    {
+      "path": "endpoint/runtime1.asm.txt",
+      "bytes": 18550,
+      "sha256": "5d67f798b3a6f563e6143773a97333a1dabfed5f18ea773d0d81c13264adb6bc"
+    },
+    {
+      "path": "endpoint/runtime2.asm.txt",
+      "bytes": 18550,
+      "sha256": "e311c0f054aba166963cde3e3338c6cf59ef9d4b988eabac99f0e7cf640e4422"
+    },
+    {
+      "path": "endpoint/scan.cjs",
+      "bytes": 2902,
+      "sha256": "3327b202cf1be41217dbbb8b00174b619ef9143588dabc2afc5785405d370ee2"
+    },
+    {
+      "path": "endpoint/sdk-builder.asm.txt",
+      "bytes": 14118,
+      "sha256": "0e0ff4255e6f3aab98ebdc358895b0fbc0da59ad345fc69e1d98e0bf1d3d0eff"
+    },
+    {
+      "path": "endpoint/sdk-builder.run.json",
+      "bytes": 301,
+      "sha256": "5fb7e58ebfe7bbca04c02371f8664d69c46fa15aa9c061214c677af0d1656296"
+    },
+    {
+      "path": "endpoint/sdk-builder.strings.json",
+      "bytes": 1097,
+      "sha256": "46dcf68a1108ee47d71a8980db5663f05bb982c1463d563e8a3755a4ec83fdc7"
+    },
+    {
+      "path": "endpoint/sdk-client.asm.txt",
+      "bytes": 70269,
+      "sha256": "f016589f0fe4d70e4070ebc51965d1f44d559f6839d4429c39d4faea6ffe4807"
+    },
+    {
+      "path": "endpoint/sdk-client.run.json",
+      "bytes": 301,
+      "sha256": "354b7bebefa496961040d54e2fac136e53f1e6ef65bc4192871472038a9ac367"
+    },
+    {
+      "path": "endpoint/sdk-client.strings.json",
+      "bytes": 3588,
+      "sha256": "498c4f33644c200bfbd23e3a82dbabe567fb02b57e56bbdcfc4a402024cffb80"
+    },
+    {
+      "path": "endpoint/setting-key.asm.txt",
+      "bytes": 885,
+      "sha256": "e1ca104a3a7cd1fdf451e36097758dd675d27c1d0c050d92fa1d39384e845f54"
+    },
+    {
+      "path": "endpoint/setting-key.run.json",
+      "bytes": 301,
+      "sha256": "cf068f582ace77d279753ae147d0ce0f77a5dd00fa5ca01511269793d2c5db47"
+    },
+    {
+      "path": "endpoint/setting-keys.json",
+      "bytes": 525,
+      "sha256": "5f0eceb3c5944394c862393d5658ea24e0cabf70d9c9895489ac06b212c6e840"
+    },
+    {
+      "path": "endpoint/streaming-setter.asm.txt",
+      "bytes": 4450,
+      "sha256": "e9399f959c365e7158964d18d67f1ca9455d5cf0f35b2679ff179bcd272741ad"
+    },
+    {
+      "path": "endpoint/streaming-setter.run.json",
+      "bytes": 301,
+      "sha256": "3c1c3ba24f686ded9db6e6c87119887ecd4f48cf35fa463b850aaae25f216de8"
+    },
+    {
+      "path": "endpoint/structures.cjs",
+      "bytes": 702,
+      "sha256": "841c898e10ae9b43d069021ac072df72c22c54022eeb805484dad6e09308fbf2"
+    },
+    {
+      "path": "operation/body.asm.txt",
+      "bytes": 8313,
+      "sha256": "2619d998bda82f97a8dc0ca869ef649780da08647933c8599232243104553c32"
+    },
+    {
+      "path": "operation/body-wrapper.asm.txt",
+      "bytes": 5667,
+      "sha256": "e0406864468f8893ddc19b16aa5e8b1defa8fe3fefad76182894eb08641e88e1"
+    },
+    {
+      "path": "operation/call-candidates.json",
+      "bytes": 262,
+      "sha256": "5a153cb539d68fc023793c093deb5da9bc3a5db557e50b2d6f710ac11fcfec5a"
+    },
+    {
+      "path": "operation/calls.cjs",
+      "bytes": 592,
+      "sha256": "823f5a2951bed63a66cf32fbad8e00eda64356fd04c2de2c5990471da9304714"
+    },
+    {
+      "path": "operation/conversation.asm.txt",
+      "bytes": 25078,
+      "sha256": "6c4d4515f7a49e46dd3467d3bae3516403203bd18311e5423c5b7b8be5b320ff"
+    },
+    {
+      "path": "operation/disasm.cjs",
+      "bytes": 911,
+      "sha256": "2ede805b773bcaf7c2b4873a3d7dc501142cfa045a68b29cf8f72bea253ff3a3"
+    },
+    {
+      "path": "operation/dumpbin-runs.json",
+      "bytes": 1637,
+      "sha256": "e523370172ba4561422b5c0be71ee63b9ae615339b54513654db6f70f75674c4"
+    },
+    {
+      "path": "operation/message.asm.txt",
+      "bytes": 8424,
+      "sha256": "b91f3f9c3539de335242be06cbc652e7c0838141fe77a6a8661385b220b6e711"
+    },
+    {
+      "path": "operation/operation.asm.txt",
+      "bytes": 56575,
+      "sha256": "9e1ff8f7b6c2043f075414e358e20a3698bbbf755ef620a808a5cb3e37bb68c0"
+    },
+    {
+      "path": "operation/report.cjs",
+      "bytes": 1976,
+      "sha256": "1a444b0a18793c07420e4d2165f994c539bc854d3c86bdaf5335d302893568e4"
+    },
+    {
+      "path": "operation/report.json",
+      "bytes": 17044,
+      "sha256": "d80e4299e007f8bda71b9397ed3791b0f1ff2f6a9ee0a6ef1846e098b60a4a52"
+    },
+    {
+      "path": "operation/report.md",
+      "bytes": 2452,
+      "sha256": "303912ac20a625f59e1663c313350d3f5050eea3a04b51cbe830d63c56918a48"
+    },
+    {
+      "path": "operation/scan.cjs",
+      "bytes": 1269,
+      "sha256": "7677d1123675c804937042fad859beda8d79af6d332b5145cc80bb8e2fd5b6d1"
+    },
+    {
+      "path": "operation/strings.json",
+      "bytes": 1599988,
+      "sha256": "61a61014fad9546498c57ec23262dba8b8b5677717d28123b417f804c407ecd4"
+    },
+    {
+      "path": "operation/user.asm.txt",
+      "bytes": 120677,
+      "sha256": "821d6c850a4a1f16c4241c07e7dd2b45cd4667e43fd7fecdfd14d8135b847c30"
+    },
+    {
+      "path": "operation/xrefs.cjs",
+      "bytes": 3144,
+      "sha256": "35c62bfe57b8f2e41b4e8f06861b1245278391276ce6ad1fa5421c532d4772ff"
+    },
+    {
+      "path": "operation/xrefs.json",
+      "bytes": 43722,
+      "sha256": "d3660edcc7fded472e78c775229b7a1485e7ec16487f7b73e7c3289da83bd94c"
+    },
+    {
+      "path": "stream-notes.md",
+      "bytes": 1851,
+      "sha256": "617b4d03a58c83d92b8214f5424a1a551f7fd02b4e8f4638fc4be0fb1a0fa984"
+    }
+  ]
+}

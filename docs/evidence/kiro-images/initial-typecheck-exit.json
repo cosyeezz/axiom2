@@ -1,0 +1,13 @@
+{
+    "workingDirectory":  "F:/Axiom/axiom2/app",
+    "checks":  [
+                   {
+                       "command":  "node node_modules/typescript/bin/tsc --noEmit",
+                       "exitCode":  2
+                   },
+                   {
+                       "command":  "node node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit",
+                       "exitCode":  0
+                   }
+               ]
+}

@@ -35,7 +35,7 @@ Axiom 的个人/企业认证适配已实现并完成离线验证；本次 REA �
 4. **Social device flow 能力有官方文档依据，但本次不实现。** [官方 Remote machine authentication](https://kiro.dev/docs/getting-started/authentication/) 明示 Builder ID、IAM Identity Center、Google、GitHub 支持远程设备流程；仅凭端点字符串不足以编造轮询字段及状态。
 5. 企业 profile 策略、external IdP 直连、GovCloud 实际可用性、真实账号权限/计费及任何模型推理行为均未验证。个人 Builder ID 与企业 Identity Center 分流是实现设计，并结合官方文档与参考源码，不仅凭符号名称作判断。
 
-未发现上述已核验字段与当前实现需要纠正的冲突；这不意味着未知部分已证明兼容。当前交付是**待真实账号联调的 auth-only 适配**。
+未发现上述已核验字段与当前实现需要纠正的冲突；这不意味着未知部分已证明兼容。本记录仅覆盖认证子集。后续已增加实时模型目录，见[目录静态对照](kiro-catalog-audit.md)；后续原生文本/工具聊天实现见[推理静态对照](kiro-inference-audit.md)，仍待真实账号联调；本认证证据不能替代推理协议或服务接受性验证。
 
 ## 可追溯证据索引
 
@@ -48,4 +48,4 @@ Axiom 的个人/企业认证适配已实现并完成离线验证；本次 REA �
 - **[T] 响应**：`ev_886df357993732bd2315203c3c77f6d322613cf853a888ae5fab4dc13b04dfcb`（解析函数）；`ev_71a2a9885f65b4c8c9447ff76da2122fd5d9f00d2b8f81b88e4178af8877397f`（42 字节字段表）。
 - **[M] Social 端点字符串簇**：`ev_64ff70b1f64b19247ddf221c19fb892a071e6590de056ab98f7c028df7223176`。
 
-本次机器上的临时证据包：[rea-ghidra-evidence.json](/tmp/kiro-cli-static.Bz5akg/rea-ghidra-evidence.json)，44 条记录，2,487,524 字节，SHA-256 `e5c547775ce471431bc934d1e86bfbc91aac92324a111f654fa93c8b6c91d4ba`。完整查询响应及派生 C 文件位于同目录的 [rea-ghidra](/tmp/kiro-cli-static.Bz5akg/rea-ghidra)。这些是本机临时文件，不随仓库分发；应在系统清理前另行保留需要复核的产物。导出结果的 `unknowns=0` 仅是账本字段，**不消除本文列出的分析未知项与失败记录**。
+该认证阶段原环境的临时证据包：`/tmp/kiro-cli-static.Bz5akg/rea-ghidra-evidence.json`，44 条记录，2,487,524 字节，SHA-256 `e5c547775ce471431bc934d1e86bfbc91aac92324a111f654fa93c8b6c91d4ba`。完整查询响应及派生 C 文件当时位于 `/tmp/kiro-cli-static.Bz5akg/rea-ghidra`。这些是原认证分析环境的临时文件，不随仓库分发；当前 Windows 推理复核无法访问，不能把它们当作仓库内可用链接或本轮重新验证的文件。原环境应在系统清理前另行保留需要复核的产物。导出结果的 `unknowns=0` 仅是账本字段，**不消除本文列出的分析未知项与失败记录**。

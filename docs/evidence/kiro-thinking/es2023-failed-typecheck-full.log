@@ -1,0 +1,2 @@
+src/server/providers/kiro-thinking-stream.ts(22,19): error TS2550: Property 'isWellFormed' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2024' or later.
+tests/kiro-thinking.test.ts(193,45): error TS2550: Property 'isWellFormed' does not exist on type 'string'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2024' or later.

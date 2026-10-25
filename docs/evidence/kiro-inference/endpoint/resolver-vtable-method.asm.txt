@@ -1,0 +1,84 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000141ECDB40: 55                 push        rbp
+  0000000141ECDB41: 56                 push        rsi
+  0000000141ECDB42: 57                 push        rdi
+  0000000141ECDB43: 53                 push        rbx
+  0000000141ECDB44: 48 83 EC 48        sub         rsp,48h
+  0000000141ECDB48: 48 8D 6C 24 40     lea         rbp,[rsp+40h]
+  0000000141ECDB4D: 48 C7 45 00 FE FF  mov         qword ptr [rbp],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  0000000141ECDB55: 48 89 D7           mov         rdi,rdx
+  0000000141ECDB58: 48 89 CE           mov         rsi,rcx
+  0000000141ECDB5B: 49 8B 18           mov         rbx,qword ptr [r8]
+  0000000141ECDB5E: 49 8B 40 08        mov         rax,qword ptr [r8+8]
+  0000000141ECDB62: 48 8D 4D E0        lea         rcx,[rbp-20h]
+  0000000141ECDB66: 48 89 DA           mov         rdx,rbx
+  0000000141ECDB69: FF 50 18           call        qword ptr [rax+18h]
+  0000000141ECDB6C: 66 0F 6F 45 E0     movdqa      xmm0,xmmword ptr [rbp-20h]
+  0000000141ECDB71: 66 0F 74 05 E7 42  pcmpeqb     xmm0,xmmword ptr [0000000145D81E60h]
+                    EB 03
+  0000000141ECDB79: 66 0F D7 C0        pmovmskb    eax,xmm0
+  0000000141ECDB7D: 3D FF FF 00 00     cmp         eax,0FFFFh
+  0000000141ECDB82: 75 13              jne         0000000141ECDB97
+  0000000141ECDB84: 48 89 F1           mov         rcx,rsi
+  0000000141ECDB87: 48 89 FA           mov         rdx,rdi
+  0000000141ECDB8A: 49 89 D8           mov         r8,rbx
+  0000000141ECDB8D: E8 6E A4 D8 FF     call        0000000141C58000
+  0000000141ECDB92: E9 83 00 00 00     jmp         0000000141ECDC1A
+  0000000141ECDB97: B9 27 00 00 00     mov         ecx,27h
+  0000000141ECDB9C: BA 01 00 00 00     mov         edx,1
+  0000000141ECDBA1: E8 7A 5D B9 02     call        0000000144A63920
+  0000000141ECDBA6: 48 85 C0           test        rax,rax
+  0000000141ECDBA9: 0F 84 8C 00 00 00  je          0000000141ECDC3B
+  0000000141ECDBAF: 48 89 C7           mov         rdi,rax
+  0000000141ECDBB2: 0F 10 05 67 43 87  movups      xmm0,xmmword ptr [000000015B741F20h]
+                    19
+  0000000141ECDBB9: 0F 11 40 10        movups      xmmword ptr [rax+10h],xmm0
+  0000000141ECDBBD: F3 0F 6F 05 4B 43  movdqu      xmm0,xmmword ptr [000000015B741F10h]
+                    87 19
+  0000000141ECDBC5: F3 0F 7F 00        movdqu      xmmword ptr [rax],xmm0
+  0000000141ECDBC9: 48 B8 20 70 72 65  mov         rax,746E657365727020h
+                    73 65 6E 74
+  0000000141ECDBD3: 48 89 47 1F        mov         qword ptr [rdi+1Fh],rax
+  0000000141ECDBD7: B9 18 00 00 00     mov         ecx,18h
+  0000000141ECDBDC: BA 08 00 00 00     mov         edx,8
+  0000000141ECDBE1: E8 3A 5D B9 02     call        0000000144A63920
+  0000000141ECDBE6: 48 85 C0           test        rax,rax
+  0000000141ECDBE9: 74 3B              je          0000000141ECDC26
+  0000000141ECDBEB: 48 C7 00 27 00 00  mov         qword ptr [rax],27h
+                    00
+  0000000141ECDBF2: 48 89 78 08        mov         qword ptr [rax+8],rdi
+  0000000141ECDBF6: 48 C7 40 10 27 00  mov         qword ptr [rax+10h],27h
+                    00 00
+  0000000141ECDBFE: 48 B9 01 00 00 00  mov         rcx,8000000000000001h
+                    00 00 00 80
+  0000000141ECDC08: 48 89 0E           mov         qword ptr [rsi],rcx
+  0000000141ECDC0B: 48 89 46 08        mov         qword ptr [rsi+8],rax
+  0000000141ECDC0F: 48 8D 05 42 43 87  lea         rax,[000000015B741F58h]
+                    19
+  0000000141ECDC16: 48 89 46 10        mov         qword ptr [rsi+10h],rax
+  0000000141ECDC1A: 48 89 F0           mov         rax,rsi
+  0000000141ECDC1D: 48 83 C4 48        add         rsp,48h
+  0000000141ECDC21: 5B                 pop         rbx
+  0000000141ECDC22: 5F                 pop         rdi
+  0000000141ECDC23: 5E                 pop         rsi
+  0000000141ECDC24: 5D                 pop         rbp
+  0000000141ECDC25: C3                 ret
+  0000000141ECDC26: 48 89 7D F8        mov         qword ptr [rbp-8],rdi
+  0000000141ECDC2A: B9 08 00 00 00     mov         ecx,8
+  0000000141ECDC2F: BA 18 00 00 00     mov         edx,18h
+  0000000141ECDC34: E8 38 CF BF 03     call        0000000145ACAB71
+  0000000141ECDC39: 0F 0B              ud2
+  0000000141ECDC3B: B9 01 00 00 00     mov         ecx,1
+  0000000141ECDC40: BA 27 00 00 00     mov         edx,27h
+  0000000141ECDC45: E8 40 CF BF 03     call        0000000145ACAB8A
+  0000000141ECDC4A: CC                 int         3
+  0000000141ECDC4B: 0F
+
+  Summary
+
+     5BF1000 .text

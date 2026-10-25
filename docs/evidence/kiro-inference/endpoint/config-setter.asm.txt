@@ -1,0 +1,87 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014278E250: 55                 push        rbp
+  000000014278E251: 56                 push        rsi
+  000000014278E252: 57                 push        rdi
+  000000014278E253: 48 81 EC 90 00 00  sub         rsp,90h
+                    00
+  000000014278E25A: 48 8D AC 24 80 00  lea         rbp,[rsp+0000000000000080h]
+                    00 00
+  000000014278E262: 48 C7 45 08 FE FF  mov         qword ptr [rbp+8],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  000000014278E26A: 48 89 D7           mov         rdi,rdx
+  000000014278E26D: 48 89 CE           mov         rsi,rcx
+  000000014278E270: 48 C7 45 A8 01 00  mov         qword ptr [rbp-58h],1
+                    00 00
+  000000014278E278: 48 C7 45 B0 01 00  mov         qword ptr [rbp-50h],1
+                    00 00
+  000000014278E280: 41 0F 10 00        movups      xmm0,xmmword ptr [r8]
+  000000014278E284: 41 0F 10 48 10     movups      xmm1,xmmword ptr [r8+10h]
+  000000014278E289: 41 0F 10 50 20     movups      xmm2,xmmword ptr [r8+20h]
+  000000014278E28E: 0F 11 45 B8        movups      xmmword ptr [rbp-48h],xmm0
+  000000014278E292: 0F 11 4D C8        movups      xmmword ptr [rbp-38h],xmm1
+  000000014278E296: 0F 11 55 D8        movups      xmmword ptr [rbp-28h],xmm2
+  000000014278E29A: 49 8B 40 30        mov         rax,qword ptr [r8+30h]
+  000000014278E29E: 48 89 45 E8        mov         qword ptr [rbp-18h],rax
+  000000014278E2A2: B9 48 00 00 00     mov         ecx,48h
+  000000014278E2A7: BA 08 00 00 00     mov         edx,8
+  000000014278E2AC: E8 6F 56 2D 02     call        0000000144A63920
+  000000014278E2B1: 48 85 C0           test        rax,rax
+  000000014278E2B4: 48 89 7D 00        mov         qword ptr [rbp],rdi
+  000000014278E2B8: 0F 84 A1 00 00 00  je          000000014278E35F
+  000000014278E2BE: 48 8B 4D E8        mov         rcx,qword ptr [rbp-18h]
+  000000014278E2C2: 48 89 48 40        mov         qword ptr [rax+40h],rcx
+  000000014278E2C6: 0F 10 45 A8        movups      xmm0,xmmword ptr [rbp-58h]
+  000000014278E2CA: 0F 10 4D B8        movups      xmm1,xmmword ptr [rbp-48h]
+  000000014278E2CE: 0F 10 55 C8        movups      xmm2,xmmword ptr [rbp-38h]
+  000000014278E2D2: 0F 10 5D D8        movups      xmm3,xmmword ptr [rbp-28h]
+  000000014278E2D6: 0F 11 58 30        movups      xmmword ptr [rax+30h],xmm3
+  000000014278E2DA: 0F 11 50 20        movups      xmmword ptr [rax+20h],xmm2
+  000000014278E2DE: 0F 11 48 10        movups      xmmword ptr [rax+10h],xmm1
+  000000014278E2E2: 48 89 45 F0        mov         qword ptr [rbp-10h],rax
+  000000014278E2E6: 0F 11 00           movups      xmmword ptr [rax],xmm0
+  000000014278E2E9: B8 01 00 00 00     mov         eax,1
+  000000014278E2EE: F0 48 0F C1 05 19  lock xadd   qword ptr [000000015F374810h],rax
+                    65 BE 1C
+  000000014278E2F7: 48 89 45 F8        mov         qword ptr [rbp-8],rax
+  000000014278E2FB: 83 7F 20 02        cmp         dword ptr [rdi+20h],2
+  000000014278E2FF: 72 1B              jb          000000014278E31C
+  000000014278E301: 48 8B 45 00        mov         rax,qword ptr [rbp]
+  000000014278E305: 48 8B 40 28        mov         rax,qword ptr [rax+28h]
+  000000014278E309: F0 48 FF 08        lock dec    qword ptr [rax]
+  000000014278E30D: 75 0D              jne         000000014278E31C
+  000000014278E30F: 48 8B 45 00        mov         rax,qword ptr [rbp]
+  000000014278E313: 48 8D 48 28        lea         rcx,[rax+28h]
+  000000014278E317: E8 14 83 D6 FD     call        00000001404F6630
+  000000014278E31C: 48 8B 55 00        mov         rdx,qword ptr [rbp]
+  000000014278E320: 48 C7 42 20 02 00  mov         qword ptr [rdx+20h],2
+                    00 00
+  000000014278E328: 48 8B 45 F0        mov         rax,qword ptr [rbp-10h]
+  000000014278E32C: 48 89 42 28        mov         qword ptr [rdx+28h],rax
+  000000014278E330: 48 8D 05 31 94 07  lea         rax,[000000015B807768h]
+                    19
+  000000014278E337: 48 89 42 30        mov         qword ptr [rdx+30h],rax
+  000000014278E33B: 48 8B 45 F8        mov         rax,qword ptr [rbp-8]
+  000000014278E33F: 48 89 42 38        mov         qword ptr [rdx+38h],rax
+  000000014278E343: 41 B8 88 02 00 00  mov         r8d,288h
+  000000014278E349: 48 89 F1           mov         rcx,rsi
+  000000014278E34C: E8 A5 5B 32 03     call        0000000145AB3EF6
+  000000014278E351: 48 89 F0           mov         rax,rsi
+  000000014278E354: 48 81 C4 90 00 00  add         rsp,90h
+                    00
+  000000014278E35B: 5F                 pop         rdi
+  000000014278E35C: 5E                 pop         rsi
+  000000014278E35D: 5D                 pop         rbp
+  000000014278E35E: C3                 ret
+  000000014278E35F: B9 08 00 00 00     mov         ecx,8
+  000000014278E364: BA 48 00 00 00     mov         edx,48h
+  000000014278E369: E8 03 C8 33 03     call        0000000145ACAB71
+  000000014278E36E: 0F 0B              ud2
+  000000014278E370: 48
+
+  Summary
+
+     5BF1000 .text

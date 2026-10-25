@@ -1,0 +1,4 @@
+0x140af6b40	function	candidate_query_serializer
+0x140af7630	function	candidate_body_serializer
+0x140b0a6f0	function	candidate_operation_serializer
+0x1414589e0	function	candidate_catalog_cache_miss

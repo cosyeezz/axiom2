@@ -1,0 +1,23 @@
+[
+  {
+    "line": 101,
+    "instruction": "0000000140BED21E: 48 8D 05 27 65 19  lea         rax,[0000000145D8374Ch]",
+    "offset": "0x5d8234c",
+    "direct": "codewhispererstreamingcontent was not specified but it is required when building AssistantResponseMessagemessage was not specified but it is required when building ThrottlingErrorm",
+    "pointers": []
+  },
+  {
+    "line": 106,
+    "instruction": "0000000140BED231: 48 8D 05 0B 65 19  lea         rax,[0000000145D83743h]",
+    "offset": "0x5d82343",
+    "direct": "0.1.17593codewhispererstreamingcontent was not specified but it is required when building AssistantResponseMessagemessage was not specified but it is required when building Throttl",
+    "pointers": []
+  },
+  {
+    "line": 153,
+    "instruction": "0000000140BED2EA: 48 8D 05 45 35 19  lea         rax,[0000000145D80836h]",
+    "offset": "0x5d7f436",
+    "direct": "amzn_codewhisperer_streaming_client::config::Configgenerate_assistant_response_responsegenerate_assistant_response_response was not specified but it is required when building Gener",
+    "pointers": []
+  }
+]

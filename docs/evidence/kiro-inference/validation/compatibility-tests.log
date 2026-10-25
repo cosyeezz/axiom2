@@ -1,0 +1,33 @@
+✔ CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes (4288.1534ms)
+✔ public Pi getAuth completes OAuth persistence before a fresh execution snapshot; later identity changes still reject (96.4988ms)
+✔ auth preparation uses the provider-network operation, contains credentials, and honors missing auth/cancellation (5.9604ms)
+✔ real model-network auth preparation returns a boolean only and makes no inference request (2535.929ms)
+✔ OAuth opener passes authorization URLs as data on every platform (2.2942ms)
+✔ catalog fetches the configured baseUrl with pi auth and imports only upstream IDs (15751.7499ms)
+✔ OAuth without a custom endpoint keeps native discovery but never falls back on refresh failure (61.6013ms)
+✔ malformed provider configuration never returns secret JSON fragments (4.3148ms)
+✔ queued catalog cancellation does not wait for the configuration writer (32.2743ms)
+✔ catalog workers never migrate credentials belonging to another provider (2540.7797ms)
+✔ real IPC relays native API key prompts, persists credentials and cancels an active prompt (2550.5556ms)
+✔ provider workers isolate proxy routes, serialize requests and settle queued cancellation and shutdown (2763.849ms)
+✔ OAuth imports credentials in default storage and saves mixed native model protocols without endpoint or key fields (379.8028ms)
+✔ OAuth automatic callback cancels manual prompt; device flow needs no code submission (223.4171ms)
+✔ unused native providers remain unregistered while their add-provider templates stay visible (29.1431ms)
+✔ an unrelated configured provider does not initialize CodeBuddy (18.6396ms)
+✔ credential-only native providers restore their catalog without a background refresh (27.0556ms)
+✔ first explicit native-provider use loads it once without changing model files (12.6395ms)
+✔ runtime creation without refresh preserves a cold execution profile; explicit refresh still invalidates it (54.6982ms)
+✔ a cold dynamic native provider must not create a models store during snapshot initialization (28.7378ms)
+✔ PI_OFFLINE="" prevents network refresh even when requested (9.6677ms)
+✔ PI_OFFLINE="1" prevents network refresh even when requested (8.239ms)
+✔ default runtime creation awaits one explicit local refresh with the native provider registered (33.8928ms)
+✔ Qoder regional templates are available without an experimental opt-in (2.1928ms)
+✔ Qoder isolated worker login, signed catalog, reopened settings and snapshot runtime (5468.4263ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 95780.9905
