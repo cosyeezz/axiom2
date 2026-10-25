@@ -58,6 +58,13 @@ try {
     assert.deepEqual(disk(), prices, "invalid hidden price must not reach disk");
     assert.equal(await page.locator("#models-tab").getAttribute("aria-selected"), "true");
   }
+  // Clearing all existing rates is still an invalid edit, not an instruction to retain old rates.
+  for (const key of Object.keys(prices)) await page.locator(`#model-cost-${key}`).fill("");
+  await page.locator("#suppliers-tab").click();
+  await page.locator("#save-provider").click();
+  await page.getByRole("alert").filter({ hasText: "计费设置" }).waitFor();
+  assert.deepEqual(disk(), prices, "clearing all saved rates must not bypass price validation");
+  for (const [key, value] of Object.entries(prices)) await page.locator(`#model-cost-${key}`).fill(String(value));
   await page.locator("#model-cost-input").fill("4");
   await page.locator("#suppliers-tab").click();
   await page.locator("#save-provider").click();

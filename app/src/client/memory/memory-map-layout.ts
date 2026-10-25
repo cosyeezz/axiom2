@@ -1,10 +1,10 @@
-import type { MemoryDocumentRef, MemoryIndexNode, MemoryPurpose } from "../../shared/memory-tree.js";
+import { isMemoryTitle, type MemoryDocumentRef, type MemoryIndexNode, type MemoryPurpose } from "../../shared/memory-tree.js";
 import { memoryNodePath, uniqueMemoryDocuments } from "../../shared/memory-directory.js";
 
 export type MemoryMapNode = {
   id: string; label: string; kind: "Directory" | "Purpose"; parent?: string;
   purpose?: MemoryPurpose; children: MemoryMapNode[];
-  titlePath?: string; documents?: MemoryDocumentRef[]; sources?: MemoryPurpose[];
+  titlePath?: string; displayPath?: string; documents?: MemoryDocumentRef[]; sources?: MemoryPurpose[];
 };
 export type MapPosition = MemoryMapNode & { x: number; y: number; width: number; side: -1 | 1; branch: number; open: boolean };
 export const mapNodeHeight = 64;
@@ -18,9 +18,17 @@ export function memoryMapNodes(roots: MemoryIndexNode[], purposes: MemoryPurpose
   const byId = new Map(purposes.map(purpose => [purpose.id, purpose]));
   const visit = (node: MemoryIndexNode, parent?: string, titles: string[] = []): MemoryMapNode => {
     const purposeIds = node.purposeIds ?? (node.purposeId ? [node.purposeId] : []), parts = [...titles, node.name];
-    return { id: node.id, label: node.name, kind: purposeIds.length ? "Purpose" : "Directory", parent,
+    let displayPath = node.titlePath ?? parts.join(" / ");
+    if (isMemoryTitle(node) && node.titlePath) {
+      try {
+        const path: unknown = JSON.parse(node.titlePath);
+        if (Array.isArray(path) && path.length && path.every(part => typeof part === "string")) displayPath = path.join(" / ");
+      } catch { /* Legacy title paths are already human-readable. */ }
+    }
+    return { id: node.id, label: node.name, kind: isMemoryTitle(node) ? "Purpose" : "Directory", parent,
       purpose: node.purposeId ? byId.get(node.purposeId) : undefined,
-      titlePath: node.titlePath ?? memoryNodePath(parts), documents: uniqueMemoryDocuments(node.documentRefs ?? []),
+      titlePath: node.titlePath ?? (isMemoryTitle(node) ? JSON.stringify(parts) : memoryNodePath(parts)), displayPath,
+      documents: uniqueMemoryDocuments(node.documentRefs ?? []),
       sources: purposeIds.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
       children: node.children.map(child => visit(child, node.id, parts)) };
   };

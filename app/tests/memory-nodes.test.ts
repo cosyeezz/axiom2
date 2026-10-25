@@ -18,37 +18,39 @@ test("numeric node IDs start at zero, survive restart/reordering and are never r
     for (const node of flatten(restarted.nodeSnapshot(f.workspace.id).roots)) assert.equal(node.id, byPath.get(node.titlePath));
     const counter = Number(f.store.db.prepare("SELECT next_id FROM memory_node_sequence").get()!.next_id);
     f.write(scope, "# [In progress] 首个目的\n# [Completed] 第二目的\n"); f.memories.scan(scope);
-    assert.equal(flatten(f.tree.nodeSnapshot(f.workspace.id).roots).some(node => node.id === byPath.get("记忆事务 / 首个目的")), false);
+    assert.equal(flatten(f.tree.nodeSnapshot(f.workspace.id).roots).some(node => node.id === byPath.get(JSON.stringify(["记忆事务", "首个目的"]))), false);
     f.write(scope, "# [In progress] 首个目的\n# [Completed] 第二目的\n# [Completed] 第三个目的\n"); f.memories.scan(scope); f.publish();
     const added = flatten(f.tree.nodeSnapshot(f.workspace.id).roots).find(node => node.name === "第三个目的")!;
     assert.ok(Number(added.id) >= counter);
   } finally { await f.close(); }
 });
-test("workspace/path uniqueness merges directory and purpose identities without dropping any source", async () => {
+test("semantic directories and same-name original titles have separate identities without dropping sources", async () => {
   const f = purposeFixture(); try {
     const a = f.create("# [Completed] 同名\n"), b = f.create("# [Completed] 子目的\n"), c = f.create("# [Completed] 同名\n");
     for (const [scope, body] of [[a, "甲"], [b, "乙"], [c, "丙"]] as const) { f.detail(scope, body); f.memories.scan(scope); }
     const purposes = f.tree.entries(f.workspace.id), same = purposes.filter(p => p.text === "同名"), child = purposes.find(p => p.text === "子目的")!;
     const roots = f.tree.classify(JSON.stringify([{ name: "分类", children: [
-      { purposeId: same[0].id }, { name: "同名", children: [{ purposeId: child.id }] }, { purposeId: same[1].id },
+      { title: "同名" }, { name: "同名", children: [{ title: child.text }] },
     ] }]), purposes);
     f.tree.publish(f.workspace.id, purposes, roots, 0);
     const snapshot = f.tree.nodeSnapshot(f.workspace.id), node = snapshot.roots[0].children[0];
-    assert.equal(snapshot.roots[0].children.length, 1); assert.equal(node.children.length, 1);
+    assert.equal(snapshot.roots[0].children.length, 2); assert.equal(node.kind, "title"); assert.equal(node.children.length, 0);
+    assert.equal(snapshot.roots[0].children[1].kind, "directory"); assert.equal(snapshot.roots[0].children[1].children.length, 1);
     assert.deepEqual(node.purposeIds, same.map(p => p.id)); assert.equal(node.documentRefs?.length, 2);
     assert.equal(new Set(node.documentRefs?.map(ref => ref.sessionId)).size, 2);
-    const row = f.store.db.prepare("SELECT * FROM memory_directory_nodes WHERE id=?").get(Number(node.id))!;
-    assert.throws(() => f.store.db.prepare("INSERT INTO memory_directory_nodes SELECT 9999,workspace_id,title,parent_id,depth,ancestor_ids,title_path,purpose_ids,document_refs,position,active FROM memory_directory_nodes WHERE id=?").run(Number(node.id)), /UNIQUE/);
+    const directoryId = Number(snapshot.roots[0].children[1].id);
+    const row = f.store.db.prepare("SELECT * FROM memory_directory_nodes WHERE id=?").get(directoryId)!;
+    assert.throws(() => f.store.db.prepare("INSERT INTO memory_directory_nodes SELECT 9999,workspace_id,title,parent_id,depth,ancestor_ids,title_path,purpose_ids,document_refs,position,active FROM memory_directory_nodes WHERE id=?").run(directoryId), /UNIQUE/);
     assert.equal(row.title_path, "分类 / 同名");
     const report = JSON.parse(String(f.store.db.prepare("SELECT report FROM memory_node_indexes WHERE workspace_id=?").get(f.workspace.id)!.report));
-    assert.deepEqual(report.mergedPaths, ["分类 / 同名"]);
+    assert.deepEqual(report.mergedPaths, []);
   } finally { await f.close(); }
 });
 test("metadata migration is idempotent; normal unchanged-source scan backfills actual references", async () => {
   const f = purposeFixture(); try {
     const scope = f.create(); f.detail(scope, "可复用正文"); f.memories.scan(scope); f.publish();
     const legacy = f.tree.snapshot(f.workspace.id), originalPurpose = legacy.purposes[0].id;
-    f.store.db.exec("DROP TABLE memory_directory_nodes; DROP TABLE memory_node_indexes; DROP TABLE memory_node_sequence; DROP TABLE memory_purpose_documents;");
+    f.store.db.exec("DROP TABLE memory_directory_titles; DROP TABLE memory_directory_layout; DROP TABLE memory_directory_nodes; DROP TABLE memory_node_indexes; DROP TABLE memory_node_sequence; DROP TABLE memory_purpose_documents;");
     const migrated = new MemoryTreeStore(f.store), before = migrated.nodeSnapshot(f.workspace.id);
     assert.equal(before.version, legacy.version); assert.deepEqual(before.roots[0].children[0].documentRefs, []);
     const ids = flatten(before.roots).map(node => node.id);
@@ -98,7 +100,7 @@ test("abandoned ancestors and original document states survive direct-reference 
 test("failed publication rolls back node IDs, references and migration metadata with the old index", async () => {
   const f = purposeFixture(); try {
     const scope = f.create(); f.detail(scope, "正文"); f.memories.scan(scope);
-    const batch = f.tree.entries(f.workspace.id), roots = f.tree.classify(JSON.stringify([{ name: "事务", children: batch.map(p => ({ purposeId: p.id })) }]), batch);
+    const batch = f.tree.entries(f.workspace.id), roots = f.tree.classify(JSON.stringify([{ name: "事务", children: batch.map(p => ({ title: p.text })) }]), batch);
     const nextId = f.store.db.prepare("SELECT next_id FROM memory_node_sequence").get()!.next_id;
     assert.throws(() => f.tree.publish(f.workspace.id, batch, roots, 0, () => { throw Error("injected transaction failure"); }), /injected/);
     assert.equal(f.tree.nodeSnapshot(f.workspace.id).roots.length, 0);

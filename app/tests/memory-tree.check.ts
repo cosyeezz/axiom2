@@ -34,8 +34,8 @@ try {
   }
   const tree = memory.pipeline.tree, batch = tree.batch(workspace.id, Date.now() + memoryBatchWaitMs);
   const roots = tree.classify(JSON.stringify([
-    { name: "数据库事务", children: [{ name: "贡献发布", children: [{ purposeId: batch.find(p => p.text === "并发更新校验")!.id }] }] },
-    { name: "语义查询", children: [{ purposeId: batch.find(p => p.text === "查询未命中")!.id }] },
+    { name: "数据库事务", children: [{ name: "贡献发布", children: [{ title: "并发更新校验" }] }] },
+    { name: "语义查询", children: [{ title: "查询未命中" }] },
   ]), batch);
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }), errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

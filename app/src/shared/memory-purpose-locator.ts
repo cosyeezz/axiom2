@@ -1,5 +1,6 @@
-import type { MemoryIndexNode, MemoryPurpose, MemoryTree } from "./memory-tree.js";
+import { isMemoryTitle, type MemoryIndexNode, type MemoryPurpose, type MemoryTree } from "./memory-tree.js";
 import type { PurposeHeading } from "./memory-purposes.js";
+import { memorySemanticCatalog } from "./memory-query-projection.js";
 
 const referenceSuffix = / 〔[1-9]\d*〕$/u;
 const canonicalKey = (purpose: MemoryPurpose) => purpose.source.key === JSON.stringify([purpose.text.normalize("NFC")]);
@@ -34,6 +35,21 @@ export function locateMemoryPurpose(purpose: MemoryPurpose, headings: PurposeHea
   if (numberedPeers.length !== 1 || candidates[0]?.key !== numberedPeers[0].source.key) return;
   return candidates.length === 1 ? candidates[0] : undefined;
 }
+export function pruneMemoryPurposes(nodes: MemoryIndexNode[], removed: ReadonlySet<string>): MemoryIndexNode[] {
+  return nodes.flatMap(node => {
+    if (isMemoryTitle(node)) {
+      const purposeIds = (node.purposeIds ?? (node.purposeId ? [node.purposeId] : [])).filter(id => !removed.has(id));
+      if (!purposeIds.length) return [];
+      const documentRefs = node.documentRefs?.flatMap(ref => {
+        const ids = ref.purposeIds.filter(id => !removed.has(id));
+        return ids.length ? [{ ...ref, purposeIds: ids }] : [];
+      });
+      return [{ ...node, purposeIds, ...(documentRefs ? { documentRefs } : {}) }];
+    }
+    const children = pruneMemoryPurposes(node.children, removed);
+    return children.length ? [{ ...node, children }] : [];
+  });
+}
 /** Project only proven redundant legacy leaves from the captured snapshot.
  * No source scan, index switch, persistence, or guessing from an old directory.
  * All actual source/completion/revision checks still happen before answering.
@@ -41,10 +57,6 @@ export function locateMemoryPurpose(purpose: MemoryPurpose, headings: PurposeHea
 export function queryMemorySnapshot(snapshot: MemoryTree): MemoryTree {
   const redundant = new Set(snapshot.purposes.filter(purpose => canonicalMemoryPurpose(purpose, snapshot.purposes) !== purpose).map(purpose => purpose.id));
   if (!redundant.size) return snapshot;
-  const prune = (nodes: MemoryIndexNode[]): MemoryIndexNode[] => nodes.flatMap(node => {
-    if (node.purposeId) return redundant.has(node.purposeId) ? [] : [node];
-    const children = prune(node.children); return children.length ? [{ ...node, children }] : [];
-  });
-  const roots = prune(snapshot.roots);
-  return { ...snapshot, roots, purposes: snapshot.purposes.filter(purpose => !redundant.has(purpose.id)), nameChars: Array.from(roots.map(root => root.name).join("\n")).length };
+  const roots = pruneMemoryPurposes(snapshot.roots, redundant);
+  return { ...snapshot, roots, purposes: snapshot.purposes.filter(purpose => !redundant.has(purpose.id)), nameChars: Array.from(memorySemanticCatalog(roots)).length };
 }

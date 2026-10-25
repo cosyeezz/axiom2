@@ -33,7 +33,7 @@ function ageSources(t: TestContext) {
 /** Seed program-assigned purposes, never model-generated facts. */
 function indexSources(f: ReturnType<typeof fixture>) {
   const tree = f.memories.pipeline.tree, batch = tree.batch(f.scope.workspaceId, Date.now() + memoryBatchWaitMs), old = tree.snapshot(f.scope.workspaceId);
-  const purposes = [...old.purposes, ...batch], roots = tree.classify(classification({ prompt: JSON.stringify({ purposes }) }).answer, purposes);
+  const purposes = [...old.purposes, ...batch], roots = tree.classify(classification({ prompt: JSON.stringify({ titles: [...new Set(purposes.map(purpose => purpose.text))] }) }).answer, purposes);
   tree.publish(f.scope.workspaceId, batch, roots, old.version);
 }
 test("memory budget patches persist, validate limits and preserve existing saved values", async () => {
@@ -502,7 +502,7 @@ test("without corrections, oversized detail files do not block unrelated organiz
     writeFileSync(join(f.directory, "references", "oversized.md"), "x".repeat(4 * 1024 * 1024 + 1));
     let calls = 0;
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      calls++; assert.ok(JSON.parse(input.prompt).purposes.length);
+      calls++; assert.ok(JSON.parse(input.prompt).titles.length);
       return classification(input);
     } };
     f.memories.scan(); ageSources(t);
@@ -537,7 +537,7 @@ test("organizer cannot publish results against a changed source", async (t) => {
     writeFileSync(join(f.directory, "MEMORY.md"), completed); f.memories.scan();
     f.store.db.prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)").run(f.scope.sessionId, JSON.stringify({ provider: "fixture", id: "fixture", thinking: "off" }));
     f.memories.runner = { close: async () => {}, execute: async (input) => {
-      assert.ok(JSON.parse(input.prompt).purposes.length); writeFileSync(join(f.directory, "MEMORY.md"), "用户的新事实");
+      assert.ok(JSON.parse(input.prompt).titles.length); writeFileSync(join(f.directory, "MEMORY.md"), "用户的新事实");
       return classification(input);
     } };
     ageSources(t);
@@ -624,7 +624,7 @@ test("batch classification has no arbitrary source reads and failed batches reta
     const attempted: string[] = [];
     f.memories.runner = { close: async () => {}, execute: async (input) => {
       attempted.push(input.scope.sessionId);
-      const data = JSON.parse(input.prompt); assert.equal(data.purposes.length, 2); assert.ok(!input.prompt.includes(file));
+      const data = JSON.parse(input.prompt); assert.equal(data.titles.length, 1, "same-name source titles are deduplicated before classification"); assert.ok(!input.prompt.includes(file));
       assert.throws(() => input.read(input.scope.sessionId, file), /不提供任意文件读取工具/);
       throw Error("批次失败");
     } };

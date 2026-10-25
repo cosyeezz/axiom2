@@ -26,6 +26,7 @@ export type OpenCliState = {
   configured: boolean;
   managed?: boolean;
   cleanup?: CleanupScope;
+  cleanupUnverified?: string[];
   removalPending?: boolean;
   pendingOperation?: string;
   revision: string;

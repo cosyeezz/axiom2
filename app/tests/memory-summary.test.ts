@@ -55,6 +55,8 @@ test("classification errors remain separate from missing sources and clear after
     assert.equal(entry.organizationError, "classification fixture failed", "source failure must not replace an actual classification error");
     f.write(scope, "# [Completed] 验证目的\n## [Completed] 验证结果\n"); f.memories.scan(scope);
     f.memories.runner = { close: async () => {}, execute: async input => classification(input) };
+    assert.equal(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs).length, 0, "unchanged scans do not restart a paused request");
+    await f.configure({ readChars: 240001 }); // A genuine configuration change allows a fresh attempt.
     await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal);
     entry = f.memories.catalog(f.workspace.id).find(entry => entry.sessionId === scope.sessionId)!;
     assert.equal(entry.status, "ready"); assert.equal(entry.error, undefined); assert.equal(entry.organizationError, undefined);
@@ -63,11 +65,13 @@ test("classification errors remain separate from missing sources and clear after
 });
 test("oversized classification refuses before any model request without dropping IDs or prior index", async () => {
   const f = purposeFixture(); try {
-    await f.configure({ readChars: 16000 }); const scope = f.create(); f.memories.scan(scope); f.publish(); const old = f.tree.snapshot(f.workspace.id);
-    f.write(scope, "# [Completed] 验证目的\n" + Array.from({ length: 49 }, (_, i) => `# [Completed] 新目的${i}${"长".repeat(59)}`).join("\n")); f.memories.scan(scope); let calls = 0;
+    const original = Array.from({ length: 100 }, (_, i) => `# [Completed] 原目的${i}${"长".repeat(59)}`).join("\n");
+    const scope = f.create(original); f.memories.scan(scope); f.publish(); f.publish(); const old = f.tree.snapshot(f.workspace.id);
+    await f.configure({ readChars: 16000 });
+    f.write(scope, original + "\n" + Array.from({ length: 49 }, (_, i) => `# [Completed] 新目的${i}${"长".repeat(59)}`).join("\n")); f.memories.scan(scope); let calls = 0;
     f.memories.runner = { close: async () => {}, execute: async () => { calls++; throw Error("must not call"); } };
     await assert.rejects(f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal), { code: "MEMORY_LIMIT" });
-    assert.equal(calls, 0); assert.equal(f.tree.entries(f.workspace.id).length, 50); assert.deepEqual(f.tree.snapshot(f.workspace.id), old); assert.equal(f.tree.tree(f.workspace.id).failed, 49);
+    assert.equal(calls, 0); assert.equal(f.tree.entries(f.workspace.id).length, 149); assert.deepEqual(f.tree.snapshot(f.workspace.id), old); assert.equal(f.tree.tree(f.workspace.id).failed, 49);
   } finally { await f.close(); }
 });
 test("query reads complete selected details and direct explicit text links without classification read budget", async () => {

@@ -29,12 +29,14 @@ export interface MemoryExecution {
   deadlineAt?: number;
   /** Organizer-only document allowance after charging its prompt. Queries have no read budget. */
   readChars?: number;
+  /** Organizer-only conservative complete-response token reservation. Not model text. */
+  outputReserve?: number;
   read: (sessionId: string, path: string, offset?: number, limit?: number, options?: { includeImage?: boolean }) => MemoryDocument;
   /** 仅探测原始字节修订，供执行器在结束前验证实际读取的依据。 */
   revision?: (sessionId: string, path: string) => string;
   kind: "query" | "organize" | "title";
 }
-export interface MemoryRunner { execute(input: MemoryExecution): Promise<MemoryExecutionResult>; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
+export interface MemoryRunner { configurationKey?(selection?: Selection): string; execute(input: MemoryExecution): Promise<MemoryExecutionResult>; stopProviders?(providers: string[], confirmed: boolean): Promise<void>; close(): Promise<void> }
 /** Query-local authority receipt; never published in model input or client results. */
 export interface MemoryReadAccess { actual: string; external: boolean }
 /** 持久目录的内部字段不属于前端目录协议。 */
@@ -115,6 +117,7 @@ export class Memories {
       this.publish(processingScope(workspaceId), data);
     });
     this.pipeline = new MemoryPipeline(this);
+    this.pipeline.tree.organization.recover();
     const root = memoryRoot(store.root);
     try { mkdirSync(root, { recursive: true, mode: 0o700 }); }
     catch { /* Memory storage is optional; background reads can retry later. */ }
@@ -823,7 +826,7 @@ export class Memories {
     if (this.closed || this.organizationWork || !this.runner) return;
     // Count and timer triggers share this slot, reserved synchronously before
     // the first await. A running batch stays pending until atomic publication,
-    // so a restart needs no recovery of model-owned or half-published state.
+    // persistent claims pause unknown requests on restart; no half-tree is published.
     const work: OrganizationWork = { controller: new AbortController() };
     this.organizationWork = work;
     work.done = (async () => {
@@ -836,12 +839,17 @@ export class Memories {
         const scope = { workspaceId: workspace.id, sessionId: batch[0].source.sessionId }, processingId = this.pipeline.startOrganization(batch);
         work.active = { workspaceId: workspace.id, processingId, purposeIds: batch.map(purpose => purpose.id), sessionIds: [...new Set(batch.map(purpose => purpose.source.sessionId))] };
         this.publishTree(workspace.id);
+        let enteredPipeline = false;
         try {
           this.records.stage(processingId, "选择分类模型");
-          await this.pipeline.organize(batch, this.preferences().organizerModel ?? this.selection(scope), work.controller.signal, processingId);
+          const selection = this.preferences().organizerModel ?? this.selection(scope);
+          enteredPipeline = true;
+          await this.pipeline.organize(batch, selection, work.controller.signal, processingId);
         } catch (error) {
-          this.records.failure(processingId, error, work.controller.signal);
-          this.pipeline.tree.failure(batch, error);
+          if (!enteredPipeline) {
+            this.records.failure(processingId, error, work.controller.signal);
+            this.pipeline.tree.failure(batch, error);
+          }
           this.publishTree(workspace.id);
           if (work.controller.signal.aborted) break;
         } finally {

@@ -3,10 +3,14 @@ import type { Store } from "./storage.js";
 import { emptyMemoryTree, memoryBatchSize, memoryBatchWaitMs, memoryContextPurposeLimit, memoryTopicBlock,
   type MemoryPurpose, type MemoryIndexNode, type MemoryTree } from "../shared/memory-tree.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
-import { canonicalMemoryPurpose, locateMemoryPurpose, queryMemorySnapshot } from "../shared/memory-purpose-locator.js";
+import { canonicalMemoryPurpose, locateMemoryPurpose, pruneMemoryPurposes } from "../shared/memory-purpose-locator.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { processingError } from "./processing-records.js";
 import { MemoryNodeStore } from "./memory-nodes.js";
+import { MemoryOrganizationState } from "./memory-organization-state.js";
+import { projectMemoryTree } from "../shared/memory-query-projection.js";
+import { isMemoryTitle, memoryOrganizationWatermarks } from "../shared/memory-tree.js";
+export interface OrganizationClaim { fingerprint: string; processingId: string }
 
 export interface QueuedPurpose extends MemoryPurpose {
   workspaceId: string; queuedAt: number; processedAt: number | null; retryAfter: number; blocked: boolean; error?: string;
@@ -15,7 +19,8 @@ export interface QueuedPurpose extends MemoryPurpose {
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
 export class MemoryTreeStore {
   readonly nodes: MemoryNodeStore;
-  constructor(private store: Store) {
+  readonly organization: MemoryOrganizationState;
+  constructor(private store: Store, configuration: (workspaceId: string, purposes: readonly MemoryPurpose[]) => string = () => "") {
     // Keep the original purpose queue and organizer projection for compatibility.
     store.db.exec(`CREATE TABLE IF NOT EXISTS memory_purposes(
       id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -26,6 +31,7 @@ export class MemoryTreeStore {
       CREATE TABLE IF NOT EXISTS memory_purpose_indexes(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
       version INTEGER NOT NULL,body TEXT NOT NULL);`);
     this.nodes = new MemoryNodeStore(store);
+    this.organization = new MemoryOrganizationState(store, configuration);
     // Metadata-only backfill: never scan source files on a query or constructor.
     // The normal successful source scan supplies actual document references.
     for (const row of store.db.prepare("SELECT workspaceId,body FROM memory_purpose_indexes").all()) {
@@ -103,7 +109,9 @@ export class MemoryTreeStore {
         blocked: !!row.blocked, ...(row.error ? { error: String(row.error) } : {}) }));
   }
   batch(workspaceId: string, now = Date.now()): QueuedPurpose[] {
-    const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null && !purpose.blocked && purpose.retryAfter <= now);
+    const entries = this.entries(workspaceId), snapshot = this.snapshot(workspaceId);
+    const excluded = this.organization.excluded(workspaceId, snapshot.version, entries);
+    const pending = entries.filter(purpose => purpose.processedAt === null && !purpose.blocked && !excluded.has(purpose.id) && purpose.retryAfter <= now);
     if (pending.length < memoryBatchSize && (!pending.length || now - pending[0].queuedAt < memoryBatchWaitMs)) return [];
     return pending.slice(0, memoryBatchSize);
   }
@@ -114,32 +122,35 @@ export class MemoryTreeStore {
   tree(workspaceId: string, now = Date.now(), activeIds: readonly string[] = []): MemoryTree {
     const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null), active = new Set(activeIds);
     const waiting = pending.filter(purpose => !active.has(purpose.id));
-    const eligible = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter <= now), backoff = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter > now);
+    const excluded = this.organization.excluded(workspaceId, this.snapshot(workspaceId).version, this.entries(workspaceId));
+    const paused = (purpose: QueuedPurpose) => purpose.blocked || excluded.has(purpose.id);
+    const eligible = waiting.filter(purpose => !paused(purpose) && purpose.retryAfter <= now), backoff = waiting.filter(purpose => !paused(purpose) && purpose.retryAfter > now);
     return { ...this.nodeSnapshot(workspaceId), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
-      queue: { waiting: waiting.length, eligible: eligible.length, backoff: backoff.length, blocked: waiting.filter(purpose => purpose.blocked).length,
+      queue: { waiting: waiting.length, eligible: eligible.length, backoff: backoff.length, blocked: waiting.filter(paused).length,
         oldestQueuedAt: eligible[0]?.queuedAt ?? null,
         nextBatchAt: eligible.length >= memoryBatchSize ? now : eligible.length ? eligible[0].queuedAt + memoryBatchWaitMs : null,
         retryAt: backoff.length ? Math.min(...backoff.map(purpose => purpose.retryAfter)) : null } };
   }
   /** Validate the whole proposed tree and bind every leaf ourselves. No lossy truncation. */
   classify(answer: string, purposes: MemoryPurpose[]): MemoryIndexNode[] {
-    const value: unknown = JSON.parse(answer), remaining = new Map(purposes.map(purpose => [purpose.id, purpose]));
+    const value: unknown = JSON.parse(answer), remaining = new Map<string, MemoryPurpose[]>();
+    for (const purpose of purposes) remaining.set(purpose.text, [...remaining.get(purpose.text) ?? [], purpose]);
     let count = 0;
     const visit = (input: unknown, path: string[], depth: number): MemoryIndexNode => {
       if (++count > 100_000 || depth > 64 || !input || typeof input !== "object" || Array.isArray(input)) throw Error("分类树结构无效或过深");
       const node = input as Record<string, unknown>, keys = Object.keys(node).sort().join(",");
-      if (keys === "purposeId") {
-        if (!depth || typeof node.purposeId !== "string" || !remaining.has(node.purposeId)) throw Error("目的ID缺失、重复或越界");
-        const purpose = remaining.get(node.purposeId)!; remaining.delete(purpose.id);
-        return { id: purpose.id, name: purpose.text, purposeId: purpose.id, children: [] };
+      if (keys === "title") {
+        if (!depth || typeof node.title !== "string" || !remaining.has(node.title)) throw Error("原标题缺失、重复、改写或越界");
+        const sources = remaining.get(node.title)!; remaining.delete(node.title);
+        return { id: `t-${hash([path, node.title])}`, kind: "title", name: node.title, purposeIds: sources.map(p => p.id), children: [] };
       }
       if (keys !== "children,name" || typeof node.name !== "string" || !/^[\p{Script=Han}A-Za-z]+$/u.test(node.name) ||
         ["其他", "通用", "未分类", "优化", "处理", "开发"].includes(node.name.trim()) || !Array.isArray(node.children) || !node.children.length)
         throw Error("目录必须名称具体且包含子节点；不能返回来源信息或四字段记录");
       const name = node.name.trim(), current = [...path, name];
       const children = node.children.map(child => visit(child, current, depth + 1));
-      if (new Set(children.filter(child => !child.purposeId).map(child => child.name)).size !== children.filter(child => !child.purposeId).length) throw Error("同级目录名称重复");
-      return { id: `d-${hash(current)}`, name, children };
+      if (new Set(children.filter(child => !isMemoryTitle(child)).map(child => child.name)).size !== children.filter(child => !isMemoryTitle(child)).length) throw Error("同级目录名称重复");
+      return { id: `d-${hash(current)}`, kind: "directory", name, children };
     };
     if (!Array.isArray(value) || (!value.length && purposes.length)) throw Error("分类结果必须是完整目录JSON数组");
     const roots = value.map(node => visit(node, [], 0));
@@ -147,20 +158,47 @@ export class MemoryTreeStore {
     memoryTopicBlock(roots);
     return roots;
   }
-  modelTree(roots: MemoryIndexNode[]): unknown[] {
-    return roots.map(node => node.purposeId ? { purposeId: node.purposeId } : { name: node.name, children: this.modelTree(node.children) });
+  modelTree(roots: MemoryIndexNode[], seen = new Set<string>()): unknown[] {
+    return roots.flatMap((node): unknown[] => {
+      if (isMemoryTitle(node)) {
+        if (seen.has(node.name)) return [];
+        seen.add(node.name); return [{ title: node.name }];
+      }
+      const children = this.modelTree(node.children, seen);
+      return children.length ? [{ name: node.name, children }] : [];
+    });
   }
-  publish(workspaceId: string, batch: QueuedPurpose[], roots: MemoryIndexNode[], expectedVersion: number, recordApplied?: () => void) {
+  claim(workspaceId: string, batch: QueuedPurpose[], purposes: MemoryPurpose[], expectedVersion: number, processingId: string): OrganizationClaim {
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
+      const snapshot = this.snapshot(workspaceId), entries = this.entries(workspaceId);
+      const excluded = this.organization.excluded(workspaceId, snapshot.version, entries);
+      if (snapshot.version !== expectedVersion || batch.some(p => excluded.has(p.id) || !entries.some(live => live.id === p.id && !live.blocked && live.processedAt === null && live.retryAfter <= Date.now())))
+        throw new AppError("REVISION_CONFLICT", "整理来源或领取已变化");
+      const fingerprint = this.organization.fingerprint(workspaceId, expectedVersion, purposes);
+      this.organization.begin(workspaceId, batch, purposes, fingerprint, processingId);
+      this.store.db.exec("COMMIT"); return { fingerprint, processingId };
+    } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
+  }
+  publish(workspaceId: string, batch: QueuedPurpose[], roots: MemoryIndexNode[], expectedVersion: number, recordApplied?: () => void, claim?: OrganizationClaim, deadlineAt?: number) {
+    const guardDeadline = () => { if (deadlineAt !== undefined && Date.now() >= deadlineAt) throw new AppError("MEMORY_BUDGET", "整理总执行时限已到，未发布"); };
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      guardDeadline();
       const previous = this.snapshot(workspaceId);
       if (previous.version !== expectedVersion) throw new AppError("REVISION_CONFLICT", "记忆索引已变化，未发布旧分类");
       const live = new Map(this.entries(workspaceId).map(purpose => [purpose.id, purpose]));
       if (batch.some(purpose => !live.has(purpose.id) || live.get(purpose.id)!.processedAt !== null || live.get(purpose.id)!.blocked))
         throw new AppError("REVISION_CONFLICT", "目的队列已失效，未发布旧分类");
       const purposes = [...previous.purposes, ...batch.map(({ id, text, source }) => ({ id, text, source }))];
-      const tree: MemoryTree = { version: previous.version + 1, roots, purposes,
-        nameChars: Array.from(roots.map(root => root.name).join("\n")).length, pending: 0, failed: 0 };
+      if (claim && this.organization.fingerprint(workspaceId, expectedVersion, purposes) !== claim.fingerprint)
+        throw new AppError("REVISION_CONFLICT", "整理来源绑定或配置已变化，未发布旧结果");
+      // Recheck coverage at the publication boundary; never trust caller bindings.
+      roots = this.classify(JSON.stringify(this.modelTree(roots)), purposes);
+      const nameChars = Array.from(projectMemoryTree(roots).catalog).length;
+      if (nameChars > memoryOrganizationWatermarks.maximum) throw new AppError("MEMORY_LIMIT", "语义目录超过发布上限");
+      memoryTopicBlock(roots);
+      const tree: MemoryTree = { version: previous.version + 1, roots, purposes, nameChars, pending: 0, failed: 0 };
       this.store.db.prepare(`INSERT INTO memory_purpose_indexes VALUES(?,?,?) ON CONFLICT(workspaceId) DO UPDATE SET version=excluded.version,body=excluded.body`)
         .run(workspaceId, tree.version, JSON.stringify(tree));
       const update = this.store.db.prepare("UPDATE memory_purposes SET processedAt=?,error=NULL,retryAfter=0 WHERE id=? AND processedAt IS NULL AND blocked=0");
@@ -168,13 +206,30 @@ export class MemoryTreeStore {
       this.nodes.publish(tree, workspaceId);
       // This callback must remain synchronous: the original queue/index transaction
       // also commits its diagnostic application fact before returning to the event loop.
+      if (claim) this.organization.finish(claim.fingerprint, claim.processingId);
       recordApplied?.();
+      guardDeadline();
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
   }
-  failure(batch: QueuedPurpose[], error: unknown) {
-    const update = this.store.db.prepare("UPDATE memory_purposes SET error=?,retryAfter=? WHERE id=? AND processedAt IS NULL AND blocked=0");
-    for (const purpose of batch) update.run(processingError(error instanceof Error ? error : "批分类失败").slice(0, 1000), Date.now() + 60_000, purpose.id);
+  failure(batch: QueuedPurpose[], error: unknown, claim?: OrganizationClaim) {
+    if (!batch.length) return;
+    const workspaceId = batch[0].workspaceId;
+    if (!claim) {
+      const previous = this.snapshot(workspaceId), purposes = [...previous.purposes, ...batch];
+      try { claim = this.claim(workspaceId, batch, purposes, previous.version, `preflight-${randomUUID()}`); }
+      catch { return; }
+    }
+    const message = processingError(error instanceof Error ? error : "批分类失败").slice(0, 1000);
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      const retry = this.organization.fail(claim.fingerprint, claim.processingId, message, (error as { code?: string })?.code === "MEMORY_RETRYABLE");
+      if (retry !== undefined) {
+        const update = this.store.db.prepare("UPDATE memory_purposes SET error=?,retryAfter=? WHERE id=? AND processedAt IS NULL AND blocked=0");
+        for (const purpose of batch) update.run(message, retry ? Date.now() + 60_000 : 0, purpose.id);
+      }
+      this.store.db.exec("COMMIT");
+    } catch (failure) { this.store.db.exec("ROLLBACK"); throw failure; }
   }
   suspend(purpose: QueuedPurpose, error: unknown) {
     this.store.db.prepare("UPDATE memory_purposes SET blocked=1,error=? WHERE id=? AND processedAt IS NULL")
@@ -193,12 +248,8 @@ export class MemoryTreeStore {
         const ids = new Set(affected.map(purpose => purpose.id));
         const update = this.store.db.prepare("UPDATE memory_purposes SET blocked=1,processedAt=NULL,error=NULL WHERE id=?");
         for (const id of ids) update.run(id);
-        const prune = (nodes: MemoryIndexNode[]): MemoryIndexNode[] => nodes.flatMap(node => {
-          if (node.purposeId) return ids.has(node.purposeId) ? [] : [node];
-          const children = prune(node.children); return children.length ? [{ ...node, children }] : [];
-        });
-        const roots = prune(old.roots), next = { ...old, version: old.version + 1, roots,
-          purposes: old.purposes.filter(purpose => !ids.has(purpose.id)), nameChars: Array.from(roots.map(root => root.name).join("\n")).length };
+        const roots = pruneMemoryPurposes(old.roots, ids), next = { ...old, version: old.version + 1, roots,
+          purposes: old.purposes.filter(purpose => !ids.has(purpose.id)), nameChars: Array.from(projectMemoryTree(roots).catalog).length };
         this.store.db.prepare(`INSERT INTO memory_purpose_indexes VALUES(?,?,?) ON CONFLICT(workspaceId) DO UPDATE SET version=excluded.version,body=excluded.body`).run(workspaceId, next.version, JSON.stringify(next));
         this.nodes.publish(next, workspaceId);
       }

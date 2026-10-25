@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { command, useScope } from "../transport.js";
 import type { Scope, Workspace } from "../../shared/protocol.js";
-import { memoryTreeScope, memoryBatchSize, memoryBatchWaitMs, memoryDirectoryMaxChars, type MemoryTree } from "../../shared/memory-tree.js";
+import { memoryTreeScope, memoryBatchSize, memoryBatchWaitMs, memoryDirectoryMaxChars, memoryOrganizationWatermarks, type MemoryTree } from "../../shared/memory-tree.js";
 import { memoryCatalogScope, type MemoryCatalogEntry, type MemoryPreferences } from "../../shared/memory.js";
 import { ModelPicker } from "../chat/ModelPicker.js";
 import { MemoryFilter } from "./MemoryFilter.js";
@@ -50,17 +50,17 @@ export function MemoryTreePage({ workspaceId, workspaces, select, open, openReco
       <button className="btn" onClick={() => openRecords({})}>处理记录</button>
       <button className="btn" aria-label="记忆设置" aria-expanded={settings} onClick={() => setSettings(!settings)}>设置</button>
     </div>
-    <div className="memory-tree-status"><span>{tree?.roots.length ?? 0} 个一级分类 · {tree?.purposes.length ?? 0} 个目的 · 目录 {tree?.nameChars ?? 0}/{memoryDirectoryMaxChars} 字{pending ? ` · 待整理 ${pending} 个目的` : ""}</span></div>
+    <div className="memory-tree-status"><span>{tree?.roots.length ?? 0} 个一级分类 · {tree?.purposes.length ?? 0} 个目的 · 语义目录 {tree?.nameChars ?? 0}/{memoryOrganizationWatermarks.maximum} 码点{pending ? ` · 待整理 ${pending} 个目的` : ""}</span></div>
     {visible && <OrganizationFeedback workspaceId={workspaceId} tree={tree} openRecords={openRecords} />}
     {error && <p role="alert">{error}</p>}
     {!!failures.length && <details className="memory-tree-errors"><summary>整理出错 {failures.length}</summary>{failures.map((entry) => <p key={entry.id}>{entry.sourceTitle ?? entry.title}：{publicMemoryError(entry.organizationError!)} <button className="btn" onClick={() => openRecords({ kind: "memory.organize", sessionId: entry.sessionId, id: entry.processingId, legacyError: publicMemoryError(entry.organizationError!) })}>查看详情</button></p>)}</details>}
     {settings && <div className="memory-tree-settings"><h3>全局记忆设置</h3>{prefs ? <fieldset disabled={busy}>
       <h4>查询模型</h4><ModelPicker value={prefs.queryModel} inheritLabel="使用查询会话模型" onDefaultSelect={(queryModel) => configure({ queryModel })} />
       <h4>整理模型</h4><ModelPicker value={prefs.organizerModel} inheritLabel="使用来源会话模型" onDefaultSelect={(organizerModel) => configure({ organizerModel })} />
-      <p className="meta">完成目的自动入队；积累 {memoryBatchSize} 条或最早目的等待 {memoryBatchWaitMs / 60000} 分钟后互斥批量分类。一级目录最多 {memoryDirectoryMaxChars} 字；不符合目的结构的记忆跳过。配置适用于所有工作空间。</p>
+      <p className="meta">完成目的自动入队；积累 {memoryBatchSize} 条或最早目的等待 {memoryBatchWaitMs / 60000} 分钟后互斥批量分类。一级目录最多 {memoryDirectoryMaxChars} 码点；语义目录达到 {memoryOrganizationWatermarks.early} 码点先重整至 {memoryOrganizationWatermarks.target}，发布上限 {memoryOrganizationWatermarks.maximum}。不符合目的结构的记忆跳过。配置适用于所有工作空间。</p>
       <NumberSetting label="执行时限（秒）" value={prefs.timeoutMs / 1000} max={3600} save={(value) => configure({ timeoutMs: value * 1000 })} />
       <NumberSetting label="完整分类输入上限（字符）" value={prefs.readChars} min={16000} save={(readChars) => configure({ readChars })} />
-      <p className="meta">离开输入框自动保存。目的终态只入队一次，分类携带少量同文件目的标题作为语境。查询读取必要原文详情；浏览索引不调用模型。</p>
+      <p className="meta">离开输入框自动保存。目的终态只入队一次，整理模型只接收旧树和去重原标题，不接收来源标识、正文或邻近语境。查询模型只匹配语义目录，由程序展开后代文档；浏览索引不调用模型。</p>
     </fieldset> : <p role="status">正在读取设置…</p>}</div>}
     <div className="memory-tree-workspace">
       <MemoryMindMap key={workspaceId} roots={roots} query={query} workspaceName={workspaces.find(workspace => workspace.id === workspaceId)?.name ?? "记忆"}

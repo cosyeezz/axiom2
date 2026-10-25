@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createModels, Type, type Context } from "@earendil-works/pi-ai";
 import { qoderProvider } from "../src/server/providers/qoder.js";
-import { type QoderRegion } from "../src/server/providers/qoder-protocol.js";
+import { qoderFailure, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
 import { unwrapQoderSse } from "../src/server/providers/qoder-sse.js";
 
 delete process.env.AXIOM_EXPERIMENTAL_QODER;
@@ -111,6 +111,36 @@ test("Qoder SSE handles bytewise Unicode and stops terminal keepalive", async ()
   const upstream = new Response(new ReadableStream({ pull(controller) { if (offset < bytes.length) controller.enqueue(bytes.slice(offset, ++offset)); }, cancel() { cancelled = true; } }), { headers: { "content-type": "text/event-stream" } });
   const text = await unwrapQoderSse(upstream).text();
   assert.match(text, /中文🙂/); assert.match(text, /\[DONE\]/); assert.equal(cancelled, true);
+});
+test("Qoder nested resource-limit errors override SSE 403 without leaking upstream messages or retrying", async () => {
+  // Observed live: HTTP 200 → SSE 403 → JSON body code 403 → message JSON code 10605.
+  const resourceLimit = { code: "403", message: JSON.stringify({ code: "10605", message: JSON.stringify({ isQueued: true, retryAfterSeconds: 30, subCode: "RESOURCE_LIMIT", secret: "SECRET" }), subCode: "RESOURCE_LIMIT" }) };
+  const { models, model } = await fixture();
+  let calls = 0;
+  const result = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxRetries: 4, fetch: async () => {
+    calls++;
+    return new Response(envelope(chunk({ content: "partial" })) + envelope(resourceLimit, 403), { headers: { "content-type": "text/event-stream" } });
+  } });
+  assert.equal(result.stopReason, "error"); assert.equal(calls, 1);
+  assert.match(result.errorMessage!, /资源繁忙.*10605/); assert.match(result.errorMessage!, /未自动重放/);
+  assert.doesNotMatch(result.errorMessage!, /认证|重新登录|HTTP 403|SECRET/);
+  for (const body of [{ code: 10605 }, { error: { code: "10605", message: "SECRET" } }, { code: 403, message: JSON.stringify({ code: 112, message: "SECRET" }) }]) {
+    const response = new Response(envelope(body), { headers: { "content-type": "text/event-stream" } });
+    await assert.rejects(unwrapQoderSse(response).text(), error => error instanceof Error && /资源繁忙|额度不足/.test(error.message) && !error.message.includes("SECRET"));
+  }
+});
+test("Qoder unknown denials retain HTTP versus SSE stage and bound nested error inspection", async () => {
+  assert.match(qoderFailure(403).message, /HTTP 403/);
+  assert.doesNotMatch(qoderFailure(403).message, /重新登录/);
+  for (const detail of ["SECRET", '{"code":"SECRET"', [10605], { message: "SECRET 10605" }, JSON.stringify({ code: "10605", message: "SECRET".repeat(2000) })]) {
+    const error = qoderFailure(403, detail, "sse");
+    assert.match(error.message, /事件流状态 403/); assert.doesNotMatch(error.message, /HTTP 403|SECRET|资源繁忙/);
+  }
+  let deep: unknown = { code: 10605 };
+  for (let i = 0; i < 10; i++) deep = { body: deep };
+  assert.doesNotMatch(qoderFailure(403, deep, "sse").message, /资源繁忙/);
+  const response = new Response(envelope({ code: 403, message: "SECRET" }, 403), { headers: { "content-type": "text/event-stream" } });
+  await assert.rejects(unwrapQoderSse(response).text(), error => error instanceof Error && /事件流状态 403/.test(error.message) && !error.message.includes("SECRET"));
 });
 test("Qoder SSE malformed, truncated and mid-stream business errors never become a successful response", async () => {
   for (const text of [envelope(chunk({ content: "partial" })), 'data: not-json\n\n', envelope(chunk({ content: "partial" })) + envelope({ code: 112, message: "SECRET" }), envelope("SECRET", 403)]) {

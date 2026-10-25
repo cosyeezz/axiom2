@@ -5,12 +5,15 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { memoryIncompleteMessages, type MemoryIncompleteReason } from "../shared/memory.js";
 import type { Selection } from "../shared/agent.js";
+import { memoryOrganizationOutputChars } from "../shared/memory-tree.js";
+import { organizationModelBudget } from "./memory-organization-capacity.js";
+import { AppError } from "../shared/protocol.js";
 import { ModelService } from "./model-service.js";
 import { acceptsLease, awaitExecutionPermit, instanceSend, leaseSender, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 
 export interface MemoryWorkerInput {
   kind: "query" | "organize" | "title"; executionGate?: boolean; root: string; cwd: string; modelsFile?: string;
-  selection: Selection; prompt: string; systemPrompt?: string;
+  selection: Selection; prompt: string; systemPrompt?: string; outputReserve?: number;
 }
 type Binding = { ref?: LeaseRef; controller: AbortController };
 let runtime: ModelRuntime | undefined, preparing: Promise<void> | undefined, active: Binding | undefined, closing = false;
@@ -55,6 +58,7 @@ async function run(input: MemoryWorkerInput, binding: Binding) {
     const model = runtime!.getModel(input.selection.provider, input.selection.id);
     if (!model) throw Error("记忆模型不可用，未静默切换");
     if (!getSupportedThinkingLevels(model).includes(input.selection.thinking)) throw Error("记忆模型不支持所选思考等级");
+    const outputOptions = input.kind === "organize" ? organizationModelBudget(input, model) : {};
     await awaitExecutionPermit(binding.ref, input.executionGate); signal.throwIfAborted();
     send({ type: "execution_phase", stage: "bind", durationMs: performance.now() - begin });
     const usageId = randomUUID();
@@ -64,23 +68,31 @@ async function run(input: MemoryWorkerInput, binding: Binding) {
       systemPrompt: input.systemPrompt,
       messages: [{ role: "user", content: input.prompt, timestamp: Date.now() }],
     }, {
-      signal, sessionId: transportId, transport: "websocket", cacheRetention: "short", maxRetries: 0,
+      signal, sessionId: transportId, transport: "websocket", cacheRetention: "short", maxRetries: 0, ...outputOptions,
       ...(input.selection.thinking === "off" ? {} : { reasoning: input.selection.thinking }),
     });
     send({ type: "model_result", result });
     // Record incurred usage even when cancellation or an invalid stop reason prevents publication.
     send({ type: "usage", id: usageId, provider: result.provider, model: result.responseModel ?? result.model, usage: result.usage });
     signal.throwIfAborted();
-    if (result.stopReason === "error" || result.stopReason === "aborted") throw Error(result.errorMessage || "记忆模型请求失败");
+    if (result.stopReason === "error" || result.stopReason === "aborted") {
+      const message = result.errorMessage || "记忆模型请求失败";
+      // Only an explicit provider rate-limit rejection is safe to retry. A lost
+      // response, generic network failure or timeout may already have been billed.
+      if (result.stopReason === "error" && /\b429\b|rate_limit_exceeded/i.test(message)) throw new AppError("MEMORY_RETRYABLE", message);
+      throw Error(message);
+    }
     if (result.stopReason !== "stop" && result.stopReason !== "length") throw Error("记忆模型未返回同步文本结果");
     if (result.content.some((part) => part.type === "toolCall")) throw Error("记忆请求不允许工具调用");
     const answer = result.content.filter((part) => part.type === "text").map((part) => part.text).join("");
     let incompleteReason: MemoryIncompleteReason | undefined = result.stopReason === "length" ? "model_output_limit" : undefined;
-    if (answer.length > 32000) incompleteReason ??= "output_limit";
+    if (input.kind === "organize" && answer.length > memoryOrganizationOutputChars)
+      throw new AppError("MEMORY_LIMIT", "整理完整输出超过容量，未截断或发布");
+    if (input.kind !== "organize" && answer.length > 32000) incompleteReason ??= "output_limit";
     if (!answer && !incompleteReason && input.kind === "organize") throw Error("记忆模型未返回结果");
-    send({ type: "completed", answer: answer.slice(0, 32000) || (incompleteReason ? memoryIncompleteMessages[incompleteReason] : ""), incomplete: !!incompleteReason, incompleteReason });
+    send({ type: "completed", answer: (input.kind === "organize" ? answer : answer.slice(0, 32000)) || (incompleteReason ? memoryIncompleteMessages[incompleteReason] : ""), incomplete: !!incompleteReason, incompleteReason });
     success = true;
-  } catch (error) { send({ type: "failed", error: error instanceof Error ? error.message : "记忆执行失败" }); }
+  } catch (error) { send({ type: "failed", error: error instanceof Error ? error.message : "记忆执行失败", code: error instanceof AppError ? error.code : undefined }); }
   finally {
     active = undefined;
     if (success && !closing && !signal.aborted) {

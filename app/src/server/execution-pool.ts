@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { fork, spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { MaintenanceError } from "../shared/maintenance.js";
 import { AppError } from "../shared/protocol.js";
 import type { ExecutionMode, PreparedEnvironment } from "./execution-profile.js";
 import { sameLease, type LeaseRef } from "./execution-protocol.js";
@@ -350,15 +351,23 @@ export class ExecutionPool {
   }
   async trim() {for(const {environment:e} of this.recent.values())e.release();this.recent.clear();await Promise.all([...this.instances.values()].filter(i=>!i.lease).map(i=>this.retireInstance(i,'trim')));}
   /** Quiesce retained workers before removing programs they may have cached. */
-  async maintenance<T>(operation: () => T): Promise<T> {
+  async maintenance<T>(operation: () => T, signal?: AbortSignal, closeTimeoutMs = 30_000): Promise<T> {
     if (this.stopping || this.maintaining || this.waiters.length || [...this.instances.values()].some(i => i.lease))
       throw new AppError("MAINTENANCE_BUSY", "仍有执行或维护任务，请结束后再卸载组件。");
+    signal?.throwIfAborted();
     this.maintaining = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined, abort: (() => void) | undefined;
     try {
-      await this.trim();
+      await Promise.race([this.trim(), new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new MaintenanceError("stop-unconfirmed", "缓存工作进程退出超时；已请求终止并保留文件，可重新核实后重试。")), closeTimeoutMs);
+        abort = () => reject(signal!.reason);
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
+      })]);
+      signal?.throwIfAborted();
       if (this.stopping) throw new AppError("SHUTTING_DOWN", "执行池正在关闭。");
       return await operation();
-    } finally { this.maintaining = false; this.schedule(); }
+    } finally { clearTimeout(timeout); if (abort) signal?.removeEventListener("abort", abort); this.maintaining = false; this.schedule(); }
   }
   async waitForPrewarm() {this.prewarm();await Promise.all([...this.instances.values()].filter(i=>!i.lease&&i.ready).map(i=>i.ready!.catch(()=>{})));}
   async close() {

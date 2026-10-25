@@ -1,8 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { memoryOrganizationOutputChars } from "../shared/memory-tree.js";
 import { performance } from "node:perf_hooks";
 import type { ChildProcess } from "node:child_process";
 import type { Memories, MemoryExecution, MemoryRunner } from "./memories.js";
 import type { ModelService } from "./model-service.js";
+import type { Selection } from "../shared/agent.js";
+import { organizationJSON } from "./memory-organization-state.js";
 import type { MemoryWorkerInput } from "./memory-worker.js";
 import { AppError } from "../shared/protocol.js";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
@@ -24,6 +29,21 @@ export class PooledMemoryRunner implements MemoryRunner {
   private readonly ownsPool: boolean;
   constructor(private readonly memories: Memories, private readonly models: ModelService, pool?: ExecutionPool, profiles?: ExecutionProfiles) {
     this.ownsPool=!pool;this.pool=pool??new ExecutionPool();this.profiles=profiles??new ExecutionProfiles(memories.store.root);
+  }
+  configurationKey(selection?: Selection) {
+    const hash = createHash("sha256");
+    if (!selection) return hash.update("no-organizer-selection").digest("hex");
+    for (const file of ["models.json", "auth.json", "models-store.json"]) {
+      try {
+        const data = JSON.parse(readFileSync(join(this.models.dir, file), "utf8").replace(/^\uFEFF/, ""));
+        const provider = file === "models.json" ? data.providers?.[selection.provider] : data[selection.provider];
+        // Catalog check timestamps and other providers/models cannot unlock a paused request.
+        const selected = file === "models-store.json" ? provider?.models?.find((model: { id: string }) => model.id === selection.id)
+          : file === "models.json" && provider ? { ...provider, models: provider.models?.filter((model: { id: string }) => model.id === selection.id), modelOverrides: provider.modelOverrides?.[selection.id] ?? null } : provider;
+        hash.update(organizationJSON([file, selected ?? null]));
+      } catch { hash.update(`unreadable:${file}`); }
+    }
+    return hash.digest("hex");
   }
   execute(input: MemoryExecution) {
     const started=performance.now();
@@ -59,7 +79,7 @@ export class PooledMemoryRunner implements MemoryRunner {
       this.memories.owner(input.scope);
       stage("准备发送模型请求");
       const revisionAware = input as RevisionAwareExecution;
-      return await this.observe(child,lease,revisionAware,signal,{kind:input.kind,executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,systemPrompt:input.systemPrompt});
+      return await this.observe(child,lease,revisionAware,signal,{kind:input.kind,executionGate:true,root:this.memories.store.root,cwd,modelsFile:lease.environment.modelsFile,selection:input.selection,prompt:input.prompt,systemPrompt:input.systemPrompt,outputReserve:input.outputReserve});
     } catch(error) {
       if(lease)await this.pool.retire(lease.ref,'memory_failed');
       if(timeout.aborted)throw timeoutError();
@@ -101,13 +121,13 @@ export class PooledMemoryRunner implements MemoryRunner {
           if(signal.aborted)return;
           if(event.type==='read'||event.type==='revision')throw Error('独立记忆请求不允许工具读取');
           if(event.type==='completed'){
-            if(typeof event.answer!=='string'||input.kind==='organize'&&!event.answer||event.answer.length>32000||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
+            if(typeof event.answer!=='string'||input.kind==='organize'&&!event.answer||event.answer.length>(input.kind==='organize'?memoryOrganizationOutputChars:32000)||typeof event.incomplete!=='boolean')throw Error('记忆结果无效');
             if(event.incompleteReason !== undefined && (typeof event.incompleteReason !== 'string' || !Object.hasOwn(memoryIncompleteMessages,event.incompleteReason)))throw Error('记忆未完成原因无效');
             result={answer:event.answer,incomplete:event.incomplete,...(event.incompleteReason ? {incompleteReason:event.incompleteReason as MemoryIncompleteReason} : {})};
             if (input.processingId) this.memories.records.stage(input.processingId, '清理执行环境');
             reap=setTimeout(()=>{failure=Error('记忆清理未完成');void this.pool.retire(lease.ref,'cleanup_timeout');},1500);
           }
-          if(event.type==='failed'){failure=Error(typeof event.error==='string'?event.error:'记忆执行失败');void this.pool.retire(lease.ref,'memory_failed');}
+          if(event.type==='failed'){failure=['MEMORY_RETRYABLE','MEMORY_LIMIT'].includes(event.code)?new AppError(event.code,typeof event.error==='string'?event.error:'记忆执行失败'):Error(typeof event.error==='string'?event.error:'记忆执行失败');void this.pool.retire(lease.ref,'memory_failed');}
           if(event.type==='cleaned'){
             if(!result||failure||event.clean!==true)throw Error('记忆执行未提供有效清理结果');
             clearTimeout(reap);

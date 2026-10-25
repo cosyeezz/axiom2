@@ -1,37 +1,63 @@
-.confirm-dialog {
+/* One confirmation surface, independent of workbench/settings/desktop styles. */
+dialog.confirm-dialog.scrollable-dialog {
+  --confirm-tone: var(--accent);
   box-sizing: border-box;
-  width: min(440px, calc(100% - 32px));
+  width: min(432px, calc(100vw - 32px));
   max-width: none;
-  max-height: calc(100dvh - 32px);
+  max-height: calc(var(--visual-height, 100dvh) - 32px);
   margin: auto;
-  padding: 24px;
-  overflow: auto;
+  padding: 0;
+  overflow: hidden;
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--elev-raised);
-  font: 15px/1.6 var(--font-body);
+  box-shadow: var(--overlay-shadow, var(--elev-raised));
+  font: 14px/1.65 var(--font-body);
+  text-align: left;
 }
-.confirm-dialog::backdrop { background: color-mix(in srgb, var(--bg) 80%, transparent); }
-.confirm-dialog h2 { margin: 0; font-size: 20px; }
-.confirm-dialog .confirm-subject {
-  margin: 16px 0 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--fg-2);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-  max-height: 120px;
-  overflow: auto;
+dialog.confirm-dialog-danger.scrollable-dialog { --confirm-tone: var(--danger-text); }
+dialog.confirm-dialog::backdrop { background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(3px); }
+dialog.confirm-dialog > .dialog-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; max-height: calc(var(--visual-height, 100dvh) - 34px); overflow: hidden; }
+.confirm-dialog .confirm-heading { display: flex; align-items: center; gap: 12px; flex-shrink: 0; padding: 24px 24px 0; }
+.confirm-dialog .confirm-symbol { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; color: var(--confirm-tone); border: 1px solid color-mix(in srgb, var(--confirm-tone) 20%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--confirm-tone) 8%, transparent); }
+.confirm-dialog .confirm-symbol svg { width: 18px; height: 18px; }
+.confirm-dialog h2 { min-width: 0; margin: 0; color: var(--fg); font-size: 18px; font-weight: 600; line-height: 1.45; text-wrap: pretty; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-body { min-height: 0; padding: 16px 24px 24px; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-subject { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: 13px; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-description { margin: 0; color: var(--fg-2); font-size: 14px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-description > :first-child { margin-top: 0; }
+.confirm-dialog .confirm-description > :last-child { margin-bottom: 0; }
+.confirm-dialog .confirm-body :where(p) { margin-block: 0 12px; }
+.confirm-dialog .confirm-body > .confirm-location { margin: 16px 0 0; color: var(--fg-2); font-size: 13px; }
+.confirm-dialog .confirm-body ul { margin-block: 12px; padding-left: 20px; color: var(--fg-2); }
+.confirm-dialog .confirm-body li + li { margin-top: 6px; }
+.confirm-dialog .confirm-warning { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--warn) 7%, transparent); color: var(--fg-2); font-size: 13px; line-height: 1.65; }
+.confirm-dialog .confirm-warning > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 3px; color: var(--warn); }
+.confirm-dialog .confirm-warning > p { margin: 0; }
+.confirm-dialog .confirm-error { margin: 16px 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger-text) 25%, transparent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger-text); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.confirm-dialog .confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; flex-shrink: 0; margin: 0; padding: 16px 24px; border-top: 1px solid var(--border-soft); background: color-mix(in srgb, var(--bg) 16%, var(--surface)); }
+.confirm-dialog .confirm-actions .btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; min-width: 76px; max-width: 100%; margin: 0; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); font: inherit; font-size: 13px; font-weight: 500; line-height: 1.5; text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: background var(--motion-fast), border-color var(--motion-fast); }
+.confirm-dialog .confirm-actions .btn:hover:not([aria-disabled=true]):not(:disabled) { background: color-mix(in srgb, var(--fg) 6%, transparent); border-color: color-mix(in srgb, var(--fg) 18%, transparent); }
+.confirm-dialog .confirm-actions .btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-on); }
+.confirm-dialog .confirm-actions .btn-primary:hover:not([aria-disabled=true]):not(:disabled) { background: var(--accent-hover); border-color: transparent; }
+.confirm-dialog .confirm-actions .confirm-danger { background: var(--danger); border-color: transparent; color: #fff; }
+.confirm-dialog .confirm-actions .confirm-danger:hover:not([aria-disabled=true]):not(:disabled) { background: var(--danger-hover); border-color: transparent; }
+.confirm-dialog .confirm-actions .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.confirm-dialog .confirm-actions .btn[aria-disabled=true] { opacity: .55; cursor: wait; }
+.confirm-dialog .confirm-actions .btn:disabled { opacity: .45; cursor: not-allowed; }
+.confirm-dialog .confirm-spinner { width: 15px; height: 15px; }
+@media (prefers-reduced-motion: no-preference) {
+  dialog.confirm-dialog[open] { animation: confirmation-in 160ms var(--ease-standard); }
+  .confirm-spinner { animation: confirmation-spin .8s linear infinite; }
 }
-.confirm-dialog .confirm-description { margin: 12px 0 0; color: var(--muted); font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
-.confirm-dialog .confirm-error { margin: 12px 0 0; color: color-mix(in srgb, var(--danger) 55%, var(--fg)); font-size: 13px; overflow-wrap: anywhere; }
-.confirm-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-.confirm-actions .btn { min-height: 44px; min-width: 80px; }
-.confirm-actions .confirm-danger { background: var(--danger); border-color: transparent; color: var(--fg); }
-.confirm-actions .confirm-danger:hover:not([aria-disabled=true]) { background: var(--danger-hover); }
-.confirm-actions .btn[aria-disabled=true] { opacity: .5; cursor: wait; }
-@media (max-width: 640px) { .confirm-dialog { padding: 20px; } }
+@keyframes confirmation-in { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes confirmation-spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px), (pointer: coarse) {
+  .confirm-dialog .confirm-actions .btn { min-height: 44px; }
+}
+@media (max-width: 400px) {
+  .confirm-dialog .confirm-heading { padding: 20px 20px 0; }
+  .confirm-dialog .confirm-body { padding: 14px 20px 20px; }
+  .confirm-dialog .confirm-actions { padding: 14px 20px; }
+}

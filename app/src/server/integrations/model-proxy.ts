@@ -1,3 +1,4 @@
+import type { IntegrationRemoval } from "./managed-removal.js";
 import { proxyLaunchSupported, toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { checkXrayImporter, prepareXrayImporter, xrayImporterRelease, xrayImporterVersion } from "./model-proxy-xray-installer.js";
 import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
@@ -16,7 +17,7 @@ import { inspectProxySource } from "./model-proxy-import.js";
 import { inspectXraySource } from "./model-proxy-xray-import.js";
 
 type Profile = StoredProxyProfile & { enabled?: boolean };
-export type ModelProxyDependencies = { readSource?: typeof readProxyShareSource; inspectSource?: typeof inspectProxySource };
+export type ModelProxyDependencies = { readSource?: typeof readProxyShareSource; inspectSource?: typeof inspectProxySource; removal?: IntegrationRemoval };
 export class ModelProxyService {
   private config: ProxyConfig;
   private processes = new Map<string, ProxyProcess>();
@@ -46,6 +47,9 @@ export class ModelProxyService {
     const controller = this.importerController = new AbortController();
     this.importerPending = this.useImporter(() => runMaintenance(this.root, { id: c.requestId, resource: "proxy:xray-knife", label: "Xray 分享导入组件", action: removing ? "uninstall" : c.op === "modelProxy.importerCheck" ? "check" : "install", params: p, cancel: !removing, steps: removing ? ["checking", "removing", "validating"] : undefined }, controller, async () => {
       if (removing) {
+        await (this.dependencies.removal ?? (async work => work()))(() => {
+        controller.signal.throwIfAborted();
+        if (p.revision !== this.config.revision || readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已改变，请重新读取后操作。");
         const plan = proxyImporterRemovalPlan(this.root, this.config);
         assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
         this.importerVersion = undefined;
@@ -55,6 +59,7 @@ export class ModelProxyService {
         const remaining = this.config.removalPending!.filter(name => !plan.names.includes(name));
         this.save({ ...this.config, removalPending: remaining.length ? remaining : undefined });
         maintenancePhase("validating");
+        });
       } else {
         if (this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name))) throw Error("导入组件有待清理文件，请先完成清理。");
         this.importerVersion = undefined;
@@ -285,7 +290,9 @@ export class ModelProxyService {
       let prepared: { directory: string; version: string } | undefined, skipped = 0;
       try {
         if (removing) {
-          if (readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
+          await (this.dependencies.removal ?? (async work => work()))(async () => {
+          signal.throwIfAborted();
+          if (p.revision !== this.config.revision || readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
           const plan = proxyRemovalPlan(this.root, kernel, this.config);
           assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
           await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop()));
@@ -301,6 +308,7 @@ export class ModelProxyService {
           const remaining = this.config.removalPending!.filter(name => !plan.names.includes(name));
           this.save({ ...this.config, removalPending: remaining.length ? remaining : undefined });
           this.clearInspection();
+          });
         } else if (inspecting) {
           if (kernel === "xray") {
             const result = await this.useImporter(async () => {

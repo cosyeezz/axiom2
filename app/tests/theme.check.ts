@@ -23,7 +23,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
 const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
-const desktop = await createViteServer({ configFile: resolve("desktop/vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+const desktop = await createViteServer({ configFile: resolve("desktop/vite.config.ts"), cacheDir: join(root, "desktop-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null } });
 await desktop.listen();
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 const errors: string[] = [], results: unknown[] = [];
@@ -122,6 +122,7 @@ try {
       if (name === "axiom_update") return { managed: true, clientSupported: true, clientVersion: "0.4.11", release: null, job: null };
       if (name === "axiom_controls") { view = "control"; window.dispatchEvent(new CustomEvent("axiom-desktop-view", { detail: "control" })); return; }
       if (name === "axiom_peers") return { peers: [] };
+      if (name === "axiom_cleanup" && args.request?.op.endsWith(".get")) return { requestId: args.request.requestId, data: { revision: "empty-fixture", items: [], scopes: [], warnings: [], installations: {}, engines: [] } };
       if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, npmReady: true, writable: true, tailscale: true, platform: "darwin", nodeVersion: "24.0.0", npmVersion: "11.0.0" } : { job: null };
       throw Error(`Unexpected IPC ${name}`);
     } };
@@ -162,8 +163,8 @@ try {
     await controller.screenshot({ path: join(output, `${theme}-device-menu.png`) });
     await controller.keyboard.press("Escape");
     await controller.getByRole("button", { name: "关闭后台服务", exact: true }).click();
-    await controller.locator('.connect-dialog[open]').waitFor();
-    await checkContrast(controller, '.connect-dialog p');
+    await controller.getByRole('dialog', { name: '关闭后台服务？' }).waitFor();
+    await checkContrast(controller, '.confirm-dialog .confirm-description');
     await controller.screenshot({ path: join(output, `${theme}-service-dialog.png`) });
     await controller.getByRole("button", { name: "继续运行", exact: true }).click();
   }
@@ -176,6 +177,10 @@ try {
   assert.deepEqual(errors, []);
   await writeFile(join(output, "results.json"), JSON.stringify({ passed: true, results, crossOrigin: true, widths: [320, 360, 390, 820, 1440], errors }, null, 2));
   console.log(`Theme checks passed: palettes, eight real panels, select, tooltip, modal, contrast, persistence, cross-origin delivery. Artifacts: ${output}`);
+} catch (error) {
+  console.error("Theme fixture page errors:", errors);
+  for (const [index, page] of context.pages().entries()) { await page.screenshot({ path: join(output, `failure-${index}.png`), fullPage: true }).catch(() => {}); await writeFile(join(output, `failure-${index}.txt`), await page.locator("body").innerText().catch(() => "unavailable")).catch(() => {}); }
+  throw error;
 } finally {
   await browser.close(); await desktop.close();
   await new Promise<void>(resolve => server.close(() => resolve()));

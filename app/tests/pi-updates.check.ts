@@ -5,13 +5,13 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 
-const output = resolve(process.env.AXIOM_PI_OUTPUT || "test-results/pi-updates");
+const output = resolve(process.env.AXIOM_PI_OUTPUT || process.env.AXIOM_TEST_ARTIFACTS || "test-results/pi-updates");
 await mkdir(output, { recursive: true });
-const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), cacheDir: resolve(output, ".vite"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null } });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
-  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript({ content: "window.__name = value => value;" });
@@ -19,7 +19,7 @@ try {
     const state = {
       version: null as string | null, release: null as any, job: null as any, missing: true, execution: null as any,
       failCheck: false, checkDelay: 0, legacy: false, cliError: "", holdStatus: false,
-      held: null as (() => void) | null, calls: [] as any[],
+      held: null as (() => void) | null, calls: [] as any[], unexpected: [] as string[],
     };
     (window as any).piFixture = state;
     const snapshot = () => ({
@@ -31,12 +31,16 @@ try {
     let theme = "dark", revision = 0;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, ...args });
-      if (name === "axiom_theme") { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
-      if (name === "axiom_service") return { desktopView: "control", state: state.missing ? "missing" : "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
-      if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" } : { job: null };
-      if (name === "axiom_peers") return { peers: [] };
-      if (name === "axiom_reveal_path") return null;
-      if (name !== "axiom_update") throw Error("Unexpected IPC: " + name);
+      if (name === "axiom_theme" && args.action === undefined) { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
+      if (name === "axiom_service" && args.action === "status") return { desktopView: "control", state: state.missing ? "missing" : "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
+      if (name === "axiom_setup" && args.action === "check") return { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" };
+      if (name === "axiom_setup" && args.action === "status") return { job: null };
+      if (name === "axiom_peers" && args.action === undefined) return { peers: [] };
+      if (name === "axiom_reveal_path" && args.action === undefined) return null;
+      if (name !== "axiom_update" || !["status", "pi-refresh", "pi-check", "pi"].includes(args.action)) {
+        state.unexpected.push(name + ":" + args.action);
+        throw Error("Unexpected IPC: " + name + ":" + args.action);
+      }
       if (args.action === "status" && state.holdStatus) await new Promise<void>(resolve => { state.held = resolve; });
       if (args.action === "pi-check") {
         if (state.checkDelay) await new Promise(resolve => setTimeout(resolve, state.checkDelay));
@@ -49,7 +53,7 @@ try {
   });
   await page.clock.install();
   await page.goto(server.resolvedUrls!.local[0]);
-  const maintenance = page.locator(".startup-maintenance > summary");
+  const maintenance = page.locator(".startup-maintenance > summary").filter({ hasText: "版本与更新" });
   assert.match(await maintenance.innerText(), /Pi 引擎/);
   await page.locator(".startup-preparation > summary").click();
   const entry = await maintenance.boundingBox();
@@ -90,7 +94,11 @@ try {
     await page.setViewportSize({ width, height: 1000 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no overflow at ${width}`);
     const boxes = await pi.locator(".connect-versions > div").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().toJSON()));
-    assert.ok(boxes[0].right <= boxes[1].left && boxes[1].right <= boxes[2].left, `three version columns at ${width}`);
+    assert.equal(boxes.length, 3);
+    if (width <= 400)
+      assert.ok(boxes[0].bottom <= boxes[1].top && boxes[1].bottom <= boxes[2].top, `stacked version rows at ${width}`);
+    else
+      assert.ok(boxes[0].right <= boxes[1].left && boxes[1].right <= boxes[2].left, `three version columns at ${width}`);
     await page.screenshot({ path: resolve(output, `page-${width}.png`), fullPage: true });
   }
   await install.click();
@@ -102,6 +110,19 @@ try {
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.ok(await install.evaluate(node => document.activeElement === node));
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi").length), 0);
+
+  // A current safety gate can invalidate an open confirmation without changing its frozen target.
+  await install.click();
+  await page.evaluate(() => { (window as any).piFixture.release.token = null; });
+  await page.clock.runFor(2100);
+  const acceptInstall = dialog.getByRole("button", { name: "确认安装 Pi", exact: true });
+  await acceptInstall.and(page.locator(":disabled")).waitFor();
+  await acceptInstall.dispatchEvent("click");
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi").length), 0);
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.evaluate(() => { (window as any).piFixture.release.token = "confirmed-token"; });
+  await page.clock.runFor(2100);
+  await install.and(page.locator(":enabled")).waitFor();
 
   // Polling may change the latest release, but never the version being confirmed.
   await install.click();
@@ -145,7 +166,7 @@ try {
   await pi.getByRole("button", { name: "更新终端 Pi · 1.1.1", exact: true }).click();
   await page.getByRole("dialog", { name: "更新终端 Pi 1.1.1？", exact: true }).waitFor();
   await page.keyboard.press("Escape");
-  assert.equal(await page.locator(".startup-maintenance > summary > span").textContent(), "发现新版本");
+  assert.equal(await maintenance.locator(":scope > span").textContent(), "发现新版本");
 
   await page.evaluate(() => { (window as any).piFixture.failCheck = true; });
   await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
@@ -168,7 +189,15 @@ try {
   assert.ok(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).isEnabled());
   assert.equal(await pi.getByRole("alert").count(), 0);
   assert.equal(await page.locator(".startup-global-error").count(), 0, "no caught IPC errors hidden from pageerror checks");
+  const unexpected = await page.evaluate(() => (window as any).piFixture.unexpected);
+  assert.deepEqual(unexpected, [], "unknown IPC names or actions must never receive fixture success");
   assert.deepEqual(errors, []);
-  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
+  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, unexpected, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
   console.log("Pi UI passed: fresh install, upgrade, confirmation snapshot, queued polling, progress, errors, legacy and six widths.");
+} catch (error) {
+  for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) {
+    await page.screenshot({ path: resolve(output, `failure-${index}.png`), fullPage: true }).catch(() => {});
+    await writeFile(resolve(output, `failure-${index}.txt`), await page.locator("body").innerText()).catch(() => {});
+  }
+  throw error;
 } finally { await browser.close(); await server.close(); }

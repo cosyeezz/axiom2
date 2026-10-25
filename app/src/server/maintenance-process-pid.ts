@@ -99,7 +99,7 @@ export function forkPidProcess(entry: string, options: Pick<ForkOptions, "cwd" |
         await delay(50);
       }
       throw uncertain();
-    })();
+    })().catch(failure => { stopping = undefined; throw failure; });
   }
   return { child, ready, close, failure: () => error, setDeadline(_value: number) {} };
 }

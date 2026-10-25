@@ -1,5 +1,6 @@
 import { Icon } from "../Icon.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
+import { BuiltinRecovery } from "./BuiltinRecovery.js";
 import { useEffect, useRef, useState } from "react";
 import { emptyMaintenanceState } from "../../shared/maintenance.js";
 import { emptyReaState, reaVersion, type ReaState } from "../../shared/rea.js";
@@ -21,10 +22,10 @@ export function ReaTool({ active }: { active: boolean }) {
   const feedback = feedbackByResource.rea;
   const checkButton = useRef<HTMLButtonElement>(null);
   const focusAfterReconcile = useRef(false);
-  const [uninstall, setUninstall] = useState<string>();
+  const [uninstall, setUninstall] = useState<{ revision: string; cleanupRevision?: string }>();
   const [choice, setChoice] = useState<{ revision: string; enabled: boolean }>();
-  const blocked = sending || !!coreJob?.running || !!state.pendingOperation || !connection.connected;
-  const busy = blocked || requests.length > 0 || jobs.some(job => job.running) || !!state.engines?.some(engine => engine.pendingOperation);
+  const blocked = sending || !!coreJob?.running || !connection.connected;
+  const busy = blocked || requests.length > 0 || jobs.some(job => job.running);
   useEffect(() => {
     if (!busy && focusAfterReconcile.current) { focusAfterReconcile.current = false; checkButton.current?.focus(); }
   }, [busy]);
@@ -77,19 +78,20 @@ export function ReaTool({ active }: { active: boolean }) {
         </dl>
         {state.version && !state.runtimeManaged && <p className="field-help">现有安装保持不变。重新安装或更新后使用与目标 REA 版本兼容的独立 Node/npm；不需要升级后台或系统 Node。</p>}
         {!state.supported && state.nodeVersion && <p className="tools-error">{state.supportError || "当前后台平台尚不支持内置工具进程。"}</p>}
-        {state.pendingOperation && !coreJob?.running && <div className="tools-conflict" role="group" aria-label="核实 REA 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
+        {state.pendingOperation && !coreJob?.running && <BuiltinRecovery label="REA" operationId={state.pendingOperation} disabled={busy} reconcile={force => void action("rea.reconcile", { operationId: state.pendingOperation, force })} />}
         <div className="tools-actions">
           <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("rea.refresh")}>检查安装</button>
           <button className="btn" disabled={busy || !state.supported} onClick={() => void action("rea.check")}>检查更新</button>
           <button className="btn btn-primary" disabled={busy || !state.supported || older} onClick={() => void action("rea.install", { version: target })}>{coreJob?.running && coreJob.kind === "install" ? "正在安装…" : state.version === target ? "重新安装 REA" : state.version ? "更新 REA" : "安装 REA"}</button>
-          {(state.version || state.removalPending) && <button className="btn" disabled={busy} onClick={() => setUninstall(state.revision)}><Icon name="trash-2" />{state.removalPending ? "清理残留程序" : "卸载 REA"}</button>}
+          {(state.version || state.removalPending) && <button className="btn" disabled={busy} onClick={() => setUninstall({ revision: state.revision, cleanupRevision: state.cleanup?.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留程序" : "卸载 REA"}</button>}
           {coreJob?.running && !["uninstall", "engine-uninstall"].includes(coreJob.kind) && <button className="btn" disabled={sending || !connection.connected} onClick={() => void action("rea.cancel", { jobId: coreJob.id })}>取消操作</button>}
         </div>
-        {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label="确认卸载 REA">
-          <p>移除 Axiom 托管的 REA 程序及其技能、MCP 安装引用。保留默认设置、分析引擎与组件路径；正在执行任务时须先结束任务。</p>
-          <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rea.uninstall", { revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button></div>
+        {uninstall !== undefined && <div className="tools-conflict inline-confirmation" role="group" aria-label="确认卸载 REA">
+          <p>移除 Axiom 托管的 REA 程序及其技能、MCP 安装引用。保留默认设置、分析引擎与组件路径。等待已准入任务完成后自动卸载；等待期间可在任务面板取消。</p>
+          <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button><button className="btn confirm-danger" disabled={busy} onClick={() => { const confirmation = uninstall; setUninstall(undefined); void action("rea.uninstall", { ...confirmation, confirm: true }); }}><Icon name="trash-2" />确认卸载</button></div>
         </div>}
         <p className="field-help tools-help">安装到 Axiom 独立目录。新版本通过连接检查后才生效，失败或取消保留当前版本。下载原生依赖可能需要几分钟；可离开页面，稍后回来查看进度。</p>
+        {!!state.cleanupUnverified?.length && <p className="field-help">另有 {state.cleanupUnverified.length} 个旧程序目录缺少归属证明，将保留，不阻塞当前程序卸载。</p>}
         {state.packageRoot && <p className="tools-path">安装位置 <LocalPath path={state.packageRoot} /></p>}
       </BackendMaintenance>
       <section className="section tools-section" aria-labelledby="rea-skill-heading">

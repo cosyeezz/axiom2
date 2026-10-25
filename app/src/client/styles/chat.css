@@ -219,7 +219,7 @@
 .compression-settings .model-picker .model-popover { width: 100%; max-width: 100%; }
 .model-picker .model-search { margin: 4px 6px; padding-inline: 8px; gap: 6px; }
 .model-picker .model-search input { min-height: 36px; padding-block: 6px; }
-.model-picker .model-list { flex: 1 1 auto; min-height: 48px; max-height: 360px; padding: 0 4px 4px; overscroll-behavior: contain; }
+.model-picker .model-list { flex: 1 1 auto; min-height: 0; max-height: 360px; padding: 0 4px 4px; overscroll-behavior: contain; }
 .model-picker .model-row { margin-bottom: 0; }
 .model-picker .model-option { font-family: var(--font-body); min-height: 48px; padding: 5px 8px; gap: 6px; }
 .model-picker .model-copy { display: grid; gap: 0; text-align: left; }
@@ -232,11 +232,11 @@
 .model-picker .model-reasoning { min-width: 0; margin: 0; padding: 4px 8px; border: 0; border-top: 1px solid var(--border); flex-shrink: 0; }
 .model-picker .model-reasoning legend { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
 .model-picker .model-reasoning > p { clear: both; }
-/* Reserve seven equal slots even when a model exposes fewer reasoning levels. */
-.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; container-type: inline-size; }
+/* Use real options, readable type and wrapping instead of seven tiny reserved slots. */
+.model-picker .model-levels { clear: both; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(72px * var(--display-font-scale, 1))), 1fr)); gap: 4px; }
 .model-picker .model-level { position: relative; min-width: 0; cursor: pointer; }
 .model-picker .model-level input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; font: 10px/1.5 var(--font-mono); font-size: min(calc(10px * var(--display-font-scale, 1)), 3cqw); color: var(--fg-2); white-space: nowrap; pointer-events: none; }
+.model-picker .model-level span { display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 4px 0; border: 1px solid var(--border); border-radius: 6px; font: calc(11px * var(--display-font-scale, 1))/1.5 var(--font-mono); color: var(--fg-2); white-space: nowrap; pointer-events: none; }
 .model-picker .model-level input:enabled:hover + span { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .model-picker .model-level input:checked + span { border-color: var(--accent); background: var(--accent); color: var(--accent-on); }
 .model-picker .model-level input:enabled:checked:hover + span { border-color: var(--accent-hover); background: var(--accent-hover); }
@@ -285,6 +285,14 @@
 .composer-clear:hover:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
 .composer-clear svg { width: 18px; height: 18px; --icon-stroke: 1.5px; }
 .composer { position: relative; }
+/* A long draft owns the entire upper row, not a narrow column beside controls. */
+.composer[data-multiline] { grid-template-rows: auto 44px; row-gap: 0; border-radius: 20px; }
+.composer[data-multiline] textarea { grid-column: 1 / -1; grid-row: 1; width: 100%; min-width: 0; padding-inline: 8px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
+.composer[data-multiline] :is(.attachment-picker, #attach, .composer-model-controls, .model-picker, .send, .composer-actions) { grid-row: 2; }
+.composer[data-multiline] .attachment-picker, .composer[data-multiline] #attach { grid-column: 1; }
+.composer[data-multiline] :is(.model-picker, .composer-model-controls) { grid-column: 2 / 4; justify-self: end; max-width: 100%; }
+.composer[data-multiline] :is(.send, .composer-actions) { grid-column: 4; }
+.composer[data-multiline] .composer-model-controls > .model-picker { flex: 1; }
 .attachment-picker { grid-column: 1; grid-row: 1; position: relative; display: grid; width: 44px; height: 44px; }
 .file-completion {
   position: fixed;

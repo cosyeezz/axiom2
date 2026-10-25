@@ -9,12 +9,25 @@ import type {
   ProviderProxy,
 } from "../../shared/models.js";
 import { assignModelConfigIds, validModelPricing } from "../../shared/models.js";
+// Optional false flags mean the same thing as omitted flags in server drafts.
+const draftSnapshot = (value: unknown) => JSON.stringify(value, (key, item) =>
+  ["clearKey", "keepUrl", "keep"].includes(key) && item === false ? undefined : item,
+);
 const empty: Configuration = {
   revision: "",
   providerCount: 0,
   modelCount: 0,
   available: [],
   dataRoot: "",
+};
+export type ConfigurationDecision = {
+  title: string;
+  text: string;
+  confirmLabel: string;
+  danger?: boolean;
+  subject?: string;
+  warning?: string;
+  proceed: () => void;
 };
 export function useConfiguration() {
   const config = useScope("configuration", empty),
@@ -25,8 +38,8 @@ export function useConfiguration() {
   const [templates, setTemplates] = useState<ModelConfiguration["templates"]>(
     [],
   );
-  const [dirty, setDirty] = useState(false),
-    [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [savedProviders, setSavedProviders] = useState<Provider[]>([]);
   const initialized = useRef(false);
   const logoutInFlight = useRef(false);
   const [needsReconcile, setNeedsReconcile] = useState(false);
@@ -46,16 +59,13 @@ export function useConfiguration() {
   const feedback = notice.message, feedbackError = notice.error;
   const setFeedback = (message: string, error = false) => setNotice({ message, error });
   const [copyFeedback, setCopyFeedback] = useState("");
-  const [decision, setDecision] = useState<{
-    title: string;
-    text: string;
-    proceed: () => void;
-  } | null>(null);
+  const [decision, setDecision] = useState<ConfigurationDecision | null>(null);
   const p = providers.find((p) => p.id === selected);
+  const dirty = draftSnapshot(providers) !== draftSnapshot(savedProviders);
   const editorDirty =
     !!editor &&
-    JSON.stringify(editor) !==
-      JSON.stringify(
+    draftSnapshot(editor) !==
+      draftSnapshot(
         p?.models.find((m) => m.key === editor.key) ?? {
           key: editor.key,
           id: "",
@@ -69,6 +79,10 @@ export function useConfiguration() {
   // One staging path for Finish, unified Save (including a hidden editor), and supplier switches.
   const stageEditor = (): Provider[] | null => {
     if (!editor || !p) return providers;
+    if (!editorDirty) {
+      setEditor(null);
+      return providers;
+    }
     const id = editor.id.trim();
     if (!id) {
       setFeedback(
@@ -94,7 +108,6 @@ export function useConfiguration() {
     );
     setProviders(next);
     setEditor(null);
-    setDirty(true);
     setFeedback("已结束行内编辑；仍是未保存草稿。");
     return next;
   };
@@ -103,6 +116,7 @@ export function useConfiguration() {
     try {
       const data = await command<ModelConfiguration>("configuration.get");
       setProviders(data.providers);
+      setSavedProviders(data.providers);
       setRevision(data.revision);
       setTemplates(data.templates);
       setStorage(data.storage);
@@ -115,7 +129,6 @@ export function useConfiguration() {
             : (data.providers[0]?.id ?? ""),
       );
       setEditor(null);
-      setDirty(false);
       setNeedsReconcile(false);
       setShowKey(false);
       setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
@@ -181,13 +194,14 @@ export function useConfiguration() {
               : e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED"
                 ? "停止受影响的执行？"
                 : "允许执行配置命令？",
-          text:
-            e.message +
-            (e.code === "LOGOUT_CONFIRMATION_REQUIRED"
+          text: e.message,
+          confirmLabel: e.code === "LOGOUT_CONFIRMATION_REQUIRED" ? "退出并保存" : e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED" ? "停止并保存" : "允许命令并保存",
+          danger: e.code !== "COMMAND_AUTHORIZATION_REQUIRED",
+          warning: e.code === "LOGOUT_CONFIRMATION_REQUIRED"
               ? "受影响供应商及其模型的请求头覆盖也将清除，以移除备用认证来源；外部环境变量不改写。"
               : e.code === "COMMAND_AUTHORIZATION_REQUIRED"
                 ? "只应允许你自己配置并理解的命令。"
-                : "停止不回滚已修改的项目文件。"),
+                : "停止不回滚已修改的项目文件。",
           proceed: () =>
             void save(
               confirmLogout || e.code === "LOGOUT_CONFIRMATION_REQUIRED",
@@ -202,18 +216,19 @@ export function useConfiguration() {
   const patch = (change: Partial<Provider>) => {
     setSaved(false);
     setFeedback("");
-    setDirty(true);
     setProviders((all) =>
       all.map((item) => (item.id === selected ? { ...item, ...change } : item)),
     );
   };
   const discardEditor = (proceed: () => void) => {
-    if (!editor) {
+    if (!editorDirty) {
       proceed();
       return;
     }
     setDecision({
       title: "放弃当前模型编辑？",
+      confirmLabel: "放弃编辑",
+      danger: true,
       text: "当前行内编辑尚未完成。确认将丢弃这部分输入，其他供应商和模型草稿仍保留。取消可继续编辑。",
       proceed,
     });
@@ -236,7 +251,6 @@ export function useConfiguration() {
           models: [],
         },
       ]);
-      setDirty(true);
       setSelected(id);
       setTab("suppliers");
       setEditor(null);
@@ -251,7 +265,7 @@ export function useConfiguration() {
     setFeedback("已保留其他供应商的草稿；下方保存才会发布配置。");
   };
   const logoutProvider = async (provider: Provider, confirmStop = false) => {
-    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId || provider.connectionType === "oauth") return;
+    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId) return;
     logoutInFlight.current = true;
     setBusy(true);
     setSaved(false);
@@ -274,8 +288,10 @@ export function useConfiguration() {
         const remaining = refreshed.providers.find((item) => item.providerId === provider.providerId);
         setFeedback(remaining?.auth?.configured
           ? "已清除受管理认证；供应商和模型已保留。当前仍有环境变量等其他来源提供认证。"
-          : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
-        requestAnimationFrame(() => document.getElementById("provider-key")?.focus());
+          : provider.connectionType === "oauth"
+            ? "已退出授权；供应商和模型已保留，可重新进行 OAuth 登录。"
+            : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
+        requestAnimationFrame(() => document.getElementById(provider.connectionType === "oauth" ? "oauth-login-provider" : "provider-key")?.focus());
       }
     } catch (error) {
       const e = error as Error & { code?: string };
@@ -285,6 +301,8 @@ export function useConfiguration() {
       if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
         setDecision({
           title: "停止受影响的执行并退出认证？",
+          confirmLabel: "停止并退出认证",
+          danger: true,
           text: e.message + "停止不回滚项目文件；供应商和模型配置保留。",
           proceed: () => void logoutProvider(provider, true),
         });
@@ -296,6 +314,9 @@ export function useConfiguration() {
   const removeProvider = (provider: Provider, stopConfirmed = false) => {
     setDecision({
       title: "删除供应商？",
+      confirmLabel: provider.originalId ? "删除供应商" : "移除草稿",
+      danger: true,
+      subject: provider.name || provider.providerId,
       text: provider.originalId
         ? "立即退出该供应商，删除其模型与受管理认证；同供应商会话将需要重新选择模型。未保存的其他修改不会一并提交。"
         : "仅移除尚未发布的供应商草稿。",
@@ -304,7 +325,6 @@ export function useConfiguration() {
           setProviders((all) => all.filter((p) => p.id !== provider.id));
           setSelected("");
           setEditor(null);
-          setDirty(true);
           return;
         }
         setBusy(true);
@@ -332,6 +352,8 @@ export function useConfiguration() {
           if (e.code === "ACTIVE_RUNS_CONFIRMATION_REQUIRED")
             setDecision({
               title: "停止受影响的执行？",
+              confirmLabel: "停止并继续删除",
+              danger: true,
               text: e.message + "停止不回滚项目文件。",
               proceed: () => removeProvider(provider, true),
             });
@@ -376,6 +398,7 @@ export function useConfiguration() {
     saved: saved && !dirty && !editorDirty,
     templates,
     dirty: dirty || editorDirty,
+    editorDirty,
     stageEditor,
     busy,
     needsReconcile,

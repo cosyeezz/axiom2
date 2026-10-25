@@ -25,11 +25,11 @@ export function unwrapQoderSse(response: Response, signal?: AbortSignal): Respon
     const raw = data.join("\n"); data = [];
     if (raw === "[DONE]") { terminal(); return; }
     const envelope = parse(raw);
-    if (Number(envelope.statusCodeValue) !== 200) throw qoderFailure(Number(envelope.statusCodeValue) || 502);
+    if (Number(envelope.statusCodeValue) !== 200) throw qoderFailure(Number(envelope.statusCodeValue) || 502, envelope.body, "sse");
     if (envelope.body === "[DONE]") { terminal(); return; }
     if (envelope.body === "" || envelope.body == null) return;
     const chunk = typeof envelope.body === "string" ? parse(envelope.body) : object(envelope.body);
-    if (chunk.error || chunk.code !== undefined && ![0, "0", 200, "200"].includes(chunk.code as number | string)) throw qoderFailure(502, chunk.code);
+    if (chunk.error || chunk.code !== undefined && ![0, "0", 200, "200"].includes(chunk.code as number | string)) throw qoderFailure(502, chunk, "sse");
     if (!Array.isArray(chunk.choices)) throw new QoderError("Qoder 事件流缺少 choices。");
     for (const value of chunk.choices) {
       const choice = object(value), delta = choice.delta == null ? {} : object(choice.delta);

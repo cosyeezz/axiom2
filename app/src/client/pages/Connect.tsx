@@ -14,6 +14,7 @@ import { desktopInvoke, isDesktopResponsePending, remember, stored } from "./des
 import DeviceSelect from "./DeviceSelect.js";
 import { IconButton } from "./StartupControls.js";
 import "../styles/connect.css";
+import "../styles/confirmation-inline.css";
 
 type View = "control" | "workbench";
 type Service = { desktopView?: View; state: "starting" | "running" | "stopped" | "stopping" | "missing" | "unmanaged"; active: string[]; url?: string; log?: string; message?: string; background?: boolean };

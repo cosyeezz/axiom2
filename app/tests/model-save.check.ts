@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { startServer } from "../src/server/index.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-model-save-"));
+const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS || "test-results/model-save"); mkdirSync(artifacts, { recursive: true });
 const previous = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "shared-pi");
 const app = await startServer({ root: join(root, "data"), port: 0 });
@@ -62,16 +63,17 @@ try {
   assert.equal(await page.locator("#save-provider").innerText(), "保存");
   assert.equal(await page.locator("#reset-provider").innerText(), "取消");
   assert.equal(await page.locator(".configuration-actions button").count(), 3);
-  assert.equal(await page.locator(".topnav button").count(), 0);
+  assert.equal(await page.locator(".topnav button:not(.maintenance-launcher)").count(), 0, "model save/reset/logout controls remain beside the form, not in the navigation");
   assert.equal(await page.locator("#provider-key").inputValue(), "");
   assert.match(await page.locator("#provider-key").getAttribute("placeholder") || "", /已保存/);
   assert.match(await page.locator("#provider-key-status").innerText(), /已保存到本地/);
+  const banner = await page.locator(".configuration-feedback").boundingBox();
+  assert.ok(banner && banner.y >= 0 && banner.y + banner.height <= 902, `save feedback must fit viewport: ${JSON.stringify({ banner, scroll: await page.evaluate(() => ({ page: scrollY, detail: document.querySelector(".supplier-detail")?.scrollTop })) })}`);
   await page.locator(".credential-details summary").click();
   assert.ok(await page.getByText(join(root, "shared-pi", "auth.json"), { exact: true }).isVisible());
   const keyOnDisk = () => JSON.parse(readFileSync(join(root, "shared-pi", "auth.json"), "utf8"))["save-feedback-test"]?.key;
   assert.ok(keyOnDisk() === "TEST-ONLY-FIRST-KEY", "initial key must reach disk");
-  const banner = await page.locator(".configuration-feedback").boundingBox();
-  assert.ok(banner && banner.y >= 0 && banner.y + banner.height < 900);
+  await page.locator(".credential-details summary").click();
 
   // Tall windows must not stretch the form and push its actions to the viewport bottom.
   await page.setViewportSize({ width: 1440, height: 1400 });
@@ -87,6 +89,12 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.reload();
   await page.locator("#provider-key-status").filter({ hasText: "已保存到本地" }).waitFor();
+  await page.locator("#provider-key").fill("TEMPORARY");
+  await page.locator("#provider-key").fill("");
+  assert.ok(await page.locator("#save-provider").isDisabled(), "clearing a temporary key restores the clean state");
+  await page.locator("#provider-url").fill("http://127.0.0.1:2/v1");
+  await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
+  assert.ok(await page.locator("#save-provider").isDisabled(), "restoring the endpoint restores the clean state");
   await page.locator("#provider-key").fill("TEST-ONLY-REPLACEMENT");
   await page.locator("#save-provider").click();
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();
@@ -140,7 +148,7 @@ try {
   await stopDialog.waitFor();
   assert.equal(logoutRequests, beforeDoubleClick + 1, "duplicate clicks must not submit twice");
   logoutFailure = null;
-  await stopDialog.getByRole("button", { name: "确认", exact: true }).click();
+  await stopDialog.getByRole("button", { name: "停止并退出认证", exact: true }).click();
   await page.locator(".configuration-feedback").filter({ hasText: "已退出认证" }).waitFor();
   assert.equal(keyOnDisk(), undefined);
   assert.deepEqual(modelsOnDisk().models, preservedModels);
@@ -163,6 +171,9 @@ try {
   assert.ok(await page.locator("#logout-provider").isEnabled());
   assert.deepEqual(errors, []);
   console.log("Model save UI: disk persistence, replacement, reload, blank retention, feedback, failure preservation, mobile layout, controls following content, immediate logout/model preservation/active-run confirmation/duplicate clicks/reconciliation passed.");
+} catch (error) {
+  for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) await page.screenshot({ path: join(artifacts, `failure-${index}.png`), fullPage: true }).catch(() => {});
+  throw error;
 } finally {
   await browser.close();
   await app.close();

@@ -108,11 +108,31 @@ export function qoderHeaders(body: string, url: string, identity: QoderIdentity)
   };
 }
 
-export function qoderFailure(status: number, code?: unknown): Error {
-  const numericCode = typeof code === "number" || typeof code === "string" && /^\d+$/.test(code) ? Number(code) : undefined;
-  if (status === 401 || status === 403) return new QoderError(`Qoder 认证或权限失败（HTTP ${status}），请检查账号地区并重新登录。`);
-  if (status === 429 || [110, 112, 10605].includes(numericCode ?? -1)) return new QoderError("Qoder 额度不足或请求过于频繁，请检查账号额度后重试。");
-  return new QoderError(`Qoder 请求失败（HTTP ${status}${numericCode === undefined ? "" : `，code ${numericCode}`}）。`);
+// Error envelopes may JSON-encode another error in body/message (e.g. 403 → 10605).
+// Inspect only bounded error fields; never include upstream text, headers or credentials in errors.
+function qoderBusinessCode(value: unknown, depth = 0): number | undefined {
+  if (depth > 5) return;
+  if (typeof value === "number" && Number.isSafeInteger(value) || typeof value === "string" && /^\d{1,9}$/.test(value)) return Number(value);
+  if (typeof value === "string") {
+    if (value.length > 8192 || !value.trimStart().startsWith("{")) return;
+    try { return qoderBusinessCode(JSON.parse(value), depth + 1); } catch { return; }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const error = value as Record<string, unknown>, ownCode = qoderBusinessCode(error.code, depth + 1);
+  // Recognized business errors take precedence over their outer HTTP-style wrapper.
+  if ([110, 112, 10605].includes(ownCode ?? -1)) return ownCode;
+  for (const field of ["body", "message", "error"] as const) {
+    const code = qoderBusinessCode(error[field], depth + 1);
+    if ([110, 112, 10605].includes(code ?? -1)) return code;
+  }
+  return ownCode;
+}
+export function qoderFailure(status: number, detail?: unknown, source: "http" | "sse" = "http"): Error {
+  const numericCode = qoderBusinessCode(detail), label = `${source === "sse" ? "事件流状态" : "HTTP"} ${status}`;
+  if (numericCode === 10605) return new QoderError("Qoder 当前模型资源繁忙（code 10605），请稍后重试；本次请求未自动重放。");
+  if (status === 429 || [110, 112].includes(numericCode ?? -1)) return new QoderError("Qoder 额度不足或请求过于频繁，请检查账号额度后重试。");
+  if (status === 401 || status === 403) return new QoderError(`Qoder 请求被拒绝（${label}），可能涉及认证、权限或服务端限制；请检查账号状态及地区。`);
+  return new QoderError(`Qoder 请求失败（${label}${numericCode === undefined ? "" : `，code ${numericCode}`}）。`);
 }
 export function qoderSignal(signal?: AbortSignal | null, timeout = 15000) {
   return AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeout)]);

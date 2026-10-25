@@ -4,13 +4,13 @@ import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lockResourcePaths } from "../resource-file-lock.js";
-import { canRecoverProcessOwner } from "../process-owner-record.js";
+import { canRecoverProcessOwner, processOwnerFingerprint, stopRecordedProcessOwner } from "../process-owner-record.js";
 import { currentMaintenance, recordMaintenanceInterruption, recordMaintenanceUnconfirmed } from "../maintenance.js";
 import { MaintenanceError, validMaintenanceBudgets, type MaintenanceTask } from "../../shared/maintenance.js";
 import { runTool, type ToolRunOptions } from "./tool-process.js";
 
 type Tool = "opencli" | "rea";
-type Entry = { path: string; ownerId: string; state: "registered" | "cleaned" };
+type Entry = { path: string; ownerId: string; fingerprint?: string; state: "registered" | "cleaned" };
 type Identity = { dev: string; ino: string };
 type Record = { format: 1; id: string; tool: Tool; scope?: ReaEngineId; root: string; rootIdentity: Identity; controlIdentity: Identity; state: "active" | "complete" | "interrupted"; commands: Entry[]; task?: MaintenanceTask; directories: { path: string; dev: string; ino: string }[]; removals?: string[] };
 const contexts = new AsyncLocalStorage<ReturnType<typeof beginBuiltinOperation>>();
@@ -94,6 +94,20 @@ export function builtinPendingRemovals(root: string, tool: Tool, scope?: ReaEngi
       record.removals !== undefined && (!Array.isArray(record.removals) || record.removals.some(path => !managedPath(root, tool, path, scope)))) throw unknown();
   return [...record.removals ?? []];
 }
+/** Planning only: absence of an inode proof must preserve an orphan, not turn
+ * the entire uninstall into a permanently unknown operation. Deletion still
+ * rechecks ownership under the operation's locks. */
+export function builtinDirectoryRecorded(root: string, tool: Tool, path: string): boolean {
+  try {
+    root = realpathSync(root);
+    const directory = controlDirectory(root, tool), record: Record = read(join(directory, "current.json"));
+    if (record.format !== 1 || !uuid(record.id) || record.root !== root || record.tool !== tool || record.scope !== undefined ||
+        !["active", "complete", "interrupted"].includes(record.state) || !Array.isArray(record.directories) ||
+        realpathSync(directory) !== directory || !matches(record.rootIdentity, identity(root)) || !matches(record.controlIdentity, identity(directory)) || !managedPath(root, tool, path)) return false;
+    const proof = record.directories.find(item => item?.path === path), stat = lstatSync(path);
+    return !!proof && stat.isDirectory() && !stat.isSymbolicLink() && realpathSync(path) === path && matches(proof, identity(path));
+  } catch { return false; }
+}
 /** Read-only affordance check. Never imports or creates directory ownership. */
 export function inspectBuiltinDirectoryOwnership(root: string, tool: Tool, path: string) {
   const unavailable = () => Error("下载目录缺少有效的原始维护归属证明或任务尚未结束，已保留文件；请先核实维护记录，不会自动重新登记目录。");
@@ -122,6 +136,54 @@ export function reconcileBuiltinOperation(root: string, tool: Tool, operationId:
   if (!uuid(operationId)) throw unknown();
   const operation = beginBuiltinOperation(root, tool, operationId, scope);
   try { operation.finish(); } finally { operation.close(); }
+}
+export async function reconcileBuiltinOperationStopping(root: string, tool: Tool, operationId: unknown, scope?: ReaEngineId) {
+  try { reconcileBuiltinOperation(root, tool, operationId, scope); return; }
+  catch (error) { if (!(error instanceof MaintenanceError) || error.code !== "stop-unconfirmed") throw error; }
+  if (!uuid(operationId)) throw unknown();
+  root = realpathSync(root);
+  const directory = controlDirectory(root, tool, scope), path = join(directory, "current.json");
+  const admit = lockResourcePaths([join(controlDirectory(root, tool), "admission")]);
+  let release = () => {}, writer = () => {};
+  try {
+    writer = acquireReaWriter(root, tool);
+    // Do not force a tree while any related parent can still commit.
+    release = lockResourcePaths([undefined, ...(tool === "rea" ? reaEngineIds : [])].map(item => join(controlDirectory(root, tool, item), "parent")));
+    const record: Record = read(path), original = JSON.stringify(record), named = identity(path);
+    const validate = () => {
+      if (!matches(identity(path), named) || JSON.stringify(read(path)) !== original || realpathSync(directory) !== directory ||
+          record.format !== 1 || record.id !== operationId || record.root !== root || record.tool !== tool || record.scope !== scope ||
+          !["active", "interrupted"].includes(record.state) || !matches(record.rootIdentity, identity(root)) || !matches(record.controlIdentity, identity(directory)) ||
+          !Array.isArray(record.commands) || !Array.isArray(record.directories)) throw unknown();
+      for (const item of record.directories) {
+        if (!managedPath(root, tool, item?.path, scope)) throw unknown();
+        try { if (realpathSync(item.path) !== item.path || !matches(item, identity(item.path))) throw unknown(); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      }
+      for (const entry of record.commands) {
+        if (dirname(entry.path) !== directory || !/^\.axiom-command-[a-f0-9-]{36}\.json$/.test(basename(entry.path)) || !uuid(entry.ownerId) || !["registered", "cleaned"].includes(entry.state)) throw unknown();
+        sameOwner(entry, entry.state === "cleaned");
+      }
+      for (const name of readdirSync(directory)) if (/^\.axiom-command-.*\.json$/.test(name) && !record.commands.some(entry => entry.path === join(directory, name))) throw unknown();
+    };
+    validate();
+    // No directory/configuration changes here. Receipts are written only after
+    // TERM -> KILL -> full tree verification, bound to the saved owner digest.
+    for (const entry of record.commands) if (entry.state !== "cleaned") {
+      validate(); await stopRecordedProcessOwner(entry.path, entry.ownerId, entry.fingerprint);
+    }
+    validate();
+  } finally { release(); writer(); admit(); }
+  reconcileBuiltinOperation(root, tool, operationId, scope);
+}
+export async function recoverBuiltinOperations(root: string, tool: Tool, scope?: ReaEngineId) {
+  // A fresh user request verifies interrupted work; it never replays it. The
+  // primitive begin() stays strict so non-service callers cannot bypass this.
+  for (const pendingScope of tool === "rea" ? [undefined, ...reaEngineIds] : [undefined]) {
+    if (scope && pendingScope !== undefined && pendingScope !== scope) continue;
+    const pending = builtinPendingOperation(root, tool, pendingScope);
+    if (pending) reconcileBuiltinOperation(root, tool, pending, pendingScope);
+  }
 }
 export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: string, scope?: ReaEngineId) {
   const maintenanceRoot = root;
@@ -167,7 +229,9 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
   let record: Record, task: MaintenanceTask | undefined, closed = false;
   try {
     releaseWriter = acquireReaWriter(root, tool);
-    if (scope && builtinPendingOperation(root, tool) || !scope && tool === "rea" && reaEngineIds.some(id => builtinPendingOperation(root, tool, id))) throw unknown();
+    // Reconciliation only verifies a stopped parent and preserves its files.
+    // Cross-scope pending records must not make global/scoped recovery deadlock.
+    if (!reconcileId && (scope && builtinPendingOperation(root, tool) || !scope && tool === "rea" && reaEngineIds.some(id => builtinPendingOperation(root, tool, id)))) throw unknown();
     release = lockResourcePaths([join(directory, "parent")]);
     let previous: Record | undefined;
     let observed: string | undefined, observedIdentity: Identity | undefined;
@@ -283,6 +347,12 @@ export function beginBuiltinOperation(root: string, tool: Tool, reconcileId?: st
       if (!uuid(ownerId)) throw unknown();
       save({ ...record, commands: [...record.commands, { path, ownerId, state: "registered" }] });
     },
+    armed(path: string) {
+      assertRecord();
+      const entry = record.commands.find(item => item.path === path);
+      if (!entry || !sameOwner(entry)) throw unknown();
+      save({ ...record, commands: record.commands.map(item => item.path === path ? { ...item, fingerprint: processOwnerFingerprint(path) } : item) });
+    },
     cleaned(path: string) {
       if (closed) throw unknown();
       const entry = record.commands.find(item => item.path === path);
@@ -317,13 +387,14 @@ export function withBuiltinConfiguration<T>(root: string, tool: Tool, work: () =
   try { return operation.run(work); }
   finally { try { operation.finish(); } finally { operation.close(); } }
 }
-export async function runBuiltinTool(tool: Tool, file: string, args: string[], options: Omit<ToolRunOptions, "root" | "beforeStart" | "onStopped"> & { cwd: string }) {
+export async function runBuiltinTool(tool: Tool, file: string, args: string[], options: Omit<ToolRunOptions, "root" | "beforeStart" | "onArmed" | "onStopped"> & { cwd: string }) {
   const inherited = contexts.getStore(), operation = inherited ?? beginBuiltinOperation(options.cwd, tool);
   let owner: string | undefined;
   try {
     if (operation.tool !== tool || operation.root !== realpathSync(options.cwd)) throw unknown();
     return await runTool(file, args, { ...options, root: operation.directory,
       beforeStart: path => { operation.register(path); owner = path; },
+      onArmed: path => operation.armed(path),
       onStopped: () => { if (owner) operation.cleaned(owner); },
     });
   } finally { if (!inherited) { try { operation.finish(); } finally { operation.close(); } } }
