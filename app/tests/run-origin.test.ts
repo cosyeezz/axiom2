@@ -164,8 +164,8 @@ test("live, cold, original and archived views agree; legacy/unknown/cross-sessio
   assert.ok(duplicateGroup.ids.includes(repeated), "duplicate origins are exercised inside the same process");
   assert.deepEqual(duplicateGroup.process!.origins, ["manual_resume"], "duplicate origins within a folded process are unique");
   assert.equal([...views.original(scope).values()].some(m => /internal notification|internal continuation/.test(m.text)), false);
-  const revision = index.revision; manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "current append" }], stopReason: "stop", timestamp: 1 } as any); views.refresh(scope);
-  assert.equal(views.historyIndex(scope).revision, revision, "current stream does not invalidate archived source facts");
+  const revision = index.revision; manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "current append", textSignature: JSON.stringify({ v: 1, id: "current-append", phase: "commentary" }) }], stopReason: "stop", timestamp: 1 } as any); views.refresh(scope);
+  assert.equal(views.historyIndex(scope).revision, revision, "non-delivery append does not invalidate archive layout");
   views.forget(scope); await f.restart();
   assert.equal(f.agents.info(scope).run!.origin, undefined, "unknown future DB origin does not become resumable provenance on restart");
   const restarted = new AgentViews(f.store, () => {});
