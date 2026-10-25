@@ -315,9 +315,14 @@ mod tests {
     }
     #[test]
     fn bounded_walk_and_path_candidates_report_incomplete_results() {
-        let root = fixture(); fs::write(root.join("pi"), "not-an-executable").unwrap();
+        let root = fixture();
+        let filename = if cfg!(windows) { "pi.cmd" } else { "pi" };
+        fs::write(root.join(filename), "not-an-executable").unwrap();
         let result = scan(&root.join("data"), None, vec![root.clone(), PathBuf::from("relative")], None);
         assert_eq!(result["commands"].as_array().unwrap().len(), 1); assert_eq!(result["pathIncomplete"], true);
+        assert_eq!(result["commands"][0]["command"], "pi");
+        assert_eq!(result["commands"][0]["path"], root.join(filename).to_string_lossy().as_ref());
+        assert_eq!(fs::read_to_string(root.join(filename)).unwrap(), "not-an-executable");
         let mut size = Size { complete: true, ..Size::default() };
         let mut budget = Budget { entries: MAX_ENTRIES, started: Instant::now() };
         walk(inventory_fs::open(&root).unwrap(), 0, &mut size, &mut budget);

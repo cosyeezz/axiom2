@@ -93,7 +93,11 @@ mod platform {
         for part in path.components() {
             current.push(part.as_os_str());
             if matches!(part, Component::Prefix(_)) { continue; }
-            match fs::create_dir(&current) { Ok(()) => {}, Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}, Err(e) => return Err(e) }
+            // CreateDirectoryW reports AccessDenied for an existing volume root.
+            // Still hold and verify that root, but never try to create it.
+            if !matches!(part, Component::RootDir) {
+                match fs::create_dir(&current) { Ok(()) => {}, Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}, Err(e) => return Err(e) }
+            }
             let guard = OpenOptions::new().read(true).share_mode(1).custom_flags(0x02000000 | 0x00200000).open(&current)?;
             let info = guard.metadata()?;
             if !info.is_dir() || info.file_attributes() & 0x400 != 0 { return Err(invalid()); }
