@@ -42,7 +42,8 @@ for (const mode of ["cancel", "timeout", "shutdown", "orphan"] as const) test(`m
   let identities: ReturnType<typeof pidSnapshot> = [];
   const script = `const {spawn}=require('node:child_process');const fs=require('node:fs');
 const leaf=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:'ignore'});leaf.unref();
-fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify([process.pid,leaf.pid]));
+fs.writeFileSync(${JSON.stringify(marker + ".tmp")},JSON.stringify([process.pid,leaf.pid]));
+fs.renameSync(${JSON.stringify(marker + ".tmp")},${JSON.stringify(marker)});
 ${mode === "orphan" ? "setTimeout(()=>process.exit(0),500);" : "process.on('SIGTERM',()=>{});setInterval(()=>{},1000);"}`;
   const pending = runTool(process.execPath, ["-e", script], { root, signal: controller.signal, timeout: mode === "timeout" ? 1500 : 15000 });
   void pending.catch(() => {});
