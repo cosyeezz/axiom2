@@ -74,15 +74,21 @@ mod platform {
     struct FileInformation { attributes: u32, times: [u32; 6], volume: u32, size: [u32; 2], links: u32, index: [u32; 2] }
     #[link(name = "kernel32")]
     extern "system" {
-        fn SetFileInformationByHandle(file: *mut std::ffi::c_void, class: i32, information: *const std::ffi::c_void, size: u32) -> i32;
         fn GetFileInformationByHandle(handle: *mut std::ffi::c_void, information: *mut FileInformation) -> i32;
+    }
+    #[repr(C)]
+    struct IoStatusBlock { status: usize, information: usize }
+    #[link(name = "ntdll")]
+    extern "system" {
+        fn NtSetInformationFile(file: *mut std::ffi::c_void, status: *mut IoStatusBlock, information: *const std::ffi::c_void, size: u32, class: i32) -> i32;
+        fn RtlNtStatusToDosError(status: i32) -> u32;
     }
     fn single_link(file: &File) -> io::Result<bool> {
         let mut info = std::mem::MaybeUninit::<FileInformation>::uninit();
         if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 { return Err(io::Error::last_os_error()); }
         Ok(unsafe { info.assume_init() }.links == 1)
     }
-    fn commit(file: &File, parent: &File, target: &str) -> io::Result<()> {
+    fn commit(file: &File, target: &str) -> io::Result<()> {
         #[repr(C)]
         struct RenameInformation { replace: u8, root: *mut std::ffi::c_void, length: u32, name: [u16; 1] }
         let name: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().collect();
@@ -92,10 +98,12 @@ mod platform {
         let info = storage.as_mut_ptr().cast::<RenameInformation>();
         unsafe {
             (*info).replace = 0;
-            (*info).root = parent.as_raw_handle();
+            (*info).root = std::ptr::null_mut();
             (*info).length = (name.len() * 2) as u32;
             std::ptr::copy_nonoverlapping(name.as_ptr(), storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(), name.len());
-            if SetFileInformationByHandle(file.as_raw_handle(), 3, storage.as_ptr().cast(), size as u32) == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+            let mut completion = IoStatusBlock { status: 0, information: 0 };
+            let status = NtSetInformationFile(file.as_raw_handle(), &mut completion, storage.as_ptr().cast(), size as u32, 10);
+            if status < 0 { Err(io::Error::from_raw_os_error(RtlNtStatusToDosError(status) as i32)) } else { Ok(()) }
         }
     }
     pub(super) fn publish(path: &Path, files: &[(&str, &str)]) -> io::Result<()> {
@@ -120,11 +128,11 @@ mod platform {
             let target = path.join(name);
             let temporary = path.join(staging_name());
             #[cfg(test)] eprintln!("bundled: creating staging {:?}", temporary);
-            let mut file = OpenOptions::new().access_mode(0x40000000 | 0x00010000).share_mode(0).create_new(true).open(&temporary)?;
+            let mut file = OpenOptions::new().write(true).access_mode(0x40000000 | 0x00010000).share_mode(0).create_new(true).open(&temporary)?;
             #[cfg(test)] eprintln!("bundled: staging opened");
             let written = file.write_all(source.as_bytes()).and_then(|_| file.sync_all());
             #[cfg(test)] eprintln!("bundled: committing to {:?}", target);
-            let result = written.and_then(|_| commit(&file, guards.last().ok_or_else(invalid)?, name));
+            let result = written.and_then(|_| commit(&file, name));
             drop(file);
             #[cfg(test)] eprintln!("bundled: commit result {:?}", result);
             if result.is_err() { let _ = fs::remove_file(&temporary); }
