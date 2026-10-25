@@ -135,15 +135,19 @@ axiom2 stop     # 停止后台，会中断活动执行
 | 平台 | 入口 | 使用条件 |
 | --- | --- | --- |
 | Windows / macOS / Linux 浏览器 | 按上方命令启动后台后，打开本机地址 | 后台所在电脑需要 Node.js；Linux 原生目录选择另需图形桌面与 GTK 依赖 |
-| Windows x64 | [安装版 MSI](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.msi) · [便携版 EXE](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.exe) | 客户端 v0.4.13；需要 WebView2，当前未签名 |
-| macOS Apple 芯片 / Intel | [通用版 DMG](https://github.com/cosyeezz/axiom2/releases/download/v0.4.13/Axiom2.dmg) | 客户端 v0.4.13；ad-hoc 签名，未获 Apple 公证 |
+| Windows x64 | [安装版 MSI](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.msi) · [便携版 EXE](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.exe) | 客户端 v0.4.16；需要 WebView2，当前未签名 |
+| macOS Apple 芯片 / Intel | [通用版 DMG](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.dmg) | 客户端 v0.4.16；ad-hoc 签名，未获 Apple 公证 |
+| Linux x64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-x64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-x64) | 客户端 v0.4.16；基于 Ubuntu 22.04 构建，需图形桌面及系统依赖 |
+| Linux ARM64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-arm64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-arm64) | 客户端 v0.4.16；基于 Ubuntu 24.04 构建，需图形桌面及系统依赖 |
 | Android 8.0+ | [APK 下载与发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12) | 客户端 v0.4.12；连接电脑后台，不在手机本地执行任务 |
 
 **后台与客户端独立发布。** 一行安装跟随后台最新 Release；桌面和 Android 链接指向各自已有安装包的版本，最新后台发布页不一定包含客户端。
 
 手机与电脑加入同一 **Tailscale** 网络后，可在 Android 客户端连接电脑上的工作台：发送任务、查看主／子会话、选择模型，任务仍由电脑执行。连接方式、扫码和原生功能以所装 APK 版本为准。[Android 与内网连接指南 →](app/android/README.md)
 
-目前没有已发布的 iOS 原生客户端，也没有已发布并验收的 Linux 原生桌面安装包。
+Linux 推荐通过系统包管理器安装 DEB，由它解析 GTK 3、WebKitGTK 4.1 等依赖；单独的可执行文件仍需相同系统依赖，并需手动赋予执行权限。Linux 安装包已通过架构、版本和无显示器后台维护入口检查，不代表已在所有发行版或图形桌面完成交互验收。
+
+Windows 安装包当前未签名；macOS 采用 ad-hoc 签名、未获 Apple 公证，首次打开可能出现系统安全提示。安装前请核对 [SHA256 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/SHA256SUMS) 与 [v0.4.16 发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.16)。Android 继续独立交付 v0.4.12，不重新签发。当前没有已发布的 iOS 原生客户端。
 
 ## 安全与当前边界
 
