@@ -112,6 +112,19 @@ try {
     assert.equal(filledInput.x, emptyInput.x, "showing clear never moves the text start right");
     await assertClearLayout();
     if (width === 1440) await page.locator(".composer").screenshot({ path: join(artifacts, "desktop-single-line.png") });
+    if (width >= 740) for (const words of [6, 12, 18, 24, 30]) {
+      await input.fill('draft '.repeat(words));
+      await page.waitForTimeout(80);
+      const frames = await input.evaluate(async node => {
+        const states: string[] = [];
+        for (let frame = 0; frame < 12; frame++) {
+          await new Promise(requestAnimationFrame);
+          states.push(`${node.closest('form')!.hasAttribute('data-multiline')}:${node.getBoundingClientRect().width}:${node.getBoundingClientRect().height}`);
+        }
+        return states;
+      });
+      assert.equal(new Set(frames).size, 1, `soft-wrap layout remains stable at ${width}px/${words} words: ${frames}`);
+    }
     await input.fill("这是需要真正自动换行的长文本。".repeat(12));
     await page.waitForTimeout(100);
     const long = await geometry(page);

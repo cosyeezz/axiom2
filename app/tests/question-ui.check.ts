@@ -252,6 +252,7 @@ try {
   await page.waitForFunction(() => !(document.querySelector('.model-question fieldset') as HTMLFieldSetElement)?.disabled);
   await page.getByRole("button", { name: "发送回答", exact: true }).click();
   await popup.waitFor({ state: 'detached' });
+  assert.equal(await page.locator('#prompt').evaluate(el => el === document.activeElement), true, 'submitting a focused question returns focus to the composer');
   await noExtraUI();
   assert.equal(prompts().length, 1);
   assert.equal(prompts()[0].params?.mode, undefined);

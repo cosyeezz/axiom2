@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useId, useMemo, useRef } from "react";
 import { Icon } from "../components.js";
 import { agentScope, emptyAgent, emptyThread, messageScope, threadScope, type ChatMessage } from "../../shared/agent.js";
 import { tasksScope } from "../../shared/tasks.js";
@@ -27,14 +27,15 @@ export function ComposerQuestion({ scope, anchor, editing = false }: { scope: Sc
     !sourceScope || !scopeCurrent(sourceScope) || !scopeCurrent(threadScope(scope)) || !scopeCurrent(agentScope(scope)) ||
     !scopeCurrent("configuration") || !info.task && !scopeCurrent(tasksScope(scope))) return null;
   const key = questionStateKey(scope, messageId, parsed.questions);
-  return <QuestionPrompt key={key} scope={scope} messageId={messageId} questions={parsed.questions} />;
+  return <QuestionPrompt key={key} scope={scope} anchor={anchor} messageId={messageId} questions={parsed.questions} />;
 }
 
-function QuestionPrompt({ scope, messageId, questions }: { scope: Scope; messageId: string; questions: ModelQuestion[] }) {
+function QuestionPrompt({ scope, anchor, messageId, questions }: { scope: Scope; anchor: HTMLFormElement; messageId: string; questions: ModelQuestion[] }) {
   const [state, update] = useQuestionState(questionStateKey(scope, messageId, questions), questions.length);
+  const panel = useRef<HTMLElement>(null);
   const id = useId();
   if (state.submitted) return null;
-  return <section className="model-question-dock" aria-label="模型提问">
+  return <section ref={panel} className="model-question-dock" aria-label="模型提问">
     <button type="button" className="model-question-toggle" aria-expanded={!state.collapsed} aria-controls={id}
       onClick={() => update({ collapsed: !state.collapsed })}>
       <Icon name="chat" />
@@ -43,7 +44,10 @@ function QuestionPrompt({ scope, messageId, questions }: { scope: Scope; message
       <Icon name="chevron" />
     </button>
     <div id={id} className="model-question-dock-content" hidden={state.collapsed}>
-      <ModelQuestionCard scope={scope} messageId={messageId} questions={questions} enabled />
+      <ModelQuestionCard scope={scope} messageId={messageId} questions={questions} enabled onSubmitStart={() => {
+        if (panel.current?.contains(document.activeElement) && anchor.isConnected)
+          anchor.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+      }} />
     </div>
   </section>;
 }

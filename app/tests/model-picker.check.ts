@@ -156,7 +156,9 @@ try {
     assert.ok(await row.evaluate((el) => el.querySelector(".model-provider-name")!.getBoundingClientRect().top >= el.querySelector(".model-name")!.getBoundingClientRect().bottom), "provider is below name");
     const list = menu.locator(".model-list");
     const listBox = await list.boundingBox();
-    const minimumListHeight = height <= 480 || touch && height <= 600 ? 96 : 144;
+    // Seven 44px reasoning controls wrap on a short touch viewport. Keep at
+    // least one complete model row, with the rest scrollable and actions fixed.
+    const minimumListHeight = touch && height <= 480 ? 48 : height <= 480 || touch && height <= 600 ? 96 : 144;
     assert.ok(listBox && listBox.height >= minimumListHeight, `at least ${minimumListHeight / 48} visible rows at ${width}x${height}: ${listBox?.height}`);
     const footer = await menu.locator(".model-footer").boundingBox();
     assert.ok(footer && footer.y + footer.height <= box.y + box.height + 1, "actions stay visible without scrolling the panel");

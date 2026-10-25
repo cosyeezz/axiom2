@@ -13,8 +13,8 @@ import "../styles/model-question.css";
 
 const noConfig: Configuration = { revision: "", providerCount: 0, modelCount: 0, available: [], dataRoot: "" };
 export const questionStateKey = (scope: Scope, messageId: string, questions: ModelQuestion[]) => JSON.stringify([scope.workspaceId, scope.sessionId, messageId, questions]);
-export function ModelQuestionCard({ scope, messageId, questions, enabled = false }: {
-  scope: Scope; messageId: string; questions: ModelQuestion[]; enabled?: boolean;
+export function ModelQuestionCard({ scope, messageId, questions, enabled = false, onSubmitStart }: {
+  scope: Scope; messageId: string; questions: ModelQuestion[]; enabled?: boolean; onSubmitStart?: () => void;
 }) {
   const id = useId();
   const [state, update] = useQuestionState(questionStateKey(scope, messageId, questions), questions.length);
@@ -52,7 +52,7 @@ export function ModelQuestionCard({ scope, messageId, questions, enabled = false
       running(agent?.run ?? null) || agent?.task && taskActive(agent.task.status) ||
       !nested && children?.tasks.some(task => taskActive(task.status)) ||
       pendingMessages(scope).some(item => item.state !== "failed") || getComposerEdit(scope)) return;
-    void submit("prompt", { draft: { text, attachment: null }, onStart: () => update({ submitted: true }) });
+    void submit("prompt", { draft: { text, attachment: null }, onStart: () => { onSubmitStart?.(); update({ submitted: true }); } });
   }}>
     <div className="model-question-body">
     {questions.map((question, position) => <fieldset key={position} disabled={disabled} data-answered={questionAnswered(question, state.answers[position]) || undefined}>
