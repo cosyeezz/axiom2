@@ -8,7 +8,7 @@ import { AppError } from "../shared/protocol.js";
 import { providerProxyUrl, readProviderProxy } from "./integrations/model-proxy-env.js";
 
 export const inModelNetworkWorker = process.env.AXIOM_MODEL_NETWORK_WORKER === "1";
-export type NetworkOperation = "catalog" | "login" | "storeKey" | "checkAuth" | "available" | "logout";
+export type NetworkOperation = "catalog" | "login" | "storeKey" | "checkAuth" | "prepareAuth" | "available" | "logout";
 type Callbacks = { signal?: AbortSignal; prompt?: (prompt: AuthPrompt) => Promise<string>; notify?: (event: AuthEvent) => void };
 type Request = { id: string; op: NetworkOperation; resolve: (value: any) => void; reject: (error: unknown) => void; callbacks: Callbacks; cleanup: () => void; cancelled: boolean; abort: () => void };
 type Slot = { child: ChildProcess; request?: Request; tail: Promise<unknown>; idle?: ReturnType<typeof setTimeout>; key: string; root: string; exiting: boolean; exited: Promise<void> };

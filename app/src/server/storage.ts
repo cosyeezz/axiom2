@@ -1,4 +1,6 @@
 import { ServiceRecoveryRecords } from "./service-recovery-records.js";
+import { safeExecutionRejection } from "./execution-diagnostics.js";
+import { ExecutionPermitDeniedError } from "./execution-protocol.js";
 import { initializeMemory } from "./memory-files.js";
 import { initializeMemoryStorage } from "./memory-storage.js";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -69,6 +71,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS agent_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS compression_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,status TEXT NOT NULL,selection TEXT NOT NULL,startedAt INTEGER NOT NULL,endedAt INTEGER,error TEXT);
+      CREATE TABLE IF NOT EXISTS run_binding_rejections(runId TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS task_parents(sessionId TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,frozen INTEGER NOT NULL DEFAULT 0,defaultModel TEXT);
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,workspaceId TEXT NOT NULL,parentSessionId TEXT NOT NULL,sessionId TEXT NOT NULL UNIQUE,anchor TEXT NOT NULL,description TEXT NOT NULL,status TEXT NOT NULL,runId TEXT REFERENCES runs(id),budgets TEXT NOT NULL,createdAt INTEGER NOT NULL,error TEXT,FOREIGN KEY(workspaceId,parentSessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE,FOREIGN KEY(workspaceId,sessionId) REFERENCES sessions(workspaceId,id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS task_inputs(id TEXT PRIMARY KEY,taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,body TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,runId TEXT REFERENCES runs(id),createdAt INTEGER NOT NULL);
@@ -107,6 +111,9 @@ export class Store {
         sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
         sourceId TEXT NOT NULL,kind TEXT NOT NULL,version INTEGER NOT NULL,
         PRIMARY KEY(sessionId,sourceId),UNIQUE(sessionId,version));`);
+      // Preserve coordinator-proven initial denials before startup erases live inputs.
+      // These need explicit user retry, never the automatic service-resume path.
+      this.recoverInitialRetries();
       this.recoveries.capture();
       this.db.exec(`UPDATE tasks SET status='interrupted',error=CASE
           WHEN sessionId IN (SELECT sessionId FROM service_recoveries WHERE state='pending') THEN '服务中断；等待自动恢复。'
@@ -266,6 +273,44 @@ export class Store {
       this.db.exec("RELEASE result_event");
       return !!inserted;
     } catch (error) { this.db.exec("ROLLBACK TO result_event; RELEASE result_event"); throw error; }
+  }
+  private recoverInitialRetries() {
+    const tables = ["task_initial_retries", "task_input_receipts", "task_input_skills"];
+    if (tables.some(name => !this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)) ||
+        !this.db.prepare("PRAGMA table_info(tasks)").all().some(column => column.name === "initialInputId")) return;
+    const candidates = this.db.prepare(`SELECT t.id AS taskId,t.sessionId,r.id AS runId,i.id AS inputId,i.body
+      FROM tasks t JOIN runs r ON r.id=t.runId JOIN run_binding_rejections b ON b.runId=r.id
+      JOIN task_inputs i ON i.taskId=t.id AND i.id=t.initialInputId AND i.runId=r.id
+      JOIN task_input_receipts receipt ON receipt.inputId=i.id AND receipt.taskId=t.id
+      WHERE t.status='starting' AND (r.status='starting' OR r.status='failed' AND r.reasonCode='BINDING_REJECTED')
+      AND r.id=(SELECT id FROM runs latest WHERE latest.sessionId=t.sessionId ORDER BY startedAt DESC,rowid DESC LIMIT 1)
+      AND i.mode='steer' AND i.state='starting' AND (receipt.runId IS NULL OR receipt.runId=r.id)
+      AND receipt.state IN ('queued','failed','unknown')
+      AND NOT EXISTS(SELECT 1 FROM task_inputs other WHERE other.taskId=t.id AND other.id<>i.id)
+      AND NOT EXISTS(SELECT 1 FROM task_input_images WHERE inputId=i.id)
+      AND NOT EXISTS(SELECT 1 FROM task_input_skills WHERE inputId=i.id)
+      AND NOT EXISTS(SELECT 1 FROM task_input_receipts WHERE taskId=t.id AND state IN ('accepted','delivered','cancelled'))`).all();
+    for (const candidate of candidates) {
+      const runId = String(candidate.runId), taskId = String(candidate.taskId);
+      const error = new ExecutionPermitDeniedError(this.bindingRejection(runId)).message;
+      this.db.prepare("INSERT OR REPLACE INTO task_initial_retries(taskId,runId,inputId,body) VALUES(?,?,?,?)")
+        .run(taskId, runId, candidate.inputId, candidate.body);
+      this.db.prepare("UPDATE task_input_receipts SET state='failed',runId=?,error=?,updatedAt=? WHERE inputId=? AND taskId=?")
+        .run(runId, "绑定校验未通过，初始委派未发送；点击继续可重新发送原任务。", Date.now(), candidate.inputId, taskId);
+      this.db.prepare("UPDATE tasks SET status='failed',error=? WHERE id=?").run(error, taskId);
+      this.db.prepare("DELETE FROM service_recoveries WHERE sessionId=?").run(candidate.sessionId);
+      this.finishRun(runId, "failed", error, "BINDING_REJECTED");
+    }
+  }
+  /** Only called by the execution coordinator, never from a worker event or raw metric. */
+  rejectBinding(runId: string, rejection: unknown) {
+    this.db.prepare(`INSERT OR IGNORE INTO run_binding_rejections(runId,body,createdAt)
+      SELECT id,?,? FROM runs WHERE id=? AND status='starting'`)
+      .run(JSON.stringify(safeExecutionRejection(rejection)), Date.now(), runId);
+  }
+  bindingRejection(runId: string) {
+    const row = this.db.prepare("SELECT body FROM run_binding_rejections WHERE runId=?").get(runId);
+    return row ? safeExecutionRejection(JSON.parse(String(row.body))) : undefined;
   }
   finishRun(id: string, status: Run["status"], error: string | null, reasonCode: string | null = null, retry?: Run["retry"]) {
     this.db.exec("SAVEPOINT finish_run");

@@ -31,6 +31,12 @@ async function run(message: any, signal: AbortSignal) {
   await ensureModelProvider(runtime, provider);
   if (runtime.getError()) throw new AppError("CONFIG_READ_FAILED", "模型配置未通过校验。");
   if (op === "checkAuth") return runtime.checkAuth(provider, { signal });
+  if (op === "prepareAuth") {
+    const model = runtime.getModel(provider, payload.modelId);
+    // Auth resolution may rotate OAuth under the SDK credential-store lock.
+    // Never send its token, headers or credential back across IPC.
+    return !!(model && await runtime.getAuth(model, { signal, minOAuthValidityMs: 330_000 }));
+  }
   if (op === "available") return runtime.getAvailable(provider, { signal });
   if (op === "logout") { await runtime.logout(provider); await runtime.removeRuntimeApiKey(provider); return; }
   let supplied = false;

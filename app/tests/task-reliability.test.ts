@@ -50,6 +50,156 @@ function fixture() {
     dispose: async () => { scheduler.closing = true; await tick(); store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
+function initialDenial(f: ReturnType<typeof fixture>, options: { witness?: boolean; accepted?: boolean; extra?: boolean } = {}) {
+  const initial = f.records.inputs(f.row(), "queued")[0];
+  const run: Run = { id: randomUUID(), sessionId: f.row().sessionId, status: "starting", selection: f.agents.info(target(f.row())).selection!, startedAt: Date.now(), endedAt: null, error: null };
+  f.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,?,?,?)").run(run.id, run.sessionId, run.status, JSON.stringify(run.selection), run.startedAt);
+  f.store.db.prepare("UPDATE tasks SET runId=?,status='starting' WHERE id=?").run(run.id, f.taskId);
+  f.store.db.prepare("UPDATE task_inputs SET runId=?,state='starting' WHERE id=?").run(run.id, initial.id);
+  f.records.receipt(initial.id, options.accepted ? "accepted" : "queued", null, run.id, f.taskId);
+  if (options.extra) f.records.queue(f.taskId, "later append", "steer");
+  if (options.witness !== false) f.store.rejectBinding(run.id, { check: "auth", secret: "PRIVATE_CANARY" });
+  return { run, initial };
+}
+function initialFailure(f: ReturnType<typeof fixture>, options: Parameters<typeof initialDenial>[1] = {}) {
+  const { run, initial } = initialDenial(f, options);
+  run.status = "failed"; run.endedAt = Date.now(); run.reasonCode = "BINDING_REJECTED"; run.error = "binding rejected";
+  f.store.finishRun(run.id, run.status, run.error, run.reasonCode);
+  f.scheduler.settle(f.row(), run);
+  return { run, initial };
+}
+
+test("coordinator-proven initial rejection resends the exact original delegation on explicit retry, never empty resume", async () => {
+  const f = fixture();
+  try {
+    const { run, initial } = initialFailure(f);
+    assert.equal(f.row().status, "failed");
+    assert.equal(f.records.list(f.scope).tasks[0].inputs![0].state, "failed");
+    assert.deepEqual(f.store.bindingRejection(run.id), { check: "auth" });
+    assert.deepEqual({ ...f.records.initialRetry(f.row(), run.id) }, { inputId: initial.id, body: initial.body });
+    assert.equal(f.records.inputs(f.row(), "queued").length, 0, "a rejection never schedules its own retry");
+    const result = f.scheduler.resume(f.row(), run.id, randomUUID());
+    assert.equal(result.inputId, initial.id);
+    assert.equal(f.records.initialRetry(f.row(), run.id), undefined, "proof is consumed atomically");
+    assert.deepEqual(f.records.inputs(f.row(), "queued").map(input => [input.id, input.mode, input.body, input.runId]), [[initial.id, "steer", initial.body, null]]);
+    assert.throws(() => f.scheduler.resume(f.row(), run.id, randomUUID()), { code: "RUN_MISMATCH" });
+    let command: any;
+    f.agents.command = async (c, internal) => { command = { c, internal }; return {}; };
+    await (f.scheduler as any).start(f.row());
+    assert.equal(command.c.op, "prompt");
+    assert.equal(command.internal.prompt, initial.body);
+    assert.deepEqual(command.internal.task.inputIds, [initial.id]);
+  } finally { await f.dispose(); }
+});
+
+for (const options of [{ witness: false }, { accepted: true }, { extra: true }]) test(`initial replay requires an authoritative denial with no accepted or additional input: ${JSON.stringify(options)}`, async () => {
+  const f = fixture();
+  try {
+    const { run } = initialFailure(f, options);
+    assert.equal(f.records.initialRetry(f.row(), run.id), undefined);
+    f.agents.messages = () => [];
+    assert.throws(() => f.scheduler.resume(f.row(), run.id, randomUUID()), { code: "NO_CONTINUATION" });
+    assert.equal(f.records.inputs(f.row(), "queued").length, 0);
+  } finally { await f.dispose(); }
+});
+
+for (const action of ["append", "cancel", "recall"] as const) test(`${action} invalidates a saved initial replay proof`, async () => {
+  const f = fixture();
+  try {
+    const { run } = initialFailure(f);
+    assert.ok(f.records.initialRetry(f.row(), run.id));
+    if (action === "append") await f.scheduler.append(f.row(), { text: "new explicit work" });
+    else if (action === "cancel") f.scheduler.cancel(f.row(), {});
+    else await f.scheduler.recall(f.row());
+    assert.equal(f.store.db.prepare("SELECT 1 FROM task_initial_retries WHERE taskId=?").get(f.taskId), undefined);
+    if (action === "append") assert.deepEqual(f.records.inputs(f.row(), "queued").map(input => input.body), ["new explicit work"]);
+  } finally { await f.dispose(); }
+});
+
+test("initial retry proof survives restart but cannot outlive its run, and capacity failure rolls back consumption", async () => {
+  const f = fixture(); let reopened: Store | undefined, closed = false;
+  try {
+    const { run, initial } = initialFailure(f);
+    f.scheduler.closing = true; await tick(); f.store.close(); closed = true;
+    reopened = new Store(f.root);
+    const records = new TaskRecords(reopened), row = () => records.rows("WHERE id=?", f.taskId)[0];
+    const scheduler = new TaskScheduler({ ...f.agents, store: reopened } as Agents, records, new TaskDelivery(f.agents, records));
+    scheduler.kick = () => {};
+    assert.deepEqual({ ...records.initialRetry(row(), run.id) }, { inputId: initial.id, body: initial.body });
+    assert.equal(records.initialRetry(row(), "stale-run"), undefined);
+    for (let i=0; i<4; i++) records.create(f.scope, `capacity-${i}`, "context", Array.from({ length: 8 }, () => ({ task: "capacity" })), run.selection);
+    assert.throws(() => scheduler.resume(row(), run.id, randomUUID()), { code: "TASK_LIMIT" });
+    assert.ok(records.initialRetry(row(), run.id), "failed admission did not consume proof");
+    assert.equal(records.inputs(row(), "queued").length, 0);
+    assert.equal(row().status, "failed");
+  } finally { await tick(); reopened?.close(); if (!closed) f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+for (const phase of ["starting", "finished", "receipt"] as const) test(`startup preserves a durable initial denial before settlement at ${phase}`, async () => {
+  const f = fixture(); let reopened: Store | undefined, closed = false;
+  try {
+    const { run, initial } = initialDenial(f);
+    if (phase !== "starting") f.store.finishRun(run.id, "failed", "binding rejected", "BINDING_REJECTED");
+    if (phase === "receipt") f.records.receipt(initial.id, "failed", "binding rejected", run.id, f.taskId);
+    f.scheduler.closing = true; await tick(); f.store.close(); closed = true;
+    reopened = new Store(f.root);
+    const records = new TaskRecords(reopened), row = () => records.rows("WHERE id=?", f.taskId)[0];
+    const agents = { ...f.agents, store: reopened, messages: () => [] } as unknown as Agents;
+    const delivery = new TaskDelivery(agents, records); delivery.pause();
+    const scheduler = new TaskScheduler(agents, records, delivery); scheduler.kick = () => {};
+    const terminal: Run = { ...run, status: "failed", reasonCode: "BINDING_REJECTED", error: "binding rejected", endedAt: Date.now() };
+    assert.deepEqual({ ...reopened.db.prepare("SELECT status,reasonCode FROM runs WHERE id=?").get(run.id) }, { status: "failed", reasonCode: "BINDING_REJECTED" });
+    assert.equal(row().status, "failed");
+    assert.equal(reopened.recoveries.get(row().sessionId), undefined, "a denied initial task is not automatically resumed");
+    assert.equal(records.inputs(row(), "queued").length, 0);
+    assert.deepEqual({ ...records.initialRetry(row(), run.id) }, { inputId: initial.id, body: initial.body });
+    scheduler.settle(row(), terminal, true); // Same startup reconciliation used by the Tasks facade.
+    assert.deepEqual({ ...records.initialRetry(row(), run.id) }, { inputId: initial.id, body: initial.body }, "settlement must not erase the startup witness");
+    assert.equal(scheduler.resume(row(), run.id, randomUUID()).inputId, initial.id);
+    assert.equal(records.initialRetry(row(), run.id), undefined);
+    assert.throws(() => scheduler.resume(row(), run.id, randomUUID()), { code: "RUN_MISMATCH" });
+    let command: any;
+    agents.command = async (c, internal) => { command = { c, internal }; return {}; };
+    await (scheduler as any).start(row());
+    assert.equal(command.c.op, "prompt"); assert.equal(command.internal.prompt, initial.body);
+    assert.deepEqual(command.internal.task.inputIds, [initial.id]);
+  } finally { await tick(); reopened?.close(); if (!closed) f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+for (const scenario of ["no_witness", "accepted", "delivered", "cancelled", "stopping", "extra", "images", "skills", "not_initial", "newer_run", "running"] as const)
+  test(`startup cannot create initial retry authority for ${scenario}`, async () => {
+    const f = fixture(); let reopened: Store | undefined, closed = false;
+    try {
+      const { run, initial } = initialDenial(f, { witness: scenario !== "no_witness", extra: scenario === "extra" });
+      if (scenario === "no_witness") f.store.finishRun(run.id, "failed", "worker self-report", "BINDING_REJECTED");
+      if (["accepted", "delivered", "cancelled"].includes(scenario)) f.records.receipt(initial.id, scenario as any, null, run.id, f.taskId);
+      if (scenario === "stopping") f.store.db.prepare("UPDATE tasks SET status='stopping' WHERE id=?").run(f.taskId);
+      if (scenario === "running") f.store.db.prepare("UPDATE runs SET status='running' WHERE id=?").run(run.id);
+      if (scenario === "images") f.store.db.prepare("INSERT INTO task_input_images VALUES(?,?)").run(initial.id, "[{}]");
+      if (scenario === "skills") f.store.db.prepare("INSERT INTO task_input_skills VALUES(?,?)").run(initial.id, "[{}]");
+      if (scenario === "not_initial") f.store.db.prepare("UPDATE tasks SET initialInputId=? WHERE id=?").run(randomUUID(), f.taskId);
+      if (scenario === "newer_run") f.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'completed',?,?)").run(randomUUID(), run.sessionId, JSON.stringify(run.selection), run.startedAt + 1);
+      f.scheduler.closing = true; await tick(); f.store.close(); closed = true;
+      reopened = new Store(f.root);
+      const records = new TaskRecords(reopened), row = records.rows("WHERE id=?", f.taskId)[0];
+      assert.equal(reopened.db.prepare("SELECT 1 FROM task_initial_retries WHERE taskId=?").get(f.taskId), undefined);
+      assert.equal(records.initialRetry(row, run.id), undefined);
+      assert.equal(records.inputs(row, "queued").length, 0);
+    } finally { await tick(); reopened?.close(); if (!closed) f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
+  });
+
+test("startup never overwrites an already-unknown historical receipt with a service-restart explanation", async () => {
+  const f = fixture(); let reopened: Store | undefined, closed = false;
+  try {
+    const run = f.activate();
+    const id = randomUUID(), message = "执行已结束，输入送达未确认；未自动重发。";
+    f.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,?,'unknown',?,?)").run(id, f.taskId, run.id, message, 123);
+    f.scheduler.closing = true; await tick(); f.store.close(); closed = true;
+    reopened = new Store(f.root); new TaskRecords(reopened);
+    assert.deepEqual({ ...reopened.db.prepare("SELECT state,error,updatedAt FROM task_input_receipts WHERE inputId=?").get(id) }, { state: "unknown", error: message, updatedAt: 123 });
+  } finally { await tick(); reopened?.close(); if (!closed) f.store.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test("stopping appends survive old settlement, keep frozen parent and join FIFO once", async () => {
   const f = fixture();
   try {

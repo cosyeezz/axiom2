@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { ExecutionPool, type ExecutionLease } from "../execution-pool.js";
 import { fileRevision } from "../execution-profile.js";
-import { sameLease } from "../execution-protocol.js";
+import { sameLease, ExecutionPermitDeniedError } from "../execution-protocol.js";
 import { AppError, type Scope, type Draft } from "../../shared/protocol.js";
 import { agentScope, threadScope, type Run } from "../../shared/agent.js";
 import type { Store } from "../storage.js";
@@ -395,9 +395,15 @@ export class AgentRuns {
       let terminal: Run | undefined;
       try {
         this.views.flush(scope);
-        const status = live.finish?.status ?? "interrupted";
-        const error = live.finish?.error ?? (live.finish ? null : "工作进程中断；流式尾部可能未保存，未自动重做。");
-        const reasonCode = live.finish?.reasonCode ?? (live.finish ? null : "WORKER_INTERRUPTED");
+        // Worker text/reason codes alone cannot authorize a replay. The durable
+        // witness is written by the coordinator before a denied permit is sent.
+        const rejection = this.store.bindingRejection(run.id);
+        const rejected = rejection && live.finish?.status !== "cancelled" && live.run.status !== "stopping" && !live.storageFailed;
+        const status = rejected ? "failed" : live.finish?.status ?? "interrupted";
+        const error = rejected ? new ExecutionPermitDeniedError(rejection).message
+          : live.finish?.error ?? (live.finish ? null : "工作进程中断；流式尾部可能未保存，未自动重做。");
+        const reasonCode = rejected ? "BINDING_REJECTED" : live.finish?.reasonCode === "BINDING_REJECTED" ? "EXECUTION_ERROR"
+          : live.finish?.reasonCode ?? (live.finish ? null : "WORKER_INTERRUPTED");
         const retry = live.run.retry && ["waiting", "retrying"].includes(live.run.retry.state)
           ? { ...live.run.retry, state: "cancelled" as const, nextRetryAt: undefined } : live.run.retry;
         if (!keepAlive) this.views.recoverRequestUsage(scope);

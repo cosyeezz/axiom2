@@ -51,13 +51,15 @@ export class TaskScheduler {
     if (!row || row.runId !== run.id || this.store.db.prepare("SELECT 1 FROM task_results WHERE runId=?").get(run.id)) return;
     clearTimeout(this.timers.get(run.id));
     this.timers.delete(run.id);
+    const rejectedInitial = this.records.saveInitialRetry(row, run);
     for (const input of ["queued", "starting", "inflight"].flatMap((state) => this.records.inputs(row, state))) {
       this.records.drafts.delete(input.id);
       this.handed.delete(input.id);
-      const state = input.state === "queued" || this.failedInputs.has(input.id) ? "failed" : "unknown";
+      const state = input.id === rejectedInitial || input.state === "queued" || this.failedInputs.has(input.id) ? "failed" : "unknown";
       this.failedInputs.delete(input.id);
-      this.records.receipt(input.id, state, state === "unknown"
-        ? "执行已结束，输入送达未确认；未自动重发。" : "执行已结束，输入未发送；未自动重发。", run.id, row.id);
+      this.records.receipt(input.id, state, input.id === rejectedInitial
+        ? "绑定校验未通过，初始委派未发送；点击继续可重新发送原任务。"
+        : state === "unknown" ? "执行已结束，输入送达未确认；未自动重发。" : "执行已结束，输入未发送；未自动重发。", run.id, row.id);
     }
     this.store.db.prepare(`UPDATE task_input_receipts SET state='unknown',error='执行已结束，输入送达未确认；未自动重发。',updatedAt=?
       WHERE taskId=? AND runId=? AND state IN ('accepted','unknown')`).run(Date.now(), row.id, run.id);
@@ -223,6 +225,7 @@ export class TaskScheduler {
     let id: string;
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
+      this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
       if (!taskActive(row.status)) this.records.enqueue(row);
       id = this.records.queue(row.id, rewrite ? JSON.stringify({ text: p.text, attachments, skills, rewrite }) : body, rewrite ? "rewrite" : mode, images, requestId, skills);
       if (row.status === "stopping") this.store.db.prepare("UPDATE task_inputs SET state='waiting',runId=? WHERE id=?").run(row.runId, id);
@@ -278,14 +281,22 @@ export class TaskScheduler {
   resume(row: Row, expectedRunId: string, requestId: string) {
     if (this.closing || this.cancelling.has(row.id))
       throw new AppError("TASK_STOPPED", "子会话正在停止，暂时无法重试。");
+    row = this.records.rows("WHERE id=?", row.id)[0];
+    if (taskActive(row.status)) throw new AppError("RUN_MISMATCH", "子任务已有活动或排队输入；未重复重试。");
     this.agents.assertContinuation(target(row), expectedRunId);
-    // A control item shares capacity, stop and receipt handling with task inputs,
-    // but is never sent to the model as text or batched with user requirements.
+    const retryInitial = this.records.initialRetry(row, expectedRunId);
+    // Empty history is not evidence of non-delivery. Historical failures without
+    // a coordinator witness require a new explicit requirement, not a blind replay.
+    if (!retryInitial && this.agents.messages?.(target(row)).some(message => ["user", "assistant", "toolResult"].includes(message.role)) === false)
+      throw new AppError("NO_CONTINUATION", "此子会话没有可续接的对话或初始任务未发送证明；请明确重新发送任务。");
+    // A proven initial rejection resends the exact original prompt on explicit
+    // retry; all other continuations remain host controls, never model text.
     let id: string;
     this.store.db.exec("BEGIN IMMEDIATE");
     try {
+      if (retryInitial) id = this.records.retryInitial(row, expectedRunId);
+      else id = this.records.queue(row.id, expectedRunId, "resume", [], requestId);
       this.records.enqueue(row);
-      id = this.records.queue(row.id, expectedRunId, "resume", [], requestId);
       this.store.db.exec("COMMIT");
     } catch (error) { this.store.db.exec("ROLLBACK"); throw error; }
     this.changed(row);
@@ -296,6 +307,7 @@ export class TaskScheduler {
     // Freeze handoff/preflight before yielding. A failed worker recall must not
     // erase queued drafts whose successful withdrawal could not be returned.
     this.recalling.add(row.id);
+    this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
     try {
       const queued = ["queued", "waiting"].flatMap((state) => this.records.inputs(row, state)).filter((input) => this.records.drafts.has(input.id));
       const sent = ["starting", "inflight"].flatMap((state) => this.records.inputs(row, state))
@@ -450,6 +462,7 @@ export class TaskScheduler {
               throw new AppError("TASK_CAPACITY_DEFERRED", "等待可用子任务容量");
           },
           onCommit: (run) => {
+            this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
             this.store.db
               .prepare(
                 "UPDATE tasks SET status='starting',runId=?,error=NULL,workStartedAt=?,workDeadlineAt=?,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1 WHERE id=?",
@@ -563,6 +576,7 @@ export class TaskScheduler {
     const current = this.records.rows("WHERE id=?", row.id)[0];
     if (source !== "shutdown") this.store.recoveries.remove(current.sessionId);
     row = current;
+    this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
     if (!taskActive(current.status))
       return { taskId: row.id, status: current.status };
     const inputs = ["queued", "waiting", "starting", "inflight"].flatMap((state) => this.records.inputs(row, state));

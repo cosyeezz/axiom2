@@ -98,6 +98,40 @@ test('recent-profile LRU and demand expiry release exactly their own references'
   await h.pool.trim();await h.pool.close();assert.equal(h.refs(),0);
 });
 
+test('duplicate binding_ready cannot issue a rejection witness after granting execution', async t => {
+  const h=harness(t);let valid=true,verifications=0;
+  const proofs: unknown[]=[];
+  const environment={...h.environment(),current:()=>valid,currentAsync:async()=>{verifications++;await turn();return valid;}};
+  const lease=await h.acquire('same',{environment,onBindingRejected:(proof:unknown)=>proofs.push(proof)}),child:any=await lease.ensureReady();
+  child.emit('message',{type:'binding_ready',lease:lease.ref});
+  child.emit('message',{type:'binding_ready',lease:lease.ref});
+  await turn();await turn();
+  assert.equal(verifications,1);
+  assert.equal(child.messages.filter((m:any)=>m.type==='execution_permit').length,1);
+  assert.equal(child.messages.find((m:any)=>m.type==='execution_permit').allowed,true);
+  valid=false;
+  child.emit('message',{type:'binding_ready',lease:lease.ref});await turn();
+  assert.equal(verifications,1);assert.deepEqual(proofs,[]);
+  valid=true;
+  await h.cleaned(lease);
+  const next=await h.acquire('same',{environment}),nextChild:any=await next.ensureReady();
+  assert.equal(next.ref.instanceId,lease.ref.instanceId);
+  nextChild.emit('message',{type:'binding_ready',lease:next.ref});await turn();await turn();
+  assert.equal(verifications,2);
+  assert.equal(nextChild.messages.filter((m:any)=>m.type==='execution_permit'&&m.lease.leaseId===next.ref.leaseId).length,1,'permit state resets for the next lease');
+});
+
+test('a denied permit supplies one content-free coordinator witness even if its observer throws', async t => {
+  const h=harness(t);let valid=true,witnesses=0;
+  const environment={...h.environment(),current:(_resources?:boolean,observe?:RejectionObserver)=>valid||(observe?.({check:'auth'}),false)};
+  const lease=await h.acquire('same',{environment,onBindingRejected:(proof:unknown)=>{assert.deepEqual(proof,{check:'auth'});witnesses++;throw Error('PRIVATE_CANARY');}}),child:any=await lease.ensureReady();
+  valid=false;
+  child.emit('message',{type:'binding_ready',lease:lease.ref});child.emit('message',{type:'binding_ready',lease:lease.ref});await turn();
+  assert.equal(witnesses,1);
+  assert.deepEqual(child.messages.find((m:any)=>m.type==='execution_permit').rejection,{check:'auth'});
+  assert.equal(h.pool.isActive(lease.ref),false);
+});
+
 test('binding completion revalidates configuration and snapshot before permitting inference', async t => {
   t.mock.timers.enable({apis:['setTimeout']});
   const h=harness(t);let valid=true,kills=0;

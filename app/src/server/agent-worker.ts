@@ -1222,7 +1222,8 @@ async function run(input: WorkerInput) {
     send({
       type: "done",
       status: wasCancelled ? "cancelled" : "failed",
-      reasonCode: wasCancelled ? "USER_STOPPED" : error instanceof AppError ? error.code : "EXECUTION_ERROR",
+      reasonCode: wasCancelled ? "USER_STOPPED" : error instanceof ExecutionPermitDeniedError ? "BINDING_REJECTED"
+        : error instanceof AppError ? error.code : "EXECUTION_ERROR",
       error: errorMessage(error, "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {

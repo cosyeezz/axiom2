@@ -109,7 +109,10 @@ for (const failure of ['configuration', 'resource', 'snapshot', 'snapshot-batche
       await wait(()=>!agents.active(scope)&&agents.pool.stats().total===0);
       assert.equal(injected,true);assert.equal(retired,true);assert.equal(requests,1);assert.equal(agents.info(scope).run?.status,'failed');
       assert.deepEqual(terminal.map(event=>event.type),['done','closed'],'failure must be reported once before a single close handshake');
-      assert.equal(terminal[0].reasonCode,'EXECUTION_ERROR');
+      assert.equal(terminal[0].reasonCode,'BINDING_REJECTED');
+      const rejection=store.bindingRejection(agents.info(scope).run!.id);
+      assert.equal(rejection?.check,failure==='configuration'?'auth':failure==='resource'?'resource_digest':'snapshot');
+      assert.equal(JSON.stringify(rejection).includes(root),false);
     }finally{
       await agents.close();store.close();http.closeAllConnections();await new Promise<void>(r=>http.close(()=>r()));
       if(previousDir===undefined)delete process.env.AXIOM_PI_DIR;else process.env.AXIOM_PI_DIR=previousDir;

@@ -1,5 +1,5 @@
 import type { SkillReference } from "../../shared/skills.js";
-import type { Selection } from "../../shared/agent.js";
+import type { Run, Selection } from "../../shared/agent.js";
 import { randomUUID } from "node:crypto";
 import type { Store } from "../storage.js";
 import { AppError, text, type Scope, type ImageAttachment, type Draft } from "../../shared/protocol.js";
@@ -60,6 +60,8 @@ export class TaskRecords {
       inputId TEXT PRIMARY KEY, taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       runId TEXT, state TEXT NOT NULL, error TEXT, updatedAt INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS task_input_receipts_task ON task_input_receipts(taskId);
+      CREATE TABLE IF NOT EXISTS task_initial_retries(taskId TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+        runId TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,inputId TEXT NOT NULL,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS task_queue_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,
         taskId TEXT UNIQUE NOT NULL REFERENCES tasks(id) ON DELETE CASCADE);
       INSERT OR IGNORE INTO task_queue_order(taskId) SELECT id FROM tasks WHERE status='queued' ORDER BY createdAt,rowid;
@@ -71,7 +73,7 @@ export class TaskRecords {
       UPDATE task_input_receipts SET state='failed',error='服务重启后未自动重放输入'
         WHERE state='queued' AND runId IS NULL AND inputId NOT IN (SELECT id FROM task_inputs);
       UPDATE task_input_receipts SET state='unknown',error='服务重启，输入送达未确认；未自动重放输入'
-        WHERE state IN ('queued','accepted','unknown') AND inputId NOT IN (SELECT id FROM task_inputs);`);
+        WHERE state IN ('queued','accepted') AND inputId NOT IN (SELECT id FROM task_inputs);`);
     if (!(store.db.prepare("PRAGMA table_info(task_notification_attempts)").all() as { name: string }[]).some((column) => column.name === "runId"))
       store.db.exec("ALTER TABLE task_notification_attempts ADD COLUMN runId TEXT");
     store.db.exec("INSERT OR IGNORE INTO task_model_preferences(id,selection) VALUES(1,NULL)");
@@ -221,6 +223,41 @@ export class TaskRecords {
       AND (? IS NULL OR taskId=?) AND (? IS NULL OR runId IS NULL OR runId=?)`)
       .run(state, error, Date.now(), runId ?? null, id, taskId ?? null, taskId ?? null,
         runId ?? null, runId ?? null).changes > 0;
+  }
+  /** Retain only the initial, uniquely handed-off delegation after a coordinator-proven denial. */
+  saveInitialRetry(row: TaskRow, run: Run) {
+    const rejected = run.status === "failed" && run.reasonCode === "BINDING_REJECTED" && !!this.store.bindingRejection(run.id);
+    // Startup may have preserved this witness before deleting interrupted live inputs.
+    const saved = rejected ? this.initialRetry(row, run.id) : undefined;
+    if (saved) return saved.inputId;
+    this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+    if (!rejected) return;
+    const inputs = ["queued", "waiting", "starting", "inflight"].flatMap(state => this.inputs(row, state));
+    const input = inputs[0];
+    if (inputs.length !== 1 || input.id !== row.initialInputId || input.mode !== "steer" || input.state !== "starting" ||
+        input.runId !== run.id || this.images(input.id).length || this.skills(input.id).length ||
+        this.store.db.prepare("SELECT 1 FROM task_input_receipts WHERE taskId=? AND state IN ('accepted','delivered','cancelled') LIMIT 1").get(row.id)) return;
+    this.store.db.prepare("INSERT INTO task_initial_retries VALUES(?,?,?,?)").run(row.id, run.id, input.id, input.body);
+    return input.id;
+  }
+  initialRetry(row: TaskRow, expectedRunId: string) {
+    if (row.runId !== expectedRunId || row.status !== "failed") return;
+    return this.store.db.prepare(`SELECT p.inputId,p.body FROM task_initial_retries p
+      JOIN task_input_receipts r ON r.inputId=p.inputId AND r.taskId=p.taskId AND r.runId=p.runId
+      JOIN run_binding_rejections b ON b.runId=p.runId
+      WHERE p.taskId=? AND p.runId=? AND p.inputId=? AND r.state='failed'`)
+      .get(row.id, expectedRunId, row.initialInputId ?? "") as { inputId: string; body: string } | undefined;
+  }
+  /** Caller owns the enqueue transaction. Preserve the initial input identity, never an append. */
+  retryInitial(row: TaskRow, expectedRunId: string) {
+    const proof = this.initialRetry(row, expectedRunId);
+    if (!proof) throw new AppError("RUN_MISMATCH", "未发送证明已失效；未重新发送原任务。");
+    this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+    this.store.db.prepare("INSERT INTO task_inputs VALUES(?,?,?,'steer','queued',NULL,?)")
+      .run(proof.inputId, row.id, proof.body, Date.now());
+    this.store.db.prepare("UPDATE task_input_receipts SET state='queued',runId=NULL,error=NULL,updatedAt=? WHERE inputId=? AND taskId=?")
+      .run(Date.now(), proof.inputId, row.id);
+    return proof.inputId;
   }
   elapsed(taskId: string) {
     return Number(this.store.db.prepare(`SELECT COALESCE(SUM(MAX(0,r.endedAt-r.startedAt)),0) AS ms

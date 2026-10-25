@@ -10,7 +10,7 @@ test("execution permits preserve rejection identity across batched retirement an
     import assert from "node:assert/strict";
     import { awaitExecutionPermit, ExecutionPermitDeniedError, workerInstance } from "./src/server/execution-protocol.ts";
     const lease = { instanceId: workerInstance.instanceId, generation: workerInstance.generation, leaseId: "current" };
-    const denied = { type: "execution_permit", lease, allowed: false };
+    const denied = { type: "execution_permit", lease, allowed: false, rejection: { check: "auth", secret: "PRIVATE_CANARY" } };
     const shutdown = { type: "shutdown", instance: workerInstance };
     const stop = { type: "stop", lease };
     const allowed = { type: "execution_permit", lease, allowed: true };
@@ -25,7 +25,11 @@ test("execution permits preserve rejection identity across batched retirement an
       const messagesBefore = process.listenerCount("message");
       const disconnectsBefore = process.listenerCount("disconnect");
       const pending = awaitExecutionPermit(lease, true).then(() => "allowed", (error) => {
-        if (error instanceof ExecutionPermitDeniedError) return "denied";
+        if (error instanceof ExecutionPermitDeniedError) {
+          assert.deepEqual(error.rejection, { check: "auth" });
+          assert.equal(error.message.includes("PRIVATE_CANARY"), false);
+          return "denied";
+        }
         assert.equal(error.message, "执行已取消", scenario.name);
         return "cancelled";
       });

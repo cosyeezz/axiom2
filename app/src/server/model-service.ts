@@ -137,6 +137,26 @@ export class ModelService {
       refreshOnCreate: false,
     });
   }
+  /** Complete expiring OAuth rotation before an execution environment snapshots auth.json. */
+  async prepareAuth(selection: { provider: string; id: string }, modelsPath: string, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const credential = readStoredCredential(selection.provider, join(this.dir, "auth.json"));
+    // API keys and fresh OAuth need no network operation. Keep checkAuth read-only.
+    // Leave a 30s binding margin beyond Pi's five-minute refresh window.
+    if (credential?.type !== "oauth" || credential.expires > Date.now() + 330_000) return;
+    let ready: boolean;
+    if (this.network) {
+      ready = await this.network<boolean>(this.root, this.dir, selection.provider, modelsPath, "prepareAuth",
+        { modelId: selection.id }, { signal });
+    } else {
+      const runtime = await this.runtime(modelsPath);
+      await ensureModelProvider(runtime, selection.provider);
+      const model = runtime.getModel(selection.provider, selection.id);
+      ready = !!(model && await runtime.getAuth(model, { signal, minOAuthValidityMs: 330_000 }));
+    }
+    signal.throwIfAborted();
+    if (!ready) throw new AppError("MODEL_UNAVAILABLE", "模型认证已失效；未发送请求，请重新登录。");
+  }
   async load() {
     const raw = await this.raw();
     let config: Json;

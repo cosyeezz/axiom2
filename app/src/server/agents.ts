@@ -565,7 +565,8 @@ export class Agents {
           throw new AppError("PROMPT_PREPARATION_FAILED",
             `消息未发送：${errorMessage(error, "准备会话或模型配置失败。")}`);
         }
-        return { start: { cwd, file, modelsFile, capabilities, selection: selection!, commit: (lease: ExecutionLease) => {
+        return { start: { cwd, file, modelsFile, capabilities, selection: selection!,
+          onBindingRejected: (rejection: unknown) => this.store.rejectBinding(id, rejection), commit: (lease: ExecutionLease) => {
           validate();
           if (ownStart?.controller.signal.aborted || !this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
           internal.beforeStart?.();
@@ -706,6 +707,13 @@ export class Agents {
       let lease: ExecutionLease | undefined;
       let commitAttempted = false;
       try {
+        // getAuth (unlike checkAuth) may persist a refreshed OAuth credential.
+        // Finish that write before capturing the immutable binding revision.
+        await this.models.serial(async () => {
+          validate();
+          await this.models.prepareAuth(start.selection, start.modelsFile, ownStart!.controller.signal);
+          validate();
+        }, ownStart!.controller.signal);
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
           modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
           mode: this.pool.mode }, ownStart!.controller.signal);
@@ -713,6 +721,7 @@ export class Agents {
         validate();
         ownStart!.provider = start.selection.provider;
         lease = await this.pool.acquire({ environment, kind: "agent", bindingGate: true, requestStartedAtMonoMs,
+          onBindingRejected: start.onBindingRejected,
           beforeExecute: internal.memoryContinuation ? () => {
             this.assertMemoryContinuation(scope, internal.memoryContinuation!.expectedRunId, ownStart, false, continuationRunId);
             internal.memoryContinuation!.validate();

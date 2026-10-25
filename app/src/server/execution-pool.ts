@@ -17,6 +17,8 @@ export interface AcquireRequest {
   bindingGate?: true;
   /** Recheck business admission immediately before start dispatch and the model execution permit. */
   beforeExecute?: () => void;
+  /** Coordinator-owned proof: this lease has never been granted an execution permit. */
+  onBindingRejected?: RejectionObserver;
   affinity?: { sessionId: string; fileRevision: string };
   parentLease?: LeaseRef; signal: AbortSignal; deadlineAt?: number;
   memory?: { concurrency: number; queue: number };
@@ -42,7 +44,7 @@ type Instance = {
   id: string; generation: number; environment: PreparedEnvironment; state: State; child?: ChildProcess;
   bornAt: number; lastUsed: number; processReadyAt?: number; environmentReadyAt?: number;
   ready?: Promise<ChildProcess>; validationAbort: AbortController; processReady: Deferred<void>; environmentReady: Deferred<void>; closed: Deferred<void>;
-  lease?: { ref: LeaseRef; request: AcquireRequest; done: Deferred<void>; abort: () => void; source: ExecutionLease["source"] };
+  lease?: { ref: LeaseRef; request: AcquireRequest; done: Deferred<void>; abort: () => void; source: ExecutionLease["source"]; permit?: "checking" | "allowed" | "denied" };
   binding?: AcquireRequest["affinity"]; consumed: boolean; cleaned?: string; idleTimer?: NodeJS.Timeout; killTimer?: NodeJS.Timeout;
 };
 type Waiter = { request: AcquireRequest; at: number; done: Deferred<ExecutionLease>; abort: () => void; timer?: NodeJS.Timeout };
@@ -220,7 +222,9 @@ export class ExecutionPool {
   }
   private async permit(i: Instance, ref: LeaseRef) {
     const lease = i.lease;
-    if (!lease || !sameLease(lease.ref, ref) || !this.isActive(ref)) return;
+    if (!lease || !sameLease(lease.ref, ref) || !this.isActive(ref) || lease.permit) return;
+    // A duplicate binding_ready must never produce a rejection after an earlier grant.
+    lease.permit = 'checking';
     let rejection: Readonly<ExecutionRejection> | undefined;
     // Per invocation, not instance state: overlapping validations cannot overwrite this rejection.
     const observe: RejectionObserver = value => {
@@ -234,7 +238,10 @@ export class ExecutionPool {
       (i.environment.current(false, observe) || rejectExecution(observe, { check: 'verification', stage: 'configuration' })) &&
       (i.environment.snapshotValid(observe) || rejectExecution(observe, { check: 'snapshot' }));
     if (allowed) { try { lease.request.beforeExecute?.(); } catch { allowed = rejectExecution(observe, { check: 'before_execute' }); } }
-    try { i.child.send({type:'execution_permit',lease:ref,allowed},error=>{if(error)void this.retireInstance(i,'send_failed');}); }
+    lease.permit = allowed ? 'allowed' : 'denied';
+    if (!allowed) rejectExecution(lease.request.onBindingRejected, rejection ?? { check: 'verification' });
+    try { i.child.send({type:'execution_permit',lease:ref,allowed,
+      ...(!allowed ? { rejection: safeExecutionRejection(rejection) } : {})},error=>{if(error)void this.retireInstance(i,'send_failed');}); }
     catch { void this.retireInstance(i,'send_failed'); return; }
     // A denied permit already makes the run fail and close itself. Sending
     // shutdown as well can cancel it or close IPC before its failure is sent.
