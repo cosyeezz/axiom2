@@ -92,7 +92,7 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
         const ticket = options.apiKey ? tickets.get(options.apiKey) : undefined;
         if (options.apiKey) tickets.delete(options.apiKey);
         if (!ticket || ticket.expires <= Date.now() || ticket.account.expires <= Date.now()) throw new KiroChatError("Kiro 原生认证交接无效或已过期，请重试；不接受通用 API 密钥。");
-        const account = ticket.account, { payload, names, seenCalls, historyNotice } = kiroChatRequest(model, context, account, options.sessionId);
+        const account = ticket.account, { payload, names, seenCalls, historyNotice, interruptionNotice } = kiroChatRequest(model, context, account, options.sessionId);
         const thinking = kiroThinkingRequest(model, advanced);
         if (thinking) {
           message.providerThinkingLevel = thinking.providerLevel;
@@ -115,7 +115,8 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
             (message.diagnostics ??= []).push({ type: "kiro-thinking-tag-unclosed", timestamp: Date.now(), details: { note: "思考标签未闭合；剩余内容仅按思考显示，不伪造正文或截断原因。" } });
           }
         };
-        if (Object.values(historyNotice).some(Boolean)) (message.diagnostics ??= []).push({ type: "kiro-reasoning-history-normalized", timestamp: Date.now(), details: historyNotice });
+        if (Object.values(historyNotice).some(Boolean)) (message.diagnostics ??= []).push({ type: "kiro-reasoning-history-omitted", timestamp: Date.now(), details: historyNotice });
+        if (interruptionNotice.omittedToolCalls) (message.diagnostics ??= []).push({ type: "kiro-interrupted-tools-omitted", timestamp: Date.now(), details: interruptionNotice });
         const replacement = await waitForKiro(options.onPayload?.(payload, model), bounded), request = replacement === undefined ? payload : kiroObject(replacement);
         const state = kiroObject(request.conversationState), current = kiroObject(kiroObject(state.currentMessage).userInputMessage);
         if (request.profileArn !== account.profileArn || current.modelId !== model.id || current.origin !== "KIRO_CLI")

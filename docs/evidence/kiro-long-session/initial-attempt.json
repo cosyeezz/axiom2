@@ -1,0 +1,2135 @@
+{
+  "schemaVersion": 2,
+  "phase": "original-matrix",
+  "generatedAt": "2026-10-25T19:44:47.987Z",
+  "transport": "AXIOM /ws -> registered task -> worker -> kiro-chat",
+  "contentPolicy": "No prompts, answers, hidden thinking, signatures, tool arguments/results, credentials, or local transcript paths. Only allowlisted metadata, assertions, and SHA-256 digests.",
+  "complete": false,
+  "allProtocolsCompleted": false,
+  "allSemanticChecksPassed": false,
+  "allFormatChecksPassed": null,
+  "modelCount": 8,
+  "matrixRoundCount": 58,
+  "models": [
+    {
+      "model": "auto",
+      "taskRef": "t4014",
+      "sessionIdSha256": "13eb7298623475027c6b128b2b3e804e93c86cebd792df5771b0976b2179abc9",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": true,
+      "matrixRoundCount": 20,
+      "protocolCompleted": true,
+      "protocolCompletedRoundCount": 20,
+      "protocolFailureRoundCount": 0,
+      "rateLimitedRoundCount": 0,
+      "semanticPassed": true,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 20,
+      "uncheckedRoundCount": 0,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": true,
+      "completedAt": "2026-10-25T17:42:07.513Z",
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "c070c037-cd65-4345-b9e5-7ab539203553",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "1e219536d893c1002d48adc30a104223e2653b83c631318bcd47d57d20724d2b",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 17026,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-02-read",
+          "runId": "93d8f508-6a08-423d-b9a4-4ede13ce8b5f",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "eafa44686ef976aeaf4bcaa95fcfaa72696562eb4cec0d1eed4fb566eca70202",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 38930,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "f3555031703ae28df61cc7fa598399fd295d5d089e517bceb6f28473010823bf",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "f3555031703ae28df61cc7fa598399fd295d5d089e517bceb6f28473010823bf",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-03-reasoning",
+          "runId": "0ed9893d-5190-48af-a4ab-10f8808234b3",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "3cdf2ee0e018303e7de83309e215409e1df8edf159bc536541666fcc090320cf",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7463,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-04-error-recovery",
+          "runId": "10bee93a-16f8-4d08-bacf-0d370fcb2022",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "99a0bc173261cf49b63eb7c81147125825d367aaabc8f53860904f1fd4a14c70",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 12348,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "46623c1e17ba5f3835339325c48403c6b0bd3aa56b3aee7f76a42677844110f1",
+              "argumentsSha256": "15340c19fbea2df1304099a13a2adc64f9fd84d636e93d0ace11627ddc09af4b"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "bb4709f80d227c752213b19ea513122bb57203da611ac2e4991888337ec9170b",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "46623c1e17ba5f3835339325c48403c6b0bd3aa56b3aee7f76a42677844110f1",
+              "status": "failed",
+              "hasError": false,
+              "textSha256": "958e6338555a9d7970d9827e7721f1fc5ef74100525222bcf84fd1c71b31911c",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "bb4709f80d227c752213b19ea513122bb57203da611ac2e4991888337ec9170b",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-05-off-memory",
+          "runId": "d5d62dad-d1cd-4f07-8751-1cf04f357aee",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "09089d146ec9648f3d2ad0be39cbd0479eb58caaff407704c2ae26fa9d146b17",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 15739,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-06-large-attachment",
+          "runId": "f1d77e5f-a53b-4b14-8405-7147a1c81160",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "75d5e0a6acdc8b09111ee437f4bdb7a724574c5b92cde32a438f95d7f59a8088",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 10581,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-07-delayed-memory",
+          "runId": "0ebf30b1-cfd8-4c24-ac07-55abf88ea95a",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "83bdd3cc8a3db13f0599a3d15ed213eb5f0d089714d2176bf061b6d9c76efff3",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 11874,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-08-two-reads",
+          "runId": "abbef893-009d-466f-a2b9-cb49fa662714",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "d97b55f0ed669b7687bc0b8d68ce4f5018ca45cdff91b7029733c5cc91c6ea17",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 9871,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "bb096ca5316329e783db297c8d904a8b5a26b031aa54bad326a5a6c5f69934f1",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "7ca1712d74b2872024aca447bdda80143db7ae324f5a333dd029349bae0f9191",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "bb096ca5316329e783db297c8d904a8b5a26b031aa54bad326a5a6c5f69934f1",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "7ca1712d74b2872024aca447bdda80143db7ae324f5a333dd029349bae0f9191",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-09-state-update",
+          "runId": "a83edca9-40ee-45c6-a02d-e3a2406ecf30",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "ceb49bf69a109e4fcbc5bfa4454ff93d40122caa38e38e8106db3aeab74d5b6a",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 5506,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-10-write-read",
+          "runId": "2e5d624d-8848-4ca6-b588-c6a5865e3e95",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "166f89e25e87582d49e4da3fa2d0645f44a8b8d69745223f4b3841b481de26c5",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 9645,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "powershell",
+              "callIdSha256": "3e27846d5cca85f302aaab9d967d81c9c1063b3ac6f9d8d82ef81af3a611e963",
+              "argumentsSha256": "037d62c46d7a1b68f13a15852bb727eab7246fc898acf2cfb1f1cc11d3f2867e"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "5895d9be57c08115b3257d0c4f47a23c3305470b81b852e202fced9698723558",
+              "argumentsSha256": "62a2d2ef853ffec36b7e8e197633ff568743a60f7376892f2170795beca3c39d"
+            }
+          ],
+          "results": [
+            {
+              "name": "powershell",
+              "callIdSha256": "3e27846d5cca85f302aaab9d967d81c9c1063b3ac6f9d8d82ef81af3a611e963",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "eff2906dc8f6d10da753f78c53bbb4c2fc0a1b4bc925c1ec535b5f42902a240a",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "5895d9be57c08115b3257d0c4f47a23c3305470b81b852e202fced9698723558",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "011ca31410ca0997959b4e5f1308cc3b13110bc2b991dde0b7d244b645c5a675",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-11-user-image",
+          "runId": "9140ce82-6baa-4e70-a8e1-6727b801f701",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "3832bd033050967955f9e4c01f38d022132541191cfeb7716a198a50d472136c",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7046,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [
+            {
+              "bytes": 10341,
+              "sha256": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136"
+            }
+          ],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-12-follow-up",
+          "runId": "24b331bb-8890-4133-8747-916dd68c483e",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "321abf6e034ba1c5629f9572631367b6a3eba146f0272597152465a017966703",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 5349,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-13-tool-image",
+          "runId": "ecaabd63-9a25-4152-ac4d-000cb1bcf137",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "019985914f08f8770c81e30adec165fb0e028954b9fdeba3f5726a96eae40694",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7377,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "9c0b081b4d24c3588ed6236cc0470410c442ea0b3d1a8e13252a9ae3fdf88aca",
+              "argumentsSha256": "8ed1b60796dbb63aa5edc0f127b82c0e155a46d61e6bdcd3c05f64bcd10e5e3f"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "9c0b081b4d24c3588ed6236cc0470410c442ea0b3d1a8e13252a9ae3fdf88aca",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "c8ac22445b3351cbfc02859a4ba2749892fa5d9b96b63aa4e61a7ea0acad650a",
+              "returnedImageCount": 1
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-14-history-recall",
+          "runId": "1fccdbde-8cd5-47c4-a184-2d0fb7c4c386",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "74cbdeeccfabf50546ccef79ef31c0343a4fe9a055dda3cf39b3ebf526373551",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 5686,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-15-second-attachment",
+          "runId": "6c77e6df-fad1-4040-b79f-9d9d1d3de2b1",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "22473dbcbd3e084724af8b9f11914d876e86bec0e63aa7ed9c200d165129aa2a",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 6046,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "82e1475af88951ba36ed30140c6637ead3541d19ff1454937ccd1b003302d7b4"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-16-grade-memory",
+          "runId": "35213df7-d1b8-41d5-9679-c80d7af9215b",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "e3be2045d7796b3ff9871269b37f118766ff514b74f5227e5756b30ea7a17c64",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 6239,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-17-shell-recovery",
+          "runId": "fc239d78-e62c-4822-a976-f1f9648664f0",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "ecd4c07d3c48ab6bddf8b6d89c4f6837c0eac6deda921af97b54e4452da49930",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 9411,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "powershell",
+              "callIdSha256": "5b6a0f1345e9298d05dca20ed38bf5f30f025c31ee6f43dc4e2936c4aea09df9",
+              "argumentsSha256": "11e851de40353689ad61e24944f673eede6b9fc9597e648d8165077a3845e04f"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "aa330a6c5ab43d13306b45c97e79b9a370c08f5b3ebadfdea7e4d72b5944c3ea",
+              "argumentsSha256": "62a2d2ef853ffec36b7e8e197633ff568743a60f7376892f2170795beca3c39d"
+            }
+          ],
+          "results": [
+            {
+              "name": "powershell",
+              "callIdSha256": "5b6a0f1345e9298d05dca20ed38bf5f30f025c31ee6f43dc4e2936c4aea09df9",
+              "status": "failed",
+              "hasError": false,
+              "textSha256": "8653eb37332725bc08af73fea8dfd57913b14270d156cbcee1c42562e582f4e2",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "aa330a6c5ab43d13306b45c97e79b9a370c08f5b3ebadfdea7e4d72b5944c3ea",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "011ca31410ca0997959b4e5f1308cc3b13110bc2b991dde0b7d244b645c5a675",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-18-unicode",
+          "runId": "4a545085-7fef-4ff0-923a-07c2f5d205ea",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "0173512281f9b78d9c9175ce0c3f9825d24e095670e1a2bec5bb4bcefe5236bd",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 5698,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-19-final-ledger",
+          "runId": "fa5c29f6-e193-4cf7-9bc9-cc02dd1cd554",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "b1f0a7416be54e2b30f320446763ab8a5914887df7d8d7ff81c564ce9fd16a21",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7608,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-20-checksum",
+          "runId": "0ad06713-0020-4ac9-affe-3f95b0a85c07",
+          "selection": {
+            "provider": "kiro",
+            "id": "auto",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "9442dc3db6b948b73fa827f6d2e53b4d204b1fd51b2bded961e334b3f0356d34",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7476,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "claude-sonnet-4.5",
+      "taskRef": "t4046",
+      "sessionIdSha256": "b6e68e5aa13eb7762d3395b31d45b43eec0b83ec15dddb6671e40e7a5909bf40",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 16,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 15,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 15,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "818a8066-ba5b-4e44-99d8-d1eebac64920",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "high"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "1e219536d893c1002d48adc30a104223e2653b83c631318bcd47d57d20724d2b",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 379,
+          "observedMs": 13206,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-02-read",
+          "runId": "fd196ba6-c96c-49f1-b6cb-404dfe6a2031",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "high"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "077dcae93daa68f1440a6d6eb1d5962a352d5f32e2c993d0054d106d1eaeec0b",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 667,
+          "observedMs": 22254,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "1303255e80460e4fa6e92c421f2cf22a8424752a12f66c599ada5fa4b18de42e",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "1303255e80460e4fa6e92c421f2cf22a8424752a12f66c599ada5fa4b18de42e",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-03-reasoning",
+          "runId": "37d227e1-700d-4f01-ae71-791d4fdb1671",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "high"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "2bb2527a2f3099f61586592954d6dbd4fec6ca49778b9113a82fc9eda7c61642",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 721,
+          "observedMs": 34210,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-04-error-recovery",
+          "runId": "aa4ab62a-05a6-4f0b-8743-efed98be8532",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "high"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "4f287724e2989cd48a989b50b387d895fd21eca2aa50890af6257bd4619a130c",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 15484,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "b170e010680ba612ccf783e4382ebfbff879a39b3c2678b4c0769a2d8751b245",
+              "argumentsSha256": "cd9ce990ae9d1068aa203139de617ed7266d5a6b01c9965aedb9fa70eae133e3"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "c872f05b3451ebcf54720229c1015f74d3aed180db8e318ee10b4804816dc681",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "b170e010680ba612ccf783e4382ebfbff879a39b3c2678b4c0769a2d8751b245",
+              "status": "failed",
+              "hasError": false,
+              "textSha256": "8ed3a95f7a24e172593f75f7afbf7ca3c446e625a82e9bde6d0863b55262d5f0",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "c872f05b3451ebcf54720229c1015f74d3aed180db8e318ee10b4804816dc681",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-05-off-memory",
+          "runId": "9d4a573a-61f7-441b-a171-9cc7fbbb78ac",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "f113ca60528a74402f13da135961068c1c40b59642464c076e35b550b3028f68",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 14231,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-06-large-attachment",
+          "runId": "a52b9137-f419-4b52-a304-bf2d3d6d0c9e",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "75d5e0a6acdc8b09111ee437f4bdb7a724574c5b92cde32a438f95d7f59a8088",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 9735,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-07-delayed-memory",
+          "runId": "d53700db-bc46-4da0-8d02-1b2c1fdd11ac",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "9f832bfceff1fc93874d31e30e6f0aafbff6b3a6b1dc532f8e3673e5cca4b1e1",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 14052,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-08-two-reads",
+          "runId": "817f418b-8994-425e-abd6-c9f478e0f96e",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "b9bb381038cd867f1555453f8ded2c09fe1ce45bfb3604e04ea4492b1ef8991d",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 11555,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "c48da59e69c912cba3cae34310e6b3ed3829e84a90227652994391baeebbe85b",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "55ed320b1fe0476dc5a410a916caf31593ad651eb2d8da2dd4080206746a45f0",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "c48da59e69c912cba3cae34310e6b3ed3829e84a90227652994391baeebbe85b",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "55ed320b1fe0476dc5a410a916caf31593ad651eb2d8da2dd4080206746a45f0",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-09-state-update",
+          "runId": "a4b118f4-4763-4640-8664-13a70afe17b6",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "minimal"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "ceb49bf69a109e4fcbc5bfa4454ff93d40122caa38e38e8106db3aeab74d5b6a",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7438,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-10-write-read",
+          "runId": "5f13acab-efd2-43f0-bbcc-afb75f77c60b",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "minimal"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "c301513c427fa4e177b1d9d488895514d138cf1e9495d5a0b581cd417e93594d",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 15317,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "powershell",
+              "callIdSha256": "89ae33d4025f3848d27bc3bad9d88d4cb157345ae450a6284a4cdcb611489dd5",
+              "argumentsSha256": "56a5c21bc8a42f1ff32c113ffad4ef2f9ed731a8fa06630a891b2a4440c71947"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "8933c650187ec90d8bd7de2823e98b4c1549c340dae883554211eb826abe131f",
+              "argumentsSha256": "64caff0875acd73613ca246a9d47b677ba441570ccfad71dc920a131666d97bd"
+            }
+          ],
+          "results": [
+            {
+              "name": "powershell",
+              "callIdSha256": "89ae33d4025f3848d27bc3bad9d88d4cb157345ae450a6284a4cdcb611489dd5",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "efefc15c24ee8645a3f5f6958389db729c1577eb6b32aeac4caab2a86d90daa3",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "8933c650187ec90d8bd7de2823e98b4c1549c340dae883554211eb826abe131f",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "86bd8be7bb01f9f535ba389490551e2e40f3471e207e26501737965040e4900e",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-11-user-image",
+          "runId": "44e7012b-af70-45e2-83d8-e7163d48c39b",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "minimal"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "bafbca6674f14292f10d683fea6b653e541bbf517d732ebdd2721b9d32ba3a8a",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 6883,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [
+            {
+              "bytes": 10341,
+              "sha256": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136"
+            }
+          ],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-12-follow-up",
+          "runId": "1bab8609-8ea6-4bfb-a1fb-ec3ae6a1b955",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "low"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "7feb7a1a5f6e7b55a36356ed277e3856e8330c12cccc7ddcfb297e4c810db4c6",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 6853,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-13-tool-image",
+          "runId": "6f35c034-a9df-454c-8c7c-f7a2f50d8c6b",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "low"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "f16bf8891b988c446ffec9e64d8131fdf63706550626140bfb1c339fa41c0f9d",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 11925,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "ee13fcf7c79dd7cd17b22c11bc365c1ec9132fc8ded856680f90f3a672a575c1",
+              "argumentsSha256": "8ed1b60796dbb63aa5edc0f127b82c0e155a46d61e6bdcd3c05f64bcd10e5e3f"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "ee13fcf7c79dd7cd17b22c11bc365c1ec9132fc8ded856680f90f3a672a575c1",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "c8ac22445b3351cbfc02859a4ba2749892fa5d9b96b63aa4e61a7ea0acad650a",
+              "returnedImageCount": 1
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-14-history-recall",
+          "runId": "53518264-1a58-4ea8-a624-69af13f337a9",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "low"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "60067eb32fc98848c594c3da09d9e07a04003a1a93c140bf02f5df7e9caabd6d",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7377,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-15-second-attachment",
+          "runId": "9b2798ee-2984-409a-a1a0-154253be1249",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "low"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "568a03901889e6caa4119b09a4b77328be9b24b7343e6dc9762adb6506e4909c",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 550,
+          "observedMs": 11672,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "82e1475af88951ba36ed30140c6637ead3541d19ff1454937ccd1b003302d7b4"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-16-grade-memory",
+          "runId": "9fb97b11-b260-458e-bc23-3f415471700f",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "medium"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 24805,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "claude-haiku-4.5",
+      "taskRef": "t4015",
+      "sessionIdSha256": "5f6a3547e3b9ef15be986a9fa365f0edf4cf552d73a02f3d4cab85ddefa5a008",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 1,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 0,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 0,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "d65b9f74-6dde-45f9-bd59-69fae897c4ef",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-haiku-4.5",
+            "thinking": "high"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 24461,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "deepseek-3.2",
+      "taskRef": "t4016",
+      "sessionIdSha256": "e445950c7a6a21f8e0ab1b9cba5f226d4abc7a5b5dea5295cfe908aef3bf26f0",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 11,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 10,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 10,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "1e219536d893c1002d48adc30a104223e2653b83c631318bcd47d57d20724d2b",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 42759,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-02-read",
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "ae15e2d7bf2d5d7c6aef3575bb8a98868421e1fd7dc7ad41f63d93b3894bb02a",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 17949,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "44995939f973559f279c6ef2d6c621041d5b140aa79d9a43091d89516d9884a4",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "44995939f973559f279c6ef2d6c621041d5b140aa79d9a43091d89516d9884a4",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-03-reasoning",
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "0dd20c076b4135cf8fe04fb071b9f82d78d3c710f5c1940523abf2472c169cd9",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 22092,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-04-error-recovery",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "5e87770ebc24970ed7a96fc2a46dac3290a667ab435e46e9b190a71bd90bd873",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 20404,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "31959803e06ce6baa1179e0766161d87a7817b04bceb31fd74f0c3aa1940ad4e",
+              "argumentsSha256": "f418ca5cfbda86d086f578da3745ef71b293c28e1d22c59eb9ffc564c68d3f10"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "50ecfc68a7d382fd384711c267300eacd9640b3b54966615edebbc872d7dcf30",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "31959803e06ce6baa1179e0766161d87a7817b04bceb31fd74f0c3aa1940ad4e",
+              "status": "failed",
+              "hasError": false,
+              "textSha256": "06dff959dc9111e01de50dd143f33eb7796ac0c08d6bf171deaee64235c20231",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "50ecfc68a7d382fd384711c267300eacd9640b3b54966615edebbc872d7dcf30",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-05-off-memory",
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "2578472d2387876cd836af6bac8a7e319a76dcb99a0a7585c914263f2dc9cbbd",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 7887,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-06-large-attachment",
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "9ffb2cb454035021838593481cebb57dcc692d7d05756dbbd6ac79bd89e47296",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 9459,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-07-delayed-memory",
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "da60f9bea3ec221acb7f6db83f3b2895e5b24a323ac98b50127c4b5cab08e01b",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 8111,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-08-two-reads",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "15eb5c550ecb9ed57e235b69e44da0ac68e4c52285e46335f84fc83a959a4865",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 18333,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "read",
+              "callIdSha256": "d8fb643e337702b7128d2b651bc34f23f9829fb93ba8fe06563e7336747290b2",
+              "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "71a2f7bb8a5bc0dd7938271262640eb736a84ae9a771f407ef4a522c92cd092b",
+              "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+            }
+          ],
+          "results": [
+            {
+              "name": "read",
+              "callIdSha256": "d8fb643e337702b7128d2b651bc34f23f9829fb93ba8fe06563e7336747290b2",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "71a2f7bb8a5bc0dd7938271262640eb736a84ae9a771f407ef4a522c92cd092b",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-09-state-update",
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "f21b19bb2263f1826bbe019ab7e849572c0d05588b47c8cd1b68917cd63f6463",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 10833,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-10-write-read",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "216525e5fb9f12197020016f4b4c4145b5105c7db2914bd54420dde1609c73e8",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 34202,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [
+            {
+              "name": "powershell",
+              "callIdSha256": "56382e8e04034f39c25bba4ffeafa3c8c13bcfef922f44a9fa219825fb481a9d",
+              "argumentsSha256": "ff1bc29d71713609bc249c7cc1560c1949adc55aed62841e356e217f30709ca4"
+            },
+            {
+              "name": "powershell",
+              "callIdSha256": "9bc62f20428f052c91595c1d4d2f31708e6e847a1c04ee3d1bd31d87c3eb929e",
+              "argumentsSha256": "58f823a56563b00cae5819a0dc22a3514569ed08b24f9a69c69c026e0db0828c"
+            },
+            {
+              "name": "read",
+              "callIdSha256": "c9b1a94ac381f3ee3e10a1c912e8f87348f5020759fadd21485a0b6d4c533e25",
+              "argumentsSha256": "f925238075fa37bcec1b597fbdb32e2948f5b3ab1841289d89699d32560d6c1f"
+            }
+          ],
+          "results": [
+            {
+              "name": "powershell",
+              "callIdSha256": "56382e8e04034f39c25bba4ffeafa3c8c13bcfef922f44a9fa219825fb481a9d",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "6ec0c357c90edf6c653017138767bea6ba0ab49b564210a42b46a46dd2370403",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "powershell",
+              "callIdSha256": "9bc62f20428f052c91595c1d4d2f31708e6e847a1c04ee3d1bd31d87c3eb929e",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "efefc15c24ee8645a3f5f6958389db729c1577eb6b32aeac4caab2a86d90daa3",
+              "returnedImageCount": 0
+            },
+            {
+              "name": "read",
+              "callIdSha256": "c9b1a94ac381f3ee3e10a1c912e8f87348f5020759fadd21485a0b6d4c533e25",
+              "status": "completed",
+              "hasError": false,
+              "textSha256": "550ce307103c8428a18fce967e9dce0360cfcc4013c25c0365fc4c18f1c701ab",
+              "returnedImageCount": 0
+            }
+          ],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-11-text-table",
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "selection": {
+            "provider": "kiro",
+            "id": "deepseek-3.2",
+            "thinking": "off"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 22203,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "minimax-m2.5",
+      "taskRef": "t4017",
+      "sessionIdSha256": "30b8d04090cca84400e9fc134b8c1475908cf2cf32a81fd72c461d895e0c1f01",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 1,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 0,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 0,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "6a1ad8e7-023f-488a-bcdb-b166be521cfb",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.5",
+            "thinking": "off"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 19270,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "minimax-m2.1",
+      "taskRef": "t4018",
+      "sessionIdSha256": "486b2902f912ee36eb42dcc1704c51cbe62b70d7dd9f5199e3619fd8cff476d8",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 7,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 7,
+      "protocolFailureRoundCount": 0,
+      "rateLimitedRoundCount": 0,
+      "semanticPassed": false,
+      "semanticFailureCount": 4,
+      "checkedRoundCount": 7,
+      "uncheckedRoundCount": 0,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "0b39bc6c-eb9e-4914-a498-e19831133198",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "bbb27710373d9b67333006b58c06ab2c590975b2ebe6a7ae783a0de238a23f28",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 122,
+          "observedMs": 4900,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-02-read",
+          "runId": "f499bee8-a835-4285-a355-2d5f6109f5c7",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "c926ee6a9bbeb802545be94b77982e690e9bc5af17471d478b439598dd328e0d",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 205,
+          "observedMs": 19323,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": false,
+            "category": "required-real-tool-evidence",
+            "errorSha256": "d85221c07b6c815e2246805586fc122c7b545206789dbab9499eaa59ac1fb2ce"
+          }
+        },
+        {
+          "label": "long-03-reasoning",
+          "runId": "56f4b672-d278-4d74-af56-3615359c2c8a",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "2412e5eba4fdb7a97551cb0b317c6d2f7781a7c30d3fcc4608c907879c5da107",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 361,
+          "observedMs": 41525,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": false,
+            "category": "semantic-assertion",
+            "errorSha256": "39c27f54e3b1c2a6d7f008060eff1d6df35d002aeea67bc17f07ab7d19e27d01"
+          }
+        },
+        {
+          "label": "long-04-error-recovery",
+          "runId": "e2bf88db-4bd7-4285-bbe0-3a1b07c69a73",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "bcc36146467f4d09873f5927cdb7f1c88986ee4111f483120459d1db7b2787b0",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 134,
+          "observedMs": 22385,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": false,
+            "category": "required-real-tool-evidence",
+            "errorSha256": "d85221c07b6c815e2246805586fc122c7b545206789dbab9499eaa59ac1fb2ce"
+          }
+        },
+        {
+          "label": "long-05-off-memory",
+          "runId": "94a9d276-5105-42f7-a12e-17a016a33db3",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "bf9ad16f35704efa2041ab1731b508bed7c7b60d43b3d4609c5aa9043d505fb0",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 416,
+          "observedMs": 13685,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": false,
+            "category": "semantic-assertion",
+            "errorSha256": "71e3c6326265f45c726771b9d9fad89a602160c466240336e078ba053fb3eda1"
+          }
+        },
+        {
+          "label": "long-06-large-attachment",
+          "runId": "6595b092-e314-4dfa-bc2d-05c455b9967a",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "598341f26f28f8b8ce9b126ad87dbc26b7df1af88086dccbf09127777456d2d0",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 315,
+          "observedMs": 20859,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [
+            {
+              "bytes": 73395,
+              "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+            }
+          ],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        },
+        {
+          "label": "long-07-delayed-memory",
+          "runId": "3e16616f-cecf-4199-9a96-7bcaf5bb016b",
+          "selection": {
+            "provider": "kiro",
+            "id": "minimax-m2.1",
+            "thinking": "off"
+          },
+          "status": "completed",
+          "protocolError": null,
+          "answerSha256": "f5bab964ac7e0b96480953b7124297ce743068f34b54ee9d8fcf8cf5816371f9",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 145,
+          "observedMs": 7450,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": {
+            "passed": true
+          }
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "glm-5",
+      "taskRef": "t4019",
+      "sessionIdSha256": "1f8b0fd8df6ba46ee81cd3173ed1c05343ec516ab9be2c090242c35559901020",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 1,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 0,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 0,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "78031b9a-2cc5-417f-81a9-f336bb25afb9",
+          "selection": {
+            "provider": "kiro",
+            "id": "glm-5",
+            "thinking": "off"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 19532,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    },
+    {
+      "model": "qwen3-coder-next",
+      "taskRef": "t4020",
+      "sessionIdSha256": "607ea2d1c6652d48fa771e02740f784b1e4003ddd1d93382867f830f3b5e950e",
+      "harness": {
+        "version": "v1",
+        "inferredLegacy": true,
+        "controlledPrompts": false,
+        "promptCorrelation": "new-terminal-run",
+        "paceMs": null
+      },
+      "complete": false,
+      "matrixRoundCount": 1,
+      "protocolCompleted": false,
+      "protocolCompletedRoundCount": 0,
+      "protocolFailureRoundCount": 1,
+      "rateLimitedRoundCount": 1,
+      "semanticPassed": false,
+      "semanticFailureCount": 0,
+      "checkedRoundCount": 0,
+      "uncheckedRoundCount": 1,
+      "formatCheckedRoundCount": 0,
+      "formatFailureCount": 0,
+      "formatPassed": null,
+      "defaultsUnchangedVerifiedByDriver": false,
+      "completedAt": null,
+      "observerFailure": null,
+      "rounds": [
+        {
+          "label": "long-01-seed",
+          "runId": "fe170408-e8b9-44f6-8cf3-309a092345a6",
+          "selection": {
+            "provider": "kiro",
+            "id": "qwen3-coder-next",
+            "thinking": "off"
+          },
+          "status": "failed",
+          "protocolError": {
+            "category": "upstream-rate-or-quota-429",
+            "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+          },
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "answerHasPriorReasoningWrapper": false,
+          "thinkingLength": 0,
+          "observedMs": 19161,
+          "promptCorrelation": null,
+          "format": null,
+          "promptImages": [],
+          "attachments": [],
+          "calls": [],
+          "results": [],
+          "unmatchedCallCount": 0,
+          "semanticCheck": null
+        }
+      ],
+      "supplementalTurns": []
+    }
+  ]
+}

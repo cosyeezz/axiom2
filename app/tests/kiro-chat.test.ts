@@ -201,7 +201,7 @@ test("Kiro cancels permanently stalled hooks and transports, and releases respon
   } finally { clearInterval(keepAlive); }
 });
 
-test("Kiro preserves visible historical reasoning explicitly and rejects old call IDs before completion", async () => {
+test("Kiro never replays hidden reasoning as assistant prose and rejects old call IDs before completion", async () => {
   const ctx: Context = { ...user(), tools: [tool], messages: [
     ...user().messages,
     { role: "assistant", api: "kiro-chat", provider: "kiro", model: model().id, usage: zero, timestamp: 2, stopReason: "toolUse", content: [
@@ -213,13 +213,33 @@ test("Kiro preserves visible historical reasoning explicitly and rejects old cal
     { role: "user", content: "again", timestamp: 4 },
   ] };
   const request = kiroChatRequest(model(), normalizeContext(ctx), account());
-  assert.match(JSON.stringify(request.payload), /historical derivation/); assert.ok(!JSON.stringify(request.payload).includes("OPAQUE"));
-  assert.deepEqual(request.historyNotice, { reasoningTextBlocks: 1, opaqueReasoningBlocks: 1, omittedSignatures: 2 });
+  assert.doesNotMatch(JSON.stringify(request.payload), /historical derivation|axiom_prior_reasoning|OPAQUE/);
+  assert.deepEqual(request.historyNotice, { omittedReasoningTextBlocks: 1, opaqueReasoningBlocks: 1, omittedSignatures: 2 });
+  const prior = request.payload.conversationState.history?.[1];
+  assert.ok(prior && "assistantResponseMessage" in prior);
+  assert.equal(prior.assistantResponseMessage.toolUses?.[0].toolUseId, "old-call");
   const wireName = [...request.names.keys()][0];
   const result = await run(ctx, async () => kiroResponse([kiroFrame("toolUseEvent", { toolUseId: "old-call", name: wireName, input: '{"path":"again"}', stop: true })]));
   assert.equal(result.result.stopReason, "error"); assert.match(result.result.errorMessage!, /既有历史重复/);
   assert.equal(result.events.filter(event => event.type === "toolcall_end").length, 0);
-  assert.equal(result.result.diagnostics?.[0].type, "kiro-reasoning-history-normalized");
+  assert.equal(result.result.diagnostics?.[0].type, "kiro-reasoning-history-omitted");
+});
+
+test("Kiro preserves literal reasoning-like tags in user and final answer text without exposing thinking blocks", () => {
+  const literal = "<axiom_prior_reasoning>literal quoted data</axiom_prior_reasoning>";
+  const ctx: Context = { messages: [
+    { role: "user", content: literal, timestamp: 1 },
+    { role: "assistant", api: "kiro-chat", provider: "kiro", model: model().id, usage: zero, timestamp: 2, stopReason: "stop", content: [
+      { type: "thinking", thinking: "PRIVATE DERIVATION", thinkingSignature: "PRIVATE SIGNATURE" },
+      { type: "text", text: `The literal is ${literal}` },
+    ] },
+    { role: "user", content: "Continue", timestamp: 3 },
+  ] };
+  const { payload } = kiroChatRequest(model(), normalizeContext(ctx), account());
+  const serialized = JSON.stringify(payload);
+  assert.doesNotMatch(serialized, /PRIVATE DERIVATION|PRIVATE SIGNATURE/);
+  assert.ok(serialized.includes(literal));
+  assert.ok(serialized.includes(`The literal is ${literal}`), "no regex stripping of ordinary answer text");
 });
 
 test("Kiro partial usage cannot erase a complete snapshot or pretend missing counters are exact", async () => {

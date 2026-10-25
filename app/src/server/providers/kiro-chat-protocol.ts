@@ -64,7 +64,8 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
   });
   if (tools.length > 1024) throw new KiroChatError("Kiro 工具数量超过本地限制。");
   const wire: WireMessage[] = [], pending = new Map<string, string>(), seenCalls = new Set<string>();
-  const historyNotice = { reasoningTextBlocks: 0, opaqueReasoningBlocks: 0, omittedSignatures: 0 };
+  const historyNotice = { omittedReasoningTextBlocks: 0, opaqueReasoningBlocks: 0, omittedSignatures: 0 };
+  const interruptionNotice = { omittedToolCalls: 0 };
   for (const message of collapsed.messages) {
     if (message.role === "system") continue;
     if (message.role === "assistant") {
@@ -78,10 +79,13 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
         if (block.thinkingSignature) historyNotice.omittedSignatures++;
         if (block.redacted) { historyNotice.opaqueReasoningBlocks++; return []; }
         if (!block.thinking) return [];
-        historyNotice.reasoningTextBlocks++;
-        // Native reasoning fields exist, but the current CLI replay policy is not yet
-        // verified. Retain visible context without fabricating a signature.
-        return [`<axiom_prior_reasoning>\n${block.thinking}\n</axiom_prior_reasoning>`];
+        historyNotice.omittedReasoningTextBlocks++;
+        // Thinking is not ordinary assistant prose. Replaying it as text made the
+        // live service imitate our private history wrapper in subsequent answers,
+        // especially after changing thinking levels. Keep it in the local transcript
+        // only until native reasoning/signature replay has a verified contract.
+        // User messages, final answers and tool calls/results remain lossless.
+        return [];
       }).join("\n");
       const toolUses = message.content.filter(block => block.type === "toolCall").map(block => {
         if (!kiroText(block.id, 256) || !kiroText(block.name, 256) || seenCalls.has(block.id)) throw new KiroChatError("Kiro 历史工具调用标识无效或重复。");
@@ -94,7 +98,21 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
         if (toolUses.length) last.assistantResponseMessage.toolUses = [...last.assistantResponseMessage.toolUses ?? [], ...toolUses];
       } else if (content || toolUses.length) wire.push({ assistantResponseMessage: { content, ...(toolUses.length ? { toolUses } : {}) } });
     } else if (message.role === "user") {
-      if (pending.size) throw new KiroChatError("Kiro 历史中存在未完成的工具结果；请重试或开启新会话。");
+      if (pending.size) {
+        // Cancelling a running tool can leave its completed assistant call in the
+        // native transcript without a result. A new user turn closes that flow.
+        // Omit only outstanding wire calls, never fabricate a result or edit local
+        // history. Paired calls/results and ordinary assistant prose stay intact.
+        const index = wire.findLastIndex(item => "assistantResponseMessage" in item), prior = wire[index];
+        if (!prior || !("assistantResponseMessage" in prior)) throw new KiroChatError("Kiro 未完成的工具调用缺少助手消息。");
+        const assistant = prior.assistantResponseMessage;
+        const paired = (assistant.toolUses ?? []).filter(call => !pending.has(call.toolUseId));
+        if (paired.length) assistant.toolUses = paired;
+        else delete assistant.toolUses;
+        if (!assistant.content && !paired.length) wire.splice(index, 1);
+        interruptionNotice.omittedToolCalls += pending.size;
+        pending.clear(); // Keep seenCalls: an omitted call ID is still historical.
+      }
       const { texts, images } = inputContent(message.content), content = texts.join("\n"), last = wire.at(-1);
       if (last && "userInputMessage" in last) {
         last.userInputMessage.content += "\n\n" + content;
@@ -132,7 +150,7 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
   if (tools.length) (current.userInputMessage.userInputMessageContext ??= {}).tools = tools;
   const conversationId = sessionId ? createHash("sha256").update("axiom-kiro-conversation\0" + sessionId).digest("hex").slice(0, 32).replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5") : randomUUID();
   const payload = { conversationState: { conversationId, chatTriggerType: "MANUAL", currentMessage: current, ...(wire.length ? { history: wire } : {}) }, ...(account.profileArn ? { profileArn: account.profileArn } : {}) };
-  return { payload, names, seenCalls, historyNotice };
+  return { payload, names, seenCalls, historyNotice, interruptionNotice };
 }
 
 export function kiroChatEndpoint(account: KiroCredential) { return `https://runtime.${kiroServiceRegion(account)}.kiro.dev/`; }

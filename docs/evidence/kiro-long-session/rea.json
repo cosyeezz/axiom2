@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "phase": "shipped-kiro-cli-comparison",
+  "target": {
+    "version": "2.12.0",
+    "bytes": 528630968,
+    "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+    "authenticodeReverified": false
+  },
+  "analysis": {
+    "reaVersion": "6.8.0",
+    "provider": "Ghidra 12.1.4",
+    "targetExecuted": false,
+    "modelRequestsMade": false,
+    "directedSliceCount": 4,
+    "wholeExecutableColdImported": false
+  },
+  "evidence": [
+    {
+      "slice": "caller1",
+      "exitCode": 0,
+      "id": "ev_6c9e64b61ab79a5b49824b5138b7c79117b4e18175feb930be9d5b89f2569f10"
+    },
+    {
+      "slice": "caller2",
+      "exitCode": 0,
+      "id": "ev_68d1cce8b12d3b8792fcf2e76e82e461825102330cf6f312268ebc7d5b81759e"
+    },
+    {
+      "slice": "iterator-v2",
+      "exitCode": 0,
+      "id": "ev_26d8f29eb60556e8566dbbb4959d0956c49ef52210432338477e6cc546125002"
+    },
+    {
+      "slice": "dispatch-v2",
+      "exitCode": 0,
+      "id": "ev_5619bf84a5c84f360792703b3110e49abcdb62455ff87ab540572c0a5df94938",
+      "decompilerWarnings": true,
+      "policyInferredFromItsPseudocode": false
+    }
+  ],
+  "confirmed": [
+    {
+      "claim": "The shipped caller contains native reasoning text/signature/redacted conversion, separate from normal content and tools.",
+      "addresses": [
+        "0x14314a500",
+        "0x1432500e0",
+        "0x14310d9d0",
+        "0x1432020c0",
+        "0x143226710",
+        "0x140c00f30",
+        "0x1428c7d40"
+      ]
+    },
+    {
+      "claim": "The serializers contain branches that omit reasoningContent or signature; this does not establish all server acceptance conditions.",
+      "addresses": [
+        "0x140bae5a0",
+        "0x140b80196–0x140b801c2"
+      ]
+    }
+  ],
+  "decision": "Omit hidden reasoning from ordinary assistant text in AXIOM wire history; preserve normal content and paired tools without guessing opaque/signature replay.",
+  "notEstablished": [
+    "Official CLI always discards reasoning.",
+    "Complete behavioral equivalence with official history policy.",
+    "Response collection through persistence and thinking-grade-switch cleanup.",
+    "All signature replay requirements, retries, caching or billing behavior."
+  ],
+  "contentPolicy": {
+    "originalDecompilerFiles": "not published",
+    "targetLocalPath": "omitted",
+    "credentials": "not read",
+    "thinkingAndSignatures": "not published"
+  }
+}

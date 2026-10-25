@@ -246,7 +246,8 @@ test("Kiro real Agent forwards each grade through an image/tool loop, with no to
       }
       assert.deepEqual(s.currentMessage.userInputMessage.images, [{ format: "png", source: { bytes: "AA==" } }]);
       assert.equal(s.currentMessage.userInputMessage.userInputMessageContext.toolResults[0].toolUseId, "call");
-      assert.match(s.history[1].assistantResponseMessage.content, /inspect image/);
+      assert.equal(s.history[1].assistantResponseMessage.content, "", "private thinking is not replayed as ordinary assistant prose");
+      assert.equal(s.history[1].assistantResponseMessage.toolUses[0].toolUseId, "call");
       return kiroResponse([kiroFrame("assistantResponseEvent", { content: "<thinking>checked</thinking>\n\nDone" })], 1);
     } }) });
     await agent.prompt("Inspect", [image]);
@@ -254,6 +255,52 @@ test("Kiro real Agent forwards each grade through an image/tool loop, with no to
     const last = agent.state.messages.at(-1)!; assert.equal(last.role, "assistant");
     if (last.role === "assistant") { assert.equal(last.stopReason, damaged ? "error" : "stop"); assert.equal(last.thinkingLevel, "high"); }
   }
+});
+
+test("Kiro 24-turn mixed-grade Agent history keeps answers and image/tool pairs but never replays private thinking", async () => {
+  const models = await setup(), target = model("claude-sonnet-4.5");
+  const image = { type: "image" as const, mimeType: "image/png", data: "AA==" };
+  let turnNumber = 0, requests = 0, executions = 0, conversationId: string | undefined;
+  const grades = ["high", "off", "minimal", "low", "medium"] as const;
+  const agent = new Agent({ sessionId: "kiro-long-regression", initialState: { model: target, systemPrompt: "Full Axiom policy", tools: [{
+    name: "read", label: "read", description: "read", parameters: Type.Object({}), execute: async () => {
+      executions++; return { content: [{ type: "text" as const, text: "image tool result" }, image], details: {} };
+    },
+  }] }, streamFn: (m, c, options) => models.streamSimple(m, c, { ...options, fetch: async (_url, init) => {
+    requests++;
+    const payload = JSON.parse(String(init?.body)), state = payload.conversationState;
+    const serialized = JSON.stringify(payload);
+    assert.doesNotMatch(serialized, /private derivation|PRIVATE-SIGNATURE|axiom_prior_reasoning/);
+    assert.match(serialized, /Full Axiom policy/);
+    if (conversationId) assert.equal(state.conversationId, conversationId);
+    conversationId = state.conversationId;
+    if (turnNumber > 1) assert.ok(serialized.includes(`Answer ${turnNumber - 1}`), "the previous final answer survives grade changes");
+    const user = state.currentMessage.userInputMessage;
+    if (turnNumber % 4 === 0 && !user.userInputMessageContext?.toolResults?.length) {
+      return kiroResponse([
+        kiroFrame("reasoningContentEvent", { text: `private derivation ${turnNumber}`, signature: "PRIVATE-SIGNATURE" }),
+        kiroFrame("toolUseEvent", { toolUseId: `call-${turnNumber}`, name: "read", input: "{}", stop: true }),
+      ], 1);
+    }
+    if (user.userInputMessageContext?.toolResults?.length) {
+      assert.equal(user.userInputMessageContext.toolResults[0].toolUseId, `call-${turnNumber}`);
+      assert.deepEqual(user.images, [{ format: "png", source: { bytes: "AA==" } }]);
+    }
+    return kiroResponse([kiroFrame("assistantResponseEvent", {
+      content: (options?.reasoning ? `<thinking>private derivation ${turnNumber}</thinking>\n\n` : "") + `Answer ${turnNumber}`,
+    })], 1);
+  } }) });
+  for (turnNumber = 1; turnNumber <= 24; turnNumber++) {
+    agent.state.thinkingLevel = grades[(turnNumber - 1) % grades.length];
+    await agent.prompt(`User turn ${turnNumber}`, turnNumber % 3 === 0 ? [image] : undefined);
+    const last = agent.state.messages.at(-1)!;
+    assert.equal(last.role, "assistant");
+    if (last.role === "assistant") {
+      assert.equal(last.stopReason, "stop", last.errorMessage);
+      assert.equal(last.content.filter(block => block.type === "text").map(block => block.text).join(""), `Answer ${turnNumber}`);
+    }
+  }
+  assert.equal(requests, 30); assert.equal(executions, 6);
 });
 
 test("Kiro catalog/cache restoration upgrades adapter thinking metadata without changing vision or issuing offline requests", async () => {

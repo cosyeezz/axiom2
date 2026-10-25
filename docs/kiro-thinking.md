@@ -17,7 +17,7 @@
 
 | 兼容配置 | 默认可选等级 | 实际发送 |
 | --- | --- | --- |
-| 预算模式：精确 `claude-sonnet-3.7`、`claude-sonnet-4`、`claude-opus-4`、`claude-opus-4.1`、`claude-sonnet-4.5`、`claude-haiku-4.5`、`claude-opus-4.5`、`claude-sonnet-4.8` | off / minimal / low / medium / high | 首条真实 user 文本增加 enabled 及 token 预算标签；不发原生 effort |
+| 预算模式：精确 `claude-sonnet-3.7`、`claude-sonnet-4`、`claude-opus-4`、`claude-opus-4.1`、`claude-sonnet-4.5`、`claude-haiku-4.5`、`claude-opus-4.5`、`claude-sonnet-4.8` | off / minimal / low / medium / high | 首条 wire 用户消息文本增加 enabled 及 token 预算标签；不发原生 effort |
 | `claude-sonnet-4.6` | off / low / medium / high | adaptive 标签及 `additionalModelRequestFields.output_config.effort` |
 | `claude-opus-4.6` | off / low / medium / high / max | 同上；不把 xhigh 静默降成 high |
 | 精确 `claude-opus-4.7`、`claude-opus-4.8`、`claude-sonnet-5`、`claude-sonnet-5.5`、`claude-opus-5`、`claude-opus-5.5`、`claude-fable-5`、`claude-mythos-5` | off / low / medium / high / xhigh / max | 同上 |
@@ -64,7 +64,7 @@ GPT 示例：
 
 Pi Agent 将 off 传为自有属性 `reasoning:undefined`。Claude off 不新增标签或原生 effort，不从 ID 的 thinking 后缀强制开启，也不删除用户原文中引用的标签；这表示**没有请求额外思考控制**，不保证服务默认永不自行推理。GPT 显式 off 发送原生 `reasoning.effort:"none"`；裸 SDK 请求完全不提供 reasoning 属性时保留服务默认。服务主动发送的原生思考事件仍正常显示。
 
-控制只注入新建 wire payload 的首条真实 user：即使系统提示缺失或空也生效。保留完整 `<axiom_system>`、原始历史/图片/工具及顺序，不伪造助手确认、不植入第三方身份提示、不修改宿主 transcript；下一轮不会累计注入。
+控制只注入新建 wire payload 的首条 `userInputMessage`：即使系统提示缺失或空也生效。这里指协议结构，不验证消息是否来自真人。保留完整 `<axiom_system>`；按下述思考省略、失败 assistant 跳过及未配对调用清理规则构造 wire 历史，保留其余正文、图片和已配对工具的顺序。不伪造助手确认、不植入第三方身份提示、不修改宿主 transcript；下一轮不会累计注入。
 
 ## 响应思考处理
 
@@ -75,7 +75,15 @@ Pi Agent 将 off 传为自有属性 `reasoning:undefined`。Claude off 不新增
 - 未闭合块在工具或正常流尾保留为 thinking 并记诊断，不捏造正文空格、签名或 `max_tokens` 原因。只有思考而无有效正文/完整工具的回复仍按原空回复保护失败。
 - 工具仍只来自正式工具事件；XML 文本不能创建或执行工具。CRC、schema、工具结束/ID、完整流校验、固定端点、一次性票据、10 MiB 完整请求预算及取消不变。
 
-**完整签名思考历史续接未在本轮实现。** 原有可见历史思考仍转为明确标记的普通 assistant 上下文；opaque/signature 不回传且记录诊断。启用思考配置不等于已完全对齐官方 CLI 的历史回放、重试、缓存、错误恢复或计费行为。
+**完整签名思考历史续接尚未实现。** 真实多轮测试发现，把历史思考包装成普通 assistant 正文会诱发后续模型将其当作答案模板，导致思考泄漏到正文。现已停止这种降级：本地 transcript 继续保留思考文本及签名，远端历史仅发送正常答案、工具调用和结果，省略所有 thinking 块及其 opaque/signature，并以 `kiro-reasoning-history-omitted` 记录数量。用户或正常答案中引用的同名标签属于普通文字，不被正则清洗。该保守隔离不等于官方 CLI 原生签名回放契约已恢复，也不表示已完全对齐其重试、缓存或计费行为。
+
+## 取消工具后的历史恢复
+
+工具执行阶段发生中断后，本地原生历史可能保留 assistant 工具调用，却没有对应结果。适配器在遇到下一条归一化后的 `role:"user"` 消息时，仅从远端 wire 历史省略仍未配对的调用，并记录 `kiro-interrupted-tools-omitted` 及 `omittedToolCalls`。这个边界可能来自真人、合成输入或上游转换的 custom/摘要消息；适配器不验证来源，也不证明发生了取消。诊断数量仅表示被省略的调用数。
+
+该兼容策略不伪造工具成功或失败结果，不改写本地 transcript。已经配对的调用和实际结果、其余普通正文、用户图片和工具图片仍然保留；已省略调用的 ID 继续受历史去重保护。`stopReason` 为 `error` 或 `aborted` 的 assistant 消息在 pending 检查前整体跳过，不登记其中的调用，也不关闭先前 pending；其他 assistant 跨越未配对调用仍报错。system 消息不构成恢复边界。
+
+没有后续归一化 user 边界的未完成调用、被省略调用的迟到结果、孤立结果及重复调用 ID 仍会明确失败。省略调用不证明工具未执行或没有副作用，不能据此推断可以安全重试。端到端取消、恢复及资源重载的实际验证见[长会话验收](evidence/kiro-long-session/README.md)。
 
 ## 可复核来源
 

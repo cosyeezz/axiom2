@@ -1,0 +1,539 @@
+{
+  "schemaVersion": 1,
+  "phase": "final-offline-verification",
+  "generatedAt": "2026-10-25T22:27:59.497Z",
+  "platform": "win32",
+  "node": "v24.19.0",
+  "integrationBaseCommit": "739146f57bb95d9e023e2e3820812bb4e12269a1",
+  "supersedes": "verification-v2.json",
+  "previousSnapshotSha256": "b8c98ec05cd01452711cb38facdd5930071dc89586d8e5dfa5e0ac0f8bce7660",
+  "realModelMatrixComplete": false,
+  "remainingExternalBlocker": "Sonnet round 17 and one bounded followup failed HTTP 429; no further Kiro inputs were sent.",
+  "countPolicy": "Check groups overlap and must not be summed. Unit/mock/build/syntax evidence does not replace real AXIOM model runs. Local raw logs are retained, not published.",
+  "preservedFailureHistory": [
+    {
+      "id": "wrong-test-filename-preflight",
+      "status": "not-run",
+      "recordSha256": "dff4fe84dfdc29b1cb5e13700b3290bf257a0266c8ba7f11e54b30f90b40e748",
+      "resolvedBy": "compatibility"
+    },
+    {
+      "id": "first-hardening-types",
+      "exitCode": 2,
+      "logSha256": "15b15d31d645b6fde2920342976ecd09b1f23f326dd1216e14493df96060b037",
+      "resolvedBy": [
+        "native-proof-and-corrected-interruption",
+        "complete-delivery-build",
+        "final-types"
+      ]
+    },
+    {
+      "id": "first-cached-diff-whitespace",
+      "exitCode": 2,
+      "logSha256": "6b6074dfb774e683cc4ba25907237f51f518b12ed0b11771ea49f290f076bb9c",
+      "scope": "Three new tests had an extra blank line at EOF; only those blank lines were removed.",
+      "resolvedBy": "final-eof-byte-scope"
+    },
+    {
+      "id": "initial-review-ast-fixture-contract",
+      "exitCode": 1,
+      "logSha256": "db3916df20aef33b004d95ab5a6e0a9035035daf9d177fe8e9488d40170014b9",
+      "sourceSha256": {
+        "plan": "12de8f9ad94f7b45793251d409a931684cb34639bd3d8f9a776c3d10c32683d7",
+        "planTest": "8a4723ece916a94c36c704d6070f942a732b6d20ccd573c0d7ba2fdcba37e8a7"
+      },
+      "resolvedBy": "final-review-plan-and-cli",
+      "scope": "Offline harness and test correction; original model scores unchanged."
+    },
+    {
+      "id": "upstream-doc-parity-exception",
+      "exitCode": 1,
+      "logSha256": "f7f8c0be1c810fccf7a87556be1273144ec489fc4f301d02d1c52fd330e095a4",
+      "scope": "Local export preflight, not a model/protocol test.",
+      "resolvedBy": "current-manifest-export"
+    },
+    {
+      "id": "synthetic-unit-fixture-path",
+      "exitCode": 1,
+      "logSha256": "9c054da452642df90b4142f35a994870ef9f61e08ccfdaab28d86d28a7335e0d",
+      "scope": "Local export preflight, not a model/protocol test.",
+      "resolvedBy": "current-manifest-export"
+    },
+    {
+      "id": "overbroad-json-key-guard",
+      "exitCode": 1,
+      "logSha256": "bd79f5fbc67f7e7354e9605917b3e407ed91d36508c03ca43759a9a58849e976",
+      "scope": "Local export preflight, not a model/protocol test.",
+      "resolvedBy": "current-manifest-export"
+    },
+    {
+      "id": "utf8-bom-in-synthetic-json-fixture",
+      "exitCode": 1,
+      "logSha256": "576b18ab03ea2c6e2f64b6c9fa484cd813d16fa0c82e8756d3fbbd33d6f80d4d",
+      "scope": "Local export preflight, not a model/protocol test.",
+      "resolvedBy": "current-manifest-export"
+    }
+  ],
+  "checks": [
+    {
+      "id": "historical-integrated-kiro-baseline",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-auth.test.ts tests/kiro-callback.test.ts tests/kiro-catalog.test.ts tests/kiro-chat.test.ts tests/kiro-images.test.ts tests/kiro-interrupted-history.test.ts tests/kiro-live-evidence.test.ts tests/kiro-live-plan.test.ts tests/kiro-pooling.test.ts tests/kiro-runtime.test.ts tests/kiro-thinking.test.ts",
+      "exitCode": 0,
+      "total": 146,
+      "passed": 146,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "9f35868d7d1070be6fb231f0a32ccd0c4bf955c2e22ea3958d0da89cbec29806",
+      "scopeNote": "Historical 11-file baseline before later harness/test hardening; not a fresh complete-suite run of the final scripts.",
+      "commandEvidence": "Reproducible file-scope command; exact historical flags were not retained in the numeric exit-code record."
+    },
+    {
+      "id": "compatibility",
+      "command": "node --import tsx --test --test-concurrency=1 tests/model-default.test.ts tests/models.test.ts tests/model-runtime.test.ts tests/process-owner-record.test.ts tests/theme.test.ts",
+      "exitCode": 0,
+      "total": 41,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 6,
+      "logSha256": "1e44bf1c9aad4ed57ac684d71c03beab7ff31543ce3acf7503eba08d5cfefa07",
+      "scopeNote": "Six Linux-only cases skipped on Windows.",
+      "commandEvidence": "Reproducible file-scope command; exact historical flags were not retained in the numeric exit-code record."
+    },
+    {
+      "id": "curator-and-interruption-hardening",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-interrupted-history.test.ts tests/kiro-live-evidence.test.ts",
+      "exitCode": 0,
+      "total": 34,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "7d8f6bb6ab4bc89c7fd7c1b4b96792ab2b7c85c43ed2cb10b1af506784aa2d2d",
+      "scopeNote": "The initial associated typecheck failed; the corrected interruption test is covered below.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "native-proof-and-corrected-interruption",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-interrupted-history.test.ts tests/kiro-live-native-proof.test.ts",
+      "exitCode": 0,
+      "total": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "d04514edfec7311ef9672ee8a5d3e99cf4e09b62b00e4c6d205184238443567a",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "full-input-cli-configuration-and-no-overwrite",
+      "command": "node --import tsx --test tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts tests/kiro-live-safety.test.ts",
+      "exitCode": 0,
+      "total": 59,
+      "passed": 59,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "b5a016d39acd72f176e85e1e56b71c2c7b1d08c875e87c9eb431cf69c13a5d95",
+      "scopeNote": "51 plan + 6 identity/path configuration + 2 CLI safety cases. Followed by one prompt-only edit and its affected check below.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "final-prompt-no-supplied-repair-answer",
+      "command": "node --import tsx --test tests/kiro-live-plan.test.ts",
+      "exitCode": 0,
+      "total": 51,
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "89277429ecaff9ff865bd5c6de2fc27c41fc1acf83256227884330bf78ab9114",
+      "scopeNote": "Final prompt removes the reduce initial-value hint; no final real-model matrix rerun.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "final-synthetic-unit-paths",
+      "command": "node --import tsx --test tests/kiro-live-plan.test.ts",
+      "exitCode": 0,
+      "total": 51,
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "68ffc3c42b6b26b5d278f5f692e1b0471fd5430defe3584622cf432e9bc4c1c9",
+      "scopeNote": "Only a test fixture path changed from a real repository path to a synthetic Windows path; final production MJS unchanged.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "pre-review-types",
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "first-review-hardening-attempt",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts tests/kiro-live-safety.test.ts tests/kiro-live-evidence.test.ts",
+      "exitCode": 1,
+      "total": 84,
+      "passed": 83,
+      "failed": 1,
+      "skipped": 0,
+      "logSha256": "db3916df20aef33b004d95ab5a6e0a9035035daf9d177fe8e9488d40170014b9",
+      "scopeNote": "Initial four-file run failed: positive AST fixture used the wrong record shape; the negative AST fixture also caught an unrelated TypeError. Corrected tests and adversarial AST/sentinel cases are covered below. The 3 safety and 18 curator cases passed here and their source/dependencies are unchanged.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "final-review-plan-and-cli",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts",
+      "exitCode": 0,
+      "total": 63,
+      "passed": 63,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "8b53f9a2bcf9132b997e3acb96d3426dc9913dbdde6cd02e74e162b043b65640",
+      "scopeNote": "Current affected plan and importing driver scope after correcting fixture contracts, duplicate callback/TS-only AST syntax and forged writer sentinels; no generated source execution or real-model request. Unchanged safety/curator cases are not rerun.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "final-eof-byte-scope",
+      "command": "node --import tsx --test --test-concurrency=1 tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts tests/kiro-live-evidence.test.ts",
+      "exitCode": 0,
+      "total": 81,
+      "passed": 81,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "356ca66212c94754b3e2a014f6fe9d96fa8796f12a67e9b465412ff64fa3227e",
+      "scopeNote": "Only one extra final blank line was removed from each of these three tests after cached diff checking. No production script changed. This overlapping scope is not added to the earlier 63 or 84 tests.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "final-types",
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "complete-delivery-build",
+      "command": "npm run build",
+      "exitCode": 0,
+      "logSha256": "22509cf0195c6ae3efa2d5cd2cf21e84befb80ee2fbc36032b087cc57c34e542",
+      "scopeNote": "tsc --noEmit && vite build && tsc -p tsconfig.server.json; only chunk-size warning. Subsequent edits affect opt-in scripts and tests only, including CLI/static-validation hardening, separately tested/type/syntax checked; Vite/server production inputs unchanged.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "upstream-739-affected-tests",
+      "command": "node --import tsx --test tests/memory-runner.test.ts tests/compression.test.ts tests/model-switch.test.ts tests/native-source-proof.test.ts",
+      "exitCode": 0,
+      "total": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "logSha256": "1bf2af1446916d1e23a929702094ee4d5995329efac2bd46c9f47c7849b8dccb",
+      "commandEvidence": "Reproducible file-scope command; exact historical flags were not retained in the numeric exit-code record."
+    },
+    {
+      "id": "historical-evidence-assembly",
+      "command": "node assemble-final-evidence.mjs",
+      "exitCode": 0,
+      "controlledRecordedRounds": 137,
+      "controlledProtocolCompleted": 136,
+      "strictChecksPassed": 115,
+      "strictChecksChecked": 136,
+      "wholeTurnFormatPassed": 39,
+      "wholeTurnFormatChecked": 136,
+      "logSha256": "ff5cd422c2e05637f2250a9f9d3231d484f028ddd7fbe602c8cab0b9c913d9f0",
+      "scopeNote": "Local-only; command is an uncommitted local export script, not an additional model test.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "posthoc-21-failure-classifications",
+      "command": "node audit-assertion-classifications.mjs",
+      "exitCode": 0,
+      "classifiedOriginalFailures": 21,
+      "newModelRequests": 0,
+      "logSha256": "309646de1f7b4c825dbb3502ba054e1b83aff6fdcd915dc86bb4afc4cf172d26",
+      "scopeNote": "Original scores and raw states unchanged.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "posthoc-qwen-input-observation",
+      "command": "node observe-qwen-turn10.mjs",
+      "exitCode": 0,
+      "toolCallsObserved": 6,
+      "completeDetailsRead": 2,
+      "newModelRequests": 0,
+      "logSha256": "8415d33758d88447847540aea84027614317b94c04934ad3af89de9251ff179a",
+      "scopeNote": "Read-only AXIOM WS history/detail operations; not a new scored run.",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "documented-cross-root-recipe",
+      "command": "README ASCII here-string | node --input-type=module - ROOT_A ROOT_B NEW_OUTPUT",
+      "exitCode": 0,
+      "newModelRequests": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    },
+    {
+      "id": "recipe-output-and-synthetic-fixtures",
+      "command": "node check-reproduction-fixtures.mjs",
+      "exitCode": 0,
+      "canonicalRecoveryModelsEqual": true,
+      "publishedFixturesVerified": 4,
+      "newModelRequests": 0,
+      "logSha256": "30d1d1529e58de8c8d28ced18799ae37446e0a99798e477958d53c738c906b77",
+      "commandEvidence": "Recorded invocation or explicitly identified README recipe."
+    }
+  ],
+  "syntaxChecks": [
+    {
+      "command": "node --check scripts/kiro-live-check.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-plan.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-evidence.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-lifecycle.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-native-proof.mjs",
+      "exitCode": 0
+    }
+  ],
+  "preCorrectionSyntaxChecks": [
+    {
+      "command": "node --check scripts/kiro-live-check.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-plan.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check scripts/kiro-live-evidence.mjs",
+      "exitCode": 0
+    }
+  ],
+  "finalReviewSyntaxChecks": [
+    {
+      "command": "node --check scripts/kiro-live-plan.mjs",
+      "exitCode": 0
+    }
+  ],
+  "finalPromptSyntax": {
+    "command": "node --check scripts/kiro-live-plan.mjs",
+    "exitCode": 0,
+    "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "reproduction": {
+    "mergeRecipeExitCode": 0,
+    "exportedModelsEqualCanonicalRecovery": true,
+    "recordedRounds": 137,
+    "complete": false,
+    "publishedFixtureCount": 4,
+    "allFixtureHashesMatchHistoricalControlledRuns": true,
+    "syntheticCsvAndLedgerValuesVerified": true,
+    "syntheticPngSignaturesAndVisualContentsVerified": true,
+    "fixtureHashes": {
+      "inventory.csv": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+      "ledger.json": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+      "visual-a.png": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136",
+      "visual-b.png": "35a2a52c2351df8c5a1221b599542c5bc1450c34b26e22bafd157da5ef49de93"
+    },
+    "newModelRequests": 0
+  },
+  "privacyChecks": {
+    "actualPrivateIdentityValuesScanned": 20,
+    "noActualPrivateIdentityValueOrMachinePathInPublication": true,
+    "noRawBodyOrPrivateIdentityKeysInPublicJson": true,
+    "actualPublicRunIdAndTaskRefFormatsVerified": true,
+    "limitation": "Trusted driver-state allowlist, not a general anonymizer. Public run IDs/task refs remain linkable; synthetic input fixtures intentionally published."
+  },
+  "sourceSnapshot": {
+    "hashMeaning": "Working-file byte snapshot, not dist/worker-loaded proof. Repository-content hashes normalize CRLF for text; historical executing source hashes remain in each evidence attempt.",
+    "upstreamPreservedExceptions": [
+      {
+        "path": "app/src/server/providers/kiro-chat.ts",
+        "reason": "Upstream timeout/keepAlive implementation and associated test retained in delivery."
+      },
+      {
+        "path": "app/tests/kiro-chat.test.ts",
+        "reason": "Upstream timeout/keepAlive implementation and associated test retained in delivery."
+      },
+      {
+        "path": "docs/kiro-thinking.md",
+        "reason": "Upstream live-test provenance paragraph retained; main tree still has its older offline-only paragraph. Content difference independently inspected."
+      }
+    ],
+    "files": [
+      {
+        "path": "app/src/server/providers/kiro-chat-protocol.ts",
+        "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19",
+        "repositoryContentSha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+      },
+      {
+        "path": "app/src/server/providers/kiro-chat.ts",
+        "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5",
+        "repositoryContentSha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+      },
+      {
+        "path": "app/tests/kiro-chat.test.ts",
+        "sha256": "1bb4a52fa1c816cc8133f416606a6ceba85736d0763a4aeed4477e801f4f3efe",
+        "repositoryContentSha256": "1bb4a52fa1c816cc8133f416606a6ceba85736d0763a4aeed4477e801f4f3efe"
+      },
+      {
+        "path": "app/tests/kiro-thinking.test.ts",
+        "sha256": "2290e98b850126ed5dfe7bf740d295a2ad0cfb1784e880deaa3934d4243e3668",
+        "repositoryContentSha256": "2290e98b850126ed5dfe7bf740d295a2ad0cfb1784e880deaa3934d4243e3668"
+      },
+      {
+        "path": "docs/kiro-thinking.md",
+        "sha256": "bc33865afa1647a52442912f6923218b133c428a14b8a7d475170388722fbd31",
+        "repositoryContentSha256": "bc33865afa1647a52442912f6923218b133c428a14b8a7d475170388722fbd31"
+      },
+      {
+        "path": "app/scripts/kiro-live-check.mjs",
+        "sha256": "abb98d868279e92b43abc5877ad146081c57df4d615432785521f46703773b60",
+        "repositoryContentSha256": "abb98d868279e92b43abc5877ad146081c57df4d615432785521f46703773b60"
+      },
+      {
+        "path": "app/scripts/kiro-live-plan.mjs",
+        "sha256": "5452d18cd9d8c99657fdf1d43b7b5a3d196f840dfe23393080b72c099a6ae770",
+        "repositoryContentSha256": "5452d18cd9d8c99657fdf1d43b7b5a3d196f840dfe23393080b72c099a6ae770"
+      },
+      {
+        "path": "app/scripts/kiro-live-evidence.mjs",
+        "sha256": "9800f4920dea90a32f745b66070e63c197027f61a00cafaa95ebcca2f5dcfc1d",
+        "repositoryContentSha256": "9800f4920dea90a32f745b66070e63c197027f61a00cafaa95ebcca2f5dcfc1d"
+      },
+      {
+        "path": "app/scripts/kiro-live-lifecycle.mjs",
+        "sha256": "583cdea18e041d2e0a205ee49c855ebfba7ad84cec50501a818bafaf569839f3",
+        "repositoryContentSha256": "583cdea18e041d2e0a205ee49c855ebfba7ad84cec50501a818bafaf569839f3"
+      },
+      {
+        "path": "app/scripts/kiro-live-native-proof.mjs",
+        "sha256": "eb831a4fcffab6a706b0516b80efbb89a60ca14b38cb2bda9d8391a5760b6873",
+        "repositoryContentSha256": "eb831a4fcffab6a706b0516b80efbb89a60ca14b38cb2bda9d8391a5760b6873"
+      },
+      {
+        "path": "app/tests/kiro-interrupted-history.test.ts",
+        "sha256": "73c3f31ed0937a73fea3a5fbbd7273e7579408bded271007cc457ce235523c88",
+        "repositoryContentSha256": "73c3f31ed0937a73fea3a5fbbd7273e7579408bded271007cc457ce235523c88"
+      },
+      {
+        "path": "app/tests/kiro-live-check.test.ts",
+        "sha256": "5dfa12663eec8ed4d9a7ab807eea976e540dfb164b23530aaa44d353a9ae3616",
+        "repositoryContentSha256": "5dfa12663eec8ed4d9a7ab807eea976e540dfb164b23530aaa44d353a9ae3616"
+      },
+      {
+        "path": "app/tests/kiro-live-evidence.test.ts",
+        "sha256": "6a8f2dca2ff9aeff7383791edffaf50c09db7a71720be8b42ce1fe5635067a70",
+        "repositoryContentSha256": "6a8f2dca2ff9aeff7383791edffaf50c09db7a71720be8b42ce1fe5635067a70"
+      },
+      {
+        "path": "app/tests/kiro-live-native-proof.test.ts",
+        "sha256": "68d0d75997b670352b8c8ef6be0f5feda189b22a84f55c0ed8129fb48525e548",
+        "repositoryContentSha256": "68d0d75997b670352b8c8ef6be0f5feda189b22a84f55c0ed8129fb48525e548"
+      },
+      {
+        "path": "app/tests/kiro-live-plan.test.ts",
+        "sha256": "8e9c03f0db7f58dedbbc7093d743843c6f257913863f1f4769e612b5252e97cb",
+        "repositoryContentSha256": "8e9c03f0db7f58dedbbc7093d743843c6f257913863f1f4769e612b5252e97cb"
+      },
+      {
+        "path": "app/tests/kiro-live-safety.test.ts",
+        "sha256": "ecc62ee2786423ea949934200c551e06446c0d8a8300b0002c46e06b2e947ec6",
+        "repositoryContentSha256": "ecc62ee2786423ea949934200c551e06446c0d8a8300b0002c46e06b2e947ec6"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/README.md",
+        "sha256": "703955a05ffa8fb017610b1e0b37fe788f140186fba2d7a120869b541c5a9756",
+        "repositoryContentSha256": "703955a05ffa8fb017610b1e0b37fe788f140186fba2d7a120869b541c5a9756"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/initial-attempt.json",
+        "sha256": "be460ff7fbafeca6cee94d8ddc1ccbe02851e51716ef5b1fff87a1e13bd0a5e0",
+        "repositoryContentSha256": "be460ff7fbafeca6cee94d8ddc1ccbe02851e51716ef5b1fff87a1e13bd0a5e0"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/initial-minimax-m2.1-turn08-supplement.json",
+        "sha256": "f5a58825ea5a927307b4a40aa018140e0aaa99790208b69288252626d7cac046",
+        "repositoryContentSha256": "f5a58825ea5a927307b4a40aa018140e0aaa99790208b69288252626d7cac046"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/lifecycle.json",
+        "sha256": "2829e004728b8b93e0ef350d46bcad1be940d498349bdd1367ad693561d9d200",
+        "repositoryContentSha256": "2829e004728b8b93e0ef350d46bcad1be940d498349bdd1367ad693561d9d200"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/rea.json",
+        "sha256": "65b6a930d07c6ced52b0ecce75dd218d9361105056380b08a53b79a861588e3e",
+        "repositoryContentSha256": "65b6a930d07c6ced52b0ecce75dd218d9361105056380b08a53b79a861588e3e"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/qwen-tool-input-supplement.json",
+        "sha256": "091ef57a9de59a8026b7baf1ef28777b1c4659a79b6cb81db5f774d28c51cf74",
+        "repositoryContentSha256": "091ef57a9de59a8026b7baf1ef28777b1c4659a79b6cb81db5f774d28c51cf74"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/assertion-audit.json",
+        "sha256": "c2a41c09fb662dcfa9484a8b19584f6d106a6d8a73f9157693ccb15aa1490d18",
+        "repositoryContentSha256": "c2a41c09fb662dcfa9484a8b19584f6d106a6d8a73f9157693ccb15aa1490d18"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/controlled-recovery.json",
+        "sha256": "51cb1ed6affbc1d5a134b58fd3a254d776ac257f2326758259d897b9f48e2de5",
+        "repositoryContentSha256": "51cb1ed6affbc1d5a134b58fd3a254d776ac257f2326758259d897b9f48e2de5"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/runtime-checks.json",
+        "sha256": "1df379be0bddde83c33794cc9f3f18250cdc79a3d026a1908ec79ec6a6200cca",
+        "repositoryContentSha256": "1df379be0bddde83c33794cc9f3f18250cdc79a3d026a1908ec79ec6a6200cca"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/serial-attempts.json",
+        "sha256": "f848341169c35fe2b1c00751668f2b3dc95c5ffe1e42ad2981b9b3159cba19b9",
+        "repositoryContentSha256": "f848341169c35fe2b1c00751668f2b3dc95c5ffe1e42ad2981b9b3159cba19b9"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/sonnet-post429.json",
+        "sha256": "91cb23108e3ec2d9d365081154be78cffee8d6bffd60bec81058e77be0245a3f",
+        "repositoryContentSha256": "91cb23108e3ec2d9d365081154be78cffee8d6bffd60bec81058e77be0245a3f"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/verification.json",
+        "sha256": "c9287da2c9f2be3679517f1ed1c1bbcdebc5437b195307de31c2501cd3bfc65c",
+        "repositoryContentSha256": "c9287da2c9f2be3679517f1ed1c1bbcdebc5437b195307de31c2501cd3bfc65c"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/verification-v2.json",
+        "sha256": "b8c98ec05cd01452711cb38facdd5930071dc89586d8e5dfa5e0ac0f8bce7660",
+        "repositoryContentSha256": "b8c98ec05cd01452711cb38facdd5930071dc89586d8e5dfa5e0ac0f8bce7660"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/fixtures/inventory.csv",
+        "sha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+        "repositoryContentSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/fixtures/ledger.json",
+        "sha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+        "repositoryContentSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/fixtures/visual-a.png",
+        "sha256": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136",
+        "repositoryContentSha256": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136"
+      },
+      {
+        "path": "docs/evidence/kiro-long-session/fixtures/visual-b.png",
+        "sha256": "35a2a52c2351df8c5a1221b599542c5bc1450c34b26e22bafd157da5ef49de93",
+        "repositoryContentSha256": "35a2a52c2351df8c5a1221b599542c5bc1450c34b26e22bafd157da5ef49de93"
+      }
+    ]
+  }
+}
