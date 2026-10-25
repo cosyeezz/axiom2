@@ -98,7 +98,9 @@ mod platform {
             if !matches!(part, Component::RootDir) {
                 match fs::create_dir(&current) { Ok(()) => {}, Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}, Err(e) => return Err(e) }
             }
+            #[cfg(test)] eprintln!("bundled: opening ancestor {:?}", current);
             let guard = OpenOptions::new().read(true).share_mode(1).custom_flags(0x02000000 | 0x00200000).open(&current)?;
+            #[cfg(test)] eprintln!("bundled: held ancestor {:?}", current);
             let info = guard.metadata()?;
             if !info.is_dir() || info.file_attributes() & 0x400 != 0 { return Err(invalid()); }
             guards.push(guard);
@@ -106,10 +108,14 @@ mod platform {
         for (name, source) in files {
             let target = path.join(name);
             let temporary = path.join(staging_name());
+            #[cfg(test)] eprintln!("bundled: creating staging {:?}", temporary);
             let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+            #[cfg(test)] eprintln!("bundled: staging opened");
             let written = file.write_all(source.as_bytes()).and_then(|_| file.sync_all());
             drop(file);
+            #[cfg(test)] eprintln!("bundled: committing to {:?}", target);
             let result = written.and_then(|_| commit(&temporary, &target));
+            #[cfg(test)] eprintln!("bundled: commit result {:?}", result);
             if result.is_err() { let _ = fs::remove_file(&temporary); }
             match result {
                 Ok(()) => {},
