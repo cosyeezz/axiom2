@@ -10,7 +10,7 @@ import { engineContractVersion, engineContractSupported, reaEngineProfiles } fro
 import { managedNode, type ManagedNodeProvider } from "./managed-node.js";
 import { supervisorEnvironment } from "./component-environment.js";
 import { fileURLToPath } from "node:url";
-import { beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration, builtinRemovalDirectories, inspectBuiltinDirectoryOwnership } from "./builtin-operation.js";
+import { recoverBuiltinOperations, reconcileBuiltinOperationStopping, beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration, builtinRemovalDirectories, inspectBuiltinDirectoryOwnership } from "./builtin-operation.js";
 import { randomUUID } from "node:crypto";
 import { runMaintenance, maintenanceCancelled, maintenanceFailure, maintenancePhase } from "../maintenance.js";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -125,7 +125,8 @@ export class ReaService {
       value.pendingOperation = builtinPendingOperation(this.root, "rea");
       const config = readReaConfig(this.root), pendingPaths = builtinPendingRemovals(this.root, "rea");
       const removals = pendingPaths.filter(path => ["versions", "engines"].some(container => dirname(path) === join(reaDirectory(this.root), container))).map(path => basename(path));
-      value.cleanup = cleanupScope(reaRemovalPlan(this.root, config, pendingPaths).paths);
+      const plan = reaRemovalPlan(this.root, config, pendingPaths);
+      value.cleanup = cleanupScope(plan.paths); value.cleanupUnverified = plan.unverified;
       value.removalPending ||= removals.some(name => reaProgramDirectoryPattern.test(name));
       const engineDirectories = managedChildren(this.root, ["integrations", "rea"], "engines", reaEngineDirectoryPattern);
       for (const engine of value.engines ?? []) {
@@ -182,7 +183,8 @@ export class ReaService {
     if (c.op === "rea.clearDownloads" && !["ghidra", "hopper"].includes(engine!)) throw new AppError("INVALID_SETTINGS", "请选择 Ghidra 或 Hopper 登记下载包。");
     this.assertAvailable(["rea.engine-uninstall", "rea.clearDownloads"].includes(c.op) ? undefined : scope);
     if (c.op === "rea.reconcile") {
-      reconcileBuiltinOperation(this.root, "rea", p.operationId, scope);
+      if (p.force === true) await reconcileBuiltinOperationStopping(this.root, "rea", p.operationId, scope);
+      else reconcileBuiltinOperation(this.root, "rea", p.operationId, scope);
       this.load(); this.changed(); return this.snapshot();
     }
     const current = readReaConfig(this.root);
@@ -251,6 +253,9 @@ export class ReaService {
     if (kind === "install" && (p.version !== version || !validReaVersion(version))) throw new AppError("CHECK_REQUIRED", "请安装推荐版本，或先检查更新再安装已确认的版本。");
     if (kind === "install" && current.installation && version !== current.installation.version && !newerOpenCli(version, current.installation.version)) throw new AppError("DOWNGRADE", "当前版本较新，未执行降级。");
     const exclusive = !scope || kind === "engine-uninstall" || kind === "clearDownloads";
+    await recoverBuiltinOperations(this.root, "rea", exclusive ? undefined : scope);
+    if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
+    this.assertAvailable(exclusive ? undefined : scope);
     const operation = beginBuiltinOperation(this.root, "rea", undefined, exclusive ? undefined : scope);
     const controller = new AbortController(), signal = controller.signal;
     const job: ReaJob = { id: randomUUID(), kind, engine: scope, startedAt: Date.now(), running: true, message: kind === "install" ? `正在安装 REA ${version}…` : "正在检查 REA…", recommendation: candidate ? { version: candidate.release.version, reaVersion: current.installation!.version, ...host } : this.state.jobs?.find(job => job.engine === scope)?.recommendation };

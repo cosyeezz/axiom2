@@ -1,6 +1,7 @@
 import { Icon } from "../Icon.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { ReaTool } from "./ReaTool.js";
+import { BuiltinRecovery } from "./BuiltinRecovery.js";
 import { emptyReaState } from "../../shared/rea.js";
 import { ModelProxyTool } from "./ModelProxyTool.js";
 import { emptyModelProxyState } from "../../shared/model-proxy.js";
@@ -36,11 +37,11 @@ export default function BuiltinTools() {
   const [draft, setDraft] = useState<{ revision: string; settings: OpenCliSettings }>();
   const checkButton = useRef<HTMLButtonElement>(null);
   const focusAfterReconcile = useRef(false);
-  const [uninstall, setUninstall] = useState<{ revision: string }>();
+  const [uninstall, setUninstall] = useState<{ revision: string; cleanupRevision?: string }>();
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; revision?: string }>();
   const settings = draft?.settings ?? state.settings;
-  const busy = sending || !!state.job?.running || !!state.pendingOperation || !connection.connected;
+  const busy = sending || !!state.job?.running || !connection.connected;
   useEffect(() => {
     if (!busy && focusAfterReconcile.current) { focusAfterReconcile.current = false; checkButton.current?.focus(); }
   }, [busy]);
@@ -106,18 +107,19 @@ export default function BuiltinTools() {
               </dl>
               {state.version && !state.runtimeManaged && <p className="field-help">现有安装保持不变。重新安装或更新后迁移到版本绑定的独立 Node/npm，不修改系统或 Axiom 后台运行环境。</p>}
               {state.supportError && <p className="field-help">{state.supportError}</p>}
-              {state.pendingOperation && !state.job?.running && <div className="tools-conflict" role="group" aria-label="核实 OpenCLI 中断任务"><p>上次维护尚未确认结束。核实只检查退出与提交记录，保留现有安装文件。</p><button className="btn" disabled={sending || !connection.connected} onClick={() => void action("opencli.reconcile", { operationId: state.pendingOperation })}><Icon name={sending ? "loader-circle" : "refresh-cw"} />{sending ? "正在核实…" : "核实中断任务"}</button></div>}
+              {state.pendingOperation && !state.job?.running && <BuiltinRecovery label="OpenCLI" operationId={state.pendingOperation} disabled={busy} reconcile={force => void action("opencli.reconcile", { operationId: state.pendingOperation, force })} />}
               <div className="tools-actions">
                 <button ref={checkButton} className="btn" disabled={busy} onClick={() => void action("opencli.refresh")}>检查环境</button>
                 <button className="btn" disabled={busy || !!state.supportError} onClick={() => void action("opencli.check")}>检查更新</button>
                 <button className="btn btn-primary" disabled={busy || !!state.supportError || !state.latest || !!draft || (!!state.version && state.version !== state.latest && !update)} onClick={() => void action("opencli.install", { version: state.latest })}>{state.job?.running && state.job.kind === "install" ? "正在安装…" : state.version ? update ? "更新 OpenCLI" : "重新安装" : "安装 OpenCLI"}</button>
-                {(state.configured || state.removalPending || state.version) && <button className="btn" disabled={busy || !!draft} onClick={() => setUninstall({ revision: state.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留文件" : state.managed ? "卸载 OpenCLI" : "移除接入"}</button>}
+                {(state.configured || state.removalPending || state.version) && <button className="btn" disabled={busy || !!draft} onClick={() => setUninstall({ revision: state.revision, cleanupRevision: state.cleanup?.revision })}><Icon name="trash-2" />{state.removalPending ? "清理残留文件" : state.managed ? "卸载 OpenCLI" : "移除接入"}</button>}
               </div>
               {uninstall && <div className="tools-conflict" role="group" aria-label="确认移除 OpenCLI">
-                <p>移除 Axiom 接入并清理托管程序。接入设置、Chrome 扩展与外部安装保留。请先结束正在使用 OpenCLI 的 Agent 任务。</p>
-                <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const revision = uninstall.revision; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, revision }); }}><Icon name="trash-2" />确认移除</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button></div>
+                <p>移除 Axiom 接入并清理托管程序。接入设置、Chrome 扩展与外部安装保留。等待已准入任务完成后自动移除；等待期间可在任务面板取消。</p>
+                <div className="tools-actions"><button className="btn" disabled={busy} onClick={() => { const confirmation = uninstall; setUninstall(undefined); void action("opencli.uninstall", { confirm: true, ...confirmation }); }}><Icon name="trash-2" />确认移除</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不移除</button></div>
               </div>}
               <p className="field-help tools-help">先检查更新，再安装已确认的版本。新版本安装到独立目录，验证成功后用于后续执行；现有任务继续使用原版本。可在任务面板取消安装或延长时间。外部 npm 安装保留，如需卸载请使用原安装方式。</p>
+              {!!state.cleanupUnverified?.length && <p className="field-help">另有 {state.cleanupUnverified.length} 个旧程序目录缺少归属证明，将保留，不阻塞当前程序卸载。</p>}
               {state.packageRoot && <p className="tools-path">安装位置 <LocalPath path={state.packageRoot} /></p>}
             </BackendMaintenance>
             <section className="section tools-section" aria-labelledby="config-heading">

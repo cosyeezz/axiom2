@@ -12,6 +12,8 @@ export interface MemoryDocumentRef {
  * purposeId remains only for the legacy organizer's lossless source tree. */
 export interface MemoryIndexNode {
   id: string; name: string; children: MemoryIndexNode[]; purposeId?: string;
+  /** Explicit role: original titles are entries, never semantic path segments. */
+  kind?: "directory" | "title";
   titlePath?: string; parentId?: string; depth?: number; ancestorIds?: string[];
   purposeIds?: string[]; documentRefs?: MemoryDocumentRef[];
 }
@@ -29,6 +31,9 @@ export const memoryBatchSize = 50;
 export const memoryBatchWaitMs = 30 * 60_000;
 export const memoryDirectoryMaxChars = 1000;
 export const memoryContextPurposeLimit = 4;
+export const memoryOrganizationWatermarks = { early: 20_000, target: 16_000, maximum: 24_000 } as const;
+export const memoryOrganizationOutputChars = 1_000_000;
+export const isMemoryTitle = (node: MemoryIndexNode) => node.kind === "title" || !!node.purposeId;
 export const emptyMemoryTree = (): MemoryTree => ({ version: 0, roots: [], purposes: [], nameChars: 0, pending: 0, failed: 0 });
 export const memoryTreeScope = (workspaceId: string) => `memory-tree:${workspaceId}`;
 // Keep Pi's custom-entry identity, not its old Topic-ID payload or lookup protocol.

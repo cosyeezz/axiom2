@@ -38,6 +38,22 @@ test("stable sides survive filtering and expansion; purpose sources remain avail
   assert.equal(node.purpose?.source.sessionId, "s");
   assert.equal(layoutMemoryMap([node], new Set(), "memory.MD").positions.length, 1);
 });
+test("partial tree views preserve the supplied full breadcrumb", () => {
+  const [directory, title] = memoryMapNodes([
+    { id: "0", name: "语义子目录", titlePath: "完整目录 / 语义子目录", children: [] },
+    { id: "1", name: "原题", kind: "title", titlePath: JSON.stringify(["完整目录", "原题"]), children: [] },
+  ], []);
+  assert.equal(directory.displayPath, "完整目录 / 语义子目录");
+  assert.equal(title.displayPath, "完整目录 / 原题");
+});
+test("original-title display breadcrumbs stay readable and separate from reversible identity", () => {
+  const [root] = memoryMapNodes([{ id: "0", name: "语义目录", kind: "directory", children: [
+    { id: "1", name: "原题 / 任意符号 😀", kind: "title", children: [], titlePath: JSON.stringify(["语义目录", "原题 / 任意符号 😀"]) },
+  ] }], []);
+  assert.equal(root.children[0].kind, "Purpose");
+  assert.equal(root.children[0].displayPath, "语义目录 / 原题 / 任意符号 😀");
+  assert.deepEqual(JSON.parse(root.children[0].titlePath!), ["语义目录", "原题 / 任意符号 😀"]);
+});
 test("empty, depth-64 and broad layouts return finite bounds", () => {
   assert.equal(layoutMemoryMap([], new Set()).positions.length, 0);
   let deep = leaf("deep"); const expanded = new Set<string>();

@@ -9,7 +9,7 @@ import { memoryDetails } from "../src/shared/memory-detail-paths.js";
 import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 export const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
-export const classification = (input: Pick<MemoryExecution, "prompt">, name = "记忆事务") => ({ answer: JSON.stringify([{ name, children: JSON.parse(input.prompt).purposes.map((p: { id: string }) => ({ purposeId: p.id })) }]), incomplete: false });
+export const classification = (input: Pick<MemoryExecution, "prompt">, name = "记忆事务") => ({ answer: JSON.stringify([{ name, children: JSON.parse(input.prompt).titles.map((title: string) => ({ title })) }]), incomplete: false });
 /** Independently decode the model-facing protocol for fake semantic selections. */
 export const matchingCandidates = (input: Pick<MemoryExecution, "prompt">) => {
   const data = JSON.parse(input.prompt);
@@ -56,7 +56,7 @@ export function purposeFixture() {
   const publish = (name = "记忆事务") => {
     const batch = tree.batch(workspace.id, Date.now() + memoryBatchWaitMs), old = tree.snapshot(workspace.id);
     const purposes = [...old.purposes, ...batch];
-    const roots = tree.classify(JSON.stringify([{ name, children: purposes.map(p => ({ purposeId: p.id })) }]), purposes);
+    const roots = tree.classify(JSON.stringify([{ name, children: [...new Set(purposes.map(p => p.text))].map(title => ({ title })) }]), purposes);
     tree.publish(workspace.id, batch, roots, old.version); return batch;
   };
   return { root, project, store, workspace, memories, tree, create, write, detail, configure, publish,

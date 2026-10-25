@@ -6,15 +6,14 @@ import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
 import { purposeFixture, selection, classification } from "./memory-purpose-fixture.js";
 
-test("classification receives only opaque IDs, purpose text and frozen same-file context; raw bytes are untouched", async () => {
+test("classification receives only old tree and exact title text; IDs, context and raw bytes stay private", async () => {
   const f = purposeFixture(); try {
     const scope = f.create("# [Completed] 修复目的索引\n## [Abandoned] ~~旧方案~~\n### [In progress] ~~旧实现~~\n## [Completed] 新方案\n# [In progress] 提升资料查找\n"); f.detail(scope, "正文机密哨兵"); f.memories.scan(scope);
     const path = join(memoryDirectory(f.root, scope.sessionId), "MEMORY.md"), bytes = readFileSync(path); let calls = 0;
     f.memories.runner = { close: async () => {}, execute: async input => {
-      calls++; const data = JSON.parse(input.prompt); assert.deepEqual(Object.keys(data).sort(), ["batchIds", "existingTree", "purposes"]);
-      assert.deepEqual(Object.keys(data.purposes[0]).sort(), ["context", "id", "text"]);
-      assert.deepEqual(data.purposes[0].context, [{ text: "提升资料查找", state: "进行中" }]);
-      for (const secret of ["正文机密哨兵", "旧实现", "MEMORY.md", scope.sessionId, f.root]) assert.ok(!input.prompt.includes(secret));
+      calls++; const data = JSON.parse(input.prompt); assert.deepEqual(Object.keys(data).sort(), ["existingTree", "titles"]);
+      assert.deepEqual(data.titles, ["修复目的索引"]); assert.deepEqual(data.existingTree, []);
+      for (const secret of ["提升资料查找", "context", "purposeId", "正文机密哨兵", "旧实现", "MEMORY.md", scope.sessionId, f.root, ...f.tree.entries(f.workspace.id).map(p => p.id)]) assert.ok(!input.prompt.includes(secret));
       assert.throws(() => input.read(scope.sessionId, "MEMORY.md"), /不提供/); return classification(input);
     } };
     await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal);

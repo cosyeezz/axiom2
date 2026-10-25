@@ -3,6 +3,7 @@ import { assetCacheControl } from "./asset-cache.js";
 import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
 import { MaintenanceService } from "./maintenance.js";
+import { IntegrationMaintenanceQueue } from "./integration-maintenance.js";
 import { stopMaintenanceProcesses } from "./maintenance-process.js";
 import { Resources } from "./resources.js";
 import { SkillFiles } from "./skill-files.js";
@@ -274,6 +275,15 @@ export async function startServer(
   // RTK installs into immutable private directories; it does not mutate global tools or active workers.
   let proxyReady = false, proxyRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   const maintenance = new MaintenanceService(store.root, () => publish("maintenance"));
+  let agents: Agents;
+  const integrationMaintenance = new IntegrationMaintenanceQueue(() => [
+    ...(shuttingDown ? ["服务正在退出"] : []),
+    ...(!agents || agents.maintenancePending ? ["Agent 启动或后台操作"] : []),
+    ...(resources.busy ? ["资源操作"] : []),
+    ...(workspaceOperations.size ? ["工作空间操作"] : []),
+    ...(store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get() ? ["已准入的子代理任务"] : []),
+  ], (work, signal) => agents.pool.maintenance(work, signal));
+  const removeIntegration = integrationMaintenance.run;
   const modelProxy = new ModelProxyService(store.root, () => {
     publish("builtin-tools:model-proxy");
     if (!proxyReady || shuttingDown) return;
@@ -284,14 +294,7 @@ export async function startServer(
       const update = refreshConfiguration().catch(() => {}).finally(() => inFlight.delete(update));
       inFlight.add(update);
     }, 150);
-  });
-  let agents: Agents;
-  const removeIntegration = async <T,>(operation: () => T): Promise<T> => {
-    if (shuttingDown || !agents || agents.maintenancePending || resources.busy || workspaceOperations.size ||
-        store.db.prepare("SELECT 1 FROM tasks WHERE status IN ('queued','starting','running','stopping') LIMIT 1").get())
-      throw new AppError("MAINTENANCE_BUSY", "仍有任务或资源操作，请结束后再卸载组件。");
-    return agents.pool.maintenance(operation);
-  };
+  }, { removal: removeIntegration });
   const rea = new ReaService(store.root, () => publish("builtin-tools:rea"), { ...options.rea, removal: removeIntegration });
   const rtk = new RtkService(store.root, () => publish("builtin-tools:rtk"), { ...options.rtk, removal: removeIntegration });
   const opencli = new OpenCliService(store.root, () => publish("builtin-tools:opencli"), options.openCli?.execute, options.openCli?.locateNpm, options.openCli?.openExtension, removeIntegration, options.openCli?.runtime);
@@ -448,6 +451,12 @@ export async function startServer(
           send(ws, { type: "receipt", requestId, ok: true, data: {} });
           return;
         }
+        // This is external/root admission only. Already-admitted delegates and
+        // scheduler work use the internal path and must drain normally.
+        if (integrationMaintenance.pending && (c.op === "prompt" ||
+            ["agent.resume", "agent.model", "agent.reload", "agent.skills", "task.append", "compression.start", "memory.run"].includes(c.op) ||
+            c.op.startsWith("resources.") && !["resources.get", "resources.detail"].includes(c.op)))
+          throw new AppError("MAINTENANCE_BUSY", "组件维护已预约；现有任务继续执行，维护完成或取消等待后可开始新操作。");
         // Register before an async service queues admission through model locks.
         // A workspace deletion is synchronous and must not overtake an admitted operation.
         if (c.workspaceId && c.op !== "workspace.delete") {
@@ -972,6 +981,7 @@ export async function startServer(
     tasks,
     close: async () => {
       shuttingDown = true;
+      integrationMaintenance.close();
       recovery.pause();
       clearTimeout(proxyRefreshTimer);
       clearTimeout(costTimer); costWorkspaces.clear();

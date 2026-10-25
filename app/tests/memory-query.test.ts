@@ -4,13 +4,21 @@ import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Memories } from "../src/server/memories.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
+import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import { purposeFixture, navigation, selection, matchingCandidates } from "./memory-purpose-fixture.js";
 async function fixture() {
   const f = purposeFixture(); await f.configure({ queryModel: selection });
   const create = (text = "当前来源事实", title = "来源核验") => { const scope = f.create(`# [Completed] ${title}\n## [Completed] 验证结果\n`); f.detail(scope, text); f.memories.scan(scope); return scope; };
-  const scope = create(); f.publish();
+  // Semantic subdirectories are explicit fixture choices, not original-title leaves.
+  const publish = (name = "记忆事务") => {
+    const old = f.tree.snapshot(f.workspace.id), batch = f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), purposes = [...old.purposes, ...batch];
+    const groups = [...new Set(purposes.map(p => p.text))].map(title => ({ name: title.replace(/\d/g, digit => String.fromCharCode(65 + Number(digit))), children: [{ title }] }));
+    const roots = f.tree.classify(JSON.stringify([{ name, children: groups }]), purposes);
+    f.tree.publish(f.workspace.id, batch, roots, old.version); return batch;
+  };
+  const scope = create(); publish();
   const query = (signal?: AbortSignal, target = f.memories) => target.query(scope, "当前事实", signal);
-  return { ...f, create, scope, query };
+  return { ...f, create, publish, scope, query };
 }
 
 test("one complete-tree match directly reads all associated documents, then one answer", async () => {
@@ -146,10 +154,15 @@ for (const revoke of ["never", "before query", "during answer"] as const) test(`
     else assert.equal(result.answer, "");
   } finally { await f.close(); }
 });
-test("matching a documentless directory never answers from its title or descendants", async () => {
+test("matching a documentless parent expands descendant documents and answers only from evidence", async () => {
   const f = await fixture(); try {
-    let calls = 0; f.memories.runner = { close: async () => {}, execute: async () => { calls++; return { answer: '["记忆事务"]', incomplete: false }; } };
-    const result = await f.query(); assert.equal(result.answer, ""); assert.equal(result.incomplete, false); assert.equal(calls, 1);
+    let calls = 0; f.memories.runner = { close: async () => {}, execute: async input => {
+      calls++; const evidence = JSON.parse(input.prompt).evidence;
+      if (!evidence) return { answer: '["记忆事务"]', incomplete: false };
+      assert.deepEqual(evidence.map((e: any) => e.content), ["当前来源事实"]);
+      return { answer: "来自后代原文", incomplete: false };
+    } };
+    const result = await f.query(); assert.equal(result.answer, "来自后代原文"); assert.equal(result.incomplete, false); assert.equal(calls, 2);
   } finally { await f.close(); }
 });
 test("same full path merges navigation, keeps both source files and audit bindings, no short numbers", async () => {

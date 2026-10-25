@@ -1,4 +1,5 @@
 import { Icon } from "../Icon.js";
+import { BuiltinRecovery } from "./BuiltinRecovery.js";
 import { revealLocalPath } from "../LocalPath.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useState } from "react";
@@ -20,7 +21,7 @@ function installLabel(engine: ReaEngineState) {
 }
 function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, action, reportedError }: { engine: ReaEngineState; state: ReaState; uninstallBusy: boolean; blocked: boolean; sending: boolean; feedback?: ReaFeedback; action: Action; reportedError: boolean }) {
   const job = (state.jobs ?? (state.job ? [state.job] : [])).find(job => job.engine === engine.id);
-  const busy = blocked || sending || !!job?.running || !!engine.pendingOperation;
+  const busy = blocked || sending || !!job?.running;
   const revision = engine.revision ?? state.revision;
   const [openError, setOpenError] = useState("");
   const error = openError || (feedback?.error ? feedback.text : !feedback ? job?.error : undefined);
@@ -45,7 +46,7 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
     {error && <div className="tools-feedback" aria-live="polite"><p className="tools-error" role="alert">{error}</p></div>}
     {!error && !job?.running && job?.message.includes("已取消") && <p className="field-help" role="status">{job.kind === "engine-open-installer" ? job.message : "操作已取消。"}</p>}
     {!error && installerOpened && !current && <p className="field-help" role="status">{job.message}</p>}
-    {engine.pendingOperation && !job?.running && <div className="tools-conflict" role="group" aria-label={`核实${label}中断任务`}><p>上次任务中断，请先核实。</p><button className="btn" disabled={blocked || sending} onClick={() => void action("rea.reconcile", { engine: engine.id, operationId: engine.pendingOperation })}><Icon name="refresh-cw" />核实中断任务</button></div>}
+    {engine.pendingOperation && !job?.running && <BuiltinRecovery label={label} operationId={engine.pendingOperation} disabled={uninstallBusy || busy} reconcile={force => void action("rea.reconcile", { engine: engine.id, operationId: engine.pendingOperation, force })} />}
     <div className="tools-actions">
       <button className="btn" disabled={unavailable} onClick={() => void action("rea.engine-check", { engine: engine.id })}><Icon name="refresh-cw" />{downloadable ? `检查${label}更新` : `检测${label}`}</button>
       {cachedInstall && !current && <button className="btn" disabled={unavailable} onClick={() => setConfirm({ revision, version: engine.download!.version, downloadPath: engine.download!.path, recommendedVersion: recommended, operation: engine.id === "hopper" ? "open" : "install" })}><Icon name="package" />安装{label}</button>}

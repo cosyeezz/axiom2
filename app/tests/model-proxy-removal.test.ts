@@ -58,6 +58,27 @@ test("proxy uninstall awaits owned process stop and preserves unrelated kernel, 
     assert.equal(fs.existsSync(f.importer), true); assert.equal(s.snapshot().importer?.filesPresent, true);
   } finally { release?.(); await s.close(); f.cleanup(); }
 });
+for (const importer of [false, true]) for (const outcome of ["remove", "changed", "denied"] as const) test(`${importer ? "importer" : "kernel"} uninstall waits at shared barrier and handles ${outcome}`, { skip: !importer && process.platform === "win32" }, async () => {
+  const f = fixture(); let release!: () => void, entered = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const s = new ModelProxyService(f.root, () => {}, { removal: async work => {
+    entered = true; await gate;
+    if (outcome === "denied") throw Error("fixture barrier denied");
+    return work();
+  } });
+  const path = importer ? f.importer : join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory);
+  try {
+    await (importer ? importerCommand(s, "Uninstall") : uninstall(s)); await turn();
+    assert.equal(entered, true); assert.equal(fs.existsSync(path), true);
+    assert.deepEqual(readProxyConfig(f.root).installations, f.config.installations);
+    if (outcome === "changed") atomicProxyJson(proxyConfigPath(f.root), { ...f.config, revision: randomUUID() });
+    release();
+    const error = importer ? (await settleImporter(s)).error : (await settle(s)).job?.error;
+    if (outcome === "remove") { assert.equal(error, undefined); assert.equal(fs.existsSync(path), false); }
+    else { assert.match(error!, outcome === "changed" ? /配置已改|配置已变/ : /barrier denied/); assert.equal(fs.existsSync(path), true); }
+  } finally { release(); await s.close(); f.cleanup(); }
+});
+
 test("proxy uninstall rejects stale revision and unsafe parent without modifying configuration", async () => {
   const f = fixture(), versions = join(proxyDirectory(f.root), "versions"), outside = join(f.root, "outside");
   fs.renameSync(versions, outside); fs.symlinkSync(outside, versions, process.platform === "win32" ? "junction" : "dir");

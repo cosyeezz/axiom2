@@ -8,14 +8,14 @@ export class MaintenanceExecution {
   constructor(readonly task: MaintenanceTask, readonly controller: AbortController, private publish: () => void) {
     this.timer = setInterval(() => {
       if (!task.capabilities.extend) return;
-      if (task.startedAt && Date.now() - task.startedAt >= task.budgets.totalMs) this.abort("total-timeout", "任务已达到总时限，请核实当前安装状态后重试。");
+      if (Date.now() - (task.startedAt ?? task.createdAt) >= task.budgets.totalMs) this.abort("total-timeout", "任务已达到总时限，请核实当前安装状态后重试。");
       if (task.phase === "installing" && Date.now() - this.phaseStartedAt >= task.budgets.installMs) this.abort("install-timeout", "安装阶段已达到时限，请核实当前安装状态。");
     }, 250);
   }
   get signal() { return this.controller.signal; }
   get budgets() { return this.task.budgets; }
   remainingBudget() {
-    const now = Date.now(), total = this.budgets.totalMs - (now - (this.task.startedAt ?? now));
+    const now = Date.now(), total = this.budgets.totalMs - (now - (this.task.startedAt ?? this.task.createdAt));
     const install = this.task.phase === "installing" ? this.budgets.installMs - (now - this.phaseStartedAt) : Infinity;
     return install < total ? { remainingMs: install, code: "install-timeout" as const } : { remainingMs: total, code: "total-timeout" as const };
   }

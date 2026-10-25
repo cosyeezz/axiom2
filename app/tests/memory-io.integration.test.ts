@@ -20,7 +20,7 @@ test("read/save preserves BOM and CRLF and detects raw-byte conflicts", async ()
 test("classification rejects model write suggestions and never sends full detail bodies", async () => {
   const f = purposeFixture(); try {
     const scope = f.create(); f.detail(scope, "OLD" + "详情".repeat(10000)); f.memories.scan(scope); const entry = join(memoryDirectory(f.root, scope.sessionId), "MEMORY.md"), bytes = readFileSync(entry); let calls = 0;
-    f.memories.runner = { close: async () => {}, execute: async input => { calls++; assert.ok(!input.prompt.includes("OLD")); return { answer: JSON.stringify([{ name: "事务发布", children: JSON.parse(input.prompt).purposes.map((p: any) => ({ purposeId: p.id })), edits: [{ oldText: "OLD", newText: "NEW" }] }]), incomplete: false }; } };
+    f.memories.runner = { close: async () => {}, execute: async input => { calls++; assert.ok(!input.prompt.includes("OLD")); return { answer: JSON.stringify([{ name: "事务发布", children: JSON.parse(input.prompt).titles.map((title: string) => ({ title })), edits: [{ oldText: "OLD", newText: "NEW" }] }]), incomplete: false }; } };
     await assert.rejects(f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal)); assert.equal(calls, 1); assert.deepEqual(readFileSync(entry), bytes); assert.equal(f.tree.snapshot(f.workspace.id).roots.length, 0);
   } finally { await f.close(); }
 });
@@ -103,7 +103,7 @@ test("pooled direct API isolates classification/navigation/evidence, uses no too
   const server = createServer(async (request, response) => {
     let raw = ""; for await (const part of request) raw += part; const payload = JSON.parse(raw); payloads.push(payload);
     const data = JSON.parse(payload.messages.find((m: any) => m.role === "user").content);
-    const content = data.purposes ? classification({ prompt: JSON.stringify(data) }).answer : navigation({ prompt: JSON.stringify(data) }, "已读取完整依据。").answer;
+    const content = data.titles ? "[" + " ".repeat(34000) + classification({ prompt: JSON.stringify(data) }).answer.slice(1) : navigation({ prompt: JSON.stringify(data) }, "已读取完整依据。").answer;
     response.writeHead(200, { "Content-Type": "text/event-stream" }); response.end(`data: ${JSON.stringify({ id: "memory", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\ndata: [DONE]\n\n`);
   });
   await new Promise<void>(r => server.listen(0, "127.0.0.1", r));
@@ -112,6 +112,7 @@ test("pooled direct API isolates classification/navigation/evidence, uses no too
   try {
     await f.configure({ queryModel: selection }); const scope = f.create(), directory = memoryDirectory(f.root, scope.sessionId); f.detail(scope, "DETAIL_SENTINEL [依据](../references/basis.md)"); mkdirSync(join(directory, "references"), { recursive: true }); writeFileSync(join(directory, "references/basis.md"), "字".repeat(20000)); f.memories.scan(scope);
     await f.memories.pipeline.organize(f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), selection, new AbortController().signal); assert.equal(payloads.length, 1);
+    assert.equal(f.tree.snapshot(f.workspace.id).purposes.length, 1, "a JSON document whose closing bracket is beyond 32k must arrive intact");
     const result = await f.memories.query(scope, "读取情况"); assert.equal(result.answer, "已读取完整依据。"); assert.equal(payloads.length, 3); assert.equal(result.readDocuments?.length, 2);
     for (const payload of payloads) { assert.ok(!payload.tools?.length); assert.deepEqual(payload.messages.map((m: any) => m.role), ["system", "user"]); }
     for (const payload of payloads.slice(0, -1)) assert.ok(!JSON.stringify(payload).includes("DETAIL_SENTINEL")); assert.ok(JSON.stringify(payloads.at(-1)).includes("DETAIL_SENTINEL"));

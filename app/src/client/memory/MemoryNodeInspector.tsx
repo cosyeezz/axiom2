@@ -17,7 +17,7 @@ export function MemoryNodeInspector({ node, workspaceId, catalog, open, close }:
   const search = filter.trim().toLocaleLowerCase(), visible = documents.filter(ref => !search || `${ref.title} ${ref.path} ${sourceName(ref.sessionId)}`.toLocaleLowerCase().includes(search));
   return <aside className="memory-tree-inspector" aria-label="记忆详情">
     <header><h3>{node.label}</h3><button className="btn" aria-label="关闭记忆详情" onClick={close}>关闭</button></header>
-    <p className="memory-node-path">{node.titlePath ?? node.label}</p>
+    <p className="memory-node-path">{node.displayPath ?? node.titlePath ?? node.label}</p>
     <h4>关联文档 · {documents.length} 份</h4>
     <p className="meta">仅列当前节点直属文档，不包含子节点。</p>
     {documents.length > 8 && <input className="memory-document-filter" aria-label="筛选关联文档" placeholder="筛选文件名、路径或来源" value={filter} onChange={event => setFilter(event.target.value)} />}

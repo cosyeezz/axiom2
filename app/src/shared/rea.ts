@@ -18,6 +18,7 @@ export type ReaState = {
   latest?: string;
   packageRoot?: string;
   cleanup?: CleanupScope;
+  cleanupUnverified?: string[];
   downloadCleanup?: Partial<Record<"ghidra" | "hopper", CleanupScope>>;
   downloadCleanupErrors?: Partial<Record<"ghidra" | "hopper", string>>;
   removalPending?: boolean;

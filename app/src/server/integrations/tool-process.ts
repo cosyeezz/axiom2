@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolProcessReply, ToolProcessRequest } from "./tool-process-worker.js";
 
-export type ToolRunOptions = { root: string; cwd?: string; input?: string; signal?: AbortSignal; timeout?: number; limit?: number; errorLimit?: number; env?: NodeJS.ProcessEnv; output?: "structured" | "tail"; errorOutput?: "structured" | "tail"; admissionCheck?: () => void; beforeStart?: (owner: string) => void; onStopped?: (proof: "not-started" | "tree-cleaned") => void };
+export type ToolRunOptions = { root: string; cwd?: string; input?: string; signal?: AbortSignal; timeout?: number; limit?: number; errorLimit?: number; env?: NodeJS.ProcessEnv; output?: "structured" | "tail"; errorOutput?: "structured" | "tail"; admissionCheck?: () => void; beforeStart?: (owner: string) => void; onArmed?: (owner: string) => void; onStopped?: (proof: "not-started" | "tree-cleaned") => void };
 export type ToolRun = (file: string, args: string[], options: ToolRunOptions) => Promise<{ code: number; stdout: Buffer; stderr: Buffer; stdoutTruncated?: boolean; stderrTruncated?: boolean }>;
 function commandLease(root: string, ownerPath: string): { id?: CommandLeaseIdentity; close(): void } {
   // PID owners use a revocable in-host registry, not Linux /proc descriptors.
@@ -78,23 +78,23 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
     options.beforeStart?.(owner);
     const entry = fileURLToPath(new URL(`./tool-process-worker.${source ? "ts" : "js"}`, import.meta.url));
     const forkOptions = { cwd: options.cwd ?? options.root, env: supervisorEnvironment(), execArgv: source ? ["--import", import.meta.resolve("tsx")] : [], serialization: "advanced" as const };
-    owned = forkMaintenanceProcess(entry, forkOptions, deadline(), timeoutError, identity => journal.arm(identity));
+    owned = forkMaintenanceProcess(entry, forkOptions, deadline(), timeoutError, identity => { journal.arm(identity); options.onArmed?.(owner); });
     child = owned.child;
   } catch (error) {
     activeOwners.delete(owner);
-    try { options.onStopped?.("not-started"); journal.confirmed(); }
+    try { journal.stopped("not-started"); options.onStopped?.("not-started"); journal.confirmed(); }
     finally { lease.close(); }
     reject(error); return;
   }
-  const chunks: Buffer[] = []; let stderr = Buffer.alloc(0), bytes = 0, errorBytes = 0, stdoutTruncated = false, failure: unknown, commandSent = false, admissionLost = false;
+  const chunks: Buffer[] = []; let stderr = Buffer.alloc(0), bytes = 0, errorBytes = 0, stdoutTruncated = false, failure: unknown, commandSent = false;
   let result: ToolProcessReply | undefined, deliveryFailure: Error | undefined, stopping: Promise<void> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
-  const cleanup = () => stopping ??= owned.close();
+  const cleanup = () => stopping ??= owned.close().catch(error => { stopping = undefined; throw error; });
   const uncertain = () => new MaintenanceError("stop-unconfirmed", "程序退出未能确认，文件已保留；请核实后台进程后重试。");
   const stop = (reason?: unknown) => {
     failure ??= reason;
     void cleanup().catch(() => {});
-    stopTimer ??= setTimeout(() => { admissionLost = true; journal.revoke(); lease.close(); clearInterval(timer); activeOwners.delete(owner); reject(uncertain()); }, 7000);
+    stopTimer ??= setTimeout(() => { journal.revoke(); lease.close(); clearInterval(timer); activeOwners.delete(owner); reject(uncertain()); }, 7000);
   };
   const abort = () => stop(signal?.reason ?? new MaintenanceError("cancelled", "操作已取消。"));
   const deliveryFailed = () => {
@@ -136,10 +136,12 @@ export const runTool: ToolRun = (file, args, options) => new Promise((resolve, r
       const nativeFailure = owned.failure();
       if (nativeFailure instanceof MaintenanceError && nativeFailure.code === "stop-unconfirmed") throw nativeFailure;
       failure ??= nativeFailure ?? deliveryFailure;
-      if (!admissionLost) {
-        options.onStopped?.(commandSent ? "tree-cleaned" : "not-started");
-        journal.confirmed();
-      }
+      const proof = commandSent ? "tree-cleaned" : "not-started";
+      // Even after the caller's bounded wait expired, retain a durable receipt
+      // so a later locked reconcile can settle this operation in the same host.
+      journal.stopped(proof);
+      options.onStopped?.(proof);
+      journal.confirmed();
       if (failure || signal?.aborted) reject(failure ?? signal?.reason);
       else if (result?.type !== "exit") reject(Error("程序执行失败，请检查输入和安装状态。"));
       else resolve({ code: result.code ?? -1, stdout: Buffer.concat(chunks), stderr, ...(stdoutTruncated ? { stdoutTruncated: true } : {}), ...(errorBytes > (options.errorLimit ?? 64 * 1024) ? { stderrTruncated: true } : {}) });

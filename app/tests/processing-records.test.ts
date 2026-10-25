@@ -260,7 +260,7 @@ test("natural-language organization output records a successful call and a faile
     memories.runner = { close: async () => {}, execute: async () => ({ answer: "我会完整读取会话记忆", incomplete: false }) };
     await assert.rejects(memories.pipeline.organize(batch, selection, new AbortController().signal));
     const failed = f.get(f.list({ kind: "memory.organize" }).items[0]!.id); assert.equal(failed.state, "failed"); assert.equal(failed.stage, "校验分类结果"); assert.equal(failed.calls[0]!.state, "completed"); assert.match(failed.calls[0]!.output!.text, /我会完整读取/);
-    tree.publish(f.scope.workspaceId, batch, tree.classify(classification({ prompt: JSON.stringify({ purposes: batch }) }).answer, batch), tree.snapshot(f.scope.workspaceId).version);
+    tree.publish(f.scope.workspaceId, batch, tree.classify(classification({ prompt: JSON.stringify({ titles: batch.map(p => p.text) }) }).answer, batch), tree.snapshot(f.scope.workspaceId).version);
     memories.runner = { close: async () => {}, execute: async input => navigation(input, "当前事实") };
     await memories.pipeline.query(f.scope, "当前事实", selection, new AbortController().signal, Date.now() + 10000);
     const query = f.get(f.list({ kind: "memory.query" }).items[0]!.id); assert.equal(query.state, "completed"); assert.deepEqual(query.calls.map((c) => c.stage), ["全树一次匹配", "归纳原文答案"]); assert.ok(query.calls.every((c) => c.state === "completed"));

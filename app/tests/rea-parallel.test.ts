@@ -169,7 +169,7 @@ for (const cancel of [false, true]) test(`two manual downloads overlap and ${can
   } finally { ghidra.release(); hopper.release(); await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("component recovery preserves both interrupted jobs and the legacy global barrier", async () => {
+test("component requests automatically reconcile stopped jobs and legacy global barriers", async () => {
   const root = temporary(); config(root);
   const first = beginBuiltinOperation(root, "rea", undefined, "java"), second = beginBuiltinOperation(root, "rea", undefined, "jadx");
   first.close(); second.close(); // Simulate parent exit before its terminal record.
@@ -178,15 +178,14 @@ test("component recovery preserves both interrupted jobs and the legacy global b
   try {
     const state = service.snapshot(); assert.equal(state.jobs!.length, 2);
     assert.ok(state.jobs!.every(job => !job.running && /中断/.test(job.message)));
-    await assert.rejects(call(service, "rea.engine-check", { engine: "java" }));
+    await call(service, "rea.engine-check", { engine: "java" }); await settle(service);
+    assert.equal(service.snapshot().engines!.find(item => item.id === "java")!.pendingOperation, undefined);
     await call(service, "rea.engine-check", { engine: "wabt" }); await settle(service);
-    await call(service, "rea.reconcile", { engine: "java", operationId: state.engines!.find(item => item.id === "java")!.pendingOperation });
     assert.ok(service.snapshot().engines!.find(item => item.id === "jadx")!.pendingOperation);
     await call(service, "rea.reconcile", { engine: "jadx", operationId: state.engines!.find(item => item.id === "jadx")!.pendingOperation });
     const legacy = beginBuiltinOperation(root, "rea"); legacy.close();
-    await assert.rejects(call(service, "rea.engine-check", { engine: "java" }));
-    await call(service, "rea.reconcile", { operationId: service.snapshot().pendingOperation });
     await call(service, "rea.engine-check", { engine: "java" }); await settle(service);
+    assert.equal(service.snapshot().pendingOperation, undefined);
     assert.equal(service.snapshot().jobs!.find(job => job.engine === "java")!.error, undefined);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });

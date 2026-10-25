@@ -1,7 +1,6 @@
 import {
   reasoningLevels as levels,
   modelCostKeys,
-  emptyModelPricing,
   type ModelDraft as Model,
   type ProviderDraft as Provider,
 } from "../../shared/models.js";
@@ -10,6 +9,7 @@ import { Icon } from "../Icon.js";
 import { Headers, BodyOverrides } from "./Overrides.js";
 export function ModelEditor({
   editor,
+  editorDirty,
   setEditor,
   p,
   stageEditor,
@@ -17,6 +17,7 @@ export function ModelEditor({
   feedback,
 }: {
   editor: Model;
+  editorDirty: boolean;
   setEditor: (m: Model | null) => void;
   p: Provider;
   stageEditor: () => unknown;
@@ -136,7 +137,10 @@ export function ModelEditor({
                 <input className="input num" id={`model-cost-${key}`} type="number" min="0" step="any"
                   aria-describedby="model-pricing-help" placeholder="0" required={!!editor.cost}
                   value={editor.cost && Number.isFinite(editor.cost[key]) ? editor.cost[key] : ""}
-                  onChange={event => setEditor({ ...editor, cost: { ...(editor.cost ?? emptyModelPricing()), [key]: event.target.valueAsNumber } })} />
+                  onChange={event => {
+                    const cost = { ...(editor.cost ?? { input: NaN, output: NaN, cacheRead: NaN, cacheWrite: NaN }), [key]: event.target.valueAsNumber };
+                    setEditor({ ...editor, cost: !p.models.find(model => model.key === editor.key)?.cost && modelCostKeys.every(part => Number.isNaN(cost[part])) ? undefined : cost });
+                  }} />
               </div>
             ))}
           </div>
@@ -163,7 +167,7 @@ export function ModelEditor({
           >
             取消
           </button>
-          <button className="btn" type="submit">
+          <button className="btn" type="submit" disabled={!editorDirty}>
             完成编辑
           </button>
           <p className="feedback" role="status">{feedback}</p>

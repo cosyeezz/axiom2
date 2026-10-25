@@ -49,7 +49,7 @@ try {
   // Opening suggestions and reselecting the same key cannot discard a hidden saved value.
   await pick(providerHeaders, "第 1 项 key", "Content-Type");
   assert.equal(await providerHeaders.getByRole("combobox", { name: "第 1 项 value", exact: true }).inputValue(), "");
-  await save();
+  assert.ok(await page.locator("#save-provider").isDisabled(), "reselecting the same key does not create an unsaved change");
   assert.equal(disk().headers["Content-Type"], "application/json");
   await page.locator("#models-tab").click();
   await page.locator("#add-model").click();

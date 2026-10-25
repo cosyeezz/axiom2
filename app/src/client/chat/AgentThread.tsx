@@ -8,8 +8,6 @@ import { updateDraft, getDraft } from "../drafts.js";
 import { threadScope, emptyThread, agentScope, emptyAgent, activeStatus, type ThreadIndex } from "../../shared/agent.js";
 import type { Scope } from "../../shared/protocol.js";
 import { ModelChangeNotice } from "./ModelChangeNotice.js";
-import { TitleProcessCard, useTitleProcesses } from "../workspaces/TitleFeedback.js";
-import { titleCardPosition } from "../../shared/title-card.js";
 import { Message } from "./Message.js";
 import { ProcessFlow } from "./ProcessFlow.js";
 import { ModelRequestStatus, pendingModelActivity } from "./ProcessStatus.js";
@@ -27,7 +25,7 @@ import { useDisclosureReveal } from "./useDisclosureReveal.js";
 import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useHistoryConversation, useThreadMessage } from "./OriginalConversation.js";
 import { useHistoryRows } from "./HistoryTimeline.js";
-import { VirtualTimeline, type TimelineNavigation, type TimelineRow } from "./VirtualTimeline.js";
+import { VirtualTimeline, type TimelineNavigation } from "./VirtualTimeline.js";
 import type { ScrollDirection } from "./delivery-navigation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
@@ -44,7 +42,6 @@ function ThreadActivityGroup({ scope, group, tail, index, animateFold }: {
 type ThreadProps = { scope: Scope | null; nested?: boolean; readingRevision?: number; task?: Task; briefRevision?: number };
 function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRevision = 0 }: ThreadProps) {
   const index = useScope(scope?.sessionId ? threadScope(scope) : null, emptyThread);
-  const titleProcesses = useTitleProcesses(scope);
   // Keep the collection subscribed even for an empty or entirely compressed thread.
   const messagesReceived = useScopeOrder(scope?.sessionId ? `messages:${scope.workspaceId}:${scope.sessionId}` : null);
   const threadReceived = useScopeOrder(scope?.sessionId ? threadScope(scope) : null);
@@ -199,26 +196,12 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     previousGroups.current.some(previous => !previous.folded && previous.ids.some(id => group.ids.includes(id)))).map(group => group.id));
   useLayoutEffect(() => { previousGroups.current = liveGroups; }, [liveGroups]);
   const editReveal = editing && historyReceived && history.ready ? { messageId: editing.target.messageId, revision: editing.revision } : undefined;
-  const processBreaks = new Set(titleProcesses.items.flatMap(item => item.anchorMessageId ? [item.anchorMessageId] : []));
-  const { rows: historyRows, groups, segments, titlePositions, tailBoundary } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal, processBreaks,
+  const { rows, groups, segments, tailBoundary } = useHistoryRows({ scope, index, history, initialTaskInputId: task?.initialInputId, reveal: editReveal,
     renderLive: (group, groupIndex, currentGroups, boundary) => <Fragment>
       {group.selectionChange && <ModelChangeNotice change={group.selectionChange} />}
       {group.activity ? <ThreadActivityGroup scope={scope!} group={group} tail={!boundary && groupIndex === currentGroups.length - 1} index={index} animateFold={folding.has(group.id)} />
         : <Message scope={scope!} id={group.id} initialTaskInputId={task?.initialInputId} hideThinking={group.hideThinking} activeRunId={activeStatus(index.runStatus) ? index.runId : undefined} />}
     </Fragment> });
-  // Keep metadata beside the existing trigger row, never inside a folded process
-  // and never reattach an unknown historical record to the current conversation tail.
-  const titleRows = new Map<number, TimelineRow[]>();
-  for (const item of titleProcesses.items) {
-    const position = titleCardPosition(item, titlePositions);
-    if (position < 0) continue;
-    const entries = titleRows.get(position) ?? [];
-    entries.push({ key: `title:${item.id}`, estimate: 74,
-      revision: `${item.state}:${item.stage}:${item.endedAt}:${item.outcome}:${titleProcesses.stale}`,
-      render: () => <TitleProcessCard item={item} stale={titleProcesses.stale} /> });
-    titleRows.set(position, entries);
-  }
-  const rows: TimelineRow[] = historyRows.flatMap((row, position) => [row, ...(titleRows.get(position) ?? [])]);
   const revealKey = editReveal && rows.find(row => row.messageIds?.includes(editReveal.messageId))?.key;
   const cancelNavigation = () => { timelineNavigation.current?.cancel(); setStepping(null); };
   const scroll = (target: "top" | "bottom" | ScrollDirection) => {

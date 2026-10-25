@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Memories } from "../src/server/memories.js";
+import { AppError } from "../src/shared/protocol.js";
 import { memoryBatchWaitMs } from "../src/shared/memory-tree.js";
 import { purposeFixture, selection, classification } from "./memory-purpose-fixture.js";
 const headings = (count: number, prefix = "完成目的") => Array.from({ length: count }, (_, i) => `# [Completed] ${prefix}${i}`).join("\n");
@@ -44,7 +45,7 @@ test("batch failure retains prior tree and pending IDs with persisted retry back
   const f = purposeFixture(); try {
     await f.configure({ organizerModel: selection }); const scope = f.create(); f.memories.scan(scope); f.publish(); const old = f.tree.snapshot(f.workspace.id);
     f.write(scope, "# [Completed] 验证目的\n# [Completed] 新目的\n"); f.memories.scan(scope); age(f); let calls = 0;
-    f.memories.runner = { close: async () => {}, execute: async () => { calls++; throw Error("temporary"); } };
+    f.memories.runner = { close: async () => {}, execute: async () => { calls++; throw new AppError("MEMORY_RETRYABLE", "temporary"); } };
     await f.memories.organize(); assert.deepEqual(f.tree.snapshot(f.workspace.id), old); assert.equal(f.tree.tree(f.workspace.id).failed, 1);
     await f.memories.organize(); assert.equal(calls, 1);
     f.store.db.prepare("UPDATE memory_purposes SET retryAfter=0").run(); f.memories.runner.execute = async input => { calls++; return classification(input); };

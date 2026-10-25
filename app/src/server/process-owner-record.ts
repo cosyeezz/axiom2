@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { MaintenanceError } from "../shared/maintenance.js";
 import { linuxProcessGone, linuxProcessStart, linuxProcessView, sameLinuxView, type LinuxProcessView } from "./process-owner-linux-identity.js";
 
 import { pidGroupGone, pidIdentityGone, pidSnapshot, type PidProcessIdentity } from "./maintenance-process-pid.js";
@@ -16,7 +18,7 @@ export function createProcessOwner(path: string, commandLease?: CommandLeaseIden
   let host: { view: LinuxProcessView; startTime: string } | undefined;
   try { host = { view: linuxProcessView(), startTime: linuxProcessStart(process.pid) }; } catch { /* Explicitly unrecoverable; still require the durable gate. */ }
   const hostStarted = process.platform === "darwin" ? pidSnapshot().find(row => row.pid === process.pid)?.started : undefined;
-  const record = { format: 1, id: randomUUID(), state: "intent" as "intent" | "armed", hostPid: process.pid, host, hostStarted, commandLease, createdAt: Date.now(), identity: undefined as ProcessOwnerIdentity | undefined };
+  const record = { format: 1, id: randomUUID(), state: "intent" as "intent" | "armed", hostPid: process.pid, host, hostStarted, commandLease, createdAt: Date.now(), identity: undefined as ProcessOwnerIdentity | undefined, cleaned: undefined as "not-started" | "tree-cleaned" | undefined };
   let removed = false;
   function syncDirectory() {
     // Windows does not support fsync on directory descriptors. File contents are
@@ -64,6 +66,14 @@ export function createProcessOwner(path: string, commandLease?: CommandLeaseIden
         if (!validPidIdentity(identity)) throw Error("维护进程 PID 身份无效。");
       } else if (!Number.isSafeInteger(identity.workerPid) || identity.workerPid < 1) throw Error("Windows 进程归属身份无效。");
       record.state = "armed"; record.identity = identity;
+      persist(false);
+    },
+    stopped(proof: "not-started" | "tree-cleaned") {
+      if (removed) return;
+      assertSameRecord();
+      // Written only by the holder of the native process handle after close()
+      // proves the complete tree stopped. Survives a failed parent callback.
+      record.cleaned = proof;
       persist(false);
     },
     confirmed() {
@@ -126,7 +136,21 @@ function canRecoverPidOwner(path: string) {
     return current.isFile() && !current.isSymbolicLink() && current.nlink === 1 && current.dev === stat.dev && current.ino === stat.ino && readFileSync(path, "utf8") === bytes;
   } catch { return false; }
 }
+function hasCleanupReceipt(path: string): boolean {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 1024 * 1024) return false;
+    const bytes = readFileSync(path, "utf8"), record = JSON.parse(bytes);
+    if (record.format !== 1 || !/^[a-f0-9-]{36}$/.test(record.id) || !["intent", "armed"].includes(record.state) ||
+        !Number.isSafeInteger(record.hostPid) || record.hostPid <= 1 ||
+        !["not-started", "tree-cleaned"].includes(record.cleaned) ||
+        record.cleaned === "tree-cleaned" && record.state !== "armed" || processOwnerIsLive(path)) return false;
+    const current = lstatSync(path);
+    return current.isFile() && !current.isSymbolicLink() && current.nlink === 1 && current.dev === stat.dev && current.ino === stat.ino && readFileSync(path, "utf8") === bytes;
+  } catch { return false; }
+}
 export function canRecoverProcessOwner(path: string): boolean {
+  if (hasCleanupReceipt(path)) return true;
   if (process.platform === "darwin") return canRecoverPidOwner(path);
   if (process.platform !== "linux") return false;
   try {
@@ -145,6 +169,56 @@ export function canRecoverProcessOwner(path: string): boolean {
     if (!current.isFile() || current.isSymbolicLink() || current.nlink !== 1 || current.dev !== stat.dev || current.ino !== stat.ino) return false;
     return true;
   } catch { return false; }
+}
+
+/** Called only with the journal's parent/admission locks held. A saved PID is
+ * never enough: Darwin requires its start identity and a continuous owned group.
+ * Other platforms retain their native namespace/Job proof instead of PID kills. */
+export function processOwnerFingerprint(path: string) {
+  const record = JSON.parse(readFileSync(path, "utf8"));
+  const { cleaned: _receipt, ...ownership } = record;
+  return createHash("sha256").update(JSON.stringify(ownership)).digest("hex");
+}
+export async function stopRecordedProcessOwner(path: string, ownerId: string, fingerprint: string | undefined) {
+  const uncertain = () => new MaintenanceError("stop-unconfirmed", "无法证明残留进程属于此维护任务，已保留记录与文件，未终止其他进程。");
+  if (canRecoverProcessOwner(path)) return;
+  const stat = lstatSync(path), bytes = readFileSync(path, "utf8"), record = JSON.parse(bytes);
+  const unchanged = () => {
+    const named = lstatSync(path);
+    if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.dev !== stat.dev || named.ino !== stat.ino || readFileSync(path, "utf8") !== bytes) throw uncertain();
+  };
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 1024 * 1024 || record.format !== 1 || record.id !== ownerId ||
+      record.state !== "armed" || !fingerprint || processOwnerFingerprint(path) !== fingerprint || processOwnerIsLive(path) || process.platform !== "darwin" || !validPidIdentity(record.identity)) throw uncertain();
+  const identity: PidProcessIdentity = record.identity;
+  const signal = (name: NodeJS.Signals) => {
+    unchanged();
+    const rows = pidSnapshot(), leader = rows.find(row => row.pid === identity.workerPid);
+    if (leader && leader.started !== identity.started) throw uncertain();
+    const group = rows.filter(row => row.group === identity.workerPid && !row.zombie);
+    // Without the original leader, only a fully recorded group is trusted.
+    if (!leader && group.some(row => !identity.members.some(member => member.pid === row.pid && member.started === row.started))) throw uncertain();
+    if (group.length) { try { process.kill(-identity.workerPid, name); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; } }
+    for (const member of identity.members) if (!pidIdentityGone(member)) {
+      unchanged();
+      try { process.kill(member.pid, name); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    }
+  };
+  signal("SIGTERM");
+  const graceful = Date.now() + 500;
+  while (!pidGroupGone(identity) && Date.now() < graceful) await delay(25);
+  if (!pidGroupGone(identity)) signal("SIGKILL");
+  const deadline = Date.now() + 3000;
+  while (!pidGroupGone(identity) && Date.now() < deadline) await delay(50);
+  if (!pidGroupGone(identity)) throw uncertain();
+  unchanged();
+  const staged = `${path}.${randomUUID()}.tmp`;
+  try {
+    const fd = openSync(staged, "wx", 0o600);
+    try { writeFileSync(fd, JSON.stringify({ ...record, cleaned: "tree-cleaned" })); fsyncSync(fd); } finally { closeSync(fd); }
+    unchanged(); renameSync(staged, path);
+    const directory = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
+    try { fsyncSync(directory); } finally { closeSync(directory); }
+  } finally { rmSync(staged, { force: true }); }
 }
 
 /** Revalidate under the caller's resource lock after its interrupted state has
