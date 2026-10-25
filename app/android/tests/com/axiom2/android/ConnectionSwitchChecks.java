@@ -99,6 +99,20 @@ final class ConnectionSwitchChecks {
         test.runOnMainSync(() -> web.evaluateJavascript(script, value -> { result.set(value); done.countDown(); }));
         check(done.await(10, TimeUnit.SECONDS), "WebView JavaScript timed out"); return result.get();
     }
+    private static void tapPageButton(Instrumentation test, AxiomWebView web) throws Exception {
+        org.json.JSONArray rectangle = new org.json.JSONArray(javascript(test, web, "(()=>{const r=document.querySelector('#page-next').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,innerWidth]})()"));
+        float x = (float) rectangle.getDouble(0), y = (float) rectangle.getDouble(1), width = (float) rectangle.getDouble(2);
+        float[] point = new float[2];
+        test.runOnMainSync(() -> {
+            int[] location = new int[2]; web.getLocationOnScreen(location); web.requestFocus();
+            float scale = web.getWidth() / width;
+            point[0] = location[0] + x * scale; point[1] = location[1] + y * scale;
+        });
+        long time = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(time, time, android.view.MotionEvent.ACTION_DOWN, point[0], point[1], 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(time, time + 40, android.view.MotionEvent.ACTION_UP, point[0], point[1], 0);
+        try { test.sendPointerSync(down); test.sendPointerSync(up); } finally { down.recycle(); up.recycle(); }
+    }
     private static String page(String url) {
         android.net.Uri uri = android.net.Uri.parse(url);
         return uri.getScheme() + "://" + uri.getAuthority() + uri.getPath();
@@ -119,7 +133,7 @@ final class ConnectionSwitchChecks {
             android.webkit.WebBackForwardList list = web.copyBackForwardList();
             List<String> urls = new ArrayList<>();
             for (int i = 0; i < list.getSize(); i++) urls.add(list.getItemAtIndex(i).getUrl());
-            result.set("url=" + web.getUrl() + ", index=" + list.getCurrentIndex() + ", history=" + urls + ", last=" + prefs(activity).getString("last", ""));
+            result.set("url=" + web.getUrl() + ", index=" + list.getCurrentIndex() + ", canGoBack=" + web.canGoBack() + ", history=" + urls + ", last=" + prefs(activity).getString("last", ""));
         }); return result.get();
     }
     private static void ready(Instrumentation test, MainActivity activity, String endpoint) throws Exception {
@@ -172,19 +186,20 @@ final class ConnectionSwitchChecks {
                     test.runOnMainSync(() -> check(!web.canGoBack(), "Cross-workstation history leaked into Back"));
                     check(prefs(activity).getString("history", "").equals(saved), "Real cycle reordered saved endpoints");
                     if (expected.equals(b)) {
-                        javascript(test, web, "history.pushState(null, '', '/secondary')");
-                        // The renderer's evaluate callback can precede the native history update.
-                        waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/secondary'")) && nativeHistory(test, web, b, "/secondary", 1, 2), "Second workstation pushState did not reach native history");
                         String before = navigation(test, activity, web);
-                        test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
                         try {
+                            // A trusted tap models actual SPA navigation; unactivated script entries can be skipped by Chromium.
+                            tapPageButton(test, web);
+                            waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/secondary' && navigator.userActivation.hasBeenActive")) && nativeHistory(test, web, b, "/secondary", 1, 2), "Second workstation pushState did not reach native history");
+                            test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
                             waitFor(() -> "true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/'")), "Second workstation page history was skipped");
                             check(prefs(activity).getString("last", "").equals(b), "Second workstation page Back switched connections");
                             ready(test, activity, b);
                             waitFor(() -> nativeHistory(test, web, b, "/", 0, 2), "Second workstation Back did not settle at root");
+                            check("true".equals(javascript(test, web, "location.origin === '" + b + "' && location.pathname === '/'")) && prefs(activity).getString("last", "").equals(b), "Second workstation Back did not remain on the same computer");
                             check(prefs(activity).getString("history", "").equals(saved), "Page Back reordered saved connections");
                         } catch (AssertionError failure) {
-                            throw new AssertionError(failure.getMessage() + "; before: " + before + "; after: " + navigation(test, activity, web), failure);
+                            throw new AssertionError(failure.getMessage() + "; before: " + before + "; after: " + navigation(test, activity, web) + "; renderer=" + javascript(test, web, "[location.href,history.length,navigator.userActivation.hasBeenActive]"), failure);
                         }
                     }
                 }
@@ -224,7 +239,7 @@ final class ConnectionSwitchChecks {
                         requested.countDown();
                         try { release.await(15, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     }
-                    String html = "<!doctype html><div id='app'><span class='connection-status' data-connected='true'>Fixture ready</span></div><div id='popover' popover>Menu</div><dialog>Details</dialog><button id='collapse-history' onclick=\"document.body.classList.remove('history-open')\">Close history</button>";
+                    String html = "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><div id='app'><span class='connection-status' data-connected='true'>Fixture ready</span></div><div id='popover' popover>Menu</div><dialog>Details</dialog><button id='collapse-history' onclick=\"document.body.classList.remove('history-open')\">Close history</button><button id='page-next' style='position:fixed;left:16px;top:100px;width:200px;height:52px' onclick=\"history.pushState(null, '', '/secondary')\">Open secondary page</button>";
                     byte[] body = (status ? "{\"connected\":true}" : html).getBytes(StandardCharsets.UTF_8);
                     OutputStream out = socket.getOutputStream();
                     out.write(("HTTP/1.1 200 OK\r\nContent-Type: " + (status ? "application/json" : "text/html; charset=utf-8") + "\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
