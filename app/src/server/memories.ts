@@ -473,7 +473,11 @@ export class Memories {
   private applyScan(scope: Scope, view: MemoryView, changedCatalogs?: Set<string>) {
     const cached = this.cachedViews.get(scope.sessionId);
     this.cachedViews.set(scope.sessionId, view);
-    if (!view.error && this.pipeline.tree.enqueue(scope, view.entry)) this.publishTree(scope.workspaceId);
+    if (!view.error) {
+      const reconciled = this.pipeline.tree.reconcile(scope, view.entry);
+      const enqueued = this.pipeline.tree.enqueue(scope, view.entry);
+      if (reconciled || enqueued) this.publishTree(scope.workspaceId);
+    }
     this.scheduleOrganization();
     const sourceTitle = view.progress.title || String(this.owner(scope).title);
     const old = this.store.db.prepare("SELECT revision,body FROM memory_sources WHERE sessionId=?").get(scope.sessionId);

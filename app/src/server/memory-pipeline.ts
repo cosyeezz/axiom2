@@ -7,6 +7,7 @@ import type { MemoryPurpose, MemorySource, MemoryIndexNode } from "../shared/mem
 import { AppError, type Scope } from "../shared/protocol.js";
 import { type MemoryDocument, type MemoryQueryResult } from "../shared/memory.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
+import { locateMemoryPurpose, queryMemorySnapshot } from "../shared/memory-purpose-locator.js";
 import { availableMemoryDetails } from "./memory-detail-files.js";
 import type { Selection } from "../shared/agent.js";
 import type { LeaseRef } from "./execution-protocol.js";
@@ -35,10 +36,10 @@ export class MemoryPipeline {
         throw new AppError("REVISION_CONFLICT", "读取依据已变化，结果未发布");
     }
   }
-  private locate(purpose: MemoryPurpose, document: MemoryDocument) {
+  private locate(purpose: MemoryPurpose, document: MemoryDocument, peers: readonly MemoryPurpose[]) {
     const headings = memoryPurposes(document.content);
-    const found = headings.find(heading => heading.key === purpose.source.key);
-    if (!found || found.title !== purpose.text || !found.complete)
+    const found = locateMemoryPurpose(purpose, headings, peers);
+    if (!found || !found.complete)
       throw new AppError("MEMORY_LOCATOR_INVALID", "原目的定位已失效；不能猜测来源或使用旧目录回答");
     return found;
   }
@@ -60,13 +61,13 @@ export class MemoryPipeline {
   async organize(batch: QueuedPurpose[], selection: Selection, signal: AbortSignal, recordId?: string) {
     if (!batch.length) return;
     const scope = { workspaceId: batch[0].workspaceId, sessionId: batch[0].source.sessionId };
-    const processingId = recordId ?? this.startOrganization(batch), originalBatch = batch;
+    const processingId = recordId ?? this.startOrganization(batch), originalBatch = batch, peers = this.tree.entries(scope.workspaceId);
     const batchContext = (published = false) => ({ purposeIds: originalBatch.map(purpose => purpose.id), sessionIds: [...new Set(originalBatch.map(purpose => purpose.source.sessionId))], published, skipped: originalBatch.length - batch.length });
     const guard = () => {
       signal.throwIfAborted();
       for (const purpose of batch) {
         const source = { workspaceId: scope.workspaceId, sessionId: purpose.source.sessionId };
-        this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal));
+        this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal), peers);
       }
     };
     try {
@@ -77,7 +78,7 @@ export class MemoryPipeline {
         signal.throwIfAborted();
         try {
           const source = { workspaceId: purpose.workspaceId, sessionId: purpose.source.sessionId };
-          this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal)); return true;
+          this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal), peers); return true;
         } catch (error) { signal.throwIfAborted(); this.tree.suspend(purpose, error); return false; }
       });
       this.memories.records.annotate(processingId, { batch: batchContext() });
@@ -127,7 +128,7 @@ export class MemoryPipeline {
     this.memories.records.stage(processingId, "读取已发布目的索引", selection);
     // Capture once, at invocation, before any model call. No session-directory
     // restriction, no rescan, and no switching versions midway through a query.
-    const snapshot = this.tree.snapshot(scope.workspaceId), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
+    const snapshot = queryMemorySnapshot(this.tree.snapshot(scope.workspaceId)), base = { scope, selection, kind: "query" as const, signal, deadlineAt, parentLease, processingId };
     const empty: MemoryQueryResult = { answer: "", scope, incomplete: false, sources: [], indexVersion: snapshot.version };
     let turns = 0;
     const match = async (stage: string, candidates: Array<{ id: string; text: string; [key: string]: unknown }>) => {
@@ -169,8 +170,14 @@ export class MemoryPipeline {
     };
     const details = new Map<string, { purpose: MemoryPurpose; path: string; heading: string; state: string }>();
     const outlines: Array<{ purpose: string; content: string }> = [];
+    const located = new Set<string>();
     for (const purpose of snapshot.purposes.filter(purpose => chosen.has(purpose.id))) {
-      const entry = read(purpose.source.sessionId, "MEMORY.md"), heading = this.locate(purpose, entry);
+      const entry = read(purpose.source.sessionId, "MEMORY.md"), heading = this.locate(purpose, entry, snapshot.purposes);
+      // Old and reference-annotated leaves can coexist in historical snapshots.
+      // Validate every selected locator, but read the same current goal only once.
+      const key = JSON.stringify([purpose.source.sessionId, heading.key]);
+      if (located.has(key)) continue;
+      located.add(key);
       outlines.push({ purpose: purpose.text, content: heading.content });
       const directory = memoryDirectory(this.memories.store.root, purpose.source.sessionId);
       for (const { node, path } of availableMemoryDetails(directory, entry.content)) {

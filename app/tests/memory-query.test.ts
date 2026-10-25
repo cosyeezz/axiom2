@@ -12,6 +12,56 @@ async function fixture() {
   const query = (signal?: AbortSignal, target = f.memories) => target.query(scope, "当前事实", signal);
   return { ...f, create, scope, query };
 }
+test("legacy duplicates are projected once from the captured index and only current numbered detail is read", async () => {
+  const f = await fixture(); try {
+    // Simulate the published historical tuple without treating its first member as a title.
+    const previous = f.tree.snapshot(f.workspace.id), old = previous.purposes[0];
+    old.source.key = '["unrelated historical label",7]';
+    const row = f.tree.entries(f.workspace.id)[0];
+    f.store.db.prepare("UPDATE memory_purposes SET sourceKey=?,body=? WHERE id=?").run(old.source.key, JSON.stringify({ ...row, source: old.source }), old.id);
+    f.store.db.prepare("UPDATE memory_purpose_indexes SET body=? WHERE workspaceId=?").run(JSON.stringify(previous), f.workspace.id);
+    f.write(f.scope, "# [Completed] 来源核验 〔7〕\n## [Completed] 验证结果\n");
+    const detail = f.detail(f.scope, "新版编号详情依据");
+    // Capture a historical overlap; query itself must not scan or repair storage.
+    f.tree.enqueue(f.scope, "# [Completed] 来源核验 〔7〕\n## [Completed] 验证结果\n"); f.publish();
+    const before = f.tree.snapshot(f.workspace.id), rows = f.tree.entries(f.workspace.id); let answers = 0;
+    assert.equal(before.purposes.length, 2); assert.equal(f.tree.tree(f.workspace.id).purposes.length, 1);
+    (f.memories as any).scanAsync = async () => { throw Error("query must not scan"); };
+    f.memories.runner = { close: async () => {}, execute: async input => {
+      const data = JSON.parse(input.prompt);
+      if (data.candidates?.some((candidate: any) => candidate.kind === "purpose")) assert.equal(data.candidates.filter((candidate: any) => candidate.kind === "purpose").length, 1);
+      if (data.evidence) { answers++; assert.equal(data.evidence.length, 1); assert.equal(data.evidence[0].content, "新版编号详情依据"); }
+      return navigation(input, "新版编号详情依据");
+    } };
+    const result = await f.query(); assert.equal(result.answer, "新版编号详情依据"); assert.equal(answers, 1); assert.equal(result.indexVersion, before.version);
+    assert.equal(result.readDocuments?.filter(document => document.path === detail.path).length, 1);
+    assert.deepEqual(f.tree.snapshot(f.workspace.id), before); assert.deepEqual(f.tree.entries(f.workspace.id), rows);
+    f.write(f.scope, "# [In progress] 来源核验 〔7〕\n## [Completed] 验证结果\n");
+    const invalid = await f.query(); assert.equal(invalid.reason, "locator_invalid"); assert.equal(invalid.answer, ""); assert.equal(answers, 1, "legacy duplicate cannot revive a reopened canonical goal");
+  } finally { await f.close(); }
+});
+test("an unnumbered canonical binding follows only a unique reference annotation", async () => {
+  const f = await fixture(); try {
+    f.write(f.scope, "# [Completed] 来源核验 〔8〕\n## [Completed] 验证结果\n"); const detail = f.detail(f.scope, "编号补注后仍可核验");
+    let answers = 0; f.memories.runner = { close: async () => {}, execute: async input => { if (JSON.parse(input.prompt).evidence) answers++; return navigation(input, "编号补注后仍可核验"); } };
+    const unproven = await f.query(); assert.equal(unproven.reason, "locator_invalid"); assert.equal(answers, 0, "a source-only annotation is not a published binding");
+    f.memories.scan(f.scope); f.publish();
+    const result = await f.query(); assert.equal(result.answer, "编号补注后仍可核验"); assert.ok(result.readDocuments?.some(document => document.path === detail.path));
+    f.write(f.scope, "# [Completed] 来源核验 〔9〕\n");
+    const changed = await f.query(); assert.equal(changed.reason, "locator_invalid"); assert.equal(answers, 1);
+  } finally { await f.close(); }
+});
+test("selecting only an old unnumbered leaf cannot bypass a changed numbered binding", async () => {
+  const f = await fixture(); try {
+    f.tree.enqueue(f.scope, "# [Completed] 来源核验 〔1〕\n"); f.publish();
+    f.write(f.scope, "# [Completed] 来源核验 〔2〕\n"); f.detail(f.scope, "不得通过旧别名读取"); let answers = 0;
+    f.memories.runner = { close: async () => {}, execute: async input => {
+      const data = JSON.parse(input.prompt); if (data.evidence) answers++;
+      return data.candidates ? { answer: JSON.stringify(data.candidates.filter((candidate: any) => candidate.kind !== "purpose" || candidate.text === "来源核验").map((candidate: any) => candidate.id)), incomplete: false } : navigation(input);
+    } };
+    const result = await f.query(); assert.equal(result.reason, "locator_invalid"); assert.equal(result.answer, ""); assert.equal(answers, 0);
+  } finally { await f.close(); }
+});
 test("cold restart reads only selected purposes beyond 24 sources with full detail files", async () => {
   const f = await fixture(); let restarted: Memories | undefined;
   try {

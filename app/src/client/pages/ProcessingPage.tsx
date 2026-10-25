@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { processingActive, processingKinds, processingOutcomes, processingStates, type ProcessingKind } from "../../shared/processing.js";
+import { processingActive, processingFailed, processingKinds, processingOutcomes, processingStates, type ProcessingKind } from "../../shared/processing.js";
 import { useProcessingList, useProcessingRecord } from "../processing/records.js";
 import { ProcessingDetails, processingDuration, processingTime, useProcessingNow } from "../processing/ProcessDetail.js";
 import "../styles/processing.css";
@@ -28,7 +28,7 @@ export function ProcessingPage({ workspaceId, initial = {}, onBack }: { workspac
     {listRead.error && <p role="alert">读取记录失败：{listRead.error} <button className="btn" disabled={listRead.stale} onClick={refresh}>重新读取</button></p>}
     <div className={`processing-layout${selected ? " has-selection" : ""}`}>
       <div className="processing-list" aria-label="处理记录列表">{!list ? !listRead.error && <p role="status">正在读取记录…</p> : !list.items.length ? <p>没有符合条件的处理记录。旧请求未记录的内容无法还原。</p> : list.items.map((item) => <button className="processing-row" key={item.id} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>
-        <span><strong>{processingKinds[item.kind]}</strong><b data-state={item.state}>{processingStates[item.state]}{item.outcome ? ` · ${processingOutcomes[item.outcome]}` : ""}</b></span><span>{item.title}</span><small>{processingTime(item.startedAt)} · {processingDuration(item.startedAt, item.endedAt, now)}</small><small>{item.stage}{item.legacy ? " · 历史记录" : ""}</small>{item.error && <span className="processing-row-error">{item.error}</span>}
+        <span><strong>{processingKinds[item.kind]}</strong><b data-state={item.state}>{processingStates[item.state]}{item.outcome ? ` · ${processingOutcomes[item.outcome]}` : ""}</b></span><span>{item.title}</span><small>{processingTime(item.startedAt)} · {processingDuration(item.startedAt, item.endedAt, now)}</small><small>{item.stage}{item.legacy ? " · 历史记录" : ""}</small>{item.error && <span className={`processing-row-error${processingFailed(item.state) ? "" : " processing-notice"}`}>{item.error}</span>}
       </button>)}<div className="processing-pagination"><button className="btn" disabled={!pages.length} onClick={() => setPages((p) => p.slice(0, -1))}>上一页</button><span>第 {pages.length + 1} 页</span><button className="btn" disabled={list?.next == null} onClick={() => { if (list?.next != null) setPages((p) => [...p, list.next!]); }}>下一页</button></div></div>
       {selected && <article className="processing-detail" aria-label="处理详情"><button className="btn" onClick={() => setSelected("")}>返回记录列表</button>{detailRead.error && <p role="alert">{detailRead.error}</p>}{detail ? <ProcessingDetails record={detail} /> : !detailRead.error && <p role="status">正在读取详情…</p>}</article>}
     </div>

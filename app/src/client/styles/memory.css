@@ -105,7 +105,7 @@
 .memory-loading>.bubble-loading{width:18px;height:18px;flex:0 0 18px}
 .memory-empty-copy.memory-loading{justify-content:center}
 @media(max-width:480px){.memory-branch{margin-left:5px;padding-left:8px}.memory-task-row{gap:5px}.memory-task-state{font-size:10px}.memory-task-detail-button{gap:0}.memory-task-detail-button>svg{display:block}}
-@media(pointer:coarse),(max-width:640px){.memory-branch-toggle,.memory-task-detail-button,.memory-task-link-button,.memory-context-summary>summary{min-height:44px}.memory-task-row{min-height:36px}}
+@media(pointer:coarse),(max-width:640px){.memory-branch-toggle,.memory-task-detail-button,.memory-task-link-button,.memory-context-summary>summary{min-height:44px}.memory-branch-disclosure{flex-basis:44px}.memory-task-detail-button,.memory-task-link-button{min-width:44px;flex-shrink:0}.memory-title-open{display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%}.memory-task-row{min-height:44px}}
 .memory-next{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px 14px;margin:0 20px 18px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;line-height:1.7}
 .memory-next:empty{display:none}
 .memory-next dt{color:var(--muted);white-space:nowrap}

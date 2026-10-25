@@ -24,6 +24,63 @@ test("enqueue allocates opaque stable IDs once per terminal purpose, not per fil
     assert.equal(f.tree.entries(f.workspace.id).length, 2, "ambiguous duplicate titles fail closed");
   } finally { await f.close(); }
 });
+test("source scans revoke reopened goals and reuse the same ID on completion without version churn", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope); f.publish();
+    const first = f.tree.entries(f.workspace.id)[0], initial = f.tree.snapshot(f.workspace.id);
+    f.memories.scan(scope); assert.equal(f.tree.snapshot(f.workspace.id).version, initial.version);
+    f.write(scope, "# [In progress] 验证目的\n## [Completed] 验证结果\n"); f.memories.scan(scope);
+    const revoked = f.tree.snapshot(f.workspace.id); assert.equal(revoked.purposes.length, 0); assert.equal(revoked.version, initial.version + 1);
+    assert.equal(f.tree.entries(f.workspace.id)[0].blocked, true); assert.equal(f.tree.entries(f.workspace.id)[0].processedAt, null);
+    f.memories.scan(scope); assert.equal(f.tree.snapshot(f.workspace.id).version, revoked.version);
+    f.write(scope, "# [Completed] 验证目的\n## [Completed] 验证结果\n"); f.memories.scan(scope);
+    const restored = f.tree.entries(f.workspace.id)[0]; assert.equal(restored.id, first.id); assert.equal(restored.blocked, false);
+    assert.equal(f.tree.tree(f.workspace.id).pending, 1); f.publish(); assert.equal(f.tree.snapshot(f.workspace.id).purposes[0].id, first.id);
+  } finally { await f.close(); }
+});
+test("scan quarantines unsupported ordinal bindings, then publishes a canonical replacement without reviving the duplicate", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope); f.publish();
+    const before = f.tree.snapshot(f.workspace.id), old = before.purposes[0], row = f.tree.entries(f.workspace.id)[0];
+    old.source.key = '["unknown historical meaning",0]';
+    f.store.db.prepare("UPDATE memory_purposes SET sourceKey=?,body=? WHERE id=?").run(old.source.key, JSON.stringify({ ...row, source: old.source }), old.id);
+    f.store.db.prepare("UPDATE memory_purpose_indexes SET body=? WHERE workspaceId=?").run(JSON.stringify(before), f.workspace.id);
+    f.memories.scan(scope);
+    let entries = f.tree.entries(f.workspace.id); assert.equal(entries.length, 2); assert.equal(entries.find(p => p.id === old.id)?.blocked, true);
+    assert.equal(f.tree.snapshot(f.workspace.id).purposes.length, 0); f.publish();
+    const canonical = f.tree.snapshot(f.workspace.id); assert.equal(canonical.purposes.length, 1); assert.notEqual(canonical.purposes[0].id, old.id);
+    f.memories.scan(scope); f.memories.scan(scope); entries = f.tree.entries(f.workspace.id);
+    assert.equal(entries.length, 2); assert.equal(entries.find(p => p.id === old.id)?.blocked, true);
+    assert.equal(f.tree.tree(f.workspace.id).pending, 0); assert.equal(f.tree.snapshot(f.workspace.id).version, canonical.version);
+  } finally { await f.close(); }
+});
+test("a reference annotation requires a new explicit binding and subsequent renumbering cannot reuse it", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope); f.publish(); const before = f.tree.snapshot(f.workspace.id);
+    f.write(scope, "# [Completed] 验证目的 〔3〕\n## [Completed] 验证结果\n"); f.memories.scan(scope);
+    assert.equal(f.tree.entries(f.workspace.id).length, 2); assert.equal(f.tree.entries(f.workspace.id).find(p => p.id === before.purposes[0].id)?.blocked, true);
+    f.publish(); const numbered = f.tree.snapshot(f.workspace.id).purposes[0]; assert.equal(numbered.text, "验证目的 〔3〕");
+    f.write(scope, "# [Completed] 验证目的 〔4〕\n"); f.memories.scan(scope);
+    assert.equal(f.tree.entries(f.workspace.id).find(p => p.id === numbered.id)?.blocked, true);
+    assert.equal(f.tree.snapshot(f.workspace.id).purposes.length, 0);
+  } finally { await f.close(); }
+});
+test("legacy plus unnumbered canonical peers stay quarantined across numbered-source scans", async () => {
+  const f = purposeFixture(); try {
+    const scope = f.create(); f.memories.scan(scope); f.publish();
+    const snapshot = f.tree.snapshot(f.workspace.id), canonical = snapshot.purposes[0], row = f.tree.entries(f.workspace.id)[0];
+    const legacy = { ...row, id: "legacy-ordinal", source: { ...row.source, key: '["unrelated old label",0]' } };
+    f.store.db.prepare("INSERT INTO memory_purposes(id,workspaceId,sessionId,sourceKey,queuedAt,processedAt,body) VALUES(?,?,?,?,?,?,?)").run(legacy.id, f.workspace.id, scope.sessionId, legacy.source.key, row.queuedAt - 1, row.processedAt, JSON.stringify(legacy));
+    snapshot.purposes.push(legacy); snapshot.roots[0].children.unshift({ id: legacy.id, purposeId: legacy.id, name: legacy.text, children: [] });
+    f.store.db.prepare("UPDATE memory_purpose_indexes SET body=? WHERE workspaceId=?").run(JSON.stringify(snapshot), f.workspace.id);
+    f.write(scope, "# [Completed] 验证目的 〔1〕\n## [Completed] 验证结果\n"); f.memories.scan(scope);
+    const after = f.tree.snapshot(f.workspace.id); assert.deepEqual(after.purposes, []); assert.equal(f.tree.entries(f.workspace.id).find(p => p.id === canonical.id)?.blocked, true);
+    f.memories.scan(scope); f.memories.scan(scope);
+    assert.equal(f.tree.entries(f.workspace.id).find(p => p.id === legacy.id)?.blocked, true);
+    assert.equal(f.tree.tree(f.workspace.id).pending, 1); assert.equal(f.tree.snapshot(f.workspace.id).version, after.version);
+    assert.equal(f.tree.entries(f.workspace.id).find(p => p.source.key === JSON.stringify(["验证目的 〔1〕"]))?.blocked, false, "new numbered binding, not the superseded legacy row, is queued");
+  } finally { await f.close(); }
+});
 test("context freezes nearest four same-file titles/statuses without indexing unfinished helpers", async () => {
   const f = purposeFixture(); try {
     const scope = f.create(Array.from({ length: 7 }, (_, i) => `# [${i === 3 ? "Completed" : "In progress"}] 语境${i}`).join("\n")); f.memories.scan(scope);

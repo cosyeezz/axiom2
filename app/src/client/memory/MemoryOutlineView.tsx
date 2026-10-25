@@ -13,7 +13,9 @@ import { reconcileMemoryTree, type MemoryTreeItem as TreeItem } from "./memory-t
 export { MemoryStateIcon } from "./MemoryStateIcon.js";
 
 /** Read only the selected independent file, with revision-safe pagination. */
-function InlineDetail({ scope, path }: { scope: Scope; path: string }) {
+function InlineDetail({ scope, path, onFocusLost }: { scope: Scope; path: string; onFocusLost: () => void }) {
+  const section = useRef<HTMLElement>(null);
+  useLayoutEffect(() => () => { if (section.current?.contains(window.document.activeElement)) onFocusLost(); }, []);
   const [document, setDocument] = useState<MemoryDocument | null>(null);
   const [busy, setBusy] = useState(true), [error, setError] = useState("");
   const generation = useRef(0);
@@ -29,7 +31,7 @@ function InlineDetail({ scope, path }: { scope: Scope; path: string }) {
     finally { if (current === generation.current) setBusy(false); }
   };
   useEffect(() => { void read(); return () => { generation.current++; }; }, [path, scope.workspaceId, scope.sessionId]);
-  return <section className="memory-inline-detail" aria-label="详情内容">
+  return <section ref={section} className="memory-inline-detail" aria-label="详情内容">
     {busy && <p className="memory-loading" role="status"><BubbleLoadingIcon />正在读取此条详情…</p>}
     {error && <p className="memory-error" role="alert">{error} <button type="button" className="memory-text-button" disabled={busy} onClick={() => { setDocument(null); void read(); }}>重新读取</button></p>}
     {document && <div className="markdown"><Markdown text={document.content} pathScope={scope} pathBase="memory" sourceFile={path} /></div>}
@@ -47,12 +49,12 @@ function TaskBranch({ item, goal, paths, openDetail }: { item: TreeItem; goal: b
     previousState.current = node.state;
   }, [node.state, node.abandoned]);
   return <li data-state={node.state} data-abandoned={node.abandoned || undefined} data-kind={node.kind} data-goal={goal || undefined}>
-    <div className="memory-task-row">
+    <div className="memory-task-row" data-task-key={item.key}>
       <span className="memory-task-marker">{node.state && <MemoryStateIcon state={node.state} motion={!node.abandoned} />}</span>
       {!!children.length && <button type="button" className="memory-branch-toggle memory-branch-disclosure" aria-label={`${expanded ? "收起" : "展开"}：${memoryTitleLabel(node.title)}`} aria-expanded={expanded} aria-controls={id} onClick={() => { setVisited(true); setExpanded(!expanded); }}><Icon name="chevron-right" className="memory-task-chevron" /></button>}
       <span className="memory-task-title"><MemoryTaskTitle text={node.title} path={path} onOpen={(_path, event) => openDetail(item, event.currentTarget)} /></span>
       {node.state && <span className="memory-task-state">{node.state === "阻塞" ? "等待" : node.state}</span>}
-      {path && <button type="button" className="memory-task-detail-button" aria-label={`查看详情：${memoryTitleLabel(node.title)}`} data-task-key={item.key} onClick={event => openDetail(item, event.currentTarget)}><Icon name="file-text" /></button>}
+      {path && <button type="button" className="memory-task-detail-button" aria-label={`查看详情：${memoryTitleLabel(node.title)}`} onClick={event => openDetail(item, event.currentTarget)}><Icon name="file-text" /></button>}
     </div>
     {!!children.length && <div id={id} hidden={!expanded} className="memory-branch">
       {goal && <div className="memory-execution-label">执行树 <span>{children.length} 个步骤</span></div>}
@@ -61,7 +63,7 @@ function TaskBranch({ item, goal, paths, openDetail }: { item: TreeItem; goal: b
   </li>;
 }
 export function MemoryTaskTree({ nodes, files = [], scope, revision, goals = true, onDetailChange, openLink }: { nodes: MemoryNode[]; files?: ReadonlyArray<{ path: string }>; scope: Scope; revision: string; goals?: boolean; onDetailChange?: (open: boolean) => void; openLink?: (path: string) => void }) {
-  const container = useRef<HTMLDivElement>(null), returnTo = useRef<{ top: number; key: string } | null>(null), back = useRef<HTMLButtonElement>(null);
+  const container = useRef<HTMLDivElement>(null), returnTo = useRef<{ top: number; key: string; trigger: HTMLButtonElement; title: boolean } | null>(null), back = useRef<HTMLButtonElement>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const previous = useRef<TreeItem[]>([]), sequence = useRef(0);
   const roots = reconcileMemoryTree(nodes, previous.current, () => `task-${++sequence.current}`);
@@ -72,10 +74,10 @@ export function MemoryTaskTree({ nodes, files = [], scope, revision, goals = tru
     for (const item of items) { if (item.key === key) return item; const child = find(item.children, key); if (child) return child; }
   };
   const current = detail ? find(roots, detail) : null, selected = current ? paths.get(current.node) : undefined;
-  const openDetail: OpenDetail = (item) => {
+  const openDetail: OpenDetail = (item, trigger) => {
     const path = paths.get(item.node); if (!path) return;
     if (openLink) { openLink(path); return; }
-    returnTo.current = { top: container.current?.closest(".toolbar-detail-body")?.scrollTop ?? 0, key: item.key };
+    returnTo.current = { top: container.current?.closest(".toolbar-detail-body")?.scrollTop ?? 0, key: item.key, trigger, title: trigger.classList.contains("memory-title-open") };
     setDetail(item.key); onDetailChange?.(true);
   };
   const closeDetail = () => { setDetail(null); onDetailChange?.(false); };
@@ -84,7 +86,8 @@ export function MemoryTaskTree({ nodes, files = [], scope, revision, goals = tru
     if (body) body.scrollTop = detail ? 0 : returnTo.current?.top ?? body.scrollTop;
     if (detail) back.current?.focus({ preventScroll: true });
     else if (returnTo.current) {
-      const target = container.current?.querySelector<HTMLButtonElement>(`[data-task-key="${returnTo.current.key}"]`);
+      const saved = returnTo.current;
+      const target = saved.trigger.isConnected && container.current?.contains(saved.trigger) ? saved.trigger : container.current?.querySelector<HTMLButtonElement>(`[data-task-key="${saved.key}"] ${saved.title ? ".memory-title-open" : ".memory-task-detail-button"}`);
       if (target?.getClientRects().length) target.focus({ preventScroll: true }); else container.current?.focus({ preventScroll: true });
     }
   }, [!!detail]);
@@ -96,7 +99,7 @@ export function MemoryTaskTree({ nodes, files = [], scope, revision, goals = tru
     {detail && <section className="memory-detail-page" aria-label="任务详情">
       <button ref={back} type="button" className="memory-text-button memory-detail-back" onClick={closeDetail}><Icon name="arrow-left" />返回执行树</button>
       {current && <div className="memory-detail-heading"><span className="memory-task-marker">{current.node.state && <MemoryStateIcon state={current.node.state} motion={false} />}</span><h3><MemoryTaskTitle text={current.node.title} /></h3></div>}
-      {current && selected ? <InlineDetail key={`${scope.workspaceId}:${scope.sessionId}:${revision}:${selected}`} scope={scope} path={selected} /> : <p role="status">此项或其详情文件已移除，可返回查看最新执行树。</p>}
+      {current && selected ? <InlineDetail key={`${scope.workspaceId}:${scope.sessionId}:${revision}:${selected}`} scope={scope} path={selected} onFocusLost={() => back.current?.focus({ preventScroll: true })} /> : <p role="status">此项或其详情文件已移除，可返回查看最新执行树。</p>}
     </section>}
   </div>;
 }

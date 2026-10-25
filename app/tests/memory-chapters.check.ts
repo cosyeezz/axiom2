@@ -12,6 +12,7 @@ const root = realpathSync(mkdtempSync(join(tmpdir(), "axiom-memory-chapters-ui-"
 const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
 const app = await startServer({ root, port: 0, dev: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
+const output = process.env.AXIOM_TEST_ARTIFACTS || mkdtempSync(join(tmpdir(), "axiom-memory-chapters-artifacts-")); mkdirSync(output, { recursive: true });
 try {
   const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
@@ -95,7 +96,8 @@ try {
   await toggle("新方案").click(); await toggle("新方案").click();
   assert.equal(await done.evaluate((node, previous) => node === previous, doneNode), true);
   const detailButton = todo.getByRole("button", { name: "查看详情：修复取消按钮", exact: true });
-  await detailButton.focus(); const scrollTop = await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop); await page.keyboard.press("Enter");
+  await todo.locator(".toolbar-detail-body").evaluate(node => { node.scrollTop = 100; });
+  await detailButton.evaluate(node => (node as HTMLElement).focus({ preventScroll: true })); const scrollTop = await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop); assert.ok(scrollTop > 0); await page.keyboard.press("Enter");
   await todo.getByText("ONLY_DETAIL_ONE：保留修复依据与验证结果。", { exact: true }).waitFor();
   assert.deepEqual(reads.map(read => read.path), [shortPath]); assert.doesNotMatch(await todo.innerText(), /DETAIL_TWO_START|UNRELATED_DETAIL_SENTINEL/);
   assert.equal(await todo.locator(".memory-goals").isVisible(), false);
@@ -107,16 +109,35 @@ try {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await todo.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, `tree overflow at ${width}`);
     assert.match(await todo.locator('li[data-abandoned="true"] .memory-task-title').first().evaluate(node => getComputedStyle(node).textDecorationLine), /line-through/);
-    if (width !== 320) await page.screenshot({ path: `/tmp/axiom-memory-chapters-${width}.png` });
+    if (width <= 640) {
+      const targets = await todo.locator('.memory-title-open:visible,.memory-branch-disclosure:visible,.memory-task-detail-button:visible').evaluateAll(nodes => nodes.map(node => ({ label: node.getAttribute("aria-label") || node.textContent, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
+      for (const target of targets) assert.ok(target.width >= 44 && target.height >= 44, `touch target ${JSON.stringify(target)} at ${width}`);
+    }
+    await page.screenshot({ path: join(output, `memory-chapters-${width}.png`) });
   }
   // The title is the same action as the document icon, not the disclosure control.
-  await todo.getByRole("button", { name: "长详情验证", exact: true }).click(); await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
+  const titleButton = todo.getByRole("button", { name: "长详情验证", exact: true });
+  await titleButton.focus(); const titleScroll = await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop); await page.keyboard.press("Space");
+  await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
+  assert.equal(await todo.getByRole("button", { name: "返回执行树", exact: true }).evaluate(node => node === document.activeElement), true);
   assert.doesNotMatch(await todo.innerText(), /ONLY_DETAIL_ONE|DETAIL_TWO_END|UNRELATED_DETAIL_SENTINEL/);
   await todo.getByRole("button", { name: "继续读取此条详情", exact: true }).click(); await todo.getByText("DETAIL_TWO_END", { exact: true }).waitFor();
   assert.deepEqual(reads.map(read => read.path), [shortPath, longPath, longPath]); assert.ok(reads.at(-1)!.offset! > 0);
   assert.equal(await todo.getByRole("button", { name: "编辑", exact: true }).count(), 0);
   await todo.getByRole("button", { name: "返回执行树", exact: true }).focus(); await page.keyboard.press("Space");
   await todo.locator(".memory-inline-detail").waitFor({ state: "detached" }); assert.ok(await todo.getByText("真机验证", { exact: true }).isVisible());
+  assert.equal(await titleButton.evaluate(node => node === document.activeElement), true, "title entry returns to the title, not the adjacent file icon");
+  assert.equal(await todo.locator(".toolbar-detail-body").evaluate(node => node.scrollTop), titleScroll);
+  // A state/revision refresh while details are open must preserve the original entry.
+  await titleButton.focus(); await page.keyboard.press("Enter"); await todo.getByText("DETAIL_TWO_START", { exact: true }).waitFor();
+  await todo.getByRole("button", { name: "继续读取此条详情", exact: true }).focus();
+  writeFileSync(entry, originalEntry.replace("[未开始] 长详情验证", "[进行中] 长详情验证")); app.agents.memories.scan();
+  await todo.locator('.memory-detail-heading svg[data-state="进行中"]').waitFor();
+  assert.equal(await todo.getByRole("button", { name: "返回执行树", exact: true }).evaluate(node => node === document.activeElement), true, "revision refresh keeps detail keyboard focus on the stable back action");
+  await todo.getByRole("button", { name: "返回执行树", exact: true }).click();
+  assert.equal(await titleButton.evaluate(node => node === document.activeElement), true);
+  writeFileSync(entry, originalEntry); app.agents.memories.scan();
+  await todo.locator('li[data-state="未开始"] .memory-title-open').filter({ hasText: "长详情验证" }).waitFor();
   await detailButton.click(); await todo.getByText("ONLY_DETAIL_ONE：保留修复依据与验证结果。", { exact: true }).waitFor();
   rmSync(join(directory, shortPath)); app.agents.memories.scan();
   await todo.getByText("此项或其详情文件已移除，可返回查看最新执行树。", { exact: true }).waitFor();

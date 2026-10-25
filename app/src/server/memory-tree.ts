@@ -3,6 +3,7 @@ import type { Store } from "./storage.js";
 import { emptyMemoryTree, memoryBatchSize, memoryBatchWaitMs, memoryContextPurposeLimit, memoryTopicBlock,
   type MemoryPurpose, type MemoryIndexNode, type MemoryTree } from "../shared/memory-tree.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
+import { canonicalMemoryPurpose, locateMemoryPurpose, queryMemorySnapshot } from "../shared/memory-purpose-locator.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { processingError } from "./processing-records.js";
 
@@ -23,6 +24,20 @@ export class MemoryTreeStore {
       CREATE TABLE IF NOT EXISTS memory_purpose_indexes(workspaceId TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
       version INTEGER NOT NULL,body TEXT NOT NULL);`);
   }
+  /** Keep derived leaves coherent with a completed source scan, never during a query.
+   * Raw task titles/files are immutable here; revoked IDs remain available for safe reuse.
+   */
+  reconcile(scope: Scope, entry: string) {
+    const headings = memoryPurposes(entry), existing = this.entries(scope.workspaceId).filter(purpose => purpose.source.sessionId === scope.sessionId);
+    const invalid = existing.filter(purpose => {
+      const heading = locateMemoryPurpose(purpose, headings, existing);
+      const duplicate = canonicalMemoryPurpose(purpose, existing) !== purpose || heading && purpose.source.key !== heading.key && existing.some(other => other.source.key === heading.key && other.text === heading.title);
+      return (!heading?.complete || duplicate) && (purpose.processedAt !== null || !purpose.blocked);
+    });
+    if (!invalid.length) return false;
+    this.revoke(scope.sessionId, invalid.map(purpose => purpose.source.key));
+    return true;
+  }
   enqueue(scope: Scope, entry: string, now = Date.now()) {
     const headings = memoryPurposes(entry);
     const existing = this.entries(scope.workspaceId).filter(purpose => purpose.source.sessionId === scope.sessionId);
@@ -30,10 +45,10 @@ export class MemoryTreeStore {
     let added = 0;
     for (const [index, heading] of headings.entries()) {
       if (!heading.complete) continue;
-      const prior = existing.find(purpose => purpose.source.key === heading.key);
+      const prior = existing.find(purpose => purpose.source.key === heading.key) ?? existing.find(purpose => canonicalMemoryPurpose(purpose, existing) === purpose && locateMemoryPurpose(purpose, headings, existing)?.key === heading.key);
       if (prior) {
         // Explicit correction or a temporarily invalid locator keeps the same ID.
-        if (prior.blocked && prior.processedAt === null) this.store.db.prepare("UPDATE memory_purposes SET blocked=0,error=NULL,retryAfter=0 WHERE id=?").run(prior.id);
+        if (prior.blocked && prior.processedAt === null) added += Number(this.store.db.prepare("UPDATE memory_purposes SET blocked=0,error=NULL,retryAfter=0 WHERE id=?").run(prior.id).changes);
         continue;
       }
       const context = headings.map((other, position) => ({ other, distance: Math.abs(position - index), position }))
@@ -69,7 +84,7 @@ export class MemoryTreeStore {
     const pending = this.entries(workspaceId).filter(purpose => purpose.processedAt === null), active = new Set(activeIds);
     const waiting = pending.filter(purpose => !active.has(purpose.id));
     const eligible = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter <= now), backoff = waiting.filter(purpose => !purpose.blocked && purpose.retryAfter > now);
-    return { ...this.snapshot(workspaceId), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
+    return { ...queryMemorySnapshot(this.snapshot(workspaceId)), pending: pending.filter(purpose => !purpose.blocked).length, failed: pending.filter(purpose => purpose.error).length,
       queue: { waiting: waiting.length, eligible: eligible.length, backoff: backoff.length, blocked: waiting.filter(purpose => purpose.blocked).length,
         oldestQueuedAt: eligible[0]?.queuedAt ?? null,
         nextBatchAt: eligible.length >= memoryBatchSize ? now : eligible.length ? eligible[0].queuedAt + memoryBatchWaitMs : null,

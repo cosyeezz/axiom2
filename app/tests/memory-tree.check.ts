@@ -12,7 +12,7 @@ const root = mkdtempSync(join(tmpdir(), "axiom-memory-tree-ui-")), project = joi
 const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
 const app = await startServer({ root, port: 0, dev: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
-const output = "/tmp/axiom-memory-tree-ui"; mkdirSync(output, { recursive: true });
+const output = process.env.AXIOM_TEST_ARTIFACTS || "/tmp/axiom-memory-tree-ui"; mkdirSync(output, { recursive: true });
 try {
   const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const session = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
@@ -37,12 +37,25 @@ try {
   const dialog = page.getByRole("dialog", { name: "全局记忆", exact: true }); await dialog.waitFor();
   await dialog.locator(".memory-tree-empty").waitFor();
   assert.ok((await dialog.boundingBox())!.width > 1000, "global memory gets a real map-sized workspace, not the shared 520px drawer");
-  assert.ok((await dialog.locator(".memory-tree-canvas").boundingBox())!.height > 500, "empty document wrapper must not consume half the canvas height");
+  const assertWorkspace = async () => {
+    const size = await dialog.locator(".memory-tree-page").evaluate(node => {
+      const workspace = node.querySelector(".memory-tree-workspace")!, canvas = node.querySelector(".memory-tree-canvas")!;
+      const preceding = [...node.children].filter(child => child !== workspace && child.getClientRects().length && getComputedStyle(child).display !== "none");
+      const last = preceding.at(-1)?.getBoundingClientRect(), area = node.getBoundingClientRect(), work = workspace.getBoundingClientRect(), map = canvas.getBoundingClientRect();
+      return { top: work.top, bottom: work.bottom, height: map.height, mapTop: map.top, workHeight: work.height, expectedTop: last ? last.bottom + parseFloat(getComputedStyle(node).rowGap) : area.top, pageBottom: area.bottom, minHeight: parseFloat(getComputedStyle(canvas).minHeight) };
+    });
+    assert.ok(size.minHeight >= 320 && size.height >= size.minHeight - 1, `canvas retains readable CSS minimum: ${JSON.stringify(size)}`);
+    assert.ok(Math.abs(size.top - size.expectedTop) <= 2 && Math.abs(size.mapTop - size.top) <= 1, `feedback and canvas do not overlap or leave an empty wrapper: ${JSON.stringify(size)}`);
+    assert.ok(Math.abs(size.height - size.workHeight) <= 2 && Math.abs(size.bottom - Math.max(size.pageBottom, size.top + size.minHeight)) <= 2, `canvas fills all remaining workspace, allowing minimum-height vertical scroll: ${JSON.stringify(size)}`);
+    assert.equal(await dialog.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
+  };
+  await dialog.getByRole("status").filter({ hasText: "后续等待 2 个目的" }).waitFor();
+  await assertWorkspace();
   const assertFullscreen = async (width: number, height: number) => {
     const bounds = (await dialog.boundingBox())!, canvas = (await dialog.locator(".memory-tree-canvas").boundingBox())!;
     assert.ok(Math.abs(bounds.x) < 1 && Math.abs(bounds.y) < 1 && Math.abs(bounds.width - width) < 1 && Math.abs(bounds.height - height) < 1, `fullscreen fills ${width}×${height}, including the composer area`);
     assert.ok(Math.abs(canvas.x) < 1 && Math.abs(canvas.y) < 1 && Math.abs(canvas.width - width) < 1 && Math.abs(canvas.height - height) < 1, `the canvas itself fills every edge of ${width}×${height}, with no toolbar, padding or inspector space`);
-    for (const selector of [".memory-tree-toolbar", ".memory-tree-status", ".memory-tree-settings", ".memory-tree-errors", ".memory-map-heading", ".memory-map-help"]) {
+    for (const selector of [".memory-tree-toolbar", ".memory-tree-status", ".memory-organization-feedback", ".memory-tree-settings", ".memory-tree-errors", ".memory-map-heading", ".memory-map-help"]) {
       assert.equal(await dialog.locator(selector).isVisible(), false, `${selector} must not appear in pure canvas fullscreen`);
     }
     assert.ok(await dialog.locator(".memory-tree-canvas").evaluate(node => { const style = getComputedStyle(node); return style.borderTopWidth === "0px" && style.borderRadius === "0px"; }), "fullscreen canvas has no panel border or rounded corners");
@@ -125,6 +138,7 @@ try {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(100);
     assert.equal(await dialog.evaluate((node) => node.scrollWidth > node.clientWidth + 1), false, `no dialog overflow at ${width}`);
+    await assertWorkspace();
     const box = (await dialog.locator(".memory-tree-canvas").boundingBox())!, controls = (await dialog.locator(".memory-tree-zoom").boundingBox())!;
     assert.ok(controls.x >= box.x && controls.x + controls.width <= box.x + box.width, `map controls remain accessible at ${width}`);
     if (width < 700) {
@@ -142,6 +156,11 @@ try {
     await dialog.getByRole("button", { name: "全屏画布", exact: true }).waitFor();
   }
   await page.setViewportSize({ width: 844, height: 390 });
+  await assertWorkspace();
+  await dialog.locator(".memory-tree-zoom").scrollIntoViewIfNeeded();
+  const zoom = (await dialog.locator(".memory-tree-zoom").boundingBox())!;
+  assert.ok(zoom.y >= 0 && zoom.y + zoom.height <= 390, "normal landscape allows scrolling to all canvas controls");
+  await page.screenshot({ path: join(output, "tree-normal-landscape.png") });
   await dialog.getByRole("button", { name: "全屏画布", exact: true }).click();
   await assertFullscreen(844, 390);
   await page.waitForTimeout(400);

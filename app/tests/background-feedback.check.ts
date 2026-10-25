@@ -212,8 +212,38 @@ try {
   }
   records.get("title")!.state = "completed"; records.get("title")!.outcome = "not_applied"; publish("processing:work", { revision: 30 });
   await page.getByRole("button", { name: "标题生成记录：标题记录", exact: true }).waitFor();
-  for (const state of ["failed", "interrupted", "invalidated"] as const) {
-    records.get("title")!.state = state; publish("processing:work", { revision: state }); await page.getByRole("button", { name: "标题生成记录：标题生成失败", exact: true }).waitFor();
+  for (const [state, label, reason, danger] of [
+    ["running", "标题生成中", "处理状态说明", false], ["cancelling", "标题取消中", "取消状态说明", false],
+    ["cancelled", "标题已取消", "取消原因", false], ["invalidated", "标题结果已失效", "结果失效原因", false],
+    ["interrupted", "标题已中断", "中断原因", true], ["failed", "标题生成失败", "处理失败原因", true],
+  ] as const) {
+    const title = records.get("title")!; title.state = state; title.outcome = undefined; title.error = "STATE_REASON_" + state;
+    publish("processing:work", { revision: state });
+    const button = page.getByRole("button", { name: "标题生成记录：" + label, exact: true }); await button.waitFor();
+    await button.click(); await titlePanel.waitFor();
+    const disclosure = titlePanel.locator(".processing-disclosure").first(); await disclosure.locator(":scope > summary").click();
+    await disclosure.getByRole("heading", { name: reason, exact: true }).waitFor();
+    assert.equal(await disclosure.locator(".processing-detail > .processing-failure").count(), danger ? 1 : 0, `only actual failures are red alerts: ${state}`);
+    assert.equal(await disclosure.locator(".processing-detail > .processing-notice").count(), danger ? 0 : 1);
+    if (!danger) assert.equal(await button.evaluate(node => { const sample = document.createElement("span"); sample.style.color = "var(--danger)"; node.append(sample); const red = getComputedStyle(sample).color; sample.remove(); return getComputedStyle(node).color === red; }), false);
+    await page.screenshot({ path: join(artifacts, `title-state-${state}-320.png`) });
+    await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" });
+  }
+  // A no-evidence check is not a request or a failed title; keep its explanation open.
+  const title = records.get("title")!; title.state = "running"; title.error = null; publish("processing:work", { revision: "empty-start" });
+  await page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true }).click(); await titlePanel.waitFor();
+  title.state = "completed"; title.outcome = "no_evidence"; title.calls = []; publish("processing:work", { revision: "empty-finish" });
+  await page.getByRole("button", { name: "标题生成记录：标题等待记忆", exact: true }).waitFor();
+  await titlePanel.getByText(/本次未请求标题模型/).waitFor(); assert.equal(await titlePanel.isVisible(), true);
+  await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" });
+  // Unapplied success must also remain inspectable; only an applied result auto-closes.
+  for (const outcome of ["not_applied", "applied"] as const) {
+    title.state = "running"; title.outcome = undefined; publish("processing:work", { revision: outcome + "-start" });
+    await page.getByRole("button", { name: "标题生成记录：标题生成中", exact: true }).click(); await titlePanel.waitFor();
+    title.state = "completed"; title.outcome = outcome; publish("processing:work", { revision: outcome + "-finish" });
+    await page.getByRole("button", { name: "标题生成记录：标题记录", exact: true }).waitFor();
+    if (outcome === "applied") await titlePanel.waitFor({ state: "detached" });
+    else { assert.equal(await titlePanel.isVisible(), true); await page.keyboard.press("Escape"); await titlePanel.waitFor({ state: "detached" }); }
   }
   await render({ mode: "business", tree: { ...tree, pending: 0, queue: { ...tree.queue, waiting: 0 } } }); await settle();
   assert.equal(await page.getByText(/后续等待/).count(), 0); await page.getByText(/正在整理 2 个目的/).waitFor();
