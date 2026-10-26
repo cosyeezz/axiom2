@@ -1,0 +1,133 @@
+name: Release Axiom2 Backend
+on:
+  workflow_run:
+    workflows: [Validate Axiom2]
+    types: [completed]
+    branches: [master]
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+# Separate from CI cancellation. The controller always resolves the current
+# master SHA, so even a delayed schedule/rerun cannot publish an obsolete head.
+concurrency:
+  group: axiom-backend-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'cosyeezz/axiom2' && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      source: ${{ steps.gate.outputs.source }}
+    permissions:
+      contents: write
+      actions: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Resolve current master and verify every required check
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-controller.mjs
+      - name: Check out the exact validated source
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          AXIOM_SOURCE: ${{ steps.gate.outputs.source }}
+        run: git checkout --detach "$AXIOM_SOURCE"
+      - name: Configure Linux namespace test environment
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        run: |
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Allocate or resume release version
+        id: release
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AXIOM_RELEASE_SOURCE: ${{ steps.gate.outputs.source }}
+        run: node scripts/auto-release.mjs prepare "$RUNNER_TEMP/axiom-release-state.json"
+      - name: Build versioned release snapshot
+        if: steps.release.outputs.publish == 'true'
+        run: npm ci
+      - name: Include both Linux ownership helpers from the validated CI run
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.gate.outputs.run_id }}
+          pattern: linux-ownership-*
+          path: bin/native/
+          merge-multiple: true
+      - name: Restore native executable permissions
+        if: steps.release.outputs.publish == 'true'
+        run: chmod 755 bin/native/linux-*/axiom-owner
+      - name: Validate and retain the exact release package
+        if: steps.release.outputs.publish == 'true'
+        env:
+          AXIOM_VERIFIED_PACKAGE_DIR: ${{ runner.temp }}/axiom-release-assets
+        run: npm run check:package
+      - name: Preserve release candidate before publication
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-release-candidate-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/axiom-release-state.json
+            ${{ runner.temp }}/axiom-release-assets/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish and verify backend release
+        id: publication
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/auto-release.mjs publish "$RUNNER_TEMP/axiom-release-state.json" "$RUNNER_TEMP/axiom-release-assets"
+      - name: Resolve previous release incident
+        if: success() && (steps.release.outputs.verified == 'true' || steps.publication.outputs.verified == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-controller.mjs resolved
+      - name: Preserve release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-release-diagnostics-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/axiom-release-state.json
+            ${{ runner.temp }}/axiom-release-assets/
+          if-no-files-found: ignore
+          retention-days: 7
+  notify:
+    needs: [publish]
+    # A fresh runner can report a timed-out publisher even when the original
+    # job no longer has time to run its cleanup/notification steps.
+    if: always() && (needs.publish.result == 'failure' || needs.publish.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Report failed controller or publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AXIOM_SOURCE: ${{ needs.publish.outputs.source }}
+        run: node scripts/release-controller.mjs failure
