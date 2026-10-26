@@ -273,6 +273,9 @@ test('package failure reporting keeps valid bounded JSON and cannot mask the ori
 test('release versions advance numerically beyond source, public releases and reserved draft tags', () => {
   assert.equal(nextVersion('0.4.1', []), '0.4.2');
   assert.equal(nextVersion('0.4.1', ['v0.4.9', 'v0.4.10', 'v0.4.11']), '0.4.12');
+  assert.equal(nextVersion('0.4.1', ['v0.4.17', 'android-v0.4.18']), '0.4.19');
+  assert.equal(nextVersion('0.4.1', ['android-v0.4.9', 'android-v0.4.18', 'v0.4.20']), '0.4.21');
+  assert.equal(nextVersion('0.4.1', ['v0.4.17', 'android-v2.0.0-beta.1', 'android-v01.0.0', '0.9.0']), '0.4.18');
   assert.equal(nextVersion('0.5.0', ['v0.4.99']), '0.5.1');
   assert.equal(nextVersion('0.4.1', ['v1.0.0', 'v2.0.0-beta.1', 'v01.0.0', 'other']), '1.0.1');
   assert.ok(compareVersions('1.0.0', '0.99.99') > 0);

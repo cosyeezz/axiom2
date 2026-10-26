@@ -29,7 +29,8 @@ export function compareVersions(a, b) {
 
 export function nextVersion(base, tags) {
   assert.match(base, pattern, 'Source version must be a stable three-part version');
-  const versions = [base, ...tags.filter((tag) => tag.startsWith('v')).map((tag) => tag.slice(1)).filter((version) => pattern.test(version))];
+  // Unified clients must advance beyond independently published Android builds too.
+  const versions = [base, ...tags.filter((tag) => /^(?:android-)?v/.test(tag)).map((tag) => tag.replace(/^(?:android-)?v/, '')).filter((version) => pattern.test(version))];
   versions.sort(compareVersions);
   const parts = versions.at(-1).split('.').map(Number);
   parts[2]++;
@@ -221,7 +222,7 @@ export async function prepare(stateFile) {
   assert.equal(git('status', '--porcelain'), '', 'Release checkout must be clean');
   if (!sourceIsCurrent(source)) return output({ skip: true, reason: 'master has advanced', source }, stateFile);
   const published = releases();
-  const tags = git('tag', '--list', 'v*').split('\n').filter(Boolean);
+  const tags = git('tag', '--list', 'v*', 'android-v*').split('\n').filter(Boolean);
   const matching = tags.filter((tag) => pattern.test(tag.slice(1)) && hasSource(git('show', '-s', '--format=%B', tag), source));
   assert.ok(matching.length <= 1, 'Multiple release tags refer to this source');
   let tag = matching[0], version;
