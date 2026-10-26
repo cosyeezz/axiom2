@@ -1,0 +1,17 @@
+{
+  "method": "Axiom UI via OpenCLI Chrome browser session; no direct provider HTTP/CLI invocation",
+  "origin": "http://127.0.0.1:4317",
+  "provider": "qoder-cn",
+  "model": "gmodel",
+  "displayName": "GLM-5.3",
+  "thinking": "high",
+  "prompt": "这是Qoder接入的独立最小测试。不要调用任何工具，不要访问文件或网络。17乘以19等于多少？最终只回复数字。",
+  "observedText": "323",
+  "result": "error",
+  "errorMessage": "Qoder 事件流缺少 choices。",
+  "limitations": [
+    "UI evidence confirms output followed by stream failure, but not offending raw frame shape.",
+    "No credentials or provider raw payload captured.",
+    "No deployment or restart performed."
+  ]
+}

@@ -226,6 +226,8 @@ export function kiroOAuth(options: {
         : await request(`${oidcOrigin(String(meta.authRegion))}/token`, { clientId: meta.clientId, clientSecret: meta.clientSecret, refreshToken, grantType: "refresh_token" }, signal);
       return token(result, meta, credential);
     },
-    async toAuth(credential) { return { apiKey: required(credential.access, "访问令牌") }; },
+    // Only the native chat provider may issue its private, one-use auth hand-off.
+    // Generic/custom API transports must never receive Kiro OAuth tokens.
+    async toAuth() { throw new Error("Kiro 账号令牌仅供原生适配器使用，不能派生为通用或自定义接口密钥。"); },
   };
 }

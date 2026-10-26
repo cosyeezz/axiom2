@@ -1,0 +1,15 @@
+.log-row:has(.editable-user-message) { padding-inline-start: 52px; }
+.user-text.editable-user-message { position: relative; padding-inline: 14px; }
+.editable-user-message .message-actions { top: 4px; left: auto; right: calc(100% + 4px); display: flex; gap: 0; }
+.editable-user-message .message-actions > button { flex-shrink: 0; width: 24px; height: 28px; opacity: 0; pointer-events: none; }
+.log-row:hover .editable-user-message .message-actions > button,
+.editable-user-message:focus-within .message-actions > button { opacity: 1; pointer-events: auto; }
+.editable-user-message.is-editing { outline: 2px solid var(--accent-hover); outline-offset: 3px; background: color-mix(in srgb, var(--accent-hover) 12%, var(--surface)); }
+.editable-user-message:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 3px; }
+.composer-edit-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+.composer-edit-status > .btn { flex-shrink: 0; min-height: 36px; }
+@media (hover: none), (pointer: coarse) {
+  .editable-user-message .message-actions { top: 0; visibility: hidden; }
+  .editable-user-message:focus-within .message-actions { visibility: visible; }
+  .editable-user-message .message-actions > button { width: 24px; height: 44px; opacity: 1; pointer-events: auto; }
+}

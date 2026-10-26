@@ -1,0 +1,23 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "A portable workflow and Web UI plugin group",
+  "bundle": {
+    "version": 1,
+    "layers": [
+      {
+        "name": "base",
+        "plugins": [
+          { "path": "plugins/workflow", "options": { "label": "Review workspace" } },
+          { "path": "plugins/quick-action" }
+        ]
+      },
+      {
+        "name": "team",
+        "plugins": [
+          { "path": "plugins/workflow", "options": { "label": "Team review" } }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "observedAt": "2026-10-25T17:48:52.221Z",
+  "head": "7aee7a9eb8ab97f0b001f329ae84539921bcdccc",
+  "originMaster": "7aee7a9eb8ab97f0b001f329ae84539921bcdccc",
+  "rows": [
+    {
+      "path": "app/src/server/providers/kiro-chat-protocol.ts",
+      "indexSha256": "667a5696d879f50dd5ce9ae62900465ec63561e25188f1862f80fd7d04809508",
+      "sameAsBaseline": true,
+      "sameAsCurrent": false,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-chat.ts",
+      "indexSha256": "0750e92f3d3e1f71e6dc517c98ed33838392b855d66024708aec139e3edf3b2e",
+      "sameAsBaseline": true,
+      "sameAsCurrent": false,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/tests/kiro-chat.test.ts",
+      "indexSha256": "1a225f9a4bfd6681ed2dfcfb5890e4322cb6fccb69bda28642e113e2669fbfad",
+      "sameAsBaseline": true,
+      "sameAsCurrent": false,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/tests/kiro-thinking.test.ts",
+      "indexSha256": "7dfa851d8637f64f19ab721de30d084b23e5adea7e44bd848c0944df763f6b57",
+      "sameAsBaseline": true,
+      "sameAsCurrent": false,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "docs/kiro-thinking.md",
+      "indexSha256": "5b97374d0cc1c5d94b7bfcefffa73989fad68941dfd1f0977779c5140882f481",
+      "sameAsBaseline": false,
+      "sameAsCurrent": false,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-catalog.ts",
+      "indexSha256": "803c557f307b14c934e3c1951795b7f24760f268a75089495c6ab95c6c5a9d12",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-eventstream.ts",
+      "indexSha256": "7b85863198215eb60cf88a0e0f2173585cc7474e036ee33c7a664963dc8fe470",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-thinking.ts",
+      "indexSha256": "80cce09f6ef304c87e16119d56db5a2e6b0c132b615983646e0a0fb467ad7f47",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-thinking-stream.ts",
+      "indexSha256": "1603340b565ae5e2b0591fe8fce357719c01f0563fd74d1255c40a5788c1abc5",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro.ts",
+      "indexSha256": "8585d7d5cded1394dda25a19a8f9d6e9e60eaeb5a4da1de685e9d8e8c5fdbdad",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/providers/kiro-auth.ts",
+      "indexSha256": "d7851d8ab8104427717dc11cf5ed57c779deb8e344e55ed041bc83a6fbe6511f",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/src/server/model-runtime.ts",
+      "indexSha256": "5499e33578172d8140b28ea6a756817c1511ccb9aa73bc004d77e64ab150ca3f",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    },
+    {
+      "path": "app/tests/fixtures/kiro-eventstream.ts",
+      "indexSha256": "f34599d960e17c5e4852f480259ad51703cd4716951badd45b6bf854155caffe",
+      "sameAsBaseline": true,
+      "sameAsCurrent": true,
+      "sameAsDeliveryWorktree": true
+    }
+  ]
+}

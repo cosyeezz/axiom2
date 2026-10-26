@@ -84,7 +84,7 @@ export function ModelCatalogPicker({ provider, revision, blocked, add, close }: 
             {existing.has(model.id) ? <span className="tag">已添加</span> : provider.connectionType !== "oauth" && model.api !== provider.api ? <span className="meta">需使用 {model.api} 协议</span> : null}
           </label>
         ))}
-        {!busy && !error && catalog && !rows.length && <p className="model-empty">{query ? "没有匹配的模型，请调整搜索。" : "暂无可列出的模型；请检查连接和认证，或手动添加模型。"}</p>}
+        {!busy && !error && catalog && !rows.length && <p className="model-empty">{query ? "没有匹配的模型，请调整搜索。" : provider.providerId === "kiro" ? "当前账号没有返回可列出的模型；请检查认证、权限及 profile。不会用静态名单或其他模型代替账号目录。" : "暂无可列出的模型；请检查连接和认证，或手动添加模型。"}</p>}
       </div>
       {overflow && <p role="alert" className="auth-error">每个供应商最多配置 1,000 个模型，请减少选择。</p>}
       <div className="model-catalog-actions">

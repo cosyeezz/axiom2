@@ -1,0 +1,6 @@
+{
+  "name": "__PLUGIN_NAME__-quick-action",
+  "version": "1.0.0",
+  "description": "A native Chat review draft button",
+  "client": { "platform": "web", "format": "module", "entry": "index.js", "apiVersion": 1 }
+}

@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "validation": "Read sanitized Axiom metadata and match expected results/run IDs; no new model requests",
+  "assertions": {
+    "highCompleted": true,
+    "offCompleted": true,
+    "kiroModelAndRunIdsMatch": true,
+    "explicitHighAndOff": true,
+    "expectedReplies": true,
+    "thinkingProjection": true,
+    "noModelTools": true,
+    "noRetriesObserved": true,
+    "timingsMatch": true,
+    "taskDefaultUnchanged": true
+  },
+  "files": [
+    {
+      "Path": "F:\\Axiom\\axiom2\\docs\\evidence\\kiro-live\\axiom-calls.json",
+      "Hash": "8F8F1AD7F43EAE7156088782C1812B9888D8653C1019A21AC34E9B2EC2E9888E"
+    },
+    {
+      "Path": "F:\\Axiom\\axiom2\\docs\\evidence\\kiro-live\\README.md",
+      "Hash": "4AB62A284604EC6D01C401E021235DDB5F64CFAB580B204C11858C576213B331"
+    }
+  ],
+  "scopedGitDiffCheckExit": 0,
+  "limits": "Actual text calls only, no raw wire token-limit proof or CLI equivalence"
+}

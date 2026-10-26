@@ -1,0 +1,72 @@
+.thread-shell { container-type: size; position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
+.thread-shell > .thread { flex: 1; min-width: 0; min-height: 0; }
+/* Share the composer container width; floating controls reserve no extra gutter. */
+.thread-navigation { position: absolute; z-index: 4; right: 4px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 2px; }
+.thread-navigation button { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); cursor: pointer; transition: color 160ms, background 160ms, transform 160ms; }
+.thread-navigation button svg { width: 19px; height: 19px; }
+.thread-navigation button:nth-child(3) { margin-top: 6px; }
+.thread-navigation button:not(:disabled):hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.thread-navigation button:not(:disabled):active { transform: scale(.94); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.thread-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.thread-navigation button:disabled { opacity: .25; cursor: default; }
+@container (max-height: 300px) {
+  .thread-navigation { top: 8px; transform: none; flex-direction: row; }
+  .thread-navigation button:nth-child(3) { margin-top: 0; margin-left: 6px; }
+}
+.compaction-card { margin: 20px 0; min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+.compaction-card > summary { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto 16px; align-items: center; gap: 14px; min-height: 76px; padding: 14px 18px; border-radius: inherit; list-style: none; cursor: pointer; transition: background 160ms; }
+.compaction-card > summary::-webkit-details-marker { display: none; }
+.compaction-card > summary:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.compaction-card > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.compaction-icon { display: grid; place-items: center; width: 32px; height: 32px; color: var(--accent-hover); }
+.compaction-icon svg { width: 100%; height: 100%; }
+.compaction-heading { display: grid; min-width: 0; gap: 4px; }
+.compaction-number { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10px; line-height: 1.5; color: var(--muted); }
+.compaction-number > span { font-family: var(--font-mono); }
+.compaction-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 510; line-height: 1.6; color: var(--fg-2); }
+.compaction-tokens { display: grid; justify-items: end; gap: 4px; min-width: 0; font: 11px/1.5 var(--font-mono); color: var(--muted); }
+.compaction-token-values { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.compaction-token-after { color: var(--fg-2); }
+.compaction-arrow { color: var(--meta); }
+.compaction-token-label { font: 10px/1.5 var(--font-body); }
+.compaction-chevron { display: flex; color: var(--muted); transition: transform 160ms; }
+.compaction-chevron svg { width: 16px; height: 16px; }
+.compaction-card[open] .compaction-chevron { transform: rotate(180deg); }
+.compaction-card .compaction-body { padding: 20px; border-top: 1px solid var(--border); }
+.compaction-load { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.compaction-load > p { flex-basis: 100%; color: var(--danger-text); }
+@media (max-width: 700px) {
+  .compaction-card > summary { grid-template-columns: 28px minmax(0, 1fr) 16px; gap: 8px 10px; padding: 12px; }
+  .compaction-icon { width: 28px; height: 28px; }
+  .compaction-chevron { grid-column: 3; grid-row: 1; }
+  .compaction-tokens { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .compaction-title { white-space: normal; overflow-wrap: anywhere; }
+  .compaction-card .compaction-body { padding: 16px 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .compaction-card > summary, .compaction-chevron { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .thread-navigation button { transition: none; } }
+
+/* Expanded checkpoints have no row, rail, collapse control or reserved gap. */
+.virtual-timeline { min-width: 0; }
+.timeline-row { position: relative; display: flow-root; min-width: 0; }
+.timeline-spacer { pointer-events: none; overflow-anchor: none; }
+.history-disclosure:focus-visible, .history-summary-disclosure:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.history-card { margin: 14px 0 20px; overflow: hidden; }
+.history-card-controls { position: relative; }
+.history-disclosure.history-card-heading { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; min-height: 74px; padding: 12px 14px; border: 0; border-radius: inherit; background: transparent; text-align: left; cursor: pointer; }
+.history-card-heading:hover { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.history-card .compaction-icon { width: 28px; height: 28px; }
+.history-card-number { color: var(--fg-2); font-size: 13px; font-weight: 550; line-height: 20px; }
+.history-card-number > span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: 3px; }
+.history-card-range { color: var(--muted); font-size: 10px; line-height: 16px; overflow-wrap: anywhere; }
+.history-card .compaction-tokens { grid-column: auto; grid-row: auto; align-self: start; display: grid; padding-top: 1px; gap: 0; font-size: 11px; }
+.history-card .compaction-token-values { gap: 6px; }
+.history-summary-disclosure { position: absolute; right: 10px; bottom: 6px; min-height: 30px; padding: 4px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px; line-height: 16px; cursor: pointer; }
+.history-summary-disclosure:hover, .history-summary-disclosure[aria-expanded="true"] { color: var(--accent-hover); }
+.history-loading { margin: 0; min-height: 56px; padding: 16px 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 700px) {
+  .history-disclosure.history-card-heading { grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; padding-inline: 10px; }
+  .history-card .compaction-icon { width: 26px; height: 26px; }
+  .history-card .compaction-tokens { font-size: 10px; }
+  .history-summary-disclosure { right: 6px; }
+}

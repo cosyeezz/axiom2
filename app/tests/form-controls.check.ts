@@ -9,6 +9,7 @@ import { build } from "vite";
 import { chromium } from "playwright";
 import { WebSocketServer } from "ws";
 import { displayTypography } from "../scripts/display-typography.js";
+import { chooseSelect } from "./select-helpers.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-form-controls-"));
 const artifacts = resolve(process.env.AXIOM_TEST_ARTIFACTS ?? "test-results/form-controls");
@@ -93,7 +94,8 @@ try {
   await page.keyboard.press("Escape");
   await page.getByRole("combobox", { name: "Office 页或工作表", exact: true }).selectOption("1");
   assert.equal(await page.getByRole("combobox", { name: "Office 页或工作表", exact: true }).inputValue(), "1");
-  await page.locator(".maintenance-budget-template select").selectOption("slow");
+  const budgetTemplate = page.getByRole("combobox", { name: "时限模板", exact: true });
+  await chooseSelect(page, budgetTemplate, "slow");
   assert.equal(await page.locator(".maintenance-budget-input input").first().inputValue(), "60");
   const pageOption = page.locator('[aria-label="网页运行模式"] option[value="page"]');
   assert.equal(await pageOption.evaluate(node => (node as HTMLOptionElement).disabled), true, "unavailable native option remains disabled");
@@ -113,7 +115,10 @@ try {
   assert.equal(await page.locator("#provider-id").evaluate(node => (node as HTMLInputElement).readOnly), true, "saved provider ID remains read-only");
   assert.equal(await page.getByRole("button", { name: "供应商 ID备选项", exact: true }).count(), 0);
   await page.emulateMedia({ forcedColors: "active" });
-  assert.equal(await page.locator(".maintenance-budget-template select").evaluate(node => getComputedStyle(node).appearance), "auto", "high contrast keeps native select affordance");
+  assert.equal(await page.getByRole("combobox", { name: "Office 页或工作表", exact: true }).evaluate(node => getComputedStyle(node).appearance), "auto", "high contrast keeps native select affordance");
+  await budgetTemplate.click();
+  assert.equal(await page.getByRole("listbox").locator(".select-option.is-active").evaluate(node => getComputedStyle(node).outlineStyle), "solid", "high contrast identifies the active themed template option");
+  await page.keyboard.press("Escape");
   assert.deepEqual(errors, [], "no browser exceptions");
   assert.ok(!operations.includes("preview.start"), "no real project process started");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ findings, results, operations, errors }, null, 2));

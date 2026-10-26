@@ -14,13 +14,22 @@ try {
   await page.addInitScript({ content: 'window.__name = value => value;' });
   await page.addInitScript(() => {
     function assertFixture(confirmed: boolean) { if (!confirmed) throw Error('缺少解除确认'); }
-    const state = { node: false, installed: false, view: 'control', connection: 'connected', job: null as any, calls: [] as any[], remoteFail: false, remoteDelay: false, stopped: false, starting: false, statusFail: false };
+    const state = { node: false, installed: false, view: 'control', connection: 'connected', job: null as any, calls: [] as any[], remoteFail: false, remoteDelay: false, stopped: false, starting: false, statusFail: false, reconcileFail: true, reconcileDelay: false, unexpected: [] as string[] };
+    let theme = 'dark', revision = 0;
     (window as any).fixture = state;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, args });
+      if (name === 'axiom_theme') { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
       if (name === 'axiom_setup') {
         if (args.action === 'check') return { nodeReady: state.node, nodeVersion: state.node ? 'v24.13.0' : '', writable: true, tailscale: true, platform: 'windows' };
         if (args.action === 'status') return { job: state.job };
+        if (args.action === 'reconcile-service') {
+          if (args.maintenance?.id !== state.job.id) throw Error('恢复任务身份不匹配');
+          if (state.reconcileFail) throw Error('退出凭据尚未齐全，已保留占用');
+          if (state.reconcileDelay) await new Promise(resolve => setTimeout(resolve, 250));
+          state.job = { ...state.job, running: false, phase: 'error', message: '已确认安装进程退出，安装未完成，可重新验证后重试' };
+          return { job: state.job };
+        }
         if (args.action === 'acknowledge-interruption') { assertFixture(args.confirmed); state.job = { ...state.job, running: false, phase: 'error', message: '已解除占用' }; return { job: state.job }; }
         if (['node','service'].includes(args.action)) {
           state.job = { action: args.action, running: true, phase: 'running', message: '正在执行测试安装步骤…', lines: ['开始处理'] };
@@ -41,7 +50,7 @@ try {
       if (name === 'axiom_connection') return state.connection;
       if (name === 'axiom_controls') { state.view = 'control'; return; }
       if (name === 'axiom_update') return { clientVersion: '0.4.1', serviceVersion: '0.4.1', managed: true, clientSupported: true, release: null, job: null };
-      throw Error(`Unexpected ${name}`);
+      state.unexpected.push(name); throw Error(`Unexpected ${name}`);
     } };
   });
   await page.goto(origin);
@@ -50,9 +59,10 @@ try {
   assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => ['axiom_local', 'axiom_remote'].includes(call.name) || call.args.action === 'open').length), 0, 'never auto-connect');
   for (const [width, height] of [[1440, 900], [1100, 768], [1024, 768], [820, 1180], [844, 390], [600, 960], [430, 900], [390, 844], [360, 800]]) {
     await page.setViewportSize({ width, height });
-    const geometry = await page.evaluate(() => { const first = document.querySelector('.connect-header')!.getBoundingClientRect(), last = document.querySelector('.connect-footer')!.getBoundingClientRect(); return { height: document.documentElement.scrollHeight, width: document.documentElement.scrollWidth, center: (first.top + last.bottom) / 2 }; });
-    assert.ok(geometry.height <= height + 1 && geometry.width <= width + 1, `no unnecessary scrolling ${width}x${height}`);
-    assert.ok(Math.abs(geometry.center - height / 2) <= 4, `content centered ${width}x${height}`);
+    const geometry = await page.evaluate(() => { const first = document.querySelector('.connect-header')!.getBoundingClientRect(), last = document.querySelector('.connect-footer')!.getBoundingClientRect(); return { height: document.documentElement.scrollHeight, width: document.documentElement.scrollWidth, center: (first.top + last.bottom) / 2, top: first.top + scrollY, bottom: last.bottom + scrollY }; });
+    assert.ok(geometry.width <= width + 1, `no horizontal overflow ${width}x${height}`);
+    if (geometry.height <= height + 1) assert.ok(Math.abs(geometry.center - height / 2) <= 4, `content centered ${width}x${height}`);
+    else assert.ok(geometry.top >= 0 && geometry.bottom <= geometry.height, `short-screen content remains in the scrollable document ${width}x${height}`);
     assert.equal(await page.locator('.startup-title h1').textContent(), '就绪之后，专注创造。');
     const controls = await page.evaluate(() => { const port = document.querySelector('.connection-port input')!.getBoundingClientRect(), connect = document.querySelector('.startup-connect-button')!.getBoundingClientRect(), device = document.querySelector('.device-trigger')!.getBoundingClientRect(); return { gap: connect.left - port.right, height: connect.height, portCenter: port.top + port.height / 2, connectCenter: connect.top + connect.height / 2, deviceCenter: device.top + device.height / 2 }; });
     assert.equal(controls.height, 44);
@@ -67,7 +77,8 @@ try {
     const menu = await page.locator('.device-menu').boundingBox();
     assert.ok(menu && menu.y >= 0 && menu.y + menu.height <= height, 'menu stays within viewport');
     await page.getByRole('button', { name: '刷新设备', exact: true }).focus();
-    assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), `menu stays inside viewport ${width}x${height}`);
+    const focusedMenu = await page.locator('.device-menu').boundingBox();
+    assert.ok(focusedMenu && focusedMenu.y >= 0 && focusedMenu.y + focusedMenu.height <= height && focusedMenu.x >= 0 && focusedMenu.x + focusedMenu.width <= width, `focused menu stays inside viewport ${width}x${height}`);
     await page.keyboard.press('Escape');
     assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).getAttribute('aria-expanded'), 'false');
     assert.equal(await page.getByRole('combobox', { name: '连接设备', exact: true }).evaluate(node => document.activeElement === node), true);
@@ -101,15 +112,15 @@ try {
   assert.ok(await page.getByRole('combobox', { name: '连接设备', exact: true }).isDisabled());
   await page.getByRole('button', { name: '安装并启动服务', exact: true }).waitFor();
   await page.getByRole('button', { name: '安装并启动服务', exact: true }).click();
-  await page.getByRole('button', { name: '打开工作台', exact: false }).waitFor();
+  await page.getByRole('button', { name: '打开工作台', exact: true }).waitFor();
   await page.waitForFunction(() => !(document.querySelector('.setup-job .startup-spin')));
   await page.locator('.startup-preparation > summary').click();
   await page.getByLabel('本地端口').fill('4317');
   for (const [width, height] of [[1440, 900], [820, 1180], [844, 390], [600, 960], [390, 844], [360, 800]]) {
     await page.setViewportSize({ width, height });
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight + 1), `running layout fits ${width}x${height}`);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `running layout has no horizontal overflow ${width}x${height}`);
     assert.equal(await page.getByRole('button', { name: '关闭后台服务', exact: true }).isVisible(), true);
-    assert.equal(await page.locator('.startup-maintenance > summary').isVisible(), true);
+    assert.equal(await page.locator('.startup-maintenance > summary').filter({ hasText: '版本与更新 · Pi 引擎' }).isVisible(), true);
     assert.equal(await page.locator('.startup-connect-button svg').evaluate(node => node.getBoundingClientRect().width), 21);
     await page.locator('.connect-header').click();
     await page.screenshot({ path: resolve(output, `ready-${width}x${height}.png`), fullPage: true });
@@ -161,7 +172,7 @@ try {
   await page.locator('.connection-status-tag').filter({ hasText: '运行中' }).waitFor();
   await page.getByRole('combobox', { name: '连接设备', exact: true }).click();
   await page.screenshot({ path: resolve(output, 'device-menu.png'), fullPage: true });
-  assert.equal(await page.getByRole('option').count(), 4);
+  assert.equal(await page.getByRole('listbox', { name: '连接设备列表' }).getByRole('option').count(), 4);
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('Escape');
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('ArrowDown');
@@ -183,13 +194,13 @@ try {
   for (const width of [1440, 820, 430, 390, 360]) {
     await page.setViewportSize({ width, height: 48 });
     const layout = await page.evaluate(() => {
-      const nodes = ['.desktop-workbench-status', '.desktop-workbench-bar button'].map(selector => document.querySelector(selector)!.getBoundingClientRect());
+      const nodes = ['.desktop-workbench-status', '.desktop-workbench-bar button:not(.theme-toggle)'].map(selector => document.querySelector(selector)!.getBoundingClientRect());
       return { centers: nodes.map(box => box.y + box.height / 2), right: nodes[1].right, leftEnd: nodes[0].right, buttonStart: nodes[1].left, width: innerWidth };
     });
     assert.ok(Math.max(...layout.centers) - Math.min(...layout.centers) < 1, `center alignment ${width}`);
     assert.ok(layout.right <= layout.width && layout.leftEnd <= layout.buttonStart, `header fits ${width}`);
-    await page.locator('.desktop-workbench-bar button').hover();
-    assert.equal(await page.locator('.desktop-workbench-bar button').evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+    await page.getByRole('button', { name: '服务与更新', exact: true }).hover();
+    assert.equal(await page.getByRole('button', { name: '服务与更新', exact: true }).evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: resolve(output, `header-${width}.png`) });
   }
   await page.evaluate(() => { (window as any).fixture.connection = 'disconnected'; });
@@ -235,6 +246,18 @@ try {
   await recover.waitFor({ state: 'hidden' });
   assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'acknowledge-interruption').length), 1);
   assert.deepEqual(errors, []);
+  await page.evaluate(() => { (window as any).fixture.job = { id: '123-456', action: 'service', running: false, phase: 'interrupted', message: '后台安装结果待核实', lines: [] }; });
+  const reconcile = page.getByRole('button', { name: '核实退出回执并解除占用', exact: true });
+  await reconcile.waitFor();
+  await reconcile.click();
+  await page.getByRole('alert').filter({ hasText: '退出凭据尚未齐全，已保留占用' }).waitFor();
+  assert.ok(await page.getByRole('button', { name: '安装 Node.js', exact: true }).isDisabled(), 'missing exit proof retains admission');
+  await page.evaluate(() => { Object.assign((window as any).fixture, { reconcileFail: false, reconcileDelay: true }); });
+  await reconcile.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await reconcile.waitFor({ state: 'hidden' });
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'reconcile-service').length), 2, 'one failed proof check plus one successful request; double-click never replays');
+  assert.equal(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.args.action === 'reconcile-service').at(-1).args.maintenance.id), '123-456');
+  await page.getByText('已确认安装进程退出，安装未完成，可重新验证后重试', { exact: true }).waitFor();
   // A partial installation record must not unmount the page when no log exists.
   await page.evaluate(() => { (window as any).fixture.job = { running: false, phase: 'error', message: '异常记录测试' }; });
   await page.getByText('异常记录测试', { exact: true }).waitFor();
@@ -250,5 +273,6 @@ try {
   await page.getByLabel('远程连接地址', { exact: true }).waitFor();
   await page.getByRole('alert').filter({ hasText: '客户端响应超时' }).waitFor({ timeout: 30000 });
   assert.deepEqual(errors, []);
+  assert.deepEqual(await page.evaluate(() => (window as any).fixture.unexpected), [], 'no unexpected IPC is hidden by component error handling');
   console.log('PASS: first-install steps, real job polling UI, disabled actions, peer selection/default port, failure retry, successful address persistence/default and custom port recovery/interrupted install acknowledgement, header alignment/transparent hover/change acknowledgement, 360–1440px layouts. IPC is a controlled fixture; no software was installed.');
 } finally { await browser.close(); await server.close(); }

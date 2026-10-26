@@ -1,0 +1,1 @@
+"use strict";Object.defineProperty(exports, "__esModule", { value: true });exports.default = void 0;var _nodeFs = await jitiImport("node:fs");var _default = (pi) => {pi.on("session_before_compact", () => {(0, _nodeFs.writeFileSync)("unwanted.txt", "ran");});};exports.default = _default; /* v9-6701fc70e7684348 */

@@ -1,0 +1,9 @@
+﻿{
+    "command":  "node --import tsx F:/Axiom/axiom2/test-results/krs-429-comparison-fb7031ed/probe-v2.mjs",
+    "cwd":  "F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app",
+    "releaseCommit":  "d5d90322661d5d434872de024e014534c9a58c64",
+    "startedAt":  "2026-10-26T01:46:37.5213219Z",
+    "finishedAt":  "2026-10-26T01:46:38.3599652Z",
+    "elapsedMs":  831.1343,
+    "exitCode":  0
+}

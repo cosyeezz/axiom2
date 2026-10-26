@@ -1,0 +1,74 @@
+/* Tool-row glyphs follow the font size; process feedback shares one entry. */
+.process-icon { --icon-stroke: .1em; position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 1em; width: 1em; height: 1em; color: #9ca3af; }
+.process-icon > svg { width: 100%; height: 100%; flex: 0 0 100%; overflow: visible; transform-origin: center; stroke-width: .1em; }
+.process-icon-think { color: #e6d8a3; }
+.process-icon > svg > path { vector-effect: non-scaling-stroke; }
+.process-icon-tool.is-active > svg { animation: process-tool-turn 2.4s ease-in-out infinite; }
+@keyframes process-tool-turn { 0%, 15%, 85%, 100% { transform: rotate(0deg); opacity: .65; } 40% { transform: rotate(-14deg); opacity: 1; } 65% { transform: rotate(7deg); opacity: .85; } }
+.process-status-text { color: var(--process-text-color); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Text and dots inherit one progress value, including the pause between sweeps. */
+@property --process-progress { syntax: "<number>"; inherits: true; initial-value: 0; }
+.process-status-text.is-active,
+.tool-heading .process-status-text.is-active > .tool-action-label { background-image: linear-gradient(90deg, var(--process-text-color) 0%, var(--process-text-color) 35%, var(--process-highlight-color) 50%, var(--process-text-color) 65%, var(--process-text-color) 100%); background-size: 250% 100%; background-position: calc((1 - var(--process-progress)) * 100%) 0; background-clip: text; -webkit-background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.process-status-text.is-active { animation: process-text-sweep 3s linear infinite; }
+/* Only the action name sweeps; paths, copy controls and parameters keep a solid fill. */
+.tool-heading > .process-status-text.is-active { background-image: none; color: var(--process-text-color); -webkit-text-fill-color: currentColor; }
+@keyframes process-text-sweep { 0% { --process-progress: 0; } 85%, 100% { --process-progress: 1; } }
+@media (forced-colors: active) {
+  .process-status-text.is-active, .tool-heading > .process-status-text.is-active,
+  .tool-heading .process-status-text.is-active > .tool-action-label { background: none; color: CanvasText; -webkit-text-fill-color: CanvasText; }
+  .process-ellipsis { background-color: CanvasText; }
+}
+.tool-activity[data-folding="true"] { overflow: hidden; box-sizing: border-box; }
+.tool-activity > .activity-content > .tool-activity { margin-block: 4px 8px; }
+.tool-activity.activity.process-live { margin: 0 0 8px; border: 0; border-radius: 0; background: transparent; }
+.tool-activity.process-live > summary { min-height: 28px; padding: 2px 0; background: transparent; }
+.tool-activity.process-live > .activity-content { padding-inline: 0; }
+.tool-activity.activity.process-live[open] { border: 1px solid var(--border); border-radius: var(--radius-md); }
+.tool-activity.activity.process-live[open] > summary { padding: 6px 10px; }
+.tool-activity.activity.process-live[open] > .activity-content { padding: 2px 10px 8px; }
+.tool-activity.process-live > summary:hover { background: transparent; }
+.tool-activity.process-live[data-status="completed"] > summary .activity-title { color: #9ca3af; }
+.tool-activity > summary .activity-title, .process-requesting .activity-title { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); font-style: normal; }
+.process-requesting { display: flex; align-items: center; min-height: 28px; padding: 2px 0; margin: 0 0 8px; }
+@media (hover: none), (pointer: coarse) { .process-requesting { min-height: 32px; } }
+.tool-activity > summary .activity-title.is-active, .process-requesting .activity-title.is-active { font-weight: 700; }
+/* Process entries must not inherit the mobile conversation's 28px message gap. */
+.thread-content .log-row.activity-message { padding: 0; border: 0; }
+.thread-content .message-result:has(.reply-body) { border-top: 0; }
+/* Match both sides of a process row without stacking the message's default gaps. */
+.thread-content .log-row:has(.reply-body):has(+ .process-live) { padding-bottom: 0; margin-bottom: 8px; }
+.thread-content .process-live + .log-row:has(.reply-body) { padding-top: 0; }
+/* Virtual rows must preserve the same compact narration/process spacing. */
+.thread-content .timeline-row:has(> .log-row .reply-body):has(+ .timeline-row > .process-live) > .log-row { padding-bottom: 0; margin-bottom: 8px; }
+.thread-content .timeline-row:has(> .process-live) + .timeline-row > .log-row:has(.reply-body) { padding-top: 0; }
+.tool-activity .tool-call { border: 0; }
+.tool-activity .tool-call > .tool-header { min-height: 28px; padding-block: 2px; }
+@media (hover: none), (pointer: coarse) { .tool-activity .tool-call > .tool-header, .tool-activity.process-live > summary { min-height: 32px; } }
+.tool-heading, .tool-result-state { font-size: 13px; font-weight: 400; }
+.tool-heading .process-status-text, .thinking-label :is(strong, em, code) { font-size: inherit; }
+.tool-heading .process-status-text :is(.tool-name, .tool-target, .tool-input-detail) { color: inherit; }
+.tool-activity .activity-message .reply-body:has(.markdown) { color: var(--fg); font-size: var(--thread-text-size, 15px); }
+.thinking-block { border: 0; min-width: 0; max-width: 100%; }
+.thinking-block > .thinking-header { font-size: 13px; line-height: 20px; color: var(--process-text-color); }
+.process-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 5px; min-width: 0; color: #9ca3af; font-size: var(--thread-text-size, 15px); }
+.process-counts > span { white-space: nowrap; }
+.process-counts > span + span::before { content: "·"; margin-right: 5px; color: #9ca3af; }
+.process-counts [data-status="failed"] { color: var(--danger-text); }
+.tool-duration { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 13px; }
+.thread-content .tool-activity :is(.tool-heading, .tool-name, .tool-target, .tool-input-detail, .tool-duration, .tool-detail-label, .tool-detail pre, .activity-current) { font-size: 13px; line-height: 20px; font-weight: 400; }
+.thread-content .tool-activity .task-notice-text { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
+.thread-content :is(.delegation-card, .task-operation) { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
+.thread-content :is(.delegation-card, .task-operation) :is(.subagents-head, .agent-identity strong, .agent-identity small, .agent-state-label, .task-batch-progress, .delegation-pending, .task-operation-heading strong, .task-operation-target, .task-operation-status, .task-operation-action, .task-operation-preview, .task-call-error, .task-call-meta, .task-call-content, .task-call-raw, .task-call-raw pre, .task-report .markdown, .task-open-link) { font-size: var(--thread-text-size, 15px); line-height: var(--thread-line-height, 24px); }
+.thread-content .tool-call .tool-duration[data-latency="slow"] { color: #e6a45b; }
+.thread-content .tool-call .tool-duration[data-latency="long"] { color: var(--danger-text); }
+.tool-result-state { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.process-ellipsis { position: relative; display: inline-block; width: 24px; height: 24px; vertical-align: middle; margin-left: 2px; background-image: inherit; background-size: var(--process-gradient-width) 100%; background-position: calc(var(--process-gradient-travel) * (1 - var(--process-progress)) - var(--process-dot-offset)) 0; background-repeat: no-repeat; }
+.process-ellipsis > svg { position: absolute; inset: 0; width: 24px; height: 24px; }
+/* Radius follows the local highlight: each dot peaks at the sweep's center. */
+.process-ellipsis circle { r: calc(2px * clamp(0, 1 - max((var(--process-progress) - var(--process-dot-peak)) * 4, (var(--process-dot-peak) - var(--process-progress)) * 4), 1)); }
+.process-outcome { display: inline-flex; width: 1em; height: 1em; flex: 0 0 1em; color: #9ca3af; }
+.process-outcome > svg { width: 100%; height: 100%; }
+.process-outcome[data-status="completed"] { color: var(--success); }
+.process-outcome[data-status="failed"] { color: var(--danger-text); }
+.thinking-block[data-status="failed"] > summary .process-status-text { color: var(--danger-text); }

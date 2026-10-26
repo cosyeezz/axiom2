@@ -15,7 +15,9 @@ pub(crate) fn read(path: &Path) -> Result<Vec<u8>, String> {
         use std::os::windows::fs::OpenOptionsExt;
         options.custom_flags(0x00200000); // FILE_FLAG_OPEN_REPARSE_POINT
     }
-    let file = options.open(path).map_err(|_| "无法安全读取服务安装记录，请检查安装来源。")?;
+    let file = options.open(path).map_err(|error| if error.kind() == std::io::ErrorKind::NotFound {
+        "本地后台尚未安装；请展开安装与准备，或连接已有服务。"
+    } else { "无法安全读取服务安装记录，请检查安装来源。" })?;
     let metadata = file.metadata().map_err(|e| e.to_string())?;
     #[cfg(windows)] {
         use std::os::windows::fs::MetadataExt;
@@ -64,8 +66,8 @@ mod tests {
     #[test]
     fn directory_and_missing_record_are_rejected_without_creation() {
         let f = Fixture::new(); let path = f.record();
-        assert!(read(&path).is_err()); assert!(!path.exists());
-        fs::create_dir(&path).unwrap(); assert!(read(&path).is_err());
+        assert!(read(&path).unwrap_err().contains("尚未安装")); assert!(!path.exists());
+        fs::create_dir(&path).unwrap(); assert!(!read(&path).unwrap_err().contains("尚未安装"));
         assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
     }
     #[cfg(unix)]

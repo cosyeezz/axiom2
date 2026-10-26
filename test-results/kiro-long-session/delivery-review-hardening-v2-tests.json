@@ -1,0 +1,21 @@
+{
+    "cwd":  "F:/Axiom/axiom-kiro-long-session-fb7031ed/app",
+    "command":  "node --import tsx --test --test-concurrency=1 tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts",
+    "exit_code":  0,
+    "count":  {
+                  "tests":  63,
+                  "suites":  0,
+                  "pass":  63,
+                  "fail":  0,
+                  "cancelled":  0,
+                  "skipped":  0,
+                  "todo":  0
+              },
+    "duration_ms":  18568.6861,
+    "TEMP":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-review-hardening-v2-test-temp",
+    "TMP":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-review-hardening-v2-test-temp",
+    "started_at":  "2026-10-25T22:11:17.6300417Z",
+    "finished_at":  "2026-10-25T22:11:36.3658160Z",
+    "log":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-review-hardening-v2-tests.log",
+    "count_source":  "Actual Node spec reporter summary (info-prefixed output)"
+}

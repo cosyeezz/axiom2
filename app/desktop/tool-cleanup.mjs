@@ -7,9 +7,9 @@ const removals = new Map([
   ['resources.remove', ['id', 'clearCredentials']], ['rea.uninstall', []],
   ['rea.engine-uninstall', ['engine']], ['rea.clearDownloads', ['engine']], ['rea.uninstallSkill', []], ['rea.uninstallMcp', []],
   ['rtk.uninstall', []], ['rtk.cleanupStats', []], ['rtk.cleanupOriginals', []], ['opencli.uninstall', []],
-  ['modelProxy.uninstall', ['kernel']], ['modelProxy.importerUninstall', []],
+  ['modelProxy.uninstall', ['kernel']],
 ]);
-const scopedRemovals = new Set(['rtk.uninstall', 'rtk.cleanupStats', 'rtk.cleanupOriginals', 'opencli.uninstall', 'rea.uninstall', 'rea.engine-uninstall', 'rea.clearDownloads', 'modelProxy.uninstall', 'modelProxy.importerUninstall']);
+const scopedRemovals = new Set(['rtk.uninstall', 'rtk.cleanupStats', 'rtk.cleanupOriginals', 'opencli.uninstall', 'rea.uninstall', 'rea.engine-uninstall', 'rea.clearDownloads', 'modelProxy.uninstall']);
 export function cleanupCommand(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['op', 'params', 'requestId'].includes(key))) throw Error('清理请求无效。');
   const { op, params = {}, requestId = randomUUID() } = input;

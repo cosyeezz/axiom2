@@ -1,0 +1,8 @@
+﻿{
+    "pid":  55080,
+    "entry":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\serial-recovery-continuation-v3.mjs",
+    "startedAt":  "2026-10-25T19:55:56.6733162Z",
+    "root":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\recovery-continuation-v3",
+    "stdout":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\continuation-v3.stdout.log",
+    "stderr":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\continuation-v3.stderr.log"
+}

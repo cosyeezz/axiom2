@@ -49,13 +49,13 @@ export function ProxyProfileEditor({ draft, setDraft, state, busy, conflict, ins
           <div className="tools-actions">
             <button className="btn" type="button" disabled={disabled} onClick={() => fileInput.current?.click()}>{readingQr ? "正在读取图片…" : "导入二维码图片"}</button>
             <input ref={fileInput} type="file" disabled={disabled} hidden accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" aria-label="二维码图片" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void readQr(file); }} />
-            <button className="btn btn-primary" type="button" disabled={disabled || !state.managed || !draft.source.trim() || (draft.kernel === "mihomo" && !state.installations.mihomo)} onClick={() => void onInspect(draft.source, draft.kernel)}>{inspecting ? "正在识别…" : "识别节点"}</button>
+            <button className="btn btn-primary" type="button" disabled={disabled || !state.managed || !draft.source.trim() || !state.installations[draft.kernel] || !!state.removalPending?.[draft.kernel]} onClick={() => void onInspect(draft.source, draft.kernel)}>{inspecting ? "正在识别…" : "识别节点"}</button>
             {inspecting && <button className="btn" type="button" disabled={!canCancelInspection} onClick={onCancelInspection}>取消识别</button>}
           </div>
           {!state.managed && <p className="field-help">当前平台无法运行节点识别程序。可继续编辑并保存已有线路，或使用高级配置。</p>}
           <div className="tools-feedback" aria-live="polite">{notice && <p className={notice.error ? "tools-error" : "field-help"} role={notice.error ? "alert" : "status"}>{notice.text}</p>}</div>
-          <p className="field-help">二维码也可直接粘贴到输入框，图片在浏览器本地解码。点击「识别节点」后读取内容；订阅地址会从其服务器下载。{draft.kernel === "mihomo" ? "支持分享链接、Base64 列表和 Clash 配置。" : "支持分享链接和 Base64 列表，保存后由 Xray-core 运行。首次识别会从官方自动下载导入组件，可取消。"}</p>
-          {!state.installations[draft.kernel] && <p className="field-help">{draft.kernel === "mihomo" ? "请先在上方安装 mihomo，再识别节点。" : "启动线路前，请先在上方安装 Xray-core。"}</p>}
+          <p className="field-help">二维码也可直接粘贴到输入框，图片在浏览器本地解码。点击「识别节点」后读取内容；订阅地址会从其服务器下载。{draft.kernel === "mihomo" ? "支持分享链接、Base64 列表和 Clash 配置。" : "支持分享链接和 Base64 列表，保存后由 Xray-core 运行。"}</p>
+          {!state.installations[draft.kernel] && <p className="field-help">{draft.kernel === "mihomo" ? "请先在上方安装 mihomo，再识别节点。" : "请先在上方安装 Xray-core，再识别节点。"}</p>}
           {inspectionExpired && <p className="tools-error" role="alert">识别结果已失效，请重新识别节点。</p>}
           {!inspectionExpired && draft.nodes?.length ? <div className="field"><label htmlFor="proxy-import-node">选择节点</label><Select id="proxy-import-node" label="选择节点" disabled={disabled} value={draft.node}
             options={draft.nodes.map(node => ({ value: node.name, label: `${node.name} · ${node.type}` }))}

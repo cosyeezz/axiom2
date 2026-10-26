@@ -1,0 +1,1 @@
+function YTg(A){if("base64"===A.type)return zT(A.mediaType)?null:A.mediaType;let e=/^data:([^;,]+)/i.exec(A.url)?.[1];if(e?.toLowerCase().startsWith("image/")&&!zT(e))return e;try{return new URL(A.url).pathname.toLowerCase().endsWith(".svg")?"image/svg+xml":null}catch{return A.url.toLowerCase().split(/[?#]/,1)[0].endsWith(".svg")?"image/svg+xml":null}}

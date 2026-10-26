@@ -1,0 +1,10 @@
+const net = require('node:net');
+const tls = require('node:tls');
+const cp = require('node:child_process');
+const {syncBuiltinESMExports} = require('node:module');
+const deny = () => { throw new Error('QODER_AUDIT_OFFLINE: network/process creation disabled'); };
+net.Socket.prototype.connect = deny;
+net.connect = deny; net.createConnection = deny; tls.connect = deny;
+globalThis.fetch = async () => { throw new Error('QODER_AUDIT_OFFLINE: fetch disabled'); };
+for (const name of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork']) cp[name] = deny;
+syncBuiltinESMExports();

@@ -1,0 +1,200 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "transcript": "2026-10-25T17-18-31-507Z_01a17412-3053-70b6-89be-bc65e49cb058.jsonl",
+  "extractedAt": "2026-10-25T17:41:55.581Z",
+  "files": [
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "70d0fc129c754e844e581e5dd5766f3700cf011c5a905ec1e169e939c2d9c885",
+      "builtAt": "2026-10-25T17:32:19.057Z"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "3a989fbf20df1b7d5d0b222b18ff65dcf36ce52a53222ecd41cf871f148e76d8",
+      "builtAt": "2026-10-25T17:32:19.025Z"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "5563e6e8ba6bbbd848b14132ae3204fc79450ab637346ef893f4854cc51fd928",
+      "builtAt": "2026-10-25T17:36:11.725Z"
+    }
+  ],
+  "records": [
+    {
+      "id": "3da1e8f2",
+      "timestamp": 1792948874449,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "8efc8a9a5addc300812015c26a80c47804b2d0244022e8e8f7f388fae085109e",
+      "diagnostics": []
+    },
+    {
+      "id": "f6cca6dc",
+      "timestamp": 1792948980768,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "1abffc5fd2c5d623507ccd16e8e49a3deb50320c84add80eb78a03fd3847107a",
+      "diagnostics": []
+    },
+    {
+      "id": "3362f32e",
+      "timestamp": 1792948988972,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "5446b6fc",
+      "timestamp": 1792948994501,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "26a3c9e1",
+      "timestamp": 1792948997955,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "3b33da3c",
+      "timestamp": 1792949001451,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "b6f0be40dd67f63d0e54d4f2c3ef0ec656b515a32afd836f55a04fba25810a00",
+      "diagnostics": []
+    },
+    {
+      "id": "6ed1a8b8",
+      "timestamp": 1792949082338,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "00fb3d2d",
+      "timestamp": 1792949089623,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "ea6e5b57",
+      "timestamp": 1792949092357,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f2a327e1cbf7d8c5197d5f85b913adc676713509bdab49d4fc72759e9c546e09",
+      "diagnostics": []
+    },
+    {
+      "id": "2936cf51",
+      "timestamp": 1792949097287,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "off",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+      "diagnostics": []
+    },
+    {
+      "id": "f60c78af",
+      "timestamp": 1792949104861,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "minimal",
+      "providerThinkingLevel": "1024",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "1c4abfa4b79b76edfbb4eb3c1b85407d94286f219e1cf19abdddd249211cf4d2",
+      "diagnostics": []
+    },
+    {
+      "id": "741d84f3",
+      "timestamp": 1792949113731,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f5994bdb018aae034438963493e2e38e305465c2aa5518314bc7e9fd5556f530",
+      "diagnostics": []
+    },
+    {
+      "id": "89a9a2ef",
+      "timestamp": 1792949200813,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "a33a30eff6dc3eec2a27da064bcfc4b69bd13fbad8f1123c1863175d741ed786",
+      "diagnostics": []
+    },
+    {
+      "id": "88aca664",
+      "timestamp": 1792949809485,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "40e214dc101dd4b68bce049381b96bcaafea84fd72a07dfb9d341a5d3e2a59a9",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792949809490,
+          "omittedReasoningTextBlocks": 5,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    }
+  ]
+}

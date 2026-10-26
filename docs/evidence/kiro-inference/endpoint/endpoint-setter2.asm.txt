@@ -1,0 +1,87 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000141C69E40: 55                 push        rbp
+  0000000141C69E41: 41 57              push        r15
+  0000000141C69E43: 41 56              push        r14
+  0000000141C69E45: 56                 push        rsi
+  0000000141C69E46: 57                 push        rdi
+  0000000141C69E47: 53                 push        rbx
+  0000000141C69E48: 48 83 EC 48        sub         rsp,48h
+  0000000141C69E4C: 48 8D 6C 24 40     lea         rbp,[rsp+40h]
+  0000000141C69E51: 48 C7 45 00 FE FF  mov         qword ptr [rbp],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  0000000141C69E59: 48 89 D3           mov         rbx,rdx
+  0000000141C69E5C: 48 89 CE           mov         rsi,rcx
+  0000000141C69E5F: 4D 8B 38           mov         r15,qword ptr [r8]
+  0000000141C69E62: 4D 8B 70 08        mov         r14,qword ptr [r8+8]
+  0000000141C69E66: 49 8B 78 10        mov         rdi,qword ptr [r8+10h]
+  0000000141C69E6A: B9 28 00 00 00     mov         ecx,28h
+  0000000141C69E6F: BA 08 00 00 00     mov         edx,8
+  0000000141C69E74: E8 A7 9A DF 02     call        0000000144A63920
+  0000000141C69E79: 48 85 C0           test        rax,rax
+  0000000141C69E7C: 48 89 5D F8        mov         qword ptr [rbp-8],rbx
+  0000000141C69E80: 0F 84 AB 00 00 00  je          0000000141C69F31
+  0000000141C69E86: 48 C7 00 01 00 00  mov         qword ptr [rax],1
+                    00
+  0000000141C69E8D: 48 C7 40 08 01 00  mov         qword ptr [rax+8],1
+                    00 00
+  0000000141C69E95: 4C 89 78 10        mov         qword ptr [rax+10h],r15
+  0000000141C69E99: 4C 89 70 18        mov         qword ptr [rax+18h],r14
+  0000000141C69E9D: 48 89 45 E8        mov         qword ptr [rbp-18h],rax
+  0000000141C69EA1: 48 89 78 20        mov         qword ptr [rax+20h],rdi
+  0000000141C69EA5: 48 8B 43 48        mov         rax,qword ptr [rbx+48h]
+  0000000141C69EA9: 48 89 45 E0        mov         qword ptr [rbp-20h],rax
+  0000000141C69EAD: 48 8B 43 50        mov         rax,qword ptr [rbx+50h]
+  0000000141C69EB1: 48 89 45 F0        mov         qword ptr [rbp-10h],rax
+  0000000141C69EB5: 48 83 BB 98 00 00  cmp         qword ptr [rbx+0000000000000098h],0
+                    00 00
+  0000000141C69EBD: 74 21              je          0000000141C69EE0
+  0000000141C69EBF: 48 8B 45 F8        mov         rax,qword ptr [rbp-8]
+  0000000141C69EC3: 48 8B 80 A8 00 00  mov         rax,qword ptr [rax+00000000000000A8h]
+                    00
+  0000000141C69ECA: F0 48 FF 08        lock dec    qword ptr [rax]
+  0000000141C69ECE: 75 10              jne         0000000141C69EE0
+  0000000141C69ED0: 48 8B 45 F8        mov         rax,qword ptr [rbp-8]
+  0000000141C69ED4: 48 8D 88 A8 00 00  lea         rcx,[rax+00000000000000A8h]
+                    00
+  0000000141C69EDB: E8 50 C7 88 FE     call        00000001404F6630
+  0000000141C69EE0: 48 8B 55 F8        mov         rdx,qword ptr [rbp-8]
+  0000000141C69EE4: 48 8B 45 E0        mov         rax,qword ptr [rbp-20h]
+  0000000141C69EE8: 48 89 82 98 00 00  mov         qword ptr [rdx+0000000000000098h],rax
+                    00
+  0000000141C69EEF: 48 8B 45 F0        mov         rax,qword ptr [rbp-10h]
+  0000000141C69EF3: 48 89 82 A0 00 00  mov         qword ptr [rdx+00000000000000A0h],rax
+                    00
+  0000000141C69EFA: 48 8B 45 E8        mov         rax,qword ptr [rbp-18h]
+  0000000141C69EFE: 48 89 82 A8 00 00  mov         qword ptr [rdx+00000000000000A8h],rax
+                    00
+  0000000141C69F05: 48 8D 05 4C E6 B9  lea         rax,[000000015B808558h]
+                    19
+  0000000141C69F0C: 48 89 82 B0 00 00  mov         qword ptr [rdx+00000000000000B0h],rax
+                    00
+  0000000141C69F13: 41 B8 F0 01 00 00  mov         r8d,1F0h
+  0000000141C69F19: 48 89 F1           mov         rcx,rsi
+  0000000141C69F1C: E8 D5 9F E4 03     call        0000000145AB3EF6
+  0000000141C69F21: 48 89 F0           mov         rax,rsi
+  0000000141C69F24: 48 83 C4 48        add         rsp,48h
+  0000000141C69F28: 5B                 pop         rbx
+  0000000141C69F29: 5F                 pop         rdi
+  0000000141C69F2A: 5E                 pop         rsi
+  0000000141C69F2B: 41 5E              pop         r14
+  0000000141C69F2D: 41 5F              pop         r15
+  0000000141C69F2F: 5D                 pop         rbp
+  0000000141C69F30: C3                 ret
+  0000000141C69F31: 4C 89 7D E8        mov         qword ptr [rbp-18h],r15
+  0000000141C69F35: 4C 89 75 F0        mov         qword ptr [rbp-10h],r14
+  0000000141C69F39: B9 08 00 00 00     mov         ecx,8
+  0000000141C69F3E: BA 28 00 00 00     mov         edx,28h
+  0000000141C69F43: E8 29 0C E6 03     call        0000000145ACAB71
+  0000000141C69F48: 0F 0B              ud2
+  0000000141C69F4A: 66
+
+  Summary
+
+     5BF1000 .text

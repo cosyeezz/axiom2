@@ -1,0 +1,8 @@
+({ 95198(eA, el) {
+        "use strict";
+        Object.defineProperty(el, "__esModule", { value: !0 }), el.applyReasoningSupplement = el.REASONING_SUPPLEMENTS = void 0;
+        let ec = { canDisableThinking: !1, defaultEffort: "high" };
+        function applyReasoningSupplement(eA) { var ec; let eu = el.REASONING_SUPPLEMENTS[eA.id]; if (!eu)
+            return eA; let ed = eA; void 0 === ed.onlyReasoning && void 0 !== eu.onlyReasoning && (ed.onlyReasoning = eu.onlyReasoning); let ep = { ...null != (ec = ed.reasoning) ? ec : {} }, eg = !1; return void 0 === ep.canDisableThinking && void 0 !== eu.canDisableThinking && (ep.canDisableThinking = eu.canDisableThinking, eg = !0), void 0 === ep.defaultEffort && void 0 !== eu.defaultEffort && (ep.defaultEffort = eu.defaultEffort, eg = !0), void 0 === ep.supportedEfforts && void 0 !== eu.supportedEfforts && (ep.supportedEfforts = eu.supportedEfforts, eg = !0), eg && (ed.reasoning = ep), eA; }
+        el.REASONING_SUPPLEMENTS = { "auto-pro-x": ec, "gpt-5": ec, "gpt-5-codex": ec, "gpt-5-mini": ec, "gpt-5-nano": ec, "gpt-5-pro": ec, "gpt-5.1": ec, "gpt-5.1-chat-latest": ec, "gpt-5.1-codex": ec, "gpt-5.1-codex-max": ec, "gpt-5.1-codex-mini": ec, "gpt-5.2": ec, "gpt-5.2-chat-latest": ec, "gpt-5.2-codex": ec, "gpt-5.2-pro": ec, "gpt-5.3-codex": ec, "gpt-5.3-codex-spark": ec, "gpt-5.4": ec, "gpt-5.4-mini": ec, "gpt-5.4-nano": ec, "gpt-5.4-pro": ec, "gpt-5.5": ec, "gpt-5.5-pro": ec, o1: ec, "o1-pro": ec, o3: ec, "o3-deep-research": ec, "o3-mini": ec, "o3-pro": ec, "o4-mini": ec, "o4-mini-deep-research": ec }, el.applyReasoningSupplement = applyReasoningSupplement;
+    } });

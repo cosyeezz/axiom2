@@ -1,0 +1,60 @@
+{
+  "passed": true,
+  "probeChecks": 8,
+  "dumpbinRuns": 2,
+  "oldManifest": {
+    "files": 79,
+    "bytes": 3141440,
+    "unchanged": true
+  },
+  "localLinks": 72,
+  "styledFiles": 6,
+  "scopedGitDiffCheckExit": 0,
+  "evidenceFiles": [
+    {
+      "path": "README.md",
+      "bytes": 4807,
+      "sha256": "ea1cf442a8ad927017a13428db18751dad6f302b5036f65d084c792d8fdc20f2"
+    },
+    {
+      "path": "adapter-probe.json",
+      "bytes": 3027,
+      "sha256": "0659612acedbf6d887db5902703244a0cba76a2abff9efff04db44c7cd624525"
+    },
+    {
+      "path": "adapter-probe.ts",
+      "bytes": 6805,
+      "sha256": "2fa04899202ca2954ce449f15ab441fae526ea9ae93785734bfcfa194fabd72d"
+    },
+    {
+      "path": "assistant.asm.txt",
+      "bytes": 50923,
+      "sha256": "2e00f35de82c59ac9b45d0094b95f6c313ffdf04a6ca32ef39a51f2f6282bc75"
+    },
+    {
+      "path": "check.cjs",
+      "bytes": 4054,
+      "sha256": "de9285fe215385a4a0799cc59b2887ae8c2690b1b3a8fab23e9cd8ad5852dcf4"
+    },
+    {
+      "path": "dumpbin-run.json",
+      "bytes": 661,
+      "sha256": "fc2d6832b47180a7c5329a5973f8ae86ab9a4fc8b78c0585173067c380f10c9c"
+    },
+    {
+      "path": "reasoning.asm.txt",
+      "bytes": 10767,
+      "sha256": "ac66e2357fe044b578e6d3125f845086271719ffd6a7e7800daeffbb2792d941"
+    },
+    {
+      "path": "serializer-fields.json",
+      "bytes": 11530,
+      "sha256": "f5d41972d8c03a0602d6a68499999fefb35ad0c5edbdfb4762986fa701f62a8d"
+    },
+    {
+      "path": "serializer-scan.cjs",
+      "bytes": 3558,
+      "sha256": "8f530d79139aecbe19dca0ad3745d75ddec4a9129ab4177af68e4451e5edfe62"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+/* Shared interaction for icon-only actions; page styles own geometry.
+   Explicit control specificity keeps legacy page rules from changing this contract. */
+:root { --action-icon-fg: #8a8f98; }
+:root :is(button, a)[class]:is(.icon-btn, .action-icon) {
+  color: var(--action-rest, var(--action-icon-fg));
+  background: transparent;
+  transition: color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast);
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+  color: var(--action-highlight, var(--fg));
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: -2px;
+}
+:root :is(button, a)[class]:is(.icon-btn, .action-icon):is(:disabled, [aria-disabled="true"]) {
+  color: var(--action-icon-fg);
+  background: transparent;
+  cursor: not-allowed;
+}
+/* Persistent state and operation feedback remain distinguishable. */
+.model-favorite[aria-pressed="true"] { --action-rest: var(--warn); --action-highlight: var(--warn); }
+.compression-trigger:is([aria-expanded="true"], [data-state="running"]),
+.annotation-toggle[aria-pressed="true"],
+:is(.memory-todo-toggle, .memory-global)[aria-expanded="true"],
+.original-conversation-toggle[aria-pressed="true"] { --action-rest: var(--accent-hover); --action-highlight: var(--accent-hover); }
+:root .compression-trigger.action-icon:is([aria-expanded="true"], [aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.compression-trigger[data-od-id="background-compression-trigger"]:is([data-state="completed"],[data-state="cancelled"]) { --action-rest: var(--action-icon-fg); --action-highlight: var(--fg); }
+.compression-trigger[data-od-id="background-compression-trigger"]:is([data-state="failed"],[data-state="interrupted"]) { --action-rest: var(--danger-text); --action-highlight: var(--danger-text); }
+/* Toolbar state is expressed by backgrounds, shapes and motion; all glyphs
+   share the system's neutral rest color and interactive highlight. */
+:root .usage button.action-icon {
+  --action-rest: var(--action-icon-fg);
+  --action-highlight: var(--fg);
+}
+:root .usage button.action-icon:is([aria-expanded="true"], [aria-pressed="true"]):not(:disabled) {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.usage .action-icon > svg, .usage .annotation-count { color: inherit; }
+.execution-alert .icon-btn > svg { color: inherit; }
+.message-actions[data-feedback="copied"] > .copy-reply { --action-rest: var(--success); --action-highlight: var(--success); }
+.message-actions[data-feedback="failed"] > .copy-reply { --action-rest: var(--danger-icon); --action-highlight: var(--danger-icon); }
+@media (prefers-reduced-motion: reduce) {
+  :root :is(button, a)[class]:is(.icon-btn, .action-icon) { transition: none; }
+}

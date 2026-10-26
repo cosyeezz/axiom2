@@ -1,0 +1,3 @@
+.draft-status{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;min-width:0;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.draft-status .btn{min-height:28px;padding:2px 6px;font-size:11px}
+@media(pointer:coarse){.draft-status .btn{min-height:44px}}

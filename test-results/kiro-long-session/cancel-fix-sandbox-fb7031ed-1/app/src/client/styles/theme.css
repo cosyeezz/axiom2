@@ -1,0 +1,149 @@
+/* Loaded after page styles so every page, portal and native control shares one palette. */
+:root { color-scheme: dark; --overlay-shadow: 0 12px 40px #0006; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-warm: #f0eeea;
+  --fg: #252824;
+  --fg-2: #454b46;
+  --muted: #646c65;
+  --meta: #646c65;
+  --border: #dcded7;
+  --border-soft: #e7e8e2;
+  --accent: #a94f1d;
+  --process-text-color: var(--fg-2);
+  --process-highlight-color: var(--accent);
+  --accent-on: #ffffff;
+  --accent-hover: #884017;
+  --accent-active: #723413;
+  --success: #28753e;
+  --warn: #82611f;
+  --danger: #b13f3f;
+  --danger-icon: #ae3838;
+  --danger-text: #ae3838;
+  --danger-hover: #963232;
+  --action-icon-fg: #646c65;
+  --elev-raised: 0 2px 8px #2830210d, 0 0 0 1px var(--border);
+  --overlay-shadow: 0 12px 40px #2830211f, 0 2px 6px #2830210a;
+}
+html[data-theme] body { color-scheme: inherit; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; min-width: 36px; height: 36px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--fg-2); cursor: pointer; }
+.theme-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.theme-toggle:hover { color: var(--accent-hover); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.desktop-workbench-actions, .connect-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.desktop-workbench-actions > button { margin-left: 0; }
+.desktop-workbench-actions > .theme-toggle { width: 36px; min-height: 36px; padding: 0; border-radius: 8px; }
+.desktop-workbench-actions > .theme-toggle svg { width: 18px; height: 18px; stroke-width: 1.5; }
+.desktop-workbench-actions > .theme-toggle:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+@media (max-width: 360px) { .desktop-workbench-status > span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; } .desktop-workbench-actions { gap: 4px; } }
+
+/* Text that previously used colors tailored to the dark canvas. */
+html[data-theme="light"] {
+  .tool-activity, .task-results, .message-body:not(.user-text) { --muted: #646c65; }
+  .markdown .code-head { --muted: #646c65; }
+  .session-state.unread { color: #286aab; }
+  .message-image-icon { --image-tint: #286aab; }
+  .thinking-block { --process-text-color: #806120; }
+  .thinking-block .thinking-body.markdown, .thinking-preview, .thinking-preview *, .thinking-indicator, .process-icon-think { color: #806120; }
+  .process-icon, .process-counts, .process-counts > span + span::before, .process-outcome,
+  .tool-activity.process-live[data-status="completed"] > summary .activity-title { color: var(--muted); }
+  .process-icon-think { color: #806120; }
+  .process-outcome[data-status="completed"] { color: var(--success); }
+  .process-outcome[data-status="failed"], .activity-current[data-status="failed"] .process-icon { color: var(--danger-text); }
+  .thread-content .tool-call .tool-duration[data-latency="slow"] { color: var(--warn); }
+  .skill-card, .skill-chip { border-color: #d8cfe4; background: #f3eff7; color: #68507e; }
+  .skill-card > .skill-icon, .capability-runtime { color: #74568c; }
+  .skill-card-copy > strong { color: #604575; }
+  .skill-card-copy > span { color: #73647d; }
+  .skill-card .icon-btn:focus-visible, .capability-use:focus-visible, .skill-chip button:focus-visible { outline-color: #74568c; }
+  .skill-file-error, .phone-connect-section .phone-connect-error, .overview-message[role="alert"],
+  .tools-error, .settings-dialog .auth-error, .model-catalog-panel .auth-error, .oauth-provider-setup .auth-error,
+  .oauth-login-panel .auth-error, .configuration-feedback[data-error="true"], .settings-app[data-feedback-error="true"] .feedback,
+  .settings-app .feedback[role="alert"] { color: var(--danger-text); border-left-color: var(--danger); }
+  .mobile-connection { color: var(--warn); background: #f3e8d4; }
+  .reading-mode .mobile-expand { background: #fffffff2; border-color: var(--border); box-shadow: var(--overlay-shadow); }
+  .file-image-scroll { background: repeating-conic-gradient(#e9ebe6 0% 25%, #fff 0% 50%) 50% / 20px 20px; }
+
+  /* Menus and dialogs are often portaled outside their original page. */
+  .axiom-tooltip { background: var(--surface); color: var(--fg-2); box-shadow: var(--overlay-shadow); }
+  .confirm-actions .confirm-danger { color: #fff; }
+  .composer .send.is-running, .composer .send.is-running:is(:hover, :active, :disabled) { background: transparent; color: var(--danger-icon); border: 1px solid var(--muted); border-radius: 50%; }
+  .send.is-running::after { content: none; }
+  .send.is-running svg { fill: var(--danger-icon); }
+  .provider-add-menu, .phone-address-menu, .annotation-popover, .metric-detail,
+  .select-menu, .model-popover, .memory-filter-menu, .file-completion,
+  .workspace-dialog, .settings-dialog, .confirm-dialog, .resources-dialog, .remote-file-dialog,
+  .cost-popover, .file-preview-panel, dialog.toolbar-detail-panel, .font-scale-feedback { box-shadow: var(--overlay-shadow); }
+  dialog:modal::backdrop { background: #252d254d; }
+}
+
+/* The desktop controller has its own layout and previously hard-coded palette. */
+html[data-theme="light"] {
+  body:has(.connect-page), .connect-page { background: var(--bg); color: var(--fg); }
+  .desktop-workbench-bar { background: #eeefea; border-color: var(--border); }
+  .desktop-workbench-status, .desktop-workbench-bar button { color: var(--fg-2); }
+  .desktop-workbench-status svg { color: var(--muted); }
+  .desktop-workbench-status[data-state="connected"] svg { color: var(--success); }
+  .desktop-workbench-status[data-state="disconnected"] svg { color: var(--danger-icon); }
+  .desktop-workbench-bar button:is(:hover, :focus-visible, :active):not(:disabled) { color: var(--accent-hover); }
+  .desktop-workbench-bar button:focus-visible, .connect-page :is(button, summary, a, input):focus-visible { outline-color: var(--accent); }
+  .desktop-update-dot { background: var(--accent); }
+  .desktop-workbench-error { color: var(--danger-text); }
+  .connect-brand, .startup-title h1, .startup-preparation > summary, .startup-maintenance > summary,
+  .device-trigger, .device-option, .startup-content-heading h2 { color: var(--fg); }
+  .startup-brand-version, .startup-overline, .connect-eyebrow { color: var(--warn); }
+  .connect-local, .startup-title p, .startup-title h1 span:first-child, .startup-private,
+  .connection-label, .target-connect .connect-footnote, .connection-service-detail, .connection-text-button, .connection-primary-meta,
+  .startup-preparation > summary > svg, .device-symbol, .device-name small, .device-option small,
+  .device-kind, .device-trigger > svg, .device-menu-caption, .device-menu-caption span,
+  .device-menu-caption .startup-icon-button, .device-menu-note, .device-option > svg,
+  .startup-steps > button, .startup-step-marker, .startup-steps small, .startup-steps > p,
+  .startup-description, .startup-icon-button, .startup-check-result span, .startup-resource span,
+  .connect-details dt, .connect-footnote, .startup-manual summary, .startup-manual p,
+  .startup-command-block > span, .startup-maintenance > summary > svg, .startup-maintenance > summary > span,
+  .connect-footer, .connection-field, .setup-job pre, .connect-pi-location summary, .connect-versions dt,
+  .connect-update-detail, .connect-log { color: var(--muted); }
+  .startup-panel, .device-menu, .connect-dialog { background: var(--surface); border-color: var(--border); box-shadow: var(--overlay-shadow); }
+  .connection-service, .startup-preparation, .startup-preparation[open] > summary, .device-option:last-child,
+  .startup-steps, .startup-check-result, .connect-details, .startup-manual, .startup-command,
+  .startup-maintenance, .connect-pi, .connect-versions { border-color: var(--border-soft); }
+  .connection-action-divider { background: var(--border); }
+  .device-trigger, .connection-field input, .connect-secondary { background: var(--bg); border-color: var(--border); color: var(--fg); }
+  .device-trigger:hover:not(:disabled), .device-trigger[aria-expanded="true"] { background: #f5f2ec; border-color: #b8a38a; }
+  .device-option[data-active="true"], .connection-text-button:hover:not(:disabled), .startup-icon-button:hover:not(:disabled),
+  .startup-steps > button:hover, .connect-secondary:hover:not(:disabled) { background: #f0f1ec; color: var(--fg); }
+  .connect-primary.startup-connect-button, .device-option[aria-selected="true"] { background: #f4eadb; color: #78561e; border-color: #d4be96; }
+  .connect-primary.startup-connect-button:hover:not(:disabled) { background: #ede0c9; border-color: #b99c67; }
+  .device-option > svg.device-selected, .startup-step-pointer, .startup-steps > button[aria-current="step"] .startup-step-marker { color: var(--warn); }
+  .connection-status-tag, .preparation-tag { background: #f0f1ec; border-color: #d6dbd2; color: var(--muted); }
+  .connection-status-tag[data-state="running"], .preparation-tag[data-state="ready"] { background: #eaf3e9; border-color: #bdd5bd; color: #327146; }
+  .connection-status-tag:is([data-state="starting"], [data-state="stopping"], [data-state="unmanaged"]), .preparation-tag[data-state="missing"] { background: #f7eedc; border-color: #decba4; color: var(--warn); }
+  .connection-service-hint, .device-discovery-error { color: var(--warn); }
+  .device-peer-state, .startup-steps > button[data-done="true"] .startup-step-marker, .connect-update-current { color: var(--success); }
+  .peer-online { background: var(--success); }
+  .peer-unknown { background: var(--muted); }
+  .startup-steps { background: #f4f4ef; }
+  .startup-steps > button[aria-current="step"] { color: #78561e; background: #f3ead9; border-color: #e3d4b9; }
+  .startup-icon-button[data-tooltip]::after { background: var(--surface); border-color: var(--border); color: var(--fg-2); box-shadow: var(--overlay-shadow); }
+  .startup-icon-button.startup-open, .connect-primary { background: #876731; border-color: #876731; color: #fff; }
+  .startup-icon-button.startup-open:hover:not(:disabled), .connect-primary:hover:not(:disabled) { background: #705326; }
+  .startup-check-result > svg, .startup-check-result strong, .startup-resource > small,
+  .startup-command-block > small, .connect-details dd { color: var(--fg-2); }
+  .startup-resource code, .startup-command code, .connect-versions dd { color: #785c2a; }
+  .startup-command { background: var(--bg); }
+  .connection-field input:focus { border-color: var(--accent); }
+  .connect-message, .connect-update-progress, .setup-job { background: #f5eddf; color: #78561e; }
+  .connect-message { background: var(--bg); color: var(--muted); }
+  .connect-error, .connect-update-progress.has-error, .setup-job.has-error { background: #faece8; color: var(--danger-text); }
+  .connection-stop:hover:not(:disabled) { color: var(--danger-text); }
+  .connect-dialog { color: var(--fg); }
+  .connect-dialog p, .connect-dialog li { color: var(--fg-2); }
+  .connect-dialog::backdrop { background: #252d254d; }
+  .connect-pi-location summary:hover { color: var(--accent-hover); }
+  .startup-fallback { color: var(--fg); }
+  .startup-fallback > span, .startup-fallback pre { color: var(--warn); }
+  .startup-fallback p { color: var(--muted); }
+  .startup-fallback a, .startup-fallback button { background: var(--surface); color: var(--accent); border-color: var(--border); }
+}

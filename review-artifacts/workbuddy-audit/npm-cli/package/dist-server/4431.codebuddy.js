@@ -1,0 +1,27 @@
+"use strict";exports.ids=["4431"],exports.modules={52286(t,i,n){n.d(i,{a:()=>e});var l=n(98995),a=n(8497),d=n(20869);function e(t){if(t instanceof d.l||t instanceof d.m||t instanceof a.a)throw t}(0,l.createRequire)(__filename)},99223(t,i,n){function s(t){let i=`${t.name} - ${t.summary}
+
+`;if(i+=`Usage: ${t.usage}
+`,t.description){if(i+=`
+Description:
+`,"string"==typeof t.description)for(let n of t.description.split(`
+`))i+=n?`  ${n}
+`:`
+`;else if(t.description.length>0)for(let n of t.description)i+=n?`  ${n}
+`:`
+`}if(t.options&&t.options.length>0)for(let n of(i+=`
+Options:
+`,t.options))i+=`  ${n}
+`;if(t.examples&&t.examples.length>0)for(let n of(i+=`
+Examples:
+`,t.examples))i+=`  ${n}
+`;if(t.notes&&t.notes.length>0)for(let n of(i+=`
+Notes:
+`,t.notes))i+=`  ${n}
+`;return{stdout:i,stderr:"",exitCode:0}}function o(t){return t.includes("--help")}function r(t,i){return{stdout:"",stderr:i.startsWith("--")?`${t}: unrecognized option '${i}'
+`:`${t}: invalid option -- '${i.replace(/^-/,"")}'
+`,exitCode:1}}n.d(i,{a:()=>s,b:()=>o,c:()=>r}),(0,n(98995).createRequire)(__filename)},28016(t,i,n){n.d(i,{a:()=>f,b:()=>p});var l=n(98995),a=n(52286),d=n(20869),m=n(29486),h=n(99223),u=n(97926);(0,l.createRequire)(__filename);var c={name:"html-to-markdown",summary:"convert HTML to Markdown (BashEnv extension)",usage:"html-to-markdown [OPTION]... [FILE]",description:["Convert HTML content to Markdown format using the turndown library.","This is a non-standard BashEnv extension command, not available in regular bash.","","Read HTML from FILE or standard input and output Markdown to standard output.","Commonly used with curl to convert web pages:","  curl -s https://example.com | html-to-markdown","","Supported HTML elements:","  - Headings (h1-h6) \u2192 # Markdown headings","  - Paragraphs (p) \u2192 Plain text with blank lines","  - Links (a) \u2192 [text](url)","  - Images (img) \u2192 ![alt](src)","  - Bold/Strong \u2192 **text**","  - Italic/Em \u2192 _text_","  - Code (code, pre) \u2192 `inline` or fenced blocks","  - Lists (ul, ol, li) \u2192 - or 1. items","  - Blockquotes \u2192 > quoted text","  - Horizontal rules (hr) \u2192 ---"],options:["-b, --bullet=CHAR     bullet character for unordered lists (-, +, or *)","-c, --code=FENCE      fence style for code blocks (``` or ~~~)","-r, --hr=STRING       string for horizontal rules (default: ---)","    --heading-style=STYLE","                      heading style: 'atx' for # headings (default),","                      'setext' for underlined headings (h1/h2 only)","    --help            display this help and exit"],examples:["echo '<h1>Hello</h1><p>World</p>' | html-to-markdown","html-to-markdown page.html","curl -s https://example.com | html-to-markdown > page.md"]},f={name:"html-to-markdown",async execute(t,i){if((0,h.b)(t))return(0,h.a)(c);let n="-",l="```",f="---",p="atx",g=[];for(let i=0;i<t.length;i++){let a=t[i];if("-b"===a||"--bullet"===a)n=t[++i]??"-";else if(a.startsWith("--bullet="))n=a.slice(9);else if("-c"===a||"--code"===a)l=t[++i]??"```";else if(a.startsWith("--code="))l=a.slice(7);else if("-r"===a||"--hr"===a)f=t[++i]??"---";else if(a.startsWith("--hr="))f=a.slice(5);else if(a.startsWith("--heading-style=")){let t=a.slice(16);("setext"===t||"atx"===t)&&(p=t)}else if("-"===a)g.push("-");else{if(a.startsWith("--")||a.startsWith("-"))return(0,h.c)("html-to-markdown",a);g.push(a)}}let w,x=Math.min(i.limits.maxInputBytes,i.limits.maxStringLength);if(0===g.length||1===g.length&&"-"===g[0]){if(i.stdin.length>x)throw new d.l(`html-to-markdown: input size limit exceeded (${x} bytes)`,"string_length");w=(0,m.d)(i.stdin)}else try{let t=i.fs.resolvePath(i.cwd,g[0]);if((await i.fs.stat(t)).size>x||(w=await i.fs.readFile(t),(0,m.a)(w)>x))throw new d.l(`html-to-markdown: input size limit exceeded (${x} bytes)`,"string_length")}catch(t){return(0,a.a)(t),{stdout:"",stderr:`html-to-markdown: ${g[0]}: No such file or directory
+`,exitCode:1}}if(!w.trim())return{stdout:"",stderr:"",exitCode:0};if(!["-","+","*"].includes(n))return{stdout:"",stderr:`html-to-markdown: invalid bullet marker
+`,exitCode:1};if("```"!==l&&"~~~"!==l)return{stdout:"",stderr:`html-to-markdown: invalid code fence
+`,exitCode:1};let k=0,y=i.limits.maxLoopIterations;for(let t=0;t<w.length;t++)if(60===w.charCodeAt(t)&&++k>y)throw new d.l(`html-to-markdown: complexity limit exceeded (${y} tags)`,"iterations");i.executionScope?.consumeWork(k,"html-to-markdown tags");let b=(0,m.a)(w),v=Math.min(i.limits.maxStringLength,i.limits.maxOutputSize);if(b>Math.floor((v-1)/4))throw new d.l(`html-to-markdown: prospective output size limit exceeded (${v} bytes)`,"output_size");let $=i.executionScope?.reserveBytes("html input",b,"html-to-markdown"),C=i.executionScope?.reserveBytes("html prospective output",4*b+1,"html-to-markdown");try{let t=new u.default({bulletListMarker:n,codeBlockStyle:"fenced",fence:l,hr:f,headingStyle:p});t.remove(["script","style","footer"]);let i=t.turndown(w).trim();if((0,m.a)(i)+1>v)throw new d.l(`html-to-markdown: output size limit exceeded (${v} bytes)`,"output_size");return{stdout:`${i}
+`,stderr:"",exitCode:0}}catch(t){return(0,a.a)(t),{stdout:"",stderr:`html-to-markdown: conversion error: ${t.message}
+`,exitCode:1}}finally{C?.release(),$?.release()}}},p={name:"html-to-markdown",flags:[],stdinType:"text"}},87762(t,i,n){n.r(i),n.d(i,{flagsForFuzzing:()=>a.b,htmlToMarkdownCommand:()=>a.a});var l=n(98995),a=n(28016);n(52286),n(8497),n(20869),n(29486),n(99223),n(7863),(0,l.createRequire)(__filename)}};

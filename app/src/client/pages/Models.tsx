@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
-import { Icon, Dialog, SettingsSidebar } from "../components.js";
+import { Icon, SettingsSidebar } from "../components.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
 import { ModelRegistry } from "../models/ModelRegistry.js";
@@ -285,6 +286,8 @@ export default function Models() {
                   disabled={busy || !!login || (!dirty && !editor)}
                   onClick={() => setDecision({
                     title: "放弃修改？",
+                    confirmLabel: "放弃修改",
+                    danger: true,
                     text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
                     proceed: () => void load(),
                   })}
@@ -300,6 +303,8 @@ export default function Models() {
                   onClick={() => {
                     if (dirty || editor) setDecision({
                       title: "重新读取配置？",
+                      confirmLabel: "放弃并重新读取",
+                      danger: true,
                       text: "这会丢弃当前未保存修改和临时密钥。取消可继续编辑。",
                       proceed: () => void load(),
                     });
@@ -321,30 +326,10 @@ export default function Models() {
           </p>
         )}
         {decision && (
-          <Dialog
-            title={decision.title}
-            onClose={() => setDecision(null)}
-            className="settings-dialog"
-          >
-            <p>{decision.text}</p>
-            <div className="row dialog-actions">
-              <button
-                className="btn btn-ghost"
-                onClick={() => setDecision(null)}
-              >
-                取消
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  decision.proceed();
-                  setDecision(null);
-                }}
-              >
-                确认
-              </button>
-            </div>
-          </Dialog>
+          <ConfirmDialog key={decision.title} title={decision.title} description={decision.text}
+            subject={decision.subject} warning={decision.warning} confirmLabel={decision.confirmLabel} danger={decision.danger}
+            onClose={() => setDecision(current => current === decision ? null : current)}
+            onConfirm={() => { setDecision(null); decision.proceed(); }} />
         )}
       </main>
     </div>

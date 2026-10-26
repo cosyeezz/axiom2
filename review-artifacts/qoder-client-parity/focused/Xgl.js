@@ -1,0 +1,1 @@
+function Xgl(A){if(!Si(A))return;let e=A.type;if("adaptive"===e||"disabled"===e)return{type:e};if("enabled"!==e)return;let t=prt(A.budgetTokens);return void 0===t?void 0:{type:"enabled",budgetTokens:t}}

@@ -1,0 +1,17 @@
+{
+  "mergeRecipeExitCode": 0,
+  "exportedModelsEqualCanonicalRecovery": true,
+  "recordedRounds": 137,
+  "complete": false,
+  "publishedFixtureCount": 4,
+  "allFixtureHashesMatchHistoricalControlledRuns": true,
+  "syntheticCsvAndLedgerValuesVerified": true,
+  "syntheticPngSignaturesAndVisualContentsVerified": true,
+  "fixtureHashes": {
+    "inventory.csv": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+    "ledger.json": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+    "visual-a.png": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136",
+    "visual-b.png": "35a2a52c2351df8c5a1221b599542c5bc1450c34b26e22bafd157da5ef49de93"
+  },
+  "newModelRequests": 0
+}

@@ -1,0 +1,398 @@
+[
+  {
+    "line": 608,
+    "instruction": "00000001415B5491: 66 0F 74 0D 17 15  pcmpeqb     xmm1,xmmword ptr [0000000145E369B0h]",
+    "offset": "0x5e355b0",
+    "direct": "wsapps.com/starthttps://view.awsoverflow adding duration to dateresulting value is out of rangeoverflow subtracting duration from dateC:\\Users\\runneradmin\\.cargo\\registry\\src\\index",
+    "pointers": []
+  },
+  {
+    "line": 610,
+    "instruction": "00000001415B5499: 66 0F 74 05 1F 15  pcmpeqb     xmm0,xmmword ptr [0000000145E369C0h]",
+    "offset": "0x5e355c0",
+    "direct": "https://view.awsoverflow adding duration to dateresulting value is out of rangeoverflow subtracting duration from dateC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949c",
+    "pointers": []
+  },
+  {
+    "line": 755,
+    "instruction": "00000001415B56B0: 48 8D 15 F9 C5 8B  lea         rdx,[0000000145E71CB0h]",
+    "offset": "0x5e708b0",
+    "direct": "xxx",
+    "pointers": [
+      {
+        "at": 8,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 32,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1479,
+    "instruction": "00000001415B6156: 48 8D 15 5B BB 8B  lea         rdx,[0000000145E71CB8h]",
+    "offset": "0x5e708b8",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 1735,
+    "instruction": "00000001415B6501: 48 8D 15 C8 B7 8B  lea         rdx,[0000000145E71CD0h]",
+    "offset": "0x5e708d0",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 24,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2125,
+    "instruction": "00000001415B6AD4: 48 8D 15 0D B2 8B  lea         rdx,[0000000145E71CE8h]",
+    "offset": "0x5e708e8",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2242,
+    "instruction": "00000001415B6C92: 48 8D 0D C7 B0 8B  lea         rcx,[0000000145E71D60h]",
+    "offset": "0x5e70960",
+    "direct": "0",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71d30",
+        "text": "Failed to get auth profile for social user: "
+      },
+      {
+        "at": 16,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2315,
+    "instruction": "00000001415B6DB3: 48 8D 0D 66 AF 8B  lea         rcx,[0000000145E71D20h]",
+    "offset": "0x5e70920",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71d00",
+        "text": "Failed to get auth profile: "
+      }
+    ]
+  },
+  {
+    "line": 2374,
+    "instruction": "00000001415B6EA4: 4C 8D 2D BD 37 56  lea         r13,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 2396,
+    "instruction": "00000001415B6EF2: 48 8D 0D 67 AE 8B  lea         rcx,[0000000145E71D60h]",
+    "offset": "0x5e70960",
+    "direct": "0",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71d30",
+        "text": "Failed to get auth profile for social user: "
+      },
+      {
+        "at": 16,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2489,
+    "instruction": "00000001415B7063: 4C 8D 2D FE 35 56  lea         r13,[000000015BB1A668h]",
+    "offset": "0x1bb19268",
+    "direct": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs",
+    "pointers": []
+  },
+  {
+    "line": 2511,
+    "instruction": "00000001415B70B1: 48 8D 0D 68 AC 8B  lea         rcx,[0000000145E71D20h]",
+    "offset": "0x5e70920",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71d00",
+        "text": "Failed to get auth profile: "
+      }
+    ]
+  },
+  {
+    "line": 2740,
+    "instruction": "00000001415B743A: 48 8D 05 8F EB 2B  lea         rax,[000000015B875FD0h]",
+    "offset": "0x1b874bd0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b875f9c",
+        "text": "crates\\chat-cli-v2\\src\\aws_common\\http_client.rs"
+      }
+    ]
+  },
+  {
+    "line": 2743,
+    "instruction": "00000001415B7446: 48 8D 0D 33 EB 2B  lea         rcx,[000000015B875F80h]",
+    "offset": "0x1b874b80",
+    "direct": "failed to create http clientcrates\\chat-cli-v2\\src\\aws_common\\http_client.rs",
+    "pointers": []
+  },
+  {
+    "line": 2745,
+    "instruction": "00000001415B744D: 4C 8D 0D F4 20 2C  lea         r9,[000000015B879548h]",
+    "offset": "0x1b878148",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x142fde330",
+        "text": "UAWAVVWSH"
+      }
+    ]
+  },
+  {
+    "line": 2760,
+    "instruction": "00000001415B7486: 48 8D 05 F3 AD 33  lea         rax,[000000015B8F2280h]",
+    "offset": "0x1b8f0e80",
+    "direct": "0\"",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2765,
+    "instruction": "00000001415B7499: 4C 8D 0D F8 AD 33  lea         r9,[000000015B8F2298h]",
+    "offset": "0x1b8f0e98",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2794,
+    "instruction": "00000001415B750A: 48 8D 05 BF EA 2B  lea         rax,[000000015B875FD0h]",
+    "offset": "0x1b874bd0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b875f9c",
+        "text": "crates\\chat-cli-v2\\src\\aws_common\\http_client.rs"
+      }
+    ]
+  },
+  {
+    "line": 2797,
+    "instruction": "00000001415B7516: 48 8D 0D 63 EA 2B  lea         rcx,[000000015B875F80h]",
+    "offset": "0x1b874b80",
+    "direct": "failed to create http clientcrates\\chat-cli-v2\\src\\aws_common\\http_client.rs",
+    "pointers": []
+  },
+  {
+    "line": 2799,
+    "instruction": "00000001415B751D: 4C 8D 0D 24 20 2C  lea         r9,[000000015B879548h]",
+    "offset": "0x1b878148",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x142fde330",
+        "text": "UAWAVVWSH"
+      }
+    ]
+  },
+  {
+    "line": 2814,
+    "instruction": "00000001415B7556: 48 8D 05 23 AD 33  lea         rax,[000000015B8F2280h]",
+    "offset": "0x1b8f0e80",
+    "direct": "0\"",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2819,
+    "instruction": "00000001415B7569: 4C 8D 0D 28 AD 33  lea         r9,[000000015B8F2298h]",
+    "offset": "0x1b8f0e98",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2852,
+    "instruction": "00000001415B75EE: 48 8D 05 DB E9 2B  lea         rax,[000000015B875FD0h]",
+    "offset": "0x1b874bd0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b875f9c",
+        "text": "crates\\chat-cli-v2\\src\\aws_common\\http_client.rs"
+      }
+    ]
+  },
+  {
+    "line": 2855,
+    "instruction": "00000001415B75FA: 48 8D 0D 7F E9 2B  lea         rcx,[000000015B875F80h]",
+    "offset": "0x1b874b80",
+    "direct": "failed to create http clientcrates\\chat-cli-v2\\src\\aws_common\\http_client.rs",
+    "pointers": []
+  },
+  {
+    "line": 2857,
+    "instruction": "00000001415B7601: 4C 8D 0D 40 1F 2C  lea         r9,[000000015B879548h]",
+    "offset": "0x1b878148",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 24,
+        "va": "0x142fde330",
+        "text": "UAWAVVWSH"
+      }
+    ]
+  },
+  {
+    "line": 2872,
+    "instruction": "00000001415B763A: 48 8D 05 3F AC 33  lea         rax,[000000015B8F2280h]",
+    "offset": "0x1b8f0e80",
+    "direct": "0\"",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2877,
+    "instruction": "00000001415B764D: 4C 8D 0D 44 AC 33  lea         r9,[000000015B8F2298h]",
+    "offset": "0x1b8f0e98",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 40,
+        "va": "0x15b8f2230",
+        "text": "/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\std\\src\\sync\\once.rs"
+      }
+    ]
+  },
+  {
+    "line": 2888,
+    "instruction": "00000001415B7678: 48 8D 0D 69 AB 8B  lea         rcx,[0000000145E721E8h]",
+    "offset": "0x5e70de8",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2891,
+    "instruction": "00000001415B7684: 48 8D 0D 5D AB 8B  lea         rcx,[0000000145E721E8h]",
+    "offset": "0x5e70de8",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2896,
+    "instruction": "00000001415B7697: 48 8D 0D FA A5 8B  lea         rcx,[0000000145E71C98h]",
+    "offset": "0x5e70898",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 32,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  },
+  {
+    "line": 2902,
+    "instruction": "00000001415B76AC: 48 8D 0D E5 A5 8B  lea         rcx,[0000000145E71C98h]",
+    "offset": "0x5e70898",
+    "direct": ";",
+    "pointers": [
+      {
+        "at": 0,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      },
+      {
+        "at": 32,
+        "va": "0x145e71c3b",
+        "text": "C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\mod.rs"
+      }
+    ]
+  }
+]

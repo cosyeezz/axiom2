@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "On-demand workbench notes using native language, theme and Chat actions",
+  "files": [".codebuddy-plugin", "client"]
+}

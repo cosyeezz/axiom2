@@ -1,0 +1,675 @@
+#!/usr/bin/env sh
+
+__cb_app="${CODEBUDDY_BROKERED_APP:-${0##*/}}"
+__cb_toybox="${CODEBUDDY_TOYBOX_BIN:-}"
+__cb_brokered_dir="${CODEBUDDY_BROKERED_BIN_DIR:-${0%/*}}"
+__cb_broker_client="${CODEBUDDY_BROKER_IPC_CLIENT:-${__cb_brokered_dir%/brokered-bin}/broker-ipc-client.cjs}"
+__cb_program_policy_helper="${__cb_brokered_dir%/brokered-bin}/broker-program-policy-check.cjs"
+
+__cb_run_node() {
+    if [ "${CODEBUDDY_NODE_RUN_AS_NODE:-}" = "1" ]; then
+        ELECTRON_RUN_AS_NODE=1 env -u NODE_OPTIONS "${CODEBUDDY_NODE_BIN:-node}" "$@"
+    else
+        env -u NODE_OPTIONS "${CODEBUDDY_NODE_BIN:-node}" "$@"
+    fi
+}
+
+__cb_cleanup() { /bin/rm -f "$__cb_err" 2>/dev/null || true; }
+
+__cb_should_fallback() { case "$1" in *"Unknown command "*|*"Unknown option "*|*"unknown option "*|*"unrecognized option "*) return 0 ;; *) return 1 ;; esac; }
+
+__cb_check_program_policy() {
+    [ -n "${CODEBUDDY_SANDBOX_PROGRAM_POLICY_COMMAND:-}" ] || return 0
+    if [ -z "${CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS:-}" ] \
+        || [ -z "${CODEBUDDY_SANDBOX_BROKER_SESSION_ID:-}" ] \
+        || [ ! -f "$__cb_broker_client" ] \
+        || [ ! -f "$__cb_program_policy_helper" ]; then
+        printf '%s' 'Brokered program policy check unavailable' >&2
+        return 13
+    fi
+    __cb_run_node "$__cb_program_policy_helper" "$1" toybox-dispatch "$__cb_broker_client"
+}
+
+__cb_check_program_policy "$__cb_app"
+__cb_program_policy_status=$?
+[ "$__cb_program_policy_status" -eq 0 ] || exit "$__cb_program_policy_status"
+
+__cb_path_without_brokered_dir() {
+    __cb_old_ifs="$IFS"
+    IFS=:; __cb_new_path=
+    for __cb_dir in ${PATH:-}; do
+        [ "$__cb_dir" = "$__cb_brokered_dir" ] && continue
+        __cb_new_path="${__cb_new_path:+$__cb_new_path:}$__cb_dir"
+    done
+    IFS="$__cb_old_ifs"
+    printf '%s' "$__cb_new_path"
+}
+
+__cb_fallback() {
+    case "$__cb_app" in
+        rm|rmdir|unlink) [ ! -x "${CODEBUDDY_SAFE_DELETE_BIN_DIR:-}/${__cb_app}" ] || BASH_ENV= exec "${CODEBUDDY_SAFE_DELETE_BIN_DIR}/${__cb_app}" "$@" ;;
+    esac
+
+    __cb_fallback_path="$(__cb_path_without_brokered_dir)"
+    [ -z "$__cb_fallback_path" ] && return 127
+    PATH="$__cb_fallback_path" exec "$__cb_app" "$@"
+}
+
+if [ "${CODEBUDDY_TOYBOX_DISPATCH_ACTIVE:-}" = "$__cb_app" ]; then
+    unset CODEBUDDY_TOYBOX_DISPATCH_ACTIVE
+    __cb_fallback "$@"
+    exit $?
+fi
+
+if [ "${CODEBUDDY_SAFE_DELETE_ENABLED:-1}" = "0" ]; then
+    case "$__cb_app" in
+        rm|rmdir|unlink) __cb_fallback "$@"; exit $? ;;
+    esac
+fi
+
+__cb_prebackup_path() {
+    [ -n "${1:-}" ] || return 0
+    [ "$1" != "-" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS:-}" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_SESSION_ID:-}" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_FILE_TOKEN_OPERATION_COMMAND:-}" ] || return 0
+    [ -f "$__cb_broker_client" ] || return 0
+
+__cb_run_node - "$__cb_broker_client" "$1" <<'NODE'
+const path = require('path');
+const { sendBrokerRequestSync } = require(process.argv[2]);
+const response = sendBrokerRequestSync({
+    command: process.env.CODEBUDDY_SANDBOX_FILE_TOKEN_OPERATION_COMMAND,
+    operation: 'write',
+    path: path.resolve(process.argv[3]),
+    sessionId: process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID,
+    toolCallId: process.env.CODEBUDDY_SANDBOX_BROKER_TOOL_CALL_ID,
+    brokerTraceId: process.env.CODEBUDDY_SANDBOX_BROKER_TRACE_ID,
+    runtime: 'toybox-dispatch',
+});
+if (response && (response.ok === true || response.decision === 'sandbox')) {
+    process.exit(0);
+}
+process.stderr.write(response && response.error ? response.error : 'Brokered write preflight denied');
+process.exit(13);
+NODE
+}
+
+__cb_prebackup_tree() {
+    [ -n "${1:-}" ] || return 0
+    [ -d "$1" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS:-}" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_SESSION_ID:-}" ] || return 0
+    [ -n "${CODEBUDDY_SANDBOX_FILE_TOKEN_OPERATION_COMMAND:-}" ] || return 0
+    [ -f "$__cb_broker_client" ] || return 0
+
+    __cb_run_node - "$__cb_broker_client" "$1" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { sendBrokerRequestSync } = require(process.argv[2]);
+
+function prebackupFile(filePath) {
+    const response = sendBrokerRequestSync({
+        command: process.env.CODEBUDDY_SANDBOX_FILE_TOKEN_OPERATION_COMMAND,
+        operation: 'write',
+        path: path.resolve(filePath),
+        sessionId: process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID,
+        toolCallId: process.env.CODEBUDDY_SANDBOX_BROKER_TOOL_CALL_ID,
+        brokerTraceId: process.env.CODEBUDDY_SANDBOX_BROKER_TRACE_ID,
+        runtime: 'toybox-dispatch',
+    });
+    if (response && (response.ok === true || response.decision === 'sandbox')) {
+        return;
+    }
+    process.stderr.write(response && response.error ? response.error : 'Brokered write preflight denied');
+    process.exit(13);
+}
+
+function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            walk(entryPath);
+        } else if (entry.isFile()) {
+            prebackupFile(entryPath);
+        }
+    }
+}
+
+walk(process.argv[3]);
+NODE
+}
+
+__cb_prebackup_tree_or_file() {
+    if [ -f "$1" ]; then
+        __cb_prebackup_path "$1"
+        return $?
+    fi
+    if [ -d "$1" ]; then
+        __cb_prebackup_tree "$1"
+        return $?
+    fi
+    __cb_prebackup_path "$1"
+}
+
+__cb_prebackup_truncate() {
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_skip_next" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_prebackup_path "$__cb_arg" || return $?; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -s|--size) __cb_skip_next=1 ;;
+            --size=*) ;;
+            -*) ;;
+            *) __cb_prebackup_path "$__cb_arg" || return $? ;;
+        esac
+    done
+}
+
+__cb_prebackup_dd() {
+    for __cb_arg in "$@"; do
+        case "$__cb_arg" in
+            of=*) __cb_prebackup_path "${__cb_arg#of=}" || return $? ;;
+        esac
+    done
+}
+
+__cb_prebackup_tee() {
+    __cb_after_options=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_after_options" ]; then __cb_prebackup_path "$__cb_arg" || return $?; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -*) ;;
+            *) __cb_prebackup_path "$__cb_arg" || return $? ;;
+        esac
+    done
+}
+
+__cb_prebackup_touch() {
+    __cb_needs_prebackup=
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_skip_next" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -d|--date|-r|--reference|-t|--time) __cb_skip_next=1; __cb_needs_prebackup=1 ;;
+            --date=*|--reference=*|--time=*|-*) __cb_needs_prebackup=1 ;;
+        esac
+    done
+    [ -n "$__cb_needs_prebackup" ] || return 0
+
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_skip_next" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_prebackup_path "$__cb_arg" || return $?; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -d|--date|-r|--reference|-t|--time) __cb_skip_next=1 ;;
+            --date=*|--reference=*|--time=*|-*) ;;
+            *) __cb_prebackup_path "$__cb_arg" || return $? ;;
+        esac
+    done
+}
+
+__cb_prebackup_mkdir() {
+    __cb_needs_prebackup=
+    __cb_operand_count=0
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_skip_next" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_operand_count=$((__cb_operand_count + 1)); continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -p|--parents) ;;
+            -m|--mode) __cb_skip_next=1; __cb_needs_prebackup=1 ;;
+            --mode=*|-) __cb_needs_prebackup=1 ;;
+            -*) __cb_needs_prebackup=1 ;;
+            *) __cb_operand_count=$((__cb_operand_count + 1)) ;;
+        esac
+    done
+    [ "$__cb_operand_count" -gt 1 ] && __cb_needs_prebackup=1
+    [ -n "$__cb_needs_prebackup" ] || return 0
+
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_skip_next" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_prebackup_path "$__cb_arg" || return $?; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -m|--mode) __cb_skip_next=1 ;;
+            --mode=*|-p|--parents|-) ;;
+            -*) ;;
+            *) __cb_prebackup_path "$__cb_arg" || return $? ;;
+        esac
+    done
+}
+
+__cb_prebackup_mv() {
+    __cb_needs_prebackup=
+    __cb_operand_count=0
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ "$__cb_skip_next" = "target-dir" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_operand_count=$((__cb_operand_count + 1)); continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -t|--target-directory) __cb_skip_next=target-dir; __cb_needs_prebackup=1 ;;
+            --target-directory=*) __cb_needs_prebackup=1 ;;
+            -*) __cb_needs_prebackup=1 ;;
+            *) __cb_operand_count=$((__cb_operand_count + 1)) ;;
+        esac
+    done
+    [ "$__cb_operand_count" -gt 2 ] && __cb_needs_prebackup=1
+    [ -n "$__cb_needs_prebackup" ] || return 0
+
+    # Rename mutates both the source entry and the destination entry. Preflight
+    # sources separately, then reuse cp's destination resolution for directories.
+    __cb_mv_target_dir=
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ "$__cb_skip_next" = "target-dir" ]; then __cb_mv_target_dir="$__cb_arg"; __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -t|--target-directory) __cb_skip_next=target-dir ;;
+            --target-directory=*) __cb_mv_target_dir="${__cb_arg#*=}" ;;
+        esac
+    done
+
+    __cb_mv_index=0
+    __cb_after_options=
+    __cb_skip_next=
+    for __cb_arg in "$@"; do
+        if [ "$__cb_skip_next" = "target-dir" ]; then __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then
+            __cb_mv_index=$((__cb_mv_index + 1))
+            if [ -n "$__cb_mv_target_dir" ] || [ "$__cb_mv_index" -lt "$__cb_operand_count" ]; then
+                __cb_prebackup_path "$__cb_arg" || return $?
+            fi
+            continue
+        fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -t|--target-directory) __cb_skip_next=target-dir ;;
+            --target-directory=*|-*) ;;
+            *)
+                __cb_mv_index=$((__cb_mv_index + 1))
+                if [ -n "$__cb_mv_target_dir" ] || [ "$__cb_mv_index" -lt "$__cb_operand_count" ]; then
+                    __cb_prebackup_path "$__cb_arg" || return $?
+                fi
+                ;;
+        esac
+    done
+    __cb_prebackup_cp "$@"
+}
+
+__cb_prebackup_last_operand() {
+    __cb_after_options=
+    __cb_last=
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_after_options" ]; then __cb_last="$__cb_arg"; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -*) ;;
+            *) __cb_last="$__cb_arg" ;;
+        esac
+    done
+    [ -z "$__cb_last" ] || __cb_prebackup_tree_or_file "$__cb_last"
+}
+
+__cb_cp_target_for_source() {
+    __cb_src="$1"
+    __cb_dest="$2"
+    if [ -d "$__cb_dest" ] && [ -z "${__cb_cp_no_target_dir:-}" ]; then
+        __cb_base="${__cb_src%/}"
+        __cb_base="${__cb_base##*/}"
+        [ -z "$__cb_base" ] || __cb_prebackup_tree_or_file "$__cb_dest/$__cb_base"
+        return $?
+    fi
+    __cb_prebackup_tree_or_file "$__cb_dest"
+}
+
+__cb_prebackup_cp() {
+    __cb_after_options=
+    __cb_skip_next=
+    __cb_cp_no_target_dir=
+    __cb_cp_target_dir=
+    __cb_cp_count=0
+    __cb_cp_dest=
+    for __cb_arg in "$@"; do
+        if [ "$__cb_skip_next" = "target-dir" ]; then __cb_cp_target_dir="$__cb_arg"; __cb_skip_next=; continue; fi
+        if [ -n "$__cb_after_options" ]; then __cb_cp_count=$((__cb_cp_count + 1)); __cb_cp_dest="$__cb_arg"; continue; fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -t|--target-directory) __cb_skip_next=target-dir ;;
+            --target-directory=*) __cb_cp_target_dir="${__cb_arg#*=}" ;;
+            -T|--no-target-directory) __cb_cp_no_target_dir=1 ;;
+            -*) ;;
+            *) __cb_cp_count=$((__cb_cp_count + 1)); __cb_cp_dest="$__cb_arg" ;;
+        esac
+    done
+
+    if [ -n "$__cb_cp_target_dir" ]; then
+        __cb_after_options=
+        __cb_skip_next=
+        for __cb_arg in "$@"; do
+            if [ "$__cb_skip_next" = "target-dir" ]; then __cb_skip_next=; continue; fi
+            if [ -n "$__cb_after_options" ]; then __cb_cp_target_for_source "$__cb_arg" "$__cb_cp_target_dir" || return $?; continue; fi
+            case "$__cb_arg" in
+                --) __cb_after_options=1 ;;
+                -t|--target-directory) __cb_skip_next=target-dir ;;
+                --target-directory=*|-T|--no-target-directory|-*) ;;
+                *) __cb_cp_target_for_source "$__cb_arg" "$__cb_cp_target_dir" || return $? ;;
+            esac
+        done
+        return 0
+    fi
+
+    [ "$__cb_cp_count" -ge 2 ] || return 0
+    __cb_after_options=
+    __cb_index=0
+    for __cb_arg in "$@"; do
+        if [ -n "$__cb_after_options" ]; then
+            __cb_index=$((__cb_index + 1))
+            [ "$__cb_index" -ge "$__cb_cp_count" ] || __cb_cp_target_for_source "$__cb_arg" "$__cb_cp_dest" || return $?
+            continue
+        fi
+        case "$__cb_arg" in
+            --) __cb_after_options=1 ;;
+            -t|--target-directory) __cb_skip_next=target-dir ;;
+            --target-directory=*|-T|--no-target-directory|-*) ;;
+            *)
+                __cb_index=$((__cb_index + 1))
+                [ "$__cb_index" -ge "$__cb_cp_count" ] || __cb_cp_target_for_source "$__cb_arg" "$__cb_cp_dest" || return $?
+                ;;
+        esac
+    done
+}
+
+__cb_prebackup_targets() {
+    case "$__cb_app" in
+        truncate) __cb_prebackup_truncate "$@" ;;
+        tee) __cb_prebackup_tee "$@" ;;
+        cp) __cb_prebackup_cp "$@" ;;
+        dd) __cb_prebackup_dd "$@" ;;
+        touch) __cb_prebackup_touch "$@" ;;
+        mkdir) __cb_prebackup_mkdir "$@" ;;
+        mv) __cb_prebackup_mv "$@" ;;
+    esac
+}
+
+__cb_host_op_ln() {
+    [ "$__cb_app" = "ln" ] || return 125
+    __cb_has_host_op_env || return 125
+
+    # Only simple ln [-s] SRC DEST is dispatched; other flags fall back to toybox.
+    __cb_run_node - "$__cb_broker_client" "$@" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { sendBrokerRequestSync } = require(process.argv[2]);
+
+const args = process.argv.slice(3);
+let symbolic = false;
+let afterOptions = false;
+const operands = [];
+
+for (const arg of args) {
+    if (afterOptions) {
+        operands.push(arg);
+        continue;
+    }
+    if (arg === '--') {
+        afterOptions = true;
+        continue;
+    }
+    if (arg === '-s' || arg === '--symbolic') {
+        symbolic = true;
+        continue;
+    }
+    if (arg.startsWith('-')) {
+        process.exit(125);
+    }
+    operands.push(arg);
+}
+
+if (operands.length !== 2) {
+    process.exit(125);
+}
+
+const [fromArg, toArg] = operands;
+const toPath = path.resolve(process.cwd(), toArg);
+const fromPath = symbolic ? fromArg : path.resolve(process.cwd(), fromArg);
+let linkPath = toPath;
+try {
+    if (fs.statSync(toPath).isDirectory()) {
+        linkPath = path.join(toPath, path.basename(fromArg));
+    }
+} catch {
+    linkPath = toPath;
+}
+const response = sendBrokerRequestSync({
+    command: process.env.CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND,
+    operation: 'link',
+    from: fromPath,
+    to: linkPath,
+    symbolic,
+    sessionId: process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID,
+    toolCallId: process.env.CODEBUDDY_SANDBOX_BROKER_TOOL_CALL_ID,
+    brokerTraceId: process.env.CODEBUDDY_SANDBOX_BROKER_TRACE_ID,
+    runtime: 'toybox-dispatch',
+});
+
+if (response && response.ok === true) {
+    process.exit(0);
+}
+if (response && response.decision === 'sandbox') {
+    process.exit(125);
+}
+process.stderr.write(response && response.error ? response.error : 'Brokered link operation denied');
+process.exit(13);
+NODE
+}
+
+__cb_has_host_op_env() {
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS:-}" ] || return 1
+    [ -n "${CODEBUDDY_SANDBOX_BROKER_SESSION_ID:-}" ] || return 1
+    [ -n "${CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND:-}" ] || return 1
+    [ -f "$__cb_broker_client" ] || return 1
+}
+
+__cb_host_op_file_mutation() {
+    case "$__cb_app" in
+        touch|mkdir|mv|cp) ;;
+        *) return 125 ;;
+    esac
+    __cb_has_host_op_env || return 125
+
+    __cb_run_node - "$__cb_broker_client" "$__cb_app" "$@" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { sendBrokerRequestSync } = require(process.argv[2]);
+
+const app = process.argv[3];
+const args = process.argv.slice(4);
+const baseRequest = {
+    command: process.env.CODEBUDDY_SANDBOX_HOST_FILE_OPERATION_COMMAND,
+    sessionId: process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID,
+    toolCallId: process.env.CODEBUDDY_SANDBOX_BROKER_TOOL_CALL_ID,
+    brokerTraceId: process.env.CODEBUDDY_SANDBOX_BROKER_TRACE_ID,
+    runtime: 'toybox-dispatch',
+};
+
+function parseOperands(acceptOption) {
+    let afterOptions = false;
+    const operands = [];
+    for (const arg of args) {
+        if (afterOptions) {
+            operands.push(arg);
+            continue;
+        }
+        if (arg === '--') {
+            afterOptions = true;
+            continue;
+        }
+        if (acceptOption(arg)) {
+            continue;
+        }
+        if (arg.startsWith('-')) {
+            process.exit(125);
+        }
+        operands.push(arg);
+    }
+    return operands;
+}
+
+function destinationPath(value, source) {
+    const resolved = path.resolve(process.cwd(), value);
+    try {
+        return fs.statSync(resolved).isDirectory()
+            ? path.join(resolved, path.basename(source))
+            : resolved;
+    } catch {
+        return resolved;
+    }
+}
+
+function dispatch(request) {
+    const response = sendBrokerRequestSync({ ...baseRequest, ...request });
+    if (response && response.ok === true) {
+        return;
+    }
+    if (response && response.decision === 'sandbox') {
+        process.exit(125);
+    }
+    process.stderr.write(response && response.error ? response.error : 'Brokered ' + app + ' operation denied');
+    process.exit(13);
+}
+
+if (app === 'touch') {
+    const operands = parseOperands(() => false);
+    if (operands.length === 0) { process.exit(125); }
+    for (const operand of operands) {
+        dispatch({ operation: 'touch', path: path.resolve(process.cwd(), operand) });
+    }
+} else if (app === 'mkdir') {
+    let recursive = false;
+    const operands = parseOperands(arg => {
+        if (arg === '-p' || arg === '--parents') {
+            recursive = true;
+            return true;
+        }
+        return false;
+    });
+    if (operands.length !== 1) { process.exit(125); }
+    dispatch({ operation: 'mkdir', path: path.resolve(process.cwd(), operands[0]), recursive });
+} else if (app === 'cp') {
+    let recursive = false;
+    const operands = parseOperands(arg => {
+        if (arg === '-R' || arg === '-r' || arg === '--recursive') {
+            recursive = true;
+            return true;
+        }
+        return false;
+    });
+    if (operands.length !== 2) { process.exit(125); }
+    const [fromArg, toArg] = operands;
+    const resolvedTo = path.resolve(process.cwd(), toArg);
+    if (toArg.endsWith(path.sep)) {
+        try {
+            if (!fs.statSync(resolvedTo).isDirectory()) { process.exit(125); }
+        } catch {
+            process.exit(125);
+        }
+    }
+    dispatch({
+        operation: 'copy',
+        from: path.resolve(process.cwd(), fromArg),
+        to: destinationPath(toArg, fromArg),
+        ...(recursive ? { recursive } : {}),
+    });
+} else {
+    const operands = parseOperands(arg => {
+        if (arg === '-f' || arg === '--force') { return true; }
+        return false;
+    });
+    if (operands.length !== 2) { process.exit(125); }
+    const [fromArg, toArg] = operands;
+    dispatch({
+        operation: 'rename',
+        from: path.resolve(process.cwd(), fromArg),
+        to: destinationPath(toArg, fromArg),
+    });
+}
+NODE
+}
+
+# rm/rmdir/unlink 在沙箱模式下由 toybox 原生实现直接执行，不会经过
+# safe-bin/rm，因此批量删除审批（safe-delete-bulk-guard.cjs）在这里补一次，
+# 与 node-safe-delete-shim.cjs / sitecustomize.py 里的调用方式保持一致。
+__cb_bulk_guard_delete_check() {
+    case "$__cb_app" in
+        rm|rmdir|unlink) ;;
+        *) return 0 ;;
+    esac
+    __cb_bg_common_sh="${__cb_brokered_dir%/brokered-bin}/safe-bin/safe-delete-common.sh"
+    [ -f "$__cb_bg_common_sh" ] || return 0
+
+    __cb_bg_targets=()
+    __cb_bg_after_dd=
+    for __cb_bg_arg in "$@"; do
+        if [ -n "$__cb_bg_after_dd" ]; then
+            __cb_bg_targets+=("$__cb_bg_arg")
+            continue
+        fi
+        case "$__cb_bg_arg" in
+            --) __cb_bg_after_dd=1 ;;
+            -*) ;;
+            *) __cb_bg_targets+=("$__cb_bg_arg") ;;
+        esac
+    done
+    [ "${#__cb_bg_targets[@]}" -gt 0 ] || return 0
+
+    # shellcheck source=/dev/null
+    . "$__cb_bg_common_sh"
+    safe_delete_bulk_guard_non_tmp_check "${__cb_bg_targets[@]}"
+}
+
+if [ -z "$__cb_toybox" ] || [ ! -x "$__cb_toybox" ]; then __cb_fallback "$@"; exit $?; fi
+
+__cb_bulk_guard_delete_check "$@" || exit $?
+__cb_prebackup_targets "$@" || exit $?
+__cb_host_op_ln "$@"
+__cb_host_op_status=$?
+if [ "$__cb_host_op_status" -eq 0 ]; then exit 0; fi
+if [ "$__cb_host_op_status" -ne 125 ]; then exit "$__cb_host_op_status"; fi
+__cb_host_op_file_mutation "$@"
+__cb_host_op_status=$?
+if [ "$__cb_host_op_status" -eq 0 ]; then exit 0; fi
+if [ "$__cb_host_op_status" -ne 125 ]; then exit "$__cb_host_op_status"; fi
+
+__cb_err="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/codebuddy-toybox.XXXXXX" 2>/dev/null || mktemp "${TMPDIR:-/tmp}/codebuddy-toybox.XXXXXX" 2>/dev/null)"
+if [ -z "${__cb_err:-}" ]; then CODEBUDDY_TOYBOX_DISPATCH_ACTIVE="$__cb_app" exec "$__cb_toybox" "$__cb_app" "$@"; fi
+
+CODEBUDDY_TOYBOX_DISPATCH_ACTIVE="$__cb_app" "$__cb_toybox" "$__cb_app" "$@" 2>"$__cb_err"
+__cb_status=$?
+if [ "$__cb_status" -eq 0 ]; then [ ! -s "$__cb_err" ] || /bin/cat "$__cb_err" >&2 2>/dev/null || true; __cb_cleanup; exit 0; fi
+
+__cb_msg="$(/bin/cat "$__cb_err" 2>/dev/null || true)"
+if __cb_should_fallback "$__cb_msg"; then
+    __cb_cleanup; __cb_fallback "$@"
+    exit $?
+fi
+
+[ -z "$__cb_msg" ] || printf '%s' "$__cb_msg" >&2
+__cb_cleanup
+exit "$__cb_status"

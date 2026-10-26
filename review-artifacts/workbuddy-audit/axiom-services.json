@@ -1,0 +1,409 @@
+[
+  {
+    "port": 4317,
+    "ok": true,
+    "revision": "2a9fb173b932164a872da6fe7f410f8b527ac29a3f6159307a35b52744c9bae3",
+    "keys": [
+      "revision",
+      "providers",
+      "storage",
+      "templates"
+    ],
+    "providers": [
+      {
+        "id": "sky",
+        "name": "Sky",
+        "models": [
+          {
+            "id": "gpt-6-astra",
+            "name": "GPT-6 Astra",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "gpt-6.1-sol",
+            "name": "GPT-6.1 Sol",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "gpt-5.6-terra",
+            "name": "GPT-5.6 Terra",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "gpt-5.6-luna",
+            "name": "GPT-5.6 Luna",
+            "input": [
+              "text",
+              "image"
+            ]
+          }
+        ],
+        "auth": [
+          "configured",
+          "source",
+          "type",
+          "methods"
+        ]
+      },
+      {
+        "id": "openai",
+        "name": "OpenAI",
+        "models": [
+          {
+            "id": "gpt-6-astra",
+            "name": "GPT-6 Astra",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "gpt-6.1-sol",
+            "name": "GPT-6.1 Sol",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "gpt-6.1-sol",
+            "name": "GPT-6.1 Sol Fast",
+            "input": [
+              "text",
+              "image"
+            ]
+          }
+        ],
+        "auth": [
+          "configured",
+          "source",
+          "type",
+          "methods"
+        ]
+      },
+      {
+        "id": "kiro",
+        "name": "kiro",
+        "models": [],
+        "auth": [
+          "configured",
+          "source",
+          "type",
+          "methods"
+        ]
+      },
+      {
+        "id": "qoder-cn",
+        "name": "Qoder 国内版",
+        "models": [
+          {
+            "id": "qmodel_38max",
+            "name": "Qwen3.8-Max",
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          {
+            "id": "dfmodel",
+            "name": "DeepSeek-Flash",
+            "input": [
+              "text",
+              "image"
+            ]
+          }
+        ],
+        "auth": [
+          "configured",
+          "source",
+          "type",
+          "methods"
+        ]
+      }
+    ],
+    "snapshot": {
+      "revision": "2a9fb173b932164a872da6fe7f410f8b527ac29a3f6159307a35b52744c9bae3",
+      "providerCount": 4,
+      "modelCount": 17,
+      "available": [
+        {
+          "provider": "sky",
+          "providerName": "Sky",
+          "id": "gpt-6-astra",
+          "name": "GPT-6 Astra",
+          "levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "sky",
+          "providerName": "Sky",
+          "id": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol",
+          "levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "sky",
+          "providerName": "Sky",
+          "id": "gpt-5.6-terra",
+          "name": "GPT-5.6 Terra",
+          "levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "sky",
+          "providerName": "Sky",
+          "id": "gpt-5.6-luna",
+          "name": "GPT-5.6 Luna",
+          "levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "openai",
+          "providerName": "OpenAI",
+          "id": "gpt-6-astra",
+          "name": "GPT-6 Astra",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "openai",
+          "providerName": "OpenAI",
+          "id": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "openai",
+          "providerName": "OpenAI",
+          "id": "axiom-copy-c9bd630c-f6b2-4d13-b942-451f61420834",
+          "name": "GPT-6.1 Sol Fast",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "auto",
+          "name": "auto",
+          "levels": [
+            "off"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "claude-sonnet-4.5",
+          "name": "claude-sonnet-4.5",
+          "levels": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "claude-haiku-4.5",
+          "name": "claude-haiku-4.5",
+          "levels": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "deepseek-3.2",
+          "name": "deepseek-3.2",
+          "levels": [
+            "off"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "minimax-m2.5",
+          "name": "minimax-m2.5",
+          "levels": [
+            "off"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "minimax-m2.1",
+          "name": "minimax-m2.1",
+          "levels": [
+            "off"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "glm-5",
+          "name": "glm-5",
+          "levels": [
+            "off"
+          ]
+        },
+        {
+          "provider": "kiro",
+          "providerName": "kiro",
+          "id": "qwen3-coder-next",
+          "name": "qwen3-coder-next",
+          "levels": [
+            "off"
+          ]
+        },
+        {
+          "provider": "qoder-cn",
+          "providerName": "Qoder 国内版",
+          "id": "qmodel_38max",
+          "name": "Qwen3.8-Max",
+          "levels": [
+            "off"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "provider": "qoder-cn",
+          "providerName": "Qoder 国内版",
+          "id": "dfmodel",
+          "name": "DeepSeek-Flash",
+          "levels": [
+            "off",
+            "low",
+            "high",
+            "max"
+          ],
+          "input": [
+            "text",
+            "image"
+          ]
+        }
+      ],
+      "dataRoot": "C:\\Users\\dane\\AppData\\Roaming\\Axiom2"
+    }
+  },
+  {
+    "port": 4327,
+    "ok": true,
+    "revision": "9aecf438c3f923ce02f488be25cae648068d632535d5ec4d38b0fa6abb6b055f",
+    "keys": [
+      "revision",
+      "providers",
+      "storage",
+      "templates"
+    ],
+    "providers": [],
+    "snapshot": {
+      "revision": "9aecf438c3f923ce02f488be25cae648068d632535d5ec4d38b0fa6abb6b055f",
+      "providerCount": 0,
+      "modelCount": 0,
+      "available": [],
+      "dataRoot": "C:\\Users\\dane\\AppData\\Local\\Axiom2-index-preview"
+    }
+  },
+  {
+    "port": 4177,
+    "error": "Error: Unexpected server response: 404"
+  }
+]

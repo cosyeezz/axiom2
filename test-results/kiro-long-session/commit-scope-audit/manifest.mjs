@@ -1,0 +1,12 @@
+﻿import {spawnSync} from 'node:child_process';
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const git=args=>{const p=spawnSync('git',args,{encoding:'utf8'});if(p.status)throw Error(p.stderr);return p.stdout;};
+const base=process.env.TEMP+'/axiom-kiro-fb7031ed-baseline/files/';
+const initial=readFileSync(process.env.TEMP+'/axiom-kiro-fb7031ed-baseline/status.txt','utf8').replace(/^\uFEFF/,'').trimEnd().split(/\r?\n/);
+const current=git(['status','--porcelain']).trimEnd().split('\n');
+const upstream=new Set(git(['diff','--name-only','HEAD','origin/master']).trim().split('\n'));
+const hash=f=>createHash('sha256').update(readFileSync(f)).digest('hex');
+const items=current.map(line=>{const p=line.slice(3);return {path:p,status:line.slice(0,2),initialStatus:initial.find(l=>l.slice(3)===p)?.slice(0,2)??null,upstreamOverlap:upstream.has(p),...(!p.endsWith('/')&&existsSync(base+p)?{sameAsBaseline:hash(p)===hash(base+p)}:{})};});
+writeFileSync('test-results/kiro-long-session/commit-scope-audit/dirty-manifest.json',JSON.stringify(items,null,2)+'\n');
+console.log(JSON.stringify({paths:items.length,overlap:items.filter(x=>x.upstreamOverlap).length,overlapUntracked:items.filter(x=>x.upstreamOverlap&&x.status==='??').map(x=>x.path),changedBaselineFiles:items.filter(x=>x.sameAsBaseline===false).map(x=>x.path)},null,2));

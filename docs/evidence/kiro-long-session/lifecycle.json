@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "phase": "real-cancel-recover-reload",
+  "taskRef": "t4003",
+  "sessionIdentitySha256": "182900346187926ebc6592f5acd13048bc9fc98a75f80974085663ff1d21b1db",
+  "startedAt": "2026-10-25T18:42:58.977Z",
+  "completedAt": "2026-10-25T18:43:23.207Z",
+  "passed": true,
+  "defaultsUnchanged": true,
+  "cases": [
+    {
+      "label": "cancel-active-real-tool",
+      "runId": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9",
+      "status": "cancelled",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "observation": {
+        "phase": "executing_tools",
+        "finalizedPowerShellCallMatched": true,
+        "sleepSeconds30Matched": true,
+        "toolCallId": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9-dd374c161ce6d024fe1d0720",
+        "toolName": "powershell",
+        "argumentsSha256": "1a3e3d07efa45a3d2eef28b988cc094a8fe084879960fe618077e5bd1e3ec2eb",
+        "osProcessStartMarkerVerified": false
+      },
+      "toolResults": []
+    },
+    {
+      "label": "after-cancel-context",
+      "runId": "0b84d7fd-0c0d-46d1-943f-4958724aece2",
+      "status": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "answerSha256": "86f9229bf37fb420adfc69ee4ea1e8ee2522877802be619f15df506df9209e54",
+      "priorReasoningWrapperPresent": false,
+      "expectedOriginalMarkerMatched": true,
+      "expectedOriginalCheckwordMatched": true,
+      "expectedInventoryTotalMatched": true
+    },
+    {
+      "label": "after-reload-context",
+      "runId": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+      "status": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+      "priorReasoningWrapperPresent": false,
+      "expectedOriginalMarkerMatched": true,
+      "expectedOriginalCheckwordMatched": true,
+      "expectedInventoryTotalMatched": true
+    }
+  ],
+  "reload": {
+    "id": "af1db693-7661-44ef-a322-604d020ab7c2",
+    "status": "completed"
+  },
+  "nativeProof": {
+    "extractedAt": "2026-10-25T20:23:05.670Z",
+    "scope": {
+      "axiomRunId": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+      "axiomId": "95850c94-930f-4e6f-9bdc-20aa77be73c6",
+      "expectedAnswerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9"
+    },
+    "selectedRecordIds": [
+      "dfcab121"
+    ],
+    "records": [
+      {
+        "id": "dfcab121",
+        "axiomRunId": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+        "axiomId": "95850c94-930f-4e6f-9bdc-20aa77be73c6",
+        "model": "claude-sonnet-4.5",
+        "stopReason": "stop",
+        "thinkingLevel": "medium",
+        "providerThinkingLevel": "16000",
+        "localThinkingBlocks": 1,
+        "answerHasPriorReasoningWrapper": false,
+        "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+        "diagnostics": [
+          {
+            "type": "kiro-reasoning-history-omitted",
+            "timestamp": 1792953797706,
+            "omittedReasoningTextBlocks": 9,
+            "opaqueReasoningBlocks": 0,
+            "omittedSignatures": 0
+          },
+          {
+            "type": "kiro-interrupted-tools-omitted",
+            "timestamp": 1792953797706,
+            "omittedToolCalls": 2
+          }
+        ]
+      }
+    ],
+    "fileSnapshotAtProofExtraction": [
+      {
+        "path": "dist/server/providers/kiro-chat.js",
+        "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6"
+      },
+      {
+        "path": "dist/server/providers/kiro-chat-protocol.js",
+        "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161"
+      },
+      {
+        "path": "scripts/kiro-live-check.mjs",
+        "sha256": "0344731dfca9cc1c6bbd362faa08e02763fc13b49a1d7d83e13005d38dae4860"
+      },
+      {
+        "path": "scripts/kiro-live-plan.mjs",
+        "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3"
+      },
+      {
+        "path": "scripts/kiro-live-lifecycle.mjs",
+        "sha256": "f358c41fb39ef203f9b9688a50c35f5c7c3f52e72aaab863d628fbe8c33931bf"
+      },
+      {
+        "path": "scripts/kiro-live-native-proof.mjs",
+        "sha256": "eb831a4fcffab6a706b0516b80efbb89a60ca14b38cb2bda9d8391a5760b6873"
+      }
+    ]
+  },
+  "priorAttempts": {
+    "toolObservationAttempt": {
+      "passed": false,
+      "category": "harness-assumption-live-tool-row-not-in-original"
+    },
+    "beforeFix": {
+      "passed": false,
+      "cases": [
+        {
+          "label": "cancel-active-real-tool",
+          "runId": "f3f9c9f1-5082-47ac-83bb-fa2fde1f9713",
+          "status": "cancelled"
+        },
+        {
+          "label": "after-cancel-context",
+          "runId": "ae2e128c-79f6-4a5b-9e68-cf739480c41a",
+          "status": "failed"
+        }
+      ],
+      "failureCategory": "unpaired-tool-history"
+    }
+  },
+  "sourceSha256": {
+    "lifecycle": "6a0580d2a1263299f61abc466298b3336dbb6429d926b2551c9337e67ae9e9c9",
+    "nativeProof": "22a6d48c48d0d2a606bf9b084e8e88f1c8c3e99700aecc3ae430c6f217435395"
+  },
+  "contentPolicy": {
+    "answers": "hashes and explicit checks only",
+    "toolArguments": "hashes and constrained observation booleans only",
+    "thinking": "counts only",
+    "nativeTranscriptPath": "omitted",
+    "credentials": "not read",
+    "limitations": [
+      "The executing_tools phase and finalized call do not independently prove OS process start.",
+      "A normalized user boundary and omission diagnostic do not prove cancellation or absence of tool side effects.",
+      "File hashes were collected at proof extraction, not at each historical run."
+    ]
+  }
+}

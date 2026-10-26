@@ -1,0 +1,87 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "startedAt": "2026-10-25T17:45:04.531Z",
+  "cases": [
+    {
+      "label": "cancel-active-real-tool",
+      "observed": {
+        "run": {
+          "id": "f3f9c9f1-5082-47ac-83bb-fa2fde1f9713",
+          "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+          "status": "running",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "low"
+          },
+          "startedAt": 1792950304848,
+          "endedAt": null,
+          "error": null,
+          "phase": "executing_tools",
+          "retry": null,
+          "reasonCode": null,
+          "resumedFromRunId": null
+        },
+        "tool": {
+          "id": "f3f9c9f1-5082-47ac-83bb-fa2fde1f9713-a70dd8a204440b04ccd5985c",
+          "name": "powershell",
+          "input": "{\n  \"command\": \"Start-Sleep -Seconds 30; Write-Output \\\"EXPECTED_SLEEP_FINISHED\\\"\"\n}"
+        }
+      },
+      "run": {
+        "id": "f3f9c9f1-5082-47ac-83bb-fa2fde1f9713",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "cancelled",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "low"
+        },
+        "startedAt": 1792950304848,
+        "endedAt": 1792950311214,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": "USER_STOPPED",
+        "resumedFromRunId": null
+      },
+      "tools": []
+    },
+    {
+      "label": "after-cancel-context",
+      "run": {
+        "id": "ae2e128c-79f6-4a5b-9e68-cf739480c41a",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "failed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "low"
+        },
+        "startedAt": 1792950311740,
+        "endedAt": 1792950314200,
+        "error": "模型请求失败：Kiro 历史中存在未完成的工具结果；请重试或开启新会话。",
+        "phase": null,
+        "retry": null,
+        "reasonCode": "MODEL_ERROR",
+        "resumedFromRunId": null
+      },
+      "answer": "",
+      "messages": [
+        {
+          "id": "ae2e128c-79f6-4a5b-9e68-cf739480c41a",
+          "role": "user"
+        },
+        {
+          "id": "638251fb-68b6-433b-8ced-45ad700aa1f5",
+          "role": "assistant",
+          "status": "failed",
+          "error": "模型请求失败：Kiro 历史中存在未完成的工具结果；请重试或开启新会话。"
+        }
+      ]
+    }
+  ],
+  "passed": false,
+  "error": "AssertionError [ERR_ASSERTION]: 模型请求失败：Kiro 历史中存在未完成的工具结果；请重试或开启新会话。\n+ actual - expected\n\n+ 'failed'\n- 'completed'\n\n    at ask (file:///F:/Axiom/axiom2/app/scripts/kiro-live-lifecycle.mjs:58:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///F:/Axiom/axiom2/app/scripts/kiro-live-lifecycle.mjs:94:20"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Durable conversation excerpts shared by browser controls and a host tool",
+  "files": [".codebuddy-plugin", "hooks", "client"]
+}

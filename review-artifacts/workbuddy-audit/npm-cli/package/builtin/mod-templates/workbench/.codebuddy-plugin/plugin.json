@@ -1,0 +1,16 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "A lazy native workbench with persistent notes and explicit Chat actions",
+  "client": {
+    "platform": "web",
+    "entry": "client/index.js",
+    "format": "module",
+    "apiVersion": 1,
+    "activationEvents": [],
+    "contributes": {
+      "dockTabs": [{"id": "notes", "label": {"zh": "工作台便签", "en": "Workbench Notes"}}],
+      "commands": [{"id": "openNotes", "label": {"zh": "打开工作台便签", "en": "Open Workbench Notes"}}]
+    }
+  }
+}

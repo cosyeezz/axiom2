@@ -1,0 +1,41 @@
+{
+    "workingDirectory":  "F:/Axiom/axiom-kiro-long-session-fb7031ed/app",
+    "commands":  [
+                     {
+                         "command":  "npm run build",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:13.3426043Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.4806223Z"
+                     },
+                     {
+                         "command":  "node --check scripts/kiro-live-check.mjs",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:47.5136222Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.5596223Z"
+                     },
+                     {
+                         "command":  "node --check scripts/kiro-live-plan.mjs",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:47.5606222Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.6040697Z"
+                     },
+                     {
+                         "command":  "node --check scripts/kiro-live-evidence.mjs",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:47.6050696Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.6493072Z"
+                     },
+                     {
+                         "command":  "node --check scripts/kiro-live-lifecycle.mjs",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:47.6503076Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.6935742Z"
+                     },
+                     {
+                         "command":  "node --check scripts/kiro-live-native-proof.mjs",
+                         "exitCode":  0,
+                         "startedUtc":  "2026-10-25T20:03:47.6945741Z",
+                         "finishedUtc":  "2026-10-25T20:03:47.7400365Z"
+                     }
+                 ]
+}

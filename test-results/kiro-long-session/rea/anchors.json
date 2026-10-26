@@ -1,0 +1,84 @@
+{
+  "hash": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "bytes": 528630968,
+  "strings": [
+    {
+      "text": "content was not specified but it is required when building AssistantResponseMessage",
+      "offset": 98050914,
+      "va": 5466765154
+    },
+    {
+      "text": "reasoning_content",
+      "offset": 98047115,
+      "va": 5466761355
+    },
+    {
+      "text": "reasoning_content",
+      "offset": 460566000,
+      "va": 5829280240
+    },
+    {
+      "text": "reasoning_content",
+      "offset": 462008551,
+      "va": 5830722791
+    }
+  ],
+  "refs": [
+    {
+      "text": "reasoning_content",
+      "address": "0x140bfb782",
+      "owner": [
+        "0x140bfb630",
+        "0x140bfb7f5"
+      ]
+    },
+    {
+      "text": "content was not specified but it is required when building AssistantResponseMessage",
+      "address": "0x140c00f87",
+      "owner": [
+        "0x140c00f30",
+        "0x140c01323"
+      ]
+    },
+    {
+      "text": "reasoning_content",
+      "address": "0x141db9619",
+      "owner": [
+        "0x141db9570",
+        "0x141db9acd"
+      ]
+    },
+    {
+      "text": "reasoning_content",
+      "address": "0x141db988d",
+      "owner": [
+        "0x141db9570",
+        "0x141db9acd"
+      ]
+    },
+    {
+      "text": "reasoning_content",
+      "address": "0x143224150",
+      "owner": [
+        "0x143223b40",
+        "0x143224ccd"
+      ]
+    },
+    {
+      "text": "reasoning_content",
+      "address": "0x143238a39",
+      "owner": [
+        "0x143238990",
+        "0x143238eed"
+      ]
+    },
+    {
+      "text": "reasoning_content",
+      "address": "0x143238cad",
+      "owner": [
+        "0x143238990",
+        "0x143238eed"
+      ]
+    }
+  ]
+}

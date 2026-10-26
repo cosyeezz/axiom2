@@ -1,0 +1,19 @@
+;; WorkBuddy brokered shell sandbox profile for bundled macOS toybox/zsh.
+(version 1)
+(deny default)
+
+(allow process*)
+(allow signal)
+(allow sysctl-read)
+(allow mach-lookup)
+(allow iokit-open)
+
+;; Broker IPC and runtime loading.
+(allow ipc-posix-shm)
+(allow network-outbound (local unix))
+(allow system-socket)
+(allow file-read* (subpath "/"))
+(allow file-write* (subpath "/dev") (subpath "/private/var/folders"))
+
+(allow file-read* (extension "com.workbuddy.sandbox.read"))
+(allow file-read* file-write* (extension "com.workbuddy.sandbox.read-write"))

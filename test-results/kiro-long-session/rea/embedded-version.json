@@ -1,0 +1,102 @@
+[
+  {
+    "offset": 97810928,
+    "address": "0x145d48df0",
+    "context": ".........AmazonQ-For-CLI....E............Version...E............2.12.0.....E............ ..........................E.............}.E..........................."
+  },
+  {
+    "offset": 458983256,
+    "address": "0x15b5b9b58",
+    "context": "ansport=ws--auth=acp-callbackACP_WS_PORT.(..E............KiroCLI/2.12.0 KAS/ os/ md/appVersion-2.12.0 app/AmazonQ-For-CLIP.[[............c.[[............g.[[..."
+  },
+  {
+    "offset": 458983286,
+    "address": "0x15b5b9b76",
+    "context": "CP_WS_PORT.(..E............KiroCLI/2.12.0 KAS/ os/ md/appVersion-2.12.0 app/AmazonQ-For-CLIP.[[............c.[[............g.[[....).......KIRO_CUSTOM_USER_AGEN"
+  },
+  {
+    "offset": 458995464,
+    "address": "0x15b5bcb08",
+    "context": "agent execution as notified: ......[[....,.......8..E............2.12.0....[[....#.......).........[[....#.......:.........[[....#.......4.........[[....#......"
+  },
+  {
+    "offset": 459091142,
+    "address": "0x15b5d40c6",
+    "context": "ype\": \"release\",..      \"date\": \"2026-07-08\",..      \"version\": \"2.12.0\",..      \"title\": \"Version 2.12.0\",..      \"changes\": [..        {..          \"type\": \"a"
+  },
+  {
+    "offset": 459091176,
+    "address": "0x15b5d40e8",
+    "context": "026-07-08\",..      \"version\": \"2.12.0\",..      \"title\": \"Version 2.12.0\",..      \"changes\": [..        {..          \"type\": \"added\",..          \"description\": \""
+  },
+  {
+    "offset": 459257200,
+    "address": "0x15b5fc970",
+    "context": ".D...........`...agent not available......._[....D...........J...2.12.0kiro-cli..v._[............Run ' login' in terminal to authenticate. See https://kiro.dev/"
+  },
+  {
+    "offset": 459567925,
+    "address": "0x15b648735",
+    "context": "ype\": \"release\",..      \"date\": \"2026-07-08\",..      \"version\": \"2.12.0\",..      \"title\": \"Version 2.12.0\",..      \"changes\": [..        {..          \"type\": \"a"
+  },
+  {
+    "offset": 459567959,
+    "address": "0x15b648757",
+    "context": "026-07-08\",..      \"version\": \"2.12.0\",..      \"title\": \"Version 2.12.0\",..      \"changes\": [..        {..          \"type\": \"added\",..          \"description\": \""
+  },
+  {
+    "offset": 459731423,
+    "address": "0x15b6705df",
+    "context": " select a conversation to resume from this directoryresume-picker2.12.0UnicodeNotAllowedInvalidUtf8InvalidLineTerminatorUnicodePropertyNotFoundUnicodePropertyVa"
+  },
+  {
+    "offset": 460643352,
+    "address": "0x15b74f018",
+    "context": "to send event to channel...t[..............t[....&...............2.12.0crates\\chat-cli\\src\\cli\\update\\mod.rs.......t[....%.......K.......Failed to create manife"
+  },
+  {
+    "offset": 460643962,
+    "address": "0x15b74f27a",
+    "context": ": .......t[....#.........t[....%.......!.......Update available: 2.12.0 .  (auto-install disabled, installer staged at ......h.t[..............t[....-.......9"
+  },
+  {
+    "offset": 460644079,
+    "address": "0x15b74f2ef",
+    "context": " at ......h.t[..............t[....-.......9:t[............Update 2.12.0 .  downloaded and staged for install on exit at ..t[..............t[............crates"
+  },
+  {
+    "offset": 460710960,
+    "address": "0x15b75f830",
+    "context": ".:.......failed to create http client.....Uu[....-.........../...2.12.0-.0.u[............crates\\chat-cli\\src\\cli\\chat\\tool_manager.rs....H.u[....,.............."
+  },
+  {
+    "offset": 461441744,
+    "address": "0x15b811ed0",
+    "context": ".5..........[....A...............appVersion.........[............2.12.0.....[...............................[............AWS_TOOLING_USER_AGENT.....[..........."
+  },
+  {
+    "offset": 461957224,
+    "address": "0x15b88fc68",
+    "context": ".8..........[....D...............appVersion......H..[............2.12.0..h..[............/..........................[............AWS_TOOLING_USER_AGENT.....[..."
+  },
+  {
+    "offset": 462048072,
+    "address": "0x15b8a5f48",
+    "context": "ession JSON: .....^.[....<.......unknown-rust-clientwindowsx86_642.12.0...................\\.[.............\\.[.............\\.[............Failed to set supported"
+  },
+  {
+    "offset": 462277280,
+    "address": "0x15b8ddea0",
+    "context": ".........0.-_......[.......[....#..........[..../...............2.12.0Failed to build user context........[.......................................C....event c"
+  },
+  {
+    "offset": 464355328,
+    "address": "0x15bad9400",
+    "context": "admin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\ipnet-2.12.0\\src\\parser.rs.......[....d...........*......[....d...........*......[....d.............."
+  },
+  {
+    "offset": 464520591,
+    "address": "0x15bb0198f",
+    "context": "..................K..[............/v1/logskiro-cliservice.version2.12.0deployment.environmentos.typewindowshost.archx86_64productCodewhispererTerminalpartitiona"
+  }
+]

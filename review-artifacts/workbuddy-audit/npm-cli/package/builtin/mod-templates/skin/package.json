@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [".codebuddy-plugin", "client", "README.md"]
+}

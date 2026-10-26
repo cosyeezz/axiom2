@@ -1,0 +1,276 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "startedAt": "2026-10-25T18:42:58.977Z",
+  "cases": [
+    {
+      "label": "cancel-active-real-tool",
+      "observed": {
+        "run": {
+          "id": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9",
+          "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+          "status": "running",
+          "selection": {
+            "provider": "kiro",
+            "id": "claude-sonnet-4.5",
+            "thinking": "medium"
+          },
+          "startedAt": 1792953779269,
+          "endedAt": null,
+          "error": null,
+          "phase": "executing_tools",
+          "retry": null,
+          "reasonCode": null,
+          "resumedFromRunId": null
+        },
+        "tool": {
+          "id": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9-dd374c161ce6d024fe1d0720",
+          "name": "powershell",
+          "input": "{\n  \"command\": \"Start-Sleep -Seconds 30; Write-Output \\\"EXPECTED_SLEEP_FINISHED\\\"\"\n}"
+        }
+      },
+      "run": {
+        "id": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "cancelled",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "medium"
+        },
+        "startedAt": 1792953779269,
+        "endedAt": 1792953785963,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": "USER_STOPPED",
+        "resumedFromRunId": null
+      },
+      "tools": []
+    },
+    {
+      "label": "after-cancel-context",
+      "run": {
+        "id": "0b84d7fd-0c0d-46d1-943f-4958724aece2",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "medium"
+        },
+        "startedAt": 1792953786476,
+        "endedAt": 1792953792671,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "answer": "ORBIT-K7 青鹭 51",
+      "messages": [
+        {
+          "id": "0b84d7fd-0c0d-46d1-943f-4958724aece2",
+          "role": "user"
+        },
+        {
+          "id": "9a51954d-3add-4687-bd64-6e9bdcc2c1c8",
+          "role": "assistant",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "label": "after-reload-context",
+      "run": {
+        "id": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "medium"
+        },
+        "startedAt": 1792953795365,
+        "endedAt": 1792953802794,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "answer": "```json\n{\"red\":14,\"blue\":28,\"green\":9,\"total\":51,\"code\":\"ORBIT-K7\",\"word\":\"青鹭\"}\n```",
+      "messages": [
+        {
+          "id": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+          "role": "user"
+        },
+        {
+          "id": "95850c94-930f-4e6f-9bdc-20aa77be73c6",
+          "role": "assistant",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "reload": {
+    "id": "af1db693-7661-44ef-a322-604d020ab7c2",
+    "status": "completed",
+    "stage": "completed",
+    "startedAt": 1792953792875,
+    "steps": [
+      {
+        "stage": "preparing",
+        "at": 1792953792875
+      },
+      {
+        "stage": "reloading",
+        "at": 1792953795051
+      },
+      {
+        "stage": "comparing",
+        "at": 1792953795068
+      },
+      {
+        "stage": "completed",
+        "at": 1792953795075
+      }
+    ],
+    "before": {
+      "skills": [
+        {
+          "name": "frontend-design · C:\\Users\\dane\\.agents\\skills\\frontend-design\\SKILL.md",
+          "revision": "b6f64ef0405d0d9fd1f1187867e4ee9ff652a3874ff1f88577f43f497da93e4d"
+        },
+        {
+          "name": "npm-publish · C:\\Users\\dane\\.agents\\skills\\npm-publish\\SKILL.md",
+          "revision": "66924a091679b50fd8d62d8cd210832bebc9d7fd67932aeb87e3e66eadb87d60"
+        },
+        {
+          "name": "pi-development · F:\\Axiom\\axiom2\\app\\skills\\pi-development\\SKILL.md",
+          "revision": "1345ab31d3ef501abb6f2a93425e6418118f3740751e721b1384ae2be79d5443"
+        },
+        {
+          "name": "ui-ux-pro-max · C:\\Users\\dane\\.agents\\skills\\ui-ux-pro-max\\SKILL.md",
+          "revision": "1f01db510ec581da70150012333bc6dddd3b302db87eeef9065076b614dbc599"
+        }
+      ],
+      "extensions": [
+        {
+          "name": "<inline:1>",
+          "revision": "a1b98724e5b7be65c5886c9154fadf092da099ccad887ec42df05e632aeb1d2f"
+        },
+        {
+          "name": "<inline:2>",
+          "revision": "ee14f533b10272808ca6cd8acc748f3cb415aa91eb51edf5c3802accdf9e967d"
+        }
+      ],
+      "prompts": [],
+      "themes": [],
+      "instructions": [],
+      "tools": [
+        {
+          "name": "find",
+          "revision": "a2d3cc24bbc5db026bc363fb4a1cf0ce4a841495551a9ed0e1ff62e643ef75d5"
+        },
+        {
+          "name": "grep",
+          "revision": "15b519645fee13a863869c0eae0b41b56dc77a851da6ea773e539e556c1210a0"
+        },
+        {
+          "name": "ls",
+          "revision": "6dc42246996d0e5416b1d9ef5f2b3b239929cfc7912ae238494bf5b4a6689b4a"
+        },
+        {
+          "name": "powershell",
+          "revision": "a1c020d26e839921569d73c80101c779e959b50395031a3b2db84f3b5e3e6610"
+        },
+        {
+          "name": "read",
+          "revision": "775cd7f6da25608d41a65eaed5ad1d03e2dbc34bf10940472a30ec0b7bc6360e"
+        }
+      ],
+      "settings": [
+        {
+          "name": "cacheWarming",
+          "revision": "b4dc66dde806261bdda8607d8707aa727d308cd80272381a5583f63899918467"
+        },
+        {
+          "name": "packages",
+          "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      ]
+    },
+    "after": {
+      "skills": [
+        {
+          "name": "frontend-design · C:\\Users\\dane\\.agents\\skills\\frontend-design\\SKILL.md",
+          "revision": "b6f64ef0405d0d9fd1f1187867e4ee9ff652a3874ff1f88577f43f497da93e4d"
+        },
+        {
+          "name": "npm-publish · C:\\Users\\dane\\.agents\\skills\\npm-publish\\SKILL.md",
+          "revision": "66924a091679b50fd8d62d8cd210832bebc9d7fd67932aeb87e3e66eadb87d60"
+        },
+        {
+          "name": "pi-development · F:\\Axiom\\axiom2\\app\\skills\\pi-development\\SKILL.md",
+          "revision": "1345ab31d3ef501abb6f2a93425e6418118f3740751e721b1384ae2be79d5443"
+        },
+        {
+          "name": "ui-ux-pro-max · C:\\Users\\dane\\.agents\\skills\\ui-ux-pro-max\\SKILL.md",
+          "revision": "1f01db510ec581da70150012333bc6dddd3b302db87eeef9065076b614dbc599"
+        }
+      ],
+      "extensions": [
+        {
+          "name": "<inline:1>",
+          "revision": "a1b98724e5b7be65c5886c9154fadf092da099ccad887ec42df05e632aeb1d2f"
+        },
+        {
+          "name": "<inline:2>",
+          "revision": "ee14f533b10272808ca6cd8acc748f3cb415aa91eb51edf5c3802accdf9e967d"
+        }
+      ],
+      "prompts": [],
+      "themes": [],
+      "instructions": [],
+      "tools": [
+        {
+          "name": "find",
+          "revision": "a2d3cc24bbc5db026bc363fb4a1cf0ce4a841495551a9ed0e1ff62e643ef75d5"
+        },
+        {
+          "name": "grep",
+          "revision": "15b519645fee13a863869c0eae0b41b56dc77a851da6ea773e539e556c1210a0"
+        },
+        {
+          "name": "ls",
+          "revision": "6dc42246996d0e5416b1d9ef5f2b3b239929cfc7912ae238494bf5b4a6689b4a"
+        },
+        {
+          "name": "powershell",
+          "revision": "a1c020d26e839921569d73c80101c779e959b50395031a3b2db84f3b5e3e6610"
+        },
+        {
+          "name": "read",
+          "revision": "775cd7f6da25608d41a65eaed5ad1d03e2dbc34bf10940472a30ec0b7bc6360e"
+        }
+      ],
+      "settings": [
+        {
+          "name": "cacheWarming",
+          "revision": "b4dc66dde806261bdda8607d8707aa727d308cd80272381a5583f63899918467"
+        },
+        {
+          "name": "packages",
+          "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      ]
+    },
+    "warnings": [],
+    "resumed": false,
+    "endedAt": 1792953795074
+  },
+  "defaultsUnchanged": true,
+  "passed": true,
+  "completedAt": "2026-10-25T18:43:23.207Z"
+}

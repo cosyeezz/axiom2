@@ -1,0 +1,1 @@
+function GTg(A,e){let t=YTg(A);if(t)return{type:"text",text:U1(t)};let i="base64"===A.type?A.mediaType&&A.data?`data:${A.mediaType};base64,${A.data}`:"":A.url;return i?e?{type:"image_url",image_url:{url:i}}:{type:"text",text:JTg}:null}

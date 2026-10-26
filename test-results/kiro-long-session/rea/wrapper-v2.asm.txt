@@ -1,0 +1,80 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001432500E0: 55                 push        rbp
+  00000001432500E1: 56                 push        rsi
+  00000001432500E2: 57                 push        rdi
+  00000001432500E3: 53                 push        rbx
+  00000001432500E4: 48 81 EC B8 00 00  sub         rsp,0B8h
+                    00
+  00000001432500EB: 48 8D AC 24 80 00  lea         rbp,[rsp+0000000000000080h]
+                    00 00
+  00000001432500F3: 48 C7 45 30 FE FF  mov         qword ptr [rbp+30h],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  00000001432500FB: 48 89 CE           mov         rsi,rcx
+  00000001432500FE: 48 B8 03 00 00 00  mov         rax,8000000000000003h
+                    00 00 00 80
+  0000000143250108: 48 89 45 D0        mov         qword ptr [rbp-30h],rax
+  000000014325010C: 0F 10 02           movups      xmm0,xmmword ptr [rdx]
+  000000014325010F: 0F 10 4A 10        movups      xmm1,xmmword ptr [rdx+10h]
+  0000000143250113: 0F 29 4D B0        movaps      xmmword ptr [rbp-50h],xmm1
+  0000000143250117: 0F 29 45 A0        movaps      xmmword ptr [rbp-60h],xmm0
+  000000014325011B: 48 8D 45 D0        lea         rax,[rbp-30h]
+  000000014325011F: 48 89 45 C0        mov         qword ptr [rbp-40h],rax
+  0000000143250123: C6 45 2F 01        mov         byte ptr [rbp+2Fh],1
+  0000000143250127: 48 8D 4D F8        lea         rcx,[rbp-8]
+  000000014325012B: 48 8D 55 A0        lea         rdx,[rbp-60h]
+  000000014325012F: E8 9C D8 EB FF     call        000000014310D9D0
+  0000000143250134: 48 B9 03 00 00 00  mov         rcx,8000000000000003h
+                    00 00 00 80
+  000000014325013E: 48 39 4D D0        cmp         qword ptr [rbp-30h],rcx
+  0000000143250142: 75 15              jne         0000000143250159
+  0000000143250144: 48 8B 45 08        mov         rax,qword ptr [rbp+8]
+  0000000143250148: 48 89 46 18        mov         qword ptr [rsi+18h],rax
+  000000014325014C: 0F 10 45 F8        movups      xmm0,xmmword ptr [rbp-8]
+  0000000143250150: 0F 11 46 08        movups      xmmword ptr [rsi+8],xmm0
+  0000000143250154: 48 89 0E           mov         qword ptr [rsi],rcx
+  0000000143250157: EB 69              jmp         00000001432501C2
+  0000000143250159: 48 8B 45 F0        mov         rax,qword ptr [rbp-10h]
+  000000014325015D: 48 89 46 20        mov         qword ptr [rsi+20h],rax
+  0000000143250161: 0F 10 45 D0        movups      xmm0,xmmword ptr [rbp-30h]
+  0000000143250165: 0F 10 4D E0        movups      xmm1,xmmword ptr [rbp-20h]
+  0000000143250169: 0F 11 4E 10        movups      xmmword ptr [rsi+10h],xmm1
+  000000014325016D: 0F 11 06           movups      xmmword ptr [rsi],xmm0
+  0000000143250170: 48 8B 4D 00        mov         rcx,qword ptr [rbp]
+  0000000143250174: 48 8B 45 08        mov         rax,qword ptr [rbp+8]
+  0000000143250178: 48 89 45 10        mov         qword ptr [rbp+10h],rax
+  000000014325017C: 48 C7 45 18 00 00  mov         qword ptr [rbp+18h],0
+                    00 00
+  0000000143250184: 48 89 4D 20        mov         qword ptr [rbp+20h],rcx
+  0000000143250188: 0F 1F 84 00 00 00  nop         dword ptr [rax+rax+0000000000000000h]
+                    00 00
+  0000000143250190: 48 8B 45 18        mov         rax,qword ptr [rbp+18h]
+  0000000143250194: 48 39 45 10        cmp         qword ptr [rbp+10h],rax
+  0000000143250198: 74 18              je          00000001432501B2
+  000000014325019A: 48 FF C0           inc         rax
+  000000014325019D: 48 89 45 18        mov         qword ptr [rbp+18h],rax
+  00000001432501A1: 48 8D B9 90 05 00  lea         rdi,[rcx+0000000000000590h]
+                    00
+  00000001432501A8: E8 03 A2 EA FF     call        00000001430FA3B0
+  00000001432501AD: 48 89 F9           mov         rcx,rdi
+  00000001432501B0: EB DE              jmp         0000000143250190
+  00000001432501B2: 48 83 7D F8 00     cmp         qword ptr [rbp-8],0
+  00000001432501B7: 74 09              je          00000001432501C2
+  00000001432501B9: 48 8B 4D 20        mov         rcx,qword ptr [rbp+20h]
+  00000001432501BD: E8 9E 26 81 01     call        0000000144A62860
+  00000001432501C2: 48 89 F0           mov         rax,rsi
+  00000001432501C5: 48 81 C4 B8 00 00  add         rsp,0B8h
+                    00
+  00000001432501CC: 5B                 pop         rbx
+  00000001432501CD: 5F                 pop         rdi
+  00000001432501CE: 5E                 pop         rsi
+  00000001432501CF: 5D                 pop         rbp
+  00000001432501D0: C3                 ret
+  00000001432501D1: 66
+
+  Summary
+
+     5BF1000 .text

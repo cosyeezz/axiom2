@@ -1,0 +1,26 @@
+.tool-activity.activity > summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) 14px; column-gap: 10px; row-gap: 3px; }
+.tool-activity > summary > .activity-overview { grid-column: 2; grid-row: 1; }
+.tool-activity.activity > summary:has(.process-counts) { grid-template-columns: 24px minmax(0, 1fr) auto 14px; }
+.tool-activity > summary > .process-counts { grid-column: 3; grid-row: 1; }
+.tool-activity > summary:has(.process-counts) > svg { grid-column: 4; }
+.tool-activity > summary > svg { grid-column: 3; grid-row: 1; justify-self: end; }
+.tool-activity > summary > .activity-ticker { grid-column: 2 / -1; grid-row: 2; width: 100%; }
+.tool-activity.activity[data-status-icon="false"] > summary { grid-template-columns: minmax(0, 1fr) 14px; }
+.tool-activity.activity[data-status-icon="false"] > summary:has(.process-counts) { grid-template-columns: minmax(0, 1fr) auto 14px; }
+.tool-activity[data-status-icon="false"] > summary > .activity-overview { grid-column: 1; }
+.tool-activity[data-status-icon="false"] > summary > .process-counts { grid-column: 2; }
+.tool-activity[data-status-icon="false"] > summary > svg { grid-column: 2; }
+.tool-activity[data-status-icon="false"] > summary:has(.process-counts) > svg { grid-column: 3; }
+.tool-activity[data-status-icon="false"] > summary > .activity-ticker { grid-column: 1 / -1; }
+.tool-activity.activity.process-live > summary { grid-template-columns: 24px minmax(0, 1fr); }
+.tool-activity.activity.process-live > summary:has(.process-counts) { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.tool-activity.activity.process-live[data-status-icon="false"] > summary { grid-template-columns: minmax(0, 1fr); }
+.tool-activity.activity.process-live[data-status-icon="false"] > summary:has(.process-counts) { grid-template-columns: minmax(0, 1fr) auto; }
+.activity-status { position: relative; display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; color: var(--muted); }
+.activity-status[data-state="completed"] { color: var(--success); }
+.activity-status[data-state="failed"] { color: var(--danger-icon); }
+.activity-status[data-state="cancelled"], .activity-status[data-state="unknown"] { color: var(--warn); }
+.activity-status svg { width: 20px; height: 20px; }
+.activity-status .activity-status-completed { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tool-activity > summary > svg:last-child { margin-left: auto; }
+.tool-activity .subagents, .tool-activity .task-operation { margin-block: 8px; }

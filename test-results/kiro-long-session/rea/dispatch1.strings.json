@@ -1,0 +1,258 @@
+[
+  {
+    "instruction": "0000000141395040: 48 8D 0D 51 82 AD  lea         rcx,[0000000145E6D298h]",
+    "text": ".}R...R..R...R.#.R.5.R...R...R.t.R...R..R..R...R.0.R.F.R...R...R...R...R.C.R...R...R.].R...R.I.R...R...R...R.=.R...R...R...R..."
+  },
+  {
+    "instruction": "00000001413950F8: 48 8D 15 21 D9 FD  lea         rdx,[0000000141372A20h]",
+    "text": "UH.....H..$....H..H......L......L......L.M.L..E..L..$....L.M.L..$....L..3..L.L$xL.....L.L$pL.D$hL.....L.D$XL.....L.D$PH.L$HH"
+  },
+  {
+    "instruction": "0000000141395106: 48 8D 15 E3 B2 AA  lea         rdx,[0000000145E403F0h]",
+    "text": "...E.................................................... .......building conversation should not fail...3..E....%...............in"
+  },
+  {
+    "instruction": "000000014139511F: 48 8D 15 DA B2 AA  lea         rdx,[0000000145E40400h]",
+    "text": "........................................ .......building conversation should not fail...3..E....%...............internal error: en"
+  },
+  {
+    "instruction": "000000014139515C: 48 8D 15 A5 19 AA  lea         rdx,[0000000145E36B08h]",
+    "text": "........0...............p..D..............................B....6j.E....r......./...?...C:\\Users\\runneradmin\\.cargo\\registry\\src\\i"
+  },
+  {
+    "instruction": "0000000141395204: 4C 8D 3D 2D 54 78  lea         r15,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "0000000141395213: 4C 8D 25 4E 54 78  lea         r12,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "00000001413952D1: 48 8D 0D D4 7F AD  lea         rcx,[0000000145E6D2ACh]",
+    "text": "5.R...R...R.t.R...R..R..R...R.0.R.F.R...R...R...R...R.C.R...R...R.].R...R.I.R...R...R...R.=.R...R...R...R...R...R.\".R...R...R..."
+  },
+  {
+    "instruction": "00000001413954D4: 4C 8D 3D 0D 45 3C  lea         r15,[000000015B7599E8h]",
+    "text": "..@....(..................B.......A.....u[.....\\.B.......B.......B....p.A......G@...............................@.............."
+  },
+  {
+    "instruction": "000000014139573D: 48 8D 0D AC 7B AD  lea         rcx,[0000000145E6D2F0h]",
+    "text": "].R...R.I.R...R...R...R.=.R...R...R...R...R...R.\".R...R...R...R.@.R._.R.+.R.z.R.K.R...R...R...R...R...R.s.R...R.\".R...R...R.+.R.J."
+  },
+  {
+    "instruction": "0000000141395776: 48 8D 0D 43 7B AD  lea         rcx,[0000000145E6D2C0h]",
+    "text": ".R..R...R.0.R.F.R...R...R...R...R.C.R...R...R.].R...R.I.R...R...R...R.=.R...R...R...R...R...R.\".R...R...R...R.@.R._.R.+.R.z.R.K."
+  },
+  {
+    "instruction": "000000014139586B: 48 8D 3D C6 4D 78  lea         rdi,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014139587A: 4C 8D 35 E7 4D 78  lea         r14,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "00000001413958B4: 48 8D 0D 65 D1 FD  lea         rcx,[0000000141372A20h]",
+    "text": "UH.....H..$....H..H......L......L......L.M.L..E..L..$....L.M.L..$....L..3..L.L$xL.....L.L$pL.D$hL.....L.D$XL.....L.D$PH.L$HH"
+  },
+  {
+    "instruction": "00000001413958BF: 48 8D 0D 2A AB AA  lea         rcx,[0000000145E403F0h]",
+    "text": "...E.................................................... .......building conversation should not fail...3..E....%...............in"
+  },
+  {
+    "instruction": "00000001413958D8: 48 8D 0D 21 AB AA  lea         rcx,[0000000145E40400h]",
+    "text": "........................................ .......building conversation should not fail...3..E....%...............internal error: en"
+  },
+  {
+    "instruction": "0000000141395915: 48 8D 0D EC 11 AA  lea         rcx,[0000000145E36B08h]",
+    "text": "........0...............p..D..............................B....6j.E....r......./...?...C:\\Users\\runneradmin\\.cargo\\registry\\src\\i"
+  },
+  {
+    "instruction": "00000001413959B2: 4C 8D 3D 97 36 54  lea         r15,[00000001448D9050h]",
+    "text": "UAWAVAUATVWSH..xH.l$p.)u...A.H.U..E..E..H..L.q.L.y.H.A..9.unL.`.M........L.(..p.I...1.H.].1...f.H..H...I9.......I9.......L.m.L.e.."
+  },
+  {
+    "instruction": "00000001413959C8: 4C 8D 3D A1 FE A1  lea         r15,[000000015BDB5870h]",
+    "text": "................ span=...................X.[.............4..4...4..C4..fatal runtime error: thread local panicked on drop, aborti"
+  },
+  {
+    "instruction": "0000000141395BB0: 48 8D 0D 49 77 AD  lea         rcx,[0000000145E6D300h]",
+    "text": "..R...R.=.R...R...R...R...R...R.\".R...R...R...R.@.R._.R.+.R.z.R.K.R...R...R...R...R...R.s.R...R.\".R...R...R.+.R.J.S..(S..(S...S..."
+  },
+  {
+    "instruction": "0000000141395C06: 48 8D 0D C3 76 AD  lea         rcx,[0000000145E6D2D0h]",
+    "text": "F.R...R...R...R...R.C.R...R...R.].R...R.I.R...R...R...R.=.R...R...R...R...R...R.\".R...R...R...R.@.R._.R.+.R.z.R.K.R...R...R...R..."
+  },
+  {
+    "instruction": "00000001413965DA: 48 8D 0D FF 6C AD  lea         rcx,[0000000145E6D2E0h]",
+    "text": "..R.C.R...R...R.].R...R.I.R...R...R...R.=.R...R...R...R...R...R.\".R...R...R...R.@.R._.R.+.R.z.R.K.R...R...R...R...R...R.s.R...R.\"."
+  },
+  {
+    "instruction": "000000014139666A: 48 8D 05 F7 08 29  lea         rax,[000000015B626F68h]",
+    "text": ".C.@.....................v.@.....u.@....P..B....a Display implementation returned an error unexpectedly/rustc/ded5c06cf21d2b93bffd"
+  },
+  {
+    "instruction": "000000014139693C: 48 8D 05 D5 58 AA  lea         rax,[0000000145E3C218h]",
+    "text": "CodeWhispererStreamingInvokeMCP....E...............E...............E....].......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhi"
+  },
+  {
+    "instruction": "0000000141396955: 48 8D 05 B4 59 AA  lea         rax,[0000000145E3C310h]",
+    "text": "GenerateAssistantResponse..........E............p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming"
+  },
+  {
+    "instruction": "0000000141396AAE: 48 8D 05 83 57 AA  lea         rax,[0000000145E3C238h]",
+    "text": "...E...............E...............E....].......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\oper"
+  },
+  {
+    "instruction": "0000000141396ABC: 48 8D 05 E5 1D AA  lea         rax,[0000000145E388A8h]",
+    "text": "........................`.d@....deleting secret...E............{}failed to parse : ......E...............E............C:\\Users\\r"
+  },
+  {
+    "instruction": "0000000141396ACA: 48 8D 15 5F 58 AA  lea         rdx,[0000000145E3C330h]",
+    "text": "...E............p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_a"
+  },
+  {
+    "instruction": "0000000141396AED: 48 8D 15 BC 3C AA  lea         rdx,[0000000145E3A7B0h]",
+    "text": ".........................7.D....aws-api...E............C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\"
+  },
+  {
+    "instruction": "0000000141396AFB: 48 8D 15 D6 3C AA  lea         rdx,[0000000145E3A7D8h]",
+    "text": "..E............C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-smithy-http-0.63.6\\src\\event_stream\\"
+  },
+  {
+    "instruction": "0000000141396C5E: 48 8D 05 D3 55 AA  lea         rax,[0000000145E3C238h]",
+    "text": "...E...............E...............E....].......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\oper"
+  },
+  {
+    "instruction": "0000000141396C6C: 48 8D 05 35 1C AA  lea         rax,[0000000145E388A8h]",
+    "text": "........................`.d@....deleting secret...E............{}failed to parse : ......E...............E............C:\\Users\\r"
+  },
+  {
+    "instruction": "0000000141396C7A: 48 8D 0D AF 56 AA  lea         rcx,[0000000145E3C330h]",
+    "text": "...E............p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_a"
+  },
+  {
+    "instruction": "0000000141396C9D: 48 8D 0D 0C 3B AA  lea         rcx,[0000000145E3A7B0h]",
+    "text": ".........................7.D....aws-api...E............C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\"
+  },
+  {
+    "instruction": "0000000141396CAB: 48 8D 0D 26 3B AA  lea         rcx,[0000000145E3A7D8h]",
+    "text": "..E............C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-smithy-http-0.63.6\\src\\event_stream\\"
+  },
+  {
+    "instruction": "00000001413978EB: 48 8D 05 A5 30 AA  lea         rax,[0000000145E3A997h]",
+    "text": "initial-response...E....}...........P...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rmcp-2.0.0\\src\\"
+  },
+  {
+    "instruction": "00000001413978F2: 48 8D 15 8F 30 AA  lea         rdx,[0000000145E3A988h]",
+    "text": "initial-requestinitial-response...E....}...........P...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\"
+  },
+  {
+    "instruction": "0000000141398370: 48 8D 15 81 32 A9  lea         rdx,[0000000145E2B5F8h]",
+    "text": "aws_request_id.............................E............................/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\st"
+  },
+  {
+    "instruction": "0000000141398AA2: 48 8D 05 AF 79 AA  lea         rax,[0000000145E40458h]",
+    "text": "3..E....%...............internal error: entered unreachable code: One of the clients must be created by this point......p..E....Z."
+  },
+  {
+    "instruction": "0000000141398AAE: 48 8D 0D 7B 79 AA  lea         rcx,[0000000145E40430h]",
+    "text": "building conversation should not fail...3..E....%...............internal error: entered unreachable code: One of the clients must "
+  },
+  {
+    "instruction": "0000000141398AB5: 4C 8D 0D AC 3C AA  lea         r9,[0000000145E3C768h]",
+    "text": "..@....(...............`)7A....@..@......................wD.....C.@.....................I.@.....0.@....0.................YA.....A"
+  },
+  {
+    "instruction": "0000000141398AD2: 48 8D 0D F7 35 F4  lea         rcx,[000000015F2DC0D0h]",
+    "text": "P..[.......................[....................h..[.......................[.......................[.......................[......"
+  },
+  {
+    "instruction": "0000000141398B51: 48 8D 05 C8 E4 28  lea         rax,[000000015B627020h]",
+    "text": ".ob[....K.......K.......C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\bstr-1.12.1\\src\\ext_slice.rs..8p"
+  },
+  {
+    "instruction": "0000000141398B5D: 48 8D 0D 34 E4 28  lea         rcx,[000000015B626F98h]",
+    "text": "a Display implementation returned an error unexpectedly/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\string.rs"
+  },
+  {
+    "instruction": "0000000141398B64: 4C 8D 0D B5 F5 28  lea         r9,[000000015B628120h]",
+    "text": "........................p.A.... .F@.......................B....called `Result::unwrap()` on an `Err` value..... .F@.............."
+  },
+  {
+    "instruction": "0000000141398B81: 48 8D 0D 70 79 AA  lea         rcx,[0000000145E404F8h]",
+    "text": "3..E....%...........9...3..E....%.......=...Z...3..E....%...........o...3..E....%...........K...3..E....%...........h...3..E....%."
+  },
+  {
+    "instruction": "0000000141398B8D: 48 8D 0D 64 79 AA  lea         rcx,[0000000145E404F8h]",
+    "text": "3..E....%...........9...3..E....%.......=...Z...3..E....%...........o...3..E....%...........K...3..E....%...........h...3..E....%."
+  },
+  {
+    "instruction": "0000000141398BA0: 48 8D 0D 29 38 AA  lea         rcx,[0000000145E3C3D0h]",
+    "text": "X..E....w.......W.......@..@....internal error: entered unreachable code.........................,A.....,A..../rustc/ded5c06cf21"
+  },
+  {
+    "instruction": "0000000141398BB8: 48 8D 0D 11 38 AA  lea         rcx,[0000000145E3C3D0h]",
+    "text": "X..E....w.......W.......@..@....internal error: entered unreachable code.........................,A.....,A..../rustc/ded5c06cf21"
+  },
+  {
+    "instruction": "0000000141398BC9: 48 8D 05 00 79 AA  lea         rax,[0000000145E404D0h]",
+    "text": "p..E....Z.......3..E....%...............3..E....%...........9...3..E....%.......=...Z...3..E....%...........o...3..E....%........."
+  },
+  {
+    "instruction": "0000000141398C21: 48 8D 15 B8 78 AA  lea         rdx,[0000000145E404E0h]",
+    "text": "3..E....%...............3..E....%...........9...3..E....%.......=...Z...3..E....%...........o...3..E....%...........K...3..E....%."
+  },
+  {
+    "instruction": "0000000141398C47: 48 8D 0D 92 36 AA  lea         rcx,[0000000145E3C2E0h]",
+    "text": "p..E....n...............p..E....n.......*.......GenerateAssistantResponse..........E............p..E....n.......8.......C:\\a\\kiro-"
+  },
+  {
+    "instruction": "0000000141398C66: 48 8D 0D 6B 34 AA  lea         rcx,[0000000145E3C0D8h]",
+    "text": "...E....W....... ...r......E....W.......(...P...C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\in"
+  },
+  {
+    "instruction": "0000000141398C85: 48 8D 0D 54 36 AA  lea         rcx,[0000000145E3C2E0h]",
+    "text": "p..E....n...............p..E....n.......*.......GenerateAssistantResponse..........E............p..E....n.......8.......C:\\a\\kiro-"
+  },
+  {
+    "instruction": "0000000141398CA4: 48 8D 0D 2D 34 AA  lea         rcx,[0000000145E3C0D8h]",
+    "text": "...E....W....... ...r......E....W.......(...P...C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\in"
+  },
+  {
+    "instruction": "0000000141398D0D: 48 8D 05 E4 35 AA  lea         rax,[0000000145E3C2F8h]",
+    "text": "p..E....n.......*.......GenerateAssistantResponse..........E............p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn"
+  },
+  {
+    "instruction": "0000000141398D19: 48 8D 0D 78 1A AA  lea         rcx,[0000000145E3A798h]",
+    "text": "correct output type..............................7.D....aws-api...E............C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.cra"
+  },
+  {
+    "instruction": "0000000141398D20: 4C 8D 0D A1 3A AA  lea         r9,[0000000145E3C7C8h]",
+    "text": ".0.@....0.................YA.....Ai@......................C......1A......................6A..............................6A......"
+  },
+  {
+    "instruction": "0000000141398D67: 48 8D 0D D2 35 AA  lea         rcx,[0000000145E3C340h]",
+    "text": "p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_assistant_respons"
+  },
+  {
+    "instruction": "0000000141398D8D: 48 8D 0D AC 1B AA  lea         rcx,[0000000145E3A940h]",
+    "text": "..E....}...........;.....E....}...........R.....E....}...............initial-requestinitial-response...E....}...........P...C:"
+  },
+  {
+    "instruction": "0000000141398DC8: 48 8D 0D 71 35 AA  lea         rcx,[0000000145E3C340h]",
+    "text": "p..E....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_assistant_respons"
+  },
+  {
+    "instruction": "0000000141398DEB: 48 8D 0D 4E 1B AA  lea         rcx,[0000000145E3A940h]",
+    "text": "..E....}...........;.....E....}...........R.....E....}...............initial-requestinitial-response...E....}...........P...C:"
+  },
+  {
+    "instruction": "0000000141398E15: 48 8D 0D 54 1B AA  lea         rcx,[0000000145E3A970h]",
+    "text": "..E....}...............initial-requestinitial-response...E....}...........P...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.cra"
+  },
+  {
+    "instruction": "0000000141398E3F: 48 8D 0D 2A 1B AA  lea         rcx,[0000000145E3A970h]",
+    "text": "..E....}...............initial-requestinitial-response...E....}...........P...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.cra"
+  }
+]

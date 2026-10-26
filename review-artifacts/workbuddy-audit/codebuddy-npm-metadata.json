@@ -1,0 +1,128 @@
+﻿{
+    "bin":  {
+                "cbc":  "./bin/codebuddy",
+                "codebuddy":  "./bin/codebuddy",
+                "cbc-prewarm":  "./bin/cbc-prewarm",
+                "codebuddy-code":  "./bin/codebuddy",
+                "codebuddy-lowmem":  "./bin/codebuddy-lowmem"
+            },
+    "bugs":  {
+                 "url":  "https://cnb.cool/codebuddy/codebuddy-code/-/issues"
+             },
+    "dist":  {
+                 "shasum":  "def513c1fa61dd3b9261f5eadb2faed9a2592536",
+                 "tarball":  "https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.176.0.tgz",
+                 "fileCount":  3406,
+                 "integrity":  "sha512-MUJZgmbsL+ceBqzA9H4jeYt4W1bhCxOisF4g3mm5t7nVg29DTWc9PXVg4awkgQc6goPP6Ei7Db9v+sJYT6z8sg==",
+                 "signatures":  [
+                                    {
+                                        "sig":  "MEYCIQDVjX2mIsFTDUvL7+EhLYoUa/khO+rG1ElhnwyPmoPrzgIhAPP0uv+ax87k6EzAliRaqpqcEf/XUktLNWkRu6Uxncm3",
+                                        "keyid":  "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+                                    },
+                                    {
+                                        "sig":  "MEUCIQDaEBg5rFY9At3BzmdJALqVDcqcGcvqYYozQ3Rpya3NbwIgdnnnQbWfknBijuC+/xUtFYoqe8aXdOXJoB2UqE0u/E8=",
+                                        "keyid":  "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+                                    }
+                                ],
+                 "unpackedSize":  201111901
+             },
+    "main":  "lib/node/index.js",
+    "name":  "@tencent-ai/codebuddy-code",
+    "exports":  {
+                    ".":  {
+                              "types":  "./lib/node/index.d.ts",
+                              "default":  "./lib/node/index.js"
+                          },
+                    "./*":  "./*",
+                    "./src/*":  {
+                                    "types":  "./src/*.ts",
+                                    "default":  "./src/*.ts"
+                                },
+                    "./node/*":  {
+                                     "types":  "./src/node/*.ts",
+                                     "default":  "./src/node/*.ts"
+                                 },
+                    "./server":  {
+                                     "types":  "./dist-server/types/node/server/index.d.ts",
+                                     "import":  "./server.mjs",
+                                     "require":  "./server.cjs",
+                                     "@genie/monorepo":  "./src/node/server/index.ts"
+                                 },
+                    "./testing":  {
+                                      "types":  "./types/codebuddy-code/testing.d.ts",
+                                      "import":  "./lib/testing.js",
+                                      "default":  "./lib/testing.js",
+                                      "require":  "./lib/testing.js",
+                                      "@genie/monorepo":  "./src/testing.ts"
+                                  },
+                    "./mods/client":  {
+                                          "types":  "./types/mod-client.d.ts"
+                                      },
+                    "./package.json":  "./package.json",
+                    "./src/node/multitask":  {
+                                                 "types":  "./src/node/multitask/index.ts",
+                                                 "default":  "./src/node/multitask/index.ts"
+                                             }
+                },
+    "license":  "SEE LICENSE IN README.md",
+    "scripts":  {
+
+                },
+    "typings":  "lib/node/index.d.ts",
+    "_npmUser":  {
+                     "name":  "muxiangqiu",
+                     "email":  "muxiangqiu@gmail.com"
+                 },
+    "homepage":  "https://cnb.cool/codebuddy/codebuddy-code",
+    "keywords":  [
+                     "codebuddy",
+                     "ai-assistant",
+                     "terminal",
+                     "cli"
+                 ],
+    "description":  "Use CodeBuddy, Tencent\u0027s AI assistant, right from your terminal. CodeBuddy can understand your codebase, edit files, run terminal commands, and handle entire workflows for you.",
+    "directories":  {
+
+                    },
+    "maintainers":  [
+                        {
+                            "name":  "muxiangqiu",
+                            "email":  "muxiangqiu@gmail.com"
+                        },
+                        {
+                            "name":  "code_faker",
+                            "email":  "1239746898@qq.com"
+                        }
+                    ],
+    "_nodeVersion":  "22.23.4",
+    "dependencies":  {
+                         "@openai/agents-core":  "0.5.2",
+                         "@agentclientprotocol/sdk":  "1.9.0"
+                     },
+    "publishConfig":  {
+                          "access":  "public"
+                      },
+    "_hasShrinkwrap":  false,
+    "devDependencies":  {
+
+                        },
+    "optionalDependencies":  {
+                                 "@lydell/node-pty":  "1.2.0-beta.14",
+                                 "@lydell/node-pty-linux-x64":  "1.2.0-beta.14",
+                                 "@lydell/node-pty-win32-x64":  "1.2.0-beta.14",
+                                 "@lydell/node-pty-darwin-x64":  "1.2.0-beta.14",
+                                 "@lydell/node-pty-win32-arm64":  "1.2.0-beta.14",
+                                 "@lydell/node-pty-darwin-arm64":  "1.2.0-beta.14",
+                                 "@tencent-ai/sandbox-cli-linux-x64":  "5.11.0-beta.5",
+                                 "@tencent-ai/sandbox-cli-win32-x64":  "5.11.0-beta.5",
+                                 "@tencent-ai/sandbox-cli-darwin-x64":  "5.11.0-beta.5",
+                                 "@tencent-ai/sandbox-cli-linux-arm64":  "5.11.0-beta.5",
+                                 "@tencent-ai/sandbox-cli-darwin-arm64":  "5.11.0-beta.5"
+                             },
+    "_npmOperationalInternal":  {
+                                    "tmp":  "tmp/codebuddy-code_2.176.0_1792926526945_0.785969409021132",
+                                    "host":  "s3://npm-registry-packages-npm-production"
+                                },
+    "_id":  "@tencent-ai/codebuddy-code@2.176.0",
+    "version":  "2.176.0"
+}

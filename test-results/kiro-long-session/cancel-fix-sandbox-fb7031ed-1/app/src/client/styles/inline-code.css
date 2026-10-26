@@ -1,0 +1,30 @@
+/* Keep only the final grapheme and action together; the rest wraps naturally.
+   The fixed icon slot prevents feedback from shifting text or table columns. */
+.inline-code-tail { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; vertical-align: baseline; }
+.inline-code-copy {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--action-icon-fg, var(--muted));
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+.inline-code-copy > svg { width: 12px; height: 12px; }
+.inline-code-copy:is(:hover, :focus-visible) { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.inline-code-copy:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -2px; }
+.inline-code[data-copy-state="copied"] { --action-rest: var(--success); --action-highlight: var(--success); }
+.inline-code[data-copy-state="failed"] { --action-rest: var(--danger-icon); --action-highlight: var(--danger-icon); }
+.inline-code-status { user-select: none; }
+@media (hover: none), (pointer: coarse) {
+  .inline-code-tail { line-height: 24px; }
+  .inline-code-copy { width: 24px; height: 24px; }
+}

@@ -1,0 +1,1 @@
+function Ntt(A) { return $Yi({ ...A, source: "qoder_api" }); }

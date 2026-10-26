@@ -1,0 +1,6 @@
+{
+  "name": "__PACKAGE_NAME__-quick-action",
+  "version": "1.0.0",
+  "type": "module",
+  "files": [".codebuddy-plugin", "index.js"]
+}

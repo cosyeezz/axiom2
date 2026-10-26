@@ -1,0 +1,118 @@
+[
+  {
+    "name": "caller1",
+    "evidenceId": "ev_6c9e64b61ab79a5b49824b5138b7c79117b4e18175feb930be9d5b89f2569f10",
+    "run": {
+      "cwd": "F:\\Axiom\\axiom2",
+      "command": [
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/runtime/node-v24.22.1-win-x64/node.exe",
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/node_modules/rea-agents/scripts/rea.mjs",
+        "decompile",
+        "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\history-analysis-only.pe",
+        "0x1428c7d40",
+        "--provider",
+        "ghidra",
+        "--format",
+        "json"
+      ],
+      "environment": {
+        "GHIDRA_INSTALL_DIR": "C:/Users/dane/AppData/Local/Temp/kg1214-68e31578/ghidra_12.1.4_PUBLIC",
+        "JAVA_HOME": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1/jbr",
+        "REA_GHIDRA_SEED_FILE": "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\seeds.tsv",
+        "REA_GHIDRA_DISABLED_ANALYZERS": "Non-Returning Functions - Discovered"
+      },
+      "exitCode": 0,
+      "signal": null,
+      "elapsedMs": 22986
+    },
+    "usableForPolicy": true,
+    "caveat": "Carved PE; partial callees/types; analyst seed names are not recovered source symbols."
+  },
+  {
+    "name": "caller2",
+    "evidenceId": "ev_68d1cce8b12d3b8792fcf2e76e82e461825102330cf6f312268ebc7d5b81759e",
+    "run": {
+      "cwd": "F:\\Axiom\\axiom2",
+      "command": [
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/runtime/node-v24.22.1-win-x64/node.exe",
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/node_modules/rea-agents/scripts/rea.mjs",
+        "decompile",
+        "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\history-analysis-only.pe",
+        "0x143226710",
+        "--provider",
+        "ghidra",
+        "--format",
+        "json"
+      ],
+      "environment": {
+        "GHIDRA_INSTALL_DIR": "C:/Users/dane/AppData/Local/Temp/kg1214-68e31578/ghidra_12.1.4_PUBLIC",
+        "JAVA_HOME": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1/jbr",
+        "REA_GHIDRA_SEED_FILE": "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\seeds.tsv",
+        "REA_GHIDRA_DISABLED_ANALYZERS": "Non-Returning Functions - Discovered"
+      },
+      "exitCode": 0,
+      "signal": null,
+      "elapsedMs": 21674
+    },
+    "usableForPolicy": true,
+    "caveat": "Carved PE; partial callees/types; analyst seed names are not recovered source symbols."
+  },
+  {
+    "name": "iterator-v2",
+    "evidenceId": "ev_26d8f29eb60556e8566dbbb4959d0956c49ef52210432338477e6cc546125002",
+    "run": {
+      "cwd": "F:\\Axiom\\axiom2",
+      "command": [
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/runtime/node-v24.22.1-win-x64/node.exe",
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/node_modules/rea-agents/scripts/rea.mjs",
+        "decompile",
+        "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\history-v2-analysis-only.pe",
+        "0x1432020c0",
+        "--provider",
+        "ghidra",
+        "--format",
+        "json"
+      ],
+      "environment": {
+        "GHIDRA_INSTALL_DIR": "C:/Users/dane/AppData/Local/Temp/kg1214-68e31578/ghidra_12.1.4_PUBLIC",
+        "JAVA_HOME": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1/jbr",
+        "REA_GHIDRA_SEED_FILE": "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\seeds-v2.tsv",
+        "REA_GHIDRA_DISABLED_ANALYZERS": "Non-Returning Functions - Discovered"
+      },
+      "exitCode": 0,
+      "signal": null,
+      "elapsedMs": 54252
+    },
+    "usableForPolicy": true,
+    "caveat": "Carved PE; partial callees/types; analyst seed names are not recovered source symbols."
+  },
+  {
+    "name": "dispatch-v2",
+    "evidenceId": "ev_5619bf84a5c84f360792703b3110e49abcdb62455ff87ab540572c0a5df94938",
+    "run": {
+      "cwd": "F:\\Axiom\\axiom2",
+      "command": [
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/runtime/node-v24.22.1-win-x64/node.exe",
+        "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/node_modules/rea-agents/scripts/rea.mjs",
+        "decompile",
+        "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\history-v2-analysis-only.pe",
+        "0x14314a500",
+        "--provider",
+        "ghidra",
+        "--format",
+        "json"
+      ],
+      "environment": {
+        "GHIDRA_INSTALL_DIR": "C:/Users/dane/AppData/Local/Temp/kg1214-68e31578/ghidra_12.1.4_PUBLIC",
+        "JAVA_HOME": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.1.1/jbr",
+        "REA_GHIDRA_SEED_FILE": "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\rea\\seeds-v2.tsv",
+        "REA_GHIDRA_DISABLED_ANALYZERS": "Non-Returning Functions - Discovered"
+      },
+      "exitCode": 0,
+      "signal": null,
+      "elapsedMs": 67818
+    },
+    "usableForPolicy": false,
+    "caveat": "Bad instruction / jump table recovery; excluded from policy conclusions."
+  }
+]

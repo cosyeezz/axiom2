@@ -1,0 +1,27 @@
+"use strict";exports.ids=["1753"],exports.modules={91695(e,t,i){i.d(t,{a:()=>m,b:()=>p});var n=i(98995),l=i(34560),a=i(97616),f=i(20869),u=i(29486),d=i(99223);(0,n.createRequire)(__filename);var c={name:"cut",summary:"remove sections from each line of files",usage:"cut [OPTION]... [FILE]...",options:["-c LIST              select only these characters","-d DELIM             use DELIM instead of TAB for field delimiter","-f LIST              select only these fields","-s, --only-delimited  do not print lines without delimiters","    --help           display this help and exit"]};function M(e,t){let i=[],n=e.split(",");if(n.length>t)throw new f.l(`cut: range count limit exceeded (${t})`,"array_elements");for(let e of n)if(e.includes("-")){let[t,n]=e.split("-"),l=t?Number(t):1,a=n?Number(n):null;if(!Number.isSafeInteger(l)||l<1||null!==a&&(!Number.isSafeInteger(a)||a<l))throw new f.l("cut: invalid range","array_elements");i.push({start:l,end:a})}else{let t=Number(e);if(!Number.isSafeInteger(t)||t<1)throw new f.l("cut: invalid range","array_elements");i.push({start:t,end:t})}return i}function B(e,t){let i=[],n=new Set;for(let l of t){let t=l.start-1,a=null===l.end?e.length:l.end;for(let l=t;l<a&&l<e.length;l++)l>=0&&!n.has(l)&&(n.add(l),i.push(e[l]))}return i}var m={name:"cut",async execute(e,t){if((0,d.b)(e))return(0,d.a)(c);let i="	",n=null,m=null,p=!1,h=[];for(let t=0;t<e.length;t++){let l=e[t];if("-d"===l)i=e[++t]||"	";else if(l.startsWith("-d"))i=l.slice(2);else if("-f"===l)n=e[++t];else if(l.startsWith("-f"))n=l.slice(2);else if("-c"===l)m=e[++t];else if(l.startsWith("-c"))m=l.slice(2);else if("-s"===l||"--only-delimited"===l)p=!0;else{if(l.startsWith("--"))return(0,d.c)("cut",l);if(l.startsWith("-")){let e=!1;for(let t of l.slice(1))if("s"===t)p=!0;else if(!"dfc".includes(t)){e=!0;break}if(e)return(0,d.c)("cut",l)}else h.push(l)}}if(!n&&!m)return{stdout:"",stderr:`cut: you must specify a list of bytes, characters, or fields
+`,exitCode:1};let g=await (0,l.c)(t,h,{cmdName:"cut"});if(!g.ok)return g.error;let x=(m?(0,u.d)(g.content):g.content).split(`
+`);x.length>0&&""===x[x.length-1]&&x.pop();let b=M(n||m||"1",t.limits.maxArrayElements),$=new a.d(Math.min(t.limits.maxOutputSize,t.limits.maxStringLength),"cut"),w=0,I=e=>{if(!Number.isSafeInteger(e)||e<0||e>t.limits.maxLoopIterations-w)throw new f.l(`cut: range expansion limit exceeded (${t.limits.maxLoopIterations})`,"iterations");w+=e,t.executionScope?.consumeWork(e,"cut range expansion")};for(let e of x)if(m){let t=Array.from(e),i=[];for(let e of b){let n=e.start-1,l=null===e.end?t.length:e.end;I(Math.max(0,Math.min(l,t.length)-n));for(let e=n;e<l&&e<t.length;e++)e>=0&&i.push(t[e])}$.append(`${i.join("")}
+`)}else{if(p&&!e.includes(i))continue;let t=e.split(i);for(let e of b){let i=e.start-1;I(Math.max(0,Math.min(null===e.end?t.length:e.end,t.length)-i))}let n=B(t,b);$.append(`${n.join(i)}
+`)}return m?{stdout:$.build(),stderr:"",exitCode:0}:{stdout:$.build(),stderr:"",exitCode:0,stdoutKind:"bytes",stdoutEncoding:"binary"}}},p={name:"cut",flags:[{flag:"-d",type:"value",valueHint:"delimiter"},{flag:"-f",type:"value",valueHint:"string"},{flag:"-c",type:"value",valueHint:"string"},{flag:"-s",type:"boolean"}],stdinType:"text",needsFiles:!0}},34560(e,t,i){i.d(t,{a:()=>B,b:()=>y,c:()=>F});var n=i(98995),l=i(20869),a=i(29486);function B(e,t,i){if(!Number.isSafeInteger(t)||t<0||t>e.limits.maxInputBytes)throw new l.l(`${i}: input size limit exceeded (${e.limits.maxInputBytes} bytes)`,"string_length");e.executionScope?.consumeInput(t,i)}async function y(e,t,i){let{cmdName:n,allowStdinMarker:l=!0,stopOnError:f=!1,batchSize:u=100}=i;if(0===t.length)return{files:[{filename:"",content:e.stdin}],stderr:"",exitCode:0};let d=[],c="",m=0;for(let i=0;i<t.length;i+=u){let p=t.slice(i,i+u);for(let t of(await Promise.all(p.map(async t=>{if(l&&"-"===t)return{filename:"-",content:e.stdin,error:null};try{let i=e.fs.resolvePath(e.cwd,t),n=await (0,a.g)(e.fs,i);return{filename:t,content:n,error:null}}catch{return{filename:t,content:a.f,error:`${n}: ${t}: No such file or directory
+`}}}))))if(t.error){if(c+=t.error,m=1,f)return{files:d,stderr:c,exitCode:m}}else d.push({filename:t.filename,content:t.content})}return{files:d,stderr:c,exitCode:m}}async function F(e,t,i){let n=await y(e,t,{...i,stopOnError:!0});return 0!==n.exitCode?{ok:!1,error:{stdout:"",stderr:n.stderr,exitCode:n.exitCode}}:{ok:!0,content:n.files.map(e=>e.content).join("")}}(0,n.createRequire)(__filename)},99223(e,t,i){function s(e){let t=`${e.name} - ${e.summary}
+
+`;if(t+=`Usage: ${e.usage}
+`,e.description){if(t+=`
+Description:
+`,"string"==typeof e.description)for(let i of e.description.split(`
+`))t+=i?`  ${i}
+`:`
+`;else if(e.description.length>0)for(let i of e.description)t+=i?`  ${i}
+`:`
+`}if(e.options&&e.options.length>0)for(let i of(t+=`
+Options:
+`,e.options))t+=`  ${i}
+`;if(e.examples&&e.examples.length>0)for(let i of(t+=`
+Examples:
+`,e.examples))t+=`  ${i}
+`;if(e.notes&&e.notes.length>0)for(let i of(t+=`
+Notes:
+`,e.notes))t+=`  ${i}
+`;return{stdout:t,stderr:"",exitCode:0}}function o(e){return e.includes("--help")}function r(e,t){return{stdout:"",stderr:t.startsWith("--")?`${e}: unrecognized option '${t}'
+`:`${e}: invalid option -- '${t.replace(/^-/,"")}'
+`,exitCode:1}}i.d(t,{a:()=>s,b:()=>o,c:()=>r}),(0,i(98995).createRequire)(__filename)},70112(e,t,i){i.r(t),i.d(t,{cutCommand:()=>l.a,flagsForFuzzing:()=>l.b});var n=i(98995),l=i(91695);i(34560),i(97616),i(94362),i(20869),i(29486),i(99223),i(7863),(0,n.createRequire)(__filename)}};

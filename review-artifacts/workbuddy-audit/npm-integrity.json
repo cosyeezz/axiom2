@@ -1,0 +1,7 @@
+{
+  "name": "@tencent-ai/codebuddy-code",
+  "version": "2.176.0",
+  "expected": "sha512-MUJZgmbsL+ceBqzA9H4jeYt4W1bhCxOisF4g3mm5t7nVg29DTWc9PXVg4awkgQc6goPP6Ei7Db9v+sJYT6z8sg==",
+  "actual": "sha512-MUJZgmbsL+ceBqzA9H4jeYt4W1bhCxOisF4g3mm5t7nVg29DTWc9PXVg4awkgQc6goPP6Ei7Db9v+sJYT6z8sg==",
+  "match": true
+}

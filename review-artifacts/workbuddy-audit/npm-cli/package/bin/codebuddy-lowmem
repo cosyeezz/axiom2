@@ -1,0 +1,43 @@
+#!/usr/bin/env -S node --optimize-for-size --max-semi-space-size=2
+
+// codebuddy-lowmem —— 低内存模式 wrapper
+//
+// 通过 `env -S` 在 shebang 里给 Node 注入 V8 保守 GC flag，
+// 主体直接 require 现有 bin/codebuddy（保持逻辑一致，避免二次维护）。
+//
+// 实测数据（macOS arm64, lite-wb bundle, `-p` 场景 5 轮中位数）：
+//
+//   scenario           runtime               peak phys   real
+//   ─────────────────  ────────────────────  ──────────  ─────
+//   -p hi              node 默认              314.4 MB    4.96s
+//   -p hi              node --optimize-for-size 176.5 MB   4.92s   ← 本 wrapper
+//   -p Read (1 tool)   node 默认              330.9 MB   10.47s
+//   -p Read (1 tool)   node --optimize-for-size 195.7 MB    9.86s   ← 本 wrapper
+//
+// 内存 -44% / -41%，时间不劣化（-p 是 I/O 瓶颈，V8 heap 变小不影响热路径）。
+//
+// 应用范围：
+// - 独立分发的 `codebuddy` / `cbc` CLI（脱离 WorkBuddy 使用）
+// - 短生命周期 `-p` / `--print` 场景收益最大
+// - **不建议**在 `--prewarm` 长驻场景使用：electron-as-node 在长驻场景仍是最优
+//   （Chromium PartitionAlloc 优势），此时应走 wb 现有的 ELECTRON_RUN_AS_NODE=1 路径
+//
+// 兼容性：
+// - `env -S`：macOS 10.15+ 与 GNU coreutils 8.30+（2018+ 所有主流 Linux 发行版）
+// - `--optimize-for-size`：V8 通用 flag，Node 14+ 稳定支持
+// - Windows：npm bin shim（`.cmd`）不透传 shebang 参数，此 wrapper 在 Windows 下
+//   等价于普通 `codebuddy`（无副作用，但也无收益）；Windows 用户请显式设置
+//   `NODE_OPTIONS="--optimize-for-size --max-semi-space-size=2"` 环境变量
+//
+// 参数选择说明：
+// - `--optimize-for-size`：V8 内部低内存模式（收缩 code space / 关 concurrent
+//   code marking / 紧凑 inline cache），冷启动内存主要收益来源（-138MB）
+// - `--max-semi-space-size=2`：new-space 单半区上限 2MB（默认 16MB），配合上者
+//   进一步压小 young generation，冷启动 mmap/faulting 更少（page reclaims -75%）
+// - **不加** `--max-old-space-size`：保留默认 ~4GB 上限，避免大对话/多工具调用
+//   场景 OOM；老年代反正冷启动阶段涨不多，砍上限没意义
+//
+// 内容极简：任何行为改动都留在 bin/codebuddy 里，本文件仅承担 flag 注入职责。
+// 唯一副作用：`process.argv[1]` 会指向本文件路径而非 bin/codebuddy——bin/codebuddy
+// 内部只用 `__dirname` 和 `process.argv.slice(2)`，不依赖 argv[1]，验证通过。
+require('./codebuddy');

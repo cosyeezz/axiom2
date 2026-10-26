@@ -1,0 +1,169 @@
+Third-party icon notices retained with the distribution. Bootstrap Icons (MIT).
+Source: https://icon-sets.iconify.design/bi/filetype-raw/
+The MIT License (MIT)
+Copyright (c) 2019-2024 The Bootstrap Authors
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Session memory execution states: Lucide clock and check-check (ISC), Tabler loader-4 and hand-stop (MIT), Phosphor pause and warning-light (MIT), original geometry in memory/MemoryStateIcon.tsx. Loader rotation, pause opacity and one-shot completion stroke use intrinsic SVG animation without additional geometry. The Lucide/Tabler notices below and assets/PHOSPHOR-LICENSE.txt apply.
+Sources: https://icon-sets.iconify.design/lucide/clock/ https://icon-sets.iconify.design/lucide/check-check/ https://icon-sets.iconify.design/tabler/loader-4/ https://icon-sets.iconify.design/tabler/hand-stop/ https://icon-sets.iconify.design/ph/pause/ https://icon-sets.iconify.design/ph/warning-light/
+
+Conversation fork: Lucide git-branch, original geometry in icons.svg (ISC notice below).
+Source: https://lucide.dev/icons/git-branch
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/git-branch.svg
+
+Skill references: user-selected Lucide book-open-check (S01), shared original paths in icons.svg (ISC notice below).
+Source: https://lucide.dev/icons/book-open-check
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/book-open-check.svg
+Subagent settings entry: user-selected Lucide git-branch (A01), original geometry in icons.svg; ISC notice below.
+Source: https://icon-sets.iconify.design/lucide/git-branch/
+Subagent identity: Lucide bot (A04), original path in icons.svg (ISC notice below).
+Subagent append: Tabler message-plus (P02), original path in icons.svg (MIT notice below).
+Subagent running and cancelled/abnormal states: Tabler loader (I12, CSS rotation) and alert-triangle (F02), original paths in icons.svg (MIT notice below).
+Subagent completion and result reading: Iconoir badge-check (C27) and eye (O24), original paths in icons.svg (MIT notice below).
+Sources: https://icon-sets.iconify.design/lucide/bot/ https://icon-sets.iconify.design/tabler/message-plus/ https://icon-sets.iconify.design/tabler/loader/ https://icon-sets.iconify.design/tabler/alert-triangle/ https://icon-sets.iconify.design/iconoir/badge-check/ https://icon-sets.iconify.design/iconoir/eye/
+Open subagent window: user-selected Lucide square-arrow-out-up-right (W14), original path in icons.svg; ISC notice below.
+Source: https://icon-sets.iconify.design/lucide/square-arrow-out-up-right/
+Iconoir license: MIT, https://github.com/iconoir-icons/iconoir/blob/main/LICENSE
+MIT License
+Copyright (c) 2021 Luca Burgio
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Shared non-brand glyphs: Lucide (ISC), static paths in icons.svg; Icon.tsx is the shared renderer. File preview, model configuration, memory, original conversation and notifications reuse these symbols. The original pin arrows and user-provided annotation bubble remain inline. The shared usage entry uses Lucide chart-column-increasing (https://lucide.dev/icons/chart-column-increasing). DataIcons.tsx combines custom measured geometry with Lucide glyphs; mobile upload uses a custom confirmed-file meter. See icons.svg for the complete adopted symbol list.
+Maintenance task states and packages: Lucide circle-alert, circle-x and package, original SVG geometry in icons.svg (ISC notice below).
+SVG sources: https://github.com/lucide-icons/lucide/blob/main/icons/circle-alert.svg https://github.com/lucide-icons/lucide/blob/main/icons/circle-x.svg https://github.com/lucide-icons/lucide/blob/main/icons/package.svg
+
+Cache entry: Lucide database-zap (C001), original ellipse and outline paths in DataIcons.tsx, with a clipped measured fill and independent activity feedback.
+Source: https://lucide.dev/icons/database-zap
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/database-zap.svg (ISC license below).
+Sources: https://lucide.dev/icons/columns-2 https://lucide.dev/icons/book-open https://lucide.dev/icons/folder-open
+SVG source: https://github.com/lucide-icons/lucide/tree/main/icons
+Running process status: eos-icons:three-dots-loading (SUSE UX/UI team, MIT), inline in chat/ToolActivity.tsx.
+EOS source: https://icon-sets.iconify.design/eos-icons/three-dots-loading/
+Compression steps: Lucide copy, file-text, list-checks, check, triangle-alert and square; official paths in chat/CompressionDetail.tsx, displayed without background badges or circular borders.
+Sources: https://lucide.dev/icons/copy https://lucide.dev/icons/file-text https://lucide.dev/icons/list-checks https://lucide.dev/icons/check https://lucide.dev/icons/triangle-alert https://lucide.dev/icons/square
+SVG source: https://github.com/lucide-icons/lucide/tree/main/icons (ISC license below).
+Shared loading status: eos-icons:bubble-loading, official SVG animation in StatusIcons.tsx.
+EOS loading source: https://icon-sets.iconify.design/eos-icons/bubble-loading/
+Session title status: original Axiom circle and radial-gradient shapes in StatusIcons.tsx. Running uses a static green dot. Unread uses a fixed blue dot with a fixed-size halo whose opacity cycles over 3 seconds; reduced motion keeps a steady halo. The former svg-spinners:pulse-rings-multiple paths are no longer used.
+SVG Spinners source: https://github.com/n3r4zzurr0/svg-spinners
+Compression card: Tabler fold, original paths with inward/outward arrow animation in StatusIcons.tsx.
+Fold source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/fold.svg
+Completed process status: user-provided Tabler progress-check SVG, inline in chat/ToolActivity.tsx; original paths preserved with one-shot left-dash reveal, right-arc drawing and check drawing.
+Tabler icon: https://tabler.io/icons/icon/progress-check
+Tabler source: https://github.com/tabler/tabler-icons/blob/main/icons/outline/progress-check.svg
+Session configuration reload: custom settings-reload outline in icons.svg, combining the application's gear silhouette with a separate lower-right clockwise reload arrow. Redrawn as open rounded strokes on a native 20-unit canvas with a larger gear body and closely placed arrow, matching the adjacent data icons' optical size and the existing 1.2px toolbar stroke; not the filled MDI candidate artwork.
+Model configuration reload: shared Lucide rotate-cw (ISC).
+Tabler fold is also used as the shared static compression symbol in icons.svg.
+Workspace folder: restored from the original ui design, including its horizontal divider.
+Open workspace: adapted from that folder silhouette with a tilted front inspired by Tabler folder-open (option 04), in icons.svg as i-workspace-open.
+Reference: https://icon-sets.iconify.design/tabler/folder-open/ (Tabler MIT notice below).
+Tabler hand-click is used by the skill/MCP picker and skill use buttons.
+Source: https://icon-sets.iconify.design/tabler/hand-click/
+Tool-call glyphs selected by the user: Iconoir brain-research (memory-03); Lucide code-xml (code-01) and plug (mcp-04); Tabler settings-search (discovery-02), packages (resources-32), template (templates-02), file-search (read-resource-29), search (search-23), world-search (web-27).
+Original path geometry is retained in icons.svg, with fitted viewBoxes and shared rounded, non-scaling strokes. ProcessIcon uses the same symbols in tool rows and collapsed summaries, at 1em size and 0.1em stroke to match existing operation glyphs. Other sprite consumers retain the shared 1.5px outline. MCP calls and unregistered external tools share the plug glyph without changing their tool names. Iconoir/Tabler MIT and Lucide ISC notices are included in this file.
+Sources: https://icon-sets.iconify.design/iconoir/brain-research/ https://icon-sets.iconify.design/lucide/code-xml/ https://icon-sets.iconify.design/lucide/plug/
+Sources: https://icon-sets.iconify.design/tabler/settings-search/ https://icon-sets.iconify.design/tabler/packages/ https://icon-sets.iconify.design/tabler/template/ https://icon-sets.iconify.design/tabler/file-search/ https://icon-sets.iconify.design/tabler/search/ https://icon-sets.iconify.design/tabler/world-search/
+Thought-summary glyph: Tabler bulb (TH25), original path in chat/ProcessIcon.tsx and icons.svg; fitted viewBox, 1em size and pale-yellow outline. Expanded thought rows have no leading glyph.
+Source: https://icon-sets.iconify.design/tabler/bulb/ (MIT notice below).
+Read, edit, write and command glyphs show standalone operation symbols without a file outline in chat/ProcessIcon.tsx and icons.svg: a magnifier adapted from Lucide file-search-corner (R08), the Lucide pencil, the same pencil with a custom writing baseline for write, and a custom >_ mark. All four use a common fitted viewBox, 1em size and 0.1em non-scaling rounded strokes in tool rows and collapsed summaries.
+Sources: https://lucide.dev/icons/file-search-corner and https://lucide.dev/icons/pencil (ISC license below).
+Tabler license: MIT, https://github.com/tabler/tabler-icons/blob/main/LICENSE
+Phosphor source: https://github.com/phosphor-icons/core/tree/main/assets/regular
+Bundled Phosphor SVGs: assets/activity-planet.svg, assets/activity-completed.svg (unmodified paths).
+New-session entry: custom rounded outline adaptation of the user-selected Phosphor note-pencil (option 05); keeps the notebook/pencil silhouette, with round caps/joins and a shared 1.25px non-scaling stroke. Sidebar glyph viewBoxes fit their geometry; non-square glyphs retain their aspect ratio and visible stroke overflow.
+Source: https://github.com/phosphor-icons/core/blob/main/assets/regular/note-pencil.svg
+MIT License: Copyright (c) 2023 Phosphor Icons. Full text: assets/PHOSPHOR-LICENSE.txt
+Lucide symbols use 1.5px non-scaling rounded strokes; ordinary desktop glyphs
+are 18px, while measured data glyphs are 24px. The composer toolbar uses 16px
+ordinary glyphs and 20px measured data glyphs with 1.2px non-scaling outlines
+and 1px inner memory lines; its neutral icon color is #8a8f98. Existing status animations remain
+instance-local SVG timelines and are not disabled by reduced-motion preferences.
+ISC License
+Copyright (c) 2026 Lucide Icons and Contributors
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+EOS Icons, SVG Spinners and Tabler Icons: MIT License
+Copyright (c) 2020 SUSE Software Solutions Germany GmbH (EOS Icons)
+Copyright (c) Utkarsh Verma (SVG Spinners)
+Copyright (c) 2020-2026 Paweł Kuna (Tabler Icons)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Feather-derived x, chevron-down and inbox: MIT License
+Copyright (c) 2013-present Cole Bemis
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Built-in resource mark: user-selected Lucide package, original path in icons.svg; ISC notice below.
+Source: https://icon-sets.iconify.design/lucide/package/
+SVG source: https://github.com/lucide-icons/lucide/blob/main/icons/package.svg
+Lucide layout-list · https://lucide.dev/icons/layout-list
+ISC License · Copyright (c) 2026 Lucide Icons and Contributors
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

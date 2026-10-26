@@ -1,0 +1,301 @@
+import { randomUUID } from "node:crypto";
+import { AppError, text } from "../../shared/protocol.js";
+import { defaultBudgets, } from "../../shared/tasks.js";
+export const target = (t) => ({
+    workspaceId: t.workspaceId,
+    sessionId: t.sessionId,
+});
+export const parent = (t) => ({
+    workspaceId: t.workspaceId,
+    sessionId: t.parentSessionId,
+});
+export const failure = (e) => e instanceof AppError
+    ? e.message
+    : "子任务操作失败；未自动重试。";
+// Owns durable task relations and input queues; it does not start workers or publish events.
+export class TaskRecords {
+    store;
+    drafts = new Map();
+    stopEpochs = new Map();
+    stopEpoch(scope) {
+        return this.stopEpochs.get(scope.sessionId) ?? 0;
+    }
+    constructor(store) {
+        this.store = store;
+        const columns = new Set(store.db.prepare("PRAGMA table_info(tasks)").all().map((column) => column.name));
+        // Task-specific instructions now live entirely in the task body.
+        if (columns.has("role"))
+            store.db.exec("ALTER TABLE tasks DROP COLUMN role");
+        for (const [name, declaration] of Object.entries({ title: "TEXT", context: "TEXT", initialInputId: "TEXT", workStartedAt: "INTEGER", workDeadlineAt: "INTEGER", summaryDeadlineAt: "INTEGER", budgetRevision: "INTEGER NOT NULL DEFAULT 0" }))
+            if (!columns.has(name))
+                store.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
+        store.db.exec("CREATE TABLE IF NOT EXISTS task_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL)");
+        store.db.exec("CREATE TABLE IF NOT EXISTS task_model_preferences(id INTEGER PRIMARY KEY CHECK(id=1),selection TEXT)");
+        // Migrate the last explicit per-session choice once; null is a remembered inheritance choice.
+        store.db.exec(`INSERT OR IGNORE INTO task_model_preferences(id,selection)
+      SELECT 1,defaultModel FROM task_parents WHERE defaultModel IS NOT NULL ORDER BY rowid DESC LIMIT 1`);
+        store.db.exec(`CREATE TABLE IF NOT EXISTS task_input_skills(inputId TEXT PRIMARY KEY REFERENCES task_inputs(id) ON DELETE CASCADE, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_input_receipts(
+      inputId TEXT PRIMARY KEY, taskId TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      runId TEXT, state TEXT NOT NULL, error TEXT, updatedAt INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS task_input_receipts_task ON task_input_receipts(taskId);
+      CREATE TABLE IF NOT EXISTS task_initial_retries(taskId TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+        runId TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,inputId TEXT NOT NULL,body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_queue_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        taskId TEXT UNIQUE NOT NULL REFERENCES tasks(id) ON DELETE CASCADE);
+      INSERT OR IGNORE INTO task_queue_order(taskId) SELECT id FROM tasks WHERE status='queued' ORDER BY createdAt,rowid;
+      CREATE TABLE IF NOT EXISTS task_stops(taskId TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_notification_attempts(id TEXT PRIMARY KEY,
+        sessionId TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        resultIds TEXT NOT NULL, state TEXT NOT NULL, error TEXT, createdAt INTEGER NOT NULL);
+      INSERT OR IGNORE INTO task_input_receipts SELECT id,taskId,runId,'queued',NULL,createdAt FROM task_inputs;
+      UPDATE task_input_receipts SET state='failed',error='服务重启后未自动重放输入'
+        WHERE state='queued' AND runId IS NULL AND inputId NOT IN (SELECT id FROM task_inputs);
+      UPDATE task_input_receipts SET state='unknown',error='服务重启，输入送达未确认；未自动重放输入'
+        WHERE state IN ('queued','accepted') AND inputId NOT IN (SELECT id FROM task_inputs);`);
+        if (!store.db.prepare("PRAGMA table_info(task_notification_attempts)").all().some((column) => column.name === "runId"))
+            store.db.exec("ALTER TABLE task_notification_attempts ADD COLUMN runId TEXT");
+        store.db.exec("INSERT OR IGNORE INTO task_model_preferences(id,selection) VALUES(1,NULL)");
+        // Stable model-facing references; UUIDs remain the storage and delivery identities.
+        store.db.exec(`CREATE TABLE IF NOT EXISTS task_model_refs(
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskId TEXT UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+      resultId TEXT UNIQUE REFERENCES task_results(id) ON DELETE CASCADE,
+      CHECK ((taskId IS NULL) != (resultId IS NULL)));
+      INSERT INTO task_model_refs(taskId) SELECT id FROM tasks
+        WHERE NOT EXISTS (SELECT 1 FROM task_model_refs WHERE taskId=tasks.id) ORDER BY rowid;
+      INSERT INTO task_model_refs(resultId) SELECT id FROM task_results
+        WHERE NOT EXISTS (SELECT 1 FROM task_model_refs WHERE resultId=task_results.id) ORDER BY rowid;`);
+    }
+    modelRef(kind, id) {
+        const column = kind === "task" ? "taskId" : "resultId";
+        let row = this.store.db.prepare(`SELECT seq FROM task_model_refs WHERE ${column}=?`).get(id);
+        if (!row) {
+            this.store.db.prepare(`INSERT INTO task_model_refs(${column}) VALUES(?)`).run(id);
+            row = this.store.db.prepare(`SELECT seq FROM task_model_refs WHERE ${column}=?`).get(id);
+        }
+        return `${kind === "task" ? "t" : "r"}${row.seq}`;
+    }
+    modelId(kind, value) {
+        const ref = text(value, kind === "task" ? "子任务标识" : "结果标识");
+        const match = (kind === "task" ? /^t([1-9]\d*)$/ : /^r([1-9]\d*)$/).exec(ref);
+        if (!match)
+            return ref; // Historical tools continue to accept complete UUIDs.
+        const column = kind === "task" ? "taskId" : "resultId";
+        const row = this.store.db.prepare(`SELECT ${column} AS id FROM task_model_refs WHERE seq=?`).get(match[1]);
+        // A resolved reference still has to pass the existing ownership/pair checks.
+        return row?.id ? String(row.id) : ref;
+    }
+    rows(where = "", ...params) {
+        return this.store.db
+            .prepare(`SELECT tasks.* FROM tasks ${where}`)
+            .all(...params);
+    }
+    child(scope) {
+        this.store.session(scope.workspaceId, scope.sessionId);
+        return this.rows("WHERE workspaceId=? AND sessionId=?", scope.workspaceId, scope.sessionId)[0];
+    }
+    own(scope, id) {
+        this.store.session(scope.workspaceId, scope.sessionId);
+        const row = this.rows("WHERE id=? AND workspaceId=? AND parentSessionId=?", text(id, "子任务标识"), scope.workspaceId, scope.sessionId)[0];
+        if (!row)
+            throw new AppError("TASK_SCOPE_MISMATCH", "子任务不属于此主会话／工作空间");
+        return row;
+    }
+    list(scope) {
+        this.store.session(scope.workspaceId, scope.sessionId);
+        const row = this.store.prepare("SELECT * FROM task_parents WHERE sessionId=?").get(scope.sessionId);
+        const rows = this.rows("WHERE workspaceId=? AND parentSessionId=? ORDER BY createdAt,rowid", scope.workspaceId, scope.sessionId);
+        const refs = new Map(this.store.prepare(`SELECT ref.taskId,ref.seq FROM task_model_refs ref
+      JOIN tasks t ON t.id=ref.taskId WHERE t.workspaceId=? AND t.parentSessionId=?`).all(scope.workspaceId, scope.sessionId)
+            .map(entry => [String(entry.taskId), `t${entry.seq}`]));
+        const inputs = new Map(), results = new Map();
+        for (const entry of this.store.prepare(`SELECT i.taskId,i.inputId,i.runId,i.state,i.error FROM task_input_receipts i
+      JOIN tasks t ON t.id=i.taskId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY i.updatedAt,i.rowid`).all(scope.workspaceId, scope.sessionId)) {
+            const { taskId, ...receipt } = entry, id = String(taskId), group = inputs.get(id) ?? [];
+            group.push(receipt);
+            inputs.set(id, group);
+        }
+        for (const entry of this.store.prepare(`SELECT tr.taskId,tr.id,tr.runId,json_extract(tr.body,'$.status') AS status FROM task_results tr
+      JOIN tasks t ON t.id=tr.taskId WHERE t.workspaceId=? AND t.parentSessionId=? ORDER BY tr.rowid`).all(scope.workspaceId, scope.sessionId)) {
+            const id = String(entry.taskId), group = results.get(id) ?? [];
+            group.push({ id: String(entry.id), runId: String(entry.runId), status: entry.status });
+            results.set(id, group);
+        }
+        const elapsed = new Map(this.store.prepare(`SELECT tr.taskId,COALESCE(SUM(MAX(0,r.endedAt-r.startedAt)),0) AS ms
+      FROM tasks t JOIN task_results tr ON tr.taskId=t.id JOIN runs r ON r.id=tr.runId
+      WHERE t.workspaceId=? AND t.parentSessionId=? GROUP BY tr.taskId`).all(scope.workspaceId, scope.sessionId)
+            .map((entry) => [String(entry.taskId), Number(entry.ms)]));
+        return {
+            tasks: rows.map((task) => ({ ...task, ref: refs.get(task.id) ?? this.modelRef("task", task.id), budgets: this.budgets(task.budgets),
+                inputs: inputs.get(task.id) ?? [], results: results.get(task.id) ?? [], elapsedMs: elapsed.get(task.id) ?? 0 })),
+            frozen: !!row?.frozen,
+            defaultModel: this.settings().selection,
+        };
+    }
+    budgets(body) {
+        const saved = JSON.parse(body);
+        return {
+            concurrency: saved.concurrency ?? defaultBudgets.concurrency,
+            workMs: saved.workMs ?? defaultBudgets.workMs,
+        };
+    }
+    preferences() {
+        const row = this.store.db
+            .prepare("SELECT body FROM task_settings WHERE id=1")
+            .get();
+        return row ? this.budgets(String(row.body)) : { ...defaultBudgets };
+    }
+    settings() {
+        const row = this.store.db.prepare("SELECT selection FROM task_model_preferences WHERE id=1").get();
+        return { budgets: this.preferences(), selection: row?.selection ? JSON.parse(String(row.selection)) : null };
+    }
+    frozen(scope) {
+        return !!this.store.db
+            .prepare("SELECT frozen FROM task_parents WHERE sessionId=?")
+            .get(scope.sessionId)?.frozen;
+    }
+    freeze(scope) {
+        this.stopEpochs.set(scope.sessionId, this.stopEpoch(scope) + 1);
+        this.store.db
+            .prepare("INSERT INTO task_parents(sessionId,frozen) VALUES(?,1) ON CONFLICT(sessionId) DO UPDATE SET frozen=1")
+            .run(scope.sessionId);
+    }
+    images(inputId) {
+        const row = this.store.db.prepare("SELECT body FROM task_input_images WHERE inputId=?").get(inputId);
+        return row ? JSON.parse(String(row.body)) : [];
+    }
+    skills(inputId) {
+        const row = this.store.db.prepare("SELECT body FROM task_input_skills WHERE inputId=?").get(inputId);
+        return row ? JSON.parse(String(row.body)) : [];
+    }
+    queue(taskId, body, mode, images = [], id = randomUUID(), skills = []) {
+        this.store.db
+            .prepare("INSERT INTO task_inputs VALUES(?,?,?,?,'queued',NULL,?)")
+            .run(id, taskId, body, mode, Date.now());
+        this.store.db.prepare("INSERT INTO task_input_receipts VALUES(?,?,NULL,'queued',NULL,?)").run(id, taskId, Date.now());
+        if (images.length)
+            this.store.db.prepare("INSERT INTO task_input_images VALUES(?,?)").run(id, JSON.stringify(images));
+        if (skills.length)
+            this.store.db.prepare("INSERT INTO task_input_skills VALUES(?,?)").run(id, JSON.stringify(skills));
+        return id;
+    }
+    inputs(row, state) {
+        return this.store.db
+            .prepare("SELECT * FROM task_inputs WHERE taskId=? AND state=? ORDER BY createdAt,rowid")
+            .all(row.id, state);
+    }
+    receipt(id, state, error = null, runId, taskId) {
+        return this.store.db.prepare(`UPDATE task_input_receipts SET state=?,error=?,updatedAt=?,runId=COALESCE(?,runId)
+      WHERE inputId=? AND state NOT IN ('delivered','cancelled')
+      AND (? IS NULL OR taskId=?) AND (? IS NULL OR runId IS NULL OR runId=?)`)
+            .run(state, error, Date.now(), runId ?? null, id, taskId ?? null, taskId ?? null, runId ?? null, runId ?? null).changes > 0;
+    }
+    /** Retain only the initial, uniquely handed-off delegation after a coordinator-proven denial. */
+    saveInitialRetry(row, run) {
+        const rejected = run.status === "failed" && run.reasonCode === "BINDING_REJECTED" && !!this.store.bindingRejection(run.id);
+        // Startup may have preserved this witness before deleting interrupted live inputs.
+        const saved = rejected ? this.initialRetry(row, run.id) : undefined;
+        if (saved)
+            return saved.inputId;
+        this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+        if (!rejected)
+            return;
+        const inputs = ["queued", "waiting", "starting", "inflight"].flatMap(state => this.inputs(row, state));
+        const input = inputs[0];
+        if (inputs.length !== 1 || input.id !== row.initialInputId || input.mode !== "steer" || input.state !== "starting" ||
+            input.runId !== run.id || this.images(input.id).length || this.skills(input.id).length ||
+            this.store.db.prepare("SELECT 1 FROM task_input_receipts WHERE taskId=? AND state IN ('accepted','delivered','cancelled') LIMIT 1").get(row.id))
+            return;
+        this.store.db.prepare("INSERT INTO task_initial_retries VALUES(?,?,?,?)").run(row.id, run.id, input.id, input.body);
+        return input.id;
+    }
+    initialRetry(row, expectedRunId) {
+        if (row.runId !== expectedRunId || row.status !== "failed")
+            return;
+        return this.store.db.prepare(`SELECT p.inputId,p.body FROM task_initial_retries p
+      JOIN task_input_receipts r ON r.inputId=p.inputId AND r.taskId=p.taskId AND r.runId=p.runId
+      JOIN run_binding_rejections b ON b.runId=p.runId
+      WHERE p.taskId=? AND p.runId=? AND p.inputId=? AND r.state='failed'`)
+            .get(row.id, expectedRunId, row.initialInputId ?? "");
+    }
+    /** Caller owns the enqueue transaction. Preserve the initial input identity, never an append. */
+    retryInitial(row, expectedRunId) {
+        const proof = this.initialRetry(row, expectedRunId);
+        if (!proof)
+            throw new AppError("RUN_MISMATCH", "未发送证明已失效；未重新发送原任务。");
+        this.store.db.prepare("DELETE FROM task_initial_retries WHERE taskId=?").run(row.id);
+        this.store.db.prepare("INSERT INTO task_inputs VALUES(?,?,?,'steer','queued',NULL,?)")
+            .run(proof.inputId, row.id, proof.body, Date.now());
+        this.store.db.prepare("UPDATE task_input_receipts SET state='queued',runId=NULL,error=NULL,updatedAt=? WHERE inputId=? AND taskId=?")
+            .run(Date.now(), proof.inputId, row.id);
+        return proof.inputId;
+    }
+    elapsed(taskId) {
+        return Number(this.store.db.prepare(`SELECT COALESCE(SUM(MAX(0,r.endedAt-r.startedAt)),0) AS ms
+      FROM runs r JOIN task_results tr ON tr.runId=r.id WHERE tr.taskId=?`).get(taskId).ms);
+    }
+    capacity(scope, count = 1) {
+        const active = Number(this.store.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE parentSessionId=? AND status IN ('queued','starting','running','stopping')").get(scope.sessionId).n);
+        if (active + count > 32)
+            throw new AppError("TASK_LIMIT", "每个主会话最多 32 个活动／排队子任务");
+    }
+    enqueue(row) {
+        this.capacity(parent(row), ["queued", "starting", "running", "stopping"].includes(row.status) ? 0 : 1);
+        this.store.db.prepare("DELETE FROM task_stops WHERE taskId=?").run(row.id);
+        this.store.db.prepare("DELETE FROM task_queue_order WHERE taskId=?").run(row.id);
+        this.store.db.prepare("INSERT INTO task_queue_order(taskId) VALUES(?)").run(row.id);
+        this.store.db.prepare("UPDATE tasks SET status='queued',error=NULL,workStartedAt=NULL,workDeadlineAt=NULL,summaryDeadlineAt=NULL,budgetRevision=budgetRevision+1 WHERE id=?").run(row.id);
+    }
+    deliver(row, ids, state = "delivered", runId) {
+        for (const id of ids) {
+            const input = this.store.db.prepare("SELECT runId,state FROM task_inputs WHERE id=? AND taskId=?").get(id, row.id);
+            if (!input) {
+                if (state === "delivered" && runId)
+                    this.store.db.prepare("UPDATE task_input_receipts SET state='delivered',error=NULL,updatedAt=? WHERE inputId=? AND taskId=? AND runId=? AND state!='delivered'")
+                        .run(Date.now(), id, row.id, runId);
+                continue;
+            }
+            if (runId && (input.runId !== runId || input.state === "waiting"))
+                continue;
+            this.receipt(id, state, null, runId, row.id);
+            this.drafts.delete(id);
+            this.store.db
+                .prepare("DELETE FROM task_inputs WHERE id=? AND taskId=?")
+                .run(id, row.id);
+        }
+    }
+    create(scope, anchor, context, definitions, selection) {
+        const budgets = this.preferences(), taskIds = [];
+        this.store.db.exec("BEGIN IMMEDIATE");
+        try {
+            this.capacity(scope, definitions.length);
+            this.store.db
+                .prepare("INSERT OR IGNORE INTO task_parents(sessionId) VALUES(?)")
+                .run(scope.sessionId);
+            for (const d of definitions) {
+                const id = randomUUID(), child = randomUUID(), initialInputId = randomUUID();
+                taskIds.push(id);
+                this.store.db
+                    .prepare("INSERT INTO sessions(id,workspaceId,title,updatedAt) VALUES(?,?,?,?)")
+                    .run(child, scope.workspaceId, d.title ?? "子任务", Date.now());
+                this.store.db
+                    .prepare("INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)")
+                    .run(child, JSON.stringify(selection));
+                this.store.db
+                    .prepare("INSERT INTO tasks(id,workspaceId,parentSessionId,sessionId,anchor,title,context,initialInputId,description,status,budgets,createdAt) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?)")
+                    .run(id, scope.workspaceId, scope.sessionId, child, anchor, d.title ?? null, context, initialInputId, d.task, JSON.stringify(budgets), Date.now());
+                this.modelRef("task", id);
+                this.store.db.prepare("INSERT INTO task_queue_order(taskId) VALUES(?)").run(id);
+                this.queue(id, `任务背景:\n${context}\n\n当前任务:\n${d.task}`, "steer", [], initialInputId);
+            }
+            this.store.db.exec("COMMIT");
+        }
+        catch (e) {
+            this.store.db.exec("ROLLBACK");
+            throw e;
+        }
+        return { taskIds, budgets };
+    }
+}
+//# sourceMappingURL=records.js.map

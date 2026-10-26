@@ -1,0 +1,26 @@
+{
+  "run_id": "2026-10-25T05-26-13-915-07-00-dgbck7-p50968",
+  "started_at": "2026-10-25T05:26:13.915-07:00",
+  "pid": 50968,
+  "ppid": 66556,
+  "process_role": "main",
+  "cli_version": "1.1.78",
+  "node_version": "v24.19.0",
+  "platform": "win32",
+  "arch": "x64",
+  "cwd": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\cli-workspace",
+  "project_id": "F--Axiom-axiom2-review-artifacts-qoder-audit-20260817-cli-workspace",
+  "argv": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\official\\package\\bundle\\qodercli.js",
+    "--version"
+  ],
+  "env_flags": {
+    "debug": false,
+    "remote_worker": false,
+    "ci": false
+  },
+  "log_files": {
+    "process": "qodercli.log"
+  }
+}

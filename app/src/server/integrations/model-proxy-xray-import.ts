@@ -3,7 +3,8 @@ import { MaintenanceError } from "../../shared/maintenance.js";
 import { proxySourceLimit, type ProxyNode } from "../../shared/model-proxy.js";
 import { coreConfiguration } from "./model-proxy-process.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
-import { prepareXrayImporter, xrayImporterDirectory } from "./model-proxy-xray-installer.js";
+import { checkXrayImporter, xrayImporterDirectory } from "./model-proxy-xray-installer.js";
+import { join } from "node:path";
 import { runNative } from "./native-process.js";
 
 export function shareSourceLines(source: string): string[] {
@@ -42,7 +43,14 @@ export async function inspectXraySource(root: string, source: string, signal: Ab
     seen.add(link); return true;
   });
   if (!candidates.length) throw Error("未找到支持的 Xray 分享链接。支持 VLESS、VMess、Trojan 和 Shadowsocks；Clash 配置请使用 mihomo。");
-  const executable = await prepareXrayImporter(root, signal, progress);
+  progress("正在校验 Xray 节点识别程序…");
+  try {
+    if (!await checkXrayImporter(root, signal)) throw Error("missing");
+  } catch (error) {
+    if (signal.aborted || error instanceof MaintenanceError) throw error;
+    throw Error("Xray 节点识别程序缺失或损坏，请在安装与更新中重新安装 Xray-core。");
+  }
+  const executable = join(xrayImporterDirectory(root), "xray-knife" + (process.platform === "win32" ? ".exe" : ""));
   maintenancePhase("validating", "正在使用 Xray 转换器识别节点…");
   const timed = currentMaintenance() ? signal : AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
   const results = new Array<{ name: string; type: string; source: string } | undefined>(candidates.length);

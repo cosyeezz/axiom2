@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, realpathSync, symlinkSync, existsSync, lstatSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, realpathSync, symlinkSync, linkSync, existsSync, lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -84,13 +84,23 @@ test("maintenance lease and startup reservation still exclude offline preview", 
     assert.throws(f.get, /启动或维护/); assert.equal(startup.prepare("SELECT token FROM startup").get()?.token, "a".repeat(64));
   } finally { lease.close(); startup.close(); f.cleanup(); }
 });
-test("preview does not repair interrupted jobs or accept linked config", () => {
+test("preview does not repair interrupted jobs", () => {
   const f = fixture();
   try {
     atomicRtkJson(join(f.base, "job.json"), { id: randomUUID(), kind: "uninstall", running: true, message: "interrupted" });
     const before = tree(f.base), state = f.get();
     assert.equal(state.job?.running, false); assert.match(state.job!.error!, /中断/); assert.deepEqual(tree(f.base), before);
-    const outside = join(f.root, "outside.json"); writeFileSync(outside, readFileSync(rtkConfigPath(f.root))); rmSync(rtkConfigPath(f.root)); symlinkSync(outside, rtkConfigPath(f.root));
+  } finally { f.cleanup(); }
+});
+for (const kind of ["hardlink", "symlink"]) test(`offline preview rejects ${kind} config without changing its target`, t => {
+  const f = fixture();
+  try {
+    const outside = join(f.root, "outside.json"); writeFileSync(outside, readFileSync(rtkConfigPath(f.root))); rmSync(rtkConfigPath(f.root));
+    try { if (kind === "hardlink") linkSync(outside, rtkConfigPath(f.root)); else symlinkSync(outside, rtkConfigPath(f.root)); }
+    catch (error) {
+      if (kind === "symlink" && process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") { t.skip("Windows file symlink creation requires Developer Mode or elevated privilege; hardlink rejection is covered separately"); return; }
+      throw error;
+    }
     assert.throws(f.get, /维护记录/); assert.equal(JSON.parse(readFileSync(outside, "utf8")).revision, "initial");
   } finally { f.cleanup(); }
 });

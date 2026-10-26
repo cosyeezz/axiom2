@@ -1,0 +1,115 @@
+{
+  "attempt": "recovery-continuation-v3",
+  "scope": "remaining-five-models-only",
+  "pid": 55080,
+  "startedAt": "2026-10-25T19:55:56.824Z",
+  "priorAttempt": "recovery-v2",
+  "priorZeroPromptPreparationFailurePreserved": true,
+  "pacingMs": 30000,
+  "betweenModelsMs": 90000,
+  "maxPassesPerModel": 1,
+  "codeHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "0344731dfca9cc1c6bbd362faa08e02763fc13b49a1d7d83e13005d38dae4860"
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6"
+    }
+  ],
+  "models": [
+    {
+      "model": "minimax-m2.5",
+      "task": "t4017",
+      "vision": false,
+      "pid": 56680,
+      "startedAt": "2026-10-25T19:55:56.840Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T20:05:36.313Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T20:05:36.303Z",
+      "semanticFailureCount": 5,
+      "formatFailureCount": 16,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "glm-5",
+      "task": "t4019",
+      "vision": false,
+      "pid": 60788,
+      "startedAt": "2026-10-25T20:07:06.331Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T20:17:01.414Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T20:17:01.404Z",
+      "semanticFailureCount": 2,
+      "formatFailureCount": 16,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "qwen3-coder-next",
+      "task": "t4020",
+      "vision": false,
+      "pid": 52308,
+      "startedAt": "2026-10-25T20:18:31.430Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T20:28:09.229Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T20:28:09.218Z",
+      "semanticFailureCount": 7,
+      "formatFailureCount": 0,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "deepseek-3.2",
+      "task": "t4016",
+      "vision": false,
+      "pid": 36984,
+      "startedAt": "2026-10-25T20:29:39.241Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T20:39:51.051Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T20:39:51.039Z",
+      "semanticFailureCount": 3,
+      "formatFailureCount": 17,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "claude-sonnet-4.5",
+      "task": "t4046",
+      "vision": true,
+      "pid": 13540,
+      "startedAt": "2026-10-25T20:41:21.063Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T20:50:01.063Z",
+      "recordedTurns": 17,
+      "completedAt": null,
+      "semanticFailureCount": 1,
+      "formatFailureCount": 16,
+      "stoppedByHttp429": true
+    }
+  ],
+  "finishedAt": "2026-10-25T20:50:01.065Z",
+  "hashesUnchanged": true,
+  "allPlannedModelsVisited": true,
+  "allProtocolsAndSemanticChecksPassed": false,
+  "allStrictFormatsPassed": false,
+  "controllerExitCode": 1
+}

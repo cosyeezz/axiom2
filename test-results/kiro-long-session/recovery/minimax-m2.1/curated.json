@@ -1,0 +1,843 @@
+{
+  "model": "minimax-m2.1",
+  "taskRef": "t4018",
+  "sessionIdSha256": "486b2902f912ee36eb42dcc1704c51cbe62b70d7dd9f5199e3619fd8cff476d8",
+  "harness": {
+    "version": "v2-controlled",
+    "inferredLegacy": false,
+    "controlledPrompts": true,
+    "paceMs": 30000,
+    "receiptTag": "recovery-v2",
+    "promptCorrelation": "receipt-inputIds-and-matching-user-text",
+    "sourceHashes": [
+      {
+        "path": "app/scripts/kiro-live-check.mjs",
+        "sha256": "cd685a611fd5de7067fde7db34dc6ededc04723bb31a3717adf52f5c810e266b"
+      },
+      {
+        "path": "app/scripts/kiro-live-plan.mjs",
+        "sha256": "7df6d20d325f826a9a65fa288bf5ac1820a76beca6258ff37118fa1fb6460c6b"
+      }
+    ],
+    "fixtures": [
+      {
+        "name": "inventory.csv",
+        "bytes": 52,
+        "sha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb"
+      },
+      {
+        "name": "ledger.json",
+        "bytes": 78,
+        "sha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f"
+      }
+    ],
+    "workerPreparation": {
+      "strategy": "intermediate-profile-cold-reload",
+      "status": "completed",
+      "modelMessagesUnchanged": true,
+      "reloadIdSha256": "76d279f84964f81c29037d649636827caac85cef2155aa4cbfc3208b13ddcea2"
+    }
+  },
+  "complete": true,
+  "matrixRoundCount": 20,
+  "protocolCompleted": true,
+  "protocolCompletedRoundCount": 20,
+  "protocolFailureRoundCount": 0,
+  "rateLimitedRoundCount": 0,
+  "semanticPassed": false,
+  "semanticFailureCount": 3,
+  "checkedRoundCount": 20,
+  "uncheckedRoundCount": 0,
+  "formatCheckedRoundCount": 20,
+  "formatFailureCount": 16,
+  "formatPassed": false,
+  "defaultsUnchangedVerifiedByDriver": true,
+  "completedAt": "2026-10-25T19:37:28.985Z",
+  "observerFailure": null,
+  "rounds": [
+    {
+      "label": "long-01-seed",
+      "runId": "7b13f093-47dd-4a81-9df9-4ccf3d9ffacd",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "bbb27710373d9b67333006b58c06ab2c590975b2ebe6a7ae783a0de238a23f28",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 107,
+      "observedMs": 5563,
+      "promptCorrelation": {
+        "inputIdSha256": "17a1b6b1f4d701a879740702da9a392b3c052ce6f5cdfd1a6a2e6e022d69868e",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "one-line",
+        "complied": true
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-02-read",
+      "runId": "420e0797-36b6-4da1-8e1e-dbcec75934cc",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "03d2278103bd62f329297df60512a57b8e8ba2bb049830ef13c5cee1a0b711c4",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 580,
+      "observedMs": 8438,
+      "promptCorrelation": {
+        "inputIdSha256": "8cc259e9503e5f98a590081eb870212823f1f1cf01b55cb6f703ac13987d5434",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [
+        {
+          "name": "read",
+          "callIdSha256": "bb79a9f40ba1378826e13fe6bc3ba69573f218dea6ba408c1868cd82fb35a2b0",
+          "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+        }
+      ],
+      "results": [
+        {
+          "name": "read",
+          "callIdSha256": "bb79a9f40ba1378826e13fe6bc3ba69573f218dea6ba408c1868cd82fb35a2b0",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+          "returnedImageCount": 0
+        }
+      ],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-03-reasoning",
+      "runId": "c30e648c-beb1-4760-8ef5-1f0a8ac87fed",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "4666d4865723c329645d5f44cc1c166df2a970dfda3a73fe5b8ac276acc086ae",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 235,
+      "observedMs": 5621,
+      "promptCorrelation": {
+        "inputIdSha256": "a8c0dc9a7b59c080607682d6da485553f13bd38836487a7c1722cb2b2a62dd22",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-04-error-recovery",
+      "runId": "56ae0bd6-e807-48a3-935c-ad47b6ce83e0",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "2c62f13305063b845d1af03e2a30eb2d28a930d7abc4c182117f1bd939b8d3c0",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 281,
+      "observedMs": 8476,
+      "promptCorrelation": {
+        "inputIdSha256": "f42fa3f2a15b24915bc238489649e28f1caf23a31078d956dd37ea8d1ecb2f04",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [
+        {
+          "name": "read",
+          "callIdSha256": "6ccbc85152e0fe45675ea73b835ed5a6ac5517880c7bf41cd32b71216b994ce1",
+          "argumentsSha256": "e06cf7e5f1879976aae6fa5ca2da228d585789311b057296152d552fc9acd709"
+        },
+        {
+          "name": "read",
+          "callIdSha256": "7074b9f54fbd240febdece2f07d9d3d0c24626b78445ed826beeeca81efb00a7",
+          "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+        }
+      ],
+      "results": [
+        {
+          "name": "read",
+          "callIdSha256": "6ccbc85152e0fe45675ea73b835ed5a6ac5517880c7bf41cd32b71216b994ce1",
+          "status": "failed",
+          "hasError": false,
+          "textSha256": "b5c2ba40002bce11f03cfa8a602def4db0efa151cacfe79f6f54280496d8e044",
+          "returnedImageCount": 0
+        },
+        {
+          "name": "read",
+          "callIdSha256": "7074b9f54fbd240febdece2f07d9d3d0c24626b78445ed826beeeca81efb00a7",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+          "returnedImageCount": 0
+        }
+      ],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-05-off-memory",
+      "runId": "b78a04f8-bbf8-4168-8b47-4d3348ca82e0",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "3976108702bebeec16b147beaa15ed35674bcf784ba042250942e78503374af3",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 108,
+      "observedMs": 5818,
+      "promptCorrelation": {
+        "inputIdSha256": "69b2ff52f891a00dcfd817421fd353f6e1830b0523131f23cb336a8c6c45e64e",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": false,
+        "category": "semantic-assertion",
+        "errorSha256": "6d3acf7be4ac4cec950f22dcc23e0ae84d6f932448587ab7c59c811b2ea53305"
+      }
+    },
+    {
+      "label": "long-06-large-attachment",
+      "runId": "7335da1b-8a42-4702-a9a8-39d2e5cea851",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "1d2a2decba9749f82f1111fbeb5daec0004066eeaa866ed59f3fdc3ebbaa2d3b",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 161,
+      "observedMs": 6007,
+      "promptCorrelation": {
+        "inputIdSha256": "715cd604d47dda89da8d13fb4baac75060cb3d0abc65272a3d9f6c2f16657fb6",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [
+        {
+          "bytes": 73395,
+          "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+        }
+      ],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-07-delayed-memory",
+      "runId": "7b678d5d-197d-48b2-987f-ece2d9b4d1ee",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "70696166b59dcf470a39b59ac38a188b5760c87bda0b0d6b07315b9ebccaf54d",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 107,
+      "observedMs": 5918,
+      "promptCorrelation": {
+        "inputIdSha256": "0e9846c96b59d307e5a41676bbd196f132e9698f80e694b28d996a1fa5952315",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-08-two-reads",
+      "runId": "9b5c8fe7-c825-4908-93fe-71594f94bfab",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "f05de0b618d46946ebd503cc6f618e2f5d3c6aa1b8c2bc5a1c55a5070db3b78e",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 281,
+      "observedMs": 7649,
+      "promptCorrelation": {
+        "inputIdSha256": "d3bd58b1719247ee32942d2bc78cd94e3fe372704f698376cfe76fe9e58685fb",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [
+        {
+          "name": "read",
+          "callIdSha256": "cb9dc8ef4dfeeb3f9c7d64b4202d789854ac7ebef9672cfcaad05011b2facbc9",
+          "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+        },
+        {
+          "name": "read",
+          "callIdSha256": "814c14780fc62b3f678f74de1b97dea5d3d6a5f8a3af0c7eba6277702432ae8c",
+          "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+        }
+      ],
+      "results": [
+        {
+          "name": "read",
+          "callIdSha256": "cb9dc8ef4dfeeb3f9c7d64b4202d789854ac7ebef9672cfcaad05011b2facbc9",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+          "returnedImageCount": 0
+        },
+        {
+          "name": "read",
+          "callIdSha256": "814c14780fc62b3f678f74de1b97dea5d3d6a5f8a3af0c7eba6277702432ae8c",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+          "returnedImageCount": 0
+        }
+      ],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-09-state-update",
+      "runId": "2d248892-d133-45d9-86a5-3058e238ed90",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "9864af730629657df9e100b81a62e23b9069f917402ba6889a5c607ff81b1b62",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 161,
+      "observedMs": 5422,
+      "promptCorrelation": {
+        "inputIdSha256": "188de85f3283b4674abca44c77b3b54d8a169a9e5983296ab2bc31f052463784",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-10-write-read",
+      "runId": "aa24851a-4cf8-4bef-aa1a-79f036265bd4",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "4c6149b83f8a4eac947e890983867a0c34fcd36472dc1dea6a9dec01545fee69",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 504,
+      "observedMs": 10892,
+      "promptCorrelation": {
+        "inputIdSha256": "3b8eff2b9c5a014b06359f176c4d7fbae5dc26ea370f65dbd45d452313b69655",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [
+        {
+          "name": "powershell",
+          "callIdSha256": "510a3fbd34308ace72947759e92be1ab9bcad3b37ce4807980b9e09591b4b2db",
+          "argumentsSha256": "5a26321b4626db5f79bf746a117038ad3fa40a4974ee0ba28d25d56bad0926a8"
+        },
+        {
+          "name": "read",
+          "callIdSha256": "25b153cb2b6a1c2b32a07b5e31055efa9cd87ce98cfa53507568d58bbc99da8e",
+          "argumentsSha256": "f5cc38d508b047b2efa9b0558bb9d6aec8151ffc3735c44abb13b03a6c97f71a"
+        }
+      ],
+      "results": [
+        {
+          "name": "powershell",
+          "callIdSha256": "510a3fbd34308ace72947759e92be1ab9bcad3b37ce4807980b9e09591b4b2db",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "efefc15c24ee8645a3f5f6958389db729c1577eb6b32aeac4caab2a86d90daa3",
+          "returnedImageCount": 0
+        },
+        {
+          "name": "read",
+          "callIdSha256": "25b153cb2b6a1c2b32a07b5e31055efa9cd87ce98cfa53507568d58bbc99da8e",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "e395eed752dc41fcee5000cc4c3fac134c55497ddd9df3a4f62a101c6ac4353c",
+          "returnedImageCount": 0
+        }
+      ],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": false,
+        "category": "semantic-assertion",
+        "errorSha256": "e48ff28535afe8b6cffafd6e1e82b4e88e6ae78ca4b9b08e2c9ed45260af63d6"
+      }
+    },
+    {
+      "label": "long-11-text-table",
+      "runId": "1a1d150d-a1ba-49c3-bd75-c4a486ab8c4f",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "00a6f8634954cac945c81e6e1f1c9185e47e5cb872619cf7bbb654fda720cbb1",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 99,
+      "observedMs": 5328,
+      "promptCorrelation": {
+        "inputIdSha256": "3938c8aba42910811436c75ae080e22e8ff290931d15c4c799dae6a3c994d403",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-12-follow-up",
+      "runId": "c4b87d43-9aa4-4fe6-8b01-a99c71f2206a",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "0c0fd92e9b5fdaf01a62456ff9033f04577e63f073bc86878348133c11a901a8",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 147,
+      "observedMs": 5234,
+      "promptCorrelation": {
+        "inputIdSha256": "1b31c7b4519b0b42fb09ea329bd0a1ab7dd8dfa1378e1177246b536f06e2c5a4",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-13-code-review",
+      "runId": "7443bda5-6f16-4556-b525-e61379b202d8",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "111605da2919f92f445270fa379ebb50401cbd44a3054a102613e2d58ce3e775",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 223,
+      "observedMs": 5540,
+      "promptCorrelation": {
+        "inputIdSha256": "75beca8ad7fde34da12914f3f802c297b94524d20aafbe7f343c623ddeead82e",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-14-history-recall",
+      "runId": "103bf93e-6cf8-4552-a7e8-729a4e809216",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "e86cfe4ad10cad81d523393bfb9ba9e8de77debe43742f37b9b8fc535d67c04c",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 165,
+      "observedMs": 5541,
+      "promptCorrelation": {
+        "inputIdSha256": "673468316814850abbe0336ecfdaa36b1054db0ca2bfb75942abbab8c21f5024",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-15-second-attachment",
+      "runId": "dac0ce7b-904a-41e8-b5e4-6b039252111d",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "1886ca5552b4b2763c8107daadcb7287b2687096b4d39a389196e5bb5c5ddc0d",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 315,
+      "observedMs": 7151,
+      "promptCorrelation": {
+        "inputIdSha256": "165643ac438f40587da309e8568e89b62c02c16e9c0b8dd16439dc7780956347",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [
+        {
+          "bytes": 73395,
+          "sha256": "82e1475af88951ba36ed30140c6637ead3541d19ff1454937ccd1b003302d7b4"
+        }
+      ],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-16-grade-memory",
+      "runId": "406eb4de-c371-4964-a8fe-fb5f7d2308eb",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "f48b980d5e9ad62d375d272dcafb53ff5614574d4cb0fcca76b6e5b76003c581",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 173,
+      "observedMs": 9845,
+      "promptCorrelation": {
+        "inputIdSha256": "2d2951fd4c9fdd41fb42324b5f1cab3e2d12aae4573a42b310a31d59495eda7e",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-17-shell-recovery",
+      "runId": "d4b1180a-4dd2-4d81-a4be-7035d39f55e8",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "a22724879058a1c9dcad0cbdb70c2bac44bcc4acee655fb45f2c79072738c007",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 184,
+      "observedMs": 9447,
+      "promptCorrelation": {
+        "inputIdSha256": "65476bee439912037ef3ce43cbab183cbdb833091a1fcbd8fc20b684bf0c7ce5",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "prefix-json",
+        "complied": false
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [
+        {
+          "name": "powershell",
+          "callIdSha256": "5f8464723cf33f5032833ef968b63996f1927b39b242759692fc5d4119cdb6b9",
+          "argumentsSha256": "11e851de40353689ad61e24944f673eede6b9fc9597e648d8165077a3845e04f"
+        },
+        {
+          "name": "read",
+          "callIdSha256": "fffc03770e3632c79be47a75af6990e9421bf501b22cd879a8ce8cafbb5b6ad5",
+          "argumentsSha256": "f5cc38d508b047b2efa9b0558bb9d6aec8151ffc3735c44abb13b03a6c97f71a"
+        }
+      ],
+      "results": [
+        {
+          "name": "powershell",
+          "callIdSha256": "5f8464723cf33f5032833ef968b63996f1927b39b242759692fc5d4119cdb6b9",
+          "status": "failed",
+          "hasError": false,
+          "textSha256": "8653eb37332725bc08af73fea8dfd57913b14270d156cbcee1c42562e582f4e2",
+          "returnedImageCount": 0
+        },
+        {
+          "name": "read",
+          "callIdSha256": "fffc03770e3632c79be47a75af6990e9421bf501b22cd879a8ce8cafbb5b6ad5",
+          "status": "completed",
+          "hasError": false,
+          "textSha256": "e395eed752dc41fcee5000cc4c3fac134c55497ddd9df3a4f62a101c6ac4353c",
+          "returnedImageCount": 0
+        }
+      ],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": false,
+        "category": "semantic-assertion",
+        "errorSha256": "e48ff28535afe8b6cffafd6e1e82b4e88e6ae78ca4b9b08e2c9ed45260af63d6"
+      }
+    },
+    {
+      "label": "long-18-unicode",
+      "runId": "52350804-15c2-4801-8761-6861cd3b6f47",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "5d53e82732af107489b0158b5efb5a1e6c45483b55c93d1aaa4cf6c082e0ad60",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 175,
+      "observedMs": 5794,
+      "promptCorrelation": {
+        "inputIdSha256": "ccc59cece989f368aacb552336c0ee03006d9b68bb73de63b6d33c580f01fad5",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": true
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-19-final-ledger",
+      "runId": "22f7110f-1054-4a9b-9589-78bc5d5f2400",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "1883f87c6a6d22b4ddf5c03154fa36ebe108045c7bbfe23ff6db7e2dc016f17d",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 628,
+      "observedMs": 7629,
+      "promptCorrelation": {
+        "inputIdSha256": "6ec5fe23a0f7662d550c4ab9acaa6ce3f2b864dfc9f87ed79e175c38d1a9dbbd",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "json-only",
+        "complied": true
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    },
+    {
+      "label": "long-20-checksum",
+      "runId": "c420c6f3-7e25-4683-82c5-d02a5118446b",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "status": "completed",
+      "protocolError": null,
+      "answerSha256": "303f2ab81b214674425f5fa1b723aa16a68230e005314ae3825c42a7fb390e7f",
+      "answerHasPriorReasoningWrapper": false,
+      "thinkingLength": 114,
+      "observedMs": 5463,
+      "promptCorrelation": {
+        "inputIdSha256": "81c257a99418d87efdf4ef07b536d4cfc08de4df5565bffb2e8ff69a133864cb",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "format": {
+        "kind": "one-line",
+        "complied": true
+      },
+      "promptImages": [],
+      "attachments": [],
+      "calls": [],
+      "results": [],
+      "unmatchedCallCount": 0,
+      "semanticCheck": {
+        "passed": true
+      }
+    }
+  ],
+  "supplementalTurns": []
+}

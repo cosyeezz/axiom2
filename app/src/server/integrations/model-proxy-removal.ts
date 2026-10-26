@@ -1,6 +1,6 @@
 import { assertToolProcessesStopped } from "./rtk-process.js";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { ProxyKernel } from "../../shared/model-proxy.js";
 import { managedChildren, managedDirectory, removeManagedDirectory } from "./managed-removal.js";
 import { proxyImporterDirectoryPattern, proxyVersionDirectoryPattern, readProxyConfig, type ProxyConfig } from "./model-proxy-config.js";
@@ -8,8 +8,10 @@ import { installedKernelPids, pidAlive, readKernelRecord, terminatePid } from ".
 
 export function assertProxyStopped(root: string, kernel: ProxyKernel, paths = proxyRemovalPlan(root, kernel, readProxyConfig(root)).paths) {
   assertToolProcessesStopped(root);
-  // Every version in the removal plan must be idle, including orphaned old installs.
-  const alive = installedKernelPids(paths.map(path => join(path, kernel + (process.platform === "win32" ? ".exe" : ""))), true);
+  // Importer workers use the maintenance process registry; cores use native PID enumeration.
+  const corePaths = paths.filter(path => !proxyImporterDirectoryPattern.test(basename(path)));
+  for (const path of paths) if (proxyImporterDirectoryPattern.test(basename(path))) assertToolProcessesStopped(path);
+  const alive = corePaths.length ? installedKernelPids(corePaths.map(path => join(path, kernel + (process.platform === "win32" ? ".exe" : ""))), true) : [];
   if (alive.length) throw Error(`尚有代理进程未确认退出（PID ${alive.join(", ")}），未删除程序文件；请停止线路后重试。`);
 }
 /** 启动前清理上一轮遗留的内核：先按记录的 PID 结束，再扫描安装目录兜底。
@@ -34,20 +36,11 @@ function readInstallation(root: string, kernel: ProxyKernel) {
   } catch { return undefined; }
 }
 
-export function proxyImporterRemovalPlan(root: string, config: ProxyConfig, verifyStopped = true) {
-  const parents = ["integrations", "model-proxy", "importer"];
-  const names = [...new Set([...managedChildren(root, parents.slice(0, -1), "importer", proxyImporterDirectoryPattern), ...(config.removalPending ?? []).filter(name => proxyImporterDirectoryPattern.test(name))])];
-  for (const name of names) {
-    const directory = managedDirectory(root, parents, name, proxyImporterDirectoryPattern);
-    if (directory && verifyStopped) assertToolProcessesStopped(directory);
-  }
-  return { names, paths: names.map(name => join(root, ...parents, name)), remove() { for (const name of names) removeManagedDirectory(root, parents, name, proxyImporterDirectoryPattern); } };
-}
-
 export function proxyRemovalPlan(root: string, kernel: ProxyKernel, config: ProxyConfig) {
   const parents = ["integrations", "model-proxy"];
   const versions = managedChildren(root, parents, "versions", new RegExp(proxyVersionDirectoryPattern.source.replace("(xray|mihomo)", kernel)));
-  const names = [...new Set([...versions, ...(config.installations[kernel] ? [config.installations[kernel]!.directory] : []), ...(config.removalPending ?? []).filter(name => proxyVersionDirectoryPattern.test(name) && name.startsWith(`${kernel}-`))])];
+  const importers = kernel === "xray" ? managedChildren(root, parents, "importer", proxyImporterDirectoryPattern) : [];
+  const names = [...new Set([...versions, ...importers, ...(config.installations[kernel] ? [config.installations[kernel]!.directory] : []), ...(config.removalPending ?? []).filter(name => kernel === "xray" && proxyImporterDirectoryPattern.test(name) || proxyVersionDirectoryPattern.test(name) && name.startsWith(`${kernel}-`))])];
   const target = (name: string) => proxyImporterDirectoryPattern.test(name)
     ? { parents: [...parents, "importer"], pattern: proxyImporterDirectoryPattern }
     : { parents: [...parents, "versions"], pattern: proxyVersionDirectoryPattern };

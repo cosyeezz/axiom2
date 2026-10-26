@@ -1,0 +1,15 @@
+﻿{
+    "workingDirectory":  "F:/Axiom/axiom-kiro-long-session-fb7031ed/app",
+    "temp":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-scope-temp",
+    "tmp":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-scope-temp",
+    "tests":  {
+                  "command":  "node --import tsx --test tests/kiro-live-check.test.ts",
+                  "exitCode":  0,
+                  "elapsedMs":  1083
+              },
+    "syntax":  {
+                   "command":  "node --check scripts/kiro-live-check.mjs",
+                   "exitCode":  0,
+                   "elapsedMs":  48
+               }
+}

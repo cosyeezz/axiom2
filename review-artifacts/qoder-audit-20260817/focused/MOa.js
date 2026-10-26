@@ -1,0 +1,1 @@
+function MOa(A){let e=OTg(A)??"";return{text:e,features:[],extra:{context:[],modelConfig:{key:A.model.key,is_reasoning:A.model.capabilities.reasoning.supported&&"none"!==A.reasoningEffort},originalContent:e},chatPrompt:"",imageUrls:null}}

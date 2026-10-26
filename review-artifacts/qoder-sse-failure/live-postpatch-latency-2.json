@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "stage": "model.request",
+      "at": 1792942190743,
+      "runId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b",
+      "requestId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b:1",
+      "purpose": "session"
+    },
+    {
+      "stage": "model.payload",
+      "at": 1792942191250,
+      "runId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b",
+      "requestId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b:1",
+      "purpose": "session"
+    },
+    {
+      "stage": "model.response",
+      "at": 1792942191379,
+      "runId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b",
+      "requestId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b:1",
+      "purpose": "session",
+      "durationMs": 636.7052000000003,
+      "status": 200
+    },
+    {
+      "stage": "model.end",
+      "at": 1792942191385,
+      "runId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b",
+      "requestId": "bb45268b-77d5-4f1d-99be-1591fbb94f5b:1",
+      "code": "other",
+      "purpose": "session",
+      "durationMs": 641.9300000000003
+    }
+  ]
+}

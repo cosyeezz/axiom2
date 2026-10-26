@@ -35,6 +35,21 @@ const tab = (name: string) => page.getByRole("tab", { name: new RegExp(`^${name}
 const config = () => page.getByLabel("MCP 连接配置（JSON）", { exact: true });
 async function waitConfig(text: string) { await page.waitForFunction(value => (document.querySelector<HTMLTextAreaElement>("#resource-config")?.value ?? "").includes(value), text); }
 async function discard() { await page.getByRole("button", { name: "放弃修改", exact: true }).click(); }
+async function captureConfirmation(name: string) {
+  const dialog = page.locator("dialog.confirm-dialog");
+  await dialog.waitFor();
+  await dialog.evaluate(async node => {
+    node.getBoundingClientRect();
+    await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {})));
+  });
+  const layout = await dialog.evaluate(node => {
+    const rect = node.getBoundingClientRect();
+    return { opacity: getComputedStyle(node).opacity, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight };
+  });
+  assert.equal(layout.opacity, "1", `confirmation animation settled: ${JSON.stringify(layout)}`);
+  assert.ok(layout.x >= 0 && layout.y >= 0 && layout.right <= layout.width && layout.bottom <= layout.height, `confirmation fits viewport after page scroll: ${JSON.stringify(layout)}`);
+  await page.screenshot({ path: join(artifacts, name) });
+}
 try {
   await page.goto(app.origin + "/settings.html");
   await page.getByRole("link", { name: "技能与 MCP", exact: true }).click();
@@ -273,7 +288,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
   await page.screenshot({ path: join(artifacts, "mcp-move-project-mobile.png"), fullPage: true });
   await page.getByRole("button", { name: "移动到全局", exact: true }).click();
-  await page.screenshot({ path: join(artifacts, "mcp-move-confirm-mobile.png") });
+  await captureConfirmation("mcp-move-confirm-mobile.png");
   await page.getByRole("button", { name: "确认移动", exact: true }).click();
   await page.getByText("MCP已移动到全局。已有会话可重载资源后使用。", { exact: true }).waitFor(); await waitConfig("可移动连接");
   assert.equal(await page.getByRole("combobox", { name: "作用范围", exact: true }).innerText(), "全局 · 所有项目");
@@ -312,7 +327,7 @@ try {
   await page.getByText("配置已保存。", { exact: true }).waitFor();
   await page.getByLabel("覆盖目标范围的同名资源", { exact: true }).check();
   await page.getByRole("button", { name: "复制到全局", exact: true }).click();
-  await page.screenshot({ path: join(artifacts, "mcp-copy-overwrite-mobile.png") });
+  await captureConfirmation("mcp-copy-overwrite-mobile.png");
   await page.getByRole("button", { name: "确认复制并覆盖", exact: true }).click();
   await page.getByText("MCP已复制到全局。已有会话可重载资源后使用。", { exact: true }).waitFor(); await waitConfig("副本覆盖验证");
   const overwrittenMcp = { ...projectOnly, description: "副本覆盖验证" };

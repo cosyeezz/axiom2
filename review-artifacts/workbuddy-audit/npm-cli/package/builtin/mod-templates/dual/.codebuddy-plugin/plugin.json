@@ -1,0 +1,6 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "Save completed answers to host storage and reuse them in Chat",
+  "client": {"platform":"web","entry":"client/index.js","format":"module","apiVersion":1}
+}

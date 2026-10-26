@@ -1,0 +1,62 @@
+{
+  "scope": "mock transport only; onPayload injects controls to isolate final requestBody projection",
+  "catalog": [
+    {
+      "id": "audit-reasoning-vision",
+      "reasoning": false,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 200000,
+      "maxTokens": 10000
+    },
+    {
+      "id": "numeric-disabled",
+      "reasoning": false,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 32768,
+      "maxTokens": 8192
+    }
+  ],
+  "openaiPayloads": [
+    {
+      "temperature": 0.25,
+      "reasoning_effort": "high",
+      "enable_thinking": true,
+      "top_p": 0.8,
+      "tool_choice": "required",
+      "context_length": 128000
+    },
+    {
+      "temperature": 0.25,
+      "reasoning_effort": "none",
+      "enable_thinking": false,
+      "top_p": 0.8,
+      "tool_choice": "required",
+      "context_length": 128000
+    }
+  ],
+  "wire": [
+    {
+      "parameters": {
+        "max_tokens": 300
+      },
+      "is_reasoning": true,
+      "session_id": "audit-session"
+    },
+    {
+      "parameters": {
+        "max_tokens": 300
+      },
+      "is_reasoning": true,
+      "session_id": "audit-session"
+    }
+  ],
+  "observations": {
+    "controlsDropped": true,
+    "offDoesNotDisableCatalogReasoning": true,
+    "numericDisabledListed": true
+  }
+}

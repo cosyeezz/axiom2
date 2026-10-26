@@ -1,0 +1,39 @@
+﻿# Kiro CLI endpoint static follow-up
+
+Source: `C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe`
+SHA-256 before/after: `0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a`
+Image base: `0x140000000`. All instruction addresses below are VA. String offsets are raw file offsets, not RVA.
+
+Conclusion: the binary has a verified data-flow path from a region-to-runtime mapping into the CodeWhisperer Streaming SDK config/client. This is stronger than a domain-string match. It is NOT proof every GenerateAssistantResponse invocation selects runtime: explicit overrides and a q-domain fallback exist, and the asynchronous operation/client dispatch is not fully reconstructed. No service availability was tested.
+
+## Verified runtime mapping and config construction
+
+- Function `0x1435add80–0x1435ae1a7` compares input region length/bytes; `0x1435addbc–0x1435addd4` matches us-east-1, then `0x1435addda`, `0x1435adde5`, `0x1435addf0` copy the 48-byte endpoint/region record at `0x15b8ed4c0`. Its endpoint pointer at +8 is `0x15b8ed498`, raw offset `0x1b8ec098`, text `https://runtime.us-east-1.kiro.dev`.
+- `0x1435ade8a–0x1435adea4` matches eu-central-1; `0x1435adeaa`, `0x1435adeb5`, `0x1435adec0` copy record `0x15b8ed518`. Endpoint pointer `0x15b8ed4f0`, raw offset `0x1b8ec0f0`, text `https://runtime.eu-central-1.kiro.dev`.
+- A duplicated mapping implementation exists at `0x142278780–0x142278ba7`, called at `0x1416a61d4`. Its runtime strings have raw offsets `0x1b76d9a0`, `0x1b76d9f8`. Primary detailed trace below uses the other implementation.
+- Constructor state-machine function `0x1415b4be0–0x1415b76fe`: `0x1415b5596` sets option index 0x1a; `0x1415b5599` calls override reader `0x1435ace30`. It compares the result to `0x8000000000000001` at `0x1415b55b6`; absent override calls the runtime mapper at `0x1415b55db`, with region pointer/length from state +0xc8/+0xd0. Present override copies the result at `0x1415b55e2–0x1415b5606`. Both populate state +0xd8 (endpoint pointer +0xe0, length +0xe8).
+- `0x1415b68a8` loads state +0xe8 and `0x1415b68ce` loads +0xe0; the bytes are copied into a String and passed at `0x1415b6939` to `0x141c69e40`. That routine wraps the String, stores resolver data at config +0xa8 and vtable `0x15b808558` at +0xb0 (`0x141c69efe–0x141c69f0c`).
+- After config transformations, `0x1415b6ac8` calls `0x140bed0c0`, whose verified references identify `codewhispererstreaming` (`0x140bed21e`, raw string `0x5d8234c`) and `amzn_codewhisperer_streaming_client::config::Config` (`0x140bed2ea`, raw string `0x5d7f436`). `0x1415b6ae5` calls `0x140bea5b0`, which references `AmazonCodeWhispererStreamingService` at `0x140beac0f`, raw string `0x5d7f150`, and streaming-client config.rs.
+- Prior report independently verifies GenerateAssistantResponse target setup at `0x140bdb355/0x140bdb3ab` in operation `0x140bdacc0–0x140bdbae2`. This follow-up identifies the matching service client; it does not claim the complete indirect operation dispatch has been recovered.
+
+## Override, profile, defaults, and q-domain distinction
+
+- `0x143616e30–0x143616e52` maps setting enum through length table `0x15b8f6588` and pointer table `0x15b8f67e8`. Index 0x19 = `api.codewhisperer.service` (raw `0x1b8f4775`); 0x1a = `api.krs.service` (`0x1b8f478e`); 0x1b = `api.cps.service` (`0x1b8f479d`). Thus runtime override above is specifically api.krs.service; the next distinct constructor branch selects api.cps.service.
+- Override reader `0x1435ace30` references `EndpointOverride`, fields endpoint/region, and errors for malformed values or empty endpoint/region. Exact accepted representations and malformed-value fallback behavior were not fully reconstructed. It queries settings object +0x48, optionally +0x90, then +0; the semantic names of those layers (e.g. environment/profile/global) are NOT established.
+- Upstream `0x1435ae1b0` reads setting 0x19 and endpoint/region members, and contains q.us-east-1/us-east-1 default-record copies at `0x1435ae3fc–0x1435ae419` and other branches. Constructor `0x1415b4cf6` invokes it, then chooses between supplied endpoint/region input and this result into state +0xa8. This state supplies the region used by the runtime mapper. Profile-loading paths coexist, with `Failed to get auth profile` messages, but full account/profile priority and active authentication branch are unresolved.
+- IMPORTANT fallback: mapper `0x1435add80` sends unrecognized hard-coded regions through `0x1435af010` and searches returned endpoint records. Exhaustion reaches `0x1435ae039–0x1435ae056`, copying record `0x15b8ed468`: `https://q.us-east-1.amazonaws.com` (pointer `0x15b8ed440`, raw `0x1b8ec040`) and `us-east-1`. Therefore it would be wrong to assert this mapper always returns runtime.*.kiro.dev. The helper's full lookup policy is unresolved.
+- `0x1435af2e0–0x1435af5b7` compares endpoint/region pairs with known q-domain records. Matching q.us-east-1 + us-east-1 returns 0 at `0x1435af5b3`; unmatched returns 1 at `0x1435af5a8`. This is classification, not a network request.
+- API-key construction `0x1415b8f70–0x1415bdf80` calls that classifier at `0x1415b95ee`. Unmatched routes to a `Using custom endpoint for API key` log branch (`0x1415b9655`). Known pairs take `0x1415ba12f`, copying endpoint records with q.us-east-1 and q.eu-central-1; the surrounding function references `Trying GetProfile for API key`, success/failure messages, and `amzn-codewhisperer-client/src/operation/get_profile.rs` at `0x1415bcaab`. This establishes a distinct profile-discovery context. It does not prove q-domain GenerateAssistantResponse availability.
+- Domain difference with catalog evidence is consequently consistent with separate clients/configuration and profile operations plus a legacy fallback, not evidence that catalog and streaming must share one host. The earlier catalog operation has not been used as chat execution proof.
+
+## Limits and isolated REA handoff
+
+No target execution, credentials/account reads, real API calls, installs, project edits, or shared REA sessions. Network reachability, HTTP method/path, authorization headers, active profile selection, and actual inference remain unverified. Runtime override should not be implemented as unconditional host replacement based on this evidence.
+
+For isolated REA if needed: prioritize `0x1415b4be0–0x1415b76fe`, especially `0x1415b5580–0x1415b5610` and `0x1415b6888–0x1415b6aea`; resolver setter `0x141c69e40–0x141c69f4a`; vtable `0x15b808558`; SDK client `0x140bea5b0–0x140beb794`; operation `0x140bdacc0–0x140bdbae2`; lookup helper `0x1435af010` (owner range not yet decoded). Main agent must create a new isolated configuration; no REA session was opened here.
+
+## Reproduction and artifacts
+
+Working directory: `F:/Axiom/axiom2` as supplied by session. Scripts/artifacts are isolated in this report's directory. Tool: Microsoft dumpbin `.../MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe /nologo /disasm /range:0xSTART,0xEND C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe`; exact per-run commands and exit codes are in `*.run.json`. All dumpbin invocations completed with exit 0. Static scans are candidate finders, not substitutes for the included decoded instructions. A one-off Node inline decoder failed with SyntaxError/exit 1 due to shell quotation; replaced by keys.cjs, which completed successfully. No tests or builds were run (static research only).
+
+Primary files: runtime2.asm.txt, constructor2.asm.txt, override2.asm.txt, routing2.asm.txt, q2.asm.txt, apikey2.asm.txt, endpoint-setter2.asm.txt, sdk-builder.asm.txt, sdk-client.asm.txt; setting-keys.json and constant-structures.json decode exact tables. Names are analyst labels, not recovered symbols; in particular streaming-setter.asm.txt is an early provisional label and is NOT the endpoint setter used in the primary trace. endpoint-xrefs.json/range-refs.json retain candidate-scan caveats.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, readdirSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as createTrap } from "node:net";
 import { tmpdir } from "node:os";
@@ -10,6 +10,7 @@ import { gzipSync } from "node:zlib";
 import { test } from "node:test";
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, proxyExecutable, readProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 import { readProxyShareSource } from "../src/server/integrations/model-proxy-share-source.js";
+import { proxyZipMember } from "../src/server/integrations/model-proxy-install.js";
 import { shareSourceLines } from "../src/server/integrations/model-proxy-xray-import.js";
 import { xrayImporterDirectory, xrayImporterRelease } from "../src/server/integrations/model-proxy-xray-installer.js";
 import { ModelProxyService } from "../src/server/integrations/model-proxy.js";
@@ -21,11 +22,14 @@ async function completed(service: ModelProxyService) {
   while (service.snapshot().job?.running && Date.now() < end) await delay(15);
   assert.equal(service.snapshot().job?.running, false); return service.snapshot();
 }
-function fixture(withCore = false) {
+function fixture(withCore = true) {
   const root = mkdtempSync(join(tmpdir(), "axiom-xray-import-"));
-  if (archive) {
+  if (archive && withCore) {
     mkdirSync(xrayImporterDirectory(root), { recursive: true });
     copyFileSync(archive, join(xrayImporterDirectory(root), xrayImporterRelease().asset));
+    const binary = "xray-knife" + (process.platform === "win32" ? ".exe" : "");
+    const executable = join(xrayImporterDirectory(root), binary);
+    writeFileSync(executable, proxyZipMember(readFileSync(archive), binary)); chmodSync(executable, 0o700);
   }
   const installation = { version: "26.10.21", directory: `xray-26.10.21-${randomUUID()}` };
   if (withCore && native) {
@@ -84,18 +88,39 @@ test("subscription fetch bounds decoded bytes, redirects, errors and cancellatio
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
-test("Xray invalid inputs require neither core and return sanitized errors", async () => {
-  const { root, service } = fixture();
+test("Xray inspection requires core installation and never installs on demand", async () => {
+  const { root, service } = fixture(false);
   try {
     await assert.rejects(service.command(cmd("inspect", { kernel: "unknown", source: "PRIVATE-TOKEN" })), { code: "INVALID_INPUT" });
-    await service.command(cmd("inspect", { kernel: "xray", source: "PRIVATE-TOKEN" }));
-    const result = await completed(service);
-    assert.ok(result.job?.error); assert.equal(JSON.stringify(result).includes("PRIVATE-TOKEN"), false);
+    await assert.rejects(service.command(cmd("inspect", { kernel: "xray", source: "PRIVATE-TOKEN" })), { code: "NOT_INSTALLED" });
+    const result = service.snapshot();
+    assert.equal(JSON.stringify(result).includes("PRIVATE-TOKEN"), false);
     assert.equal(result.inspection, undefined); assert.deepEqual(result.installations, {});
+    assert.equal(existsSync(xrayImporterDirectory(root)), false);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("real CLI imports without mihomo or Xray, binds private results to source and node, and preserves blank edits", { skip: !archive, timeout: 30000 }, async () => {
+test("missing or corrupt bundled importer asks to reinstall Xray without downloading", async () => {
+  const { root, service } = fixture();
+  try {
+    rmSync(xrayImporterDirectory(root), { recursive: true, force: true });
+    await service.command(cmd("inspect", { kernel: "xray", source: link("PRIVATE-TOKEN") }));
+    let result = await completed(service);
+    assert.match(result.job!.error!, /重新安装 Xray-core/);
+    assert.equal(existsSync(xrayImporterDirectory(root)), false);
+    mkdirSync(xrayImporterDirectory(root), { recursive: true });
+    const archivePath = join(xrayImporterDirectory(root), xrayImporterRelease().asset);
+    writeFileSync(archivePath, "corrupt cache");
+    writeFileSync(join(xrayImporterDirectory(root), "xray-knife" + (process.platform === "win32" ? ".exe" : "")), "not executed");
+    await service.command(cmd("inspect", { kernel: "xray", source: link("PRIVATE-TOKEN") }));
+    result = await completed(service);
+    assert.match(result.job!.error!, /重新安装 Xray-core/);
+    assert.equal(readFileSync(archivePath, "utf8"), "corrupt cache");
+    assert.equal(result.inspection, undefined); assert.equal(JSON.stringify(result).includes("PRIVATE-TOKEN"), false);
+  } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("real CLI imports with Xray installed, binds private results to source and node, and preserves blank edits", { skip: !archive, timeout: 30000 }, async () => {
   const { root, service } = fixture();
   const source = `${link("节点 A")}\n${link("节点 B")}\n${link("节点 A")}\nunsupported://PRIVATE-TOKEN`;
   try {
@@ -105,7 +130,7 @@ test("real CLI imports without mihomo or Xray, binds private results to source a
     const result = await completed(service); assert.equal(result.job?.error, undefined);
     assert.equal(result.inspection?.id, request.requestId);
     assert.deepEqual(result.inspection?.nodes, [{ name: "节点 A", type: "vless" }, { name: "节点 B", type: "vless" }]);
-    assert.match(result.job!.message, /跳过 2/); assert.deepEqual(result.installations, {});
+    assert.match(result.job!.message, /跳过 2/); assert.ok(result.installations.xray); assert.equal(result.installations.mihomo, undefined);
     for (const secret of [key, "11111111-1111", "PRIVATE-TOKEN", "outbounds", "streamSettings"]) assert.equal(JSON.stringify(result).includes(secret), false);
     const fields = { revision: "initial", name: "选择 B", kernel: "xray", source, node: "节点 B", inspectionId: result.inspection!.id };
     for (const invalid of [{ source: source + "\nx" }, { node: "missing" }, { inspectionId: "expired" }]) await assert.rejects(service.command(cmd("save", { ...fields, ...invalid })), { code: "INSPECTION_REQUIRED" });

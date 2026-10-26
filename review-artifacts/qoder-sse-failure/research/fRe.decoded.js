@@ -1,0 +1,132 @@
+async function* fRe(A, e, t, i) { let r, n, o, s, a, l, g = "", c = 0, B = !1, u = new Set, d = new Map, Q = new Map, E = 0, I = new Map, w = new Set, h = !1, p = null, f = -1, m = new Set, D = !1, S = new Set, k = null, y = (A, e, t = "adapter_transition") => { if (A >= 0) {
+    if (k) {
+        i?.onProviderFinish?.({ type: "provider_finish", stopReason: k, usage: sU(r) });
+        let A = Object.assign(new Error(`${"Open tool call interrupted by "}${k}`), { code: "tool_terminal", stopReason: k });
+        throw "max_tokens" === k ? new RO({ cause: A }) : A;
+    }
+    let n = d.get(A)?.id;
+    (!n?.trim() || S.has(n)) && H("invalid_tool_call_id", { id: n, index: e }), S.add(n), C.debug(`[StreamAdapter] Tool block closed: id=${n}, index=${e}, reason=${t}`);
+} let n = { type: "content_block_stop", index: e }; return A === mj && (o && (n.reasoning_item = o), o = void 0), n; }; function* P(A) { u.delete(A) && (yield y(A, c), c++); } function* M(A) { A.key === l?.key && A.item_id === l.item_id && A.output_index === l.output_index || (l = A, yield { type: "responses_output_item", item: A }); } function* F(A, e) { yield { type: "content_block_start", index: c, content_block: { type: "redacted_thinking", data: A, ...e ? { reasoning_item: e } : {} } }, yield { type: "content_block_stop", index: c }, c++; } function* v() { for (let A of u)
+    yield y(A, A < 0 ? c : c + A, "provider_finish"); u.clear(); } function* U() { D = !1, !u.has(mj) && (u.add(mj), f = c, yield { type: "content_block_start", index: c, content_block: { type: "thinking", thinking: "" } }); } let R = !1, b = [], T = 0, J = 0, H = (A, t) => { let i = { model: e, messageId: g, sseEventCount: T, ...t }; throw C.warn(`[StreamAdapter] Malformed tool call stream: reason=${A}, details=${JSON.stringify(i)}`), new u3e(A, i); }, x = A => { let e = d.get(A)?.scan.state; return void 0 === e || "partial" === e; }, N = A => "complete" !== d.get(A)?.scan.state, G = A => { for (let e of u)
+    if (e >= 0 && A(e))
+        return !0; return !1; }, L = (A, e = {}) => { let t = ppo(u); if (0 === t.length)
+    return []; "reject" === A && t.some(x) && H("content_after_tool_call_start", { ...e, activeToolBlocks: t, lastToolCall: n }); let i = []; for (let e of t)
+    i.push(y(e, c + e, "preserve" === A ? "provider_finish" : "adapter_transition")), u.delete(e); return c += E, d.clear(), Q.clear(), E = 0, R = !1, i; }; function* Y(A) { let e = A.responses_item; e && (s !== e.key && (yield* P(mj)), yield* M(e), s = e.key, A.reasoning_content && m.add(e.key)); let t = A.reasoning_content; if ("" === t && (D = !0), t && (yield* P(Ine), yield* U(), yield { type: "content_block_delta", index: c, delta: { type: "thinking_delta", thinking: t } }), A.reasoning_item) {
+    if (e)
+        return yield { type: "responses_reasoning_item", ref: e, item: A.reasoning_item }, yield* P(mj), void (!m.has(e.key) && A.reasoning_item.encrypted_content && (yield* P(Ine), yield* F(A.reasoning_item.encrypted_content, zxe(A.reasoning_item))));
+    let t = zxe(A.reasoning_item), i = Object.keys(t).length > 0;
+    if (D && A.reasoning_item.encrypted_content && (yield* U()), yield* P(Ine), !A.reasoning_content && !0 !== A.reasoning_summary_already_streamed) {
+        let e = A.reasoning_item.summary?.map(A => A.text).filter(Boolean).join("") ?? "";
+        e && (yield* U(), yield { type: "content_block_delta", index: c, delta: { type: "thinking_delta", thinking: e } });
+    }
+    A.reasoning_item.encrypted_content ? (yield* P(mj), yield* F(A.reasoning_item.encrypted_content, i ? t : void 0)) : (A.reasoning_item.id || s6(A.reasoning_item.content) || i && u.has(mj)) && (yield* U(), o = t);
+} A.signature && (D && (yield* U()), f >= 0 && (yield { type: "content_block_delta", index: f, delta: { type: "signature_delta", signature: A.signature } })); } let O = A => { let e = b.at(-1); !e?.reasoning_content || e.reasoning_item || e.signature || e.responses_item?.key !== A.responses_item?.key || !A.reasoning_content || A.reasoning_item || A.signature ? b.push({ reasoning_content: A.reasoning_content, reasoning_item: A.reasoning_item, reasoning_summary_already_streamed: A.reasoning_summary_already_streamed, signature: A.signature, responses_item: A.responses_item }) : e.reasoning_content += A.reasoning_content; }; function* j(A = "reject") { 0 !== b.length && (yield* L(A), yield* function* () { if (0 !== b.length) {
+    C.debug(`[StreamAdapter] Replaying buffered interleaved reasoning: details=${JSON.stringify({ model: e, messageId: g, sseEventCount: T, bufferedFragments: b.length })}`);
+    for (let A of b.splice(0))
+        yield* Y(A);
+} }()); } for await (let o of q2(A, t, i?.sseOptions)) {
+    let A = o.data?.trim();
+    if (!A)
+        continue;
+    if (T++, P1(A))
+        break;
+    let t, s = r$l(A);
+    if (void 0 !== s) {
+        if (i?.onCreditNotification && s)
+            try {
+                let A = JSON.parse(s);
+                A.notifications?.length && i.onCreditNotification(A.notifications);
+            }
+            catch {
+                C.warn(`[StreamAdapter] Failed to parse [NOTIFICATIONS] payload: ${s.slice(0, 200)}`);
+            }
+        continue;
+    }
+    try {
+        let e = K2(A, o.event, T);
+        if (null === e)
+            continue;
+        t = e;
+    }
+    catch (e) {
+        if (e instanceof Error && e.message.startsWith("Qoder API error:"))
+            throw e;
+        J++, C.warn(`[StreamAdapter] SSE event #${T}${": parse failed (total errors: "}${J}). event.event=${o.event ?? "none"}, error=${e instanceof Error ? e.message : String(e)}, data(first 5000)=${A.slice(0, 5e3)}`);
+        continue;
+    }
+    if (t.error)
+        throw new Error("Qoder stream returned an error payload");
+    if (!t.choices?.length) {
+        t.usage && (r = t.usage, i?.onUsage?.(sU(r)));
+        continue;
+    }
+    g = g || t.id || crypto.randomUUID(), B || (B = !0, yield { type: "message_start", message: { id: g, type: "message", role: "assistant", content: [], container: null, context_management: null, model: e, stop_reason: null, stop_sequence: null, usage: sU(t.usage) } });
+    let l = t.choices[0];
+    lpo(l.finish_reason);
+    let f = MwA(l.finish_reason);
+    t.usage && (r = t.usage, i?.onUsage?.(sU(r)));
+    let m = l.delta ?? l.message;
+    if (p)
+        f && f !== p && H("conflicting_finish_reason", { previousStopReason: p, stopReason: f }), m && Object.entries(m).some(([A, e]) => "role" !== A && ("tool_calls" === A && Array.isArray(e) ? e.length > 0 : null != e && "" !== e)) && H("content_after_finish", {});
+    else {
+        if (k = "refusal" === f || "max_tokens" === f ? f : null, m && m.function_call && !m.tool_calls) {
+            let A = m.function_call;
+            R ? m.tool_calls = [{ index: 0, type: "function", function: { arguments: A.arguments } }] : (R = !0, m.tool_calls = [{ index: 0, id: `fc_${g}_${c}`, type: "function", function: A }]), delete m.function_call;
+        }
+        if (m) {
+            m.responses_reasoning_update && m.responses_item && (yield { type: "responses_reasoning_item", ref: m.responses_item, item: m.responses_reasoning_update });
+            let A = m.reasoning_content, t = !!m.tool_calls?.length, i = fpo(u), r = t || i;
+            m.content && r && 0 === m.content.trim().length && (m.content = "");
+            let o = !!m.signature && b.length > 0, s = !!A, l = !("" !== A || t || m.content || u.has(Ine) || u.has(mj)), B = s || l || !!m.reasoning_item || o, p = !1;
+            if ((B || m.content) && i)
+                if (!m.content && G(N))
+                    p = !0, O(m);
+                else if (m.content && b.length > 0 && !G(x))
+                    yield* j();
+                else {
+                    let A = { nonToolDeltaTypes: [s ? "reasoning_content" : void 0, m.reasoning_item ? "reasoning_item" : void 0, m.content ? "content" : void 0].filter(Boolean) };
+                    m.content && (A.contentFragment = mpo(m.content)), yield* L("reject", A);
+                }
+            if (!p && (B || m.signature) && (yield* Y(m)), (m.content || t) && (D = !1), m.content && (yield* P(mj)), m.content && (m.responses_item && (a !== m.responses_item.key && (yield* P(Ine)), yield* M(m.responses_item), a = m.responses_item.key), u.has(Ine) || (u.add(Ine), yield { type: "content_block_start", index: c, content_block: { type: "text", text: "" } }), yield { type: "content_block_delta", index: c, delta: { type: "text_delta", text: m.content } }), m.tool_calls) {
+                if (b.length > 0) {
+                    let A = m.tool_calls, e = ppo(u);
+                    e.length > 0 && A.every(A => !!A.function?.name) && e.every(e => A.some(A => Q.get(A.index ?? 0) === e)) && !G(x) && (yield* j());
+                }
+                yield* P(Ine), yield* P(mj), m.responses_item && (yield* M(m.responses_item));
+                for (let A of m.tool_calls) {
+                    let t, i = A.index ?? 0;
+                    if (A.function?.name) {
+                        let e = Q.get(i);
+                        void 0 !== e && u.has(e) && (x(e) && H("incomplete_tool_replaced", { wireIndex: i, existingInternal: e }), yield y(e, c + e), u.delete(e)), t = E++, Q.set(i, t);
+                        let r = I.get(i);
+                        I.delete(i);
+                        let o = A.id || r || "", s = Mfe(A.function?.name ?? "");
+                        d.set(t, { id: o, name: s, args: "", scan: t$l() }), n = { id: o, name: s, wireIndex: i, internalIndex: t }, yield { type: "content_block_start", index: c + t, content_block: { type: "tool_use", id: o, name: s, input: {} } }, u.add(t), h = !0;
+                    }
+                    else {
+                        let r = Q.get(i);
+                        if (void 0 === r) {
+                            let t = A.function?.arguments ?? "", r = A.id ?? "";
+                            if (0 === t.length) {
+                                r && I.set(i, r), w.has(i) || (w.add(i), C.warn(`[StreamAdapter] Ignoring announcement-only tool call delta: details=${JSON.stringify({ model: e, messageId: g, sseEventCount: T, wireIndex: i, toolCallId: r })}`));
+                                continue;
+                            }
+                            H("orphan_tool_call_delta", { wireIndex: i, toolCallId: r, argumentFragment: mpo(t) });
+                            continue;
+                        }
+                        u.has(r) || H("orphan_tool_call_delta", { wireIndex: i }), t = r;
+                    }
+                    let r = d.get(t);
+                    r && null != A.function?.arguments && (r.args += A.function.arguments, n$l(r.scan, A.function.arguments, r.args), yield { type: "content_block_delta", index: c + t, delta: { type: "input_json_delta", partial_json: A.function.arguments } });
+                }
+            }
+            b.length > 0 && fpo(u) && !G(N) && (yield* j());
+        }
+        if (l.finish_reason && "null" !== l.finish_reason) {
+            let A = f;
+            "max_tokens" === A || "refusal" === A ? (yield* P(Ine), yield* P(mj)) : (yield* j("preserve"), yield* v()), "tool_use" === A && !h && C.warn(`[StreamAdapter] Preserving ${l.finish_reason}${" finish_reason without tool_use block for semantic recovery: details="}${JSON.stringify({ model: e, messageId: g, sseEventCount: T, finishReason: l.finish_reason })}`), p = A, i?.onProviderFinish?.({ type: "provider_finish", stopReason: A, usage: sU(r) });
+        }
+    }
+} if (t?.aborted)
+    throw nx(); if (p)
+    return yield { type: "message_delta", context_management: null, delta: { stop_reason: p, stop_sequence: null, container: null }, usage: (() => { let A = sU(r); return r && Qpt(A, i?.maxInputTokens), A; })() }, void (yield { type: "message_stop" }); }

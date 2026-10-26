@@ -1,0 +1,15 @@
+[
+  {
+    "line": 30,
+    "instruction": "0000000141C699A6: 48 8D 05 F3 91 9D  lea         rax,[000000015B642BA0h]",
+    "offset": "0x1b6417a0",
+    "direct": "",
+    "pointers": [
+      {
+        "at": 32,
+        "va": "0x142efeab0",
+        "text": "UAWAVAUATVWSH"
+      }
+    ]
+  }
+]

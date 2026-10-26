@@ -16,10 +16,10 @@ import { beginBuiltinOperation } from "../src/server/integrations/builtin-operat
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
-async function settle(service: { snapshot(): { job?: { running: boolean; error?: string }; importer?: { busy: boolean } } }) {
+async function settle(service: { snapshot(): { job?: { running: boolean; error?: string } } }) {
   const deadline = Date.now() + 5000;
   await turn();
-  while (service.snapshot().job?.running || service.snapshot().importer?.busy) { assert.ok(Date.now() < deadline, "maintenance must settle"); await turn(); }
+  while (service.snapshot().job?.running) { assert.ok(Date.now() < deadline, "maintenance must settle"); await turn(); }
 }
 function directory(parent: string, name: string) { const path = join(parent, name); fs.mkdirSync(path, { recursive: true }); return path; }
 
@@ -99,7 +99,7 @@ for (const engine of [undefined, "java"] as const) test(`REA ${engine || "progra
   } finally { await s.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const importer of [false, true]) test(`proxy ${importer ? "importer" : "kernel"} preview covers old versions and rejects changed scope`, async () => {
+for (const importer of [false, true]) test(`Xray preview rejects changes to ${importer ? "importer" : "core"} versions`, async () => {
   const root = fs.mkdtempSync(join(tmpdir(), "proxy-scope-"));
   const parent = join(proxyDirectory(root), importer ? "importer" : "versions");
   const name = importer ? "xray-knife-11.4.1-win32-x64" : `xray-1.0.0-${randomUUID()}`;
@@ -109,14 +109,14 @@ for (const importer of [false, true]) test(`proxy ${importer ? "importer" : "ker
   const s = new ModelProxyService(root, () => {});
   try {
     const bytes = fs.readFileSync(proxyConfigPath(root), "utf8"), before = s.snapshot();
-    const scope = importer ? before.importer!.cleanup! : before.cleanup!.xray!;
+    const scope = before.cleanup!.xray!;
     assert.deepEqual(scope.paths, [first]);
-    assert.deepEqual(importer ? s.snapshot().importer!.cleanup : s.snapshot().cleanup!.xray, scope);
+    assert.deepEqual(s.snapshot().cleanup!.xray, scope);
     assert.equal(fs.readFileSync(proxyConfigPath(root), "utf8"), bytes);
     const added = directory(parent, importer ? "xray-knife-11.4.0-win32-x64" : `xray-0.9.0-${randomUUID()}`);
-    await s.command({ requestId: randomUUID(), op: importer ? "modelProxy.importerUninstall" : "modelProxy.uninstall", params: { revision: before.revision, confirm: true, cleanupRevision: scope.revision, ...(importer ? {} : { kernel: "xray" }) } });
+    await s.command({ requestId: randomUUID(), op: "modelProxy.uninstall", params: { revision: before.revision, confirm: true, cleanupRevision: scope.revision, kernel: "xray" } });
     await settle(s);
-    assert.match((importer ? s.snapshot().importer?.error : s.snapshot().job?.error)!, /范围已变化/);
+    assert.match(s.snapshot().job!.error!, /范围已变化/);
     assert.equal(fs.readFileSync(proxyConfigPath(root), "utf8"), bytes);
     assert.ok(fs.existsSync(first)); assert.ok(fs.existsSync(added));
   } finally { await s.close(); fs.rmSync(root, { recursive: true, force: true }); }

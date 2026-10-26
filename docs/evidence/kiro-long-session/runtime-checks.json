@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "phase": "terminal-runtime-checks",
+  "checkedAt": "2026-10-25T21:02:39.834Z",
+  "allOwnedTasksQuiescent": true,
+  "defaultsUnchanged": true,
+  "ownedRunnerProcessesExited": true,
+  "originalFrozenHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19",
+      "unchanged": true
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5",
+      "unchanged": true
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "0344731dfca9cc1c6bbd362faa08e02763fc13b49a1d7d83e13005d38dae4860",
+      "unchanged": true
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3",
+      "unchanged": true
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161",
+      "unchanged": true
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6",
+      "unchanged": true
+    }
+  ],
+  "post429FrozenHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19",
+      "unchanged": true
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5",
+      "unchanged": true
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "6031bc6e918fec21c14d5c5fe922434c25e6db6da87af4fce899288596ae16e4",
+      "unchanged": true
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3",
+      "unchanged": true
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161",
+      "unchanged": true
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6",
+      "unchanged": true
+    }
+  ],
+  "tasks": [
+    {
+      "taskRef": "t4014",
+      "taskStatus": "completed",
+      "runId": "0ad06713-0020-4ac9-affe-3f95b0a85c07",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "auto",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 21,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": null
+    },
+    {
+      "taskRef": "t4018",
+      "taskStatus": "completed",
+      "runId": "c420c6f3-7e25-4683-82c5-d02a5118446b",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 29,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4015",
+      "taskStatus": "completed",
+      "runId": "115e8e42-50f0-47b1-9918-9508f0eb310d",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-haiku-4.5",
+        "thinking": "high"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 22,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4017",
+      "taskStatus": "completed",
+      "runId": "0fcf1a27-a538-49b1-bdfb-ccbb31ab2170",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.5",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 22,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4019",
+      "taskStatus": "completed",
+      "runId": "636cca6f-fab4-427c-835c-97d66b6b6100",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "glm-5",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 22,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4020",
+      "taskStatus": "completed",
+      "runId": "e429daa6-a3f1-4cb6-824d-7261b5b9d951",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "qwen3-coder-next",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 22,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4016",
+      "taskStatus": "completed",
+      "runId": "d1b90a5b-dbff-4a0c-85fe-e73862b6ed5c",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "deepseek-3.2",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 32,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4046",
+      "taskStatus": "failed",
+      "runId": "b483c133-fe77-46bf-bd7d-bb1111de2039",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "queueLength": 0,
+      "deliveredInputCount": 35,
+      "persistentInputsAllDelivered": true,
+      "reloadStatus": "completed"
+    }
+  ],
+  "snapshots": [
+    {
+      "attempt": "controlled-continuation-v3",
+      "checkedAt": "2026-10-25T20:53:17.937Z",
+      "sourceSha256": "61cc8ca85f37279071307a0764d450fec31ad8b65a106d14fd3ec95fa511a9a8"
+    },
+    {
+      "attempt": "sonnet-post429-v4",
+      "checkedAt": "2026-10-25T21:02:39.834Z",
+      "sourceSha256": "c6604780c1783f6b4da11f8464b2e58ea1282a8fcd47a3de1361595a60fb07b2"
+    }
+  ],
+  "limitation": "These are historical terminal snapshots, not a claim that subsequently edited published harness files were live-matrix tested."
+}

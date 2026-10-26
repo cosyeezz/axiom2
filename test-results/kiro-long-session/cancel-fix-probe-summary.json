@@ -1,0 +1,17 @@
+{
+  "label": "cancel-fix-availability-probe",
+  "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+  "selection": {
+    "provider": "kiro",
+    "id": "claude-sonnet-4.5",
+    "thinking": "medium"
+  },
+  "status": "completed",
+  "rateLimitOrQuota": false,
+  "contextAnswerCorrect": true,
+  "answerHasPriorReasoningWrapper": false,
+  "answerSha256": "86f9229bf37fb420adfc69ee4ea1e8ee2522877802be619f15df506df9209e54",
+  "calls": 0,
+  "results": 0,
+  "observedMs": 10368
+}

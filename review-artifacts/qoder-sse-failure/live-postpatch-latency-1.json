@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "stage": "model.request",
+      "at": 1792941595723,
+      "runId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028",
+      "requestId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028:1",
+      "purpose": "session"
+    },
+    {
+      "stage": "model.payload",
+      "at": 1792941596335,
+      "runId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028",
+      "requestId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028:1",
+      "purpose": "session"
+    },
+    {
+      "stage": "model.response",
+      "at": 1792941596476,
+      "runId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028",
+      "requestId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028:1",
+      "purpose": "session",
+      "durationMs": 753.3721,
+      "status": 200
+    },
+    {
+      "stage": "model.end",
+      "at": 1792941596482,
+      "runId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028",
+      "requestId": "bc71926d-a0ca-4dec-b614-9a5c7e98e028:1",
+      "code": "other",
+      "purpose": "session",
+      "durationMs": 758.7332000000001
+    }
+  ]
+}

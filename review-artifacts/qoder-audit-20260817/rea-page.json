@@ -1,0 +1,184 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"evidence_id\":\"ev_503a21b23509452f525419197f4e5802016f82bc2156d2f32b5b2246f81d4238\",\"subject\":{\"name\":\"package\",\"digest\":{\"sha256\":\"d913a3dc184b1fc0a6ea9a2b5b4ec5490b581f98ce4f42143d2eb0df9b133535\"},\"local_path\":\"F:\\\\Axiom\\\\axiom2\\\\review-artifacts\\\\qoder-audit-20260817\\\\official\\\\package\",\"format\":\"directory\",\"architecture\":null},\"provider\":{\"id\":\"rea-analysis-view\",\"name\":\"REA analysis view projection\",\"version\":\"1\"},\"analysis_profile\":null,\"predicate_type\":\"rea.analysis-view\",\"operation\":\"inspect_analysis_view\",\"parameters\":{\"parent_evidence_id\":\"ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546\",\"view\":{\"kind\":\"page\",\"collection\":\"modules\",\"offset\":0,\"limit\":8}},\"raw_result\":null,\"normalized_result\":{\"kind\":\"page\",\"view\":{\"kind\":\"page\",\"collection\":\"modules\",\"offset\":0,\"limit\":8},\"items\":[{\"node_id\":\"jag_node_025301fd3986e352f4c40943d44b499891120835326261d1ae142a5279f9c67b\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/dev/server.mjs\"},{\"node_id\":\"jag_node_03f0621916bb5c5194e6e06217b08144e916deb31f7519fc25d07de808b0f674\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/dev/local.mjs\"},{\"node_id\":\"jag_node_054f9d09feaa402079e867d284e8377032a5c1e42429aa42fc1381e1902ced35\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/navigation-menu.tsx\"},{\"node_id\":\"jag_node_074d2ffa1a41a5c9a43deb51cf0b8d387d4fd0bcb5a43fde93b9517d80393fa0\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/aspect-ratio.tsx\"},{\"node_id\":\"jag_node_10716a76ad21ee61e242f2a094a7d5185bf961896a6625efb631e2c5db78eb90\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/dev/memory-service.mjs\"},{\"node_id\":\"jag_node_12f85f30aa50413018c152c215e5bbc671ffd312507b807684f7284fe0932a09\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/checkbox.tsx\"},{\"node_id\":\"jag_node_1492d5130d356736d9f50470bbe91be15a8d2b20706f8b0107cf4d49057a317c\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/message-scroller.tsx\"},{\"node_id\":\"jag_node_16accf064031aed074f91f00ae5934481d08b292a651f55ec41aa0e5e972d3a4\",\"kind\":\"javascript-asset\",\"path\":\"bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/App.tsx\"}],\"parent_evidence_id\":\"ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546\",\"parent_operation\":\"analyze_javascript_application\",\"parent_digest\":\"ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546\",\"view_digest\":\"e99f27acea61bb69c3cb73fb5b7f445af566be538ddae2fce89d4b838e5997b6\",\"artifact\":{\"path\":\"F:\\\\Axiom\\\\axiom2\\\\review-artifacts\\\\qoder-audit-20260817\\\\official\\\\package\",\"sha256\":\"d913a3dc184b1fc0a6ea9a2b5b4ec5490b581f98ce4f42143d2eb0df9b133535\"},\"coverage\":{\"status\":\"page\",\"examined\":8,\"total\":138,\"next_offset\":8,\"exhausted\":false},\"limitations\":[\"Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.\",\"Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.\",\"Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.\",\"CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.\",\"Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.\",\"Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.\",\"Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.\",\"Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.\",\"JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.\",\"Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.\",\"Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.\",\"Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.\",\"Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.\",\"Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.\",\"Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.\",\"The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.\",\"Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.\",\"Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.\",\"bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application\"],\"unknowns\":[\"157 application graph unknowns remain in the parent Evidence.\",\"1680 semantic graph unknowns remain in the parent Evidence.\",\"Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.\",\"Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.\",\"Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.\",\"CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.\",\"Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.\",\"Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.\",\"Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.\",\"Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.\",\"JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.\",\"Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.\",\"Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.\",\"Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.\",\"Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.\",\"Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.\",\"Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.\",\"The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.\",\"Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.\",\"Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.\",\"bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application\",\"graph.coverage.status is partial\",\"semantic_graph.coverage.status is partial\"]},\"confidence\":\"derived\",\"authority\":\"shipped-artifact\",\"environment\":null,\"limitations\":[\"Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.\",\"Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.\",\"Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.\",\"CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.\",\"Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.\",\"Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.\",\"Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.\",\"Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.\",\"JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.\",\"Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.\",\"Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.\",\"Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.\",\"Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.\",\"Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.\",\"Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.\",\"The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.\",\"Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.\",\"Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.\",\"bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application\"],\"relationship_coverage\":null,\"locations\":[{\"kind\":\"artifact-path\",\"path\":\"F:\\\\Axiom\\\\axiom2\\\\review-artifacts\\\\qoder-audit-20260817\\\\official\\\\package\"}],\"evidence_links\":[\"ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546\"]}"
+    }
+  ],
+  "structuredContent": {
+    "evidence_id": "ev_503a21b23509452f525419197f4e5802016f82bc2156d2f32b5b2246f81d4238",
+    "subject": {
+      "name": "package",
+      "digest": {
+        "sha256": "d913a3dc184b1fc0a6ea9a2b5b4ec5490b581f98ce4f42143d2eb0df9b133535"
+      },
+      "local_path": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\official\\package",
+      "format": "directory",
+      "architecture": null
+    },
+    "provider": {
+      "id": "rea-analysis-view",
+      "name": "REA analysis view projection",
+      "version": "1"
+    },
+    "analysis_profile": null,
+    "predicate_type": "rea.analysis-view",
+    "operation": "inspect_analysis_view",
+    "parameters": {
+      "parent_evidence_id": "ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546",
+      "view": {
+        "kind": "page",
+        "collection": "modules",
+        "offset": 0,
+        "limit": 8
+      }
+    },
+    "raw_result": null,
+    "normalized_result": {
+      "kind": "page",
+      "view": {
+        "kind": "page",
+        "collection": "modules",
+        "offset": 0,
+        "limit": 8
+      },
+      "items": [
+        {
+          "node_id": "jag_node_025301fd3986e352f4c40943d44b499891120835326261d1ae142a5279f9c67b",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/dev/server.mjs"
+        },
+        {
+          "node_id": "jag_node_03f0621916bb5c5194e6e06217b08144e916deb31f7519fc25d07de808b0f674",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/dev/local.mjs"
+        },
+        {
+          "node_id": "jag_node_054f9d09feaa402079e867d284e8377032a5c1e42429aa42fc1381e1902ced35",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/navigation-menu.tsx"
+        },
+        {
+          "node_id": "jag_node_074d2ffa1a41a5c9a43deb51cf0b8d387d4fd0bcb5a43fde93b9517d80393fa0",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/aspect-ratio.tsx"
+        },
+        {
+          "node_id": "jag_node_10716a76ad21ee61e242f2a094a7d5185bf961896a6625efb631e2c5db78eb90",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/dev/memory-service.mjs"
+        },
+        {
+          "node_id": "jag_node_12f85f30aa50413018c152c215e5bbc671ffd312507b807684f7284fe0932a09",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/checkbox.tsx"
+        },
+        {
+          "node_id": "jag_node_1492d5130d356736d9f50470bbe91be15a8d2b20706f8b0107cf4d49057a317c",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/message-scroller.tsx"
+        },
+        {
+          "node_id": "jag_node_16accf064031aed074f91f00ae5934481d08b292a651f55ec41aa0e5e972d3a4",
+          "kind": "javascript-asset",
+          "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/App.tsx"
+        }
+      ],
+      "parent_evidence_id": "ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546",
+      "parent_operation": "analyze_javascript_application",
+      "parent_digest": "ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546",
+      "view_digest": "e99f27acea61bb69c3cb73fb5b7f445af566be538ddae2fce89d4b838e5997b6",
+      "artifact": {
+        "path": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\official\\package",
+        "sha256": "d913a3dc184b1fc0a6ea9a2b5b4ec5490b581f98ce4f42143d2eb0df9b133535"
+      },
+      "coverage": {
+        "status": "page",
+        "examined": 8,
+        "total": 138,
+        "next_offset": 8,
+        "exhausted": false
+      },
+      "limitations": [
+        "Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.",
+        "Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.",
+        "Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.",
+        "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+        "Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.",
+        "Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.",
+        "Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.",
+        "Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.",
+        "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+        "Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.",
+        "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.",
+        "Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.",
+        "Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.",
+        "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+        "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+        "The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.",
+        "Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.",
+        "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.",
+        "bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application"
+      ],
+      "unknowns": [
+        "157 application graph unknowns remain in the parent Evidence.",
+        "1680 semantic graph unknowns remain in the parent Evidence.",
+        "Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.",
+        "Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.",
+        "Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.",
+        "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+        "Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.",
+        "Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.",
+        "Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.",
+        "Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.",
+        "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+        "Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.",
+        "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.",
+        "Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.",
+        "Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.",
+        "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+        "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+        "The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.",
+        "Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.",
+        "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.",
+        "bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application",
+        "graph.coverage.status is partial",
+        "semantic_graph.coverage.status is partial"
+      ]
+    },
+    "confidence": "derived",
+    "authority": "shipped-artifact",
+    "environment": null,
+    "limitations": [
+      "Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.",
+      "Caller-selected source analysis leaves 156 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.",
+      "Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.",
+      "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+      "Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.",
+      "Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.",
+      "Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.",
+      "Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.",
+      "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+      "Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.",
+      "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.",
+      "Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.",
+      "Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.",
+      "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+      "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+      "The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.",
+      "Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.",
+      "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code.",
+      "bundle/qodercli.js: Analysis operation was cancelled: analyze_javascript_application"
+    ],
+    "relationship_coverage": null,
+    "locations": [
+      {
+        "kind": "artifact-path",
+        "path": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\official\\package"
+      }
+    ],
+    "evidence_links": [
+      "ev_ef28350f370f7a2207ce461aa7a48ae520f6b4277f069cf042b8893212e23546"
+    ]
+  }
+}

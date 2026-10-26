@@ -1,12 +1,12 @@
-# Kiro 账号认证（原生、仅认证）
+# Kiro 原生账号、目录与聊天
 
 Axiom 新增独立的 `kiro` 提供商。它不依赖运行 Kiro CLI、kiro.rs 代理或读取其他应用的凭据文件。
 
-**当前范围是登录、令牌保存、刷新及本地退出，不包含 Kiro 模型目录或推理协议。** 登录后不会出现可聊天的 Kiro 模型；不要把它配置成 OpenAI 兼容接口。源码更新需经过正常构建、重启后台才会生效，本次未部署或重启服务。
+**当前实现登录、令牌保存、刷新、本地退出、当前账号实时模型目录，以及原生文本/图片聊天、工具调用与可配置思考等级。** 登录后「拉取模型列表」→加入模型草稿→保存，再在会话中选择该模型。原生协议为 `kiro-chat`，不是 OpenAI 兼容接口；账号令牌不会交给通用或自定义接口。目录存在不代表账号具备推理权限，真实账号/上游服务接受性仍待联调。源码更新需正常构建、重启后台才生效，本次未部署或重启服务。
 
 ## 登录方式
 
-在模型设置中添加 OAuth 提供商 **Kiro（仅认证）**，选择：
+在模型设置中添加 OAuth 提供商 **kiro**，选择：
 
 | 身份 | 本次支持的流程 | 需要提供 |
 | --- | --- | --- |
@@ -27,10 +27,12 @@ Builder ID 也是 AWS OIDC 协议，但它是**个人身份**，不能把 `idc` 
 
 ## 与其他 OAuth 的隔离
 
-- `providers/kiro-auth.ts`：认证、刷新及协议校验。
-- `providers/kiro-callback.ts`：短生命周期 loopback 回调与手动回填。
-- `providers/kiro.ts`：空模型目录和拒绝误调用推理的护栏。
-- `model-runtime.ts`：只有配置、凭据或主动登录需要 Kiro 时才加载；添加菜单只列元信息。
+- [kiro-auth.ts](../app/src/server/providers/kiro-auth.ts)：认证、刷新及协议校验；裸 OAuth 不派生通用接口密钥。
+- [kiro-callback.ts](../app/src/server/providers/kiro-callback.ts)：短生命周期 loopback 回调与手动回填。
+- [kiro-catalog.ts](../app/src/server/providers/kiro-catalog.ts)：固定端点原生模型目录、分页及响应校验。
+- [kiro.ts](../app/src/server/providers/kiro.ts)：按账号凭据代次隔离的目录缓存，以及原生聊天提供商接线。
+- [kiro-chat.ts](../app/src/server/providers/kiro-chat.ts)、[kiro-chat-protocol.ts](../app/src/server/providers/kiro-chat-protocol.ts)、[kiro-eventstream.ts](../app/src/server/providers/kiro-eventstream.ts)：私有认证交接、消息/工具转换、AWS 流帧与错误处理。
+- [model-runtime.ts](../app/src/server/model-runtime.ts)：只有配置、凭据或主动登录需要 Kiro 时才加载；添加菜单只列元信息。
 
 继续复用 Axiom 的登录管理、按供应商隔离的网络 worker、凭据存储锁与取消机制；不修改全局 fetch 或其他供应商的 OAuth 回调。`auth.json` 按 provider ID 分条存储，包含刷新所需的客户端注册信息，不应公开。应用目前一次只允许一个认证流程；Kiro 等待授权时，其他登录需等它完成或取消。
 
@@ -53,7 +55,35 @@ Builder ID 也是 AWS OIDC 协议，但它是**个人身份**，不能把 `idc` 
 
 入口 `https://app.kiro.dev/signin`，携带独立随机 state、S256 challenge、loopback origin 和 `redirect_from=kirocli`。回调只接受 Google / GitHub 分支，向 `https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token` 交换授权码，JSON 使用 `code/code_verifier/redirect_uri`；刷新 `/refreshToken` 使用 `{refreshToken}`。
 
-Portal URL 参数、刷新请求字段及响应解析已有当前 CLI 的函数级证据；Social 首次换码的完整调用链仍未恢复，其字段主要参考 kiro.rs。详见[认证静态对照](kiro-protocol-audit.md)。**未进行真实账号验证，不宣称 IDE 与 CLI 所有调用语义一致**。不伪造个人 profile ARN、机器指纹或未证实的客户端身份头。
+Portal URL 参数、刷新请求字段及响应解析已有此前审查的 CLI 2.33.1 的函数级证据；Social 首次换码的完整调用链仍未恢复，其字段主要参考 kiro.rs。详见[认证静态对照](kiro-protocol-audit.md)。**未进行真实账号验证，不宣称 IDE 与 CLI 所有调用语义一致**。不伪造个人 profile ARN、机器指纹或未证实的客户端身份头。
+
+## 实时模型目录
+
+「拉取模型列表」走原生 `Provider.refreshModels`，不是通用 OpenAI `/models`，也不把内置名单或旧缓存当成实时结果：
+
+- AWS JSON `POST /`，目标 `AmazonCodeWhispererService.ListAvailableModels`，`origin=KIRO_CLI`；`origin`、可选 `profileArn` 和分页 `nextToken` 同时写入 query 与 JSON body，使用当前账号 Bearer access token。
+- 固定服务端点：没有 profile 时使用 `q.us-east-1.amazonaws.com`；显式 profile ARN 的区域可选美国或法兰克福 `q.eu-central-1.amazonaws.com`。**SSO 认证区域不是模型服务区域。** 不接受自定义 Base URL，不跨区域或去掉 profile 猜测重试，不伪造个人 profile。
+- 每次请求完成所有分页后才发布目录；总超时 15 秒、最多 20 页、每页 2 MiB、最多 1000 个唯一模型。格式错误、循环分页、401/403/429 等均报错，不发布半份列表或显示缓存伪装的成功。
+- 仅采用服务返回的模型 ID、名称、有效 token 限额及 supportedInputTypes 声明。未知限额不显示为 0 上下文；含 IMAGE 时展示并传递图片能力，缺少/仅未知输入声明显示待确认，思考等级另按明确的 kiro.rs 兼容配置提供（不是目录声明），零值单价只是 SDK 占位，**不表示免费、已验证能力或可推理权限**。
+- 原生图片协议现已接入，`supportedInputTypes`（`TEXT`／`IMAGE`）及其来源随 V2 目录缓存保留；旧 V1 文本能力标记迁移为上游未知，不自动开启图片。`supportsPromptCache` 仍未映射为缓存行为。缺字段不是 false；工具／思考没有本次已核实的对应目录字段。思考采用单独的明确 backend ID 兼容配置，不凭名称子串猜测，详见[思考等级配置](kiro-thinking.md)。用户明确的能力覆盖和主动禁图设置仍保留，详见[图片请求](kiro-images.md)。
+- 空目录意味着本次接口确实返回空数组，不用静态条目补齐。企业账号仍可能需要已选定的 profile 和组织授权；本次不提供 profile 枚举/切换界面。
+
+目录成功后以白名单字段缓存到 `models-store.json`，用于离线重开、导入保存和任务快照恢复；磁盘不存该接口的完整响应、原始 token 或 profile ARN。缓存绑定认证方式、认证区域、refresh token、profile 和服务区域的 SHA-256 摘要，并在 OAuth 刷新前后分别校验。换账号、注销、profile 变更、令牌轮换或损坏的缓存不会被恢复成当前账号目录。同一凭据代次请求失败时可保留旧目录供已有配置离线恢复，但拉取操作仍失败；令牌轮换后网络失败时可能暂时无目录，需要再次拉取。摘要用于隔离，不是缓存签名；不提供多进程全局最新写入保证。退出不会清除历史目录文件，但凭据作用域不匹配会阻止恢复。
+
+现代目录协议的官方产物、历史源码和第三方参考差异见[目录静态对照](kiro-catalog-audit.md)；认证证据另见[认证静态对照](kiro-protocol-audit.md)。没有使用真实账号调用受保护接口，因此仍需线上联调。
+
+## 文本、图片与工具调用
+
+- 原生 `GenerateAssistantResponse` 使用 AWS JSON 请求与 AWS event-stream，不走 OpenAI `/chat/completions`。推理固定到 `https://runtime.us-east-1.kiro.dev/` 或显式欧洲 profile 的 `https://runtime.eu-central-1.kiro.dev/`；目录仍使用独立的 `q.*.amazonaws.com`。不采用自定义 Base URL、静默换模型、跨区域试探或制造 profile。
+- 完整 Axiom 系统提示放入协议首条用户消息前缀，历史保留文本、原始工具调用 ID 和关联结果；当前消息使用用户选定的模型 ID。名称不符合线格式时进行可逆别名映射，不删改 JSON Schema 或改变工具权限。
+- 回复逐块流式显示。正式工具事件需完整结束、合法 JSON 对象、匹配声明工具和本地 schema 才成为成功调用；坏帧、截断、空回复、重复 ID、孤立结果和异常不会伪装为正常完成。字面 `<invoke>` 不创建工具；仅主动启用思考时识别回复起始 `<thinking>` 控制块，正文引用或代码示例保持原样，原生思考事件仍可接收。
+- OAuth 刷新继续由 Pi 凭据锁管理；只有原生适配器内部使用 access token。通用交接仅含短期、一次性、不透明凭证，不能作为上游 API Key 使用。退出不撤销上游令牌或已发出的网络请求，沿用 Axiom 活动执行停止流程。
+- 支持当前/历史用户图片及工具返回图片，格式为 PNG/JPEG/GIF/WebP，使用原生 images/source.bytes，不走 OpenAI 图片字段，工具结果保留 ID/status 和各文本块；详见[原生图片请求](kiro-images.md)。仍不支持助手预填充，不猜测温度、生成长度等字段；不会伪造签名、机器号或官方客户端身份。思考配置现已按 kiro.rs 接入预算标签或原生 effort，并兼容前导思考标签和原生思考事件；详见[思考等级配置](kiro-thinking.md)。这不是官方 caller 等效或线上接受性证明。完整签名历史续接仍未实现，可见历史思考转为 assistant 上下文，opaque/签名省略并记诊断。
+- 请求最多 10 MiB；单帧 16 MiB、全流 64 MiB、100,000 事件、1,024 工具/调用、单工具参数 1 MiB。默认 10 分钟总时限，支持取消；适配器自身对 HTTP/流异常仅一次请求，但 Pi agent 上层仍可能重试，输出后的跨层边界尚待对齐，见[等效审计](kiro-cli-parity-audit.md)。精确 token 用量仅来自服务报告，credits/百分比单独记录，未知费用的零值不是免费保证。
+
+Kiro 执行进程的 HTTP 池默认空闲保留时间现为 60 秒，直连与 HTTPS 代理同用，并仍遵守更短服务端提示、取消及进程隔离；其他供应商默认值不变。连接复用机制、本机 HTTPS/H2 验证及限制见[连接池保活优化](kiro-connection-pooling.md)。这不是活动请求超时或线上免握手保证。
+
+协议来源、官方客户端路由静态链、两份 kiro.rs 的防御措施取舍、验证与未验证项见[推理静态对照](kiro-inference-audit.md)。旧目录 `kiro-auth-only` 缓存可归一化为新协议；显式保存的旧占位 API 或 OpenAI 覆盖不能用于聊天，应重新拉取并添加原生模型。
 
 ## 证据及对照边界
 
@@ -63,7 +93,9 @@ Portal URL 参数、刷新请求字段及响应解析已有当前 CLI 的函数�
 - [ZyphrZero/kiro.rs](https://github.com/ZyphrZero/kiro.rs/tree/4cac2a8b887eacf4c8119558d3c1906e43f8cbd4)：基于前者，增加 OIDC device 与 Social Portal PKCE。参考 `src/kiro/auth/{idc,social}.rs`、`src/admin/service.rs`、`src/kiro/token_manager.rs`。
 - 两者采用 MIT（Copyright 2026 hank9999）。本实现独立编写，参考协议与请求字段，不运行其项目代码。
 
-### 官方发布包
+### 此前认证审查的官方发布包
+
+以下是此前认证审查保留的 macOS 2.33.1 证据，不是本轮 Windows 目录分析的目标，也不代表最新 stable 版本。本轮目录目标为本机 Windows CLI **2.12.0**；查询到的最新 stable manifest 为 **2.34.0**，没有下载或安装该新版。
 
 - 官方安装入口：<https://cli.kiro.dev/install>；仅静态读取，未执行脚本。
 - 固定版本：**Kiro CLI 2.33.1**，来自官方 stable manifest。
@@ -72,7 +104,9 @@ Portal URL 参数、刷新请求字段及响应解析已有当前 CLI 的函数�
 - 提取的 CLI arm64：35,976,848 字节，SHA-256 `e8e64f78c9067b0a8f977ed3ca8b81167c02c61f800bb442f8d8d2448c7f16a6`。
 - 官方当前 CLI 非完整开源；`aws/amazon-q-developer-cli` 的 1.19.7 是历史参考，不能当作 2.33.1 对应源码。
 
-### REA 状态
+### 此前认证审查的 REA 状态
+
+以下记录发生在原 macOS 认证审查环境；本机 Windows 的隔离组件和目录函数分析另记于[目录静态对照](kiro-catalog-audit.md)。
 
 Hopper 6.6.0-demo 已从官方发布渠道安装，哈希、macOS 代码签名和系统公证检查通过，但进程停在启动阶段，未建立分析桥接。已安装并校验 Ghidra 12.1.4 与 JDK 21，通过独立无界面 REA 通道避开宿主固定 60 秒超时。默认分析在 Decompiler Switch Analysis 阶段超过 900 秒；改用禁用该分析器及 Non-Returning Functions - Discovered 的有限分析配置后分析成功。该配置会限制自动控制流推断，不能视作完整默认分析。**本轮有限范围的函数级对照已完成，Social 完整换码链等仍有证据缺口**；已核验项、失败项和完整 Evidence ID 见[认证静态对照](kiro-protocol-audit.md)。
 
@@ -88,8 +122,8 @@ REA `inspect_rust_binary` 已核验上述 CLI 文件身份，证据 `ev_15f2ef85
 
 ## 验证
 
-Kiro 专项 **11/11** 通过；受影响的运行时、OAuth、网络 worker、CodeBuddy 和并行 Qoder 回归 **26/26** 通过；全量与 server TypeScript 检查通过。此前冷 snapshot 回归在恢复动态目录时被发现，已修复并重跑：静态/auth-only 提供商不刷新，动态提供商仅恢复存在的缓存，不创建冷缓存。
+认证/目录阶段的专项 25/25、通用回归 25/25 和类型检查是历史基线，不替代新增聊天代码验证。本轮聊天、工具及运行时测试记录见[推理静态对照](kiro-inference-audit.md)。冷启动不创建空缓存的既有保护保持不变。
 
-离线测试覆盖身份分流、OIDC/Social 请求差异、PKCE/state、轮询退避、注册过期、刷新锁、失败保留凭据、取消/超时、错误脱敏、回调端口释放，以及真实 worker 的登录/重开/空目录/其他 OAuth 隔离。fixture 禁止实际网络连接；只有回调单元测试使用本机随机 loopback 端口。
+隔离模拟覆盖认证分流、PKCE/state、轮询退避、注册过期、刷新锁、错误脱敏、取消及端口释放；另覆盖 CLI query/body 双写、地区/profile 选择、分页/限额、HTTP 错误、响应体大小、迟到响应释放、账号/令牌轮换隔离、同 scope 损坏缓存清空、失败不发布部分列表、认证竞争导致跳过刷新时不能宣称实时成功，以及 worker 登录/拉取、导入保存、重开与快照恢复。新增原生聊天测试使用合成 AWS 流帧；保存、重开及快照模型通过 Pi 两个完成入口实际到达原生适配器。恶意 API/Base URL 覆盖则在发送账号令牌前失败。供应商网络使用模拟响应，worker fixture 禁止真实 socket；回调和通用网络测试仅使用本机动态端口。
 
-真实账号登录、企业策略、权限、计费、动态 profile 与模型调用均未验证。当前实现应视为待联调的认证适配；有限范围的静态对照与离线测试不代表官方支持或线上可用性保证。
+真实账号登录、企业策略、权限、计费、动态 profile 与模型调用均未验证。当前实现是**待真实账号联调的原生认证、目录及聊天适配**；静态对照与隔离测试不代表官方支持或线上可用性保证。

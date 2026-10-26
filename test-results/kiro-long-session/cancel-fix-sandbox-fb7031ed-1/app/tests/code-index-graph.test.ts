@@ -1,0 +1,65 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { indexFixture, implementation, proposal } from "./code-index-fixture.js";
+import type { EdgeProposal, NodeProposal, RequestLedger } from "../src/server/code-index/contracts.js";
+
+const invalid = (error: unknown) => !!error && typeof error === "object" && "code" in error && ["INVALID_PROPOSAL", "AMBIGUOUS_REUSE"].includes(String(error.code));
+const feature = (id: string, evidenceId: string, name: string): Extract<NodeProposal, { kind: "feature" }> => ({ ...implementation(id, evidenceId, name), kind: "feature", flows: [] });
+const edge = (id: string, fromId: string, objectId: string, evidenceId: string, relation: EdgeProposal["relation"] = "uses", slot = ""): EdgeProposal => ({ id, fromId, target: { objectId }, relation, slot, reason: "已读取的行为关联", evidenceIds: [evidenceId], expectedContentRev: null, expectedRecordRev: null });
+
+test("final graph supports shared implementations and slots, and enforces flow retirement and restored identity", async t => {
+  const f = await indexFixture(t); await f.put("a.ts", "export const twice = (n:number) => n * 2;");
+  const initial = await f.ledger("initial"), source = await f.read(initial), first = feature("tmp:first", source.record.id, "First"), second = feature("tmp:second", source.record.id, "Second");
+  first.flows = [{ beforeEdgeId: "tmp:before", afterEdgeId: "tmp:after", condition: "通过检查", evidenceIds: [source.record.id] }];
+  const input = proposal(initial, [first, second, implementation("tmp:impl", source.record.id)]);
+  input.edges = [edge("tmp:before", first.id, "tmp:impl", source.record.id, "uses", "before"), edge("tmp:after", first.id, "tmp:impl", source.record.id, "uses", "after"), edge("tmp:shared", second.id, "tmp:impl", source.record.id)];
+  const receipt = f.commits.accept(initial.ledgerId, input), committed = await f.commits.commit(initial.ledgerId, receipt.proposalDigest, async () => {}), ids = committed.idMap;
+  assert.equal(f.store.links().length, 3); assert.equal(committed.freshness, "current");
+  const readObjects = async (ledger: RequestLedger, objectIds: string[]) => f.sources.withLedger(ledger.ledgerId, async live => { for (const id of objectIds) f.sources.recordObject(live, f.store.object(id)!); });
+  const invalidLedger = await f.ledger("bad-retire"), invalidSource = await f.read(invalidLedger), oldEdge = f.store.object(ids["tmp:after"])!;
+  await readObjects(invalidLedger, [oldEdge.id]);
+  const retirement = { id: oldEdge.id, expectedContentRev: oldEdge.contentRev, expectedRecordRev: oldEdge.recordRev, evidenceIds: [invalidSource.record.id], reason: "取消阶段" };
+  const invalidProposal = proposal(invalidLedger); invalidProposal.retire = [retirement];
+  const rejected = f.commits.accept(invalidLedger.ledgerId, invalidProposal);
+  await assert.rejects(f.commits.commit(invalidLedger.ledgerId, rejected.proposalDigest, async () => {}), invalid);
+  assert.equal(f.store.object(oldEdge.id)?.lifecycle, "active");
+  const ledger = await f.ledger("retire"), evidence = await f.read(ledger), oldFeature = f.store.object(ids["tmp:first"])!;
+  await readObjects(ledger, [oldEdge.id, oldFeature.id]);
+  const update = structuredClone(oldFeature.body) as Extract<NodeProposal, { kind: "feature" }>;
+  update.expectedContentRev = oldFeature.contentRev; update.expectedRecordRev = oldFeature.recordRev; update.flows = [];
+  const validProposal = proposal(ledger, [update]); validProposal.retire = [{ ...retirement, evidenceIds: [evidence.record.id] }];
+  const accepted = f.commits.accept(ledger.ledgerId, validProposal); await f.commits.commit(ledger.ledgerId, accepted.proposalDigest, async () => {});
+  assert.equal(f.store.object(oldEdge.id)?.lifecycle, "retired"); assert.equal(f.store.object(ids["tmp:impl"])?.lifecycle, "active");
+  const duplicateLedger = await f.ledger("duplicate"), duplicateSource = await f.read(duplicateLedger);
+  await readObjects(duplicateLedger, [ids["tmp:first"], ids["tmp:impl"]]);
+  const duplicate = proposal(duplicateLedger); duplicate.edges = [edge("tmp:replacement", ids["tmp:first"], ids["tmp:impl"], duplicateSource.record.id, "uses", "after")];
+  const duplicateAccepted = f.commits.accept(duplicateLedger.ledgerId, duplicate);
+  await assert.rejects(f.commits.commit(duplicateLedger.ledgerId, duplicateAccepted.proposalDigest, async () => {}), invalid);
+  const restoreLedger = await f.ledger("restore"), restoreSource = await f.read(restoreLedger), retired = f.store.object(oldEdge.id)!;
+  await readObjects(restoreLedger, [retired.id, ids["tmp:first"], ids["tmp:impl"]]);
+  const restored = proposal(restoreLedger);
+  restored.edges = [{ ...(retired.body as EdgeProposal), expectedContentRev: retired.contentRev, expectedRecordRev: retired.recordRev, reason: "重新核验后恢复", evidenceIds: [restoreSource.record.id] }];
+  restored.reactivate = [{ id: retired.id, expectedContentRev: retired.contentRev, expectedRecordRev: retired.recordRev, reason: "恢复", evidenceIds: [restoreSource.record.id] }];
+  const restoredAccepted = f.commits.accept(restoreLedger.ledgerId, restored); await f.commits.commit(restoreLedger.ledgerId, restoredAccepted.proposalDigest, async () => {});
+  assert.equal(f.store.object(retired.id)?.recordRev, retired.recordRev + 1); assert.equal(f.store.object(retired.id)?.contentRev, retired.contentRev + 1); assert.equal(f.store.object(retired.id)?.lifecycle, "active");
+  assert.equal(f.store.links().length, 3);
+});
+
+test("contains cycles and concurrent relation insertion are rejected by the final transaction", async t => {
+  const f = await indexFixture(t); await f.put("a.ts", "export const a = 1;");
+  const ledger = await f.ledger("cycle"), source = await f.read(ledger), input = proposal(ledger, [feature("tmp:a", source.record.id, "A"), feature("tmp:b", source.record.id, "B")]);
+  input.edges = [edge("tmp:ab", "tmp:a", "tmp:b", source.record.id, "contains"), edge("tmp:ba", "tmp:b", "tmp:a", source.record.id, "contains")];
+  const receipt = f.commits.accept(ledger.ledgerId, input);
+  await assert.rejects(f.commits.commit(ledger.ledgerId, receipt.proposalDigest, async () => {}), invalid);
+  assert.equal(f.store.objects().filter(object => object.kind !== "symbol").length, 0);
+  const initial = await f.ledger("nodes"), initialSource = await f.read(initial), nodes = proposal(initial, [feature("tmp:a", initialSource.record.id, "A"), feature("tmp:b", initialSource.record.id, "B")]);
+  const initialReceipt = f.commits.accept(initial.ledgerId, nodes), committed = await f.commits.commit(initial.ledgerId, initialReceipt.proposalDigest, async () => {}), ids = committed.idMap;
+  const a = await f.ledger("a"), b = await f.ledger("b"); await f.read(a); await f.read(b);
+  for (const item of [a, b]) await f.sources.withLedger(item.ledgerId, async live => { for (const id of Object.values(ids)) f.sources.recordObject(live, f.store.object(id)!); });
+  const aa = proposal(a), bb = proposal(b);
+  aa.edges = [edge("tmp:ab", ids["tmp:a"], ids["tmp:b"], initialSource.record.id, "contains")];
+  bb.edges = [edge("tmp:ba", ids["tmp:b"], ids["tmp:a"], initialSource.record.id, "contains")];
+  const ar = f.commits.accept(a.ledgerId, aa), br = f.commits.accept(b.ledgerId, bb);
+  await assert.rejects(f.commits.commit(a.ledgerId, ar.proposalDigest, async () => { await f.commits.commit(b.ledgerId, br.proposalDigest, async () => {}); }), invalid);
+  assert.equal(f.store.links().length, 1); assert.equal(f.store.submission(a.requestId), null); assert.ok(f.store.submission(b.requestId));
+});

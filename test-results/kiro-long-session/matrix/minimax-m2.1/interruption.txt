@@ -1,0 +1,1 @@
+﻿Execution tool interrupted command after 250 seconds. Actual node exit code was not captured; do not interpret as a test exit code. Seven turns persisted. No replay performed.

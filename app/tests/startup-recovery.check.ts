@@ -37,7 +37,7 @@ try {
   assert.equal(await page.getByRole('option', { name: /本地电脑/ }).count(), 1);
   assert.equal(await page.getByRole('option', { name: /手动输入地址/ }).count(), 1);
   await page.getByRole('combobox', { name: '连接设备', exact: true }).press('Escape');
-  await page.locator('.startup-maintenance > summary').click();
+  await page.locator('.startup-maintenance > summary').filter({ hasText: '版本与更新 · Pi 引擎' }).click();
   await page.getByRole('heading', { name: '版本与更新' }).waitFor();
   assert.equal(await page.locator('.startup-fallback').count(), 0);
   // Older status response captured before an installation must not release the new job.

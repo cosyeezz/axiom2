@@ -1,0 +1,18 @@
+{
+  "AppliedAt": "2026-10-25T08:29:46.4474896-07:00",
+  "Method": "Atomic replacement; no restart; safe SSE wrapper diagnostic",
+  "Records": [
+    {
+      "Target": "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\qoder-sse.js.map",
+      "Backup": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-sse-failure\\deployment\\backup-diagnostic-20261025-082946\\qoder-sse.js.map",
+      "PreviousSha256": "E0D7B6C54F80C31567A3A31B55353A4B1A20C19D6299126622A07083A4AE2269",
+      "AppliedSha256": "8C29BB70CCA16BBF32617574DEB7F5D0F4F4C66AC15C14AB3B9DDEA2691E82EE"
+    },
+    {
+      "Target": "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\qoder-sse.js",
+      "Backup": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-sse-failure\\deployment\\backup-diagnostic-20261025-082946\\qoder-sse.js",
+      "PreviousSha256": "36A276EABAC46BE63328B1C329C8075DDD2D70B0670A85C370B1961F0CAAD0AB",
+      "AppliedSha256": "4B0BF0898E1FD6F8E21AD5F5C9D252991EA9A6BF41A9C50F5A353EE2576C3B8F"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+Changes improve CLI safety but are not yet sufficient: three concrete issues remain.
+Scope: delivery HEAD 739146f; six changed scripts/tests byte-match main. Static review only; no suite rerun or Kiro/service request.
+
+1. app/tests/kiro-live-plan.test.ts:305,311 pass JSON.stringify(...) directly to assertControlledAnswer, which requires {answer: string} and reads record.answer.trim() at plan.mjs:173. The positive AST cases will throw TypeError; negative cases can pass without reaching AST validation. Wrap each JSON string in {answer: ...}; require the expected assertion error for negative cases.
+
+2. app/scripts/kiro-live-plan.mjs:206-215 uses forgeable text sentinels. Command `Set-Content -Path __KIRO_TARGET__ -Value '{}'` contains no quoted receipt target, yet the unmasked token matches the path-argument regex. A completed shell plus a correct preexisting receipt read can therefore pass. Use token objects/offsets tied to actual matched string literals, or reject reserved sentinels in raw commands. Add this negative case. Static-request-only wording does not cure wrong-target recognition.
+
+3. plan.mjs:141-157 accepts duplicate callback parameter names and TS-only syntax. `function sum(xs){return xs.reduce(function(a,a){return a+a;},0)}` satisfies all checks but doubles each item instead of summing. `function sum(xs?){return xs.reduce((a,x)=>a+x,0)}` also passes the shape despite invalid JS. A parse-only TypeScript probe returned zero parseDiagnostics for both (node, delivery cwd, exit 0); generated source was never executed. Require distinct callback bindings and reject questionToken/typeParameters and other non-JS modifiers, or constrain to an exact JS AST subset.
+
+Confirmed: both CLI parsers reject missing/empty/next-flag, duplicate and unknown options before file/WS operations; driver rejects unknown commands and send ambiguity. No eval introduced; TypeScript is declared. Updated tests/types/syntax results and verification-v2 remain unverified. Preserve historical verification.json; do not describe it as the new six-file snapshot. Existing reports untouched; new report created wx only.

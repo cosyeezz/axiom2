@@ -1,0 +1,39 @@
+{
+  "cwd": "F:/Axiom/axiom2/app",
+  "kiro": {
+    "exitCode": 0,
+    "tests": 46,
+    "pass": 46,
+    "fail": 0,
+    "durationMs": 50041.6828,
+    "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/kiro-auth.test.ts tests/kiro-callback.test.ts tests/kiro-catalog.test.ts tests/kiro-chat.test.ts tests/kiro-runtime.test.ts tests/kiro-pooling.test.ts",
+    "log": "kiro-tests.log",
+    "sourceResult": "C:/Users/dane/AppData/Local/Temp/kiro-final-mock-f9e571f67a554236820b32baba679ffb/result.json"
+  },
+  "compatibility": {
+    "exitCode": 0,
+    "tests": 25,
+    "pass": 25,
+    "fail": 0,
+    "durationMs": 96131.2488,
+    "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/model-runtime.test.ts tests/model-catalog.test.ts tests/model-network.test.ts tests/model-oauth-config.test.ts tests/model-oauth.test.ts tests/model-auth-preparation.test.ts tests/qoder-runtime.test.ts tests/codebuddy-runtime.test.ts",
+    "log": "compatibility-tests.log",
+    "sourceResult": "C:/Users/dane/AppData/Local/Temp/axiom-final-mock-e22b0f6f3a7c4fe887d24405dd931f73/result.json"
+  },
+  "poolingAfterWordingFix": {
+    "exitCode": 0,
+    "tests": 4,
+    "pass": 4,
+    "fail": 0,
+    "durationMs": 33243.5202,
+    "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/kiro-pooling.test.ts",
+    "log": "pooling-tests.log"
+  },
+  "build": {
+    "exitCode": 0,
+    "command": "npm run build",
+    "log": "build.log",
+    "note": "Actual LASTEXITCODE captured by main process; includes full tsc, Vite, server tsc. Chunk-size warning only."
+  },
+  "scope": "Local mock and build only. No real account/API verification; no deployment/restart/commit. Pooling names/comments revised after full suite; affected 4 tests rerun."
+}

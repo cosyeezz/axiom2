@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "scope": "offline synthetic adapter and SDK-helper observations, not live AXIOM worker or Kiro acceptance",
+  "releaseCommit": "d5d90322661d5d434872de024e014534c9a58c64",
+  "scenarios": [
+    {
+      "name": "http-success",
+      "httpStatus": 200,
+      "syntheticBodyReason": null,
+      "streamExceptionCode": null,
+      "responseRetryAfter": null,
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "stop",
+      "sdkClassifierRetryable": false,
+      "errorMessageSha256": null,
+      "textCharacters": 17,
+      "elapsedMs": 23.066
+    },
+    {
+      "name": "http429-user-rate",
+      "httpStatus": 429,
+      "syntheticBodyReason": "USER_REQUEST_RATE_EXCEEDED",
+      "streamExceptionCode": null,
+      "responseRetryAfter": "120",
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 0,
+      "elapsedMs": 1.747
+    },
+    {
+      "name": "http429-credit-rate",
+      "httpStatus": 429,
+      "syntheticBodyReason": "CREDIT_CONSUMPTION_RATE_EXCEEDED",
+      "streamExceptionCode": null,
+      "responseRetryAfter": "1800",
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 0,
+      "elapsedMs": 0.64
+    },
+    {
+      "name": "http429-monthly",
+      "httpStatus": 429,
+      "syntheticBodyReason": "MONTHLY_REQUEST_COUNT",
+      "streamExceptionCode": null,
+      "responseRetryAfter": "600",
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 0,
+      "elapsedMs": 0.403
+    },
+    {
+      "name": "http402-monthly",
+      "httpStatus": 402,
+      "syntheticBodyReason": "MONTHLY_REQUEST_COUNT",
+      "streamExceptionCode": null,
+      "responseRetryAfter": null,
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": false,
+      "errorMessageSha256": "7aa2dd420474c2165bf41903dee5d9e271557066ed46117de31acfcd50665076",
+      "textCharacters": 0,
+      "elapsedMs": 0.391
+    },
+    {
+      "name": "http200-stream-throttle",
+      "httpStatus": 200,
+      "syntheticBodyReason": "USER_REQUEST_RATE_EXCEEDED",
+      "streamExceptionCode": "ThrottlingException",
+      "responseRetryAfter": null,
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 0,
+      "elapsedMs": 0.625
+    },
+    {
+      "name": "http200-stream-quota",
+      "httpStatus": 200,
+      "syntheticBodyReason": "MONTHLY_REQUEST_COUNT",
+      "streamExceptionCode": "ServiceQuotaExceededException",
+      "responseRetryAfter": null,
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 0,
+      "elapsedMs": 0.515
+    },
+    {
+      "name": "partial-then-throttle",
+      "httpStatus": 200,
+      "syntheticBodyReason": "USER_REQUEST_RATE_EXCEEDED",
+      "streamExceptionCode": "ThrottlingException",
+      "responseRetryAfter": null,
+      "stubCalls": 1,
+      "bodyParseMethodCalls": 0,
+      "stopReason": "error",
+      "sdkClassifierRetryable": true,
+      "errorMessageSha256": "e867e2d6e7015bd8660864d7a0913b7efca34eab1137cab1719880ee2c0909e1",
+      "textCharacters": 22,
+      "elapsedMs": 0.566
+    },
+    {
+      "name": "sdk-helper-monthly-normalized-error",
+      "syntheticOnly": true,
+      "localZeroDelayPolicyNotGlobalConfiguration": true,
+      "helperInvocations": 4,
+      "scheduled": [
+        {
+          "attempt": 1,
+          "maximum": 3,
+          "delay": 0
+        },
+        {
+          "attempt": 2,
+          "maximum": 3,
+          "delay": 0
+        },
+        {
+          "attempt": 3,
+          "maximum": 3,
+          "delay": 0
+        }
+      ],
+      "stopReason": "error"
+    }
+  ],
+  "existingRunObservation": {
+    "sourceStateSha256": "07150ce3a90b9fd47f7b0d33e85f74544e989da3f76d72e94dc2a1506ce2b197",
+    "durableInputs": 1,
+    "runId": "b483c133-fe77-46bf-bd7d-bb1111de2039",
+    "runStatus": "failed",
+    "retry": {
+      "attempt": 3,
+      "maxAttempts": 3,
+      "state": "exhausted"
+    },
+    "largestObservedRemainingWaitMs": [
+      {
+        "attempt": 1,
+        "milliseconds": 1981
+      },
+      {
+        "attempt": 2,
+        "milliseconds": 3980
+      },
+      {
+        "attempt": 3,
+        "milliseconds": 7986
+      }
+    ],
+    "httpStatusOrErrorBodyNotCapturedInThisState": true,
+    "limitation": "These progress records alone do not count HTTP attempts or distinguish an HTTP429 from a stream exception normalized to the same text."
+  },
+  "passed": true,
+  "assertionsCompleted": true,
+  "sourceSha256": {
+    "src/server/providers/kiro-chat.ts": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5",
+    "src/server/providers/kiro-chat-protocol.ts": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19",
+    "src/server/model-latency.ts": "2af6ab137eff643872e8a0abbe353625733c87c8e81354e31afb220518b978eb",
+    "node_modules/@earendil-works/pi-ai/dist/utils/retry.js": "310ea86dfa001bb3942d16f5d77ce976f5ba35bfb29515b265b87a17836b45f1"
+  },
+  "sourceUnchanged": true,
+  "originalStateUnchanged": true,
+  "scenariosPassed": 9,
+  "totalSyntheticStubCalls": 12,
+  "realNetworkAttempts": 0,
+  "socketConnectAttempts": 0,
+  "stableSyntheticConversation": true,
+  "newInvocationPerAdapterCall": true,
+  "identical429AndStreamErrorMessages": true
+}

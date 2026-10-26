@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 1,
+  "scope": "Read-only source and local artifact fingerprints, not a live model test or a complete dependency closure",
+  "nodeVersion": "v24.19.0",
+  "repositories": [
+    {
+      "label": "AXIOM release",
+      "root": "F:/Axiom/axiom-kiro-long-session-fb7031ed",
+      "head": "d5d90322661d5d434872de024e014534c9a58c64",
+      "trackedClean": true,
+      "headCommandExitCode": 0,
+      "statusCommandExitCode": 0,
+      "untrackedFilesNotEvaluated": true
+    },
+    {
+      "label": "hank9999",
+      "root": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999",
+      "head": "22f36e692ad387c46581a84daf0d563347e330a3",
+      "trackedClean": true,
+      "headCommandExitCode": 0,
+      "statusCommandExitCode": 0,
+      "untrackedFilesNotEvaluated": true
+    },
+    {
+      "label": "ZyphrZero",
+      "root": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero",
+      "head": "4cac2a8b887eacf4c8119558d3c1906e43f8cbd4",
+      "trackedClean": true,
+      "headCommandExitCode": 0,
+      "statusCommandExitCode": 0,
+      "untrackedFilesNotEvaluated": true
+    },
+    {
+      "label": "official historical CLI",
+      "root": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-catalog-research/amazon-q-developer-cli",
+      "head": "15cc8f3cd18c4272925ce1c7053268eedff1ea0a",
+      "trackedClean": true,
+      "headCommandExitCode": 0,
+      "statusCommandExitCode": 0,
+      "untrackedFilesNotEvaluated": true
+    }
+  ],
+  "packages": {
+    "pi-ai": "1.1.0",
+    "pi-coding-agent": "1.1.0",
+    "pi-agent-core": "1.1.0"
+  },
+  "sources": [
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/providers/kiro-catalog.ts",
+      "sha256": "803c557f307b14c934e3c1951795b7f24760f268a75089495c6ab95c6c5a9d12"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/agent-worker.ts",
+      "sha256": "191f8f262737c170b6f0cf6aa1c310c0007b91610e91a45b8283ba025f5e2612"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/model-latency.ts",
+      "sha256": "2af6ab137eff643872e8a0abbe353625733c87c8e81354e31afb220518b978eb"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/shared/latency.ts",
+      "sha256": "063147903fa43cf1f11d03577ecedfc0b6361f0706cbf7366a50b331a49252c1"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/latency.ts",
+      "sha256": "c11412e90fff9ca3ed7cb78933df62cd12db4bd5b1fb8155b5ebfaffa445776f"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/src/server/index.ts",
+      "sha256": "887f44291f850dfb3fdd89a1ecffba58f26f532f2cb2c020ad159b1d159007bc"
+    },
+    {
+      "scope": "AXIOM release",
+      "path": "F:/Axiom/axiom-kiro-long-session-fb7031ed/app/tests/fixtures/kiro-eventstream.ts",
+      "sha256": "f34599d960e17c5e4852f480259ad51703cd4716951badd45b6bf854155caffe"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/kiro/provider.rs",
+      "sha256": "d30e3e0b80e42ff680e984df0e4e0da2f49bd59c7309c850d04921adf8dab527"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/kiro/endpoint/mod.rs",
+      "sha256": "f2905a06220221311921f49308bceec7cda92866705919c6973f082df711e05d"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/kiro/endpoint/ide.rs",
+      "sha256": "af2ba91da583a55bbddeb757aac6124fc9eba316f233f5cc4d1d3893e744fac5"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/kiro/token_manager.rs",
+      "sha256": "8fce4d41040e5b42e07c17b8236cbc482e42825dae5df0178d2049b315593381"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/model/config.rs",
+      "sha256": "9460afa728a2845238617b25ef908baf84b6395411a4e033a60c6bf1a2b4a6db"
+    },
+    {
+      "scope": "hank9999",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/hank9999/src/main.rs",
+      "sha256": "77e635beff8c2b2ed9f324c9f0512de1c7084a9eab4fccd256d402ebbf384530"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/provider.rs",
+      "sha256": "7e6730c281b269a5823715d7a7f4ac8665e08ed88d19efc14e0b2f2de2feb51e"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/endpoint/mod.rs",
+      "sha256": "f16664119259f4ba699900b5a40db482d0fe3a258c76a0d41654a06e876c852b"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/endpoint/cli.rs",
+      "sha256": "b2d8954304dcfceaa26168328ae3bf5a9271527a9fc11a4344037ed0ffff35e6"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/endpoint/ide.rs",
+      "sha256": "74ef27fa23f86ffe15b9ecd4e2997912179466d62a71694df58d9825e289bad4"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/model/credentials.rs",
+      "sha256": "77cee65f3734639136371f5536ade337c6205c945867cc08cc0eacb84588dd30"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/kiro/token_manager.rs",
+      "sha256": "72355070a9645baa125a681a53e349184b48c41536f8a5d790438c345130c8e3"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/model/config.rs",
+      "sha256": "5df7795dda1188c84c04cf42089567d2a0cd4d8bf2ac6ff7e65dea782079caca"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/src/main.rs",
+      "sha256": "6c7605832f663ce2020e059c1a11313f489bbc2744adfe874a9025c4c52fe0b9"
+    },
+    {
+      "scope": "ZyphrZero",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-rs-research-551521254d8c430680481850c604da97/ZyphrZero/Cargo.toml",
+      "sha256": "af261f2e9a319cdea7b6bc8463be4498a2e30bcd0aa7113addab8df32e4efb4d"
+    },
+    {
+      "scope": "official historical CLI",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-catalog-research/amazon-q-developer-cli/crates/chat-cli/src/api_client/retry_classifier.rs",
+      "sha256": "ea91f957fbd6bab3afe9e9df8efe9dcbe92b52812b38e36371e0a639e5ae4c8c"
+    },
+    {
+      "scope": "official historical CLI",
+      "path": "C:/Users/dane/AppData/Local/Temp/axiom-kiro-catalog-research/amazon-q-developer-cli/crates/chat-cli/src/api_client/mod.rs",
+      "sha256": "86ff55286d03392f0cefca930f9995dd85396d7ff82b0eab9791bb5a219e1a5a"
+    },
+    {
+      "scope": "installed Pi",
+      "path": "F:/Axiom/axiom2/app/node_modules/@earendil-works/pi-ai/dist/utils/retry.js",
+      "sha256": "310ea86dfa001bb3942d16f5d77ce976f5ba35bfb29515b265b87a17836b45f1"
+    },
+    {
+      "scope": "installed Pi",
+      "path": "F:/Axiom/axiom2/app/node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js",
+      "sha256": "46da2f14c0f5d58164a44c1b2837d8ab7674ded3ae4c732d02ae62c87b39b939"
+    },
+    {
+      "scope": "installed Pi",
+      "path": "F:/Axiom/axiom2/app/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "sha256": "0ba5c847b4fd2fd838f71ea84885b9f3a4f15d9bf4b5493e2e88a41d1507e20b"
+    },
+    {
+      "scope": "installed Pi",
+      "path": "F:/Axiom/axiom2/app/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js",
+      "sha256": "7ded026cd47cbc9890e9e4e7076d2ee3182bfd43a8d9e9a567913af92581ff26"
+    },
+    {
+      "scope": "installed Pi",
+      "path": "F:/Axiom/axiom2/app/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js",
+      "sha256": "8155c0b7d819d2248a1bbf0fa4b8e40d15552ff7fa6a772154cbbccb6ae59235"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "README.md",
+      "bytes": 16249,
+      "sha256": "370cab1ed9a5c3427564572edb9140d1145b8216a297459c209768c3fdeeb0e5"
+    },
+    {
+      "name": "fingerprint-v1.exit-code.txt",
+      "bytes": 6,
+      "sha256": "9585fbece5c402088f2d6a2def7e60d1c7ffecc24b16d32d5823a064b008935b"
+    },
+    {
+      "name": "fingerprint-v1.json",
+      "bytes": 11176,
+      "sha256": "76029b75ceda1df9ee29b871706d17e13dc308b401d9f2b3163e497a0f9df818"
+    },
+    {
+      "name": "fingerprint-v1.log",
+      "bytes": 106,
+      "sha256": "5c6655ded2d81846065c1cbe8719bc890106e3f823770ea585c35afa2c89aa48"
+    },
+    {
+      "name": "fingerprint-v1.mjs",
+      "bytes": 5935,
+      "sha256": "b7e639cb813450fc91605d7d5a9883c84b335b23125d956dac6a076229d99c7d"
+    },
+    {
+      "name": "fingerprint-v2.mjs",
+      "bytes": 6206,
+      "sha256": "131e044453ad8113819082ca65e4091ec920c352766aef0ec72a00484cf0f8a7"
+    },
+    {
+      "name": "latency-readonly-v1.exit-code.txt",
+      "bytes": 6,
+      "sha256": "9585fbece5c402088f2d6a2def7e60d1c7ffecc24b16d32d5823a064b008935b"
+    },
+    {
+      "name": "latency-readonly-v1.json",
+      "bytes": 684,
+      "sha256": "57d706c9e3f00086d0857d0a53a91fb75ecbd1d38db5df99c17084fc40963b90"
+    },
+    {
+      "name": "latency-readonly-v1.log",
+      "bytes": 90,
+      "sha256": "dcb79ac0875ed1ae788fb98c4d92b0fee71a02893a7259ba1064a189daec57b0"
+    },
+    {
+      "name": "latency-readonly-v1.mjs",
+      "bytes": 3441,
+      "sha256": "2d464602abb40159e6ddbe00f35a15d59c4a19d50acf7b07153b1f475b039021"
+    },
+    {
+      "name": "probe-v1-runner.json",
+      "bytes": 402,
+      "sha256": "ebb504d946a784fb89673586f422ffcd602c006c98161814319b72589653f694"
+    },
+    {
+      "name": "probe-v1.exit-code.txt",
+      "bytes": 6,
+      "sha256": "9585fbece5c402088f2d6a2def7e60d1c7ffecc24b16d32d5823a064b008935b"
+    },
+    {
+      "name": "probe-v1.json",
+      "bytes": 6061,
+      "sha256": "60774414fd4bbf199b441c48cf7f3e565416db53faaa63c6d5dd1cfea1c2b8de"
+    },
+    {
+      "name": "probe-v1.log",
+      "bytes": 195,
+      "sha256": "8ccd4cccf9d8eafba0127ef95593b730f8b35fc57211c000f349c55e88d57345"
+    },
+    {
+      "name": "probe-v1.mjs",
+      "bytes": 9718,
+      "sha256": "62643fc295846a76d2dba276fffcf0b72dd605690dc3f122e3e34714c7523438"
+    },
+    {
+      "name": "probe-v2-runner.json",
+      "bytes": 401,
+      "sha256": "e3f0b8706da180569f25d3ffe95c5c5c35f04fb92f75b2eee9c7686b62e8e521"
+    },
+    {
+      "name": "probe-v2.exit-code.txt",
+      "bytes": 6,
+      "sha256": "9585fbece5c402088f2d6a2def7e60d1c7ffecc24b16d32d5823a064b008935b"
+    },
+    {
+      "name": "probe-v2.json",
+      "bytes": 6096,
+      "sha256": "9091512fc21a6ac6c8bc3378d09f8cded07d2c0c9582b38d3492b1a032d0fc1e"
+    },
+    {
+      "name": "probe-v2.log",
+      "bytes": 195,
+      "sha256": "9e0a153c18e2b0b0f598e9a87c1be9e3786c071b5851c7b8c32f39cd0bb7d4b6"
+    },
+    {
+      "name": "probe-v2.mjs",
+      "bytes": 9754,
+      "sha256": "f2cfb9a957b48175e27ff49b2def01ba118c35342c20b22fd569a5b3acbd2fc0"
+    }
+  ],
+  "previousFingerprintSha256": "76029b75ceda1df9ee29b871706d17e13dc308b401d9f2b3163e497a0f9df818",
+  "supersedes": "v1 README and abbreviated synthetic rate reasons; prior evidence files remain unchanged. The old README hash is a historical snapshot, not the current README.",
+  "passed": true,
+  "referencedSourceLinksChecked": 21,
+  "originalPost429StateUnchanged": true,
+  "probeSourcesStillMatch": true,
+  "realMatrixRerun": false,
+  "noGitWriteCommandsUsed": true
+}

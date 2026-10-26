@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "phase": "posthoc-assertion-classification",
+  "generatedAt": "2026-10-25T21:19:29.074Z",
+  "originalStrictFailureCount": 21,
+  "scoringPolicy": "Independent classification only. Original checks, state files and counts are unchanged. Normalization is a diagnostic, not a new scored pass.",
+  "contentPolicy": "No answer, prompt, thinking, tool argument/result bodies, credentials or private session metadata.",
+  "newModelRequests": 0,
+  "sources": [
+    {
+      "model": "minimax-m2.1",
+      "stateSha256": "6bd423625aebd928facfe5deb223d6b6058ea85e424cdaba356637fa90e30240"
+    },
+    {
+      "model": "minimax-m2.5",
+      "stateSha256": "86f0720e56ddf5d318b5848c74acf703e2f7165daff513543422a253f6ed2748"
+    },
+    {
+      "model": "glm-5",
+      "stateSha256": "48c87437f4feb7789632e0d6c88caaad983976c4337a2097bdcd8aba40a7731c"
+    },
+    {
+      "model": "qwen3-coder-next",
+      "stateSha256": "35b2330eada5f481b9348d6bce33f8dad7e5384a9c4b4928ed52568703d1f3e5"
+    },
+    {
+      "model": "deepseek-3.2",
+      "stateSha256": "9f00c0514ae2cec0612676f9b4e06515d65c51a38fd249de17e5ab8aab685745"
+    },
+    {
+      "model": "claude-sonnet-4.5",
+      "stateSha256": "5f3bdf810723199f1758ebcafc4d0d816be820bc0d52a4341fd2f0f4a572c2a2"
+    }
+  ],
+  "entries": [
+    {
+      "model": "glm-5",
+      "label": "long-06-large-attachment",
+      "runId": "a2e61fbc-556e-4b40-8581-c2089799cd04",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": false
+      }
+    },
+    {
+      "model": "glm-5",
+      "label": "long-07-delayed-memory",
+      "runId": "517da335-c801-4ff9-89f4-e9a78b530f08",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": false
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-06-large-attachment",
+      "runId": "c93d3c66-9233-430e-9fc5-6c2fd881fac8",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": true
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-07-delayed-memory",
+      "runId": "12ad6f8f-4a30-47c1-8e74-b793d69836f6",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": true
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-15-second-attachment",
+      "runId": "998a7118-ee9b-4d6c-ba45-58bb5ef0dadf",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": true
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-19-final-ledger",
+      "runId": "c0a26a79-1ece-4976-a0b4-087a1d263bba",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": true
+      }
+    },
+    {
+      "model": "deepseek-3.2",
+      "label": "long-06-large-attachment",
+      "runId": "1025d468-4da8-49a7-9d96-542b127ca51f",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": false
+      }
+    },
+    {
+      "model": "deepseek-3.2",
+      "label": "long-07-delayed-memory",
+      "runId": "120d9e7f-484d-45fa-a3a6-04fad63aef80",
+      "category": "numeric-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "allRequiredSemanticFieldsPassAfterOnlyNumericTypeNormalization": true,
+        "recordedFormatComplied": false
+      }
+    },
+    {
+      "model": "minimax-m2.1",
+      "label": "long-05-off-memory",
+      "runId": "b78a04f8-bbf8-4168-8b47-4d3348ca82e0",
+      "category": "multiplication-string-prompt-validator-ambiguity",
+      "originalCheckPassed": false,
+      "observations": {
+        "correctTerminalProductValue": true,
+        "allRequiredSemanticFieldsPassAfterNumericRepresentationNormalization": true
+      }
+    },
+    {
+      "model": "minimax-m2.5",
+      "label": "long-20-checksum",
+      "runId": "0fcf1a27-a538-49b1-bdfb-ccbb31ab2170",
+      "category": "bare-text-validator-rejects-correct-json-checksum",
+      "originalCheckPassed": false,
+      "observations": {
+        "correctMarkerCheckwordAndChecksum": true,
+        "recordedOneLineFormatComplied": true,
+        "originalPromptDidNotExplicitlyBanJson": true
+      }
+    },
+    {
+      "model": "claude-sonnet-4.5",
+      "label": "long-01-seed",
+      "runId": "478da5d6-cc49-4a8c-af31-ad85d71fef2b",
+      "category": "whole-turn-seed-framing-contract",
+      "originalCheckPassed": false,
+      "observations": {
+        "allThreeSeedValuesPresent": true,
+        "recordedFormatComplied": false,
+        "notIndependentMultiplicationEvidence": true
+      }
+    },
+    {
+      "model": "minimax-m2.5",
+      "label": "long-14-history-recall",
+      "runId": "74598a7e-3663-4e3a-8123-dd3ee598b61d",
+      "category": "incorrect-arithmetic-or-state-selection",
+      "originalCheckPassed": false,
+      "observations": {
+        "field": "difference",
+        "expected": 652,
+        "actual": 647,
+        "valuesDiffer": true
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-14-history-recall",
+      "runId": "75f1ddab-95a8-4d1f-b421-261fca9aec6e",
+      "category": "incorrect-arithmetic-or-state-selection",
+      "originalCheckPassed": false,
+      "observations": {
+        "field": "difference",
+        "expected": 652,
+        "actual": 683,
+        "valuesDiffer": true
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-20-checksum",
+      "runId": "e429daa6-a3f1-4cb6-824d-7261b5b9d951",
+      "category": "incorrect-checksum",
+      "originalCheckPassed": false,
+      "observations": {
+        "expected": 1555,
+        "actual": 1866,
+        "valuesDiffer": true
+      }
+    },
+    {
+      "model": "deepseek-3.2",
+      "label": "long-20-checksum",
+      "runId": "d1b90a5b-dbff-4a0c-85fe-e73862b6ed5c",
+      "category": "incorrect-checksum",
+      "originalCheckPassed": false,
+      "observations": {
+        "expected": 1555,
+        "actual": 1503,
+        "valuesDiffer": true
+      }
+    },
+    {
+      "model": "minimax-m2.1",
+      "label": "long-10-write-read",
+      "runId": "aa24851a-4cf8-4bef-aa1a-79f036265bd4",
+      "category": "unicode-corrupted-in-observed-read-result",
+      "originalCheckPassed": false,
+      "observations": {
+        "observedReadContainsReplacementCharacter": true,
+        "readCheckwordCorrect": false,
+        "exactEncodingStageAndDiskBytesNotIndependentlyVerified": true
+      }
+    },
+    {
+      "model": "minimax-m2.1",
+      "label": "long-17-shell-recovery",
+      "runId": "d4b1180a-4dd2-4d81-a4be-7035d39f55e8",
+      "category": "unicode-corrupted-in-observed-read-result",
+      "originalCheckPassed": false,
+      "observations": {
+        "observedReadContainsReplacementCharacter": true,
+        "readCheckwordCorrect": false,
+        "exactEncodingStageAndDiskBytesNotIndependentlyVerified": true
+      }
+    },
+    {
+      "model": "minimax-m2.5",
+      "label": "long-10-write-read",
+      "runId": "397d7bfa-a85d-4e76-95c0-84856bdec1d3",
+      "category": "unicode-corrupted-in-observed-read-result",
+      "originalCheckPassed": false,
+      "observations": {
+        "observedReadContainsReplacementCharacter": true,
+        "readCheckwordCorrect": false,
+        "exactEncodingStageAndDiskBytesNotIndependentlyVerified": true
+      }
+    },
+    {
+      "model": "minimax-m2.5",
+      "label": "long-17-shell-recovery",
+      "runId": "e861beee-c15b-47b0-b236-207be0a4b223",
+      "category": "unicode-corrupted-in-observed-read-result",
+      "originalCheckPassed": false,
+      "observations": {
+        "observedReadContainsReplacementCharacter": true,
+        "readCheckwordCorrect": false,
+        "exactEncodingStageAndDiskBytesNotIndependentlyVerified": true
+      }
+    },
+    {
+      "model": "minimax-m2.5",
+      "label": "long-13-code-review",
+      "runId": "7023135f-6db5-4553-97ca-8a214ecc065a",
+      "category": "incomplete-reduce-code-contract",
+      "originalCheckPassed": false,
+      "observations": {
+        "codeStringDoesNotContainReduceCall": true,
+        "generatedCodeExecuted": false
+      }
+    },
+    {
+      "model": "qwen3-coder-next",
+      "label": "long-10-write-read",
+      "runId": "fb7b3d3b-5b03-410d-ae4a-48f7bf46f49d",
+      "category": "truncated-tool-input-observation-and-repair-order-validator",
+      "originalCheckPassed": false,
+      "observations": {
+        "fullInputSupplementHasSixCalls": true,
+        "twoProjectedInputsWereTruncated": true,
+        "recoveryAwarePosthocToolCheckPassed": true,
+        "originalStrictCheckUnchanged": true
+      }
+    }
+  ]
+}

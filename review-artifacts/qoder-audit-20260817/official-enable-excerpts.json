@@ -1,0 +1,47 @@
+{
+  "source": "official/package/bundle/qodercli.js",
+  "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+  "method": "inert literal text snippets; UTF16 offsets and original bundle lines",
+  "excerpts": [
+    {
+      "startUtf16": 19899156,
+      "line": 81,
+      "text": "},max_input_tokens:Yde(A,\"max_input_tokens\")??0,max_output_tokens:qT(A.max_output_tokens),enable:!1!==A.enable&&0!==A.enable,scene:I,server_scene:e,...void 0!==t?{price_factor:t}:{},...void 0!==i?{original_pric"
+    },
+    {
+      "startUtf16": 19899170,
+      "line": 81,
+      "text": "kens:Yde(A,\"max_input_tokens\")??0,max_output_tokens:qT(A.max_output_tokens),enable:!1!==A.enable&&0!==A.enable,scene:I,server_scene:e,...void 0!==t?{price_factor:t}:{},...void 0!==i?{original_price_factor:i}:{}"
+    },
+    {
+      "startUtf16": 19899184,
+      "line": 81,
+      "text": "x_input_tokens\")??0,max_output_tokens:qT(A.max_output_tokens),enable:!1!==A.enable&&0!==A.enable,scene:I,server_scene:e,...void 0!==t?{price_factor:t}:{},...void 0!==i?{original_price_factor:i}:{},...void 0!==a"
+    },
+    {
+      "startUtf16": 26155085,
+      "line": 422,
+      "text": "r);return{key:r,display_name:String(i.display_name??i.name??\"\"),is_default:!!i.is_default,enable:!1!==i.enable&&0!==i.enable,is_reasoning:!!i.is_reasoning,is_vl:!!i.is_vl,is_new:!!i.is_new,...void 0!==n?{is_fre"
+    },
+    {
+      "startUtf16": 26155099,
+      "line": 422,
+      "text": "r,display_name:String(i.display_name??i.name??\"\"),is_default:!!i.is_default,enable:!1!==i.enable&&0!==i.enable,is_reasoning:!!i.is_reasoning,is_vl:!!i.is_vl,is_new:!!i.is_new,...void 0!==n?{is_free:n}:{},...voi"
+    },
+    {
+      "startUtf16": 26155113,
+      "line": 422,
+      "text": ":String(i.display_name??i.name??\"\"),is_default:!!i.is_default,enable:!1!==i.enable&&0!==i.enable,is_reasoning:!!i.is_reasoning,is_vl:!!i.is_vl,is_new:!!i.is_new,...void 0!==n?{is_free:n}:{},...void 0!==o?{effor"
+    },
+    {
+      "startUtf16": 34398049,
+      "line": 857,
+      "text": "w:s}:{}}:void 0;return{source:\"qoder\",key:A.key,displayName:A.display_name,enabled:!1!==e.enable&&0!==e.enable,capabilities:{tools:!0,vision:!0===A.is_vl,imageGeneration:!1,reasoning:{supported:!0===A.is_reason"
+    },
+    {
+      "startUtf16": 34398063,
+      "line": 857,
+      "text": "0;return{source:\"qoder\",key:A.key,displayName:A.display_name,enabled:!1!==e.enable&&0!==e.enable,capabilities:{tools:!0,vision:!0===A.is_vl,imageGeneration:!1,reasoning:{supported:!0===A.is_reasoning||i.some(A="
+    }
+  ]
+}

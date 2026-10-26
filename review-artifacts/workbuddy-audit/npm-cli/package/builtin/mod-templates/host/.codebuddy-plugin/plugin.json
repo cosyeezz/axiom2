@@ -1,0 +1,7 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "Engineering checks and review guidance; does not replace your default agent",
+  "skills": "./skills",
+  "agents": "./agents"
+}

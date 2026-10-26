@@ -1,0 +1,454 @@
+[
+  {
+    "instruction": "000000014314A552: 48 8D 0D EF E9 74  lea         rcx,[000000015B898F48h]",
+    "text": "!....g...g..-...d...u...Mg..5g..............h...h..........j..Bj..0..0..\\k../k..1.....h..qh........8j...i..M0......f..f"
+  },
+  {
+    "instruction": "000000014314A5F7: 48 8D 15 D2 70 0A  lea         rdx,[00000001431F16D0h]",
+    "text": "UH......H..$....H..H......L......L......L..(...L.U8L...Oj.L..$....L.U8L..$....L....j.L..$....L....i.L..$....L..$....L.. .i.L.L$xL."
+  },
+  {
+    "instruction": "000000014314A605: 48 8D 15 AC 4D 74  lea         rdx,[000000015B88F3B8h]",
+    "text": "..[....................0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail...."
+  },
+  {
+    "instruction": "000000014314A61E: 48 8D 15 E3 43 74  lea         rdx,[000000015B88EA08h]",
+    "text": "........................................ ........ Tool Call Update: ..8.[............ .[..............[.....................B"
+  },
+  {
+    "instruction": "000000014314A65B: 48 8D 15 66 4D 74  lea         rdx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314A704: 4C 8D 3D 2D FF 9C  lea         r15,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314A713: 4C 8D 25 4E FF 9C  lea         r12,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314A78A: 48 8D 0D 2F E8 74  lea         rcx,[000000015B898FC0h]",
+    "text": "....f..f......9...g..qg..........h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`..Kb....\"4...4"
+  },
+  {
+    "instruction": "000000014314A7C1: 48 8D 0D 94 E7 74  lea         rcx,[000000015B898F5Ch]",
+    "text": "u...Mg..5g..............h...h..........j..Bj..0..0..\\k../k..1.....h..qh........8j...i..M0......f..f......9...g..qg..."
+  },
+  {
+    "instruction": "000000014314A7F9: 48 8D 0D D0 E7 74  lea         rcx,[000000015B898FD0h]",
+    "text": "9...g..qg..........h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`..Kb....\"4...4....8......p4"
+  },
+  {
+    "instruction": "000000014314A82E: 48 8D 0D 6B E7 74  lea         rcx,[000000015B898FA0h]",
+    "text": "....h..qh........8j...i..M0......f..f......9...g..qg..........h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`"
+  },
+  {
+    "instruction": "000000014314A858: 48 8D 0D 11 E7 74  lea         rcx,[000000015B898F70h]",
+    "text": ".....h...h..........j..Bj..0..0..\\k../k..1.....h..qh........8j...i..M0......f..f......9...g..qg..........h..h... ... "
+  },
+  {
+    "instruction": "000000014314A890: 48 8D 0D 49 E7 74  lea         rcx,[000000015B898FE0h]",
+    "text": ".....h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`..Kb....\"4...4....8......p4..94..I..c...5"
+  },
+  {
+    "instruction": "000000014314A906: 48 8D 3D 2B FD 9C  lea         rdi,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314A915: 48 8D 1D 4C FD 9C  lea         rbx,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314A948: 48 8D 0D 81 6D 0A  lea         rcx,[00000001431F16D0h]",
+    "text": "UH......H..$....H..H......L......L......L..(...L.U8L...Oj.L..$....L.U8L..$....L....j.L..$....L....i.L..$....L..$....L.. .i.L.L$xL."
+  },
+  {
+    "instruction": "000000014314A953: 48 8D 0D 5E 4A 74  lea         rcx,[000000015B88F3B8h]",
+    "text": "..[....................0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail...."
+  },
+  {
+    "instruction": "000000014314A96C: 48 8D 0D 95 40 74  lea         rcx,[000000015B88EA08h]",
+    "text": "........................................ ........ Tool Call Update: ..8.[............ .[..............[.....................B"
+  },
+  {
+    "instruction": "000000014314A9A9: 48 8D 0D 18 4A 74  lea         rcx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314AA48: 4C 8D 3D 01 E6 78  lea         r15,[00000001448D9050h]",
+    "text": "UAWAVAUATVWSH..xH.l$p.)u...A.H.U..E..E..H..L.q.L.y.H.A..9.unL.`.M........L.(..p.I...1.H.].1...f.H..H...I9.......I9.......L.m.L.e.."
+  },
+  {
+    "instruction": "000000014314AA5E: 4C 8D 3D 0B AE C6  lea         r15,[000000015BDB5870h]",
+    "text": "................ span=...................X.[.............4..4...4..C4..fatal runtime error: thread local panicked on drop, aborti"
+  },
+  {
+    "instruction": "000000014314AD46: 48 8D 0D 63 E2 74  lea         rcx,[000000015B898FB0h]",
+    "text": "....8j...i..M0......f..f......9...g..qg..........h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`"
+  },
+  {
+    "instruction": "000000014314AD7E: 48 8D 0D FB E1 74  lea         rcx,[000000015B898F80h]",
+    "text": "....j..Bj..0..0..\\k../k..1.....h..qh........8j...i..M0......f..f......9...g..qg..........h..h... ... ..j..Yj..Q0..f0"
+  },
+  {
+    "instruction": "000000014314B0D6: 48 8D 0D 13 DF 74  lea         rcx,[000000015B898FF0h]",
+    "text": ". ..j..Yj..Q0..f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`..Kb....\"4...4....8......p4..94..I..c...5...4..S......"
+  },
+  {
+    "instruction": "000000014314B9DD: 48 8D 15 2C 3C 74  lea         rdx,[000000015B88F610h]",
+    "text": "...[....u.......profileArn is required but was not found for social login. Please log out and log in again........[....(........."
+  },
+  {
+    "instruction": "000000014314BA14: 48 8D 15 AD 39 74  lea         rdx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314BB33: 48 8D 1D FE EA 9C  lea         rbx,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314BB42: 4C 8D 3D 1F EB 9C  lea         r15,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314BD53: 48 8D 15 2E 38 74  lea         rdx,[000000015B88F588h]",
+    "text": "8..[....J.......profileArn missing for social user . this should not happen. The profile ARN should have been stored at login ti"
+  },
+  {
+    "instruction": "000000014314BD8A: 48 8D 15 37 36 74  lea         rdx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314BEAA: 48 8D 1D 87 E7 9C  lea         rbx,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314BEB9: 4C 8D 3D A8 E7 9C  lea         r15,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314C01E: 48 8D 0D 6B CF 74  lea         rcx,[000000015B898F90h]",
+    "text": ".0..\\k../k..1.....h..qh........8j...i..M0......f..f......9...g..qg..........h..h... ... ..j..Yj..Q0..f0..Tk...k..]1..k1"
+  },
+  {
+    "instruction": "000000014314C04F: 48 8D 0D AA CF 74  lea         rcx,[000000015B899000h]",
+    "text": "f0..Tk...k..]1..k1...k...k...c...`..s`...`...`..`..Kb....\"4...4....8......p4..94..I..c...5...4..S............6..T5...."
+  },
+  {
+    "instruction": "000000014314C16B: 48 8D 0D 9E CE 74  lea         rcx,[000000015B899010h]",
+    "text": "k1...k...k...c...`..s`...`...`..`..Kb....\"4...4....8......p4..94..I..c...5...4..S............6..T5.........7...6...."
+  },
+  {
+    "instruction": "000000014314C4FE: 4C 8D 25 9B 74 75  lea         r12,[000000015B8A39A0h]",
+    "text": "..@....(................./C.......A.....9.[....../C....`.,C......,C....0.NC......G@.............................Ga@.............."
+  },
+  {
+    "instruction": "000000014314C853: 4C 8D 3D DE DD 9C  lea         r15,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314C862: 48 8D 35 FF DD 9C  lea         rsi,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314C904: 48 8D 0D 05 2D 74  lea         rcx,[000000015B88F610h]",
+    "text": "...[....u.......profileArn is required but was not found for social login. Please log out and log in again........[....(........."
+  },
+  {
+    "instruction": "000000014314C93B: 48 8D 0D 86 2A 74  lea         rcx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314CC02: 48 8D 0D C7 5C 74  lea         rcx,[000000015B8928D0h]",
+    "text": "CodeWhispererStreamingGenerateAssistantResponse..(.[....................................`.d@.....(.[.............................."
+  },
+  {
+    "instruction": "000000014314CC1B: 48 8D 0D C4 5C 74  lea         rcx,[000000015B8928E6h]",
+    "text": "GenerateAssistantResponse..(.[....................................`.d@.....(.[.....................................7.D....aws-api."
+  },
+  {
+    "instruction": "000000014314CC3B: 48 8D 0D 8E 4F 74  lea         rcx,[000000015B891BD0h]",
+    "text": ".:.C.....................#.C............................p..C....p..C....p..C.......@....P................#.C......................"
+  },
+  {
+    "instruction": "000000014314CC50: 48 8D 05 99 4F 74  lea         rax,[000000015B891BF0h]",
+    "text": "........................p..C....p..C....p..C.......@....P................#.C..............................C......C......C......"
+  },
+  {
+    "instruction": "000000014314CD7E: 48 8D 05 7B 5B 74  lea         rax,[000000015B892900h]",
+    "text": ".(.[....................................`.d@.....(.[.....................................7.D....aws-api.`).[.............(.[....n."
+  },
+  {
+    "instruction": "000000014314CD8C: 48 8D 05 7D 5B 74  lea         rax,[000000015B892910h]",
+    "text": "........................`.d@.....(.[.....................................7.D....aws-api.`).[.............(.[....n.......8.......C:"
+  },
+  {
+    "instruction": "000000014314CD9A: 48 8D 15 8F 5B 74  lea         rdx,[000000015B892930h]",
+    "text": ".(.[.....................................7.D....aws-api.`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn"
+  },
+  {
+    "instruction": "000000014314CDBD: 48 8D 15 7C 5B 74  lea         rdx,[000000015B892940h]",
+    "text": ".........................7.D....aws-api.`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-s"
+  },
+  {
+    "instruction": "000000014314CDCB: 48 8D 15 96 5B 74  lea         rdx,[000000015B892968h]",
+    "text": "`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_a"
+  },
+  {
+    "instruction": "000000014314CF2E: 48 8D 05 CB 59 74  lea         rax,[000000015B892900h]",
+    "text": ".(.[....................................`.d@.....(.[.....................................7.D....aws-api.`).[.............(.[....n."
+  },
+  {
+    "instruction": "000000014314CF3C: 48 8D 05 CD 59 74  lea         rax,[000000015B892910h]",
+    "text": "........................`.d@.....(.[.....................................7.D....aws-api.`).[.............(.[....n.......8.......C:"
+  },
+  {
+    "instruction": "000000014314CF4A: 48 8D 0D DF 59 74  lea         rcx,[000000015B892930h]",
+    "text": ".(.[.....................................7.D....aws-api.`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn"
+  },
+  {
+    "instruction": "000000014314CF6D: 48 8D 0D CC 59 74  lea         rcx,[000000015B892940h]",
+    "text": ".........................7.D....aws-api.`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-s"
+  },
+  {
+    "instruction": "000000014314CF7B: 48 8D 0D E6 59 74  lea         rcx,[000000015B892968h]",
+    "text": "`).[.............(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_a"
+  },
+  {
+    "instruction": "000000014314DD34: 48 8D 05 84 38 74  lea         rax,[000000015B8915BFh]",
+    "text": "initial-response....[....}...........P...assertion failed: slot.is_none()C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-"
+  },
+  {
+    "instruction": "000000014314DD3B: 48 8D 15 6E 38 74  lea         rdx,[000000015B8915B0h]",
+    "text": "initial-requestinitial-response....[....}...........P...assertion failed: slot.is_none()C:\\Users\\runneradmin\\.cargo\\registry\\src\\i"
+  },
+  {
+    "instruction": "000000014314DE0A: 4C 8D 3D 27 C8 9C  lea         r15,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014314DE19: 48 8D 3D 48 C8 9C  lea         rdi,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "000000014314DEBB: 48 8D 0D C6 16 74  lea         rcx,[000000015B88F588h]",
+    "text": "8..[....J.......profileArn missing for social user . this should not happen. The profile ARN should have been stored at login ti"
+  },
+  {
+    "instruction": "000000014314DEF2: 48 8D 0D CF 14 74  lea         rcx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014314EBCD: 48 8D 15 24 CA CD  lea         rdx,[0000000145E2B5F8h]",
+    "text": "aws_request_id.............................E............................/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\st"
+  },
+  {
+    "instruction": "000000014314F083: 48 8D 0D 96 9F 74  lea         rcx,[000000015B899020h]",
+    "text": ".`..s`...`...`..`..Kb....\"4...4....8......p4..94..I..c...5...4..S............6..T5.........7...6.....1..=:...9..h."
+  },
+  {
+    "instruction": "000000014314F46A: 48 8D 05 C7 FF 73  lea         rax,[000000015B88F438h]",
+    "text": "..[....(...............internal error: entered unreachable code: One of the clients must be created by this point......P.[....Z."
+  },
+  {
+    "instruction": "000000014314F476: 48 8D 0D 94 FF 73  lea         rcx,[000000015B88F411h]",
+    "text": "building conversation should not fail....[....(...............internal error: entered unreachable code: One of the clients must b"
+  },
+  {
+    "instruction": "000000014314F47D: 4C 8D 0D 7C 3B 74  lea         r9,[000000015B893000h]",
+    "text": "..@....(..................C...............................C....called `Result::unwrap()` on an `Err` value........C....p........."
+  },
+  {
+    "instruction": "000000014314F4AE: 48 8D 0D 33 01 19  lea         rcx,[000000015F2DF5E8h]",
+    "text": "`..[....................p.[.................... .[......................[.......................[....................@.[......"
+  },
+  {
+    "instruction": "000000014314F4EA: 48 8D 0D 27 77 18  lea         rcx,[000000015F2D6C18h]",
+    "text": "...E.....................l-_.....t.E............................................P..E....................X..E.....................1"
+  },
+  {
+    "instruction": "000000014314F59D: 48 8D 0D 74 00 19  lea         rcx,[000000015F2DF618h]",
+    "text": " .[......................[.......................[....................@.[....................0.[....................0..[......"
+  },
+  {
+    "instruction": "000000014314F62B: 48 8D 0D CE FF 18  lea         rcx,[000000015F2DF600h]",
+    "text": "p.[.................... .[......................[.......................[....................@.[....................0.[......"
+  },
+  {
+    "instruction": "000000014314F649: 48 8D 0D 88 FE 73  lea         rcx,[000000015B88F4D8h]",
+    "text": "..[....(.......Z...9.....[....(.......d...K.....[....(.......l...<.....[....(...........]...profileArn missing, attempting laz"
+  },
+  {
+    "instruction": "000000014314F655: 48 8D 0D 7C FE 73  lea         rcx,[000000015B88F4D8h]",
+    "text": "..[....(.......Z...9.....[....(.......d...K.....[....(.......l...<.....[....(...........]...profileArn missing, attempting laz"
+  },
+  {
+    "instruction": "000000014314F668: 48 8D 0D 99 FE 73  lea         rcx,[000000015B88F508h]",
+    "text": "..[....(.......l...<.....[....(...........]...profileArn missing, attempting lazy resolution via list_available_profiles......8."
+  },
+  {
+    "instruction": "000000014314F680: 48 8D 0D 81 FE 73  lea         rcx,[000000015B88F508h]",
+    "text": "..[....(.......l...<.....[....(...........]...profileArn missing, attempting lazy resolution via list_available_profiles......8."
+  },
+  {
+    "instruction": "000000014314F698: 48 8D 0D 69 33 74  lea         rcx,[000000015B892A08h]",
+    "text": ".).[....w.......W.......invalid memory buffer length when writing.......8..[....p.......7...^...8..[....p.......5...^...8..[....p."
+  },
+  {
+    "instruction": "000000014314F6B0: 48 8D 0D 51 33 74  lea         rcx,[000000015B892A08h]",
+    "text": ".).[....w.......W.......invalid memory buffer length when writing.......8..[....p.......7...^...8..[....p.......5...^...8..[....p."
+  },
+  {
+    "instruction": "000000014314F6C1: 48 8D 05 E8 FD 73  lea         rax,[000000015B88F4B0h]",
+    "text": "P.[....Z.........[....(.................[....(.......Z...9.....[....(.......d...K.....[....(.......l...<.....[....(........."
+  },
+  {
+    "instruction": "000000014314F729: 48 8D 15 90 FD 73  lea         rdx,[000000015B88F4C0h]",
+    "text": "..[....(.................[....(.......Z...9.....[....(.......d...K.....[....(.......l...<.....[....(...........]...profileArn"
+  },
+  {
+    "instruction": "000000014314F756: 48 8D 0D 93 FD 73  lea         rcx,[000000015B88F4F0h]",
+    "text": "..[....(.......d...K.....[....(.......l...<.....[....(...........]...profileArn missing, attempting lazy resolution via list_av"
+  },
+  {
+    "instruction": "000000014314F77C: 48 8D 0D 6D FD 73  lea         rcx,[000000015B88F4F0h]",
+    "text": "..[....(.......d...K.....[....(.......l...<.....[....(...........]...profileArn missing, attempting lazy resolution via list_av"
+  },
+  {
+    "instruction": "000000014314F81F: 48 8D 0D 62 30 74  lea         rcx,[000000015B892888h]",
+    "text": ".(.[....n...............correct output type......(.[....n.......*.......CodeWhispererStreamingGenerateAssistantResponse..(.[......"
+  },
+  {
+    "instruction": "000000014314F83E: 48 8D 0D A3 2F 74  lea         rcx,[000000015B8927E8h]",
+    "text": ".'.[....W....... ...r....'.[....W.......(...P...C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\ge"
+  },
+  {
+    "instruction": "000000014314F85D: 48 8D 0D 24 30 74  lea         rcx,[000000015B892888h]",
+    "text": ".(.[....n...............correct output type......(.[....n.......*.......CodeWhispererStreamingGenerateAssistantResponse..(.[......"
+  },
+  {
+    "instruction": "000000014314F87C: 48 8D 0D 65 2F 74  lea         rcx,[000000015B8927E8h]",
+    "text": ".'.[....W....... ...r....'.[....W.......(...P...C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\ge"
+  },
+  {
+    "instruction": "000000014314F8B7: 48 8D 0D C2 FD 73  lea         rcx,[000000015B88F680h]",
+    "text": "..[....(...............Lazily resolved profileArn from list_available_profiles....[....7..................................C......"
+  },
+  {
+    "instruction": "000000014314F8F2: 48 8D 0D 87 FD 73  lea         rcx,[000000015B88F680h]",
+    "text": "..[....(...............Lazily resolved profileArn from list_available_profiles....[....7..................................C......"
+  },
+  {
+    "instruction": "000000014314F957: 48 8D 05 5A 2F 74  lea         rax,[000000015B8928B8h]",
+    "text": ".(.[....n.......*.......CodeWhispererStreamingGenerateAssistantResponse..(.[....................................`.d@.....(.[......"
+  },
+  {
+    "instruction": "000000014314F963: 48 8D 0D 36 2F 74  lea         rcx,[000000015B8928A0h]",
+    "text": "correct output type......(.[....n.......*.......CodeWhispererStreamingGenerateAssistantResponse..(.[.............................."
+  },
+  {
+    "instruction": "000000014314F96A: 4C 8D 0D 6F 36 74  lea         r9,[000000015B892FE0h]",
+    "text": ".@....0............... ..C......@....(..................C...............................C....called `Result::unwrap()` on an `E"
+  },
+  {
+    "instruction": "000000014314F9B1: 48 8D 0D C0 2F 74  lea         rcx,[000000015B892978h]",
+    "text": ".(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_assistant_respons"
+  },
+  {
+    "instruction": "000000014314F9D7: 48 8D 0D 8A 1B 74  lea         rcx,[000000015B891568h]",
+    "text": "...[....}...........;......[....}...........R......[....}...............initial-requestinitial-response....[....}...........P...as"
+  },
+  {
+    "instruction": "000000014314FA12: 48 8D 0D 5F 2F 74  lea         rcx,[000000015B892978h]",
+    "text": ".(.[....n.......8.......C:\\a\\kiro-cli\\kiro-cli\\crates\\amzn-codewhisperer-streaming-client\\src\\operation\\generate_assistant_respons"
+  },
+  {
+    "instruction": "000000014314FA38: 48 8D 0D 29 1B 74  lea         rcx,[000000015B891568h]",
+    "text": "...[....}...........;......[....}...........R......[....}...............initial-requestinitial-response....[....}...........P...as"
+  },
+  {
+    "instruction": "000000014314FA73: 48 8D 0D A6 FA 73  lea         rcx,[000000015B88F520h]",
+    "text": "..[....(...........]...profileArn missing, attempting lazy resolution via list_available_profiles......8..[....J.......profileArn"
+  },
+  {
+    "instruction": "000000014314FAAE: 48 8D 0D 6B FA 73  lea         rcx,[000000015B88F520h]",
+    "text": "..[....(...........]...profileArn missing, attempting lazy resolution via list_available_profiles......8..[....J.......profileArn"
+  },
+  {
+    "instruction": "000000014314FADB: 48 8D 0D B6 1A 74  lea         rcx,[000000015B891598h]",
+    "text": "...[....}...............initial-requestinitial-response....[....}...........P...assertion failed: slot.is_none()C:\\Users\\runneradm"
+  },
+  {
+    "instruction": "000000014314FB08: 48 8D 0D 89 1A 74  lea         rcx,[000000015B891598h]",
+    "text": "...[....}...............initial-requestinitial-response....[....}...........P...assertion failed: slot.is_none()C:\\Users\\runneradm"
+  },
+  {
+    "instruction": "000000014314FB43: 48 8D 0D 96 1E 74  lea         rcx,[000000015B8919E0h]",
+    "text": "X..[............=...2...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-smithy-async-1.2.14\\src\\futu"
+  },
+  {
+    "instruction": "000000014314FB7E: 48 8D 0D 5B 1E 74  lea         rcx,[000000015B8919E0h]",
+    "text": "X..[............=...2...C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-smithy-async-1.2.14\\src\\futu"
+  },
+  {
+    "instruction": "000000014314FBC7: 48 8D 0D BA 1E 74  lea         rcx,[000000015B891A88h]",
+    "text": "...[............L.......U.6.....<E...[...B..s.p`.`{..m.7..;.q.\\.u...a.v..b%...z!.....t...@....`................#.C.............."
+  },
+  {
+    "instruction": "000000014314FC0D: 48 8D 0D 74 1E 74  lea         rcx,[000000015B891A88h]",
+    "text": "...[............L.......U.6.....<E...[...B..s.p`.`{..m.7..;.q.\\.u...a.v..b%...z!.....t...@....`................#.C.............."
+  },
+  {
+    "instruction": "0000000143150312: 48 8D 0D B7 F3 73  lea         rcx,[000000015B88F6D0h]",
+    "text": "...[....7..................................C......[....(...........2.....[....(...............profileArn is required but no prof"
+  },
+  {
+    "instruction": "0000000143150350: 48 8D 0D 71 F0 73  lea         rcx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "000000014315036C: 48 8D 0D 6D F3 73  lea         rcx,[000000015B88F6E0h]",
+    "text": "...........................C......[....(...........2.....[....(...............profileArn is required but no profiles are availab"
+  },
+  {
+    "instruction": "000000014315040F: 4C 8D 35 22 A2 9C  lea         r14,[000000015BB1A638h]",
+    "text": "........................`.=@......G@......G@....assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\a"
+  },
+  {
+    "instruction": "000000014315041E: 4C 8D 2D 43 A2 9C  lea         r13,[000000015BB1A668h]",
+    "text": "assertion failed: len > 0/rustc/ded5c06cf21d2b93bffd5d884aa6e96934ee4234\\library\\alloc\\src\\collections\\btree\\node.rs.......[....[."
+  },
+  {
+    "instruction": "0000000143150457: 48 8D 0D 72 F2 73  lea         rcx,[000000015B88F6D0h]",
+    "text": "...[....7..................................C......[....(...........2.....[....(...............profileArn is required but no prof"
+  },
+  {
+    "instruction": "0000000143150495: 48 8D 0D 2C EF 73  lea         rcx,[000000015B88F3C8h]",
+    "text": "........0...............p..D....crates\\chat-cli-v2\\src\\api_client\\mod.rs.building conversation should not fail....[....(........."
+  },
+  {
+    "instruction": "00000001431504B1: 48 8D 0D 28 F2 73  lea         rcx,[000000015B88F6E0h]",
+    "text": "...........................C......[....(...........2.....[....(...............profileArn is required but no profiles are availab"
+  },
+  {
+    "instruction": "00000001431505BE: 48 8D 0D 53 F1 73  lea         rcx,[000000015B88F718h]",
+    "text": "..[....(...............profileArn is required but no profiles are available. Please log in and select a profile.conversation_id r"
+  },
+  {
+    "instruction": "000000014315076A: 48 8D 05 8F EF 73  lea         rax,[000000015B88F700h]",
+    "text": "..[....(...........2.....[....(...............profileArn is required but no profiles are available. Please log in and select a p"
+  },
+  {
+    "instruction": "0000000143150776: 48 8D 0D C3 28 74  lea         rcx,[000000015B893040h]",
+    "text": "called `Result::unwrap()` on an `Err` value........C....p.................dD.... .F@.....................&C......................"
+  },
+  {
+    "instruction": "000000014315077D: 4C 8D 0D 0C 29 74  lea         r9,[000000015B893090h]",
+    "text": " .F@.....................&C............................p.&C....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6"
+  },
+  {
+    "instruction": "00000001431507D2: 48 8D 0D 57 EE 18  lea         rcx,[000000015F2DF630h]",
+    "text": "..[.......................[....................@.[....................0.[....................0..[.......................[......"
+  }
+]

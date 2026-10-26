@@ -1,0 +1,16 @@
+{
+  "mode": "staged",
+  "filesVerified": 34,
+  "sourceSnapshotFilesVerified": 33,
+  "evidenceParityFiles": 18,
+  "jsonFilesParsed": 14,
+  "markdownFileTargetsChecked": 33,
+  "gitBlobHashesVerified": 34,
+  "revision": "739146f57bb95d9e023e2e3820812bb4e12269a1",
+  "integrationBase": "739146f57bb95d9e023e2e3820812bb4e12269a1",
+  "controlledRecordedRounds": 137,
+  "controlledCompleted": 136,
+  "strictCheckPassed": 115,
+  "wholeTurnFormatPassed": 39,
+  "realModelMatrixComplete": false
+}

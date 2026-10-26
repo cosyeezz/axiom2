@@ -1,0 +1,58 @@
+{
+  "attempt": "sonnet-post429-v4",
+  "startedAt": "2026-10-25T20:58:07.232Z",
+  "pid": 21876,
+  "policy": {
+    "maximumNewPrompts": 4,
+    "minimumCooldownMs": 300000,
+    "promptPaceMs": 30000,
+    "noPriorInputReplay": true,
+    "noPriorToolReplay": true,
+    "stopOnAnyProtocolFailure": true
+  },
+  "notBefore": "2026-10-25T20:55:01.065Z",
+  "priorFailedRunId": "d0da062b-9bb2-45c9-8e2d-927fc91646b4",
+  "priorSourceSha256": "5f3bdf810723199f1758ebcafc4d0d816be820bc0d52a4341fd2f0f4a572c2a2",
+  "codeHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "6031bc6e918fec21c14d5c5fe922434c25e6db6da87af4fce899288596ae16e4"
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6"
+    }
+  ],
+  "rounds": [
+    {
+      "label": "long-17-shell-recovery",
+      "exitCode": 1,
+      "runId": "b483c133-fe77-46bf-bd7d-bb1111de2039",
+      "status": "failed"
+    }
+  ],
+  "stoppedOnProtocolFailure": true,
+  "finishedAt": "2026-10-25T20:58:27.768Z",
+  "hashesUnchanged": true,
+  "recordedRounds": 1,
+  "checkedRounds": 0,
+  "semanticFailureCount": 0,
+  "formatFailureCount": 0,
+  "controllerExitCode": 1
+}

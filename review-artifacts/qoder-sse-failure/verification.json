@@ -1,0 +1,110 @@
+{
+  "status": "runtime_patch_applied_live_acceptance_blocked_by_sse_403",
+  "sourceHashes": [
+    {
+      "Path": "F:/Axiom/axiom2/app/src/server/providers/qoder-sse.ts",
+      "Hash": "059ACFD7857F845145E4FE4441FCA087CFFD9A967F0F1E7388D296279EC625C2"
+    },
+    {
+      "Path": "F:/Axiom/axiom2/app/tests/qoder-stream.test.ts",
+      "Hash": "1D7A3A80E731514DB3E57936206C2132E69EE61C645255A6EC2CB98FE9840E9C"
+    }
+  ],
+  "liveBaseline": {
+    "method": "Axiom UI through OpenCLI; no direct provider CLI/script requests",
+    "provider": "qoder-cn",
+    "model": "gmodel",
+    "label": "GLM-5.3",
+    "thinking": "high",
+    "result": "Displayed 323 then Qoder 事件流缺少 choices",
+    "artifact": "live-baseline.json",
+    "offendingFrameCaptured": false,
+    "provesThinkingEffortAdoption": false
+  },
+  "review": {
+    "initialFindings": [
+      "usage-only frame bypass of metadata allowlist",
+      "generic notification marker bypass of non-200 envelope check"
+    ],
+    "resolved": true,
+    "finalReadOnlyReview": "passed"
+  },
+  "runtime": {
+    "productionDistUpdated": true,
+    "serverPidBefore": 28732,
+    "serverPidAfter": 28732,
+    "restarted": false,
+    "oldWorkersTerminated": false,
+    "deploymentRecords": [
+      "deployment/applied.json",
+      "deployment/applied-diagnostic.json"
+    ],
+    "deployedJsSha256": "4B0BF0898E1FD6F8E21AD5F5C9D252991EA9A6BF41A9C50F5A353EE2576C3B8F",
+    "postPatchAxiomLiveCheck": true,
+    "postPatchLiveAcceptance": false,
+    "attempts": [
+      "live-postpatch-attempt-1.json",
+      "live-postpatch-attempt-2.json"
+    ],
+    "moduleExecutionEvidence": "New diagnostic suffix present in second live run error",
+    "error": {
+      "outerResponseStatus": 200,
+      "sseWrapperStatus": 403,
+      "eventKind": "message",
+      "bodyKind": "json",
+      "code": 403
+    },
+    "waitingFor": "Clarification/resolution of Qoder-cn GLM-5.3 server rejection (account/region/model permission or server-side validation). May require user re-login. Do not infer token expiry from code 403 alone."
+  },
+  "limits": [
+    "Exact real offending frame unknown; restricted compatibility patch may not cover it.",
+    "Offline wire tests do not prove server-side thinking effort adoption.",
+    "Server compilation isolated; no new full frontend production build."
+  ],
+  "initialCompatibilityChecks": [
+    {
+      "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/qoder-auth.test.ts tests/qoder-stream.test.ts tests/qoder-runtime.test.ts tests/qoder-parity.test.ts tests/codebuddy-auth.test.ts tests/codebuddy-stream.test.ts tests/codebuddy-runtime.test.ts tests/model-runtime.test.ts",
+      "cwd": "F:/Axiom/axiom2/app",
+      "exitCode": 0,
+      "passed": 53,
+      "failed": 0,
+      "log": "tests-final.log"
+    },
+    {
+      "command": "npx --offline tsc --noEmit --pretty false",
+      "exitCode": 0,
+      "log": "typecheck-final.log"
+    },
+    {
+      "command": "npx --offline tsc -p tsconfig.server.json --outDir ../review-artifacts/qoder-sse-failure/server-build",
+      "exitCode": 0,
+      "log": "server-build-final.log",
+      "isolatedOutput": true
+    },
+    {
+      "command": "git diff --check -- app/src/server/providers/qoder-sse.ts app/tests/qoder-stream.test.ts docs/qoder-client-parity.md",
+      "exitCode": 0
+    }
+  ],
+  "currentChecks": [
+    {
+      "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/qoder-auth.test.ts tests/qoder-stream.test.ts tests/qoder-runtime.test.ts tests/qoder-parity.test.ts",
+      "cwd": "F:/Axiom/axiom2/app",
+      "exitCode": 0,
+      "passed": 29,
+      "failed": 0,
+      "log": "tests-diagnostic-final.log"
+    },
+    {
+      "command": "npx --offline tsc --noEmit --pretty false",
+      "exitCode": 0,
+      "log": "typecheck-diagnostic-final.log"
+    },
+    {
+      "command": "npx --offline tsc -p tsconfig.server.json --outDir ../review-artifacts/qoder-sse-failure/server-build",
+      "exitCode": 0,
+      "log": "server-build-diagnostic-final.log",
+      "isolatedOutput": true
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+﻿{
+    "pushCommand":  "git push origin HEAD:master",
+    "pushExitCode":  0,
+    "remoteQueryCommand":  "git ls-remote origin refs/heads/master",
+    "remoteQueryExitCode":  0,
+    "head":  "d5d90322661d5d434872de024e014534c9a58c64",
+    "remoteMaster":  "d5d90322661d5d434872de024e014534c9a58c64",
+    "originMaster":  "d5d90322661d5d434872de024e014534c9a58c64",
+    "remoteEqualsHead":  true,
+    "deliveryTreeClean":  true,
+    "verified":  true
+}

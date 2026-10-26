@@ -1,0 +1,77 @@
+{
+  "pid": 15928,
+  "startedAt": "2026-10-25T19:27:50.648Z",
+  "pacingMs": 30000,
+  "betweenModelsMs": 90000,
+  "maxAttemptsPerModel": 1,
+  "codeHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "cd685a611fd5de7067fde7db34dc6ededc04723bb31a3717adf52f5c810e266b"
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "7df6d20d325f826a9a65fa288bf5ac1820a76beca6258ff37118fa1fb6460c6b"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6"
+    }
+  ],
+  "models": [
+    {
+      "model": "minimax-m2.1",
+      "task": "t4018",
+      "vision": false,
+      "pid": 39420,
+      "startedAt": "2026-10-25T19:27:50.661Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T19:37:28.996Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T19:37:28.985Z",
+      "semanticFailureCount": 3,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "claude-haiku-4.5",
+      "task": "t4015",
+      "vision": true,
+      "pid": 24124,
+      "startedAt": "2026-10-25T19:38:59.010Z",
+      "exitCode": 0,
+      "endedAt": "2026-10-25T19:48:37.450Z",
+      "recordedTurns": 20,
+      "completedAt": "2026-10-25T19:48:37.436Z",
+      "semanticFailureCount": 0,
+      "stoppedByHttp429": false
+    },
+    {
+      "model": "minimax-m2.5",
+      "task": "t4017",
+      "vision": false,
+      "pid": 32980,
+      "startedAt": "2026-10-25T19:50:07.470Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-25T19:50:10.439Z",
+      "recordedTurns": 0,
+      "completedAt": null,
+      "semanticFailureCount": null,
+      "stoppedByHttp429": false
+    }
+  ],
+  "halted": "Unexpected harness/provider interruption; inspect the owned task before any new prompt",
+  "finishedAt": "2026-10-25T19:50:10.440Z",
+  "hashesUnchanged": true
+}

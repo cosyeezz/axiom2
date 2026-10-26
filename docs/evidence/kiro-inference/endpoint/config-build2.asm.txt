@@ -1,0 +1,67 @@
+
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000141C69950: 55                 push        rbp
+  0000000141C69951: 56                 push        rsi
+  0000000141C69952: 57                 push        rdi
+  0000000141C69953: 53                 push        rbx
+  0000000141C69954: 48 83 EC 58        sub         rsp,58h
+  0000000141C69958: 48 8D 6C 24 50     lea         rbp,[rsp+50h]
+  0000000141C6995D: 48 C7 45 00 FE FF  mov         qword ptr [rbp],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  0000000141C69965: 48 89 D3           mov         rbx,rdx
+  0000000141C69968: 48 89 CE           mov         rsi,rcx
+  0000000141C6996B: B9 10 00 00 00     mov         ecx,10h
+  0000000141C69970: BA 08 00 00 00     mov         edx,8
+  0000000141C69975: E8 A6 9F DF 02     call        0000000144A63920
+  0000000141C6997A: 48 85 C0           test        rax,rax
+  0000000141C6997D: 48 89 5D F8        mov         qword ptr [rbp-8],rbx
+  0000000141C69981: 0F 84 82 00 00 00  je          0000000141C69A09
+  0000000141C69987: 48 C7 00 01 00 00  mov         qword ptr [rax],1
+                    00
+  0000000141C6998E: 48 C7 40 08 01 00  mov         qword ptr [rax+8],1
+                    00 00
+  0000000141C69996: 0F 10 43 48        movups      xmm0,xmmword ptr [rbx+48h]
+  0000000141C6999A: 0F 11 45 D0        movups      xmmword ptr [rbp-30h],xmm0
+  0000000141C6999E: 48 89 45 F0        mov         qword ptr [rbp-10h],rax
+  0000000141C699A2: 48 89 45 E0        mov         qword ptr [rbp-20h],rax
+  0000000141C699A6: 48 8D 05 F3 91 9D  lea         rax,[000000015B642BA0h]
+                    19
+  0000000141C699AD: 48 89 45 E8        mov         qword ptr [rbp-18h],rax
+  0000000141C699B1: 48 8B 7B 28        mov         rdi,qword ptr [rbx+28h]
+  0000000141C699B5: 48 3B 7B 18        cmp         rdi,qword ptr [rbx+18h]
+  0000000141C699B9: 75 0D              jne         0000000141C699C8
+  0000000141C699BB: 48 8B 45 F8        mov         rax,qword ptr [rbp-8]
+  0000000141C699BF: 48 8D 48 18        lea         rcx,[rax+18h]
+  0000000141C699C3: E8 D8 0C E5 03     call        0000000145ABA6A0
+  0000000141C699C8: 48 8B 55 F8        mov         rdx,qword ptr [rbp-8]
+  0000000141C699CC: 48 8B 42 20        mov         rax,qword ptr [rdx+20h]
+  0000000141C699D0: 48 89 F9           mov         rcx,rdi
+  0000000141C699D3: 48 C1 E1 05        shl         rcx,5
+  0000000141C699D7: 0F 10 45 D0        movups      xmm0,xmmword ptr [rbp-30h]
+  0000000141C699DB: 0F 10 4D E0        movups      xmm1,xmmword ptr [rbp-20h]
+  0000000141C699DF: 0F 11 4C 08 10     movups      xmmword ptr [rax+rcx+10h],xmm1
+  0000000141C699E4: 0F 11 04 08        movups      xmmword ptr [rax+rcx],xmm0
+  0000000141C699E8: 48 FF C7           inc         rdi
+  0000000141C699EB: 48 89 7A 28        mov         qword ptr [rdx+28h],rdi
+  0000000141C699EF: 41 B8 F0 01 00 00  mov         r8d,1F0h
+  0000000141C699F5: 48 89 F1           mov         rcx,rsi
+  0000000141C699F8: E8 F9 A4 E4 03     call        0000000145AB3EF6
+  0000000141C699FD: 48 89 F0           mov         rax,rsi
+  0000000141C69A00: 48 83 C4 58        add         rsp,58h
+  0000000141C69A04: 5B                 pop         rbx
+  0000000141C69A05: 5F                 pop         rdi
+  0000000141C69A06: 5E                 pop         rsi
+  0000000141C69A07: 5D                 pop         rbp
+  0000000141C69A08: C3                 ret
+  0000000141C69A09: B9 08 00 00 00     mov         ecx,8
+  0000000141C69A0E: BA 10 00 00 00     mov         edx,10h
+  0000000141C69A13: E8 59 11 E6 03     call        0000000145ACAB71
+  0000000141C69A18: 0F 0B              ud2
+  0000000141C69A1A: 66
+
+  Summary
+
+     5BF1000 .text

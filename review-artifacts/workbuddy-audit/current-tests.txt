@@ -1,0 +1,23 @@
+✔ CodeBuddy browser login polls GET with encoded state and preserves token expiry (26.8768ms)
+✔ CodeBuddy login cancels pending fetch, polling delay, and late successful responses (2.2445ms)
+✔ CodeBuddy login times out, fails unknown business codes, and does not expose response secrets (71.8813ms)
+✔ CodeBuddy refresh uses header token, rotates credentials under pi lock, and retains old refresh when omitted (2.339ms)
+✔ CodeBuddy poll accepts pending codes in HTTP error envelopes without retrying unrelated errors (59.9647ms)
+✔ CodeBuddy expiry prefers official absolute milliseconds and bounds its local missing-expiry policy (1.363ms)
+✔ CodeBuddy failed refresh preserves the stored credential (0.647ms)
+✔ CodeBuddy is built in across login, reopened settings, catalog, configuration and snapshot runtimes (4213.011ms)
+✔ CodeBuddy exposes per-model effort choices and sends each supported effort without clamping (526.8442ms)
+✔ CodeBuddy conservative catalog limits follow the matching official CLI product entries (5.2645ms)
+✔ CodeBuddy native stream preserves prompts and hooks, parses simultaneous text/reasoning and empty tool arrays (2.5212ms)
+✔ CodeBuddy tools aggregate fragmented arguments and replay tool results with full system context (5.012ms)
+✔ CodeBuddy reasoning is opt-in and none/off are omitted even after a payload hook (4.8077ms)
+✔ CodeBuddy surfaces HTTP-200 business errors, stream errors and incomplete streams (7.0662ms)
+✔ CodeBuddy cancellation reaches the transport and produces an aborted result (1.643ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10760.7658

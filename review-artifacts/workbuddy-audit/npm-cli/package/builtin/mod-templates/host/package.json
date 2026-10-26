@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Explicit engineering checks and a manually invoked review skill",
+  "files": [".codebuddy-plugin", "hooks", "skills", "agents"]
+}

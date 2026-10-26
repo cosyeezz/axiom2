@@ -1,0 +1,1 @@
+function G2e(A){if(!Array.isArray(A))return;let e=[];for(let t of A){if(!XMn(t))continue;let A=t.key,i=t.type,r=t.options;if("string"!=typeof A||0===A.length||"string"!=typeof i||0===i.length||!XMn(r))continue;let n={};for(let[A,e]of Object.entries(r)){let t=Vwl(e);t&&(n[A]=t)}0!==Object.keys(n).length&&e.push({key:A,type:i,options:n})}return e.length>0?e:void 0}

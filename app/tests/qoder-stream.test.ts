@@ -39,7 +39,7 @@ async function fixture(region: QoderRegion = "cn") {
   } finally { globalThis.fetch = previous; }
   models.setProvider(provider);
   const model = provider.getModels()[0];
-  assert.equal(provider.getModels().length, 1); assert.deepEqual(model.input, ["text"]);
+  assert.equal(provider.getModels().length, 1); assert.deepEqual(model.input, ["text", "image"]); assert.equal(model.reasoning, true);
   return { provider, models, model, calls, transport };
 }
 
@@ -54,7 +54,7 @@ test("Qoder preserves system/tools and projects dynamic model_config, signs enco
         assert.equal(url.pathname, "/algo/api/v2/service/pro/sse/agent_chat_generation"); assert.equal(url.searchParams.get("Encode"), "1");
         assert.equal(init?.redirect, "error"); assert.match(new Headers(init?.headers).get("authorization")!, /^Bearer COSY\./);
         const body = decode(String(init?.body));
-        assert.equal(body.system, context.systemPrompt); assert.ok(!body.messages.some((message: any) => message.role === "system"));
+        assert.equal(body.system, context.systemPrompt); assert.equal(body.messages.find((message: any) => message.role === "system").content, context.systemPrompt);
         assert.equal(body.tools[0].function.name, "read"); assert.equal(body.model_config.key, modelConfig.key); assert.equal(body.model_config.is_reasoning, modelConfig.is_reasoning);
         assert.equal(body.model_config.unknown_field, undefined); assert.equal(body.model_config.url, "");
         assert.equal(body.parameters.max_tokens, 512); assert.equal(body.stream, true);
@@ -69,11 +69,47 @@ test("Qoder preserves system/tools and projects dynamic model_config, signs enco
     assert.deepEqual([payloads, responses, events], [1, 1, 3]);
   }
 });
+test("Qoder SSE accepts bounded auxiliary metadata and wrapped controls without losing text or late usage", async () => {
+  const metadata = [{}, { id: "aux", object: "chat.completion.chunk", created: 1, model: "fixture", system_fingerprint: null, service_tier: "default", choices: null, usage: null }, { code: 200, queue: { isQueued: false } }, { choices: [], usage: null }];
+  for (const wrap of [(value: unknown) => `data: ${JSON.stringify(value)}\n\n`, envelope]) {
+    const auxiliary = metadata.map(value => wrap(value)).join("");
+    const controls = ["   ", "[NOT_EXCEED_QUOTA]", "[EXCEED_QUOTA]notice", "[NOTIFICATIONS]", " [NOTIFICATIONS]#{} "].map(value => envelope(value)).join("");
+    const text = auxiliary + controls + wrap(chunk({ reasoning_content: "thinking", content: "323" })) + auxiliary
+      + wrap(chunk({}, "stop")) + "event: finish\n" + envelope({}) + controls + auxiliary
+      + wrap({ usage: { prompt_tokens: 3, completion_tokens: 2 } }) + "data: [DONE]\n\n";
+    const output = await unwrapQoderSse(new Response(text, { headers: { "content-type": "text/event-stream" } })).text();
+    assert.match(output, /323/); assert.match(output, /thinking/); assert.match(output, /"total_tokens":5/);
+    assert.doesNotMatch(output, /NOTIFICATIONS|EXCEED_QUOTA|"id":"aux"/);
+  }
+});
+test("Qoder auxiliary frames cannot hide errors, malformed choices, unknown content or missing finish", async () => {
+  const usage = { prompt_tokens: 1, completion_tokens: 1 };
+  const invalid = [{ error: { code: 112, message: "SECRET" } }, { code: 112 }, { queue: { isQueued: true } }, { content: "SECRET" }, { status: "error" }, { choices: {} }, { choices: "SECRET", usage },
+    { usage, content: "SECRET" }, { choices: [], usage, content: "SECRET" }, { usage, queue: { isQueued: false, message: "SECRET" } },
+    { queue: { isQueued: "false" } }, { queue: {} }, { queue: { isQueued: false, message: "SECRET" } }];
+  for (const body of invalid) for (const finished of [false, true]) {
+    const prefix = chunk({ content: "partial" }, finished ? "stop" : undefined);
+    await assert.rejects(unwrapQoderSse(sse([prefix, body, ...(finished ? [] : [chunk({}, "stop")])])).text(), error => error instanceof Error && error.message.startsWith("Qoder ") && !error.message.includes("SECRET"));
+  }
+  for (const text of [envelope({}), "event: finish\n" + envelope({}), envelope("   ") + envelope("[NOT_EXCEED_QUOTA]"), envelope(chunk({ content: "partial" })) + envelope({})]) {
+    await assert.rejects(unwrapQoderSse(new Response(text, { headers: { "content-type": "text/event-stream" } })).text(), /缺少结束状态/);
+  }
+  for (const control of ["[NOT_EXCEED_QUOTA]", "[NOTIFICATIONS]"]) for (const prefix of ["", envelope(chunk({}, "stop"))]) {
+    await assert.rejects(unwrapQoderSse(new Response(prefix + envelope(control, 403), { headers: { "content-type": "text/event-stream" } })).text(), /权限/);
+  }
+  for (const body of [{ code: 105, message: "SECRET" }, JSON.stringify({ code: "105", message: "SECRET" }), "SECRET"]) {
+    const text = "event: SECRET\n" + envelope(body, 403);
+    await assert.rejects(unwrapQoderSse(new Response(text, { headers: { "content-type": "text/event-stream" } })).text(), error => error instanceof Error && error.message.includes("[sse_wrapper status=403 event=other body=") && error.message.includes(`code=${body === "SECRET" ? "none" : "105"}]`) && !error.message.includes("SECRET"));
+  }
+});
 test("Qoder fragmented parallel tools and tool results survive round-trip", async () => {
   const { models, model } = await fixture();
   const first = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", fetch: async () => sse([
+    {},
     chunk({ tool_calls: [{ index: 0, id: "one", type: "function", function: { name: "read", arguments: '{"path":' } }, { index: 1, id: "two", type: "function", function: { name: "read", arguments: '{"path":"b"}' } }] }),
+    {},
     chunk({ tool_calls: [{ index: 0, function: { arguments: '"a"}' } }], finish_reason: "tool_calls" }),
+    { id: "aux", choices: null },
   ]) });
   assert.equal(first.stopReason, "toolUse", first.errorMessage);
   assert.deepEqual(first.content.filter(block => block.type === "toolCall").map(block => block.arguments), [{ path: "a" }, { path: "b" }]);
@@ -96,10 +132,10 @@ test("Qoder missing models, custom endpoint, images and HTTP errors fail without
   assert.equal(missing.stopReason, "error"); assert.equal(calls, 0);
   const custom = await models.completeSimple({ ...model, baseUrl: "https://not-qoder.invalid" }, context, { apiKey: "pt-FIXTURE", fetch: fail });
   assert.equal(custom.stopReason, "error"); assert.equal(calls, 0);
-  const image = await models.completeSimple(model, { messages: [{ role: "user", content: [{ type: "image", mimeType: "image/png", data: "aGVsbG8=" }], timestamp: 1 }] }, { apiKey: "pt-FIXTURE", fetch: fail });
+  const image = await models.completeSimple(model, { messages: [{ role: "user", content: [{ type: "image", mimeType: "application/pdf", data: "aGVsbG8=" }], timestamp: 1 }] }, { apiKey: "pt-FIXTURE", fetch: fail });
   assert.equal(image.stopReason, "error"); assert.equal(calls, 0, "images must fail before any inference");
   const toolImage = await models.completeSimple(model, { messages: [...context.messages,
-    { role: "toolResult", toolCallId: "image", toolName: "read", content: [{ type: "image", mimeType: "image/png", data: "aGVsbG8=" }], timestamp: 2, isError: false },
+    { role: "toolResult", toolCallId: "image", toolName: "read", content: [{ type: "image", mimeType: "application/pdf", data: "aGVsbG8=" }], timestamp: 2, isError: false },
   ] }, { apiKey: "pt-FIXTURE", fetch: fail });
   assert.equal(toolImage.stopReason, "error"); assert.equal(calls, 0);
   const error = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxRetries: 4, fetch: fail });

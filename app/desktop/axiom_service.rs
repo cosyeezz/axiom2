@@ -94,6 +94,7 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
         ("service-removal.mjs", include_str!("service-removal.mjs")),
         ("service-admission.mjs", include_str!("service-admission.mjs")),
         ("maintenance.mjs", include_str!("maintenance.mjs")),
+        ("atomic-json.mjs", include_str!("atomic-json.mjs")),
         ("desktop-native.mjs", include_str!("desktop-native.mjs")),
         ("native-helper.json", include_str!("native-helper.json")),
         ("updater-supervision.mjs", include_str!("updater-supervision.mjs")),
@@ -143,7 +144,7 @@ pub async fn axiom_cleanup(window: Webview, request: Value) -> Result<Value, Str
     let encoded = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     if encoded.len() > 16384 { return Err("清理请求过大".into()); }
     // The helper enforces parameter-level validation; the host never accepts a URL.
-    if !["resources.get", "resources.remove", "rea.get", "rea.uninstall", "rea.engine-uninstall", "rea.clearDownloads", "rea.uninstallSkill", "rea.uninstallMcp", "rtk.get", "rtk.uninstall", "rtk.cleanupStats", "rtk.cleanupOriginals", "opencli.get", "opencli.uninstall", "modelProxy.get", "maintenance.get", "modelProxy.uninstall", "modelProxy.importerUninstall"].contains(&request["op"].as_str().unwrap_or("")) {
+    if !["resources.get", "resources.remove", "rea.get", "rea.uninstall", "rea.engine-uninstall", "rea.clearDownloads", "rea.uninstallSkill", "rea.uninstallMcp", "rtk.get", "rtk.uninstall", "rtk.cleanupStats", "rtk.cleanupOriginals", "opencli.get", "opencli.uninstall", "modelProxy.get", "maintenance.get", "modelProxy.uninstall"].contains(&request["op"].as_str().unwrap_or("")) {
         return Err("不支持的清理操作".into());
     }
     tauri::async_runtime::spawn_blocking(move || {

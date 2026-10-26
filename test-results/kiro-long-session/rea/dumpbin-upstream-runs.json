@@ -1,0 +1,46 @@
+[
+  {
+    "command": [
+      "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe",
+      "/nologo",
+      "/disasm",
+      "/range:0x1421d2270,0x1421d248d",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exitCode": 0,
+    "stderr": ""
+  },
+  {
+    "command": [
+      "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe",
+      "/nologo",
+      "/disasm",
+      "/range:0x1432020c0,0x1432025c2",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exitCode": 0,
+    "stderr": ""
+  },
+  {
+    "command": [
+      "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe",
+      "/nologo",
+      "/disasm",
+      "/range:0x140c00d80,0x140c00f30",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exitCode": 0,
+    "stderr": ""
+  },
+  {
+    "command": [
+      "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe",
+      "/nologo",
+      "/disasm",
+      "/range:0x143223b40,0x143224ccd",
+      "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+    ],
+    "exitCode": 0,
+    "stderr": ""
+  }
+]

@@ -1,0 +1,40 @@
+﻿{
+    "workingDirectory":  "F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app",
+    "temp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-hardened-temp",
+    "tmp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-hardened-temp",
+    "tests":  {
+                  "exitCode":  0,
+                  "command":  "node --import tsx --test --test-concurrency=1 tests/kiro-interrupted-history.test.ts tests/kiro-live-evidence.test.ts",
+                  "elapsedMs":  2344
+              },
+    "types":  {
+                  "exitCode":  2,
+                  "command":  "npx tsc --noEmit",
+                  "elapsedMs":  23306
+              },
+    "syntax":  {
+                   "exitCode":  0,
+                   "command":  "node --check scripts/kiro-live-evidence.mjs",
+                   "elapsedMs":  50
+               },
+    "fileHashes":  [
+                       {
+                           "file":  "tests/kiro-interrupted-history.test.ts",
+                           "deliverySHA256":  "2E1684F3D144185D93A0F5DD4A8F60D51B5F801BEE386DA3214121B38F9D1FB2",
+                           "mainSHA256":  "2E1684F3D144185D93A0F5DD4A8F60D51B5F801BEE386DA3214121B38F9D1FB2",
+                           "match":  true
+                       },
+                       {
+                           "file":  "tests/kiro-live-evidence.test.ts",
+                           "deliverySHA256":  "FF76218C090DB44D81B2B8E3F736C3B8D74DF89A5BDA20F6957FB23251FC0544",
+                           "mainSHA256":  "FF76218C090DB44D81B2B8E3F736C3B8D74DF89A5BDA20F6957FB23251FC0544",
+                           "match":  true
+                       },
+                       {
+                           "file":  "scripts/kiro-live-evidence.mjs",
+                           "deliverySHA256":  "976067E45563D213F50CB5554290518DEF6C7814A9F2284CADCC5CB44695252B",
+                           "mainSHA256":  "976067E45563D213F50CB5554290518DEF6C7814A9F2284CADCC5CB44695252B",
+                           "match":  true
+                       }
+                   ]
+}

@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { test, type TestContext } from 'node:test';
+import * as fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const { createAtomicJsonWriter } = await import(new URL('../desktop/atomic-json.mjs', import.meta.url).href);
+const coded = (code: string) => Object.assign(Error(code), { code });
+async function fixture(t: TestContext) {
+  const root=await fs.mkdtemp(join(tmpdir(),'axiom-atomic-json-')),path=join(root,'cache.json');
+  await fs.writeFile(path,JSON.stringify({old:true}));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  return {root,path,read:async()=>JSON.parse(await fs.readFile(path,'utf8')),temps:async()=>(await fs.readdir(root)).filter(name=>name.endsWith('.tmp'))};
+}
+test('atomic JSON commits without touching other files',async t=>{const f=await fixture(t);await fs.writeFile(join(f.root,'other'),'keep');await createAtomicJsonWriter() (f.path,{next:true});assert.deepEqual(await f.read(),{next:true});assert.equal(await fs.readFile(join(f.root,'other'),'utf8'),'keep');assert.deepEqual(await f.temps(),[]);});
+for(const code of ['EBUSY','EPERM'])test(`Windows ${code} rename retries the same temporary file and preserves old data until commit`,async t=>{
+ const f=await fixture(t),temporary=new Set<string>(),waits:number[]=[];let calls=0;
+ const atomic=createAtomicJsonWriter({platform:'win32',fs:{...fs,rename:async(from:string,to:string)=>{temporary.add(from);assert.deepEqual(await f.read(),{old:true});if(++calls<3)throw coded(code);await fs.rename(from,to);}},sleep:async(ms:number)=>{waits.push(ms);}});
+ await atomic(f.path,{next:true});assert.equal(calls,3);assert.equal(temporary.size,1);assert.deepEqual(waits,[25,50]);assert.deepEqual(await f.read(),{next:true});assert.deepEqual(await f.temps(),[]);
+});
+test('Windows persistent contention is bounded and old target is never removed',async t=>{const f=await fixture(t),failure=coded('EBUSY'),waits:number[]=[];let calls=0;const atomic=createAtomicJsonWriter({platform:'win32',fs:{...fs,rename:async()=>{calls++;throw failure;}},sleep:async(ms:number)=>{waits.push(ms);}});await assert.rejects(atomic(f.path,{next:true}),error=>error===failure);assert.equal(calls,7);assert.deepEqual(waits,[25,50,100,200,200,200]);assert.deepEqual(await f.read(),{old:true});assert.deepEqual(await f.temps(),[]);});
+for(const [platform,code] of [['linux','EBUSY'],['win32','ENOENT'],['win32','EIO']] as const)test(`${platform}/${code} is not retried`,async t=>{const f=await fixture(t),failure=coded(code);let calls=0;const atomic=createAtomicJsonWriter({platform,fs:{...fs,rename:async()=>{calls++;throw failure;}},sleep:async()=>{throw Error('must not wait');}});await assert.rejects(atomic(f.path,{next:true}),error=>error===failure);assert.equal(calls,1);assert.deepEqual(await f.read(),{old:true});assert.deepEqual(await f.temps(),[]);});
+test('already cancelled cache write never creates or replaces a file',async t=>{const f=await fixture(t),controller=new AbortController(),reason=coded('cancelled');controller.abort(reason);const atomic=createAtomicJsonWriter();await assert.rejects(atomic(f.path,{next:true},{signal:controller.signal}),error=>error===reason);assert.deepEqual(await f.read(),{old:true});assert.deepEqual(await f.temps(),[]);});
+test('cancel during contention wait preserves its exact reason and original cache',async t=>{const f=await fixture(t),controller=new AbortController(),reason=coded('cancelled');let calls=0;const atomic=createAtomicJsonWriter({platform:'win32',fs:{...fs,rename:async()=>{calls++;throw coded('EBUSY');}},sleep:async()=>{controller.abort(reason);}});await assert.rejects(atomic(f.path,{next:true},{signal:controller.signal}),error=>error===reason);assert.equal(calls,1);assert.deepEqual(await f.read(),{old:true});assert.deepEqual(await f.temps(),[]);});
+test('temporary cleanup failure cannot mask the original commit failure',async t=>{const f=await fixture(t),primary=coded('EIO'),cleanup=coded('EPERM');const atomic=createAtomicJsonWriter({fs:{...fs,rename:async()=>{throw primary;},rm:async()=>{throw cleanup;}}});await assert.rejects(atomic(f.path,{next:true}),error=>error===primary);assert.deepEqual(await f.read(),{old:true});});
+test('a pre-existing temporary path is never removed when exclusive creation fails',async t=>{const f=await fixture(t),collision=coded('EEXIST');let removes=0;const atomic=createAtomicJsonWriter({fs:{...fs,open:async()=>{throw collision;},writeFile:async()=>{throw collision;},rm:async()=>{removes++;}}});await assert.rejects(atomic(f.path,{next:true}),error=>error===collision);assert.equal(removes,0);assert.deepEqual(await f.read(),{old:true});});
+test('stop-unconfirmed remains stronger than an ordinary cancellation',async t=>{const f=await fixture(t),controller=new AbortController(),uncertain=coded('stop-unconfirmed');const atomic=createAtomicJsonWriter({fs:{...fs,rename:async()=>{controller.abort(coded('cancelled'));throw uncertain;}}});await assert.rejects(atomic(f.path,{next:true},{signal:controller.signal}),error=>error===uncertain);assert.deepEqual(await f.read(),{old:true});});

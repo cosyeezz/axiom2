@@ -1,0 +1,60 @@
+{
+  "name": "axiom2",
+  "version": "0.4.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "tsx src/server/index.ts --dev",
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "test": "tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/*.test.ts",
+    "check:ui": "tsx tests/ui.check.ts",
+    "check:sdk": "tsx tests/sdk.check.ts",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "build:desktop": "vite build --config desktop/vite.config.ts",
+    "package:desktop": "npm run build:desktop && node ../scripts/build-desktop.mjs",
+    "check:desktop": "tsx tests/desktop.check.ts",
+    "check:desktop-update": "tsx tests/desktop-updates.check.ts"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-agent-core": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-codemode": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0",
+    "highlight.js": "10.7.3",
+    "jsqr": "1.4.0",
+    "koffi": "3.3.3",
+    "marked": "18.0.11",
+    "mermaid": "12.2.0",
+    "qrcode": "1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "semver": "7.8.5",
+    "sql-formatter": "15.9.0",
+    "tar-stream": "3.2.2",
+    "typebox": "1.1.38",
+    "typescript": "6.0.2",
+    "undici": "8.10.2",
+    "ws": "8.22.0",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.0",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/semver": "7.7.1",
+    "@types/tar-stream": "3.1.5",
+    "@types/ws": "8.18.1",
+    "@types/yauzl": "3.4.0",
+    "playwright": "1.64.0",
+    "tsx": "4.23.15",
+    "vite": "8.3.4"
+  }
+}

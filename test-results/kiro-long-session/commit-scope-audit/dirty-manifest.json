@@ -1,0 +1,1115 @@
+[
+  {
+    "path": "app/desktop/axiom_service.rs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/axiom_service_record.rs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/axiom_setup.rs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/axiom_views.rs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/pi-removal.mjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/setup.ps1",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/tool-cleanup.mjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/updater.mjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/ConfirmDialog.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/components.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/maintenance/MaintenanceView.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/models/ModelCatalogPicker.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/models/ModelRegistry.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/models/ProviderConnection.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/models/useConfiguration.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/BuiltinTools.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/Connect.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopArchiveCleanup.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopEnvironment.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopPiRemoval.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopServiceRemoval.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopToolCleanup.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/DesktopUpdates.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/ModelProxyTool.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/Models.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/ProxyProfileEditor.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/ReaEngines.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/ReaTool.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/RemoteConnect.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/Resources.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/RtkTool.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/SetupWizard.tsx",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/desktop-bridge.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/pages/desktop-cleanup.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/confirm-dialog.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/connect.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/maintenance.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/mobile.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/page-overrides.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/theme.css",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/integrations/model-proxy-env.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/integrations/model-proxy-removal.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/integrations/model-proxy-xray-import.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/integrations/model-proxy.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/model-runtime.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/model-service.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/kiro-auth.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/kiro.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder-auth.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder-protocol.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder-sse.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/shared/model-proxy.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-reconciliation.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-tool-cleanup.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-updater.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/environment-inventory.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-network.cjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/form-controls.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-auth.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-runtime.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/maintenance-ui.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-connect.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-default.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-proxy-maintenance.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-proxy-removal.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-proxy-xray-import.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-save.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/offline-tool-maintenance.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-updater.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-updates.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/qoder-auth.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/qoder-stream.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/resources.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/startup-connect.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/startup-recovery.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/theme.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/tool-cleanup-scope.test.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/ui.check.ts",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/design.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/download-maintenance.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-auth.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-protocol-audit.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/model-proxy.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/qoder.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/ui-sync.md",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "scripts/build-desktop.mjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "scripts/build-tool-maintenance.mjs",
+    "status": " M",
+    "initialStatus": " M",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/atomic-json.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/desktop/setup-reconciliation.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/scripts/kiro-live-check.mjs",
+    "status": "??",
+    "initialStatus": null,
+    "upstreamOverlap": false
+  },
+  {
+    "path": "app/scripts/kiro-live-lifecycle.mjs",
+    "status": "??",
+    "initialStatus": null,
+    "upstreamOverlap": false
+  },
+  {
+    "path": "app/scripts/kiro-live-native-proof.mjs",
+    "status": "??",
+    "initialStatus": null,
+    "upstreamOverlap": false
+  },
+  {
+    "path": "app/src/client/pages/desktop-operation.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/styles/confirmation-inline.css",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/client/vite-cache/",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false
+  },
+  {
+    "path": "app/src/server/providers/kiro-catalog.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/kiro-chat-protocol.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": false
+  },
+  {
+    "path": "app/src/server/providers/kiro-chat.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": false
+  },
+  {
+    "path": "app/src/server/providers/kiro-eventstream.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/kiro-thinking-stream.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/kiro-thinking.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder-catalog.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/src/server/providers/qoder-client.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/atomic-json.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/confirmation-design.check.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-bridge-errors.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-cleanup-correlation.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-confirmations.check.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-operation-pending.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/desktop-updater-resources.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/confirmation-dialogs.tsx",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-eventstream.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-pooling-cert.pem",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-pooling-key.pem",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-pooling.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/kiro-pooling.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/native-clipboard-guard.ps1",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/native-foreground-site.ps1",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/native-owned-close.ps1",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/native-owned-window.ps1",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/fixtures/pi-removal.tsx",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-catalog.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-chat.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": false
+  },
+  {
+    "path": "app/tests/kiro-images.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-pooling.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/kiro-thinking.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": false
+  },
+  {
+    "path": "app/tests/model-confirmations.check.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/model-proxy-bundle.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-client-download.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-controls.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-layout.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-observe.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-open-links.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-preparation.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-restart.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-session.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-task-controls.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/native-icons-updates.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-refresh-cancel.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-removal-empty.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-removal-native-helper.check.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/pi-removal-ui.check.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/qoder-parity.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/services-simplified.check.mjs",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/setup-reconciliation.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "app/tests/setup-windows-wrapper.test.ts",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/confirmation-dialogs.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": true,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/evidence/",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false
+  },
+  {
+    "path": "docs/kiro-catalog-audit.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-cli-parity-audit.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-connection-pooling.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-images.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-inference-audit.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/kiro-thinking.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": false
+  },
+  {
+    "path": "docs/qoder-capability-audit.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/qoder-client-parity.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "docs/workbuddy-capability-audit.md",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false,
+    "sameAsBaseline": true
+  },
+  {
+    "path": "review-artifacts/",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false
+  },
+  {
+    "path": "test-results/",
+    "status": "??",
+    "initialStatus": "??",
+    "upstreamOverlap": false
+  }
+]

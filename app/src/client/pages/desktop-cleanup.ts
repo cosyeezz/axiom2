@@ -1,4 +1,3 @@
-import type { MaintenanceState } from '../../shared/maintenance.js';
 import type { ResourceState } from '../../shared/resources.js';
 import type { ReaState } from '../../shared/rea.js';
 import type { RtkState } from '../../shared/rtk.js';
@@ -32,8 +31,7 @@ export function cleanupRows(states: Partial<CleanupStates>): CleanupRow[] {
   if (opencli) rows.push({ ...base('opencli', 'OpenCLI', !!(opencli.configured || opencli.removalPending), ['移除托管程序与旧版本，解除 Axiom 的程序配置引用。'], ['公共 npm 缓存、外部安装、浏览器扩展、浏览器档案与设置保留。']), warning: opencli.error || opencli.installationError || opencli.pendingOperation });
   const proxy = states.modelProxy;
   if (proxy) {
-    for (const kernel of ['xray', 'mihomo'] as const) rows.push({ ...base('modelProxy', `模型代理 · ${kernel}`, !!(proxy.installations[kernel] || proxy.removalPending?.[kernel]), ['停止使用此内核的线路，删除本次确认的托管版本目录。'], ['订阅、线路配置及供应商绑定保留；历史运行目录需另行核实。']), id: `proxy:${kernel}`, params: { kernel }, warning: proxy.cleanupError || proxy.error });
-    rows.push({ ...base('modelProxy', 'Xray 分享导入组件', !!(proxy.importer?.filesPresent || proxy.importer?.removalPending), ['已登记的 xray-knife 导入程序及对应下载包。'], ['现有线路与其他内核保留。']), id: 'proxy:importer', op: 'modelProxy.importerUninstall', warning: proxy.importer?.error || proxy.error });
+    for (const kernel of ['xray', 'mihomo'] as const) rows.push({ ...base('modelProxy', `模型代理 · ${kernel}`, !!(proxy.installations[kernel] || proxy.removalPending?.[kernel]), [kernel === 'xray' ? '停止使用 Xray 的线路，删除托管内核及分享链接识别所需文件。' : '停止使用此内核的线路，删除本次确认的托管版本目录。'], ['订阅、线路配置及供应商绑定保留；历史运行目录需另行核实。']), id: `proxy:${kernel}`, params: { kernel }, warning: proxy.cleanupError || proxy.error });
   }
   return rows.map(row => {
     // Old hosts have no capability field: offline never implies deletion permission.
@@ -41,10 +39,10 @@ export function cleanupRows(states: Partial<CleanupStates>): CleanupRow[] {
     const scope = row.family === 'rtk' ? row.op === 'rtk.cleanupStats' ? rtk?.dataCleanup?.stats : row.op === 'rtk.cleanupOriginals' ? rtk?.dataCleanup?.originals : rtk?.cleanup
       : row.family === 'opencli' ? opencli?.cleanup
       : row.family === 'rea' ? row.op === 'rea.uninstall' ? rea?.cleanup : row.op === 'rea.engine-uninstall' ? rea?.engines?.find(engine => engine.id === row.params.engine)?.cleanup : row.op === 'rea.clearDownloads' ? rea?.downloadCleanup?.[row.params.engine as 'ghidra' | 'hopper'] : undefined
-      : row.family === 'modelProxy' ? row.op === 'modelProxy.importerUninstall' ? proxy?.importer?.cleanup : proxy?.cleanup?.[row.params.kernel as ProxyKernel]
+      : row.family === 'modelProxy' ? proxy?.cleanup?.[row.params.kernel as ProxyKernel]
       : undefined;
     if (!scope) {
-      const scoped = ['rtk.uninstall', 'opencli.uninstall', 'rea.uninstall', 'rea.engine-uninstall', 'rea.clearDownloads', 'modelProxy.uninstall', 'modelProxy.importerUninstall'].includes(row.op);
+      const scoped = ['rtk.uninstall', 'opencli.uninstall', 'rea.uninstall', 'rea.engine-uninstall', 'rea.clearDownloads', 'modelProxy.uninstall'].includes(row.op);
       if (scoped) return { ...row, available: false, warning: [row.warning, '未能核实具体卸载路径，请更新后台或解除路径错误后重新读取。'].filter(Boolean).join(' ') };
       return row;
     }
@@ -60,7 +58,7 @@ export function acceptedCleanupJob(row: CleanupRow, state: CleanupStates[Cleanup
   if (row.family === 'modelProxy') return requestId;
   return (state as RtkState | OpenCliState).job?.id;
 }
-export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFamily], jobId?: string, history?: MaintenanceState): CleanupProgress {
+export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFamily], jobId?: string): CleanupProgress {
   let removed = false, pending = false, error: string | undefined, job: Job | undefined;
   const synchronous = ['rea.uninstallSkill', 'rea.uninstallMcp'].includes(row.op);
   if (row.family === 'resources') {
@@ -86,18 +84,13 @@ export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFam
     const value = state as OpenCliState; job = value.job?.id === jobId ? value.job : undefined; error = value.error || value.installationError; pending = !!value.removalPending; removed = !value.configured && !value.cleanup?.paths.length;
   } else {
     const value = state as ModelProxyState; error = value.error;
-    if (row.op === 'modelProxy.importerUninstall') {
-      const task = history?.tasks.find(item => item.id === jobId && item.endpoint === 'backend' && item.resource === 'proxy:xray-knife' && item.action === 'uninstall');
-      if (!task || history?.error || ['unknown', 'interrupted'].includes(task.status)) return { state: 'unknown', message: history?.error || '未找到本次导入组件卸载的可靠终态，请核实维护历史。' };
-      if (task.status === 'running' || task.status === 'cancelling') return { state: 'running', message: task.message || '正在清理导入组件…' };
-      if (task.status !== 'succeeded' || task.error) return { state: 'failed', message: task.error?.message || task.message || '导入组件卸载未成功。' };
-      job = { id: task.id, running: false, message: task.message || '' };
-      error ||= value.importer?.error; removed = !!value.importer && !value.importer.filesPresent && !value.importer.cleanup?.paths.length; pending = !!value.importer?.removalPending || !!value.importer?.busy;
-    } else { error ||= value.cleanupError; job = value.job?.id === jobId ? value.job : undefined; const kernel = row.params.kernel as ProxyKernel; removed = !value.installations[kernel] && !value.cleanup?.[kernel]?.paths.length; pending = !!value.removalPending?.[kernel]; }
+    error ||= value.cleanupError; job = value.job?.id === jobId ? value.job : undefined; const kernel = row.params.kernel as ProxyKernel;
+    removed = !value.installations[kernel] && !value.cleanup?.[kernel]?.paths.length; pending = !!value.removalPending?.[kernel];
   }
   if (job?.running) return { state: 'running', message: job.message };
-  if (job?.error || error) return { state: 'failed', message: job?.error || error! };
+  // A family-wide warning (or another task's failure) cannot settle this request.
   if (!synchronous && !job) return { state: 'unknown', message: '未找到此次受理的任务记录，无法确认完成；请核实维护历史。' };
+  if (job?.error || synchronous && error) return { state: 'failed', message: job?.error || error! };
   if (pending || !removed) return { state: 'failed', message: '仍发现程序、配置引用或待清理文件；本项清理尚未完成。' };
   return { state: 'verified', message: '已复读当前状态并核实选定范围；保留项与外部来源仍需分别检查。' };
 }

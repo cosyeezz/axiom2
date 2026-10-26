@@ -1,0 +1,482 @@
+{
+  "protocolVersion": 1,
+  "resources": [
+    {
+      "logicalName": "broker-ipc-client",
+      "relativePath": "shim/broker-ipc-client.cjs",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "cecd459ddd38e63e530d8a426c89b0a89ad8418d13956697f5c445737256f3d3"
+    },
+    {
+      "logicalName": "broker-program-policy-check",
+      "relativePath": "shim/broker-program-policy-check.cjs",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "ab96da7094610a01c8304c9b80de18003f597ce394eb5b8811ca493d88d7b6b2"
+    },
+    {
+      "logicalName": "node-brokered-fs-shim",
+      "relativePath": "shim/node-brokered-fs-shim.cjs",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "351f54fad9f4637024a97aa0c019e09e212d8be18f18d1f914de1d503b473cd8"
+    },
+    {
+      "logicalName": "python-sitecustomize",
+      "relativePath": "shim/sitecustomize.py",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "aae123b6a34eb0e11f84d7f4bebf1ec1e11df51ba3671b6607cb1597b14e1d88"
+    },
+    {
+      "logicalName": "node-language-shim",
+      "relativePath": "shim/node-language-shim.cjs",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "7e442ecc5d2cd88ac868eb31c2a04bac70ca899ed2c49a377029d28d7f0fad87"
+    },
+    {
+      "logicalName": "node-safe-delete-shim",
+      "relativePath": "shim/node-safe-delete-shim.cjs",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "0d32d3240133e4769bc3d3d53efeadd4a9b4a759e941507e884626871dd3c60d"
+    },
+    {
+      "logicalName": "safe-delete-broker-delete",
+      "relativePath": "shim/safe-delete-broker-delete.cjs",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "3daa04152a9fba8527664d78d1de1ac42e2f4e18c80e2b54c2b88720d576cd2b"
+    },
+    {
+      "logicalName": "safe-delete-bulk-guard",
+      "relativePath": "shim/safe-delete-bulk-guard.cjs",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "3d2f84f9974be92d07833b624dca18f474f377afdf0b9a2a3bfef0d7572341fc"
+    },
+    {
+      "logicalName": "brokered-shell",
+      "relativePath": "shim/brokered-sandbox-bash-env.sh",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "6a0356a9bdbe787982a7adc1d8a34240b68ce67a7a5300685da27bdbcb5be3d6"
+    },
+    {
+      "logicalName": "brokered-bin-dispatch",
+      "relativePath": "shim/brokered-bin/codebuddy-toybox-dispatch",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "1d870d3d74768bf188a956be24e9a6c21eaeace503322bce4796f8a49227c186"
+    },
+    {
+      "logicalName": "brokered-bin-ls",
+      "relativePath": "shim/brokered-bin/ls",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "brokered-native",
+      "relativePath": "shim/native/darwin-arm64/brokered-sandbox-native.node",
+      "platform": "darwin",
+      "arch": "arm64",
+      "executable": true,
+      "required": true,
+      "sha256": "3e8cfbedeafd040c1f971c054f7f8c1173d4b6437d273eae5dd910fe0687c768"
+    },
+    {
+      "logicalName": "brokered-native",
+      "relativePath": "shim/native/darwin-x64/brokered-sandbox-native.node",
+      "platform": "darwin",
+      "arch": "x64",
+      "executable": true,
+      "required": true,
+      "sha256": "4554f124e970e00dfffc30ed37617cc8a77e98cd6825425600bdd1fa638a6b51"
+    },
+    {
+      "logicalName": "toybox",
+      "relativePath": "toybox-macos/toybox",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "2839594a8e65e69d9e17bb7f458ff2aa3b4250689446109cd7bead81fd60036d"
+    },
+    {
+      "logicalName": "toybox-sandbox-profile",
+      "relativePath": "toybox-macos/toybox.sb",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "b112a83ebf7fc449b77de2f96e526ad889700d93f529ea5275951ce51506cee7"
+    },
+    {
+      "logicalName": "zsh",
+      "relativePath": "zsh-macos/bin/zsh",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "a42d12be203af005dae913d6b34ac5c04cd52be01013089e1a061b87970dbb6a"
+    },
+    {
+      "logicalName": "native-builds.json",
+      "relativePath": "native-builds.json",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "4ca04d42ebf3909bce63cc0f29ca137458206c0f91d5f82c26b6fa259f0a1775"
+    },
+    {
+      "logicalName": "shim-brokered-bin-cat",
+      "relativePath": "shim/brokered-bin/cat",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-chmod",
+      "relativePath": "shim/brokered-bin/chmod",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-cp",
+      "relativePath": "shim/brokered-bin/cp",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-dd",
+      "relativePath": "shim/brokered-bin/dd",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-find",
+      "relativePath": "shim/brokered-bin/find",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-grep",
+      "relativePath": "shim/brokered-bin/grep",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-head",
+      "relativePath": "shim/brokered-bin/head",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-ln",
+      "relativePath": "shim/brokered-bin/ln",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-mkdir",
+      "relativePath": "shim/brokered-bin/mkdir",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-mv",
+      "relativePath": "shim/brokered-bin/mv",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-readlink",
+      "relativePath": "shim/brokered-bin/readlink",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-realpath",
+      "relativePath": "shim/brokered-bin/realpath",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-rm",
+      "relativePath": "shim/brokered-bin/rm",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-rmdir",
+      "relativePath": "shim/brokered-bin/rmdir",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-sed",
+      "relativePath": "shim/brokered-bin/sed",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-tail",
+      "relativePath": "shim/brokered-bin/tail",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-tee",
+      "relativePath": "shim/brokered-bin/tee",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-touch",
+      "relativePath": "shim/brokered-bin/touch",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-truncate",
+      "relativePath": "shim/brokered-bin/truncate",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-unlink",
+      "relativePath": "shim/brokered-bin/unlink",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-brokered-bin-wc",
+      "relativePath": "shim/brokered-bin/wc",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "446b28c1f1cf21362362b18710a232d9cc86ddd9830ff20f2c5cc8ea0f51504a"
+    },
+    {
+      "logicalName": "shim-genie-safe-delete.cjs",
+      "relativePath": "shim/genie-safe-delete.cjs",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "130fbe8d87595e476cbdc5087e18b5307365e288f760bbe79e9c31b0c7f2b951"
+    },
+    {
+      "logicalName": "shim-safe-bin-rm",
+      "relativePath": "shim/safe-bin/rm",
+      "platform": "all",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "4ae8e0e4b145680eb81d3bdc2b751e0a6bbf0126486c2de1c0b3a0468ac32c6f"
+    },
+    {
+      "logicalName": "shim-safe-bin-rmdir",
+      "relativePath": "shim/safe-bin/rmdir",
+      "platform": "all",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "6472a6a2606eac2d1709d827a0a572343b433f50ad6fe94b1e8aa9f8a3885d7e"
+    },
+    {
+      "logicalName": "shim-safe-bin-safe-delete-bash-env.sh",
+      "relativePath": "shim/safe-bin/safe-delete-bash-env.sh",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "c4a033639314ce6fd6f50422ffcdc62679e4a65183497c84a169786cd5d85256"
+    },
+    {
+      "logicalName": "shim-safe-bin-safe-delete-common.sh",
+      "relativePath": "shim/safe-bin/safe-delete-common.sh",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "63099c71648c8737c9488c16a0fed3250fd8f71031d711a5eeb4aeef4faeccd1"
+    },
+    {
+      "logicalName": "shim-safe-bin-unlink",
+      "relativePath": "shim/safe-bin/unlink",
+      "platform": "all",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "d558f1d19a29bf8903cace7eb74248dc2ae1bbcf08bda388f22b757263c41aee"
+    },
+    {
+      "logicalName": "shim-shell-runtime-bash-env.sh",
+      "relativePath": "shim/shell-runtime-bash-env.sh",
+      "platform": "all",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "3af39371b1719224924cd031d99261f1d8d8e38d1b47dd6de2f86038a7efa051"
+    },
+    {
+      "logicalName": "toybox-macos-LICENSE",
+      "relativePath": "toybox-macos/LICENSE",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "948039f91e7e23916019047a035c69214447323c5fc272aefc0fd21e505bf41d"
+    },
+    {
+      "logicalName": "zsh-macos-LICENSE",
+      "relativePath": "zsh-macos/LICENSE",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": false,
+      "required": true,
+      "sha256": "d06fdf3ef9b1ec69d6b9e170b0a9516fbad3523261ff1668bde3bfea6e0ef5f5"
+    },
+    {
+      "logicalName": "shim-brokered-bin-7z",
+      "relativePath": "shim/brokered-bin/7z",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    },
+    {
+      "logicalName": "shim-brokered-bin-7za",
+      "relativePath": "shim/brokered-bin/7za",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    },
+    {
+      "logicalName": "shim-brokered-bin-7zz",
+      "relativePath": "shim/brokered-bin/7zz",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    },
+    {
+      "logicalName": "shim-brokered-bin-rar",
+      "relativePath": "shim/brokered-bin/rar",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    },
+    {
+      "logicalName": "shim-brokered-bin-tar",
+      "relativePath": "shim/brokered-bin/tar",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    },
+    {
+      "logicalName": "shim-brokered-bin-zip",
+      "relativePath": "shim/brokered-bin/zip",
+      "platform": "darwin",
+      "arch": "universal",
+      "executable": true,
+      "required": true,
+      "sha256": "83b99b501b63d24c6f21acfff0542554597e348c8f33755ffb9d701c25155fc6"
+    }
+  ]
+}

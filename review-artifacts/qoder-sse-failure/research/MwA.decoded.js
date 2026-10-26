@@ -1,0 +1,11 @@
+function MwA(A) { if (null != A && upo.has(A))
+    return "refusal"; switch (A) {
+    case "stop": return "end_turn";
+    case "tool_calls":
+    case "function_call": return "tool_use";
+    case "length": return "max_tokens";
+    case "null":
+    case null:
+    case void 0: return null;
+    default: throw new KYn(A);
+} }

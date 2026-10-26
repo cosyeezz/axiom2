@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Read an existing in-memory metadata ring, filtered to an already public historical run. No task mutation or model request.",
+  "operation": "diagnostics.latency",
+  "attemptsPerQuery": 1,
+  "modelRequestsSent": 0,
+  "queries": [
+    {
+      "runId": "b483c133-fe77-46bf-bd7d-bb1111de2039",
+      "ok": true,
+      "ringCapacity": 2000,
+      "matchingRecords": 0,
+      "stages": {},
+      "recordedHttpStatuses": [],
+      "distinctRequestIds": 0,
+      "coverage": "No retained records. This does not mean the model made no requests.",
+      "errorBodyOrRetryAfterAvailableFromThisEndpoint": false
+    }
+  ],
+  "readOnlyQueryCompleted": true
+}

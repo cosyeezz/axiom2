@@ -1,0 +1,37 @@
+/* Cropped source viewBoxes include stroke clearance. Keep outline weight in screen
+   pixels so a small source glyph (plus/close) does not become heavier when fitted.
+   Filled artwork, annotations and animated status artwork retain their own strokes. */
+.ui-symbol :is(path, rect, circle, ellipse, line, polyline, polygon),
+svg.ui-glyph :is(path, rect, circle, ellipse, line, polyline, polygon) {
+  vector-effect: non-scaling-stroke;
+  stroke-width: var(--icon-stroke, 1.5px);
+}
+svg.ui-glyph { display: block; flex-shrink: 0; overflow: visible; }
+.ui-symbol { overflow: visible; }
+.send { --icon-stroke: 1.8px; }
+/* These controls formerly relied on empty SVG canvas for their visual inset. */
+.send:not(.is-running) > svg { width: 18px; height: 18px; }
+.model-picker > summary > svg:last-child { width: 10px; height: 10px; }
+.workspace-picker > summary > svg:last-child { width: 12px; height: 6px; }
+/* A common optical row, with spacing owned by the controls, not by SVG padding. */
+.usage { --toolbar-icon-size: 16px; --toolbar-gap: 0px; --icon-stroke: 1.2px; column-gap: var(--toolbar-gap); padding-inline: 4px; }
+.usage-row { column-gap: var(--toolbar-gap); }
+.usage-settings { gap: 0; }
+.usage[data-od-id="token-usage"] :is(.usage-metric, .usage-settings > button, .memory-todo-toggle) > svg {
+  width: var(--toolbar-icon-size); height: var(--toolbar-icon-size); flex: 0 0 var(--toolbar-icon-size);
+}
+.memory-todo-toggle { padding-inline: 8px; gap: 8px; }
+.usage .cost-trigger { min-width: 44px; }
+.usage .memory-progress-bars { --icon-stroke: 1px; }
+/* Keep curves antialiased and line weight independent of the SVG canvas. */
+.usage .action-icon > svg { shape-rendering: geometricPrecision; overflow: visible; }
+.usage .action-icon > svg.data-icon :is(path, circle, ellipse, rect, line, polyline) { vector-effect: non-scaling-stroke; stroke-width: var(--icon-stroke); }
+/* Preserve the left statistics and right tools; tighten spacing within each group. */
+:root .usage[data-od-id="token-usage"], :root .app .usage[data-od-id="token-usage"] { justify-content: space-between; flex-wrap: nowrap; column-gap: 8px; overflow-x: auto; }
+:root .usage[data-od-id="token-usage"] .usage-settings { margin-left: auto; gap: 0; }
+:root .usage[data-od-id="token-usage"] :is(.usage-metric,.memory-todo-toggle,.usage-settings>button) { width:44px;min-width:44px;max-width:44px;height:44px;padding:0!important;justify-content:center; }
+:root .usage[data-od-id="token-usage"] .usage-settings>button { flex-shrink:0; }
+/* All interactive icons retain a touch target independently of the glyph size. */
+@media (pointer: coarse) {
+  :is(.memory-icon-button, .memory-text-button, .file-action) { min-width: 44px; min-height: 44px; }
+}

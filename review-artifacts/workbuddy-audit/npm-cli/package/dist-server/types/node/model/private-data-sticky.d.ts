@@ -1,0 +1,10 @@
+import type { Session } from '../../vendor/cbc-core/node/index.js';
+export declare const PRIVATE_DATA_STICKY_META_KEY = "codebuddy.ai/privateDataSticky";
+export declare const WECOM_RECORD_SHARE_META_KEY = "codebuddy.ai/wecomRecordShare";
+export declare const WECHAT_RECORD_SHARE_META_KEY = "codebuddy.ai/wechatRecordShare";
+export declare function isPrivateDataShareMeta(meta: Record<string, unknown> | null | undefined): boolean;
+export declare function hasPrivateDataStickyMeta(meta: Record<string, unknown> | null | undefined): boolean;
+export declare function markSessionPrivateData(session: Session | undefined): boolean;
+export declare function isSessionPrivateData(session: Session | undefined): boolean;
+export declare function markSessionPrivateDataPersisted(session: Session | undefined): void;
+export declare function isSessionPrivateDataPersisted(session: Session | undefined): boolean;

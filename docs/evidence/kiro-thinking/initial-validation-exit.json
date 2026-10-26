@@ -1,0 +1,23 @@
+﻿[
+    {
+        "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/images.test.ts tests/model-input.test.ts tests/model-catalog.test.ts tests/model-runtime.test.ts tests/model-config-validation.test.ts tests/model-overrides.test.ts tests/model-copy-runtime.test.ts tests/model-auth-preparation.test.ts tests/model-switch.test.ts",
+        "cwd":  "F:/Axiom/axiom2/app",
+        "start":  "2026-10-25T14:47:08.4896156Z",
+        "end":  "2026-10-25T14:49:29.7955949Z",
+        "exitCode":  0
+    },
+    {
+        "command":  "node node_modules/typescript/bin/tsc --noEmit",
+        "cwd":  "F:/Axiom/axiom2/app",
+        "start":  "2026-10-25T14:49:29.8311040Z",
+        "end":  "2026-10-25T14:49:53.1061633Z",
+        "exitCode":  0
+    },
+    {
+        "command":  "node node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit",
+        "cwd":  "F:/Axiom/axiom2/app",
+        "start":  "2026-10-25T14:49:53.1077053Z",
+        "end":  "2026-10-25T14:50:01.7166858Z",
+        "exitCode":  0
+    }
+]

@@ -1,0 +1,8 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A native Jobs status companion for CBC Web",
+  "files": [".codebuddy-plugin", "client"]
+}

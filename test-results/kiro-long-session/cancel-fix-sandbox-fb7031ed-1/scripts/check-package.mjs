@@ -1,0 +1,232 @@
+// Exercise the actual release tarball in an isolated global npm prefix.
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath, rename } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { createHash, randomBytes } from "node:crypto";
+import { createUpdater } from "../app/desktop/updater.mjs";
+import { tmpdir } from "node:os";
+import { join, resolve, relative, dirname } from "node:path";
+import { createServer } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
+import { reportPackageFailure } from "./package-failure-evidence.mjs";
+
+const root = resolve(import.meta.dirname, "..");
+const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const app = JSON.parse(await readFile(join(root, "app/package.json"), "utf8"));
+assert.deepEqual(pkg.dependencies, app.dependencies, "Root and app runtime dependencies must match");
+assert.deepEqual(pkg.devDependencies, app.devDependencies, "Root and app build dependencies must match");
+assert.equal(pkg.version, app.version);
+assert.ok(process.env.npm_execpath, "Run through npm run check:package");
+// Node canonicalizes macOS /var aliases when registering the CLI. Recovery
+// fixtures must use that same identity when constructing their journal.
+const temporary = await realpath(await mkdtemp(join(tmpdir(), "axiom2-package-")));
+const npm = (args) => execFileSync(process.execPath, [process.env.npm_execpath, ...args], {
+  cwd: root, encoding: "utf8", timeout: 600_000, maxBuffer: 10_000_000,
+});
+let child;
+let cli;
+let serviceEnv;
+const control = (action) => JSON.parse(execFileSync(process.execPath, [cli, action, "--json"], {
+  encoding: "utf8", env: serviceEnv, cwd: temporary, timeout: 50_000,
+}));
+const request = (url, options = {}) => fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(3000) });
+try {
+  const [packed] = JSON.parse(npm(["pack", "--ignore-scripts", "--foreground-scripts=false", "--json", "--pack-destination", temporary]));
+  const paths = packed.files.map((file) => file.path);
+  for (const file of ["npm-shrinkwrap.json", "bin/axiom2.mjs", "bin/service.mjs", "app/dist/server/index.js", "app/dist/server/agent-worker.js", "app/dist/server/compression-worker.js", "app/dist/client/index.html"])
+    assert.ok(paths.includes(file), `Missing runtime file: ${file}`);
+  const nativeArchitectures = process.env.AXIOM_VERIFIED_PACKAGE_DIR ? ["x64", "arm64"] : process.platform === "linux" ? [process.arch] : [];
+  const nativeDigests = {}, nativeAssets = {};
+  for (const arch of nativeArchitectures) {
+    const directory = `bin/native/linux-${arch}`, executable = `${directory}/axiom-owner`;
+    assert.ok(paths.includes(executable) && paths.includes(`${directory}/manifest.json`), `Missing native ownership helper: ${arch}`);
+    assert.ok((packed.files.find(file => file.path === executable).mode & 0o111) !== 0, `Native helper is not executable: ${arch}`);
+    const manifest = JSON.parse(await readFile(join(root, directory, "manifest.json"), "utf8"));
+    assert.equal(manifest.arch, arch); assert.equal(manifest.protocol, 1);
+    assert.equal(manifest.sha256, createHash("sha256").update(await readFile(join(root, executable))).digest("hex"));
+    assert.equal(manifest.sourceSha256, createHash("sha256").update(await readFile(join(root, "native/axiom-owner.c"))).digest("hex"));
+    nativeDigests[arch] = manifest.sha256;
+  }
+  assert.ok(!paths.some((path) => /(?:^|\/)(?:auth\.json|models\.json|\.env|test-results|sessions|\.aoci)(?:\/|$)/.test(path)));
+  const prefix = join(temporary, "prefix");
+  npm(["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", join(temporary, packed.filename)]);
+  const installed = join(prefix, ...(process.platform === "win32" ? [] : ["lib"]), "node_modules", "@cosyeezz", "axiom2");
+  for (const arch of nativeArchitectures) {
+    const bytes = await readFile(join(installed, 'bin/native', `linux-${arch}`, 'axiom-owner'));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), nativeDigests[arch], `Installed tarball helper differs: ${arch}`);
+    nativeAssets[`axiom-owner-linux-${arch}`] = bytes;
+  }
+  cli = join(installed, "bin/axiom2.mjs");
+  assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
+  assert.match(execFileSync(process.execPath, [cli, "--help"], { encoding: "utf8" }), /4317/);
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const port = probe.address().port;
+  await new Promise((resolve) => probe.close(resolve));
+  const pi = join(temporary, "pi");
+  await mkdir(pi);
+  let output = "";
+  serviceEnv = { ...process.env, AXIOM_PORT: String(port), AXIOM_DATA_DIR: "data", AXIOM_PI_DIR: pi, PI_CODING_AGENT_DIR: pi, NODE_PATH: "" };
+  assert.equal(control("status").state, "stopped");
+  const startupTimeout = Number(process.env.AXIOM_PACKAGE_STARTUP_TIMEOUT_MS ?? (process.platform === "win32" ? 90000 : 30000));
+  assert.ok(Number.isFinite(startupTimeout) && startupTimeout > 0, "Invalid package startup timeout");
+  const startedAt = Date.now();
+  console.log(`Installed service spawn: ${new Date(startedAt).toISOString()}; deadline ${startupTimeout}ms`);
+  child = spawn(process.execPath, [cli], {
+    cwd: temporary,
+    env: serviceEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.on("data", (chunk) => { output += chunk; });
+  child.stderr.on("data", (chunk) => { output += chunk; });
+  let spawnError;
+  child.on("error", error => { spawnError = error; });
+  child.on("exit", (code, signal) => console.log(`Installed service exit after ${Date.now() - startedAt}ms: code=${code}, signal=${signal}`));
+  let response, lastError;
+  const deadline = startedAt + startupTimeout;
+  while (Date.now() < deadline) {
+    if (spawnError) throw spawnError;
+    if (child.exitCode !== null || child.signalCode !== null) throw Error(`Installed service exited: ${output}`);
+    try {
+      response = await request(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(Math.max(1, Math.min(3000, deadline - Date.now()))) });
+      if (response.ok) break;
+      lastError = `HTTP ${response.status}`;
+      await response.body?.cancel();
+    } catch (error) { lastError = String(error); }
+    await delay(Math.max(0, Math.min(250, deadline - Date.now())));
+  }
+  assert.ok(response?.ok, `Installed service did not become ready after ${Date.now() - startedAt}ms; last request: ${lastError}; ${output}`);
+  console.log(`Installed service HTTP ready after ${Date.now() - startedAt}ms`);
+  const html = await response.text();
+  assert.match(html, /<div id="root"><\/div>/);
+  const asset = html.match(/src="([^"]+\.js)"/)?.[1];
+  assert.ok(asset, "Built page must reference a JS asset");
+  assert.equal((await request(new URL(asset, `http://127.0.0.1:${port}`))).status, 200);
+  assert.equal((await request(`http://127.0.0.1:${port}/`, { headers: { Origin: "https://example.com" } })).status, 403);
+  // The control descriptor appears only after both service and control listener are ready.
+  for (let attempt = 0; attempt < 40 && control("status").state !== "running"; attempt++) await delay(100);
+  const foreground = control("status");
+  assert.equal(foreground.state, "running");
+  assert.equal(foreground.background, false);
+  assert.deepEqual(foreground.active, []);
+  const meta = JSON.parse(await readFile(join(temporary, "data/service-control.json"), "utf8"));
+  const endpoint = `http://127.0.0.1:${meta.port}`;
+  assert.equal((await request(endpoint + "/stop", { method: "POST" })).status, 403);
+  assert.equal((await request(endpoint + "/stop", { method: "POST", headers: { Authorization: `Bearer ${meta.token}`, Origin: "http://127.0.0.1:4317" } })).status, 403);
+  assert.equal(control("status").state, "running", "Unauthorized stop must not stop service");
+  assert.equal(control("start").pid, foreground.pid, "Start must reuse a managed foreground service");
+  assert.equal(control("stop").state, "stopped");
+  await delay(150);
+  assert.equal(control("stop").state, "stopped", "Stop is idempotent");
+  const background = control("start");
+  assert.equal(background.state, "running");
+  assert.equal(background.background, true);
+  assert.notEqual(background.pid, foreground.pid);
+  assert.equal(control("start").pid, background.pid, "Repeated start must not spawn a second service");
+  assert.equal((await request(`http://127.0.0.1:${port}/`)).status, 200);
+  assert.equal(control("stop").state, "stopped");
+  // An unrelated listener is detected but can never be terminated by the manager.
+  const unrelated = createServer((socket) => socket.end());
+  await new Promise((resolve) => unrelated.listen(port, "127.0.0.1", resolve));
+  try {
+    assert.equal(control("status").state, "unmanaged");
+    assert.throws(() => control("stop"));
+    assert.throws(() => control("start"));
+    assert.equal(unrelated.listening, true);
+  } finally { await new Promise((resolve) => unrelated.close(resolve)); }
+  // Exercise the updater with a real tarball and isolated npm installation. The
+  // baseline uses the current runtime with an older version marker; native
+  // Windows checks additionally upgrade the actual published v0.2.3 runtime.
+  const installedPackage = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
+  const archive = await readFile(join(temporary, packed.filename));
+  const assetBase = `https://github.com/cosyeezz/axiom2/releases/download/v${pkg.version}/`;
+  const assets = { "axiom2.tgz": archive, ...nativeAssets };
+  const release = { tag_name: `v${pkg.version}`, draft: false, prerelease: false, assets: Object.entries(assets).map(([name, bytes]) => ({
+    name, state: "uploaded", size: bytes.length, digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, browser_download_url: assetBase + name,
+  })) };
+  const releaseFetcher = async (url) => {
+    if (url === "https://api.github.com/repos/cosyeezz/axiom2/releases/latest") return new Response(JSON.stringify(release));
+    assert.ok(url.startsWith(assetBase), "Unexpected release asset URL");
+    const name = url.slice(assetBase.length);
+    assert.ok(Object.hasOwn(assets, name), `Unexpected release asset: ${name}`);
+    return new Response(assets[name]);
+  };
+  for (const strategy of ["hoisted", "nested"]) {
+    await writeFile(join(installed, "package.json"), JSON.stringify({ ...installedPackage, version: "0.0.0" }));
+    const beforeUpdate = control("start");
+    const updater = createUpdater({ root: join(temporary, "data"), env: { ...serviceEnv, npm_config_install_strategy: strategy }, fetcher: releaseFetcher });
+    await updater.check();
+    const updated = await updater.runJob("service", pkg.version);
+    if (updated.job.phase !== "complete") await reportPackageFailure({ root: join(temporary, "data"), job: updated.job, strategy });
+    assert.equal(updated.job.phase, "complete", updated.job.message);
+    assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), pkg.version);
+    const afterUpdate = control("status");
+    assert.equal(afterUpdate.version, pkg.version);
+    assert.notEqual(afterUpdate.pid, beforeUpdate.pid);
+    assert.equal((await request(afterUpdate.url)).status, 200);
+    const dependencyRoot = await realpath(join(installed, "node_modules"));
+    for (const dependency of Object.keys(pkg.dependencies)) {
+      const location = relative(dependencyRoot, await realpath(join(dependencyRoot, dependency)));
+      assert.ok(!location.startsWith("..") && !/^[A-Za-z]:/.test(location), `Dependency escaped the installed program: ${dependency}`);
+    }
+    for (const shim of ["axiom2", "axiom2.cmd", "axiom2.ps1"]) {
+      await assert.rejects(access(join(installed, "node_modules/.bin", shim)), { code: "ENOENT" });
+    }
+    for (const worker of ["agent-worker.js", "compression-worker.js"]) {
+      execFileSync(process.execPath, ["--input-type=module", "-e", "await import(process.argv[1]);", pathToFileURL(join(installed, "app/dist/server", worker)).href], {
+        cwd: temporary, env: serviceEnv, encoding: "utf8", timeout: 30_000,
+      });
+    }
+    assert.equal(control("stop").state, "stopped");
+    console.log(`PASS: staged update with npm default strategy ${strategy}; dependency paths, worker imports and self-shim isolation`);
+  }
+  // Reproduce an interrupted switch whose candidate CLI can report a version
+  // but cannot import any control command. Recovery must use the real backup.
+  const recoveryId = randomBytes(16).toString("hex");
+  const recoveryStage = join(dirname(installed), `.axiom2-update-${recoveryId}`);
+  const recoveryBackup = join(dirname(installed), `.axiom2-backup-${recoveryId}`);
+  const recoveryRoot = join(temporary, "data");
+  await mkdir(recoveryStage);
+  await rename(installed, recoveryBackup);
+  await mkdir(join(installed, "bin"), { recursive: true });
+  await writeFile(join(installed, "package.json"), JSON.stringify({ name: pkg.name, version: "999.0.0" }));
+  await writeFile(cli, await readFile(join(recoveryBackup, "bin/axiom2.mjs")));
+  await writeFile(join(installed, "bin/service.mjs"), "export const broken = ;\n");
+  assert.equal(execFileSync(process.execPath, [cli, "--version"], { encoding: "utf8" }).trim(), "999.0.0");
+  assert.throws(() => control("status"));
+  await writeFile(join(recoveryRoot, "updates/transaction.json"), JSON.stringify({ id: recoveryId, stage: recoveryStage, backup: recoveryBackup,
+    packageRoot: installed, cli, node: process.execPath, previousVersion: pkg.version, version: "999.0.0", wasRunning: true }));
+  const recoveryUpdater = createUpdater({ root: recoveryRoot, env: serviceEnv, fetcher: releaseFetcher });
+  const recovered = await recoveryUpdater.runJob("recover");
+  if (recovered.job.phase !== "complete") await reportPackageFailure({ root: recoveryRoot, job: recovered.job, strategy: "recover" });
+  assert.equal(recovered.job.phase, "complete", recovered.job.message);
+  assert.equal(recovered.recovery, false);
+  assert.equal(control("status").version, pkg.version);
+  assert.equal((await request(control("status").url)).status, 200);
+  assert.equal(control("stop").state, "stopped");
+  console.log("PASS: real backup control restores a candidate with broken service imports and restarts the expected backend");
+  if (process.env.AXIOM_VERIFIED_PACKAGE_DIR) {
+    const destination = resolve(process.env.AXIOM_VERIFIED_PACKAGE_DIR);
+    const archive = await readFile(join(temporary, packed.filename));
+    await mkdir(destination, { recursive: true });
+    await writeFile(join(destination, "axiom2.tgz"), archive);
+    for (const [name, bytes] of Object.entries(nativeAssets)) await writeFile(join(destination, name), bytes);
+    await writeFile(join(destination, "package-validation.json"), JSON.stringify({
+      version: pkg.version,
+      commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+      sha256: createHash("sha256").update(archive).digest("hex"),
+      size: archive.length,
+      native: Object.fromEntries(Object.entries(nativeAssets).map(([name, bytes]) => [name, { size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }])),
+    }, null, 2) + "\n");
+  }
+  console.log(`PASS: ${packed.filename}; ${paths.length} files; isolated install, HTTP/assets/Origin, foreground/background lifecycle, duplicate start, authenticated stop, unrelated-process protection and staged in-app backend update`);
+} finally {
+  if (cli && serviceEnv) { try { control("stop"); } catch {} }
+  if (child && child.exitCode === null) {
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    child.kill("SIGTERM");
+    await Promise.race([exited, delay(5000).then(() => { if (child.exitCode === null) child.kill("SIGKILL"); })]);
+  }
+  await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}

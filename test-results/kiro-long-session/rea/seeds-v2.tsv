@@ -1,0 +1,8 @@
+0x14314a500	function	candidate_v2_api_dispatch
+0x1432500e0	function	candidate_v2_collect_wrapper
+0x14310d9d0	function	candidate_v2_collect
+0x1432020c0	function	candidate_v2_history_iterator
+0x140c00f30	function	candidate_assistant_builder
+0x1428c7d40	function	candidate_builder_caller_1
+0x143226710	function	candidate_builder_caller_2
+0x140bae5a0	function	assistant_serializer

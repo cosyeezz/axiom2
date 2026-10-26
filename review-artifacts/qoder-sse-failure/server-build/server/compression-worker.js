@@ -1,0 +1,147 @@
+import { configureModelNetwork } from "./integrations/model-proxy-env.js";
+import { randomUUID } from "node:crypto";
+import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance } from "./execution-protocol.js";
+import { join } from "node:path";
+import { createAgentSession, DefaultResourceLoader, SettingsManager, } from "@earendil-works/pi-coding-agent";
+import { ModelService } from "./model-service.js";
+import { openTranscript } from "./transcript.js";
+import { compactionInstructions } from "./compaction-display.js";
+import { compressionError } from "./compression-error.js";
+import { sumCosts } from "../shared/costs.js";
+import { usageCost } from "./usage-cost.js";
+let session, cancelled = false, started = false;
+let activeLease;
+const send = (value) => leaseSender(activeLease)(value);
+process.on("disconnect", () => process.exit(1));
+process.on("message", (event) => {
+    if (event.type === "shutdown" && !started) {
+        process.exit(0);
+        return;
+    }
+    if (event.type === "start" && !acceptsLease(event.lease))
+        return;
+    if (event.type !== "start" && !(event.type === "shutdown" && sameInstance(event.instance)) && workerInstance && !sameLease(event.lease, activeLease))
+        return;
+    if (event.type === "stop" || event.type === "shutdown") {
+        cancelled = true;
+        session?.abortCompaction();
+    }
+    if (event.type === "start" && !started) {
+        started = true;
+        activeLease = event.lease ? Object.freeze({ ...event.lease }) : undefined;
+        void run(event.input);
+    }
+});
+async function run(input) {
+    const send = leaseSender(activeLease);
+    const accounting = [];
+    try {
+        configureModelNetwork(input.root, input.modelsFile, input.selection.provider);
+        const runtime = await new ModelService(input.root).runtime(input.modelsFile);
+        const model = runtime.getModel(input.selection.provider, input.selection.id);
+        const configurationError = runtime.getError();
+        // Parser diagnostics may echo arbitrary secret configuration values.
+        if (configurationError)
+            throw Error("压缩模型配置读取失败，请检查供应商配置；原配置未修改。");
+        if (!model)
+            throw Error("所选压缩模型不可用，请检查供应商与模型配置。");
+        // Snapshot-only summarization: no project resources, extension hooks or coding tools.
+        const settingsManager = SettingsManager.inMemory({
+            cacheWarming: "off",
+            compaction: { enabled: false, keepRecentTokens: 0 },
+        });
+        const resourceLoader = new DefaultResourceLoader({
+            cwd: input.cwd,
+            agentDir: join(input.root, "pi"),
+            settingsManager,
+            noExtensions: true,
+            noSkills: true,
+            noPromptTemplates: true,
+            noThemes: true,
+            noContextFiles: true,
+            systemPrompt: "",
+            appendSystemPrompt: [],
+        });
+        await resourceLoader.reload();
+        ({ session } = await createAgentSession({
+            cwd: input.cwd,
+            agentDir: join(input.root, "pi"),
+            modelRuntime: runtime,
+            model,
+            thinkingLevel: input.selection.thinking,
+            settingsManager,
+            resourceLoader,
+            sessionManager: openTranscript(input.file, input.cwd),
+            noTools: "all",
+        }));
+        if (session.thinkingLevel !== input.selection.thinking)
+            throw Error("压缩模型未能使用所选思考等级，请重新选择模型设置。");
+        session.subscribe((event) => {
+            if (event.type === "compaction_start")
+                send({ type: "phase" });
+        });
+        await awaitExecutionPermit(activeLease, input.executionGate);
+        if (cancelled)
+            return send({ type: "cancelled" });
+        // Pi 1.1.0 drops customInstructions in generateTurnPrefixSummary (split turns).
+        // This session only compacts snapshots: include the same requirement in every
+        // native summary request, without another model call or persisted chat message.
+        const stream = session.agent.streamFunction;
+        const charges = [];
+        const publishBilling = () => send({ type: "billing", billing: sumCosts(charges) });
+        session.agent.streamFunction = async (model, context, options) => {
+            const index = charges.push(usageCost(null)) - 1;
+            publishBilling(); // Persist an unknown charge before a request can be interrupted.
+            const callId = randomUUID();
+            const request = { ...context, messages: [...context.messages, { role: "user", content: compactionInstructions, timestamp: Date.now() }] };
+            send({ type: "model_call", id: callId, input: request });
+            let response;
+            try {
+                response = await stream(model, request, options);
+            }
+            catch (error) {
+                send({ type: "model_result", id: callId, error: compressionError(error) });
+                throw error;
+            }
+            // result() observes the same stream without consuming/replaying its events.
+            accounting.push(response.result().then((message) => {
+                send({ type: "model_result", id: callId, output: message, usage: message.usage, error: message.stopReason === "error" || message.stopReason === "aborted" ? message.errorMessage || "模型请求失败" : undefined });
+                charges[index] = usageCost(message.usage);
+                publishBilling();
+            }).catch((error) => { send({ type: "model_result", id: callId, error: compressionError(error) }); }));
+            return response;
+        };
+        const result = await session.compact(compactionInstructions);
+        const entry = session.sessionManager.getLeafEntry();
+        if (entry?.type !== "compaction")
+            throw Error("pi 未生成有效的原生压缩记录，摘要未应用。");
+        send({
+            type: "completed",
+            entry,
+            summary: result.summary,
+            before: result.tokensBefore,
+            after: result.estimatedTokensAfter ?? null,
+            usage: result.usage && result.usage.totalTokens > 0
+                ? {
+                    input: result.usage.input,
+                    output: result.usage.output,
+                    total: result.usage.totalTokens,
+                    cost: result.usage.cost.total > 0 ? result.usage.cost.total : null,
+                }
+                : null,
+        });
+    }
+    catch (error) {
+        send(cancelled && !(error instanceof ExecutionPermitDeniedError) ? { type: "cancelled" } : { type: "failed", error: compressionError(error) });
+    }
+    finally {
+        await Promise.allSettled(accounting);
+        await session?.waitForIdle();
+        session?.dispose();
+        if (process.connected)
+            process.send?.({ type: "closed", lease: activeLease }, () => process.exit(0));
+        else
+            process.exit(0);
+    }
+}
+//# sourceMappingURL=compression-worker.js.map

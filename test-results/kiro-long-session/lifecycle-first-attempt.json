@@ -1,0 +1,8 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "startedAt": "2026-10-25T17:41:55.909Z",
+  "cases": [],
+  "passed": false,
+  "error": "Error: Run ended before cancellation target started\n    at file:///F:/Axiom/axiom2/app/scripts/kiro-live-lifecycle.mjs:75:30\n    at until (file:///F:/Axiom/axiom2/app/scripts/kiro-live-lifecycle.mjs:43:63)\n    at async file:///F:/Axiom/axiom2/app/scripts/kiro-live-lifecycle.mjs:71:22"
+}

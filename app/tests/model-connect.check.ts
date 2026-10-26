@@ -241,7 +241,7 @@ try {
   await page.locator("#configured-model-table button[aria-label^='编辑模型']").first().click();
   await capture("editor");
   await page.locator("#model-editor").getByRole("button", { name: "取消", exact: true }).click();
-  await page.getByRole("dialog", { name: "放弃当前模型编辑？" }).getByRole("button", { name: "确认", exact: true }).click();
+  await page.getByRole("dialog", { name: "放弃当前模型编辑？" }).getByRole("button", { name: "放弃编辑", exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator("#suppliers-tab").click();
   assert.equal(await page.getByRole("button", { name: "OAuth 登录", exact: true }).count(), 0, "custom interface has no OAuth login button");

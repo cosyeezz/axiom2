@@ -1,0 +1,5 @@
+.path-input { display:flex; gap:8px; flex-wrap:wrap; align-items:center; min-width:0; }
+.path-input > .input { flex:1 1 260px; min-width:0; }
+.path-input > button { flex-shrink:0; }
+.json-path-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.json-path-actions .field-help { flex:1 1 240px; margin:0; }

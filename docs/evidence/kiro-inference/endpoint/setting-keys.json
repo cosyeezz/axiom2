@@ -1,0 +1,30 @@
+[
+  {
+    "index": 25,
+    "length": 25,
+    "va": "0x15b8f5b75",
+    "offset": "0x1b8f4775",
+    "text": "api.codewhisperer.service"
+  },
+  {
+    "index": 26,
+    "length": 15,
+    "va": "0x15b8f5b8e",
+    "offset": "0x1b8f478e",
+    "text": "api.krs.service"
+  },
+  {
+    "index": 27,
+    "length": 15,
+    "va": "0x15b8f5b9d",
+    "offset": "0x1b8f479d",
+    "text": "api.cps.service"
+  },
+  {
+    "index": 28,
+    "length": 20,
+    "va": "0x15b8f5bac",
+    "offset": "0x1b8f47ac",
+    "text": "api.oidc.scopePrefix"
+  }
+]

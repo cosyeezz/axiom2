@@ -1,0 +1,7 @@
+{
+  "name": "__PLUGIN_NAME__-workflow",
+  "version": "1.0.0",
+  "description": "A manually invoked review workflow, independent of the default agent",
+  "skills": "./skills",
+  "options": { "label": "Review workspace", "detail": "base default" }
+}

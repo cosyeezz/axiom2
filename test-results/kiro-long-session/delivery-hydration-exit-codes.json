@@ -1,0 +1,33 @@
+﻿{
+    "cwd":  "F:/Axiom/axiom-kiro-long-session-fb7031ed/app",
+    "temp":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-hydration-temp",
+    "tmp":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-hydration-temp",
+    "tests":  {
+                  "command":  "node --import tsx --test tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts tests/kiro-live-safety.test.ts",
+                  "exitCode":  0,
+                  "log":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-hydration-tests.log"
+              },
+    "syntax":  [
+                   {
+                       "command":  "node --check scripts/kiro-live-check.mjs",
+                       "exitCode":  0
+                   },
+                   {
+                       "command":  "node --check scripts/kiro-live-plan.mjs",
+                       "exitCode":  0
+                   },
+                   {
+                       "command":  "node --check scripts/kiro-live-evidence.mjs",
+                       "exitCode":  0
+                   },
+                   {
+                       "command":  "node --check scripts/kiro-live-lifecycle.mjs",
+                       "exitCode":  0
+                   },
+                   {
+                       "command":  "node --check scripts/kiro-live-native-proof.mjs",
+                       "exitCode":  0
+                   }
+               ],
+    "syntaxLog":  "F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\delivery-hydration-syntax.log"
+}

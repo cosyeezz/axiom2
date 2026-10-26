@@ -20,6 +20,7 @@ test("Qoder regional PKCE login handles pending responses, validates expiry and 
     } });
     const result = await oauth.login({ signal: new AbortController().signal, prompt: async () => "", notify: event => { if (event.type === "auth_url") url = new URL(event.url); } });
     assert.equal(url!.origin, new URL(qoderSites[region].login).origin);
+    assert.equal(url!.searchParams.get("client_id"), "e883ade2-e6e3-4d6d-adf7-f92ceff5fdcb");
     assert.equal(result.region, region); assert.equal(result.machineId, url!.searchParams.get("machine_id"));
     assert.equal(result.refresh, "");
     assert.equal(JSON.parse(packQoderCredential(result, region)).token, "dt-FIXTURE");
@@ -31,7 +32,7 @@ test("Qoder cancellation, timeout, invalid JSON and auth failures do not leak cr
   const controller = new AbortController(); controller.abort();
   const interaction = { signal: controller.signal, prompt: async () => "", notify: () => {} };
   await assert.rejects(qoderOAuth("cn", { fetch: async () => { throw Error("must not fetch"); } }).login(interaction), { name: "AbortError" });
-  await assert.rejects(qoderOAuth("cn", { pollIntervalMs: 20, loginTimeoutMs: 1 }).login({ ...interaction, signal: new AbortController().signal }), /超时/);
+  await assert.rejects(qoderOAuth("cn", { pollIntervalMs: 20, loginTimeoutMs: 1, fetch: async () => new Response(null, { status: 404 }) }).login({ ...interaction, signal: new AbortController().signal }), /超时/);
   for (const response of [new Response("SECRET", { status: 403 }), json({ token: "dt-SECRET", user_id: "x" }), new Response("SECRET")]) {
     await assert.rejects(qoderOAuth("cn", { pollIntervalMs: 1, fetch: async () => response }).login({ ...interaction, signal: new AbortController().signal }), error => error instanceof Error && !error.message.includes("SECRET"));
   }
@@ -47,7 +48,7 @@ test("Qoder PAT exchange is region-isolated, short-lived and cached; raw device 
     const transport: typeof fetch = async (input, init) => {
       calls++; const url = new URL(String(input)); assert.equal(url.origin, qoderSites[region].open);
       assert.equal(init?.redirect, "error");
-      if (url.pathname.endsWith("exchange")) { const body = JSON.parse(String(init?.body)); assert.equal(body.personal_token, "pt-SECRET"); assert.equal(body.machine_token, body.machine_id); assert.ok(body.machine_id); return json({ token: "jt-SECRET", expires_at: new Date(Date.now() + 3600000).toISOString() }); }
+      if (url.pathname.endsWith("exchange")) { const body = JSON.parse(String(init?.body)); assert.equal(body.personal_token, "pt-SECRET"); assert.equal(body.machine_token, undefined); assert.ok(body.machine_id); return json({ token: "jt-SECRET", expires_at: new Date(Date.now() + 3600000).toISOString() }); }
       assert.equal(new Headers(init?.headers).get("authorization"), "Bearer jt-SECRET"); return json({ id: "user-fixture" });
     };
     const first = await store.resolve("pt-SECRET", transport, signal), next = await store.resolve("pt-SECRET", transport, signal);
@@ -62,7 +63,7 @@ test("Qoder device refresh preserves region and machine identity, requires a com
     const oauth = qoderOAuth(region, { fetch: async (input, init) => {
       assert.equal(String(input), `${qoderSites[region].open}/api/v1/deviceToken/refresh`);
       assert.equal(init?.redirect, "error");
-      assert.deepEqual(JSON.parse(String(init?.body)), { refresh_token: credential.refresh, machine_id: credential.machineId, machine_token: credential.machineId });
+      assert.deepEqual(JSON.parse(String(init?.body)), { refresh_token: credential.refresh, machine_id: credential.machineId });
       return json({ device_token: "dt-new", refresh_token: "refresh-new", expires_at: new Date(Date.now() + 3600000).toISOString() });
     } });
     const result = await oauth.refresh(credential, new AbortController().signal);

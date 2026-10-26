@@ -1,0 +1,504 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "transcript": "2026-10-25T17-18-31-507Z_01a17412-3053-70b6-89be-bc65e49cb058.jsonl",
+  "extractedAt": "2026-10-25T19:37:34.018Z",
+  "files": [
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6",
+      "builtAt": "2026-10-25T18:37:14.741Z"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161",
+      "builtAt": "2026-10-25T18:37:14.716Z"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "cd685a611fd5de7067fde7db34dc6ededc04723bb31a3717adf52f5c810e266b",
+      "builtAt": "2026-10-25T19:24:34.932Z"
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "7df6d20d325f826a9a65fa288bf5ac1820a76beca6258ff37118fa1fb6460c6b",
+      "builtAt": "2026-10-25T19:13:18.234Z"
+    },
+    {
+      "path": "scripts/kiro-live-lifecycle.mjs",
+      "sha256": "f358c41fb39ef203f9b9688a50c35f5c7c3f52e72aaab863d628fbe8c33931bf",
+      "builtAt": "2026-10-25T18:38:49.046Z"
+    },
+    {
+      "path": "scripts/kiro-live-native-proof.mjs",
+      "sha256": "487452f6e030c4a439c0ab690e98dc5406b01295cdb99951b2688cb10b91c08d",
+      "builtAt": "2026-10-25T19:37:14.880Z"
+    }
+  ],
+  "scope": {
+    "axiomRunId": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+    "axiomId": "95850c94-930f-4e6f-9bdc-20aa77be73c6",
+    "expectedAnswerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9"
+  },
+  "selectedRecordIds": [
+    "dfcab121"
+  ],
+  "records": [
+    {
+      "id": "3da1e8f2",
+      "axiomRunId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+      "axiomId": "ae4110fe-dd70-4596-af3f-63a76a631157",
+      "timestamp": 1792948874449,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "8efc8a9a5addc300812015c26a80c47804b2d0244022e8e8f7f388fae085109e",
+      "diagnostics": []
+    },
+    {
+      "id": "f6cca6dc",
+      "axiomRunId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+      "axiomId": "fdb691fc-37d3-48b9-8607-8b2aa15fc76b",
+      "timestamp": 1792948980768,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "1abffc5fd2c5d623507ccd16e8e49a3deb50320c84add80eb78a03fd3847107a",
+      "diagnostics": []
+    },
+    {
+      "id": "3362f32e",
+      "axiomRunId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+      "axiomId": "4359d4f2-7632-4701-8d56-4dfec0a597dc",
+      "timestamp": 1792948988972,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "5446b6fc",
+      "axiomRunId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+      "axiomId": "7c57cde1-1762-4d47-be5d-cd68e93cdf5d",
+      "timestamp": 1792948994501,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "26a3c9e1",
+      "axiomRunId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+      "axiomId": "0e00b99d-9a15-4b80-ab44-b6145c8fe193",
+      "timestamp": 1792948997955,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "3b33da3c",
+      "axiomRunId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+      "axiomId": "c51a3a05-fc2e-4e9b-96e8-71cc9cfbbd80",
+      "timestamp": 1792949001451,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "b6f0be40dd67f63d0e54d4f2c3ef0ec656b515a32afd836f55a04fba25810a00",
+      "diagnostics": []
+    },
+    {
+      "id": "6ed1a8b8",
+      "axiomRunId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+      "axiomId": "f8143fc4-6b1a-4d27-a7cc-22f29b08ecf4",
+      "timestamp": 1792949082338,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "00fb3d2d",
+      "axiomRunId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+      "axiomId": "10beac19-45c2-4de4-98b4-891b305c5b56",
+      "timestamp": 1792949089623,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "ea6e5b57",
+      "axiomRunId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+      "axiomId": "90f4ccc8-a973-49a8-af2b-2c55df0ee18f",
+      "timestamp": 1792949092357,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f2a327e1cbf7d8c5197d5f85b913adc676713509bdab49d4fc72759e9c546e09",
+      "diagnostics": []
+    },
+    {
+      "id": "2936cf51",
+      "axiomRunId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+      "axiomId": "4d8b526e-d4a4-47e5-a7b7-cc1310c39731",
+      "timestamp": 1792949097287,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "off",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+      "diagnostics": []
+    },
+    {
+      "id": "f60c78af",
+      "axiomRunId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+      "axiomId": "567eb5e1-75f9-4276-9778-cb4324264537",
+      "timestamp": 1792949104861,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "minimal",
+      "providerThinkingLevel": "1024",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "1c4abfa4b79b76edfbb4eb3c1b85407d94286f219e1cf19abdddd249211cf4d2",
+      "diagnostics": []
+    },
+    {
+      "id": "741d84f3",
+      "axiomRunId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+      "axiomId": "f4be4bef-2279-41ee-a938-cce1a4663df7",
+      "timestamp": 1792949113731,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f5994bdb018aae034438963493e2e38e305465c2aa5518314bc7e9fd5556f530",
+      "diagnostics": []
+    },
+    {
+      "id": "89a9a2ef",
+      "axiomRunId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+      "axiomId": "27ff7738-f952-4188-bca4-97123a14ba10",
+      "timestamp": 1792949200813,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "a33a30eff6dc3eec2a27da064bcfc4b69bd13fbad8f1123c1863175d741ed786",
+      "diagnostics": []
+    },
+    {
+      "id": "88aca664",
+      "axiomRunId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+      "axiomId": "9a27519f-c2f4-4563-860e-52c3c48dd795",
+      "timestamp": 1792949809485,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "40e214dc101dd4b68bce049381b96bcaafea84fd72a07dfb9d341a5d3e2a59a9",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792949809490,
+          "omittedReasoningTextBlocks": 5,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "ac62e340",
+      "axiomRunId": "4a36e0a8-2e87-4abc-8da8-a43b67975593",
+      "axiomId": "73a40e7a-f99f-45e0-a38b-124fc5b925e2",
+      "timestamp": 1792950123242,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950123244,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "5ff82892",
+      "axiomRunId": "4a36e0a8-2e87-4abc-8da8-a43b67975593",
+      "axiomId": "d51fabe2-9076-4baf-93d3-a5633f182f71",
+      "timestamp": 1792950157014,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950157015,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "4fa1b539",
+      "axiomRunId": "4a36e0a8-2e87-4abc-8da8-a43b67975593",
+      "axiomId": "1c2288a2-a9fc-432f-8aaf-f1e33eacf558",
+      "timestamp": 1792950159428,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950159428,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "b5ef72fd",
+      "axiomRunId": "4a36e0a8-2e87-4abc-8da8-a43b67975593",
+      "axiomId": "8e80e0db-550c-4efd-a7f3-ed3bc29f95c7",
+      "timestamp": 1792950163811,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950163812,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "0a9b8381",
+      "axiomRunId": "4a36e0a8-2e87-4abc-8da8-a43b67975593",
+      "axiomId": "c1ba4680-3517-4129-a8a7-6beaf44f2fef",
+      "timestamp": 1792950172213,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950172213,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "aa0cb001",
+      "axiomRunId": "f3f9c9f1-5082-47ac-83bb-fa2fde1f9713",
+      "axiomId": "6924f1c6-752e-454e-807b-44542d2d1839",
+      "timestamp": 1792950307182,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950307184,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "ad936748",
+      "axiomRunId": "ae2e128c-79f6-4a5b-9e68-cf739480c41a",
+      "axiomId": "638251fb-68b6-433b-8ced-45ad700aa1f5",
+      "timestamp": 1792950314122,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "9bf2d3d3",
+      "axiomRunId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+      "axiomId": "52c79924-cc2b-4baf-80db-853e16b2769d",
+      "timestamp": 1792953637245,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "86f9229bf37fb420adfc69ee4ea1e8ee2522877802be619f15df506df9209e54",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792953637247,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        },
+        {
+          "type": "kiro-interrupted-tools-omitted",
+          "timestamp": 1792953637247,
+          "omittedToolCalls": 1
+        }
+      ]
+    },
+    {
+      "id": "a349655e",
+      "axiomRunId": "f79aa6b7-dfe6-4fa4-bb6d-c4ee6251e5f9",
+      "axiomId": "4d860d10-b284-4b7d-a38b-f47e1db205ea",
+      "timestamp": 1792953781322,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792953781324,
+          "omittedReasoningTextBlocks": 7,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        },
+        {
+          "type": "kiro-interrupted-tools-omitted",
+          "timestamp": 1792953781324,
+          "omittedToolCalls": 1
+        }
+      ]
+    },
+    {
+      "id": "801ceee3",
+      "axiomRunId": "0b84d7fd-0c0d-46d1-943f-4958724aece2",
+      "axiomId": "9a51954d-3add-4687-bd64-6e9bdcc2c1c8",
+      "timestamp": 1792953788584,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "86f9229bf37fb420adfc69ee4ea1e8ee2522877802be619f15df506df9209e54",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792953788585,
+          "omittedReasoningTextBlocks": 8,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        },
+        {
+          "type": "kiro-interrupted-tools-omitted",
+          "timestamp": 1792953788585,
+          "omittedToolCalls": 2
+        }
+      ]
+    },
+    {
+      "id": "dfcab121",
+      "axiomRunId": "c1d6aefb-a5d9-4189-9a04-1d316e66d14b",
+      "axiomId": "95850c94-930f-4e6f-9bdc-20aa77be73c6",
+      "timestamp": 1792953797704,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792953797706,
+          "omittedReasoningTextBlocks": 9,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        },
+        {
+          "type": "kiro-interrupted-tools-omitted",
+          "timestamp": 1792953797706,
+          "omittedToolCalls": 2
+        }
+      ]
+    }
+  ]
+}

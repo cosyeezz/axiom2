@@ -1,0 +1,1 @@
+function sK(A){let e=yfl(A),t=Lkn(A);if(t)return Ukn(t,e);for(let t of l5i){let i=REA(A[t]);if(!i)continue;let r=Lkn(i);if(r)return Ukn(r,e);for(let A of wfl){let t=REA(i[A]);if(!t)continue;let r=Lkn(t);if(r)return Ukn(r,e)}}return e?{efforts:[],supportsDisabled:!0}:void 0}

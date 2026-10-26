@@ -1,0 +1,187 @@
+#!/bin/sh
+# -e leaves stdin available for zip -@, archive comments and streamed input.
+if [ "${CODEBUDDY_NODE_RUN_AS_NODE:-}" = "1" ]; then export ELECTRON_RUN_AS_NODE=1; fi
+exec env -u NODE_OPTIONS "${CODEBUDDY_NODE_BIN:-node}" -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
+const { spawnSync } = require("node:child_process");
+const wrapper = fs.realpathSync(process.argv[1]);
+const program = path.basename(process.argv[1]);
+const shimRoot = path.dirname(path.dirname(wrapper));
+const args = process.argv.slice(2);
+const brokerClient = process.env.CODEBUDDY_BROKER_IPC_CLIENT || path.join(shimRoot, "broker-ipc-client.cjs");
+const { checkProgramPolicy } = require(path.join(shimRoot, "broker-program-policy-check.cjs"));
+const policy = checkProgramPolicy(program, "archive-wrapper", { brokerClientPath: brokerClient });
+if (policy.code) {
+    console.error(policy.error);
+    process.exit(policy.code);
+}
+
+// Only single-archive options are tracked. Do not guess targets for -m, split
+// archives, --out, log files or options injected through ZIPOPT.
+function zipTarget() {
+    if (process.env.ZIPOPT) { return undefined; }
+    let archive;
+    let literal = false;
+    for (const arg of args) {
+        if (!literal && arg === "--") { literal = true; continue; }
+        if (!literal && arg.startsWith("-") && arg !== "-") {
+            // Conservatively exclude any cluster containing lf before parsing.
+            // Even ll+f must be separate arguments to retain rollback tracking.
+            if (arg.includes("lf")) { return undefined; }
+            if (arg === "-FS") { continue; }
+            for (let i = 1; i < arg.length; i++) {
+                // Info-ZIP matches two-character options before single flags,
+                // including inside clusters (e.g. -qlf consumes a log path).
+                const pair = arg.slice(i, i + 2);
+                if (["db", "dc", "dd", "dg", "ds", "du", "dv", "DF", "fd", "fz", "ll", "lf", "la", "li"].includes(pair)) {
+                    if (!["dc", "dd", "dg", "du", "fd", "fz", "ll"].includes(pair)) { return undefined; }
+                    i++;
+                } else if (!/^[0-9rqjXDdufgoyl@cze]$/.test(arg[i])) {
+                    return undefined;
+                }
+            }
+        } else if (archive === undefined) {
+            archive = arg;
+        }
+    }
+    if (archive === "") { return undefined; }
+    if (archive === undefined || archive === "-") { return null; }
+    return path.resolve(path.basename(archive).includes(".") ? archive : archive + ".zip");
+}
+
+function commandArchiveTarget() {
+    const rar = program === "rar";
+    if (rar && !args.includes("-cfg-")) {
+        const home = process.env.HOME || os.homedir();
+        const config = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+        if (process.env.RARINISWITCHES || [path.join(home, ".rarrc"), "/etc/.rarrc", path.join(config, "rar")]
+            .some(file => fs.existsSync(file))) { return undefined; }
+    }
+    let command;
+    let archive;
+    let type = rar ? "rar" : "7z";
+    let literal = false;
+    for (const arg of args) {
+        if (!literal && arg === "--") { literal = true; continue; }
+        if (!literal && arg.startsWith("-")) {
+            if (!rar && /^-t(7z|zip)$/.test(arg)) { type = arg.slice(2); continue; }
+            const supported = rar
+                ? /^(?:-cfg-|-r[0-]?|-m[0-5]|-ma[45]|-id[a-z]+|-y|-s-?|-ep[123]?|-p.*|-hp.*)$/
+                : /^(?:-r[0-]?|-y|-mx=?[0-9]|-mmt(?:=?[0-9]+)?|-p.*|-bb[0-3]|-bd|-b[spo][0-2])$/;
+            if (!supported.test(arg)) { return undefined; }
+        } else if (!command) {
+            command = arg;
+        } else if (archive === undefined) {
+            archive = arg;
+        }
+    }
+    if (!(rar ? ["a", "u", "f"] : ["a", "u"]).includes(command)) { return undefined; }
+    if (!archive || archive.startsWith("@") || /[*?]/.test(archive)) { return undefined; }
+    // RAR first tries an existing exact path; 7-Zip instead appends its default
+    // extension. A trailing dot has special 7-Zip naming semantics we do not infer.
+    if (!rar && archive.endsWith(".")) { return undefined; }
+    if (rar && fs.existsSync(path.resolve(archive))) { return path.resolve(archive); }
+    return path.resolve(path.basename(archive).includes(".") ? archive : archive + "." + type);
+}
+
+function tarTarget() {
+    if (process.env.TAR_OPTIONS) { return undefined; }
+    let archive;
+    let create = false;
+    let literal = false;
+    const modes = new Set(["--create", "--gzip", "--bzip2", "--xz", "--auto-compress", "--verbose"]);
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (literal) { continue; }
+        if (arg === "--") { literal = true; continue; }
+        if (modes.has(arg)) { if (arg === "--create") { create = true; } continue; }
+        if (arg === "--file" || arg === "--directory") {
+            const value = args[++i];
+            if (value === undefined) { return undefined; }
+            if (arg === "--file") {
+                if (archive !== undefined) { return undefined; }
+                archive = value;
+            }
+            continue;
+        }
+        if (arg.startsWith("--file=")) {
+            if (archive !== undefined) { return undefined; }
+            archive = arg.slice(7); continue;
+        }
+        if (arg.startsWith("--directory=")) { continue; }
+        if (arg.startsWith("--")) { return undefined; }
+        const oldStyle = i === 0 && /^[cvzjJahfC]+$/.test(arg);
+        if (!arg.startsWith("-") && !oldStyle) { continue; }
+        const flags = oldStyle ? arg : arg.slice(1);
+        for (let j = 0; j < flags.length; j++) {
+            const flag = flags[j];
+            if (flag === "c") { create = true; }
+            else if ("vzjJah".includes(flag)) { continue; }
+            else if (flag === "f" || flag === "C") {
+                const value = !oldStyle && j + 1 < flags.length ? flags.slice(j + 1) : args[++i];
+                if (value === undefined) { return undefined; }
+                if (flag === "f") {
+                    if (archive !== undefined) { return undefined; }
+                    archive = value;
+                }
+                if (!oldStyle) { break; }
+            } else { return undefined; }
+        }
+    }
+    if (!create || !archive) { return undefined; }
+    if (archive === "-") { return null; }
+    if (archive.includes(":")) { return undefined; }
+    return path.resolve(archive);
+}
+
+const brokerEnabled = Boolean(process.env.CODEBUDDY_SANDBOX_BROKER_IPC_ADDRESS
+    && process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID);
+const target = program === "zip" ? zipTarget() : program === "tar" ? tarTarget() : commandArchiveTarget();
+let send;
+function notify(command) {
+    const response = send({ command, operation: "write", path: target,
+        sessionId: process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID,
+        toolCallId: process.env.CODEBUDDY_SANDBOX_BROKER_TOOL_CALL_ID,
+        brokerTraceId: process.env.CODEBUDDY_SANDBOX_BROKER_TRACE_ID,
+        runtime: "archive-wrapper" });
+    if (!response || (response.ok !== true && response.decision !== "sandbox")) {
+        throw new Error(response?.error || "Archive rollback registration denied");
+    }
+}
+if (brokerEnabled && target === undefined) {
+    console.error("WorkBuddy: file rollback is not tracked for these " + program + " options.");
+}
+if (brokerEnabled && target) {
+    try {
+        const command = process.env.CODEBUDDY_SANDBOX_FILE_TOKEN_OPERATION_COMMAND;
+        if (!command) { throw new Error("Archive write preflight unavailable"); }
+        send = require(brokerClient).sendBrokerRequestSync;
+        notify(command);
+    } catch (error) {
+        console.error(error.message);
+        process.exit(13);
+    }
+}
+
+// Preserve the native command, excluding aliases of this wrapper to avoid recursion.
+const nativePath = (process.env.PATH || "").split(path.delimiter).filter(dir => {
+    try { return fs.realpathSync(path.resolve(dir, program)) !== wrapper; }
+    catch { return true; }
+}).join(path.delimiter);
+const result = spawnSync(program, args, { stdio: "inherit", env: { ...process.env, PATH: nativePath } });
+let status = result.status ?? (result.error?.code === "ENOENT" ? 127 : 1);
+if (result.error) { console.error(result.error.message); }
+// Nonzero exit can still leave an archive. The host checks existence and remembers
+// whether this path was missing at preflight; never infer that from the exit code.
+if (send) {
+    try { notify("FileWriteCompleted"); }
+    catch (error) {
+        console.error("WorkBuddy: " + program + " rollback registration failed: " + error.message);
+        if (status === 0) { status = 13; }
+    }
+}
+if (result.signal) { process.kill(process.pid, result.signal); }
+else { process.exit(status); }
+' "$0" "$@"

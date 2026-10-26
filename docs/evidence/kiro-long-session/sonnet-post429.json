@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "phase": "bounded-post429-followup",
+  "model": "claude-sonnet-4.5",
+  "taskRef": "t4046",
+  "startedAt": "2026-10-25T20:58:07.232Z",
+  "finishedAt": "2026-10-25T20:58:27.768Z",
+  "priorFailedRunId": "d0da062b-9bb2-45c9-8e2d-927fc91646b4",
+  "originalSourceStateSha256": "5f3bdf810723199f1758ebcafc4d0d816be820bc0d52a4341fd2f0f4a572c2a2",
+  "followupStateSha256": "07150ce3a90b9fd47f7b0d33e85f74544e989da3f76d72e94dc2a1506ce2b197",
+  "policy": {
+    "maximumNewInputs": 4,
+    "actualNewInputs": 1,
+    "unsentPlannedInputs": 3,
+    "minimumCooldownMs": 300000,
+    "actualCooldownMs": 486167,
+    "noPriorInputReplay": true,
+    "noPriorToolReplay": true,
+    "stopOnAnyProtocolFailure": true
+  },
+  "priorFailedRound": {
+    "label": "long-17-shell-recovery",
+    "toolCalls": 2,
+    "toolResults": 2,
+    "existingToolEvidenceIndependentlyRechecked": true
+  },
+  "rounds": [
+    {
+      "label": "long-17-shell-recovery",
+      "runId": "b483c133-fe77-46bf-bd7d-bb1111de2039",
+      "status": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "protocolError": {
+        "category": "upstream-rate-or-quota-429",
+        "errorSha256": "f209a4bd5c187f8978037e165c03f9d667ec55d04e91c66b5d4cceff39e21180"
+      },
+      "promptCorrelation": {
+        "inputIdSha256": "e490d78538d80c9e8cc8bb2b287b35d77958cc5a75de37edefa1387616f6c857",
+        "inputIdentityMatchedInEvidence": true,
+        "fullUserTextVerifiedByDriver": true
+      },
+      "actualToolCalls": 0,
+      "actualToolResults": 0,
+      "checked": false,
+      "axiomInternalRetry": {
+        "attempt": 3,
+        "maxAttempts": 3,
+        "state": "exhausted"
+      }
+    }
+  ],
+  "sourceHashes": [
+    {
+      "path": "src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "167e5ab7cca76487570341aae21f4a9c901f952ffcfab15c8a0a721ff71f3f19"
+    },
+    {
+      "path": "src/server/providers/kiro-chat.ts",
+      "sha256": "e8739dddd89dc4d57b6a1e1c3f7321f5ca53342952fa8909b6c225a80be038e5"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "6031bc6e918fec21c14d5c5fe922434c25e6db6da87af4fce899288596ae16e4"
+    },
+    {
+      "path": "scripts/kiro-live-plan.mjs",
+      "sha256": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6"
+    }
+  ],
+  "controllerExitCode": 1,
+  "terminalChecks": {
+    "checkedAt": "2026-10-25T21:02:39.834Z",
+    "allOwnedTasksQuiescent": true,
+    "defaultsUnchanged": true,
+    "ownedRunnerProcessesExited": true,
+    "sourceSha256": "c6604780c1783f6b4da11f8464b2e58ea1282a8fcd47a3de1361595a60fb07b2"
+  },
+  "countingPolicy": "Separate from the 137 controlled recovery rounds. One new durable input is not one HTTP attempt; AXIOM recorded bounded internal retries. No further autonomous model inputs planned.",
+  "sources": {
+    "summarySha256": "5ff29f4fc132bd52bc15ec3702d33ac750ddd905360d176abac63d01b5deb541"
+  }
+}

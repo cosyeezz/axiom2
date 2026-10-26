@@ -1,0 +1,16 @@
+﻿[
+    {
+        "command":  "node node_modules/typescript/bin/tsc --noEmit",
+        "cwd":  "F:/Axiom/axiom2/app",
+        "exitCode":  0,
+        "startedUtc":  "2026-10-25T14:05:03.1449298Z",
+        "finishedUtc":  "2026-10-25T14:05:26.7500217Z"
+    },
+    {
+        "command":  "node node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit",
+        "cwd":  "F:/Axiom/axiom2/app",
+        "exitCode":  0,
+        "startedUtc":  "2026-10-25T14:05:26.7860417Z",
+        "finishedUtc":  "2026-10-25T14:05:35.7760135Z"
+    }
+]

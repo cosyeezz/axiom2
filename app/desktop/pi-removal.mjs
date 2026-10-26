@@ -11,8 +11,26 @@ export async function pathIdentity(path) {
   } catch (error) { if (error.code === 'ENOENT') return { path, missing: true }; throw error; }
 }
 export async function inspectPiRemoval(info, registration) {
-  if (!info.version) throw Error('所选 npm 中未发现终端 Pi；请检查其他命令来源。');
   if (info.legacy) throw Error('检测到旧命名空间的 Pi，请通过原安装方式处理同名命令后重新预览。');
+  const commands = process.platform === 'win32' ? ['pi', 'pi.cmd', 'pi.ps1'].map(name => join(info.prefix, name)) : [join(info.prefix, 'bin/pi')];
+  if (!info.version) {
+    // Only a genuinely missing package is an empty result. Leftover directories,
+    // links or unreadable manifests must not become a clean-installation claim.
+    if (!(await pathIdentity(info.packageRoot)).missing) throw Error('Pi 目录仍存在但缺少有效包清单，请通过环境扫描核实；未授权删除。');
+    const entries = await Promise.all(commands.map(async path => {
+      const missing = (await pathIdentity(path)).missing === true;
+      return { label: '同名 npm 命令入口', path, state: missing ? 'absent' : 'unverified',
+        ...(!missing ? { note: '未安装所选 Pi 包，但发现同名入口；归属未核实，将保留。' } : {}) };
+    }));
+    return { installed: false, version: null, packageRoot: info.packageRoot, prefix: info.prefix, commands,
+      message: '所选 npm 中未安装终端 Pi，无需卸载；此结果不代表其他命令来源也未安装。',
+      items: [
+        { label: '所选终端 Pi 包', path: info.packageRoot, state: 'absent' },
+        ...entries,
+        { label: '共享 npm 前缀与缓存', path: info.prefix, state: 'retain', note: '未创建、删除或修改所选安装目录。' },
+        { label: '其他命令来源及用户配置', state: 'unverified', note: '请结合环境扫描核实；其他安装、用户设置及资源均未改动。' },
+      ] };
+  }
   const prefix = await realpath(info.prefix), packageRoot = await realpath(info.packageRoot);
   // Prefix aliases are bound by piEnvironment; descendants must be ordinary directories.
   if (packageRoot !== join(prefix, process.platform === 'win32' ? 'node_modules' : 'lib/node_modules', '@earendil-works/pi-coding-agent')) throw Error('Pi 目录存在链接或非标准布局，请通过原安装方式卸载。');
@@ -46,7 +64,6 @@ export async function inspectPiRemoval(info, registration) {
   if (!pkg.bin || typeof pkg.bin !== 'object' || Object.keys(pkg.bin).length !== 1 || typeof pkg.bin.pi !== 'string') throw Error('Pi 命令声明不受支持，请通过原安装方式卸载。');
   const cli = resolve(info.packageRoot, pkg.bin.pi);
   if (!cli.startsWith(`${info.packageRoot}${sep}`) || await realpath(cli) !== join(packageRoot, pkg.bin.pi)) throw Error('Pi 命令入口位于包目录之外或存在链接。');
-  const commands = process.platform === 'win32' ? ['pi', 'pi.cmd', 'pi.ps1'].map(name => join(info.prefix, name)) : [join(info.prefix, 'bin/pi')];
   for (const path of commands) {
     const identity = await pathIdentity(path);
     if (!identity.missing) {
@@ -57,7 +74,7 @@ export async function inspectPiRemoval(info, registration) {
   }
   identities.push(manifestIdentity, await pathIdentity(cli), await pathIdentity(await realpath(info.installed.node)), await pathIdentity(await realpath(info.npm)));
   const identity = createHash('sha256').update(JSON.stringify([info.identity, identities, registration])).digest('hex');
-  return { identity, version: info.version, packageRoot: info.packageRoot, prefix: info.prefix, commands,
+  return { installed: true, identity, version: info.version, packageRoot: info.packageRoot, prefix: info.prefix, commands,
     items: [
       { label: '程序与包内依赖', path: info.packageRoot, state: 'remove' },
       ...commands.map(path => ({ label: 'npm 命令入口', path, state: 'remove' })),

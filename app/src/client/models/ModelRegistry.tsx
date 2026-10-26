@@ -9,6 +9,7 @@ import { DeleteButton } from "../DeleteButton.js";
 import { ModelEditor } from "./ModelEditor.js";
 import { ModelCatalogPicker } from "./ModelCatalogPicker.js";
 import { copyModelDraft } from "./copy-model.js";
+import type { ConfigurationDecision } from "./useConfiguration.js";
 export function ModelRegistry({
   p,
   revision,
@@ -46,11 +47,7 @@ export function ModelRegistry({
   copyFeedback: string;
   copyButton: (v: string, k: string) => ReactNode;
   rows: Model[];
-  setDecision: (v: {
-    title: string;
-    text: string;
-    proceed: () => void;
-  }) => void;
+  setDecision: (v: ConfigurationDecision) => void;
 }) {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [duplicateFeedback, setDuplicateFeedback] = useState("");
@@ -216,9 +213,13 @@ export function ModelRegistry({
                       onConfirm={() =>
                         setDecision({
                           title: "删除模型草稿？",
+                          confirmLabel: "删除草稿",
+                          danger: true,
+                          subject: `${m.name}\n${m.id}`,
                           text: m.originalId
-                            ? "先移出草稿；保存时会退出整个供应商，同供应商其他模型也可能需要重新认证。"
+                            ? "将此模型移出本页草稿，保存后才会生效。"
                             : "该模型尚未发布；仅从本页草稿移除。",
+                          warning: m.originalId ? "保存时会退出整个供应商，同供应商其他模型也可能需要重新认证。" : undefined,
                           proceed: () => remove(m),
                         })
                       }

@@ -1,0 +1,6 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "Custom brand, sidebar task entry and current-conversation summary shortcut",
+  "client": {"platform":"web","entry":"client/index.js","format":"module","apiVersion":1}
+}

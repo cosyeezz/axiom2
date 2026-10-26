@@ -1,0 +1,6 @@
+{
+  "name": "brawler",
+  "version": "1.0.0",
+  "description": "长按左上角 CodeBuddy logo 唤醒像素小人：在页面元素上跳跃、连击、下砸，把界面打成碎片（Esc / R 一键复原）",
+  "client": { "platform": "web", "entry": "client/index.js", "format": "module", "apiVersion": 1 }
+}

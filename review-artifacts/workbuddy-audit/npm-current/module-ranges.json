@@ -1,0 +1,288 @@
+{
+  "input": "review-artifacts/workbuddy-audit/npm-cli/package/dist/codebuddy-headless.js",
+  "sha256": "28b11c274d7402fc2630292f8f0b434416e7e7f36619bd61b814abd9c3c59b15",
+  "ranges": [
+    {
+      "id": "93487",
+      "start": 3785302,
+      "end": 4133408,
+      "size": 348106,
+      "keys": [
+        "supportedEfforts"
+      ],
+      "sha256": "142aaee3687ab1a18fab1f466de914d81cc89d19a17e893f25c0b6cbb8e72dc4"
+    },
+    {
+      "id": "66335",
+      "start": 4734822,
+      "end": 4990250,
+      "size": 255428,
+      "keys": [
+        "configureThinkingSettings",
+        "image_url",
+        "supportedEfforts"
+      ],
+      "sha256": "f9792ca2216a7f21edcb4a444449b2ff257fffefe855d6ce042f04b189db7d73"
+    },
+    {
+      "id": "53100",
+      "start": 5042312,
+      "end": 5042436,
+      "size": 124,
+      "keys": [
+        "cli-external-link"
+      ],
+      "sha256": "6d8a066f7617fba9936b87a02c94253fc2680980e03f003873b9ba362b3ac69f"
+    },
+    {
+      "id": "57847",
+      "start": 5093805,
+      "end": 5107090,
+      "size": 13285,
+      "keys": [
+        "image_url"
+      ],
+      "sha256": "41daf98851960716f90c7e7d0c04a22d7158e9091660a04ff51aded736f6a13c"
+    },
+    {
+      "id": "87362",
+      "start": 5351328,
+      "end": 5400998,
+      "size": 49670,
+      "keys": [
+        "image_url"
+      ],
+      "sha256": "2b2c3b8880780602029727d06788c15fbc64a6676099ebf4c51d9116cf7af527"
+    },
+    {
+      "id": "21586",
+      "start": 5532140,
+      "end": 5594534,
+      "size": 62394,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "8436eb32680b7325e206ff6c80942483fb225d935c28d6c6d44e8d4c37208e5e"
+    },
+    {
+      "id": "41983",
+      "start": 6429450,
+      "end": 6431024,
+      "size": 1574,
+      "keys": [
+        "supportedEfforts"
+      ],
+      "sha256": "ae8349f59ac4c9ba33b69fe56b5bb267700516362df9f8be8255c864c6b744b4"
+    },
+    {
+      "id": "28968",
+      "start": 6438368,
+      "end": 7236134,
+      "size": 797766,
+      "keys": [
+        "injectReasoningSummaryIfNeeded",
+        "resolveModelBaseURL",
+        "reasoning_content",
+        "image_url",
+        "supportedEfforts"
+      ],
+      "sha256": "ebb4b0a46f5619b5fc4444078790767ca32164a440cce2643281c3f1a5393085"
+    },
+    {
+      "id": "95073",
+      "start": 7595162,
+      "end": 7635384,
+      "size": 40222,
+      "keys": [
+        "image_url"
+      ],
+      "sha256": "6ff4d2d949ed243e95f58a993b604f3a85c6a7d21b626ac6f550c11f447c703f"
+    },
+    {
+      "id": "84199",
+      "start": 7858591,
+      "end": 9211016,
+      "size": 1352425,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "81f86d3b9ba68fd3d856af0775d4ba24f4969744f2a2ea11f4e8d42c64f72b53"
+    },
+    {
+      "id": "88839",
+      "start": 9737504,
+      "end": 9784002,
+      "size": 46498,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "2b7e948ff8d1070ff98cc7c45b981b39a6e6288fa59c71f8f26876793a38496a"
+    },
+    {
+      "id": "58232",
+      "start": 9788400,
+      "end": 9801534,
+      "size": 13134,
+      "keys": [
+        "image_url"
+      ],
+      "sha256": "efc0cfb493e83ea343fc65ba3f5464272a0c9aeea3c738d7a150d737d4065c7e"
+    },
+    {
+      "id": "69594",
+      "start": 10378919,
+      "end": 11386374,
+      "size": 1007455,
+      "keys": [
+        "image_url",
+        "workbuddy.cn"
+      ],
+      "sha256": "3e8c7f6a235c79af6cefddbc7c05ec251b0cb650d995c94370611f196a799bd9"
+    },
+    {
+      "id": "59474",
+      "start": 11636138,
+      "end": 11672756,
+      "size": 36618,
+      "keys": [
+        "reasoning_content",
+        "image_url"
+      ],
+      "sha256": "6bcfea06e1dbe159bdfc7332bb265998f2dc35957eca1394d78b7f8ef44ba335"
+    },
+    {
+      "id": "5924",
+      "start": 12160823,
+      "end": 12183815,
+      "size": 22992,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "4725bb25e3155b44ddd5bd9df1e9817782bb5c98b28825631b3ada621e3897c2"
+    },
+    {
+      "id": "56727",
+      "start": 14397164,
+      "end": 14397870,
+      "size": 706,
+      "keys": [
+        "supportedEfforts"
+      ],
+      "sha256": "ab1deda181d6c09c6fef5c300aba305de0dbf86834151f89d773048b602b92b1"
+    },
+    {
+      "id": "10075",
+      "start": 14401615,
+      "end": 14403143,
+      "size": 1528,
+      "keys": [
+        "image_url"
+      ],
+      "sha256": "c2214f2ceffa6eae11c31ddf9a1547050aed492c2fd9455427845db57c21caff"
+    },
+    {
+      "id": "34766",
+      "start": 14406327,
+      "end": 14407381,
+      "size": 1054,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "3fd1b5b5efecb234b6699a3a6e0c013fabe4fc117acefa20b9b4c8ed89d5a3ba"
+    },
+    {
+      "id": "82214",
+      "start": 14726807,
+      "end": 15451419,
+      "size": 724612,
+      "keys": [
+        "reasoning_content",
+        "image_url",
+        "supportedEfforts"
+      ],
+      "sha256": "bbf84a9c5c959bef47db8a95bd7f78f730e5ea94a7f9fca9e9d37453783f504f"
+    },
+    {
+      "id": "82120",
+      "start": 16960578,
+      "end": 16963414,
+      "size": 2836,
+      "keys": [
+        "supportedEfforts"
+      ],
+      "sha256": "000d39848f7b448e965c04be48b810e12be9984c7e55c81df8bbacd507b939a1"
+    },
+    {
+      "id": "89121",
+      "start": 17005869,
+      "end": 17006781,
+      "size": 912,
+      "keys": [
+        "workbuddy.cn"
+      ],
+      "sha256": "3d7fa45dd81092fe6fd121492b596eb9271ea40282d6da6703de36a380995e0e"
+    },
+    {
+      "id": "50253",
+      "start": 17011081,
+      "end": 17013884,
+      "size": 2803,
+      "keys": [
+        "workbuddy.cn"
+      ],
+      "sha256": "33a1cbe63940571a9d95a589d1e9a295e479fb18b431941741526ce7e0f2a287"
+    },
+    {
+      "id": "41056",
+      "start": 17014545,
+      "end": 17015062,
+      "size": 517,
+      "keys": [
+        "cli-external-link"
+      ],
+      "sha256": "50543298d1ad626f7589fb67e85fb07ef5c12ceace028718abd8139fd23189c4"
+    },
+    {
+      "id": "86002",
+      "start": 17492403,
+      "end": 17503952,
+      "size": 11549,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "e5815995447a81f5585f9b0a058795fb330a0b941a9727b9fc659bbb45d69e65"
+    },
+    {
+      "id": "22902",
+      "start": 20340545,
+      "end": 20599301,
+      "size": 258756,
+      "keys": [
+        "reasoning_content",
+        "image_url",
+        "chat.completions"
+      ],
+      "sha256": "8b8dde22f1d6eba76e118aba82beb0a488a992927b1fbe945d5f22d54082162f"
+    },
+    {
+      "id": "66554",
+      "start": 22883005,
+      "end": 23004335,
+      "size": 121330,
+      "keys": [
+        "reasoning_content"
+      ],
+      "sha256": "66c56942e7275728376ab36601b794deafdc0fd49f3d9154bbc6fcb223691315"
+    },
+    {
+      "id": "73502",
+      "start": 23400149,
+      "end": 23526103,
+      "size": 125954,
+      "keys": [
+        "chat.completions"
+      ],
+      "sha256": "369ab581afe58a721a1019306f848a03dc055d0cf413fceb1c40710adf386c98"
+    }
+  ]
+}

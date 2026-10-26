@@ -1,0 +1,1232 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "base": 5368709120,
+  "sections": [
+    {
+      "name": ".text",
+      "rva": 4096,
+      "size": 96405504,
+      "off": 1024
+    },
+    {
+      "name": ".rdata",
+      "rva": 96411648,
+      "size": 426651648,
+      "off": 96406528
+    },
+    {
+      "name": ".data",
+      "rva": 523063296,
+      "size": 653312,
+      "off": 523058176
+    },
+    {
+      "name": ".pdata",
+      "rva": 524374016,
+      "size": 4182528,
+      "off": 523711488
+    },
+    {
+      "name": "_RDATA",
+      "rva": 528560128,
+      "size": 4096,
+      "off": 527894016
+    },
+    {
+      "name": ".reloc",
+      "rva": 528564224,
+      "size": 720896,
+      "off": 527898112
+    }
+  ],
+  "targets": [
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 460773792,
+      "offsetHex": "0x1b76d9a0",
+      "rva": 460778912,
+      "va": "0x15b76eda0",
+      "context": "q.us-east-1.amazonaws.com...............H.v[....!.................v[............https://runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us-gov-east-1.kiro.dev..........P.v[....&.................v[..",
+      "pointers": [
+        {
+          "offset": 460773840,
+          "offsetHex": "0x1b76d9d0",
+          "rva": 460778960,
+          "va": "0x15b76edd0",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://runtime.us-east-1.kiro.dev",
+      "offset": 462340248,
+      "offsetHex": "0x1b8ec098",
+      "rva": 462345368,
+      "va": "0x15b8ed498",
+      "context": "q.us-east-1.amazonaws.com...............@..[....!..................[............https://runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us-gov-east-1.kiro.dev..........H..[....&..................[..",
+      "pointers": [
+        {
+          "offset": 462340296,
+          "offsetHex": "0x1b8ec0c8",
+          "rva": 462345416,
+          "va": "0x15b8ed4c8",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 460773880,
+      "offsetHex": "0x1b76d9f8",
+      "rva": 460779000,
+      "va": "0x15b76edf8",
+      "context": "runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[............https://runtime.us-gov-east-1.kiro.dev..........P.v[....&.................v[............https://runtime.us-gov-west-1.kiro.dev............v[....&.................v[.....",
+      "pointers": [
+        {
+          "offset": 460773928,
+          "offsetHex": "0x1b76da28",
+          "rva": 460779048,
+          "va": "0x15b76ee28",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://runtime.eu-central-1.kiro.dev",
+      "offset": 462340336,
+      "offsetHex": "0x1b8ec0f0",
+      "rva": 462345456,
+      "va": "0x15b8ed4f0",
+      "context": "runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[............https://runtime.us-gov-east-1.kiro.dev..........H..[....&..................[............https://runtime.us-gov-west-1.kiro.dev.............[....&..................[.....",
+      "pointers": [
+        {
+          "offset": 462340384,
+          "offsetHex": "0x1b8ec120",
+          "rva": 462345504,
+          "va": "0x15b8ed520",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://management.us-east-1.kiro.dev",
+      "offset": 460772833,
+      "offsetHex": "0x1b76d5e1",
+      "rva": 460777953,
+      "va": "0x15b76e9e1",
+      "context": ".v[............0.-_....8.v[......v[..............v[....)...............us-east-1https://management.us-east-1.kiro.dev............v[....%.................v[............eu-central-1https://management.eu-central-1.kiro.dev............D.v[....(...............8.v[............us-gov-east-1https://management.us-gov-east-1.kiro.dev............",
+      "pointers": [
+        {
+          "offset": 460772880,
+          "offsetHex": "0x1b76d610",
+          "rva": 460778000,
+          "va": "0x15b76ea10",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://management.us-east-1.kiro.dev",
+      "offset": 462339289,
+      "offsetHex": "0x1b8ebcd9",
+      "rva": 462344409,
+      "va": "0x15b8ed0d9",
+      "context": "..[..............-_.......[.......[.... ....... ..[....,...............us-east-1https://management.us-east-1.kiro.dev.............[....%..................[............eu-central-1https://management.eu-central-1.kiro.dev............<..[....(...............0..[............us-gov-east-1https://management.us-gov-east-1.kiro.dev............",
+      "pointers": [
+        {
+          "offset": 462339336,
+          "offsetHex": "0x1b8ebd08",
+          "rva": 462344456,
+          "va": "0x15b8ed108",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 99027704,
+      "offsetHex": "0x5e70af8",
+      "rva": 99032824,
+      "va": "0x145e71ef8",
+      "context": "SPONSE file; skipping mock.........E....:................................x.B....https://q.us-east-1.amazonaws.comus-east-1.................E....!..................E............https://q.eu-central-1.amazonaws.com/eu-central-1...............X..E....%...............}..E............Using custom endpoint for API key..........E....!....",
+      "pointers": [
+        {
+          "offset": 99027760,
+          "offsetHex": "0x5e70b30",
+          "rva": 99032880,
+          "va": "0x145e71f30",
+          "refs": []
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 460773704,
+      "offsetHex": "0x1b76d948",
+      "rva": 460778824,
+      "va": "0x15b76ed48",
+      "context": "-isof-east-1.csp.hci.ic.gov...............v[....5.................v[............https://q.us-east-1.amazonaws.com...............H.v[....!.................v[............https://runtime.us-east-1.kiro.dev................v[....\".................v[............https://runtime.eu-central-1.kiro.dev.............v[....%...............8.v[.",
+      "pointers": [
+        {
+          "offset": 460773752,
+          "offsetHex": "0x1b76d978",
+          "rva": 460778872,
+          "va": "0x15b76ed78",
+          "refs": []
+        },
+        {
+          "offset": 460775480,
+          "offsetHex": "0x1b76e038",
+          "rva": 460780600,
+          "va": "0x15b76f438",
+          "refs": []
+        }
+      ],
+      "refs": [
+        {
+          "offset": 36147467,
+          "va": "0x142279d0b",
+          "owner": {
+            "start": "0x142279cd0",
+            "end": "0x142279fa7",
+            "offset": 36147408,
+            "length": 727
+          }
+        }
+      ]
+    },
+    {
+      "term": "https://q.us-east-1.amazonaws.com",
+      "offset": 462340160,
+      "offsetHex": "0x1b8ec040",
+      "rva": 462345280,
+      "va": "0x15b8ed440",
+      "context": "-isof-east-1.csp.hci.ic.gov................[....5..................[............https://q.us-east-1.amazonaws.com...............@..[....!..................[............https://runtime.us-east-1.kiro.dev.................[....\"..................[............https://runtime.eu-central-1.kiro.dev..............[....%...............0..[.",
+      "pointers": [
+        {
+          "offset": 462340208,
+          "offsetHex": "0x1b8ec070",
+          "rva": 462345328,
+          "va": "0x15b8ed470",
+          "refs": []
+        }
+      ],
+      "refs": [
+        {
+          "offset": 56289051,
+          "va": "0x1435af31b",
+          "owner": {
+            "start": "0x1435af2e0",
+            "end": "0x1435af5b7",
+            "offset": 56288992,
+            "length": 727
+          }
+        }
+      ]
+    },
+    {
+      "term": "Using custom endpoint",
+      "offset": 99027904,
+      "offsetHex": "0x5e70bc0",
+      "rva": 99033024,
+      "va": "0x145e71fc0",
+      "context": "mazonaws.com/eu-central-1...............X..E....%...............}..E............Using custom endpoint for API key..........E....!...............................Pu.B....C:\\a\\kiro-cli\\kiro-cli\\crates\\chat-cli-v2\\src\\api_client\\profile.rs...... .E....C...........m...GetProfile succeeded for API keyx .E.... .......GetProfil",
+      "pointers": [
+        {
+          "offset": 99027944,
+          "offsetHex": "0x5e70be8",
+          "rva": 99033064,
+          "va": "0x145e71fe8",
+          "refs": [
+            {
+              "offset": 22776405,
+              "va": "0x1415b9655",
+              "owner": {
+                "start": "0x1415b8f70",
+                "end": "0x1415bdf80",
+                "offset": 22774640,
+                "length": 20496
+              }
+            },
+            {
+              "offset": 22779615,
+              "va": "0x1415ba2df",
+              "owner": {
+                "start": "0x1415b8f70",
+                "end": "0x1415bdf80",
+                "offset": 22774640,
+                "length": 20496
+              }
+            },
+            {
+              "offset": 24037934,
+              "va": "0x1416ed62e",
+              "owner": {
+                "start": "0x1416eaca0",
+                "end": "0x1416f0f61",
+                "offset": 24027296,
+                "length": 25281
+              }
+            },
+            {
+              "offset": 24038431,
+              "va": "0x1416ed81f",
+              "owner": {
+                "start": "0x1416eaca0",
+                "end": "0x1416f0f61",
+                "offset": 24027296,
+                "length": 25281
+              }
+            }
+          ]
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "Using custom endpoint",
+      "offset": 460770880,
+      "offsetHex": "0x1b76ce40",
+      "rva": 460776000,
+      "va": "0x15b76e240",
+      "context": "Using CPS endpoint override.......v[.....................................t.B....Using custom endpoint...@.v[............event crates\\chat-cli\\src\\api_client\\profile.rs:102.................f...h.v[....3.........v[..............v[..............-_....8.v[......v[..............v[....)...............event crates\\chat-cli\\src",
+      "pointers": [
+        {
+          "offset": 460770904,
+          "offsetHex": "0x1b76ce58",
+          "rva": 460776024,
+          "va": "0x15b76e258",
+          "refs": [
+            {
+              "offset": 36138875,
+              "va": "0x142277b7b",
+              "owner": {
+                "start": "0x142277ac0",
+                "end": "0x1422782c8",
+                "offset": 36138688,
+                "length": 2056
+              }
+            },
+            {
+              "offset": 36140410,
+              "va": "0x14227817a",
+              "owner": {
+                "start": "0x142277ac0",
+                "end": "0x1422782c8",
+                "offset": 36138688,
+                "length": 2056
+              }
+            }
+          ]
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "CODEWHISPERER",
+      "offset": 97972575,
+      "offsetHex": "0x5d6f15f",
+      "rva": 97977695,
+      "va": "0x145d7055f",
+      "context": "completing parsingcustomizationArnconversationIdterminalUserInteractionEventTypeCODEWHISPERER_TERMINAL_COMPLETION_INSERTEDCODEWHISPERER_TERMINAL_TRANSLATION_ACTIONterminalterminalVersionshellshellVersiondurationtimeToSuggestionisCompletionAcceptedcliToolCommandmessageIdprogrammingLanguageinteractionTypeAGENTIC_C",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 11682386,
+          "va": "0x140b24e52",
+          "owner": {
+            "start": "0x140b24d40",
+            "end": "0x140b2505a",
+            "offset": 11682112,
+            "length": 794
+          }
+        }
+      ]
+    },
+    {
+      "term": "CODEWHISPERER",
+      "offset": 97972617,
+      "offsetHex": "0x5d6f189",
+      "rva": 97977737,
+      "va": "0x145d70589",
+      "context": "tionIdterminalUserInteractionEventTypeCODEWHISPERER_TERMINAL_COMPLETION_INSERTEDCODEWHISPERER_TERMINAL_TRANSLATION_ACTIONterminalterminalVersionshellshellVersiondurationtimeToSuggestionisCompletionAcceptedcliToolCommandmessageIdprogrammingLanguageinteractionTypeAGENTIC_CODE_ACCEPTEDCLICK_BODY_LINKCLICK_FOLLOW_UP",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 11682371,
+          "va": "0x140b24e43",
+          "owner": {
+            "start": "0x140b24d40",
+            "end": "0x140b2505a",
+            "offset": 11682112,
+            "length": 794
+          }
+        }
+      ]
+    },
+    {
+      "term": "codewhispererstreaming",
+      "offset": 98038328,
+      "offsetHex": "0x5d7f238",
+      "rva": 98043448,
+      "va": "0x145d80638",
+      "context": "0..@....amzn_codewhisperer_streaming_client::config::ConfigOverrideRuntimePlugincodewhispererstreamingInvalid client configuration: A behavior major version must be set when sending a request or constructing a client. You must set it during client construction or by enabling the `behavior-version-latest` cargo feature.cr",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 12491825,
+          "va": "0x140bea831",
+          "owner": {
+            "start": "0x140bea5b0",
+            "end": "0x140beb794",
+            "offset": 12491184,
+            "length": 4580
+          }
+        }
+      ]
+    },
+    {
+      "term": "codewhispererstreaming",
+      "offset": 98050892,
+      "offsetHex": "0x5d8234c",
+      "rva": 98056012,
+      "va": "0x145d8374c",
+      "context": "....Pg.@.......................@.....h.A....`..@....`.=@....typedefault0.1.17593codewhispererstreamingcontent was not specified but it is required when building AssistantResponseMessagemessage was not specified but it is required when building ThrottlingErrormessage was not specified but it is required when building Vali",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 12502558,
+          "va": "0x140bed21e",
+          "owner": {
+            "start": "0x140bed0c0",
+            "end": "0x140bed408",
+            "offset": 12502208,
+            "length": 840
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 97960446,
+      "offsetHex": "0x5d6c1fe",
+      "rva": 97965566,
+      "va": "0x145d6d5fe",
+      "context": ".....E...............................E............................service configendpoint_urlCodeWhispererRuntimeAWS_ENDPOINT_URLcrates\\amzn-codewhisperer-client\\src\\config.rs.GetUsageLimitsResponseDeserializer...^...@.J....D..PaginatorFeatureTrackerRuntimePluginManagePurchaseListAvailableModelsRequestSerializer",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 11555820,
+          "va": "0x140b05fec",
+          "owner": {
+            "start": "0x140b05d50",
+            "end": "0x140b06bef",
+            "offset": 11555152,
+            "length": 3743
+          }
+        },
+        {
+          "offset": 11556155,
+          "va": "0x140b0613b",
+          "owner": {
+            "start": "0x140b05d50",
+            "end": "0x140b06bef",
+            "offset": 11555152,
+            "length": 3743
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130111,
+      "offsetHex": "0x5d958bf",
+      "rva": 98135231,
+      "va": "0x145d96cbf",
+      "context": "....................@....SharedCredentialsProvideraws_config::default_provider::endpoint_urlmessageerr....l.E.............l.E....................................P-.D......?@.......@....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.r",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130329,
+      "offsetHex": "0x5d95999",
+      "rva": 98135449,
+      "va": "0x145d96d99",
+      "context": "try\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.rsevent C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.rs:59...................;....m.E.............l.E....*........l.E.............m-_.....",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130463,
+      "offsetHex": "0x5d95a1f",
+      "rva": 98135583,
+      "va": "0x145d96e1f",
+      "context": "try\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.rs:59...................;....m.E.............l.E....*........l.E.............m-_.....l.E.....l.E....*.......(m.E....................event C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-con",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130745,
+      "offsetHex": "0x5d95b39",
+      "rva": 98135865,
+      "va": "0x145d96f39",
+      "context": "es.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs:37aws_config::default_provider::ignore_configured_endpoint_urlsC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs.....",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130812,
+      "offsetHex": "0x5d95b7c",
+      "rva": 98135932,
+      "va": "0x145d96f7c",
+      "context": "e_configured_endpoint_urls.rs:37aws_config::default_provider::ignore_configured_endpoint_urlsC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs................%....n.E............Lo.E....=........l.E.............m-_",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98130956,
+      "offsetHex": "0x5d95c0c",
+      "rva": 98136076,
+      "va": "0x145d9700c",
+      "context": "es.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs................%....n.E............Lo.E....=........l.E.............m-_.....l.E....Lo.E....=........o.E....................event C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98167543,
+      "offsetHex": "0x5d9eaf7",
+      "rva": 98172663,
+      "va": "0x145d9fef7",
+      "context": "gning_region_setcredentials_providertoken_providerregionaccount_id_endpoint_modeendpoint_urlretry_configtimeout_configstalled_stream_protection_configuse_fipsuse_dual_stackbehavior_versionservice_configconfig_originsdisable_request_compressionrequest_min_compression_size_bytesrequest_checksum_calculationrespons",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 13600843,
+          "va": "0x140cf944b",
+          "owner": {
+            "start": "0x140cf90b0",
+            "end": "0x140cf96b0",
+            "offset": 13599920,
+            "length": 1536
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98238209,
+      "offsetHex": "0x5daff01",
+      "rva": 98243329,
+      "va": "0x145db1301",
+      "context": "v4a_signing_region_setcredentials_providertoken_provideraccount_id_endpoint_modeendpoint_urlretry_configtimeout_configstalled_stream_protection_configuse_fipsuse_dual_stackservice_configconfig_originsdisable_request_compressionrequest_min_compression_size_bytesrequest_checksum_calculationresponse_checksum_valid",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 14244811,
+          "va": "0x140d967cb",
+          "owner": {
+            "start": "0x140d96430",
+            "end": "0x140d96a30",
+            "offset": 14243888,
+            "length": 1536
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98334014,
+      "offsetHex": "0x5dc753e",
+      "rva": 98339134,
+      "va": "0x145dc893e",
+      "context": "ntextsource..........................E............................service configendpoint_urlSSOAWS_ENDPOINT_URLC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-sdk-sso-1.98.0\\src\\config.rs.InvalidRequestExceptionGetRoleCredentialsRequestSerializerTooManyRequestsExceptionexpected obj",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 14817843,
+          "va": "0x140e22633",
+          "owner": {
+            "start": "0x140e22210",
+            "end": "0x140e231ce",
+            "offset": 14816784,
+            "length": 4030
+          }
+        },
+        {
+          "offset": 14818171,
+          "va": "0x140e2277b",
+          "owner": {
+            "start": "0x140e22210",
+            "end": "0x140e231ce",
+            "offset": 14816784,
+            "length": 4030
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98399374,
+      "offsetHex": "0x5dd748e",
+      "rva": 98404494,
+      "va": "0x145dd888e",
+      "context": "ntextsource.......................P..E............................service configendpoint_urlSSO OIDCAWS_ENDPOINT_URLC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-sdk-ssooidc-1.100.0\\src\\config.rs.StartDeviceAuthorizationInvalidClientExceptionInternalServerException....@..........",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 15290883,
+          "va": "0x140e95e03",
+          "owner": {
+            "start": "0x140e959e0",
+            "end": "0x140e9699e",
+            "offset": 15289824,
+            "length": 4030
+          }
+        },
+        {
+          "offset": 15291211,
+          "va": "0x140e95f4b",
+          "owner": {
+            "start": "0x140e959e0",
+            "end": "0x140e9699e",
+            "offset": 15289824,
+            "length": 4030
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98448318,
+      "offsetHex": "0x5de33be",
+      "rva": 98453438,
+      "va": "0x145de47be",
+      "context": "essagemeta.........................G.E............................service configendpoint_urlSTSAWS_ENDPOINT_URLC:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-sdk-sts-1.103.0\\src\\config.rs.: .....IH.E............RegionDisabledException.P..@....x............... ..@....P..@....x.....",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 15649766,
+          "va": "0x140eed7e6",
+          "owner": {
+            "start": "0x140eed2a0",
+            "end": "0x140eee399",
+            "offset": 15648416,
+            "length": 4345
+          }
+        },
+        {
+          "offset": 15650091,
+          "va": "0x140eed92b",
+          "owner": {
+            "start": "0x140eed2a0",
+            "end": "0x140eee399",
+            "offset": 15648416,
+            "length": 4345
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98785450,
+      "offsetHex": "0x5e358aa",
+      "rva": 98790570,
+      "va": "0x145e36caa",
+      "context": "try\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.rs.......9l.E............2.......AWS_ENDPOINT_URLendpoint_urlinvalid value for endpoint URL setting.......l.E....&..................................B....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98785512,
+      "offsetHex": "0x5e358e8",
+      "rva": 98790632,
+      "va": "0x145e36ce8",
+      "context": "\\default_provider\\endpoint_url.rs.......9l.E............2.......AWS_ENDPOINT_URLendpoint_urlinvalid value for endpoint URL setting.......l.E....&..................................B....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\retry_config.rs",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 19397350,
+          "va": "0x1412806e6",
+          "owner": {
+            "start": "0x14127bc30",
+            "end": "0x14128466d",
+            "offset": 19378224,
+            "length": 35389
+          }
+        },
+        {
+          "offset": 19398666,
+          "va": "0x141280c0a",
+          "owner": {
+            "start": "0x14127bc30",
+            "end": "0x14128466d",
+            "offset": 19378224,
+            "length": 35389
+          }
+        },
+        {
+          "offset": 19400386,
+          "va": "0x1412812c2",
+          "owner": {
+            "start": "0x14127bc30",
+            "end": "0x14128466d",
+            "offset": 19378224,
+            "length": 35389
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98787699,
+      "offsetHex": "0x5e36173",
+      "rva": 98792819,
+      "va": "0x145e37573",
+      "context": "es.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs......t.E....................AWS_IGNORE_CONFIGURED_ENDPOINT_URLSignore_configured_endpoint_urlsinvalid value for 'ignore configured endpoint URLs' setting....u.E....;.......C:\\Users\\runneradmin\\.cargo\\registry\\src\\in",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98787797,
+      "offsetHex": "0x5e361d5",
+      "rva": 98792917,
+      "va": "0x145e375d5",
+      "context": "....t.E....................AWS_IGNORE_CONFIGURED_ENDPOINT_URLSignore_configured_endpoint_urlsinvalid value for 'ignore configured endpoint URLs' setting....u.E....;.......C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\request_min_compression_size",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 98790267,
+      "offsetHex": "0x5e36b7b",
+      "rva": 98795387,
+      "va": "0x145e37f7b",
+      "context": "5b557f\\aws-config-1.8.16\\src\\lib.rs...~.E....f...............`ignore_configured_endpoint_urls` is set, any endpoint URLs configured in the environment will be ignored. NOTE: Endpoint URLs set programmatically WILL still be respected.....h..E............token_providerC:\\Users\\runneradmin\\.cargo\\registry\\src\\inde",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 99021466,
+      "offsetHex": "0x5e6f29a",
+      "rva": 99026586,
+      "va": "0x145e7069a",
+      "context": "try\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\endpoint_url.rs.......)..E............2.......AWS_ENDPOINT_URLendpoint_urlinvalid value for endpoint URL setting.........E....&..................................B....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 99021528,
+      "offsetHex": "0x5e6f2d8",
+      "rva": 99026648,
+      "va": "0x145e706d8",
+      "context": "\\default_provider\\endpoint_url.rs.......)..E............2.......AWS_ENDPOINT_URLendpoint_urlinvalid value for endpoint URL setting.........E....&..................................B....C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\retry_config.rs",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 22692742,
+          "va": "0x1415a4f86",
+          "owner": {
+            "start": "0x1415a04d0",
+            "end": "0x1415a8f0d",
+            "offset": 22673616,
+            "length": 35389
+          }
+        },
+        {
+          "offset": 22694058,
+          "va": "0x1415a54aa",
+          "owner": {
+            "start": "0x1415a04d0",
+            "end": "0x1415a8f0d",
+            "offset": 22673616,
+            "length": 35389
+          }
+        },
+        {
+          "offset": 22695778,
+          "va": "0x1415a5b62",
+          "owner": {
+            "start": "0x1415a04d0",
+            "end": "0x1415a8f0d",
+            "offset": 22673616,
+            "length": 35389
+          }
+        }
+      ]
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 99023715,
+      "offsetHex": "0x5e6fb63",
+      "rva": 99028835,
+      "va": "0x145e70f63",
+      "context": "es.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\ignore_configured_endpoint_urls.rs........E....................AWS_IGNORE_CONFIGURED_ENDPOINT_URLSignore_configured_endpoint_urlsinvalid value for 'ignore configured endpoint URLs' setting......E....;.......C:\\Users\\runneradmin\\.cargo\\registry\\src\\in",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 99023813,
+      "offsetHex": "0x5e6fbc5",
+      "rva": 99028933,
+      "va": "0x145e70fc5",
+      "context": "......E....................AWS_IGNORE_CONFIGURED_ENDPOINT_URLSignore_configured_endpoint_urlsinvalid value for 'ignore configured endpoint URLs' setting......E....;.......C:\\Users\\runneradmin\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\aws-config-1.8.16\\src\\default_provider\\request_min_compression_size",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 99026283,
+      "offsetHex": "0x5e7056b",
+      "rva": 99031403,
+      "va": "0x145e7196b",
+      "context": "5b557f\\aws-config-1.8.16\\src\\lib.rs.....E....f...............`ignore_configured_endpoint_urls` is set, any endpoint URLs configured in the environment will be ignored. NOTE: Endpoint URLs set programmatically WILL still be respected.....X..E............token_providerC:\\Users\\runneradmin\\.cargo\\registry\\src\\inde",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 447978995,
+      "offsetHex": "0x1ab39df3",
+      "rva": 447984115,
+      "va": "0x15ab3b1f3",
+      "context": "bled|encoding|encrypted|encrypted_value|encryption|encryption_type|end|endpoint|endpoint_url|enhancedintegrity|entry|error_broker_conversations|errorfile|estimateonly|event|except|exec|executable|execute|exists|expand|expiredate|expiry_date|explicit|external|external_access|failover|failover_mode|failure_condit",
+      "pointers": [],
+      "refs": []
+    },
+    {
+      "term": "endpoint_url",
+      "offset": 459467169,
+      "offsetHex": "0x1b62e9a1",
+      "rva": 459472289,
+      "va": "0x15b62fda1",
+      "context": "v4a_signing_region_setcredentials_providertoken_provideraccount_id_endpoint_modeendpoint_urlretry_configtimeout_configstalled_stream_protection_configuse_fipsuse_dual_stackservice_configconfig_originsdisable_request_compressionrequest_min_compression_size_bytesrequest_checksum_calculationresponse_checksum_valid",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 28669051,
+          "va": "0x141b5807b",
+          "owner": {
+            "start": "0x141b57ce0",
+            "end": "0x141b582e0",
+            "offset": 28668128,
+            "length": 1536
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 97883623,
+      "offsetHex": "0x5d595e7",
+      "rva": 97888743,
+      "va": "0x145d5a9e7",
+      "context": "....@.......................@.............................h.@....GetProfileInputprofile_arn.................................@....conversation_idmax_resultsnext_token.......@.......................@....GetProfileOutputprofile_request_id.................................@....0.F@....................0..@....messag",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 10745822,
+          "va": "0x140a403de",
+          "owner": {
+            "start": "0x140a40370",
+            "end": "0x140a40469",
+            "offset": 10745712,
+            "length": 249
+          }
+        },
+        {
+          "offset": 10747847,
+          "va": "0x140a40bc7",
+          "owner": {
+            "start": "0x140a40b30",
+            "end": "0x140a40c8c",
+            "offset": 10747696,
+            "length": 348
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 97995754,
+      "offsetHex": "0x5d74bea",
+      "rva": 98000874,
+      "va": "0x145d75fea",
+      "context": ".@....idresult...@....X..................@....errorquestionoptionsInvokeMcpInputprofile_arn......@....................@..@....InvokeMcpOutput....@....8..................@...._request_idDiagnosticRelatedInformation..C.@....(...............p..@....locationoperatingSystemcurrentWorkingDirectoryenvironmentVariable",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 12003665,
+          "va": "0x140b73551",
+          "owner": {
+            "start": "0x140b73510",
+            "end": "0x140b73659",
+            "offset": 12003600,
+            "length": 329
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 98006032,
+      "offsetHex": "0x5d77410",
+      "rva": 98011152,
+      "va": "0x145d78810",
+      "context": "file-arn`` cannot be used as a header value: ......E...............E....$.......profile_arn........@....8..................A.......@....8...............0..@.......A.... ..E.......@.......@.......@.....I.@......G@....P..@....`................v.A....P..@....`..................@.....v.A.......E....`.=@....`..@...",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 12110673,
+          "va": "0x140b8d751",
+          "owner": {
+            "start": "0x140b8d240",
+            "end": "0x140b8e5f0",
+            "offset": 12109376,
+            "length": 5040
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 461256821,
+      "offsetHex": "0x1b7e3875",
+      "rva": 461261941,
+      "va": "0x15b7e4c75",
+      "context": "............L~[............expires_inissuer_urltoken_endpointSocialTokenproviderprofile_arnaccessTokenrefreshTokenexpiresInprofileArngooglegithub...L~[.............L~[............iterationstatestarted_athistorypassedfeedbackWaitingForTurnCompletedExhaustedreasonSessionStateV1conversation_metadatarts_model_stat",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 39786442,
+          "va": "0x1425f23ca",
+          "owner": {
+            "start": "0x1425f0b40",
+            "end": "0x1425f25a3",
+            "offset": 39780160,
+            "length": 6755
+          }
+        },
+        {
+          "offset": 39894218,
+          "va": "0x14260c8ca",
+          "owner": {
+            "start": "0x14260b040",
+            "end": "0x14260caa3",
+            "offset": 39887936,
+            "length": 6755
+          }
+        },
+        {
+          "offset": 39954076,
+          "va": "0x14261b29c",
+          "owner": {
+            "start": "0x14261b1b0",
+            "end": "0x14261b334",
+            "offset": 39953840,
+            "length": 388
+          }
+        },
+        {
+          "offset": 40098613,
+          "va": "0x14263e735",
+          "owner": {
+            "start": "0x14263e6f0",
+            "end": "0x14263e80b",
+            "offset": 40098544,
+            "length": 283
+          }
+        },
+        {
+          "offset": 40105109,
+          "va": "0x142640095",
+          "owner": {
+            "start": "0x142640050",
+            "end": "0x14264016b",
+            "offset": 40105040,
+            "length": 283
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 461366994,
+      "offsetHex": "0x1b7fe6d2",
+      "rva": 461372114,
+      "va": "0x15b7ffad2",
+      "context": "ansport\\async_rw.rs...'..[....n.......p.......Transport is closedGetProfileInputprofile_arn...........................p..A............................p<.B....p..A.......[....`.=@.......B.......B....`.=@......G@....OptOutInterceptor.......0.F@.....................}xB.......@......................xB.............",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 41644510,
+          "va": "0x1427b7dde",
+          "owner": {
+            "start": "0x1427b7d70",
+            "end": "0x1427b7e69",
+            "offset": 41644400,
+            "length": 249
+          }
+        },
+        {
+          "offset": 41646834,
+          "va": "0x1427b86f2",
+          "owner": {
+            "start": "0x1427b8600",
+            "end": "0x1427b872d",
+            "offset": 41646592,
+            "length": 301
+          }
+        },
+        {
+          "offset": 41649924,
+          "va": "0x1427b9304",
+          "owner": {
+            "start": "0x1427b9180",
+            "end": "0x1427b93b6",
+            "offset": 41649536,
+            "length": 566
+          }
+        },
+        {
+          "offset": 41650387,
+          "va": "0x1427b94d3",
+          "owner": {
+            "start": "0x1427b9430",
+            "end": "0x1427b9559",
+            "offset": 41650224,
+            "length": 297
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 461960208,
+      "offsetHex": "0x1b88f410",
+      "rva": 461965328,
+      "va": "0x15b890810",
+      "context": "ateToolSchemaInvalidToolUseResultMismatch...............................0i.C....profile_arn..... #.A....0................G.C....event crates\\chat-cli-v2\\src\\agent\\session\\kas.rs:112count.........[............u..[........................p...@..[....5..........[.... ..........[............`.-_.......[.......[...",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 51813300,
+          "va": "0x14316a7b4",
+          "owner": {
+            "start": "0x14316a630",
+            "end": "0x14316a866",
+            "offset": 51812912,
+            "length": 566
+          }
+        },
+        {
+          "offset": 51813651,
+          "va": "0x14316a913",
+          "owner": {
+            "start": "0x14316a870",
+            "end": "0x14316a999",
+            "offset": 51813488,
+            "length": 297
+          }
+        },
+        {
+          "offset": 51814370,
+          "va": "0x14316abe2",
+          "owner": {
+            "start": "0x14316aaf0",
+            "end": "0x14316ac1d",
+            "offset": 51814128,
+            "length": 301
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 462225635,
+      "offsetHex": "0x1b8d00e3",
+      "rva": 462230755,
+      "va": "0x15b8d14e3",
+      "context": "ith 2 elements..........[....!.......access_tokenexpires_atrefresh_tokenproviderprofile_arnstruct SocialToken with 5 elements...[....\".......accessTokenrefreshTokenexpiresInprofileArnstruct TokenResponse with 4 elements..J..[....$.......registryTyperegistryBaseUrlidentifiertransportruntimeArgumentspackageArgum",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 54671532,
+          "va": "0x1434244ac",
+          "owner": {
+            "start": "0x143422ea0",
+            "end": "0x143424663",
+            "offset": 54665888,
+            "length": 6083
+          }
+        }
+      ]
+    },
+    {
+      "term": "profile_arn",
+      "offset": 462270689,
+      "offsetHex": "0x1b8db0e1",
+      "rva": 462275809,
+      "va": "0x15b8dc4e1",
+      "context": "...........N...8..[....%.......4...^...SocialTokenaccess_tokenexpires_atproviderprofile_arn.......[...............[...............[...............[...............[............googlegithub....@..[............F..[............P..[....*.......&...,...commandresponse....[...............[............internally tagge",
+      "pointers": [
+        {
+          "offset": 462270768,
+          "offsetHex": "0x1b8db130",
+          "rva": 462275888,
+          "va": "0x15b8dc530",
+          "refs": []
+        }
+      ],
+      "refs": [
+        {
+          "offset": 55371621,
+          "va": "0x1434cf365",
+          "owner": {
+            "start": "0x1434cf320",
+            "end": "0x1434cf43b",
+            "offset": 55371552,
+            "length": 283
+          }
+        },
+        {
+          "offset": 55641775,
+          "va": "0x1435112af",
+          "owner": {
+            "start": "0x1435107a0",
+            "end": "0x143514bf5",
+            "offset": 55638944,
+            "length": 17493
+          }
+        }
+      ]
+    },
+    {
+      "term": "GenerateAssistantResponseEndpointParamsInterceptor",
+      "offset": 98023925,
+      "offsetHex": "0x5d7b9f5",
+      "rva": 98029045,
+      "va": "0x145d7cdf5",
+      "context": "tigation_payloadexpected ValueBool or ValueNullexpected ValueString or ValueNullGenerateAssistantResponseEndpointParamsInterceptor..u.@....................p..@....P..@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@.....Z.@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@....`.=@.......@.......................",
+      "pointers": [],
+      "refs": [
+        {
+          "offset": 12355455,
+          "va": "0x140bc937f",
+          "owner": {
+            "start": "0x140bc9370",
+            "end": "0x140bc9390",
+            "offset": 12355440,
+            "length": 32
+          }
+        },
+        {
+          "offset": 12355636,
+          "va": "0x140bc9434",
+          "owner": {
+            "start": "0x140bc9430",
+            "end": "0x140bc9442",
+            "offset": 12355632,
+            "length": 18
+          }
+        }
+      ]
+    },
+    {
+      "term": "Failed to find endpoint for region:",
+      "offset": 460774800,
+      "offsetHex": "0x1b76dd90",
+      "rva": 460779920,
+      "va": "0x15b76f190",
+      "context": "..........v[..............-_....8.v[......v[..............v[....+...............Failed to find endpoint for region: ......v[....$.......https://q.us-gov-east-1.amazonaws.com.............v[....%.................v[............https://q.us-gov-west-1.amazonaws.com........... .v[....%.................v[............https://q.us-iso-east-1",
+      "pointers": [
+        {
+          "offset": 460774840,
+          "offsetHex": "0x1b76ddb8",
+          "rva": 460779960,
+          "va": "0x15b76f1b8",
+          "refs": [
+            {
+              "offset": 36144353,
+              "va": "0x1422790e1",
+              "owner": {
+                "start": "0x142278bb0",
+                "end": "0x142279644",
+                "offset": 36143024,
+                "length": 2708
+              }
+            },
+            {
+              "offset": 36144900,
+              "va": "0x142279304",
+              "owner": {
+                "start": "0x142278bb0",
+                "end": "0x142279644",
+                "offset": 36143024,
+                "length": 2708
+              }
+            }
+          ]
+        }
+      ],
+      "refs": []
+    },
+    {
+      "term": "Failed to find endpoint for region:",
+      "offset": 462341264,
+      "offsetHex": "0x1b8ec490",
+      "rva": 462346384,
+      "va": "0x15b8ed890",
+      "context": "\"..........[............H.-_.......[.......[....\"..........[....................Failed to find endpoint for region: .......[....$.......https://q.us-gov-east-1.amazonaws.com..............[....%..................[............https://q.us-gov-west-1.amazonaws.com........... ..[....%..................[............https://q.us-iso-east-1",
+      "pointers": [
+        {
+          "offset": 462341304,
+          "offsetHex": "0x1b8ec4b8",
+          "rva": 462346424,
+          "va": "0x15b8ed8b8",
+          "refs": [
+            {
+              "offset": 56285878,
+              "va": "0x1435ae6b6",
+              "owner": {
+                "start": "0x1435ae1b0",
+                "end": "0x1435aecb4",
+                "offset": 56284592,
+                "length": 2820
+              }
+            },
+            {
+              "offset": 56286660,
+              "va": "0x1435ae9c4",
+              "owner": {
+                "start": "0x1435ae1b0",
+                "end": "0x1435aecb4",
+                "offset": 56284592,
+                "length": 2820
+              }
+            }
+          ]
+        }
+      ],
+      "refs": []
+    }
+  ]
+}

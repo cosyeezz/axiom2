@@ -1,0 +1,42 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "sha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "bytes": 528630968,
+  "method": "Static PE virtual-address to source-file mappings; no target execution",
+  "origin": {
+    "slotIndex": 8,
+    "jumpTable": "0x145d6c1a8",
+    "entry": {
+      "va": "0x145d6c1c8",
+      "sourceFileOffset": 97955272,
+      "length": 4,
+      "hex": "e9b6d8fa"
+    },
+    "relativeSigned32": -86460695,
+    "target": {
+      "va": "0x140af7891",
+      "sourceFileOffset": 11496593,
+      "length": 15,
+      "hex": "488d15cf42270541b808000000eb17"
+    },
+    "string": {
+      "va": "0x145d6bb67",
+      "sourceFileOffset": 97953639,
+      "length": 8,
+      "hex": "4b49524f5f434c49",
+      "ascii": "KIRO_CLI"
+    },
+    "callerAssignment": {
+      "va": "0x1414594f2",
+      "sourceFileOffset": 21334258,
+      "length": 17,
+      "hex": "49b808000000000000804d8981c0010000"
+    },
+    "callerInterpretation": "mov r8,8000000000000008h; mov [r9+1c0h],r8; request input begins at r9+178h, origin offset +48h"
+  },
+  "limitations": [
+    "Byte mappings do not establish runtime execution, server acceptance or account permission",
+    "Instruction interpretation separately supported by original-image dumpbin disassembly",
+    "Derived REA body pseudocode leaves this jump table unresolved"
+  ]
+}

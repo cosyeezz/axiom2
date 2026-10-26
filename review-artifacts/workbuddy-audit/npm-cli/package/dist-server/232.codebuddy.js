@@ -1,0 +1,2 @@
+"use strict";exports.ids=["232"],exports.modules={77999(e,a,r){r.d(a,{a:()=>t,b:()=>i}),(0,r(98995).createRequire)(__filename);var t={name:"whoami",execute:async function(e,a){return{stdout:`user
+`,stderr:"",exitCode:0}}},i={name:"whoami",flags:[]}},51563(e,a,r){r.r(a),r.d(a,{flagsForFuzzing:()=>i.b,whoami:()=>i.a});var t=r(98995),i=r(77999);r(7863),(0,t.createRequire)(__filename)}};

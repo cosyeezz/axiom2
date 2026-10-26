@@ -3,26 +3,31 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { OAuthAuth, OAuthCredential } from "@earendil-works/pi-ai";
 import { object, QoderError, qoderFailure, qoderJson, qoderReadJson, qoderSignal, qoderSites, type QoderIdentity, type QoderRegion } from "./qoder-protocol.js";
 
-// No invented 30-day lifetime or refresh success: missing/expired deadlines fail closed.
-export function qoderExpiry(data: Record<string, unknown>, relativeUnit: "seconds" | "milliseconds" | "pat"): number {
-  let expires: number;
-  if (data.expires_at !== undefined && data.expires_at !== null && data.expires_at !== "") {
-    const absolute = data.expires_at;
-    expires = typeof absolute === "number"
-      ? Math.floor(absolute > 1e12 ? absolute / 1000 : absolute) * 1000 : typeof absolute === "string" ? Date.parse(absolute) : NaN;
-  } else {
-    const relative = typeof data.expires_in === "string" && data.expires_in.trim() ? Number(data.expires_in) : data.expires_in;
-    expires = typeof relative === "number" && Number.isFinite(relative) && relative > 0
-      // Official CLI 1.1.78 Yye: PAT values > 86400 are milliseconds, otherwise seconds.
-      ? Date.now() + relative * (relativeUnit === "seconds" || relativeUnit === "pat" && relative <= 86400 ? 1000 : 1) : NaN;
+const clientId = "e883ade2-e6e3-4d6d-adf7-f92ceff5fdcb";
+// Axiom-owned IDs only. Device credentials persist theirs; PAT-only IDs are stable for this process.
+// No official client configuration or hardware fingerprints are read.
+const machineIds = { intl: randomUUID(), cn: randomUUID() };
+const nonempty = (value: unknown): value is string => typeof value === "string" && !!value.trim();
+const firstString = (data: Record<string, unknown>, keys: string[]) => keys.map(key => data[key]).find(nonempty);
+function numeric(value: unknown) { const n = typeof value === "string" && value.trim() ? Number(value) : value; return typeof n === "number" && Number.isFinite(n) ? n : undefined; }
+// No invented lifetime: absent, invalid or expired access deadlines fail closed.
+export function qoderExpiry(data: Record<string, unknown>, relativeUnit: "seconds" | "milliseconds" | "pat" | "absolute"): number {
+  const absolute = [data.expires_at, data.expiresAt].find(value => typeof value === "number" || nonempty(value)) ?? numeric(data.expire_time) ?? numeric(data.expireTime);
+  let expires = typeof absolute === "number" ? absolute > 1e12 ? absolute : absolute * 1000 : typeof absolute === "string" && absolute.trim() ? Date.parse(absolute) : NaN;
+  if (!Number.isFinite(expires) && relativeUnit !== "absolute") {
+    const relative = numeric(data.expires_in);
+    expires = relative !== undefined && relative > 0 ? Date.now() + relative * (relativeUnit === "seconds" || relativeUnit === "pat" && relative <= 86400 ? 1000 : 1) : NaN;
   }
   if (!Number.isSafeInteger(expires) || expires <= Date.now()) throw new QoderError("Qoder 未返回有效令牌期限，请重新登录。");
   return expires;
 }
-function nonempty(value: unknown): value is string { return typeof value === "string" && !!value.trim(); }
+function refreshExpiry(data: Record<string, unknown>, mode: "seconds" | "pat" | "absolute") {
+  const expires_at = [data.refresh_token_expires_at, data.refreshTokenExpiresAt].find(value => typeof value === "number" || nonempty(value)) ?? numeric(data.refresh_token_expire_time) ?? numeric(data.refreshTokenExpireTime);
+  if (expires_at == null && data.refresh_token_expires_in == null) return;
+  return qoderExpiry({ expires_at, expires_in: data.refresh_token_expires_in }, mode);
+}
 export function packQoderCredential(credential: OAuthCredential, region: QoderRegion): string {
-  if (credential.region !== region || !nonempty(credential.access) || !nonempty(credential.userId) || !nonempty(credential.machineId))
-    throw new QoderError("Qoder 凭据地区或账号信息不完整，请重新登录。");
+  if (credential.region !== region || !nonempty(credential.access) || !nonempty(credential.userId) || !nonempty(credential.machineId)) throw new QoderError("Qoder 凭据地区或账号信息不完整，请重新登录。");
   return JSON.stringify({ region, token: credential.access, userId: credential.userId, machineId: credential.machineId });
 }
 export function qoderOAuth(region: QoderRegion, options: { fetch?: typeof fetch; pollIntervalMs?: number; loginTimeoutMs?: number } = {}): OAuthAuth {
@@ -31,24 +36,27 @@ export function qoderOAuth(region: QoderRegion, options: { fetch?: typeof fetch;
     name: site.name, loginLabel: `登录 ${site.name}`, isSubscription: true,
     async login(interaction) {
       const signal = qoderSignal(interaction.signal, options.loginTimeoutMs ?? 300000);
-      const verifier = randomBytes(32).toString("base64url"), nonce = randomUUID(), machineId = randomUUID();
-      const params = new URLSearchParams({ challenge: createHash("sha256").update(verifier).digest("base64url"), challenge_method: "S256", machine_id: machineId, nonce });
+      const verifier = randomBytes(32).toString("base64url"), nonce = randomUUID(), machineId = machineIds[region];
+      const params = new URLSearchParams({ challenge: createHash("sha256").update(verifier).digest("base64url"), challenge_method: "S256", machine_id: machineId, nonce, client_id: clientId });
       signal.throwIfAborted();
       interaction.notify({ type: "auth_url", url: `${site.login}?${params}`, instructions: `请在浏览器完成 ${site.name} 授权。此接入为实验性，尚未完成真实账号联调。` });
       const query = new URLSearchParams({ nonce, verifier, challenge_method: "S256" });
       try {
         while (true) {
-          await delay(options.pollIntervalMs ?? 2000, undefined, { signal });
-          const response = await (options.fetch ?? globalThis.fetch)(`${site.open}/api/v1/deviceToken/poll?${query}`, {
-            headers: { Accept: "application/json", "User-Agent": "Go-http-client/2.0" }, redirect: "error", signal: qoderSignal(signal),
-          });
-          if (response.status === 202 || response.status === 404) { await response.body?.cancel(); continue; }
-          if (!response.ok) { await response.body?.cancel(); throw qoderFailure(response.status); }
-          const data = await qoderReadJson(response, false, signal);
-          if (!nonempty(data.token) || !data.token.startsWith("dt-") || !nonempty(data.user_id)) throw new QoderError("Qoder 授权响应缺少设备令牌或用户信息。");
-          const credential: OAuthCredential = { type: "oauth", access: data.token, refresh: nonempty(data.refresh_token) ? data.refresh_token : "", expires: qoderExpiry(data, "seconds"), userId: data.user_id, machineId, region };
-          signal.throwIfAborted();
-          return credential;
+          let response: Response | undefined;
+          try {
+            response = await (options.fetch ?? globalThis.fetch)(`${site.open}/api/v1/deviceToken/poll?${query}`, { headers: { Accept: "application/json", "User-Agent": "Go-http-client/2.0" }, redirect: "error", signal: qoderSignal(signal) });
+          } catch { signal.throwIfAborted(); /* Polling a transient network failure is safe: no inference is sent. */ }
+          if (response && response.status !== 202 && response.status !== 404) {
+            if (!response.ok) { void response.body?.cancel().catch(() => {}); throw qoderFailure(response.status); }
+            const data = await qoderReadJson(response, false, signal);
+            if (!nonempty(data.token) || !data.token.startsWith("dt-") || !nonempty(data.user_id)) throw new QoderError("Qoder 授权响应缺少设备令牌或用户信息。");
+            const refreshExpires = refreshExpiry(data, "seconds");
+            const credential: OAuthCredential = { type: "oauth", access: data.token, refresh: nonempty(data.refresh_token) ? data.refresh_token : "", expires: qoderExpiry(data, "seconds"), userId: data.user_id, machineId, region, ...(refreshExpires ? { refreshExpires } : {}) };
+            signal.throwIfAborted(); return credential;
+          }
+          void response?.body?.cancel().catch(() => {});
+          await delay(options.pollIntervalMs ?? 1000, undefined, { signal });
         }
       } catch (error) {
         interaction.signal.throwIfAborted();
@@ -58,23 +66,30 @@ export function qoderOAuth(region: QoderRegion, options: { fetch?: typeof fetch;
       }
     },
     async refresh(credential, signal) {
-      signal.throwIfAborted();
-      packQoderCredential(credential, region);
-      if (!credential.refresh) throw Error("Qoder 缺少刷新令牌，请重新登录。");
+      signal.throwIfAborted(); packQoderCredential(credential, region);
+      if (!credential.refresh || typeof credential.refreshExpires === "number" && credential.refreshExpires <= Date.now()) throw Error("Qoder 刷新令牌缺失或已过期，请重新登录。");
       const data = await qoderJson(options.fetch ?? globalThis.fetch, `${site.open}/api/v1/deviceToken/refresh`, {
-        method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qoder/1.1.78" },
-        body: JSON.stringify({ refresh_token: credential.refresh, machine_id: credential.machineId, machine_token: credential.machineId }),
+        method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qoder/1.1.78" }, body: JSON.stringify({ refresh_token: credential.refresh, machine_id: credential.machineId }),
       });
       if (!nonempty(data.device_token) || !data.device_token.startsWith("dt-") || !nonempty(data.refresh_token)) throw Error("Qoder 刷新响应不完整，请重新登录。");
-      return { ...credential, access: data.device_token, refresh: data.refresh_token, expires: qoderExpiry(data, "seconds") };
+      return { ...credential, access: data.device_token, refresh: data.refresh_token, expires: qoderExpiry(data, "absolute"), refreshExpires: refreshExpiry(data, "absolute") };
     },
     async toAuth(credential) { return { apiKey: packQoderCredential(credential, region) }; },
   };
 }
-
-// Per-provider, bounded, memory-only cache; no token/user data in logs or model catalogs.
+function waitFor<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return pending;
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+// Region/provider-scoped, bounded, memory-only cache; concurrent PAT exchanges share a job.
 export class QoderCredentials {
   private cache = new Map<string, QoderIdentity & { expires: number }>();
+  private pending = new Map<string, Promise<QoderIdentity>>();
   constructor(private region: QoderRegion) {}
   async resolve(key: string | undefined, transport: typeof fetch, signal?: AbortSignal): Promise<QoderIdentity> {
     signal?.throwIfAborted();
@@ -87,21 +102,30 @@ export class QoderCredentials {
     }
     const digest = createHash("sha256").update(key).digest("hex"), cached = this.cache.get(digest);
     if (cached && cached.expires > Date.now() + 300000) return cached;
-    const site = qoderSites[this.region];
-    const machineId = cached?.machineId ?? randomUUID();
+    let pending = this.pending.get(digest);
+    if (!pending) {
+      if (this.pending.size >= 16) throw new QoderError("Qoder 并发认证请求过多，请稍后重试。");
+      pending = this.exchange(key, digest, transport);
+      this.pending.set(digest, pending);
+      void pending.finally(() => this.pending.delete(digest)).catch(() => {});
+    }
+    return waitFor(pending, signal);
+  }
+  private async exchange(key: string, digest: string, transport: typeof fetch): Promise<QoderIdentity> {
+    const site = qoderSites[this.region], machineId = machineIds[this.region];
+    // Individual cancellation must not abort another caller's shared authentication. The job is bounded.
+    const signal = qoderSignal(undefined, 15000);
     const data = await qoderJson(transport, `${site.open}/api/v1/jobToken/exchange`, {
-      method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qodercli/1.0.0", "Cosy-Version": "1.0.0", "Cosy-ClientType": "5" },
-      body: JSON.stringify({ personal_token: key, machine_id: machineId, machine_token: machineId }),
+      method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qodercli/1.1.78", "Cosy-Version": "1.1.78", "Cosy-ClientType": "5" }, body: JSON.stringify({ personal_token: key, machine_id: machineId }),
     });
-    if (!nonempty(data.token) || !data.token.startsWith("jt-")) throw Error("Qoder PAT 交换未返回有效任务令牌。");
+    const token = firstString(data, ["token", "device_token", "access_token"]);
+    if (!token || !/^(?:jt|dt)-/.test(token)) throw Error("Qoder PAT 交换未返回有效任务令牌。");
     const expires = qoderExpiry(data, "pat");
-    const info = await qoderJson(transport, `${site.open}/api/v1/userinfo`, { signal, headers: { Authorization: `Bearer ${data.token}`, Accept: "application/json", "User-Agent": "qodercli/1.0.0" } });
-    const userId = info.id ?? info.userId ?? info.user_id;
-    if (!nonempty(userId)) throw Error("Qoder 未返回签名所需的用户 ID。");
-    const identity = { token: data.token, userId, machineId, expires };
-    signal?.throwIfAborted();
+    const info = await qoderJson(transport, `${site.open}/api/v1/userinfo`, { signal, headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "qodercli/1.1.78" } });
+    const userId = firstString(info, ["id", "user_id", "uid"]);
+    if (!userId) throw Error("Qoder 未返回签名所需的用户 ID。");
+    const identity = { token, userId, machineId, expires };
     if (this.cache.size >= 16) this.cache.delete(this.cache.keys().next().value!);
-    this.cache.set(digest, identity);
-    return identity;
+    this.cache.set(digest, identity); return identity;
   }
 }

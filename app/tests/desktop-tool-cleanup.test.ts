@@ -5,7 +5,6 @@ import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { cleanupRows, cleanupProgress, acceptedCleanupJob } from '../src/client/pages/desktop-cleanup.js';
 import { emptyReaState } from '../src/shared/rea.js';
-import { defaultMaintenanceBudgets, type MaintenanceState, type MaintenanceTask } from '../src/shared/maintenance.js';
 import { emptyModelProxyState } from '../src/shared/model-proxy.js';
 const { cleanupCommand, cleanupAddress, cleanupRequest } = await import(new URL('../desktop/tool-cleanup.mjs', import.meta.url).href);
 test('cleanup bridge rejects arbitrary operations, URLs and unconfirmed parameters', () => {
@@ -37,21 +36,22 @@ test('REA cleanup tracks exact accepted job, rejects pending files and ignores a
   assert.equal(cleanupProgress(row, { ...terminal, removalPending: true }, 'ours').state, 'failed');
   assert.equal(cleanupProgress(row, { ...terminal, jobs: [] }, 'ours').state, 'unknown');
 });
-test('proxy importer requires its exact successful maintenance task and checks remaining files', () => {
-  const initial = { ...emptyModelProxyState, revision: 'r', importer: { supported: true, pinnedVersion: '1', filesPresent: true, removalPending: false, busy: false } };
-  const row = cleanupRows({ modelProxy: initial }).find(item => item.id === 'proxy:importer')!;
-  const removed = { ...initial, importer: { ...initial.importer, filesPresent: false } };
-  const task: MaintenanceTask = { id: 'ours', attemptId: 'a', endpoint: 'backend', resource: 'proxy:xray-knife', label: 'fixture', action: 'uninstall', scope: '应用级', status: 'succeeded', phase: 'validating', steps: ['checking', 'removing', 'validating'], completedSteps: 3, createdAt: 1, updatedAt: 2, budgets: defaultMaintenanceBudgets, capabilities: { cancel: false, extend: false } };
-  const history: MaintenanceState = { tasks: [task], budgets: defaultMaintenanceBudgets };
+test('Xray cleanup groups core and importer paths and verifies its accepted job', () => {
+  const cleanup = { paths: ['/fixture/versions/xray', '/fixture/importer/xray-knife'], revision: 'a'.repeat(64) };
+  const initial = { ...emptyModelProxyState, revision: 'r', cleanup: { xray: cleanup } };
+  const rows = cleanupRows({ modelProxy: initial }), row = rows.find(item => item.id === 'proxy:xray')!;
+  assert.equal(rows.some(item => item.id === 'proxy:importer'), false);
+  assert.equal(row.available, true, 'legacy importer-only paths remain actionable');
+  for (const path of cleanup.paths) assert.ok(row.scope.some(text => text.includes(path)));
   assert.equal(acceptedCleanupJob(row, initial, 'ours'), 'ours');
-  assert.equal(cleanupProgress(row, removed, 'ours').state, 'unknown');
-  assert.equal(cleanupProgress(row, removed, 'other', history).state, 'unknown');
-  assert.equal(cleanupProgress(row, removed, 'ours', { ...history, tasks: [{ ...task, action: 'install' }] }).state, 'unknown');
-  for (const status of ['unknown', 'interrupted', 'running', 'failed', 'cancelled'] as const) assert.equal(cleanupProgress(row, removed, 'ours', { ...history, tasks: [{ ...task, status }] }).state, status === 'running' ? 'running' : status === 'unknown' || status === 'interrupted' ? 'unknown' : 'failed');
-  assert.equal(cleanupProgress(row, removed, 'ours', history).state, 'verified');
-  assert.equal(cleanupProgress(row, { ...removed, importer: { ...removed.importer, removalPending: true } }, 'ours', history).state, 'failed');
-  assert.equal(cleanupProgress(row, initial, 'ours', history).state, 'failed');
-  assert.equal(cleanupCommand({ op: 'maintenance.get' }).op, 'maintenance.get');
+  const removed = { ...initial, cleanup: { xray: { ...cleanup, paths: [] } }, job: { id: 'ours', running: false, message: 'done' } };
+  assert.equal(cleanupProgress(row, removed, 'other').state, 'unknown');
+  assert.equal(cleanupProgress(row, removed, 'ours').state, 'verified');
+  assert.equal(cleanupProgress(row, { ...removed, cleanup: { xray: { ...cleanup, paths: ['/fixture/importer/xray-knife'] } } }, 'ours').state, 'failed');
+  assert.equal(cleanupProgress(row, { ...removed, removalPending: { xray: true } }, 'ours').state, 'failed');
+  assert.equal(cleanupProgress(row, { ...removed, job: { ...removed.job, error: 'busy' } }, 'ours').state, 'failed');
+  assert.throws(() => cleanupCommand({ op: 'modelProxy.importerUninstall', params: { revision: 'r', confirm: true, cleanupRevision: cleanup.revision } }), /不支持/);
+  assert.equal(cleanupCommand({ op: 'modelProxy.uninstall', params: { revision: 'r', confirm: true, kernel: 'xray', cleanupRevision: cleanup.revision } }).op, 'modelProxy.uninstall');
 });
 test('scoped bridge allows orphan cleanup only with a valid path confirmation', () => {
   const cleanupRevision = 'a'.repeat(64);

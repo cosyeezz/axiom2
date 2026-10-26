@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "phase": "posthoc-original-turn-observation",
+  "model": "minimax-m2.1",
+  "taskRef": "t4018",
+  "label": "long-08-two-reads",
+  "runId": "a27dd2b7-769a-422d-961c-221eca8f80c6",
+  "status": "completed",
+  "selection": {
+    "provider": "kiro",
+    "id": "minimax-m2.1",
+    "thinking": "off"
+  },
+  "startedAt": "2026-10-25T17:40:49.478Z",
+  "endedAt": "2026-10-25T17:42:55.150Z",
+  "observedAt": "2026-10-25T20:10:23.990Z",
+  "promptCorrelation": {
+    "inputIdSha256": "49362599fb36468114ade291d42a2a7917a4cc6c22e32722008824a298d9caad",
+    "singleUserInputMatched": true,
+    "actualCompletePromptMatchedAtPosthocObservation": true,
+    "durableReceiptDelivered": true
+  },
+  "calls": [
+    {
+      "name": "read",
+      "callIdSha256": "8bf0ec8b5d54f8315725310519bdab5c2db1363a097aa0867f7db8d7adf28f87",
+      "argumentsSha256": "f54679c6b3912770076afa54d13ddeffdbb6e50de967906f3cfa30e9ccd35dd4"
+    },
+    {
+      "name": "read",
+      "callIdSha256": "02c2cab841912a671816f0bf049046e8b3e438c7dbe80e153a0aa642bee1f53b",
+      "argumentsSha256": "d0f4d1b4a00076c431c1091732816038aa33f6bae101cc967b194d68e3d82ada"
+    }
+  ],
+  "results": [
+    {
+      "name": "read",
+      "callIdSha256": "8bf0ec8b5d54f8315725310519bdab5c2db1363a097aa0867f7db8d7adf28f87",
+      "status": "completed",
+      "textSha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb",
+      "hasError": false
+    },
+    {
+      "name": "read",
+      "callIdSha256": "02c2cab841912a671816f0bf049046e8b3e438c7dbe80e153a0aa642bee1f53b",
+      "status": "completed",
+      "textSha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f",
+      "hasError": false
+    }
+  ],
+  "answerSha256": "07ad1008daa2d0841c3b44c2d79c6a0eb75ff785ad940e4bb0556d2b3f97e52a",
+  "checks": {
+    "originalLegacyRulePassed": true,
+    "actualTwoReadResultsPairedAndOrdered": true,
+    "actualCsvAndLedgerContentsMatched": true,
+    "originalRequiredInventoryNumbersPresent": true,
+    "noPriorReasoningWrapper": true
+  },
+  "originalState": {
+    "sha256": "ccda101bffddc430f116a43d97c2231914ab5845bb4015e6564e901425aec232",
+    "recordedRounds": 7,
+    "unchanged": true,
+    "runnerNormalExitCode": null
+  },
+  "counting": {
+    "includedInInitial58Rounds": false,
+    "includedInControlledRecoveryRounds": false,
+    "retroactivelyWrittenIntoOriginalState": false,
+    "strictV2AnswerSchemaApplied": false
+  },
+  "contentPolicy": "No original prompt/answer, thinking, full tool input/output, local transcript path, session UUID or credentials."
+}

@@ -24,14 +24,23 @@ export function Dialog({
   children,
   className = "workspace-dialog",
   describedBy,
+  heading,
+  dismissOnBackdrop = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
   describedBy?: string;
+  heading?: ReactNode;
+  dismissOnBackdrop?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const backdropPress = useRef(false);
+  const outside = (event: { clientX: number; clientY: number; currentTarget: HTMLDialogElement }) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
+  };
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement;
     ref.current!.showModal();
@@ -46,6 +55,12 @@ export function Dialog({
       aria-label={title}
       aria-describedby={describedBy}
       onKeyDown={(e) => e.stopPropagation()}
+      onPointerDown={(event) => { backdropPress.current = dismissOnBackdrop && event.target === event.currentTarget && outside(event); }}
+      onPointerCancel={() => { backdropPress.current = false; }}
+      onClick={(event) => {
+        if (backdropPress.current && event.target === event.currentTarget && outside(event)) onClose();
+        backdropPress.current = false;
+      }}
       onCancel={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -53,7 +68,7 @@ export function Dialog({
       }}
     >
       <div className="dialog-content">
-        <h2>{title}</h2>
+        {heading ?? <h2>{title}</h2>}
         {children}
       </div>
     </dialog>

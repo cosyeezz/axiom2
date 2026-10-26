@@ -1,0 +1,2433 @@
+({ 66545(eA, el, ec) {
+        "use strict";
+        ec.r(el), ec.d(el, { CustomAgentSavePath: () => A_.CustomAgentSavePath, RunContext: () => AB.RunContext, MessageReorganizeAgentRunInterceptor: () => rG, TokenCalculationAgentRunInterceptor: () => nC, UserQueryWrapperAgentRunInterceptor: () => rz, AgentRunInterceptor: () => A_.AgentRunInterceptor, AgentService: () => A_.AgentService, ContinueAgentRunInterceptor: () => ContinueAgentRunInterceptor, AGENT_TAG_SUFFIX: () => A_.AGENT_TAG_SUFFIX, InsightsDataAgentRunInterceptor: () => rI, AgentPurpose: () => AI.AgentPurpose, AgentRunInterceptorPriority: () => A_.AgentRunInterceptorPriority, DefaultAgentFactory: () => rl, AgentController: () => rg, ENV_DISABLE_PLAN_MODE: () => AK.ENV_DISABLE_PLAN_MODE, EnvAgentRunInterceptor: () => rx, CUSTOM_AGENT_TAG: () => A_.CUSTOM_AGENT_TAG, HistoryAgentRunInterceptor: () => rj, ImageFilterAgentRunInterceptor: () => rX, RawStreamedRunResult: () => AB.RawStreamedRunResult, RunnerFactory: () => A_.RunnerFactory, STATE_MACHINE_BYPASS_PURPOSES: () => AI.STATE_MACHINE_BYPASS_PURPOSES, SandboxTurnTelemetryAgentRunInterceptor: () => np, ImageCompressionAgentRunInterceptor: () => r$, Agent: () => AB.Agent, RunnerProviderImpl: () => rd, SUBAGENT_PURPOSE_PREFIX: () => AI.SUBAGENT_PURPOSE_PREFIX, SkipRunAgentRunInterceptor: () => rY, CUSTOM_AGENT_PURPOSE_PREFIX: () => AI.CUSTOM_AGENT_PURPOSE_PREFIX, SystemReminderAgentRunInterceptor: () => nf, AgentCompletionWaiter: () => A_.AgentCompletionWaiter, TRUNCATION_RETRY_MARKER: () => rc.TRUNCATION_RETRY_MARKER, TeammateFailureInterceptor: () => nK, UltracodeKeywordInterceptor: () => nD, Usage: () => AB.Usage, UserInputAgentRunInterceptor: () => rJ, AGENTS_WITH_MCP_ACCESS: () => A_.AGENTS_WITH_MCP_ACCESS, AGENT_PURPOSE_MAP: () => AI.AGENT_PURPOSE_MAP, areSandboxExperimentalFeaturesSupported: () => areSandboxExperimentalFeaturesSupported, AgentManagerImpl: () => A9, isExitPlanModeVisibleForSession: () => AK.isExitPlanModeVisibleForSession, normalizeFileBackupMaxSizeMB: () => r2.normalizeFileBackupMaxSizeMB, ENV_DISABLE_FORK_SUBAGENT: () => A_.ENV_DISABLE_FORK_SUBAGENT, ImageRehydrationAgentRunInterceptor: () => rK, RunState: () => AB.RunState, formatTeammateFailuresBlock: () => formatTeammateFailuresBlock, DeepResearchPendingInterceptor: () => rM, MessageQueueAgentRunInterceptor: () => rq, StreamJsonInitInterceptor: () => nN, AgentFactory: () => A_.AgentFactory, TeamContextInterceptor: () => nU, SUB_AGENT_TAG: () => A_.SUB_AGENT_TAG, RunToolApprovalItem: () => AB.RunToolApprovalItem, isStateMachineBypassPurpose: () => AI.isStateMachineBypassPurpose, resolveAgentPurpose: () => AI.resolveAgentPurpose, AUXILIARY_PURPOSES: () => AI.AUXILIARY_PURPOSES, PreMessageCompactInterceptor: () => r1, isPlanModeDisabled: () => AK.isPlanModeDisabled, AgentCompletionWaiterImpl: () => nV, MemoryContextInterceptor: () => nM, SandboxAgentRunInterceptor: () => nd, isSandboxCLIPlatformSupported: () => isSandboxCLIPlatformSupported, AgentServiceImpl: () => nY, RunResult: () => AB.RunResult, INTERNAL_GENERATOR_AGENTS: () => A_.INTERNAL_GENERATOR_AGENTS, isForkSubagentDisabled: () => A_.isForkSubagentDisabled, ReferencePathProcessorAgentRunInterceptor: () => rL, AgentNames: () => A_.AgentNames, tool: () => AB.tool, CustomAgentManager: () => A_.CustomAgentManager, DEFAULT_TEMPERATURE: () => A_.DEFAULT_TEMPERATURE, ENV_SUBAGENT_MAX_TURNS: () => A_.ENV_SUBAGENT_MAX_TURNS, CLI_OUTPUT_STYLE_DESCRIPTION_TEMPLATE: () => A_.CLI_OUTPUT_STYLE_DESCRIPTION_TEMPLATE, LOOP_DETECTION_MARKER: () => nZ.LOOP_DETECTION_MARKER, CustomAgentManagerImpl: () => nW, ModelConfigAgentRunInterceptor: () => rZ, PLUGIN_AGENT_TAG: () => A_.PLUGIN_AGENT_TAG, ProviderDataAgentRunInterceptor: () => rU, ENV_MAX_TURNS: () => A_.ENV_MAX_TURNS, STATE_MACHINE_BYPASS_AGENTS: () => A_.STATE_MACHINE_BYPASS_AGENTS, StateAgentRunInterceptor: () => rV, Runner: () => AB.Runner, AgentManager: () => A_.AgentManager, TelemetryAgentRunInterceptor: () => nE, UltracodeEffortReminderInterceptor: () => nB, isAuxiliaryPurpose: () => AI.isAuxiliaryPurpose, isFileBackupSupported: () => isFileBackupSupported, ToolCallLoopDetectorImpl: () => n8, ConditionalRulesAgentRunInterceptor: () => rF, shouldApplyForkSpecialization: () => A_.shouldApplyForkSpecialization, CLI_AGENT_TAG: () => A_.CLI_AGENT_TAG, TEAMMATE_FAILURE_TTL_MS: () => nG, CUSTOM_INPUT_ITEM_TYPES: () => AB.CUSTOM_INPUT_ITEM_TYPES, shouldUseSandboxCLI: () => shouldUseSandboxCLI, user: () => AB.user, OutputStyleType: () => A_.OutputStyleType, DEFAULT_MAX_TURNS: () => A_.DEFAULT_MAX_TURNS, RunnerFactoryImpl: () => rc.RunnerFactoryImpl, AgentSwitchAgentRunInterceptor: () => rQ, ToolCallLoopDetector: () => nZ.ToolCallLoopDetector, SUB_AGENT_PLAN_MODE_LOCKED_META_KEY: () => AK.SUB_AGENT_PLAN_MODE_LOCKED_META_KEY, RunnerProvider: () => A_.RunnerProvider, CustomAgentScope: () => A_.CustomAgentScope });
+        var eu, ed, ep, eg, eh, ef, em, eE, eC, ey, ew, eB, e_, eI, ev, eS, eQ, eD, eT, eR, ek, eM, ex, eO, eN, eP, eL, eF, eU, ej, eG, eH, eK, e$, eY, eJ, ez, eW, eV, eZ, eX, e0, e1, e2, e3, e4, e8, e5, e6, e9, e7, tn, tl, tc, tu, td, tp, tg, tf, tm, tE, tC, ty, tw, tB, t_, tI, tv, tS, tQ, tD, tT, tR, tk, tM, tx, tO, tN, tP, tL, tF, tU, tj, tG, tH, tK, t$, tY, tJ, tq, tz, tW, tV, tZ, tX, t0, t1, t2, t3, t4, t8, t5, t6, t9, t7, An, Al, Ac, Au, Ad, Ap, Ag, Ah, Af, Am, AE, AC, Ay, Aw, AB = ec(18553), A_ = ec(69466), AI = ec(77787), Av = ec(80699), AS = ec(86482), AQ = ec(9151), AD = ec(25301), AT = ec(22618), AR = ec(48790), Ak = ec(76884), AM = ec(51284), Ax = ec(73850), AO = ec(47962), AN = ec(14625), AP = ec(18066), AL = ec(24618), AF = ec(53766), AU = ec(15277), Aj = ec(57651), AG = ec(8844), AH = ec(93039), AK = ec(53224), A$ = ec(79896), AY = ec(92281), AJ = ec.n(AY), Aq = ec(16928), Az = ec(3352);
+        let AW = "workbuddy-builtin", AV = "welcomemode-", AZ = "interactionmode-", AX = ["fragments", "interaction.md"], A0 = /^include\s+["']([^"']+)["']$/, A1 = /\b(?:interactionMode|welcomeMode|workMode)\b/;
+        function composePluginAgent(eA) { if (!isRootComposePlugin(eA.matchedPlugin))
+            return eA.agentConfig; let el = eA.enabledPlugins.filter(isEnabledFragmentPlugin).map(toEnabledComposePlugin).filter(eA => !!eA); if (el.length > 1) {
+            let ec = el.map(eA => eA.name).sort();
+            eA.logger.warn(`[PluginAgentCompose] multiple interaction mode plugins enabled; composition skipped: ${ec.join(", ")}`);
+            return;
+        } let ec = buildEnabledComposePluginMap(eA.enabledPlugins), eu = el[0]; if (!eu && 0 === ec.size)
+            return eA.agentConfig; let ed = eA.agentConfig.instructions || eA.agentConfig.prompt, ep = { pluginMap: ec, selectedFragmentPlugin: eu, logger: eA.logger, tools: [], includedModeFragments: 0 }, eg = renderPluginTemplate(ed, ep, buildTemplateVariables(eA.matchedPlugin, eu), []), eh = eu && 0 === ep.includedModeFragments ? readModeFragment(eu, eA.logger) : void 0, ef = [eg, eh?.body].filter(Boolean).join("\n\n"); return { ...eA.agentConfig, ...ef ? { instructions: ef } : {}, tools: unionTools(eA.agentConfig.tools, ep.tools, eh?.tools) }; }
+        function isRootComposePlugin(eA) { return eA?.marketplaceName === AW && eA.name.startsWith(AV); }
+        function isEnabledFragmentPlugin(eA) { return "enabled" === eA.status && eA.marketplaceName === AW && eA.name.startsWith(AZ) && "string" == typeof eA.installedPath && eA.installedPath.length > 0; }
+        function buildEnabledComposePluginMap(eA) { let el = new Map; for (let ec of eA) {
+            let eA = toEnabledComposePlugin(ec);
+            eA && el.set(eA.name, eA);
+        } return el; }
+        function toEnabledComposePlugin(eA) { if ("enabled" === eA.status && eA.marketplaceName === AW && "string" == typeof eA.installedPath && 0 !== eA.installedPath.length)
+            return { name: eA.name, installedPath: eA.installedPath }; }
+        function buildTemplateVariables(eA, el) { let ec = eA?.name.startsWith(AV) ? eA.name.slice(AV.length) : void 0, eu = el?.name.startsWith(AZ) ? el.name.slice(AZ.length) : void 0; return { ...ec ? { welcomeMode: ec } : {}, ...eu ? { interactionMode: eu, workMode: eu } : {} }; }
+        function renderPluginTemplate(eA, el, ec, eu) { let ed; if (!eA)
+            return ""; let ep = /{%-?\s*([\s\S]*?)\s*-?%}/g, eg = [], eh = 0, ef = ""; for (; ed = ep.exec(eA);) {
+            let ep = ed[0], em = normalizeTemplateTag(ed[1]);
+            isTemplateActive(eg) && (ef += eA.slice(eh, ed.index));
+            let eE = parseIncludeTag(em), eC = parseIfExpression(em), ey = parseElifExpression(em), ew = eg[eg.length - 1];
+            if (eE)
+                isTemplateActive(eg) && (ef += renderPluginInclude(eE, el, ec, eu));
+            else if (eC) {
+                let eA = isTemplateActive(eg);
+                if (isComposeExpression(eC)) {
+                    let eu = evaluateComposeExpression(eC, ec, el.logger);
+                    eg.push({ kind: "compose", parentActive: eA, branchMatched: eu, active: eA && eu });
+                }
+                else
+                    eA && (ef += ep), eg.push({ kind: "literal", parentActive: eA, branchMatched: !1, active: eA });
+            }
+            else if (ey && ew?.kind === "compose")
+                if (!ew.parentActive || ew.branchMatched)
+                    ew.active = !1;
+                else {
+                    let eA = evaluateComposeExpression(ey, ec, el.logger);
+                    ew.branchMatched = eA, ew.active = eA;
+                }
+            else
+                isElseTag(em) && ew?.kind === "compose" ? (ew.active = ew.parentActive && !ew.branchMatched, ew.branchMatched = !0) : isEndifTag(em) && ew?.kind === "compose" ? eg.pop() : (isTemplateActive(eg) && (ef += ep), isEndifTag(em) && ew?.kind === "literal" && eg.pop());
+            eh = ed.index + ep.length;
+        } return isTemplateActive(eg) && (ef += eA.slice(eh)), ef; }
+        function normalizeTemplateTag(eA) { return eA.trim(); }
+        function parseIncludeTag(eA) { return A0.exec(eA)?.[1]; }
+        function parseIfExpression(eA) { return /^if\s+(.+)$/.exec(eA)?.[1]?.trim(); }
+        function parseElifExpression(eA) { return /^elif\s+(.+)$/.exec(eA)?.[1]?.trim(); }
+        function isElseTag(eA) { return "else" === eA; }
+        function isEndifTag(eA) { return "endif" === eA; }
+        function isComposeExpression(eA) { return A1.test(eA); }
+        function isTemplateActive(eA) { return eA.every(eA => eA.active); }
+        function evaluateComposeExpression(eA, el, ec) { try {
+            let ec = AJ().compile(`{% if ${eA} %}true{% else %}false{% endif %}`, new (AJ()).Environment(null, { autoescape: !1 })).render(el);
+            return "true" === ec.trim();
+        }
+        catch (el) {
+            return ec.warn(`[PluginAgentCompose] failed to evaluate compose expression '${eA}': ${el instanceof Error ? el.message : String(el)}`), !1;
+        } }
+        function renderPluginInclude(eA, el, ec, eu) { let ed = resolvePluginInclude(eA, el.pluginMap); if (!ed)
+            return el.logger.debug(`[PluginAgentCompose] unresolved include kept as literal: ${eA}`), `{% include "${eA}" %}`; if (eu.includes(ed.filePath))
+            return el.logger.warn(`[PluginAgentCompose] include cycle detected: ${[...eu, ed.filePath].join(" -> ")}`), ""; try {
+            let eA = (0, A$.readFileSync)(ed.filePath, "utf-8"), ep = ed.filePath.endsWith(".md") ? AH.MarkdownUtils.extractFrontMatterFull(eA) : void 0;
+            ep?.parseError && el.logger.warn(`[PluginAgentCompose] malformed YAML frontmatter in '${ed.filePath}': ${ep.parseError}`);
+            let eg = ep ? AH.MarkdownUtils.parseListField(ep.data.tools) : [];
+            el.tools = unionTools(el.tools, eg) ?? [], ed.plugin.name.startsWith(AZ) && (el.includedModeFragments += 1);
+            let eh = (0, Az.substituteLoadTimeVariables)((ep ? ep.content : eA).trim(), ed.filePath, ed.plugin.installedPath);
+            return renderPluginTemplate(eh, el, ec, [...eu, ed.filePath]);
+        }
+        catch (ec) {
+            return el.logger.warn(`[PluginAgentCompose] failed to render include '${eA}': ${ec instanceof Error ? ec.message : String(ec)}`), "";
+        } }
+        function resolvePluginInclude(eA, el) { let ec = eA.split(/[\\/]+/).filter(Boolean); if (ec.length < 2 || eA.includes("\0") || (0, Aq.isAbsolute)(eA) || ec.some(eA => ".." === eA))
+            return; let eu = el.get(ec[0]); if (!eu)
+            return; let ed = (0, Aq.join)(eu.installedPath, ...ec.slice(1)), ep = (0, Aq.relative)(eu.installedPath, ed); if (!(ep.startsWith("..") || (0, Aq.isAbsolute)(ep)) && (0, A$.existsSync)(ed))
+            return { plugin: eu, filePath: ed }; }
+        function readModeFragment(eA, el) { let ec = eA.installedPath; if (!ec)
+            return; let eu = (0, Aq.join)(ec, ...AX); if (!(0, A$.existsSync)(eu))
+            return void el.debug(`[PluginAgentCompose] mode fragment not found: ${eu}`); try {
+            let ed = (0, A$.readFileSync)(eu, "utf-8"), ep = AH.MarkdownUtils.extractFrontMatterFull(ed);
+            ep.parseError && el.warn(`[PluginAgentCompose] malformed YAML frontmatter in '${eu}': ${ep.parseError}`);
+            let eg = AH.MarkdownUtils.parseListField(ep.data.tools);
+            return { pluginName: eA.name, body: (0, Az.substituteLoadTimeVariables)(ep.content.trim(), eu, ec), tools: eg };
+        }
+        catch (ec) {
+            el.warn(`[PluginAgentCompose] failed to read mode fragment for '${eA.name}': ${ec instanceof Error ? ec.message : String(ec)}`);
+            return;
+        } }
+        function unionTools(...eA) { let el = [], ec = new Set; for (let eu of eA)
+            for (let eA of eu ?? [])
+                ec.has(eA) || (ec.add(eA), el.push(eA)); return el.length > 0 ? el : void 0; }
+        var __decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, __metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        function getProfiler() { try {
+            return Av.ContainerUtil.get(AF.StartupProfiler);
+        }
+        catch {
+            return;
+        } }
+        let A2 = new Set([Aj.ToolNames.AGENT, Aj.ToolNames.TASK_STOP, Aj.ToolNames.SEND_MESSAGE, Aj.ToolNames.ASK_USER_QUESTION, Aj.ToolNames.STRUCTURED_OUTPUT, Aj.ToolNames.SKILL, Aj.ToolNames.WECHAT_REPLY, Aj.ToolNames.WECOM_REPLY]), A3 = "PluginAgentPrompt", A4 = /{{\s*PluginAgentPrompt\s*}}/, A8 = 2e3, A5 = "__codebuddy_prewait_probe__", A6 = "<expert_prompt>\nThese are your current conversation persona instructions. They complement the default instructions and must not override higher-priority safety, tool-use, or system-level rules.\n\n{{ PluginAgentPrompt }}\n</expert_prompt>", A9 = eu = class {
+            constructor() { this.agentMap = new Map, this.managedAgentInstances = new WeakSet, this.sessionMcpPrewaitCompleted = new WeakSet, this.sessionMcpPrewaitInFlight = new WeakMap, this.agentConfigMap = new Map, this.modelMap = new Map, this.readyDeferred = new Av.Deferred, this._ready = !1, this.rebuilding = !1, this.pendingRebuild = !1, this.pendingForceRebuild = !1, this.lastConfigHash = "", this.lastNonModelConfigHash = "", this.onDidRebuildSettledEmitter = new Av.Emitter, this.agentsWithPatchedTools = new Set; }
+            init() { this.settingsManager.list(); let startAgentBuild = () => { this.productManager.waitConfiguration().then(() => { let eA = getProfiler(); eA?.markStart("agent_build", "Agent Build (rebuildAgents)"), this.rebuildAgents().then(() => { eA?.markEnd("agent_build"); }); }), this.productManager.onDidChange(() => { this.rebuildAgents(); }); }; this.prewarmStateService?.isStandby() ? this.prewarmStateService.onActivated(startAgentBuild) : startAgentBuild(); }
+            get ready() { return this._ready; }
+            getDefaultAgentName() { return this.defaultAgentName; }
+            isManagedAgentInstance(eA) { return this.managedAgentInstances?.has(eA) ?? !1; }
+            async getDefault() { let eA = Date.now(); this.logger.debug(`[Startup] AgentManager.getDefault: START (ready=${this._ready}, defaultAgent=${this.defaultAgentName})`), this._ready || this.logger.debug("[Startup] AgentManager.getDefault: waiting for readyDeferred..."), await this.readyDeferred.promise; let el = Date.now() - eA; this.logger.debug(`[Startup] AgentManager.getDefault: ready after ${el}ms, getting agent ${this.defaultAgentName}`); let ec = await this.get(this.defaultAgentName); if (ec)
+                return ec; throw Error(`default agent ${this.defaultAgentName} is not registered`); }
+            async getPrimaryModel() { return this.getModel(this.defaultAgentName); }
+            getSettingsAgentName() { return this.settingsAgentName; }
+            getVolatilePluginAgentState() { return { agentName: this.volatilePluginAgentName, sourcePluginId: this.volatilePluginSourcePluginId, internalModelRequestHeaders: this.volatilePluginInternalModelRequestHeaders }; }
+            async setVolatilePluginAgent(eA, el = {}) { let ec = this.normalizePluginAgentSetting(eA), eu = ec ? el.sourcePluginId : void 0, ed = this.normalizePluginRequestHeaders(el.internalModelRequestHeaders); return (this.volatilePluginAgentName !== ec || this.volatilePluginSourcePluginId !== eu || this.stringifyPluginRequestHeaders(this.volatilePluginInternalModelRequestHeaders) !== this.stringifyPluginRequestHeaders(ed)) && (this.volatilePluginAgentName = ec, this.volatilePluginSourcePluginId = eu, this.volatilePluginInternalModelRequestHeaders = ed, this.logger.info(`[AgentManager] volatile plugin agent override updated: ${ec || "cleared"} (source=${eu || "none"}, internalModelRequestHeaders=${Object.keys(ed ?? {}).length})`), !1 === el.rebuild || (await this.rebuildAgents(), await this.waitForRebuildSettled(), !0)); }
+            async get(eA) { return await this.readyDeferred.promise, this.agentMap.get(eA); }
+            async getAgentConfig(eA) { return await this.readyDeferred.promise, this.agentConfigMap.get(eA); }
+            async refreshAgentTools(eA) { try {
+                await this.readyDeferred.promise, await this.waitForRebuildSettled();
+                let el = this.agentMap.get(eA), ec = this.agentConfigMap.get(eA);
+                if (!el || !ec)
+                    return void this.logger.warn(`Cannot refresh tools for non-existent agent: ${eA}`);
+                let eu = await this.settingsManager.get("permissions") || {}, { agents: ed = [] } = await this.productManager.waitConfiguration(), ep = ed.find(el => el.name === eA), eg = this.agentsWithPatchedTools.has(eA) ? void 0 : ep?.tools, eh = ec.tags?.includes(A_.CUSTOM_AGENT_TAG), ef = ["Agent"], em = [...eg ?? ec.tools ?? await this.getDefaultAgentTools()], eE = !eh || ec.tools || eg ? em : em.filter(eA => !ef.includes(eA));
+                this.maybeInjectSendMessage(eA, eE), this.maybeInjectExitPlanMode(eA, eE);
+                let eC = await this.buildTools(eE, ec, eu);
+                el.tools = eC, this.logger.debug(`[refreshAgentTools] Successfully updated tools for agent: ${eA}, tools count: ${eC.length}`);
+            }
+            catch (el) {
+                this.logger.error(`Failed to refresh tools for agent ${eA}: ${el}`);
+            } }
+            async ensureAgentToolsFreshForRun(eA, el, ec, eu) { try {
+                if (await this.readyDeferred.promise, !this.agentMap.has(eA))
+                    return;
+                if (this.sessionMcpPrewaitCompleted ?? (this.sessionMcpPrewaitCompleted = new WeakSet), this.sessionMcpPrewaitInFlight ?? (this.sessionMcpPrewaitInFlight = new WeakMap), !this.sessionMcpPrewaitCompleted.has(el)) {
+                    let eu = this.sessionMcpPrewaitInFlight.get(el);
+                    eu || (eu = this.runFirstSessionMcpPrewait(eA, el, ec).then(eA => ("completed" === eA && this.sessionMcpPrewaitCompleted.add(el), eA)).finally(() => { this.sessionMcpPrewaitInFlight.get(el) === eu && this.sessionMcpPrewaitInFlight.delete(el); }), this.sessionMcpPrewaitInFlight.set(el, eu));
+                    try {
+                        let el = await eu;
+                        "completed" === el && await this.refreshAgentTools(eA);
+                    }
+                    catch (eu) {
+                        ec?.aborted || this.sessionMcpPrewaitCompleted.add(el), this.logger.warn(`[AgentManager.ensureAgentToolsFreshForRun] MCP prewait failed for ${eA}: ${eu instanceof Error ? eu.message : String(eu)}`);
+                    }
+                }
+                let ed = this.agentMap.get(eA);
+                eu && eu !== ed && eu.name === eA && this.isManagedAgentInstance(eu) && ed && (eu.tools = ed.tools);
+            }
+            catch (el) {
+                this.logger.warn(`[AgentManager.ensureAgentToolsFreshForRun] failed for ${eA}: ${el}`);
+            } }
+            async getFirstRunMcpPrewaitNames(eA, el) { let ec = this.agentMap.get(eA); if (ec?.tools?.some(eA => eA.name === Aj.ToolNames.TOOL_SEARCH) !== !0)
+                return; let eu = el.options?.toolDeferOverlay, ed = this.agentToolDeferOverlayCache?.get(eA), ep = AG.ToolDeferOverlay.merge(eu, ed), eg = [eu, ed], eh = await this.mcpManager.list(), ef = []; for (let eA of eh) {
+                let el = eA.config;
+                if (!0 === el.alwaysLoad || "sdk" === el.type || this.overlayMayExposeInlineMcpTool(eA.name, el, eg)) {
+                    ef.push(eA.name);
+                    continue;
+                }
+                let ec = "tools" in el ? Object.keys(el.tools ?? {}) : [], eu = !1;
+                for (let ed of ec) {
+                    let ec = this.getMcpPrewaitToolNameCandidates(eA.name, ed);
+                    if (!await this.deferToolConfigService.isToolDeferLoadingWithOverlay(ep, el, ...ec)) {
+                        eu = !0;
+                        break;
+                    }
+                }
+                if (!eu) {
+                    let ec = this.getMcpPrewaitToolNameCandidates(eA.name, A5);
+                    eu = !await this.deferToolConfigService.isToolDeferLoadingWithOverlay(ep, el, ...ec);
+                }
+                eu && ef.push(eA.name);
+            } return ef; }
+            async runFirstSessionMcpPrewait(eA, el, ec) { let eu; if (ec?.aborted)
+                return "aborted"; let ed = Date.now() + A8, ep = new AbortController, eg = new Promise(eA => { eu = eA; }), finishAtDeadline = () => { ep.abort(), eu(); }, eh = setTimeout(finishAtDeadline, A8); ec?.addEventListener("abort", finishAtDeadline, { once: !0 }); let ef = (async () => { let ec = await this.getFirstRunMcpPrewaitNames(eA, el); if (ep.signal.aborted || void 0 !== ec && 0 === ec.length)
+                return; let eu = Math.max(0, ed - Date.now()); 0 !== eu && (this.mcpManager.waitForPendingServers ? await this.mcpManager.waitForPendingServers({ ...ec && { names: ec }, timeoutMs: eu, signal: ep.signal }) : await this.mcpManager.getConnectedServers({ waitForSettle: !0, timeoutMs: eu, signal: ep.signal })); })(); try {
+                return await Promise.race([ef, eg]), ec?.aborted ? "aborted" : "completed";
+            }
+            catch (el) {
+                return this.logger.warn(`[AgentManager.runFirstSessionMcpPrewait] failed for ${eA}: ${el}`), ec?.aborted ? "aborted" : "completed";
+            }
+            finally {
+                clearTimeout(eh), ec?.removeEventListener("abort", finishAtDeadline);
+            } }
+            getMcpPrewaitToolNameCandidates(eA, el) { return [el, `${eA}__${el}`, `mcp__${eA}__${el}`]; }
+            overlayMayExposeInlineMcpTool(eA, el, ec) { let eu = new Set([..."tools" in el ? Object.keys(el.tools ?? {}) : [], ..."builtin_tools" in el ? el.builtin_tools ?? [] : []]); for (let el of ec) {
+                for (let ec of el?.forceNoDefer?.exact ?? [])
+                    if (ec.startsWith(`mcp__${eA}__`) || ec.startsWith(`${eA}__`) || eu.has(ec))
+                        return !0;
+                for (let ec of el?.forceNoDefer?.glob ?? [])
+                    if ("*" === ec || ec.startsWith("*") || ec.startsWith(`mcp__${eA}__`) || ec.startsWith(`${eA}__`) || this.mcpGlobMayTargetServer(ec, eA) || [...eu].some(eA => this.matchesSimpleToolGlob(ec, eA)))
+                        return !0;
+            } return !1; }
+            mcpGlobMayTargetServer(eA, el) { if (!eA.startsWith("mcp__"))
+                return !1; let ec = eA.indexOf("__", 5); if (ec < 0)
+                return eA.includes("*"); let eu = eA.slice(5, ec); return this.matchesSimpleToolGlob(eu, el); }
+            matchesSimpleToolGlob(eA, el) { let ec = eA.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*"); return RegExp(`^${ec}$`).test(el); }
+            async rebuildAgents(eA = !1) { let el = Date.now(); if (this.rebuilding) {
+                this.logger.info("[Startup] AgentManager.rebuildAgents: build already in progress, marking pending rebuild"), this.pendingRebuild = !0, this.pendingForceRebuild || (this.pendingForceRebuild = eA);
+                return;
+            } this.logger.info("[Startup] AgentManager.rebuildAgents: START"), this.rebuilding = !0, this.lastRebuildFailure = void 0; try {
+                await this.buildAgentsFromProductConfiguration(eA);
+            }
+            catch (eA) {
+                this.lastRebuildFailure = { error: eA }, this.logger.error(`Failed to rebuild agents: ${eA}`);
+            }
+            finally {
+                this.rebuilding = !1;
+            } this._ready = !0; let ec = Date.now() - el; if (this.logger.info(`[Startup] AgentManager.rebuildAgents: completed in ${ec}ms, resolving readyDeferred`), this.readyDeferred.resolve(), this.modelsReadyDeferred && !this.hasPlaceholderModels() && (this.modelsReadyDeferred.resolve(), this.modelsReadyDeferred = void 0), this.pendingRebuild) {
+                this.pendingRebuild = !1;
+                let el = eA || this.pendingForceRebuild;
+                return this.pendingForceRebuild = !1, this.rebuildAgents(el);
+            } this.onDidRebuildSettledEmitter.fire(); }
+            hasPlaceholderModels() { if (0 === this.modelMap.size)
+                return !0; for (let eA of this.modelMap.keys())
+                if (!eA.startsWith("default-model"))
+                    return !1; return !0; }
+            async buildAgentsFromProductConfiguration(eA = !1) { let el = this.cliProvider.parseOpts().opts, ec = !!(el.systemPrompt || el.systemPromptFile || el.appendSystemPrompt || el.agents || el.agent || el.verbose), { agents: ed = [], models: ep = [], skills: eg = [], commands: eh = [], tools: ef = [] } = await this.productManager.waitConfiguration(ec), em = eu.buildSkillsFingerprint(eg), eE = eh.filter(eA => eA.tags?.includes("custom")).map(eA => eA.name).sort().join(","), eC = ep.map(eA => eA.id).sort().join(","), ey = this.buildAgentConfigFingerprint(ed), ew = await this.getPluginAgentFingerprint(), eB = `${ey}|${em}|${eE}|${ew}`, e_ = `${eC}|${eB}`; if (!eA && e_ === this.lastConfigHash && this._ready || !eA && this._ready && ep.length > 0 && this.modelMap.size > 0 && 0 === ep.filter(eA => !this.modelMap.has(eA.id)).map(eA => eA.id).length && eB === this.lastNonModelConfigHash)
+                return; let eI = eB !== this.lastNonModelConfigHash; this.lastConfigHash = e_, this.lastNonModelConfigHash = eB, eI && this.toolManager.invalidatePluginDependentToolCaches(); let ev = this.defaultAgentName; for (let eA of (this.clearPluginAgentRuntimeState(), ed))
+                this.agentConfigMap.set(eA.name, eA); for (let eA of (this.modelMap.clear(), ep))
+                this.modelMap.set(eA.id, eA); !this._ready && this.hasPlaceholderModels() && (this.modelsReadyDeferred = new Av.Deferred); let eS = ed.filter(eA => eA.tags?.includes(A_.CLI_AGENT_TAG)); for (let eA of eS)
+                eA.tags?.includes("default") && (this.defaultAgentName = eA.name); for (let eA of new Set([ev, this.defaultAgentName]))
+                this.mcpSubagentToolManager.unregister(eA); let eQ = await this.applyPluginAgentSetting(eS); await this.applySettingsAgent(eS), this.removePluginSettingAgentsFromStandaloneRegistry(eQ, eS); let eD = getProfiler(); eD?.markStart("agent_build_permissions", "Agent Build - Permissions Load"); let eT = await this.settingsManager.get("permissions") || {}; eD?.markEnd("agent_build_permissions"); let eR = { agents: eS, models: ep, skills: eg, commands: eh, tools: ef }; this.logger.info(`[AgentManager] runtime cli agent view ready: ${eS.length} agents (used for registration and Agent tool descriptions)`), eD?.markStart("agent_build_register", "Agent Build - Agent Registration"), await Promise.all(eS.map(eA => this.registerAgent(eA, !1, eT, eR))), eD?.markEnd("agent_build_register"); }
+            clearPluginAgentRuntimeState() { for (let [eA, el] of (this.agentsWithPatchedTools.clear(), this.agentConfigMap))
+                el.tags?.includes(A_.PLUGIN_AGENT_TAG) && (this.agentConfigMap.delete(eA), this.agentMap.delete(eA), this.mcpSubagentToolManager.unregister(eA)); }
+            async registerAgent(eA, el = !1, ec, eu, ed = {}) { let ep = [], eg = []; for (let eh of eA.handoffs ?? []) {
+                let ef = this.agentConfigMap.get(eh);
+                if (ef) {
+                    let eh = eA.name === this.defaultAgentName, em = await this.registerAgent(ef, eh || el, ec, eu, ed);
+                    if (!0 === ef.asTool) {
+                        eg.push(em.asTool({ toolDescription: em.handoffDescription }));
+                        continue;
+                    }
+                    ep.push((0, AD.handoff)(em, { onHandoff: (eA, el) => { el && (em.prompt = el.prompt); }, inputType: this.parseParametersToZod(ef.parameters), inputFilter: eA => { try {
+                            if ("string" == typeof em.prompt && em.prompt)
+                                return { runContext: eA.runContext, inputHistory: em.prompt, preHandoffItems: eA.preHandoffItems, newItems: [] };
+                        }
+                        finally {
+                            em.prompt = void 0;
+                        } return { ...eA }; } }));
+                }
+            } let eh = eA.handoffDescription ? await this.promptRenderer.render(eA.handoffDescription) : void 0, ef = eA.tags?.includes(A_.CUSTOM_AGENT_TAG), em = A_.AGENTS_WITH_MCP_ACCESS.has(eA.name), eE = void 0 !== eA.tools, eC = ["Agent"], ey = eA.tools ?? await this.getDefaultAgentTools(), ew = ef && !eA.tools ? ey.filter(eA => !eC.includes(eA)) : ey; this.maybeInjectSendMessage(eA.name, ew), this.maybeInjectExitPlanMode(eA.name, ew); let eB = (eA.tools ?? []).filter(eA => eA.startsWith("mcp__")), e_ = eB.length > 0, eI = ef ? !eE || e_ : eA.name === this.defaultAgentName || el || em, ev = eI ? ef && e_ ? await this.buildMcpServersForTools(eB) : await this.buildMcpServers() : [], eS = { name: eA.name, instructions: async () => { let el; if (eA.name === this.defaultAgentName) {
+                    let { cliDescriptionContent: ec, outputStyleContent: eu, keepCodingInstructions: ed } = await this.getCliDescriptionAndOutputStyle();
+                    return (el = await this.renderDefaultAgentInstructions(eA, { cliDescription: ec, outputStyle: eu, keepCodingInstructions: ed }), eA.appendInstructions) ? el + "\n\n" + eA.appendInstructions : el;
+                } return await this.promptRenderer.render(eA.instructions ?? ""); }, tools: [...await this.buildTools(ew, eA, ec, eu), ...eg], mcpServers: ev, handoffDescription: eh, handoffs: ep }, eQ = await this.factory.create(eS); return this.logger.info(`[MCP][registerAgent] agent=${eA.name} mcpServers=[${ev.map(eA => eA.name).join(",")}] (count=${ev.length}) grantMcpAccess=${eI}`), ef && e_ && this.mcpSubagentToolManager.register(eA.name, eB), ed.skipMapRegistration || (this.agentMap.set(eA.name, eQ), this.managedAgentInstances ?? (this.managedAgentInstances = new WeakSet), this.managedAgentInstances.add(eQ)), eQ; }
+            parseParametersToZod(eA) { if (eA)
+                try {
+                    return "string" == typeof eA ? JSON.parse(eA) : eA;
+                }
+                catch (eA) {
+                    this.logger.warn(`Failed to parse parameters to Zod schema: ${eA}`);
+                    return;
+                } }
+            async buildTools(eA, el, ec, eu) { eA = this.normalizeAgentToolSpecs(eA, el.name); let ed = ec ?? (await this.settingsManager.get("permissions") || {}), ep = new Set(AH.PermissionUtils.extractWholeToolRules(ed.deny)), eg = eA.some(eA => eA === Aj.ToolNames.TOOL_SEARCH), eh = !1; try {
+                eh = Av.ContainerUtil.get(AT.DelegateToolManager).hasTools();
+            }
+            catch { } let ef = eA.filter(eA => ep.has(eA.toLowerCase()) ? (this.logger.debug(`Tool ${eA} filtered by permissions.deny`), !1) : eA !== Aj.ToolNames.DELEGATE_TOOL || !!eh || (this.logger.debug("DelegateTool filtered: no delegate tools registered"), !1)); return (await Promise.all(ef.map(async (eA) => { let ec = await this.toolManager.get(eA, el, eu); if (ec) {
+                let eA = { ...ec };
+                !eg && eA.defer_loading && (eA.defer_loading = !1);
+                let el = eA.isEnabled;
+                return eA.isEnabled = await this.createIsEnabledChecker(eA, el), (0, AB.tool)(eA);
+            } }))).filter(eA => void 0 !== eA); }
+            normalizeAgentToolSpecs(eA, el) { if (!eA || 0 === eA.length)
+                return el && this.agentToolDeferOverlayCache.set(el, { forceDefer: { exact: [], glob: [] }, forceNoDefer: { exact: [], glob: [] } }), eA; let ec = (0, AG.parseToolSpecs)(eA, { lenient: !0 }); for (let eA of ec.warnings)
+                this.logger.warn(`[AgentToolSpec] ${el ?? "(anon)"}: ${eA.code} — ${eA.message}`); let eu = (0, AG.augmentParsedSpecsForDefer)(ec); return el && this.agentToolDeferOverlayCache.set(el, eu.overlay), eu.names; }
+            async createIsEnabledChecker(eA, el) { let ec = !0 === eA.defer_loading, eu = await this.deferToolConfigService.isGlobalDeferLoadingEnabled(), ed = eA.name, ep = eA.aliases || [], eg = this.deferToolConfigService, eh = this.agentToolDeferOverlayCache; return async (eA) => { let ef = AG.ToolDeferOverlay.merge(eA.runContext.context.options?.toolDeferOverlay, eh.get(eA.agent?.name)); if (eg.isBuiltinToolDeferLoading(ed, ec, ef) && eu && !0 !== eA.runContext.skipActivationCheck || void 0 !== el && !1 === ("function" == typeof el ? await el(eA) : el))
+                return !1; let em = eA.runContext.context, eE = em.options?.tools; if (void 0 !== eE && "default" !== eE) {
+                let eA = eE.split(",").map(eA => eA.trim()).filter(Boolean);
+                if (0 === eA.length || 0 === AH.PermissionUtils.matchPermissionRules(eA, [ed]).length)
+                    return !1;
+            } return !(this.isToolDisallowed(em, ed, ep) || em.permissionModeSubject?.value === AL.PermissionMode.Delegate && !A2.has(ed) || (ed === Aj.ToolNames.ENTER_PLAN_MODE || ed === Aj.ToolNames.EXIT_PLAN_MODE) && (0, AK.isPlanModeDisabled)()) && (ed !== Aj.ToolNames.EXIT_PLAN_MODE || !!(0, AK.isExitPlanModeVisibleForSession)(em)); }; }
+            maybeInjectSendMessage(eA, el) { !A_.INTERNAL_GENERATOR_AGENTS.has(eA) && (el.includes(Aj.ToolNames.SEND_MESSAGE) || el.push(Aj.ToolNames.SEND_MESSAGE)); }
+            maybeInjectExitPlanMode(eA, el) { eA === this.defaultAgentName || !A_.INTERNAL_GENERATOR_AGENTS.has(eA) && (el.includes(Aj.ToolNames.EXIT_PLAN_MODE) || el.push(Aj.ToolNames.EXIT_PLAN_MODE)); }
+            isToolDisallowed(eA, el, ec) { let eu = eA.options?.disallowedTools || []; if (0 === eu.length)
+                return !1; let ed = [el, ...ec].map(eA => eA.toLowerCase()); return AH.PermissionUtils.matchPermissionRules(eu, ed).some(eA => "*" === eA.rule); }
+            async buildMcpServers() { let eA = Date.now(); await this.mcpReadyService.waitForServersReady(), await this.mcpManager.list(); let el = Date.now() - eA, ec = Date.now(), eu = await this.mcpManager.getConnectedServers({ waitForSettle: !1 }), ed = Date.now() - ec; return (el > 0 || ed > 0) && this.logger.info(`[MCP][buildMcpServers] wait breakdown: waitForServersReady=${el}ms getConnectedServers=${ed}ms`), this.logger.info(`[MCP][buildMcpServers] connected servers=[${eu.map(eA => eA.name).join(",")}] (count=${eu.length})`), eu; }
+            async buildMcpServersForTools(eA) { let el = await this.mcpManager.getConnectedServers(), ec = new Set; for (let el of eA)
+                try {
+                    let { serverName: eA } = this.parseMcpToolName(el), eu = eA.replace(/[^a-zA-Z0-9]/g, "_");
+                    ec.add(eu);
+                }
+                catch (eA) {
+                    this.logger.warn(`Invalid MCP tool name: ${el}`);
+                } return new Proxy(el, { get(eA, el) { let eu = eA.filter(eA => { let el = eA.name.replace(/[^a-zA-Z0-9]/g, "_"); return ec.has(el); }); return Reflect.get(eu, el, eu); } }); }
+            parseMcpToolName(eA) { let el = eA.match(/^mcp__(.+?)__(.+)$/); if (!el)
+                throw Error(`Invalid MCP tool name format: ${eA}`); let [, ec, eu] = el; return { serverName: ec, toolName: eu }; }
+            async getDefaultAgentTools() { let eA = Array.from(this.agentConfigMap.values()).find(eA => eA.tags?.includes("default")); return eA?.tools ?? []; }
+            async getAll() { return Array.from(this.agentMap.values()); }
+            async getCommands(eA) { let el = this.agentConfigMap.get(eA), ec = []; if (el?.commands)
+                for (let eA of el.commands) {
+                    let el = await this.commandManager.get(`/${eA}`);
+                    el && ec.push(el);
+                } return eA === this.defaultAgentName && (ec.push(...await this.commandManager.getCustomCommands()), ec.push(...await this.commandManager.getMcpCommands())), ec; }
+            findModelByIdOrName(eA) { let el = this.modelMap.get(eA); if (el)
+                return el; for (let el of this.modelMap.values())
+                if (el.name === eA)
+                    return el; for (let el of this.modelMap.values())
+                if (el.aliases?.includes(eA))
+                    return el; }
+            shouldInheritDefaultAgentSelection(eA) { if (!eA)
+                return !1; let el = eA.models ?? []; return 0 === el.length || !el.some(eA => { let el = this.findModelByIdOrName(eA); if (!el)
+                return !0; let ec = el.tags ?? []; return !(ec.includes("custom") || el.id.startsWith("custom:") || ec.includes("chat")); }); }
+            async getModels(eA) { await this.readyDeferred.promise, this.modelsReadyDeferred && await this.modelsReadyDeferred.promise; let el = [], ec = this.agentConfigMap.get(eA); if (!ec)
+                return el; let eu = new Set; if (eA !== this.defaultAgentName && !(ec.models ?? []).some(eA => { let el = this.findModelByIdOrName(eA); if (!el)
+                return !0; let ec = el.tags ?? []; return !(ec.includes("custom") || el.id.startsWith("custom:") || ec.includes("chat")); }))
+                return this.logger.info(`[AgentManager.getModels] Agent "${eA}" has no originally declared models (only auto-appended custom/chat models), inheriting from default agent "${this.defaultAgentName}"`), this.getModels(this.defaultAgentName); for (let eA of ec.models ?? []) {
+                let ec = this.findModelByIdOrName(eA);
+                ec && !eu.has(ec.id) && (el.push(ec), eu.add(ec.id));
+            } if (eA !== this.defaultAgentName && 0 === el.length)
+                return []; for (let eA of this.modelMap.values())
+                if (!eu.has(eA.id)) {
+                    let ec = eA.tags?.includes("custom"), ed = eA.id.startsWith("custom:"), ep = eA.tags?.includes("chat");
+                    (ec || ed || ep) && (el.push(eA), eu.add(eA.id));
+                } return el; }
+            async getModel(eA) { let el; this.logger.debug(`[Startup] AgentManager.getModel(${eA}): waiting for readyDeferred...`), await this.readyDeferred.promise, this.modelsReadyDeferred && (this.logger.debug(`[Startup] AgentManager.getModel(${eA}): waiting for modelsReadyDeferred...`), await this.modelsReadyDeferred.promise, this.logger.debug(`[Startup] AgentManager.getModel(${eA}): modelsReadyDeferred resolved`)); let ec = this.agentConfigMap.get(eA), eu = ec?.models?.[0]; if (eu && (0, AQ.isModelVariantType)(eu)) {
+                let eA = await this.getModel(this.defaultAgentName);
+                return this.getRelatedModel(eA.id, eu);
+            } eA === this.defaultAgentName ? el = process.env.CODEBUDDY_MODEL || await this.settingsManager.get("model") : this.shouldInheritDefaultAgentSelection(ec) && (el = process.env.CODEBUDDY_MODEL || await this.settingsManager.get("model")); let ed = await this.getModels(eA); if (el) {
+                let ec = ed.find(eA => eA.id === el || eA.name === el || eA.aliases?.includes(el));
+                if (ec?.disabled) {
+                    if (eA !== this.defaultAgentName)
+                        return this.logger.warn(`[AgentManager.getModel] requested model '${el}' is disabled for agent '${eA}'; falling back to primary model.`), this.getModel(this.defaultAgentName);
+                    let ec = ed.find(eA => !eA.disabled);
+                    ec && (this.logger.warn(`[AgentManager.getModel] agent='${eA}' requested model '${el}' is disabled; switching to first-enabled='${ec.id}'.`), el = ec.id);
+                }
+                else
+                    ec || this.logger.debug(`[AgentManager.getModel] requested model '${el}' not in agent '${eA}' available models list; trusting user selection.`);
+            }
+            else {
+                let ec = ed.find(eA => !eA.disabled);
+                el = ec?.id || ed?.[0]?.id, this.logger.info(`[AgentManager.getModel] agent='${eA}' has no explicit model (auto); resolved to first-available='${el}'`);
+            } if (el) {
+                let ec = this.findModelByIdOrName(el);
+                return ec || eA === this.defaultAgentName || (ec = await this.getModel(this.defaultAgentName)), ec || (ec = { id: el, name: el }), ec;
+            } if (eA !== this.defaultAgentName)
+                return this.getModel(this.defaultAgentName); throw Error(`model not found for agent ${eA}`); }
+            async getRelatedModel(eA, el) { await this.readyDeferred.promise; let ec = this.getModelIdFromEnv(el); if (ec) {
+                let eA = this.findModelByIdOrName(ec);
+                return eA ? (this.logger.debug(`Using env variable model for ${el}: ${eA.id}`), eA) : (this.logger.debug(`Using env variable model (not in modelMap) for ${el}: ${ec}`), { id: ec, name: ec });
+            } let eu = this.modelMap.get(eA); if (!eu)
+                return this.logger.warn(`Primary model not found: ${eA}, returning fallback model`), { id: eA, name: eA }; let ed = eu.relatedModels?.[el]; if (ed) {
+                let eA = this.modelMap.get(ed);
+                if (eA)
+                    return this.logger.debug(`Using model-specific related model for ${el}: ${eA.id}`), eA;
+                this.logger.warn(`Model-specific related model not found: ${ed}, falling back to defaults`);
+            } if (this.isCustomOrExternalModel(eu))
+                return this.logger.debug(`Custom/external model detected, skipping defaultRelatedModels for ${el}, using primary model: ${eu.id}`), eu; let { defaultRelatedModels: ep } = await this.productManager.waitConfiguration(), eg = ep?.[el]; if (eg) {
+                let eA = this.modelMap.get(eg);
+                if (eA)
+                    return this.logger.debug(`Using default related model for ${el}: ${eA.id}`), eA;
+                this.logger.warn(`Default related model not found: ${eg}, using primary model`);
+            } return this.logger.debug(`No related model found for ${el}, using primary model: ${eu.id}`), eu; }
+            isCustomOrExternalModel(eA) { return !!(eA.tags?.includes("custom") || eA.id.startsWith("custom:")); }
+            getModelIdFromEnv(eA) { switch (eA) {
+                case "lite": return process.env.CODEBUDDY_SMALL_FAST_MODEL;
+                case "reasoning": return process.env.CODEBUDDY_BIG_SLOW_MODEL;
+                default: return;
+            } }
+            async resolveModel(eA) { if (await this.readyDeferred.promise, this.modelsReadyDeferred && await this.modelsReadyDeferred.promise, (0, AQ.isModelVariantType)(eA)) {
+                let el = await this.getPrimaryModel();
+                return this.getRelatedModel(el.id, eA);
+            } return this.findModelByIdOrName(eA); }
+            async resolveConfiguredModelOrFallback(eA, el) { let ec = eA?.trim(); if (!ec)
+                return; let eu = await this.resolveModel(ec); if (eu && !eu.disabled)
+                return eu.id; let ed = eu?.disabled ? "disabled" : "not found"; this.logger.warn(`[AgentManager] configured model '${ec}' (${el}) ${ed}; inheriting main conversation model.`); }
+            async renderDefaultAgentInstructions(eA, el) { let ec = this.hasPluginAgentPromptPlaceholder(eA.instructions) ? await this.renderPluginAgentPrompt(eA) : void 0; return this.promptRenderer.render(eA.instructions ?? "", { ...el, ...void 0 !== ec ? { [A3]: ec } : {} }); }
+            async renderPluginAgentPrompt(eA) { let el = eA.pluginAgentPromptTemplate; if (el)
+                return this.promptRenderer.render(el); }
+            hasPluginAgentPromptPlaceholder(eA) { return !!eA && A4.test(eA); }
+            async getCliDescriptionAndOutputStyle() { let eA = {}; try {
+                let el, ec = this.cliProvider.parseOpts(), eu = ec.opts.outputStyle?.toLowerCase();
+                if (eu && eu !== A_.OutputStyleType.DEFAULT)
+                    el = eu, this.logger.info(`Using output style from CLI: ${el}`);
+                else {
+                    let eA = await this.settingsManager.get("outputStyle");
+                    eA ? (el = eA.toLowerCase(), this.logger.info(`Using output style from settings: ${el}`)) : el = A_.OutputStyleType.DEFAULT;
+                }
+                if (el === A_.OutputStyleType.DEFAULT)
+                    return eA;
+                let ed = await this.outputStyleManager.getOutputStyleByName(el);
+                ed && ed.name.toLowerCase() !== A_.OutputStyleType.DEFAULT && ed.content && (eA.outputStyleContent = ed.content, eA.keepCodingInstructions = ed.keepCodingInstructions, eA.cliDescriptionContent = await this.promptRenderer.render(A_.CLI_OUTPUT_STYLE_DESCRIPTION_TEMPLATE), this.logger.info(`Applied output style: ${ed.name}`));
+            }
+            catch (eA) {
+                this.logger.error(`Failed to get cli description and output style: ${eA instanceof Error ? eA.message : eA}`);
+            } return eA; }
+            async applyPluginAgentSetting(eA) { let el = new Set; if (!this.pluginManager)
+                return el; try {
+                let ec = await this.pluginManager.getActivePlugins(), eu = ec.map(({ plugin: eA }) => eA);
+                for (let { agentName: eA } of ec.map(({ plugin: eA, components: el }) => ({ plugin: eA, agentName: this.getPluginAgentSetting(el) })))
+                    eA && eA !== this.defaultAgentName && el.add(eA);
+                let ed = !!this.normalizePluginAgentSetting(this.volatilePluginAgentName), ep = !!ed && await this.applyReplacePluginAgentBaseBeforeVolatile(eA, ec), eg = this.parseVolatilePluginSource(this.volatilePluginSourcePluginId), eh = this.normalizePluginAgentSetting(this.volatilePluginAgentName);
+                if (!eh)
+                    for (let eA of eu) {
+                        let el = ec.find(el => el.plugin === eA), eu = this.getPluginAgentSetting(el?.components);
+                        eu && (eg = { name: eA.name, marketplaceName: eA.marketplaceName }, eh = eu);
+                    }
+                if (!eh)
+                    return el;
+                await this.registerPluginAgents(eg, eA, ec);
+                let ef = eh, em = eA.find(eA => eA.name === ef);
+                if (!em)
+                    for (let eA of eg ? [eg] : eu.map(eA => ({ name: eA.name, marketplaceName: eA.marketplaceName })))
+                        try {
+                            let el = ec.find(el => el.plugin.name === eA.name && el.plugin.marketplaceName === eA.marketplaceName), eu = el?.components.agents?.find(eA => eA.name === ef);
+                            if (eu) {
+                                em = eu, eg = eA;
+                                break;
+                            }
+                        }
+                        catch { }
+                if (!em)
+                    return this.logger.info(`Plugin settings.agent: "${ef}" not found in available or plugin agents. Ignoring.`), el;
+                if (ef === this.defaultAgentName)
+                    return el;
+                let eE = eA.find(eA => eA.name === this.defaultAgentName);
+                if (!eE)
+                    return this.logger.warn("Plugin settings.agent: default agent config not found, cannot apply"), el;
+                let eC = composePluginAgent({ agentConfig: em, matchedPlugin: eg, enabledPlugins: eu, logger: this.logger });
+                if (!eC)
+                    return el;
+                let ey = eC.instructions || eC.prompt, ew = ed, eB = this.hasPluginAgentPromptPlaceholder(eE.instructions), e_ = ey && !eB ? [eE.instructions, A6].filter(Boolean).join("\n\n") : eE.instructions, eI = ey || eE.instructions, ev = ew ? e_ : eI, eS = ep && ed, eQ = { ...eE, instructions: ev, ...ew && ey ? { pluginAgentPromptTemplate: ey } : {}, description: eS || !ew ? eE.description : eC.description || eE.description, tools: eS ? eE.tools : eC.tools?.length ? eC.tools : eE.tools };
+                ew && ey || delete eQ.pluginAgentPromptTemplate, eS || this.syncDefaultAgentMcpToolWhitelist(eQ.tools, "plugin-settings-agent");
+                let eD = eA.indexOf(eE);
+                eD >= 0 && (eA[eD] = eQ), this.agentConfigMap.set(this.defaultAgentName, eQ), this.agentsWithPatchedTools.add(this.defaultAgentName);
+                let eT = this.volatilePluginAgentName ? "volatile override" : "plugin settings.agent";
+                return this.logger.info(`${eT}: applied "${ef}" config onto default agent "${this.defaultAgentName}"`), el;
+            }
+            catch (eA) {
+                return this.logger.debug(`Failed to apply plugin agent setting: ${eA instanceof Error ? eA.message : String(eA)}`), el;
+            } }
+            async applyReplacePluginAgentBaseBeforeVolatile(eA, el) { let ec, eu; if (!this.pluginManager)
+                return !1; for (let eA of el) {
+                let el = this.getPluginAgentSetting(eA.components);
+                el && (ec = eA, eu = el);
+            } if (!ec || !eu)
+                return !1; let ed = { name: ec.plugin.name, marketplaceName: ec.plugin.marketplaceName }; await this.registerPluginAgents(ed, eA, el); let ep = eA.find(eA => eA.name === eu); if (ep || (ep = ec.components.agents?.find(eA => eA.name === eu)), !ep || eu === this.defaultAgentName)
+                return !1; let eg = eA.find(eA => eA.name === this.defaultAgentName); if (!eg)
+                return !1; let eh = composePluginAgent({ agentConfig: ep, matchedPlugin: ed, enabledPlugins: el.map(({ plugin: eA }) => eA), logger: this.logger }); if (!eh)
+                return !1; let ef = eh.instructions || eh.prompt; if (!ef)
+                return !1; let em = { ...eg, instructions: ef, description: eg.description, tools: eh.tools?.length ? eh.tools : eg.tools }; delete em.pluginAgentPromptTemplate, this.syncDefaultAgentMcpToolWhitelist(em.tools, "replace-plugin-agent-base-before-volatile"); let eE = eA.indexOf(eg); return eE >= 0 && (eA[eE] = em), this.agentConfigMap.set(this.defaultAgentName, em), this.agentsWithPatchedTools.add(this.defaultAgentName), this.logger.info(`replace plugin agent base: applied "${eu}" config before volatile plugin agent`), !0; }
+            syncDefaultAgentMcpToolWhitelist(eA, el) { let ec = this.normalizeMcpWhitelistToolNames(eA ?? [], el); if (0 === ec.length) {
+                this.mcpSubagentToolManager.unregister(this.defaultAgentName), this.logger.info(`[PluginAgentCompose] default agent MCP tool whitelist cleared agent=${this.defaultAgentName} reason=${el}`);
+                return;
+            } this.mcpSubagentToolManager.register(this.defaultAgentName, ec), this.logger.info(`[PluginAgentCompose] default agent MCP tool whitelist synced agent=${this.defaultAgentName} reason=${el} count=${ec.length}`); }
+            normalizeMcpWhitelistToolNames(eA, el) { if (0 === eA.length)
+                return []; let ec = (0, AG.parseToolSpecs)(eA, { lenient: !0 }); for (let eA of ec.warnings)
+                this.logger.warn(`[AgentToolSpec] ${this.defaultAgentName} MCP whitelist (${el}): ${eA.code} — ${eA.message}`); return (0, AG.augmentParsedSpecsForDefer)(ec).names; }
+            async registerPluginAgents(eA, el, ec) { if (this.pluginManager && eA)
+                try {
+                    let eu = ec.find(el => el.plugin.name === eA.name && el.plugin.marketplaceName === eA.marketplaceName), ed = eu?.components.agents ?? [];
+                    if (0 === ed.length)
+                        return;
+                    for (let eA of ed) {
+                        let ec = eA, eu = ec?.name;
+                        if (eu && !this.agentConfigMap.has(eu))
+                            try {
+                                this.agentConfigMap.set(eu, ec), el.push(ec);
+                            }
+                            catch (eA) {
+                                this.logger.warn(`[AgentManager] failed to register plugin agent "${eu}": ${eA instanceof Error ? eA.message : String(eA)}`);
+                            }
+                    }
+                }
+                catch (eA) {
+                    this.logger.debug(`Failed to register plugin agents: ${eA instanceof Error ? eA.message : String(eA)}`);
+                } }
+            removePluginSettingAgentsFromStandaloneRegistry(eA, el) { if (0 !== eA.size) {
+                for (let ec = el.length - 1; ec >= 0; ec--) {
+                    let eu = el[ec].name;
+                    eu !== this.defaultAgentName && eA.has(eu) && el.splice(ec, 1);
+                }
+                for (let el of eA)
+                    el !== this.defaultAgentName && (this.agentConfigMap.delete(el), this.agentMap.delete(el));
+            } }
+            async applySettingsAgent(eA) { try {
+                let el = this.cliProvider.parseOpts().opts.agent || await this.settingsManager.get("agent"), ec = "string" == typeof el ? el : void 0;
+                if (!ec) {
+                    this.settingsAgentName = void 0;
+                    return;
+                }
+                let eu = eA.find(eA => eA.name === ec) || this.agentConfigMap.get(ec);
+                if (!eu)
+                    return void this.logger.warn(`Settings agent: "${ec}" not found in available agents. Available: ${eA.map(eA => eA.name).join(", ")}. Ignoring.`);
+                let ed = eA.find(eA => eA.name === this.defaultAgentName);
+                if (!ed)
+                    return void this.logger.warn("Settings agent: default agent config not found, cannot apply");
+                if (ec === this.defaultAgentName) {
+                    this.settingsAgentName = void 0;
+                    return;
+                }
+                let ep = { ...ed, instructions: eu.instructions || ed.instructions, description: eu.description || ed.description, tools: eu.tools?.length ? eu.tools : ed.tools };
+                delete ep.pluginAgentPromptTemplate;
+                let eg = eA.indexOf(ed);
+                eg >= 0 && (eA[eg] = ep), this.agentConfigMap.set(this.defaultAgentName, ep), this.agentsWithPatchedTools.add(this.defaultAgentName), this.settingsAgentName = ec, this.logger.info(`Settings agent: applied "${ec}" config (instructions/tools) onto default agent "${this.defaultAgentName}"`);
+            }
+            catch (eA) {
+                this.logger.warn(`Failed to apply settings agent: ${eA instanceof Error ? eA.message : String(eA)}`);
+            } }
+            async refreshAgents() { if (await this.rebuildAgents(!0), await this.waitForRebuildSettled(0), this.lastRebuildFailure)
+                throw this.lastRebuildFailure.error; }
+            async waitForRebuildSettled(eA = 3e3) { (this.rebuilding || this.pendingRebuild) && await new Promise(el => { let ec, eu = !1, ed = this.onDidRebuildSettledEmitter.event(() => { eu || (eu = !0, ec && clearTimeout(ec), ed.dispose(), el()); }); eA > 0 && (ec = setTimeout(() => { eu || (eu = !0, ed.dispose(), this.logger.warn(`[AgentManager.waitForRebuildSettled] timeout after ${eA}ms (rebuilding=${this.rebuilding}, pendingRebuild=${this.pendingRebuild})`), el()); }, eA)); }); }
+            getInstructionFingerprint(eA) { return eA ? `${eA.length}:${eA.slice(0, 32)}` : ""; }
+            buildAgentConfigFingerprint(eA) { return eA.map(eA => [eA.name, this.getInstructionFingerprint(eA.instructions), this.getInstructionFingerprint(eA.appendInstructions), this.getInstructionFingerprint(eA.pluginAgentPromptTemplate), eA.description ?? "", (eA.tools ?? []).slice().sort().join("|"), (eA.disallowedTools ?? []).slice().sort().join("|"), (eA.models ?? []).join("|"), (eA.skills ?? []).slice().sort().join("|")].join(":")).sort().join(","); }
+            static buildSkillsFingerprint(eA) { return eA.map(eA => `${eA.name}:${+!!eA.disableModelInvocation}:${+(!1 === eA.userInvocable)}:${eA.description ? `${eA.description.length}:${eA.description.slice(0, 32)}` : ""}:${eA.displayName ?? ""}`).sort().join(","); }
+            normalizePluginAgentSetting(eA) { if ("string" == typeof eA)
+                return eA; }
+            normalizePluginRequestHeaders(eA) { if (!eA || "object" != typeof eA || Array.isArray(eA))
+                return; let el = Object.entries(eA).filter(([eA, el]) => "" !== eA.trim() && "string" == typeof el).map(([eA, el]) => [eA.trim(), el]).sort(([eA], [el]) => eA.localeCompare(el)); if (0 === el.length)
+                return; let ec = {}; for (let [eA, eu] of el)
+                ec[eA] = eu; return ec; }
+            stringifyPluginRequestHeaders(eA) { return eA ? JSON.stringify(eA) : ""; }
+            parseVolatilePluginSource(eA) { if (!eA)
+                return; let el = eA.indexOf("@"); if (!(el <= 0) && el !== eA.length - 1)
+                return { name: eA.slice(0, el), marketplaceName: eA.slice(el + 1) }; }
+            getPluginAgentSetting(eA) { return this.normalizePluginAgentSetting(eA?.settings?.agent); }
+            async getPluginAgentFingerprint() { let eA = this.normalizePluginAgentSetting(this.volatilePluginAgentName); if (eA) {
+                let el = this.volatilePluginSourcePluginId || "_", ec = this.stringifyPluginRequestHeaders(this.volatilePluginInternalModelRequestHeaders);
+                return `volatile:${el}:${eA}:${ec}`;
+            } if (!this.pluginManager)
+                return ""; try {
+                let eA = await this.pluginManager.getActivePlugins(), el = [];
+                for (let { plugin: ec, components: eu } of eA) {
+                    let eA = this.getPluginAgentSetting(eu);
+                    eA && el.push(`${ec.name}@${ec.marketplaceName}:${eA}`);
+                }
+                return el.sort().join(",");
+            }
+            catch {
+                return "";
+            } }
+        };
+        __decorate([(0, Av.Autowired)(AQ.ProductManager), __metadata("design:type", "function" == typeof (ed = void 0 !== AQ.ProductManager && AQ.ProductManager) ? ed : Object)], A9.prototype, "productManager", void 0), __decorate([(0, Av.Autowired)(AS.AuthenticationManager), __metadata("design:type", "function" == typeof (ep = void 0 !== AS.AuthenticationManager && AS.AuthenticationManager) ? ep : Object)], A9.prototype, "authenticationManager", void 0), __decorate([(0, Av.Autowired)(A_.AgentFactory), __metadata("design:type", "function" == typeof (eg = void 0 !== A_.AgentFactory && A_.AgentFactory) ? eg : Object)], A9.prototype, "factory", void 0), __decorate([(0, Av.Autowired)(Aj.ToolManager), __metadata("design:type", "function" == typeof (eh = void 0 !== Aj.ToolManager && Aj.ToolManager) ? eh : Object)], A9.prototype, "toolManager", void 0), __decorate([(0, Av.Autowired)(Ak.CommandManager), __metadata("design:type", "function" == typeof (ef = void 0 !== Ak.CommandManager && Ak.CommandManager) ? ef : Object)], A9.prototype, "commandManager", void 0), __decorate([(0, Av.Autowired)(AM.PromptRenderer), __metadata("design:type", "function" == typeof (em = void 0 !== AM.PromptRenderer && AM.PromptRenderer) ? em : Object)], A9.prototype, "promptRenderer", void 0), __decorate([(0, Av.Autowired)(AL.SettingsManager), __metadata("design:type", "function" == typeof (eE = void 0 !== AL.SettingsManager && AL.SettingsManager) ? eE : Object)], A9.prototype, "settingsManager", void 0), __decorate([(0, Av.Autowired)(Ax.McpManager), __metadata("design:type", "function" == typeof (eC = void 0 !== Ax.McpManager && Ax.McpManager) ? eC : Object)], A9.prototype, "mcpManager", void 0), __decorate([(0, Av.Autowired)(Ax.McpReadyService), __metadata("design:type", "function" == typeof (ey = void 0 !== Ax.McpReadyService && Ax.McpReadyService) ? ey : Object)], A9.prototype, "mcpReadyService", void 0), __decorate([(0, Av.Autowired)(Ax.McpServerManager), __metadata("design:type", "function" == typeof (ew = void 0 !== Ax.McpServerManager && Ax.McpServerManager) ? ew : Object)], A9.prototype, "mcpServerManager", void 0), __decorate([(0, Av.Autowired)(Ax.McpSubagentToolManager), __metadata("design:type", "function" == typeof (eB = void 0 !== Ax.McpSubagentToolManager && Ax.McpSubagentToolManager) ? eB : Object)], A9.prototype, "mcpSubagentToolManager", void 0), __decorate([(0, Av.Autowired)(AR.CliProvider), __metadata("design:type", "function" == typeof (e_ = void 0 !== AR.CliProvider && AR.CliProvider) ? e_ : Object)], A9.prototype, "cliProvider", void 0), __decorate([(0, Av.Autowired)(AP.PrewarmStateService), (0, Av.Optional)(), __metadata("design:type", Object)], A9.prototype, "prewarmStateService", void 0), __decorate([(0, Av.Autowired)(AO.OutputStyleManager), __metadata("design:type", "function" == typeof (eI = void 0 !== AO.OutputStyleManager && AO.OutputStyleManager) ? eI : Object)], A9.prototype, "outputStyleManager", void 0), __decorate([(0, Av.Autowired)(AN.PluginManager), (0, Av.Optional)(), __metadata("design:type", "function" == typeof (ev = void 0 !== AN.PluginManager && AN.PluginManager) ? ev : Object)], A9.prototype, "pluginManager", void 0), __decorate([(0, Av.Autowired)(Av.Logger), __metadata("design:type", "function" == typeof (eS = void 0 !== Av.Logger && Av.Logger) ? eS : Object)], A9.prototype, "logger", void 0), __decorate([(0, Av.Autowired)(AU.DeferToolConfigService), __metadata("design:type", "function" == typeof (eQ = void 0 !== AU.DeferToolConfigService && AU.DeferToolConfigService) ? eQ : Object)], A9.prototype, "deferToolConfigService", void 0), __decorate([(0, Av.Autowired)(AG.AgentToolDeferOverlayCache), __metadata("design:type", "function" == typeof (eD = void 0 !== AG.AgentToolDeferOverlayCache && AG.AgentToolDeferOverlayCache) ? eD : Object)], A9.prototype, "agentToolDeferOverlayCache", void 0), __decorate([(0, Av.PostConstruct)(), __metadata("design:type", Function), __metadata("design:paramtypes", []), __metadata("design:returntype", void 0)], A9.prototype, "init", null), A9 = eu = __decorate([(0, Av.Component)(A_.AgentManager)], A9);
+        var A7 = ec(92735), rn = ec(80539), ra = ec(71915), agent_factory_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, agent_factory_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rl = class {
+            async create(eA) { let el = new AB.Agent(eA), ec = A_.STATE_MACHINE_BYPASS_AGENTS.has(el.name), drivesStateMachine = eA => !ec && !(0, AI.isStateMachineBypassPurpose)(eA.agentPurpose); return el.on("agent_start", eA => { if (!eA.context)
+                return; let ec = eA.context, eu = ec.id; drivesStateMachine(ec) ? (ec.activeRunContext = eA, this.logger.debug?.(`[AgentFactory] agent_start agent=${el.name} session=${eu}`), this.stateMachine.transition(eA.context, { type: ra.SessionRunEventType.AGENT_STARTED })) : this.logger.debug?.(`[AgentFactory] agent_start from bypass generator agent=${el.name} session=${eu} — skip state machine`); }), el.on("agent_end", eA => { if (!eA.context)
+                return; let ec = eA.context, eu = ec.id; drivesStateMachine(ec) ? void 0 !== ec.activeRunContext && ec.activeRunContext !== eA ? this.logger.debug?.(`[AgentFactory] skip stale agent_end agent=${el.name} session=${eu} — RunContext mismatch (a newer run owns the session)`) : (ec.activeRunContext = void 0, this.logger.debug?.(`[AgentFactory] agent_end agent=${el.name} session=${eu}`), this.stateMachine.transition(eA.context, { type: ra.SessionRunEventType.AGENT_ENDED })) : this.logger.debug?.(`[AgentFactory] agent_end from bypass generator agent=${el.name} session=${eu} — skip state machine`); }), el.on("agent_tool_start", (eA, el, ec) => { let eu = ec?.toolCall; eu?.arguments && (eu.arguments = this.toolArgumentRewriteService.process(eu.arguments)); let ed = "string" == typeof eu?.callId ? eu.callId : void 0, ep = el?.name || eu?.name; ed && "string" == typeof ep && ep && rn.McpToolCallContext.enter(ed, ep), !eA.context || drivesStateMachine(eA.context) && this.stateMachine.transition(eA.context, { type: ra.SessionRunEventType.TOOL_STARTED, toolName: el?.name || eu?.name }); }), el.on("agent_tool_end", eA => { rn.McpToolCallContext.clear(), !eA.context || drivesStateMachine(eA.context) && this.stateMachine.transition(eA.context, { type: ra.SessionRunEventType.TOOL_ENDED }); }), el.on("agent_handoff", eA => { !eA.context || drivesStateMachine(eA.context) && this.stateMachine.transition(eA.context, { type: ra.SessionRunEventType.AGENT_HANDOFF }); }), el; }
+        };
+        agent_factory_decorate([(0, Av.Autowired)(A7.Logger), agent_factory_metadata("design:type", "function" == typeof (eT = void 0 !== A7.Logger && A7.Logger) ? eT : Object)], rl.prototype, "logger", void 0), agent_factory_decorate([(0, Av.Autowired)(Aj.ToolManager), agent_factory_metadata("design:type", "function" == typeof (eR = void 0 !== Aj.ToolManager && Aj.ToolManager) ? eR : Object)], rl.prototype, "toolManager", void 0), agent_factory_decorate([(0, Av.Autowired)(Aj.ToolArgumentRewriteService), agent_factory_metadata("design:type", "function" == typeof (ek = void 0 !== Aj.ToolArgumentRewriteService && Aj.ToolArgumentRewriteService) ? ek : Object)], rl.prototype, "toolArgumentRewriteService", void 0), agent_factory_decorate([(0, Av.Autowired)(ra.SessionRunStateMachine), agent_factory_metadata("design:type", "function" == typeof (eM = void 0 !== ra.SessionRunStateMachine && ra.SessionRunStateMachine) ? eM : Object)], rl.prototype, "stateMachine", void 0), rl = agent_factory_decorate([(0, Av.Component)(A_.AgentFactory)], rl);
+        var rc = ec(43843), runner_provider_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, runner_provider_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rd = class {
+            async get() { return this.runner || (this.runner = await this.runnerFactory.create()), this.runner; }
+        };
+        runner_provider_decorate([(0, Av.Autowired)(A_.RunnerFactory), runner_provider_metadata("design:type", "function" == typeof (ex = void 0 !== A_.RunnerFactory && A_.RunnerFactory) ? ex : Object)], rd.prototype, "runnerFactory", void 0), rd = runner_provider_decorate([(0, Av.Component)(A_.RunnerProvider)], rd);
+        var rp = ec(37819), agent_controller_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, agent_controller_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); }, __param = function (eA, el) { return function (ec, eu) { el(ec, eu, eA); }; };
+        let rg = eO = class {
+            filterHeaders(eA) { let el = {}; for (let [ec, eu] of Object.entries(eA)) {
+                let eA = ec.toLowerCase();
+                eO.STANDARD_HEADERS.has(eA) || (el[ec] = eu);
+            } return el; }
+            async getModels() { try {
+                let eA = await this.agentManager.getDefault();
+                return { models: (await this.agentManager.getModels(eA.name)).map(eA => { let { url: el, apiKey: ec, ...eu } = eA; return { id: eA.id, name: eA.name || eA.id, description: [eA.description, eA.credits].filter(Boolean).join(" \xb7 ") || void 0, _meta: { "codebuddy.ai": eu } }; }) };
+            }
+            catch (eA) {
+                return this.logger.error?.("[AgentController] getModels failed:", eA), { models: [] };
+            } }
+            async run(eA, el) { this.logger.info(`[Startup] AgentController.run: received request (print=${eA.print}, hasPrompt=${!!eA.prompt})`); let ec = this.sessionManager.getCurrent(); if (el) {
+                let eA = this.filterHeaders(el);
+                Object.keys(eA).length > 0 && (ec.requestOptions || (ec.requestOptions = {}), ec.requestOptions.headers = eA);
+            } if (eA.prompt) {
+                let el = eA.prompt, eu = { context: ec };
+                ec.traceId = void 0, ec.parentSpanId = void 0, eA.traceId && (ec.traceId = eA.traceId), eA.parentSpanId && (ec.parentSpanId = eA.parentSpanId), this.logger.info(`Incoming Trace ID: ${eA.traceId}. span ID: ${eA.parentSpanId}`), void 0 !== eA.maxTurns && (eu.maxTurns = Number(eA.maxTurns));
+                let runAgent = async () => { if ("stream-json" === eA.inputFormat) {
+                    let eA = AH.StreamJsonUtils.parseMessagesFromPipeInput(el);
+                    await this.agentService.runDefault(eA, eu);
+                }
+                else
+                    await this.agentService.runDefault(el, eu); };
+                eA.print ? (this.logger.info("[Startup] AgentController: print mode, awaiting agent completion..."), await runAgent(), this.logger.info("[Startup] AgentController: agent run completed")) : setImmediate(() => runAgent());
+            } return ec; }
+        };
+        rg.STANDARD_HEADERS = new Set(["host", "user-agent", "accept", "accept-encoding", "accept-language", "connection", "content-length", "content-type", "cache-control", "pragma", "referer", "origin", "cookie", "authorization", "www-authenticate", "proxy-authenticate", "age", "date", "expires", "last-modified", "etag", "vary", "server", "transfer-encoding", "via", "warning", "allow", "content-encoding", "content-language", "content-location", "content-md5", "content-range", "location", "retry-after", "set-cookie"]), agent_controller_decorate([(0, Av.Autowired)(A_.AgentService), agent_controller_metadata("design:type", "function" == typeof (eN = void 0 !== A_.AgentService && A_.AgentService) ? eN : Object)], rg.prototype, "agentService", void 0), agent_controller_decorate([(0, Av.Autowired)(ra.SessionManager), agent_controller_metadata("design:type", "function" == typeof (eP = void 0 !== ra.SessionManager && ra.SessionManager) ? eP : Object)], rg.prototype, "sessionManager", void 0), agent_controller_decorate([(0, Av.Autowired)(A_.AgentManager), agent_controller_metadata("design:type", "function" == typeof (eL = void 0 !== A_.AgentManager && A_.AgentManager) ? eL : Object)], rg.prototype, "agentManager", void 0), agent_controller_decorate([(0, Av.Autowired)(A7.Logger), agent_controller_metadata("design:type", "function" == typeof (eF = void 0 !== A7.Logger && A7.Logger) ? eF : Object)], rg.prototype, "logger", void 0), agent_controller_decorate([(0, Av.Autowired)(A_.AgentCompletionWaiter), agent_controller_metadata("design:type", "function" == typeof (eU = void 0 !== A_.AgentCompletionWaiter && A_.AgentCompletionWaiter) ? eU : Object)], rg.prototype, "completionWaiter", void 0), agent_controller_decorate([(0, rp.Get)("models"), agent_controller_metadata("design:type", Function), agent_controller_metadata("design:paramtypes", []), agent_controller_metadata("design:returntype", "function" == typeof (ej = "u" > typeof Promise && Promise) ? ej : Object)], rg.prototype, "getModels", null), agent_controller_decorate([(0, rp.Post)(), __param(0, (0, rp.Body)()), __param(1, (0, rp.Header)()), agent_controller_metadata("design:type", Function), agent_controller_metadata("design:paramtypes", [Object, "function" == typeof (eG = "u" > typeof Record && Record) ? eG : Object]), agent_controller_metadata("design:returntype", "function" == typeof (eH = "u" > typeof Promise && Promise) ? eH : Object)], rg.prototype, "run", null), rg = eO = agent_controller_decorate([(0, rp.Controller)("internal/agent")], rg);
+        var rh = ec(28579), rf = ec(35151), rm = ec(6350), rE = ec(59233), rC = ec(99006), ry = ec(71389), rw = ec(99963), insights_data_agent_run_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, insights_data_agent_run_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rB = "__INSIGHTS_DATA_PLACEHOLDER__", r_ = { interaction_style: "insights-facet-interaction-style", project_areas: "insights-facet-project-areas", friction_analysis: "insights-facet-friction", what_works: "insights-facet-what-works", suggestions: "insights-facet-suggestions", on_the_horizon: "insights-facet-opportunities", fun_ending: "insights-facet-memorable-moment", at_a_glance: "insights-facet-at-a-glance" }, rI = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.AgentSwitch - 10; }
+            async intercept(eA) { let el = eA.session.command?.name; if ("insights" !== el && "/insights" !== el || !Array.isArray(eA.input))
+                return; let ec = !1; for (let el of eA.input)
+                if ("user" === el.role && Array.isArray(el.content)) {
+                    for (let eA of el.content)
+                        if ("input_text" === eA.type && "string" == typeof eA.text && eA.text.includes(rB)) {
+                            ec = !0;
+                            break;
+                        }
+                } if (ec) {
+                this.stateMachine.transition(eA.session, { type: ry.SessionRunEventType.AGENT_STARTED }), await new Promise(eA => setTimeout(eA, 50));
+                try {
+                    this.logger.debug("[InsightsDataInterceptor] Starting insights data collection");
+                    let el = eA.session.abortSignal, ec = await this.settingsManager.get("language");
+                    this.logger.debug(`[InsightsDataInterceptor] User language setting: ${ec || "not set"}`), this.logger.debug("[InsightsDataInterceptor] Phase 1: Incremental per-session facet analysis"), this.emitProgress(eA.session, "[1/4] Analyzing sessions...");
+                    let eu = await this.sessionFacetService.analyzeAllSessions(ec, (el, ec, eu) => { ec > 0 && this.emitProgress(eA.session, `[1/4] Analyzing sessions... ${el}/${ec} (${eu} cached)`); }, el);
+                    this.throwIfAborted(el), this.logger.debug("[InsightsDataInterceptor] Phase 2: Collecting global stats"), this.emitProgress(eA.session, `[2/4] Collecting stats (${eu.length} sessions analyzed)...`);
+                    let ed = await this.statsService.calculateStats();
+                    this.throwIfAborted(el);
+                    let ep = this.buildAggregatedData(eu, ed), eg = JSON.stringify(ep, null, 2);
+                    this.logger.debug("[InsightsDataInterceptor] Phase 3: Running 7 aggregate analysis requests"), this.emitProgress(eA.session, "[3/4] Generating insights...");
+                    let eh = await this.runAggregateRequests(eg, ec, el);
+                    this.throwIfAborted(el), this.logger.debug("[InsightsDataInterceptor] Phase 4: Running at-a-glance consolidation"), this.emitProgress(eA.session, "[4/4] Creating summary...");
+                    let ef = await this.runConsolidationRequest(eg, eh, ec, el);
+                    eh.at_a_glance = ef;
+                    let em = this.assembleInsightsData(ep, eh), eE = "";
+                    try {
+                        eE = await this.reportService.generateReport(em, ec), this.logger.debug(`[InsightsDataInterceptor] HTML report generated: ${eE}`);
+                    }
+                    catch (eA) {
+                        this.logger.warn(`[InsightsDataInterceptor] Failed to generate HTML report: ${eA.message}`);
+                    }
+                    eE && (em.report_path = eE);
+                    let eC = JSON.stringify(em, null, 2);
+                    this.replacePlaceholder(eA, eC), this.clearProgress(eA.session), this.logger.debug(`[InsightsDataInterceptor] Insights data injected (${eu.length} sessions analyzed)`);
+                }
+                catch (el) {
+                    if (this.logger.error(`[InsightsDataInterceptor] Failed to collect insights data: ${el.message}`), this.clearProgress(eA.session), "AbortError" === el.name || eA.session.abortSignal?.aborted) {
+                        eA.skipRun = !0;
+                        try {
+                            let el = AH.InputItemUtils.createAssistantMessage(AH.INTERRUPTED_BY_USER_MESSAGE, { status: "incomplete", skipRun: !0, error: { message: "Request was aborted." } }), ec = Av.ContainerUtil.get(rC.SessionManager);
+                            await ec.addHistory(eA.session, [el]);
+                        }
+                        catch (eA) {
+                            this.logger.warn(`[InsightsDataInterceptor] Failed to add interruption message: ${eA.message}`);
+                        }
+                        this.stateMachine.forceIdle(eA.session, "insights-aborted-by-user");
+                        return;
+                    }
+                    this.replacePlaceholder(eA, `{ "error": "Failed to collect usage data: ${el.message}" }`);
+                }
+            } }
+            buildAggregatedData(eA, el) { let ec = {}, eu = {}, ed = {}, ep = {}, eg = {}, eh = {}, ef = []; for (let el of eA) {
+                if (el.goal_categories)
+                    for (let [eA, eu] of Object.entries(el.goal_categories))
+                        ec[eA] = (ec[eA] || 0) + eu;
+                if (el.outcome && (eu[el.outcome] = (eu[el.outcome] || 0) + 1), el.friction_counts)
+                    for (let [eA, ec] of Object.entries(el.friction_counts))
+                        ed[eA] = (ed[eA] || 0) + ec;
+                el.session_type && (ep[el.session_type] = (ep[el.session_type] || 0) + 1), el.codebuddy_helpfulness && (eg[el.codebuddy_helpfulness] = (eg[el.codebuddy_helpfulness] || 0) + 1), el.primary_success && "none" !== el.primary_success && (eh[el.primary_success] = (eh[el.primary_success] || 0) + 1), el.brief_summary && ef.push(el.brief_summary);
+            } let em = el.toolUsage.slice(0, 10).map(eA => [eA.toolName, eA.count]); return { sessions: el.totalSessions, analyzed: eA.length, date_range: { start: el.firstSessionDate ? el.firstSessionDate.split("T")[0] : new Date().toISOString().split("T")[0], end: el.lastSessionDate ? el.lastSessionDate.split("T")[0] : new Date().toISOString().split("T")[0] }, messages: el.totalMessages, hours: Math.round(24 * el.totalDays * (el.activeDays / Math.max(el.totalDays, 1))), top_tools: em, top_goals: Object.entries(ec).sort((eA, el) => el[1] - eA[1]), outcomes: eu, friction_types: ed, session_types: ep, helpfulness: eg, primary_successes: eh, session_summaries: ef.slice(0, 50), streaks: { current: el.streaks.currentStreak, longest: el.streaks.longestStreak }, average_session_duration_minutes: Math.round(el.averageSessionDuration / 6e4), peak_hour: el.peakActivityHour, peak_day: el.peakActivityDay, model_usage: Object.entries(el.modelUsage).map(([eA, el]) => ({ name: eA, input_tokens: el.inputTokens, output_tokens: el.outputTokens })) }; }
+            async renderPrompt(eA, el) { try {
+                return await this.promptRenderer.render(eA, el);
+            }
+            catch (el) {
+                return this.logger.warn(`[InsightsDataInterceptor] Failed to render template ${eA}: ${el.message}`), "";
+            } }
+            async runAggregateRequests(eA, el, ec) { let eu = Av.ContainerUtil.get(A_.AgentService), ed = ["interaction_style", "project_areas", "friction_analysis", "what_works", "suggestions", "on_the_horizon", "fun_ending"], ep = ec ? new Promise((eA, el) => { if (ec.aborted) {
+                let eA = Error("Insights generation cancelled by user");
+                eA.name = "AbortError", el(eA);
+                return;
+            } ec.addEventListener("abort", () => { let eA = Error("Insights generation cancelled by user"); eA.name = "AbortError", el(eA); }, { once: !0 }); }) : null, wrapWithAbort = eA => ep ? Promise.race([eA, ep]) : eA, eg = await wrapWithAbort(Promise.allSettled(ed.map(async (ec) => { try {
+                this.logger.debug(`[InsightsDataInterceptor] Running aggregate: ${ec}`);
+                let ed = await this.renderPrompt(r_[ec], { data: eA, language: el });
+                if (!ed)
+                    return { name: ec, result: this.getFallback(ec) };
+                let ep = await eu.runOneTime(A_.AgentNames.INSIGHTS_ANALYZER, ed), eg = this.parseJsonResponse(ep);
+                return this.logger.debug(`[InsightsDataInterceptor] Aggregate ${ec} completed`), { name: ec, result: eg };
+            }
+            catch (eA) {
+                return this.logger.warn(`[InsightsDataInterceptor] Aggregate ${ec} failed: ${eA.message}`), { name: ec, result: this.getFallback(ec) };
+            } }))), eh = { interaction_style: null, project_areas: null, friction_analysis: null, what_works: null, suggestions: null, on_the_horizon: null, fun_ending: null, at_a_glance: null }; for (let eA of eg)
+                "fulfilled" === eA.status && (eh[eA.value.name] = eA.value.result); for (let eA of ed)
+                eh[eA] || (eh[eA] = this.getFallback(eA)); return eh; }
+            buildFacetSummary(eA) { let el = []; if (eA.project_areas?.areas)
+                for (let ec of (el.push("## Project Areas"), eA.project_areas.areas))
+                    el.push(`- ${ec.name}: ${ec.description}`); if (eA.what_works?.impressive_workflows)
+                for (let ec of (el.push("\n## Big Wins"), eA.what_works.impressive_workflows))
+                    el.push(`- ${ec.title}: ${ec.description}`); if (eA.friction_analysis?.categories)
+                for (let ec of (el.push("\n## Friction"), eA.friction_analysis.categories))
+                    el.push(`- ${ec.category}: ${ec.description}`); if (eA.suggestions?.features_to_try)
+                for (let ec of (el.push("\n## Features to Try"), eA.suggestions.features_to_try))
+                    el.push(`- ${ec.feature}: ${ec.one_liner}`); if (eA.on_the_horizon?.opportunities)
+                for (let ec of (el.push("\n## On the Horizon"), eA.on_the_horizon.opportunities))
+                    el.push(`- ${ec.title}: ${ec.whats_possible}`); return el.join("\n"); }
+            async runConsolidationRequest(eA, el, ec, eu) { try {
+                let ed = Av.ContainerUtil.get(A_.AgentService), ep = this.buildFacetSummary(el), eg = await this.renderPrompt(r_.at_a_glance, { data: eA, facetSummary: ep, language: ec });
+                if (!eg)
+                    return this.getFallback("at_a_glance");
+                this.throwIfAborted(eu), this.logger.debug("[InsightsDataInterceptor] Running consolidation (at-a-glance)");
+                let eh = eu ? new Promise((eA, el) => { if (eu.aborted) {
+                    let eA = Error("Insights generation cancelled by user");
+                    eA.name = "AbortError", el(eA);
+                    return;
+                } eu.addEventListener("abort", () => { let eA = Error("Insights generation cancelled by user"); eA.name = "AbortError", el(eA); }, { once: !0 }); }) : null, ef = ed.runOneTime(A_.AgentNames.INSIGHTS_ANALYZER, eg), em = eh ? await Promise.race([ef, eh]) : await ef;
+                return this.parseJsonResponse(em);
+            }
+            catch (eA) {
+                if ("AbortError" === eA.name)
+                    throw eA;
+                return this.logger.warn(`[InsightsDataInterceptor] Consolidation failed: ${eA.message}`), this.getFallback("at_a_glance");
+            } }
+            assembleInsightsData(eA, el) { return { project_areas: el.project_areas || { areas: [] }, activity_summary: { total_sessions: eA.sessions, total_messages: eA.messages, active_days: eA.hours, peak_hour: eA.peak_hour, peak_day: eA.peak_day, date_range: eA.date_range, average_session_duration_minutes: eA.average_session_duration_minutes }, usage_patterns: { favorite_tools: eA.top_tools, most_used_models: eA.model_usage, top_goals: eA.top_goals, outcomes: eA.outcomes, session_types: eA.session_types, friction_types: eA.friction_types, helpfulness: eA.helpfulness, primary_successes: eA.primary_successes }, streaks: eA.streaks, interaction_style: el.interaction_style || { narrative: "", key_pattern: "" }, what_works: el.what_works || { intro: "", impressive_workflows: [] }, friction_analysis: el.friction_analysis || { intro: "", categories: [] }, suggestions: el.suggestions || { claude_md_additions: [], features_to_try: [], usage_patterns: [] }, on_the_horizon: el.on_the_horizon || { intro: "", opportunities: [] }, fun_ending: el.fun_ending || { headline: "", detail: "" }, at_a_glance: el.at_a_glance || { whats_working: "", whats_hindering: "", quick_wins: "", ambitious_workflows: "" } }; }
+            parseJsonResponse(eA) { let el = eA.trim(); el.startsWith("```json") ? el = el.slice(7) : el.startsWith("```") && (el = el.slice(3)), el.endsWith("```") && (el = el.slice(0, -3)), el = el.trim(); try {
+                return JSON.parse(el);
+            }
+            catch {
+                return this.logger.warn(`[InsightsDataInterceptor] JSON parse error: ${el.substring(0, 200)}`), null;
+            } }
+            getFallback(eA) { return ({ interaction_style: { narrative: "", key_pattern: "" }, project_areas: { areas: [] }, friction_analysis: { intro: "", categories: [] }, what_works: { intro: "", impressive_workflows: [] }, suggestions: { claude_md_additions: [], features_to_try: [], usage_patterns: [] }, on_the_horizon: { intro: "", opportunities: [] }, fun_ending: { headline: "", detail: "" }, at_a_glance: { whats_working: "", whats_hindering: "", quick_wins: "", ambitious_workflows: "" } })[eA] || {}; }
+            replacePlaceholder(eA, el) { if (Array.isArray(eA.input)) {
+                for (let ec of eA.input)
+                    if ("user" === ec.role && Array.isArray(ec.content))
+                        for (let eA of ec.content)
+                            "input_text" === eA.type && "string" == typeof eA.text && eA.text.includes(rB) && (eA.text = eA.text.replace(rB, el));
+            } }
+            emitProgress(eA, el) { eA.progressSubject && !eA.abortSignal?.aborted && eA.progressSubject.next(el); }
+            clearProgress(eA) { eA.progressSubject && eA.progressSubject.next(void 0); }
+            throwIfAborted(eA) { if (eA?.aborted) {
+                let eA = Error("Insights generation cancelled by user");
+                throw eA.name = "AbortError", eA;
+            } }
+        };
+        insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(rw.StatsService), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (eK = void 0 !== rw.StatsService && rw.StatsService) ? eK : Object)], rI.prototype, "statsService", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(rw.SessionFacetService), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (e$ = void 0 !== rw.SessionFacetService && rw.SessionFacetService) ? e$ : Object)], rI.prototype, "sessionFacetService", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(AM.PromptRenderer), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (eY = void 0 !== AM.PromptRenderer && AM.PromptRenderer) ? eY : Object)], rI.prototype, "promptRenderer", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(rw.InsightsReportService), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (eJ = void 0 !== rw.InsightsReportService && rw.InsightsReportService) ? eJ : Object)], rI.prototype, "reportService", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(A7.Logger), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (ez = void 0 !== A7.Logger && A7.Logger) ? ez : Object)], rI.prototype, "logger", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(rf.SettingsManager), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (eW = void 0 !== rf.SettingsManager && rf.SettingsManager) ? eW : Object)], rI.prototype, "settingsManager", void 0), insights_data_agent_run_interceptor_decorate([(0, Av.Autowired)(ry.SessionRunStateMachine), insights_data_agent_run_interceptor_metadata("design:type", "function" == typeof (eV = void 0 !== ry.SessionRunStateMachine && ry.SessionRunStateMachine) ? eV : Object)], rI.prototype, "stateMachine", void 0), rI = insights_data_agent_run_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rI);
+        var rv = ec(68458), channel_event_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, channel_event_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rS = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SystemReminderContext - 30; }
+            async intercept(eA) { if (!this.channelManager || !this.channelEventService || !Array.isArray(eA.input))
+                return; let el = this.channelEventService.consumeEventsForSession(eA.session.id); if (0 === el.length)
+                return; this.logger.info(`[ChannelEventInterceptor] Injecting ${el.length} channel events into agent request`); let ec = this.formatChannelEvents(el); ec && (AH.MessageUtils.addSystemReminder(eA.input, ec, "last"), this.logger.debug("[ChannelEventInterceptor] Injected channel events as system-reminder")); }
+            formatChannelEvents(eA) {
+                if (0 === eA.length)
+                    return;
+                let el = eA.map(eA => this.formatChannelEvent(eA)).join("\n");
+                return `<system-reminder data-role="channel-event">
+${el}
+</system-reminder>`;
+            }
+            formatChannelEvent(eA) { let el = `source="${this.escapeXmlAttr(eA.serverName)}"`; if (eA.meta)
+                for (let [ec, eu] of Object.entries(eA.meta))
+                    /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(ec) && (el += ` ${ec}="${this.escapeXmlAttr(eu)}"`); return `  <channel ${el}>${this.escapeXmlContent(eA.content)}</channel>`; }
+            escapeXmlAttr(eA) { return eA.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+            escapeXmlContent(eA) { return eA.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+        };
+        channel_event_interceptor_decorate([(0, Av.Autowired)(A7.Logger), channel_event_interceptor_metadata("design:type", "function" == typeof (eZ = void 0 !== A7.Logger && A7.Logger) ? eZ : Object)], rS.prototype, "logger", void 0), channel_event_interceptor_decorate([(0, Av.Autowired)(rv.ChannelManager), (0, Av.Optional)(), channel_event_interceptor_metadata("design:type", "function" == typeof (eX = void 0 !== rv.ChannelManager && rv.ChannelManager) ? eX : Object)], rS.prototype, "channelManager", void 0), channel_event_interceptor_decorate([(0, Av.Autowired)(rv.ChannelEventService), (0, Av.Optional)(), channel_event_interceptor_metadata("design:type", "function" == typeof (e0 = void 0 !== rv.ChannelEventService && rv.ChannelEventService) ? e0 : Object)], rS.prototype, "channelEventService", void 0), rS = channel_event_interceptor_decorate([(0, Av.Component)()], rS);
+        var command_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, command_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rQ = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.AgentSwitch; }
+            async intercept(eA) { if (Array.isArray(eA.input)) {
+                let el = await this.agentManager.getCommands(eA.agent.name), ec = this.extractInputCommandName(eA.input);
+                if (ec && !new Set(el.filter(eA => eA.tags?.includes(Ak.CUSTOM_COMMAND_TAG)).map(eA => eA.name)).has(`/${ec}`) && await this.handleSkillSlashCommand(eA))
+                    return;
+                let eu = await this.handleCommands(eA.input, el);
+                if (eu) {
+                    if (eA.agent = await this.resolveAgent(eu) ?? eA.agent, eA.session.command = eu, eu.allowedTools?.length && (eA.session.requestOptions.allowedTools || (eA.session.requestOptions.allowedTools = []), eA.session.requestOptions.allowedTools.push(...eu.allowedTools)), eu.model) {
+                        let el = await this.agentManager.resolveConfiguredModelOrFallback(eu.model, `command:${eu.name}`);
+                        el && (eA.session.requestOptions.model = el);
+                    }
+                    eA.agent.name === A_.AgentNames.COMPACT && (eA.skipRun = !1);
+                    return;
+                }
+                await this.handleSkillSlashCommand(eA);
+            } }
+            extractInputCommandName(eA) { for (let el of eA)
+                if ("message" === el.type && "user" === el.role) {
+                    let eA = "string" == typeof el.content ? el.content : el.content?.find(eA => "input_text" === eA.type)?.text;
+                    if (eA) {
+                        let el = this.extractCommandText(eA).split(/\s+/)[0];
+                        if (el.startsWith("/"))
+                            return el.substring(1);
+                    }
+                } }
+            async resolveAgent(eA) { for (let el of eA.tags ?? [])
+                if (el.endsWith(A_.AGENT_TAG_SUFFIX)) {
+                    let eA = await this.agentManager.get(el.replace(A_.AGENT_TAG_SUFFIX, ""));
+                    if (eA)
+                        return eA;
+                } }
+            async handleCommands(eA, el) {
+                if (0 !== eA.length && 0 !== el.length) {
+                    for (let ec of el)
+                        for (let el of eA)
+                            if ("message" === el.type && "user" === el.role) {
+                                for (let eA of ("string" == typeof el.content && (el.content = [{ type: "input_text", text: el.content }]), el.content))
+                                    if ("input_text" === eA.type && this.isCommand(eA.text, ec)) {
+                                        let el = this.extractCommandText(eA.text);
+                                        el !== eA.text.trim() && (eA.text = el), eA.providerData || (eA.providerData = {}), eA.providerData.content = eA.text;
+                                        let eu = ec.prompt;
+                                        if (ec.tags?.includes(Ak.WORKFLOW_COMMAND_TAG)) {
+                                            let el = ec.name.startsWith("/") ? ec.name.substring(1) : ec.name, eu = eA.text.substring(ec.name.length).trim(), ed = this.buildCommandContextTags(ec.name, eA.text), ep = eu ? `, "args": ${JSON.stringify(eu)}` : "";
+                                            return eA.text = [ed, `Run the saved Dynamic Workflow "${el}" by calling the Workflow tool with input \`{ "name": "${el}"${ep} }\`. Do not run any other tool first; do not paraphrase or restate the user's request — just invoke Workflow.`].join("\n"), ec;
+                                        }
+                                        if (ec.tags?.includes(Ak.MCP_PROMPT_COMMAND_TAG)) {
+                                            let el = ec.name, eu = this.buildCommandContextTags(el, eA.text), ed = await this.mcpPromptRenderer.render(ec, eA.text);
+                                            eA.text = ed ? `${eu}
+${ed}` : eA.text;
+                                        }
+                                        else if (ec.tags?.includes(Ak.CUSTOM_COMMAND_TAG)) {
+                                            let el = ec.name, ed = this.buildCommandContextTags(el, eA.text), ep = await this.safeRender(ec.prompt);
+                                            eu = await this.customCommandRenderer.render({ ...ec, prompt: ep }, eA.text);
+                                            let eg = await this.safeRender(eu);
+                                            eA.text = `${ed}
+${eg || eA.text}`;
+                                        }
+                                        else {
+                                            let el = eA.text.substring(ec.name.length).trim(), ed = await this.safeRender(eu, { prompt: el });
+                                            eA.text = ed ? eA.text.replace(ec.name, ed) : eA.text;
+                                        }
+                                        return ec;
+                                    }
+                            }
+                }
+            }
+            async safeRender(eA, el) { try {
+                return await this.promptRenderer.render(eA, el);
+            }
+            catch (el) {
+                return this.logger.error(`Failed to render prompt: ${eA}`), eA;
+            } }
+            isCommand(eA, el) { let ec = this.extractCommandText(eA); return !!el.prompt && (ec === el.name || ec.startsWith(el.name + " ")); }
+            buildCommandContextTags(eA, el) { let ec = eA; eA.startsWith("/") && (ec = eA.substring(1)); let eu = el.substring(eA.length).trim(), ed = eu ? ` <command-args>${eu}</command-args>` : ""; return `<command-message>${ec}</command-message> <command-name>${eA}</command-name>${ed}`; }
+            extractCommandText(eA) { let el = eA.trim(), ec = el.match(/^<channel[^>]*>\s*([\s\S]*?)\s*<\/channel>$/); return ec ? ec[1].trim() : el; }
+            async handleSkillSlashCommand(eA) { let el = (await this.productManager.waitConfiguration()).skills || []; if (0 === el.length)
+                return !1; for (let ec of eA.input)
+                if ("message" === ec.type && "user" === ec.role) {
+                    for (let eu of ("string" == typeof ec.content && (ec.content = [{ type: "input_text", text: ec.content }]), ec.content))
+                        if ("input_text" === eu.type) {
+                            let ec = this.extractCommandText(eu.text), ed = ec.split(/\s+/)[0], ep = ed.startsWith("/") ? ed.substring(1) : ed, eg = el.filter(eA => eA.name === ep), eh = eg.length > 1 ? eg.reduce((eA, el) => { let priority = eA => "project" === eA ? 2 : +("user" === eA); return priority(el.source) > priority(eA.source) ? el : eA; }) : eg[0];
+                            if (eh) {
+                                ec !== eu.text.trim() && (eu.text = ec), eu.providerData || (eu.providerData = {}), eu.providerData.content = eu.text;
+                                let el = ec.substring(ed.length).trim(), eg = el ? ` <command-args>${el}</command-args>` : "", ef = await this.customCommandRenderer.processContent(eh.instructions, el || void 0), em = eA.session?.id;
+                                if (em && (ef = ef.replace(/\$\{CODEBUDDY_SESSION_ID\}/g, em).replace(/\$\{CLAUDE_SESSION_ID\}/g, em)), eu.text = [`<command-message>${ep}</command-message> <command-name>/${ep}</command-name>${eg}`, `Base directory for this skill: ${eh.baseDirectory}`, ef].join("\n"), eh.model) {
+                                    let el = await this.agentManager.resolveConfiguredModelOrFallback(eh.model, `skill:${eh.name}`);
+                                    el && (eA.session.requestOptions.model = el);
+                                }
+                                return !0;
+                            }
+                        }
+                } return !1; }
+        };
+        command_interceptors_decorate([(0, Av.Autowired)(A_.AgentManager), command_interceptors_metadata("design:type", "function" == typeof (e1 = void 0 !== A_.AgentManager && A_.AgentManager) ? e1 : Object)], rQ.prototype, "agentManager", void 0), command_interceptors_decorate([(0, Av.Autowired)(AQ.ProductManager), command_interceptors_metadata("design:type", "function" == typeof (e2 = void 0 !== AQ.ProductManager && AQ.ProductManager) ? e2 : Object)], rQ.prototype, "productManager", void 0), command_interceptors_decorate([(0, Av.Autowired)(AM.PromptRenderer), command_interceptors_metadata("design:type", "function" == typeof (e3 = void 0 !== AM.PromptRenderer && AM.PromptRenderer) ? e3 : Object)], rQ.prototype, "promptRenderer", void 0), command_interceptors_decorate([(0, Av.Autowired)(Ak.CustomCommandRenderer), command_interceptors_metadata("design:type", "function" == typeof (e4 = void 0 !== Ak.CustomCommandRenderer && Ak.CustomCommandRenderer) ? e4 : Object)], rQ.prototype, "customCommandRenderer", void 0), command_interceptors_decorate([(0, Av.Autowired)(Ak.McpPromptRenderer), command_interceptors_metadata("design:type", "function" == typeof (e8 = void 0 !== Ak.McpPromptRenderer && Ak.McpPromptRenderer) ? e8 : Object)], rQ.prototype, "mcpPromptRenderer", void 0), command_interceptors_decorate([(0, Av.Autowired)(A7.Logger), command_interceptors_metadata("design:type", "function" == typeof (e5 = void 0 !== A7.Logger && A7.Logger) ? e5 : Object)], rQ.prototype, "logger", void 0), rQ = command_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rQ);
+        var rD = ec(24015), deep_research_pending_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, deep_research_pending_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rT = "deep-research-pending-reminder", rR = '<system-reminder data-role="deep-research-pending">\nReminder: the user invoked `/deep-research` and you have not yet called the Workflow tool. After at most one short clarifying round, you MUST call the `Workflow` tool with `name="deep-research"` and `args="<scoped question>"` (a plain string, NOT an object — do NOT pass `{question: "..."}`, the schema rejects objects). Do not do the research yourself.\n</system-reminder>', rk = 'data-role="deep-research-trigger"', rM = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SystemReminderContext - 35; }
+            async intercept(eA) { if (!Array.isArray(eA.input) || 0 === eA.input.length || !this.isPending(eA.session.history ?? []))
+                return; let el = await this.loadReminder(); AH.MessageUtils.addSystemReminder(eA.input, el, "last"); }
+            isPending(eA) { let el = !1; for (let ec of eA) {
+                if (this.isWorkflowToolCall(ec))
+                    return !1;
+                !el && this.containsDeepResearchTrigger(ec) && (el = !0);
+            } return el; }
+            isWorkflowToolCall(eA) { return "function_call" === eA.type && eA.name === rm.ToolNames.WORKFLOW; }
+            containsDeepResearchTrigger(eA) { let el = eA; if ("message" !== el.type || "user" !== el.role)
+                return !1; let ec = el.content; if ("string" == typeof ec)
+                return ec.includes(rk); if (Array.isArray(ec))
+                for (let eA of ec) {
+                    let el = eA?.text;
+                    if ("string" == typeof el && el.includes(rk))
+                        return !0;
+                } return !1; }
+            async loadReminder() { try {
+                let eA = await this.promptManager?.get?.(rT);
+                if (eA?.template)
+                    return eA.template;
+            }
+            catch { } return rR; }
+        };
+        deep_research_pending_interceptor_decorate([(0, Av.Autowired)(rD.PromptManager), deep_research_pending_interceptor_metadata("design:type", "function" == typeof (e6 = void 0 !== rD.PromptManager && rD.PromptManager) ? e6 : Object)], rM.prototype, "promptManager", void 0), rM = deep_research_pending_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rM);
+        var env_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, env_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rx = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.Env; }
+            async intercept(eA) { let el = await this.settingsManager.get("env"); if (el)
+                for (let eA of Object.keys(el))
+                    process.env[eA] = el[eA]; }
+        };
+        env_interceptor_decorate([(0, Av.Autowired)(rf.SettingsManager), env_interceptor_metadata("design:type", "function" == typeof (e9 = void 0 !== rf.SettingsManager && rf.SettingsManager) ? e9 : Object)], rx.prototype, "settingsManager", void 0), rx = env_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rx);
+        var rO = ec(15275), rN = ec(25428), rP = ec(95449), file_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, file_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rL = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ReferencePathProcessor, this.MAX_FILE_SIZE = 1048576, this.MAX_TEXT_FILE_SIZE = 262144; }
+            async intercept(eA) { if (Array.isArray(eA.input) && !this.referenceService.isFileReferencesPathOnly())
+                for (let el of eA.input)
+                    "message" === el.type && "user" === el.role && await this.processUserMessageFiles(el, eA.session); }
+            async getFileSize(eA) { try {
+                return (await A$.promises.stat(eA)).size;
+            }
+            catch {
+                return;
+            } }
+            sendBashNotification(eA, el) { try {
+                let ec = AH.PathUtils.getWorkDir(), eu = Aq.relative(ec, el) || ".", ed = (0, Av.generateUUUID)(), ep = { id: (0, Av.generateUUUID)(), type: "function_call_result", callId: ed, status: "completed", name: rm.ToolNames.BASH, output: { type: "text", text: `Listed directory ${eu}` }, providerData: { toolResult: { title: `Listed directory ${eu}`, content: "" }, isReferenceRead: !0 } };
+                this.sendNotificationToUI(ep, eA);
+            }
+            catch (eA) { } }
+            sendReadNotification(eA, el, ec, eu) { try {
+                let ed = Aq.basename(el), ep = AH.FileUtils.formatFileSize(ec), eg = eu ?? `Read ${ed}${ep ? ` (${ep})` : ""}`, eh = (0, Av.generateUUUID)(), ef = { id: (0, Av.generateUUUID)(), type: "function_call_result", callId: eh, status: "completed", name: rm.ToolNames.READ, output: { type: "text", text: eg }, providerData: { toolResult: { title: eg, content: "" }, isReferenceRead: !0 } };
+                this.sendNotificationToUI(ef, eA);
+            }
+            catch (eA) { } }
+            sendNotificationToUI(eA, el) { el.inputSubject && !el.abortSignal.aborted && setTimeout(() => { el.inputSubject.next(eA); }, 100); }
+            async processUserMessageFiles(eA, el) { if ("string" == typeof eA.content && (eA.content = [{ type: "input_text", text: eA.content }]), !Array.isArray(eA.content))
+                return; let ec = []; for (let eu of eA.content) {
+                if ("input_text" === eu.type) {
+                    let eA = await this.processTextForFilePaths(eu.text, el);
+                    eA && ec.push(...eA);
+                }
+                ec.push(eu);
+            } eA.content = ec; }
+            async processTextForFilePaths(eA, el) { let ec, eu = [], ed = /@([^\s]+)/g; for (; null !== (ec = ed.exec(eA));) {
+                let eA = ec[1], ed = await this.resolvePath(eA);
+                if (ed) {
+                    if (await this.isDirectory(ed)) {
+                        let eA = await this.createDirectoryContent(ed);
+                        eA.length > 0 && (this.sendBashNotification(el, ed), eu.push(...eA));
+                        continue;
+                    }
+                    let eA = await this.getFileSize(ed);
+                    if (void 0 !== eA && eA > this.MAX_FILE_SIZE)
+                        continue;
+                    if (await this.isImageFile(ed, el)) {
+                        let ec = await AH.ModelUtils.getCurrentModel(el);
+                        if (ec?.supportsImages === !1)
+                            continue;
+                        let ep = await this.createImageContent(ed);
+                        if (ep) {
+                            el.conditionalRules.pendingTriggers.add(ed), eu.push({ type: "input_text", text: `<system-reminder data-role="tool-hint"> Called the Read tool with the following input: {"file_path":"${ed}"} </system-reminder>` }), eu.push(ep);
+                            let ec = "input_text" === ep.type ? `Read ${Aq.basename(ed)}${void 0 !== eA ? ` (${AH.FileUtils.formatFileSize(eA)})` : ""} (image omitted after compression)` : void 0;
+                            this.sendReadNotification(el, ed, eA, ec);
+                        }
+                    }
+                    else if (await this.isTextFile(ed)) {
+                        if (void 0 !== eA && eA > this.MAX_TEXT_FILE_SIZE)
+                            continue;
+                        let ec = await this.createTextContent(ed);
+                        ec && (el.conditionalRules.pendingTriggers.add(ed), eu.push({ type: "input_text", text: `<system-reminder data-role="tool-hint"> Called the Read tool with the following input: {"file_path":"${ed}"} </system-reminder>` }), eu.push(ec), this.sendReadNotification(el, ed, eA));
+                    }
+                }
+            } return eu; }
+            async resolvePath(eA) { try {
+                let el = AH.PathUtils.resolveFilePathToWorkDir(eA);
+                return await A$.promises.access(el), el;
+            }
+            catch {
+                return;
+            } }
+            async isDirectory(eA) { try {
+                return (await A$.promises.stat(eA)).isDirectory();
+            }
+            catch {
+                return !1;
+            } }
+            async isImageFile(eA, el) { try {
+                let ec = await AH.ModelUtils.getCurrentModel(el), eu = ec?.id;
+                if (!AH.ImageUtils.isImageSupportedByModel(eA, eu))
+                    return !1;
+                return await AH.FileUtils.isBinaryFile(eA);
+            }
+            catch {
+                return !1;
+            } }
+            async isTextFile(eA) { try {
+                let el = Aq.extname(eA).toLowerCase();
+                if ([".txt", ".md", ".json", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".log", ".csv", ".tsv", ".sql", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".rb", ".go", ".rs", ".swift", ".kt", ".scala", ".clj", ".hs", ".elm", ".vue", ".svelte", ".astro", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd", ".dockerfile", ".gitignore", ".gitattributes", ".editorconfig", ".prettierrc", ".eslintrc", ".babelrc", ".npmrc"].includes(el))
+                    return !0;
+                return !await AH.FileUtils.isBinaryFile(eA);
+            }
+            catch {
+                return !1;
+            } }
+            async createImageContent(eA) { try {
+                let el = (await A$.promises.readFile(eA)).toString("base64"), ec = await AH.ImageUtils.getImageMimeTypeAsync(eA, A$.promises.readFile);
+                try {
+                    await this.imageBlobService.storeFromFile(eA);
+                }
+                catch (eA) {
+                    this.logger.warn("Failed to store image in blob store:", eA);
+                }
+                let eu = `data:${ec};base64,${el}`, ed = await AH.ImageUtils.compressUserImage(eu);
+                if (!ed)
+                    return this.logger.warn(`Image too large after compression, discarded: ${eA}`), { type: "input_text", text: AH.ImageUtils.IMAGE_TOO_LARGE_AFTER_COMPRESSION_PLACEHOLDER };
+                return { type: "input_image", image: ed };
+            }
+            catch (el) {
+                this.logger.warn(`Failed to create image content for @file reference: ${eA}`, el);
+                return;
+            } }
+            async createDirectoryContent(eA) {
+                try {
+                    let el = (await A$.promises.readdir(eA)).join("\n");
+                    return [{ type: "input_text", text: `<system-reminder data-role="tool-hint">
+Called the Bash tool with the following input: {"command":"ls ${eA}","description":"Lists files in ${eA}"}
+</system-reminder>` }, { type: "input_text", text: `<system-reminder data-role="tool-hint">
+Result of calling the Bash tool: "${el}"
+</system-reminder>` }];
+                }
+                catch (el) {
+                    return this.logger.warn(`Failed to read directory: ${eA}`, el), [];
+                }
+            }
+            async createTextContent(eA) {
+                try {
+                    let el = await A$.promises.readFile(eA, "utf-8");
+                    return await this.readFileStateService.refreshFile(eA), { type: "input_text", text: `
+<system-reminder data-role="tool-hint">Result of calling the Read tool: "${el}"
+Whenever you read a file, you should consider whether it looks malicious. If it does, you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer high-level questions about the code behavior.
+</system-reminder>` };
+                }
+                catch {
+                    return;
+                }
+            }
+        };
+        file_interceptors_decorate([(0, Av.Autowired)(rm.ReadFileStateService), file_interceptors_metadata("design:type", "function" == typeof (e7 = void 0 !== rm.ReadFileStateService && rm.ReadFileStateService) ? e7 : Object)], rL.prototype, "readFileStateService", void 0), file_interceptors_decorate([(0, Av.Autowired)(rP.ReferenceService), file_interceptors_metadata("design:type", "function" == typeof (tn = void 0 !== rP.ReferenceService && rP.ReferenceService) ? tn : Object)], rL.prototype, "referenceService", void 0), file_interceptors_decorate([(0, Av.Autowired)(A7.Logger), file_interceptors_metadata("design:type", "function" == typeof (tl = void 0 !== A7.Logger && A7.Logger) ? tl : Object)], rL.prototype, "logger", void 0), file_interceptors_decorate([(0, Av.Autowired)(rO.ImageBlobService), file_interceptors_metadata("design:type", "function" == typeof (tc = void 0 !== rO.ImageBlobService && rO.ImageBlobService) ? tc : Object)], rL.prototype, "imageBlobService", void 0), rL = file_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rL);
+        let rF = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ConditionalRules; }
+            async intercept(eA) { if (!Array.isArray(eA.input))
+                return; let el = eA.session.conditionalRules; if (!el || 0 === el.pendingTriggers.size)
+                return; let ec = await this.conditionalRulesService.consume(el); ec.content && AH.MessageUtils.addSystemReminder(eA.input, ec.content, "last"); }
+        };
+        file_interceptors_decorate([(0, Av.Autowired)(rN.ConditionalRulesService), file_interceptors_metadata("design:type", "function" == typeof (tu = void 0 !== rN.ConditionalRulesService && rN.ConditionalRulesService) ? tu : Object)], rF.prototype, "conditionalRulesService", void 0), rF = file_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rF);
+        var history_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, history_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rU = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ProviderData; }
+            async intercept(eA) { if (Array.isArray(eA.input))
+                for (let el of eA.input)
+                    el.providerData || (el.providerData = {}), el.providerData.agent = eA.agent.name; }
+        };
+        rU = history_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rU);
+        let rj = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.History; }
+            async intercept(eA) { if (Array.isArray(eA.input) && !eA.skipAddHistory) {
+                eA.session?.meta?.[ra.META_TOKEN_CALCULATION_REQUEST] || await this.sessionManager.addHistory(eA.session, eA.input);
+                let { lastMessageId: el, hasCompactedHistory: ec } = eA.session;
+                if (eA.input = AH.HistoryUtils.getActiveAgentOnlyHistory(eA.session.history, { lastMessageId: el, hasCompactedHistory: ec }), eA.input = AH.HistoryUtils.getSessionSeparatorHistory(eA.input), eA.input = AH.HistoryUtils.getCompactHistory(eA.input), eA.input = AH.HistoryUtils.filterBeforeCompactedMessage(eA.input), eA.input = AH.HistoryUtils.filterTaskHistory(eA.agent, eA.input), eA.input = AH.HistoryUtils.filterTruncatedHistory(eA.input), eA.input = AH.HistoryUtils.filterApiErrorMessages(eA.input), eA.input = AH.HistoryUtils.fillFunctionCallResultHistory(eA.input), eA.agent.name === A_.AgentNames.COMPACT)
+                    AH.MessageUtils.performMicrocompact(eA.input, { keepRecent: 5 }), AH.MessageUtils.stripImagesForCompaction(eA.input), eA.input = AH.MessageUtils.createFilteredCopyForCompaction(eA.input), this.logger.setContext("HistoryAgentRunInterceptor"), this.logger.debug("[HistoryAgentRunInterceptor] Filtered system-reminder from history for compact agent");
+                else {
+                    this.logger.setContext("HistoryAgentRunInterceptor"), this.logger.debug(`[HistoryAgentRunInterceptor] Processing for ${eA.agent.name} agent, input length before: ${eA.input.length}`);
+                    let el = this.sessionStore.getSessionFilePath(eA.session.storeId ?? eA.session.id);
+                    if (eA.input = AH.HistoryUtils.replaceCompactWithSummary(eA.input, el), this.logger.debug(`[HistoryAgentRunInterceptor] Input length after replaceCompactWithSummary: ${eA.input.length}`), eA.input.some(eA => eA?.providerData?.isCompactInternal === !0 && "message" === eA.type && "user" === eA.role)) {
+                        let el = AH.HistoryUtils.extractUserContextFromHistory(eA.session.history);
+                        el && !AH.HistoryUtils.containsUserContext(eA.input, el) && (AH.MessageUtils.addSystemReminder(eA.input, el, "first"), this.logger.info("[HistoryAgentRunInterceptor] Injected user-context into compact continue message"));
+                    }
+                }
+            } }
+        };
+        history_interceptors_decorate([(0, Av.Autowired)(ra.SessionManager), history_interceptors_metadata("design:type", "function" == typeof (td = void 0 !== ra.SessionManager && ra.SessionManager) ? td : Object)], rj.prototype, "sessionManager", void 0), history_interceptors_decorate([(0, Av.Autowired)(ra.SessionStore), history_interceptors_metadata("design:type", "function" == typeof (tp = void 0 !== ra.SessionStore && ra.SessionStore) ? tp : Object)], rj.prototype, "sessionStore", void 0), history_interceptors_decorate([(0, Av.Autowired)(A7.Logger), history_interceptors_metadata("design:type", "function" == typeof (tg = void 0 !== A7.Logger && A7.Logger) ? tg : Object)], rj.prototype, "logger", void 0), rj = history_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rj);
+        let rG = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.MessageReorganize; }
+            async intercept(eA) { Array.isArray(eA.input) && (eA.input = AH.MessageUtils.mergeConsecutiveUserMessages(eA.input)); }
+        };
+        rG = history_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rG);
+        var rH = ec(84024), image_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, image_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rK = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ImageRehydration; }
+            async intercept(eA) { if (!Array.isArray(eA.input))
+                return; if (this.imageBlobService.resetImageTracking(), !eA.input.some(eA => this.itemContainsBlobRef(eA)))
+                return void this.logger.debug("[ImageRehydration] No blob refs found in input, skipping"); let el = await this.settingsManager.get("imageHistoryRetainRounds") ?? 2; for (let el of eA.input) {
+                let eA = el;
+                ("function_call_result" === eA.type || "function_call_output" === eA.type) && this.trackBlobRefsInItem(eA);
+            } try {
+                let ec = eA.input.length;
+                eA.input = await this.imageBlobService.processHistoryForApi(eA.input, el);
+                let eu = 0, ed = 0;
+                for (let el of eA.input) {
+                    let eA = el;
+                    if ("function_call_result" === eA.type || "function_call_output" === eA.type) {
+                        let el = eA.providerData?.toolResult?.content;
+                        if (Array.isArray(el))
+                            for (let eA of el)
+                                "image_url" === eA.type && eu++, ("text" === eA.type || "input_text" === eA.type) && "string" == typeof eA.text && eA.text.startsWith("[Image from") && ed++;
+                    }
+                }
+                this.logger.debug("[ImageRehydration] Processed " + ec + " items, retainRounds=" + el + ", rehydrated=" + eu + ", placeholders=" + ed);
+            }
+            catch (eA) {
+                this.logger.warn("[ImageRehydration] Failed to process image history:", eA);
+            } }
+            trackBlobRefsInItem(eA) { let el = eA.providerData?.toolResult?.content; if (Array.isArray(el))
+                for (let eA of el)
+                    eA?.type === "image_blob_ref" && eA.blob_id && this.imageBlobService.trackImageDelivered(eA.blob_id, eA.source); let ec = "string" == typeof eA.output ? eA.output : "string" == typeof eA.output?.text ? eA.output.text : ""; if (ec.includes("image_blob_ref")) {
+                let eA, el = /\{[^{}]*"type"\s*:\s*"image_blob_ref"[^{}]*\}/g;
+                for (; null !== (eA = el.exec(ec));)
+                    try {
+                        let el = JSON.parse(eA[0]);
+                        el.blob_id && this.imageBlobService.trackImageDelivered(el.blob_id, el.source);
+                    }
+                    catch {
+                        let el = eA[0].match(/"blob_id"\s*:\s*"([a-f0-9]{64})"/);
+                        el && this.imageBlobService.trackImageDelivered(el[1]);
+                    }
+            } }
+            itemContainsBlobRef(eA) { if ("message" === eA.type && "user" === eA.role && Array.isArray(eA.content)) {
+                for (let el of eA.content)
+                    if (this.imageBlobService.isImageBlobRef(el))
+                        return !0;
+            } if ("function_call_output" === eA.type || "function_call_result" === eA.type) {
+                if (Array.isArray(eA.providerData?.toolResult?.content)) {
+                    for (let el of eA.providerData.toolResult.content)
+                        if (this.imageBlobService.isImageBlobRef(el))
+                            return !0;
+                }
+                if (("string" == typeof eA.output ? eA.output : "string" == typeof eA.output?.text ? eA.output.text : "").includes('"image_blob_ref"'))
+                    return !0;
+            } return !1; }
+        };
+        image_interceptors_decorate([(0, Av.Autowired)(rO.ImageBlobService), image_interceptors_metadata("design:type", "function" == typeof (tf = void 0 !== rO.ImageBlobService && rO.ImageBlobService) ? tf : Object)], rK.prototype, "imageBlobService", void 0), image_interceptors_decorate([(0, Av.Autowired)(rf.SettingsManager), image_interceptors_metadata("design:type", "function" == typeof (tm = void 0 !== rf.SettingsManager && rf.SettingsManager) ? tm : Object)], rK.prototype, "settingsManager", void 0), image_interceptors_decorate([(0, Av.Autowired)(A7.Logger), image_interceptors_metadata("design:type", "function" == typeof (tE = void 0 !== A7.Logger && A7.Logger) ? tE : Object)], rK.prototype, "logger", void 0), rK = image_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rK);
+        let r$ = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ImageCompression; }
+            init() { this.logger.setContext("ImageCompressionInterceptor"); }
+            async intercept(eA) { if (Array.isArray(eA.input))
+                try {
+                    for (let el of eA.input)
+                        "message" === el.type && "user" === el.role && await this.compressImagesInMessage(el);
+                }
+                catch (eA) {
+                    this.logger.warn(`Unexpected error during image compression, skipping: ${eA}`);
+                } }
+            async compressImagesInMessage(eA) { let el = eA.content; if (Array.isArray(el))
+                for (let eA = 0; eA < el.length; eA++) {
+                    let ec = el[eA];
+                    if ("input_image" === ec.type && "string" == typeof ec.image && ec.image.startsWith("data:")) {
+                        this.logger.info(`Found input_image (${ec.image.length} chars data URI), compressing...`);
+                        let eu = await this.compressInputImageBlock(ec);
+                        eu && (el[eA] = eu);
+                    }
+                } }
+            async compressInputImageBlock(eA) { try {
+                let el = eA.image, ec = rH.ImageUtils.getImageCompressionMaxDimension(), eu = await rH.ImageUtils.compressImage(el, ec);
+                if (eu === el)
+                    return void this.logger.info(`Image already within dimension limit (maxDimension=${ec}), no compression needed`);
+                return this.logger.info(`Compression successful (maxDimension=${ec}): ${el.length} -> ${eu.length} chars (saved ${((1 - eu.length / el.length) * 100).toFixed(1)}%)`), { ...eA, image: eu };
+            }
+            catch (eA) {
+                this.logger.warn(`Failed to compress image, using original: ${eA}`);
+                return;
+            } }
+        };
+        image_interceptors_decorate([(0, Av.Autowired)(A7.Logger), image_interceptors_metadata("design:type", "function" == typeof (tC = void 0 !== A7.Logger && A7.Logger) ? tC : Object)], r$.prototype, "logger", void 0), image_interceptors_decorate([(0, Av.PostConstruct)(), image_interceptors_metadata("design:type", Function), image_interceptors_metadata("design:paramtypes", []), image_interceptors_metadata("design:returntype", void 0)], r$.prototype, "init", null), r$ = image_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], r$);
+        var input_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, input_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rY = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SkipRun; }
+            async intercept(eA) { !eA.skipRun && Array.isArray(eA.input) && eA.input.length > 0 && (eA.input.some(eA => AH.InputItemUtils.isSkipRunItem(eA)) ? eA.skipRun = !0 : this.stateMachine.transition(eA.session, { type: ra.SessionRunEventType.RUN_ACCEPTED })); }
+        };
+        input_interceptors_decorate([(0, Av.Autowired)(ra.SessionRunStateMachine), input_interceptors_metadata("design:type", "function" == typeof (ty = void 0 !== ra.SessionRunStateMachine && ra.SessionRunStateMachine) ? ty : Object)], rY.prototype, "stateMachine", void 0), rY = input_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rY);
+        let rJ = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.UserInput; }
+            async intercept(eA) { "string" == typeof eA.input && (eA.input = [(0, AB.user)(eA.input)]); }
+        };
+        rJ = input_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rJ);
+        let rq = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.MessageQueue; }
+            async intercept(eA) { let { session: el, input: ec } = eA; if (Array.isArray(ec) && ec.some(eA => "message" === eA.type && "user" === eA.role && "string" == typeof eA.content && eA.content.trim() === `/${A_.AgentNames.COMPACT}`) || eA.bypassMessageQueue || Array.isArray(ec) && ec.some(eA => AH.InputItemUtils.isSkipRunItem(eA)))
+                return; let eu = this.stateMachine.isBusyForQueue(el); if (eu && Array.isArray(ec)) {
+                for (let eA of JSON.parse(JSON.stringify(ec)))
+                    this.messageQueueManager.enqueueMessage(el, eA);
+                eA.skipRun = !0, eA.skipAddHistory = !0;
+            }
+            else if (!eu && Array.isArray(ec) && 0 === ec.length) {
+                let ec, eu;
+                if (AH.QueueDispatchUtils.isDeferredDispatchEnabledSync()) {
+                    eA.skipRun = !0;
+                    return;
+                }
+                let ed = [...el.queue];
+                if (0 === ed.length) {
+                    this.messageQueueManager.clearQueue(el), eA.skipRun = !0;
+                    return;
+                }
+                let ep = ed.filter(eA => !AH.InputItemUtils.isQueueHoldItem(eA)), eg = ed.filter(eA => AH.InputItemUtils.isQueueHoldItem(eA));
+                for (let eA of (ep.length > 0 ? (ec = ep, eu = eg) : (ec = eg.slice(0, 1), eu = eg.slice(1)), this.messageQueueManager.clearQueue(el), eu))
+                    this.messageQueueManager.enqueueMessage(el, eA);
+                eA.input = AH.MessageUtils.mergeConsecutiveUserMessages(ec);
+            }
+            else if (!eu && Array.isArray(ec) && ec.length > 0) {
+                if (AH.QueueDispatchUtils.isDeferredDispatchEnabledSync())
+                    return;
+                if (!ec.some(eA => AH.InputItemUtils.isSkipRunItem(eA))) {
+                    let eu = [...el.queue];
+                    if (eu.length > 0) {
+                        let ed = eu.filter(eA => !AH.InputItemUtils.isQueueHoldItem(eA)), ep = eu.filter(eA => AH.InputItemUtils.isQueueHoldItem(eA));
+                        for (let eA of (this.messageQueueManager.clearQueue(el), ep))
+                            this.messageQueueManager.enqueueMessage(el, eA);
+                        ed.length > 0 && (this.logger.info(`[MessageQueue] Draining ${ed.length} queued message(s) alongside new user input`), eA.input = AH.MessageUtils.mergeConsecutiveUserMessages([...ed, ...ec]));
+                    }
+                }
+            } }
+        };
+        input_interceptors_decorate([(0, Av.Autowired)(ra.MessageQueueManager), input_interceptors_metadata("design:type", "function" == typeof (tw = void 0 !== ra.MessageQueueManager && ra.MessageQueueManager) ? tw : Object)], rq.prototype, "messageQueueManager", void 0), input_interceptors_decorate([(0, Av.Autowired)(A7.Logger), input_interceptors_metadata("design:type", "function" == typeof (tB = void 0 !== A7.Logger && A7.Logger) ? tB : Object)], rq.prototype, "logger", void 0), input_interceptors_decorate([(0, Av.Autowired)(ra.SessionRunStateMachine), input_interceptors_metadata("design:type", "function" == typeof (t_ = void 0 !== ra.SessionRunStateMachine && ra.SessionRunStateMachine) ? t_ : Object)], rq.prototype, "stateMachine", void 0), rq = input_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rq);
+        let rz = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.UserQueryWrapper; }
+            async intercept(eA) { if (Array.isArray(eA.input) && !eA.skipRun)
+                for (let el of eA.input)
+                    AH.InputItemUtils.isUserMessageItem(el) && this.wrapUserMessageContent(el); }
+            wrapUserMessageContent(eA) { if ("string" == typeof eA.content && (eA.content = [{ type: "input_text", text: eA.content }]), !Array.isArray(eA.content))
+                return; let el = [], ec = []; for (let eu = 0; eu < eA.content.length; eu++) {
+                let ed = eA.content[eu];
+                if ("input_text" !== ed.type || "string" != typeof ed.text)
+                    continue;
+                let ep = ed.text;
+                !ep?.trim() || AH.MessageUtils.isSystemInjectedContent(ep) || AH.MessageUtils.isUserQueryContent(ep) || (el.push(eu), ec.push(ep));
+            } if (0 === el.length)
+                return; let eu = ec.join(" "), ed = el[0]; eA.content[ed].text = AH.MessageUtils.wrapUserQuery(eu); for (let ec = el.length - 1; ec >= 1; ec--)
+                eA.content.splice(el[ec], 1); }
+        };
+        rz = input_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rz);
+        var model_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, model_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let rW = ["minimal", "low", "medium", "high", "xhigh", "max"];
+        function normalizeReasoningEffort(eA) { return "string" == typeof eA && rW.includes(eA) ? eA : void 0; }
+        function toSdkEffort(eA) { return "max" === eA ? "xhigh" : eA; }
+        let rV = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.State; }
+            async intercept(eA) { let { session: el, input: ec, agent: eu } = eA; if (Array.isArray(ec)) {
+                let ed = eA.session.state;
+                if (ed) {
+                    let ep = el.conversationRequestId ? ed.conversationRequestId ?? el.conversationRequestId : void 0;
+                    ep && (ed.conversationRequestId = ep), ed._context.context = el;
+                    let eg = new AB.RunState(ed._context, ec, eu, A_.DEFAULT_MAX_TURNS);
+                    ep && (eg.conversationRequestId = ep), eA.input = eg;
+                }
+            } }
+        };
+        model_interceptors_decorate([(0, Av.Autowired)(ra.SessionManager), model_interceptors_metadata("design:type", "function" == typeof (tI = void 0 !== ra.SessionManager && ra.SessionManager) ? tI : Object)], rV.prototype, "sessionManager", void 0), rV = model_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rV);
+        let rZ = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.Model; }
+            async intercept(eA) { this.logger.setContext("ModelConfigAgentRunInterceptor"), await this.configureModelConfig(eA.agent, eA.session), this.logger.info(`[ModelConfig] sessionId=${eA.session.id}, resolved model=${eA.agent.model} for agent=${eA.agent.name}, requestOptions.model=${eA.session.requestOptions?.model ?? "<none>"}, options.model=${eA.session.options?.model ?? "<none>"}`); }
+            async getModelByCliOptions(eA, el) { let ec = el.options?.model; if (!ec)
+                return; let eu = await this.agentManager.resolveModel(ec); return eu || (eu = { ...eu = await this.agentManager.getModel(eA.name), id: ec, name: ec }), eu; }
+            async getModelByRequestOptions(eA, el) { let ec = el.requestOptions?.model, eu = ec ? await this.agentManager.resolveModel(ec) : void 0; return !eu && (eu = await this.agentManager.getModel(eA.name), ec && (this.logger.warn(`[ModelConfig] resolveModel('${ec}') failed; keeping user-requested id, using agent '${eA.name}' default as base config`), eu = { ...eu, id: ec, name: ec })), eu; }
+            async configureModelConfig(eA, el) { let ec = el.requestOptions?.model ? await this.getModelByRequestOptions(eA, el) : await this.getModelByCliOptions(eA, el); ec || (ec = await this.getModelByRequestOptions(eA, el)), eA.model = ec.id, eA.modelSettings || (eA.modelSettings = {}); let eu = AH.ModelUtils.getMaxOutputTokens(ec.id, ec.maxOutputTokens); for (let ed of (void 0 !== eu && (eA.modelSettings.maxTokens = eu, this.logger.debug(`[ModelConfig] maxTokens=${eA.modelSettings.maxTokens}, model=${ec.id}`)), eA.modelSettings.temperature = ec.temperature ?? A_.DEFAULT_TEMPERATURE, eA.handoffs))
+                ed instanceof AB.Agent ? await this.configureModelConfig(ed, el) : await this.configureModelConfig(ed.agent, el); await this.configureThinkingSettings(eA, ec, el); }
+            async configureThinkingSettings(eA, el, ec) { if (!el.supportsReasoning) {
+                eA.modelSettings?.reasoning && delete eA.modelSettings.reasoning;
+                return;
+            } try {
+                let eu = this.sessionManager.getOverrideThinking(ec.id), ed = await this.settingsManager.get("alwaysThinkingEnabled"), ep = await this.settingsManager.get("reasoningEffort"), eg = process.env.MAX_THINKING_TOKENS, eh = eg ? parseInt(eg, 10) : void 0, ef = eh && !isNaN(eh) && eh > 0 ? eh : void 0, em = eu?.thinkingEnabled, eE = eu?.reasoningEffort;
+                if (!1 === em || void 0 === em && !1 === ed) {
+                    eA.modelSettings?.reasoning && delete eA.modelSettings.reasoning, this.logger.info("[ModelConfig] Thinking explicitly disabled (session/global override)");
+                    return;
+                }
+                let eC = (em ?? ed ?? !1) || !!ef;
+                eC && (eA.modelSettings || (eA.modelSettings = {}), eA.modelSettings.reasoning || (eA.modelSettings.reasoning = {}), eA.modelSettings.text || (eA.modelSettings.text = {}), eA.modelSettings.reasoning.summary = "auto", eA.modelSettings.text.verbosity = "high", ef && (eA.modelSettings.providerData || (eA.modelSettings.providerData = {}), eA.modelSettings.providerData.max_thinking_tokens = ef), this.logger.info(`Extended thinking enabled${ef ? ` (budget: ${ef})` : ""}`));
+                let ey = normalizeReasoningEffort(eE) ?? normalizeReasoningEffort(ep) ?? normalizeReasoningEffort(el.reasoning?.defaultEffort) ?? normalizeReasoningEffort(el.reasoning?.effort);
+                ey ? (eA.modelSettings.reasoning || (eA.modelSettings.reasoning = {}), eA.modelSettings.reasoning.effort = toSdkEffort(ey), eA.modelSettings.reasoning.summary || (eA.modelSettings.reasoning.summary = el.reasoning?.summary ?? "auto")) : el.reasoning?.summary && (eA.modelSettings.reasoning || (eA.modelSettings.reasoning = {}), eA.modelSettings.reasoning.summary = el.reasoning.summary), eC && !eA.modelSettings.reasoning?.effort && (eA.modelSettings.reasoning || (eA.modelSettings.reasoning = {}), eA.modelSettings.reasoning.effort = "high", this.logger.warn(`[ModelConfig] reasoning effort fallback to 'high', modelId=${el.id}; please add defaultEffort in product config or reasoning-supplements.`));
+            }
+            catch (eA) {
+                this.logger.debug("Failed to configure thinking settings:", eA);
+            } }
+        };
+        model_interceptors_decorate([(0, Av.Autowired)(AQ.ProductManager), model_interceptors_metadata("design:type", "function" == typeof (tv = void 0 !== AQ.ProductManager && AQ.ProductManager) ? tv : Object)], rZ.prototype, "productManager", void 0), model_interceptors_decorate([(0, Av.Autowired)(A_.AgentManager), model_interceptors_metadata("design:type", "function" == typeof (tS = void 0 !== A_.AgentManager && A_.AgentManager) ? tS : Object)], rZ.prototype, "agentManager", void 0), model_interceptors_decorate([(0, Av.Autowired)(rf.SettingsManager), model_interceptors_metadata("design:type", "function" == typeof (tQ = void 0 !== rf.SettingsManager && rf.SettingsManager) ? tQ : Object)], rZ.prototype, "settingsManager", void 0), model_interceptors_decorate([(0, Av.Autowired)(ra.SessionManager), model_interceptors_metadata("design:type", "function" == typeof (tD = void 0 !== ra.SessionManager && ra.SessionManager) ? tD : Object)], rZ.prototype, "sessionManager", void 0), model_interceptors_decorate([(0, Av.Autowired)(A7.Logger), model_interceptors_metadata("design:type", "function" == typeof (tT = void 0 !== A7.Logger && A7.Logger) ? tT : Object)], rZ.prototype, "logger", void 0), rZ = model_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rZ);
+        let ContinueAgentRunInterceptor = class ContinueAgentRunInterceptor {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.Continued; }
+            async intercept(eA) { eA.session.options?.continue && (eA.session.options.continued = !0); }
+        };
+        let rX = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.ImageFilter; }
+            async intercept(eA) { let el = eA.agent.model; if (!el)
+                return; let ec = await this.productManager.waitConfiguration(), eu = ec.models?.find(eA => eA.id === el); if (eu && !1 === eu.supportsImages) {
+                if (Array.isArray(eA.input))
+                    for (let el of eA.input)
+                        "message" === el.type && "user" === el.role ? await this.filterImagesFromMessage(el) : "function_call_result" === el.type && await this.filterImagesFromFunctionCallResult(el);
+                else if (eA.input && "object" == typeof eA.input && "history" in eA.input) {
+                    let el = eA.input;
+                    if (Array.isArray(el.history))
+                        for (let eA of el.history)
+                            "message" === eA.type && "user" === eA.role ? await this.filterImagesFromMessage(eA) : "function_call_result" === eA.type && await this.filterImagesFromFunctionCallResult(eA);
+                }
+            } }
+            async filterImagesFromMessage(eA) { if ("string" == typeof eA.content || !Array.isArray(eA.content))
+                return; let el = eA.content.length; eA.content = eA.content.filter(eA => "input_image" !== eA.type), eA.content.length < el && this.logger.info(`Filtered ${el - eA.content.length} image(s) from user message (model does not support images)`); }
+            async filterImagesFromFunctionCallResult(eA) { if (eA.output && "object" == typeof eA.output && null !== eA.output && "text" in eA.output) {
+                let el = eA.output.text;
+                if ("string" == typeof el) {
+                    let ec, eu = !1;
+                    try {
+                        ec = JSON.parse(el), eu = !0;
+                    }
+                    catch {
+                        return;
+                    }
+                    let ed = !1;
+                    if (Array.isArray(ec)) {
+                        let eA = ec.length;
+                        (ec = ec.filter(eA => "object" != typeof eA || null === eA || "image" !== eA.type && "image_url" !== eA.type)).length < eA && (this.logger.info(`Filtered ${eA - ec.length} image(s) from function call result (model does not support images)`), ed = !0), 0 === ec.length && (ec = { type: "text", text: "[Image content filtered - current model does not support images]" });
+                    }
+                    else
+                        "object" == typeof ec && null !== ec && ("image" === ec.type || "image_url" === ec.type) && (this.logger.info("Filtered image from function call result output (model does not support images)"), ec = { type: "text", text: "[Image content filtered - current model does not support images]" }, ed = !0);
+                    ed && eu ? eA.output.text = JSON.stringify(ec) : ed && (eA.output.text = ec);
+                }
+            } }
+        };
+        model_interceptors_decorate([(0, Av.Autowired)(AQ.ProductManager), model_interceptors_metadata("design:type", "function" == typeof (tR = void 0 !== AQ.ProductManager && AQ.ProductManager) ? tR : Object)], rX.prototype, "productManager", void 0), model_interceptors_decorate([(0, Av.Autowired)(A7.Logger), model_interceptors_metadata("design:type", "function" == typeof (tk = void 0 !== A7.Logger && A7.Logger) ? tk : Object)], rX.prototype, "logger", void 0), rX = model_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], rX);
+        var r0 = ec(67330), pre_message_compact_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, pre_message_compact_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let r1 = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.PreMessageCompact; }
+            async intercept(eA) { if (eA.skipRun || !Array.isArray(eA.input) || 0 === eA.input.length || eA.agent.name === A_.AgentNames.COMPACT || eA.input.some(eA => eA.providerData?.isCompactInternal) || eA.input.some(eA => AH.InputItemUtils.isSkipRunItem(eA)))
+                return; let { session: el } = eA; if (el.isCompressing || el.lastCompactTimestamp && Date.now() - el.lastCompactTimestamp < 3e4 || AH.SessionUtils.isSubAgent(el))
+                return; if (AH.SessionUtils.isTeamSession(el))
+                return void this.logger.info(`[PreMessageCompact] Skipping pre-message compaction for agent-team session (sessionId=${el.id})`); let ec = await this.agentManager.getDefault(), eu = await this.agentManager.getModel(ec.name), ed = el.meta?.preMessageCompactPct; if (0 === ed)
+                return; let ep = await this.productManager.waitConfiguration(); if (!(0, r0.resolvePreMessageCompactEnabled)(ep?.productFeatures))
+                return; let eg = "number" == typeof ed && ed > 0 ? ed / 100 : (0, r0.getPreMessageCompactThresholdOverride)() ?? ep?.tokenUsageThresholds?.inputTokens?.preMessage ?? .8, eh = (0, r0.resolveCompactTriggerAt)(eu.maxInputTokens, eg), ef = AH.UsageUtils.getLatestUsage(el)?.inputTokens ?? 0, em = "api-usage"; if (0 === ef && el.history && el.history.length > 0 && (ef = this.estimateHistoryTokens(el.history), em = "local-estimate", this.logger.info(`[PreMessageCompact] No API usage available, fallback to local estimate: ${ef} tokens across ${el.history.length} history items`)), 0 === ef)
+                return; if ("api-usage" === em && el.history && el.history.length > 0) {
+                let eA = AH.TokenUtils.estimateTrailingToolResultTokens(el.history);
+                eA > 0 && (ef += eA, this.logger.info(`[PreMessageCompact] Added trailing tool result tokens: +${eA}, totalTokens=${ef}`));
+            } if (ef < eh)
+                return; if (!AH.HistoryUtils.hasMeaningfulNewHistorySinceLastCompact(el.history ?? []))
+                return void this.logger.info(`[PreMessageCompact] Skipping: no meaningful new content since last compact (tokens=${ef}/${eh}, would produce a degenerate summary, see issue #34798)`); this.logger.info(`[PreMessageCompact] Token usage ${ef} >= triggerAt ${eh} (modelMax: ${eu.maxInputTokens ?? "unknown"}, tokenSource: ${em}), compacting before user message`); let eE = [...eA.input]; try {
+                let ec = Av.ContainerUtil.get(r0.ContextCompactSummarizer);
+                if (await ec.compactAndSummarize(el, { type: r0.CompactType.PRE_MESSAGE_AUTO, skipContinue: !0 }))
+                    return;
+                if (el.abortSignal?.aborted) {
+                    this.markCompactEndedWithUserVisibleError(el, eE, eA, "aborted by user"), this.logger.info("[PreMessageCompact] aborted by user during compaction; surfacing failure instead of forwarding to LLM");
+                    return;
+                }
+                this.logger.warn(`[PreMessageCompact] compactAndSummarize returned false; forwarding original input to normal model request (sessionId=${el.id})`);
+            }
+            catch (ec) {
+                if (el.abortSignal?.aborted) {
+                    this.markCompactEndedWithUserVisibleError(el, eE, eA, ec), this.logger.info("[PreMessageCompact] aborted by user during compaction; surfacing failure instead of forwarding to LLM");
+                    return;
+                }
+                this.logger.warn(`[PreMessageCompact] compactAndSummarize threw; forwarding original input to normal model request (sessionId=${el.id}):`, ec);
+            } eA.input = eE, eA.skipRun = !1; }
+            markCompactEndedWithUserVisibleError(eA, el, ec, eu) { ec.input = el, ec.skipRun = !0, eA.meta ?? (eA.meta = {}), eA.meta[r0.SESSION_META_PRE_MESSAGE_COMPACT_ENDED] = !0, eA.meta[r0.SESSION_META_PRE_MESSAGE_COMPACT_ERROR_MESSAGE] = this.formatErrorMessage(eu); }
+            formatErrorMessage(eA) { if (!eA)
+                return "上下文压缩未完成"; if ("string" == typeof eA)
+                return eA; if (eA instanceof Error)
+                return eA.message || eA.name || String(eA); try {
+                return JSON.stringify(eA);
+            }
+            catch {
+                return String(eA);
+            } }
+            estimateHistoryTokens(eA) { let el = this.filterBeforeCompactBoundary(eA), ec = 0; for (let eA of el) {
+                let el = AH.TokenUtils.createItemWithoutImages(eA), eu = "";
+                try {
+                    eu = JSON.stringify(el);
+                }
+                catch {
+                    eu = String(eA);
+                }
+                ec += AH.TokenUtils.estimateTokensRough(eu);
+            } return ec; }
+            filterBeforeCompactBoundary(eA) { for (let el = eA.length - 1; el >= 0; el--) {
+                let ec = eA[el]?.providerData ?? {};
+                if (!0 === ec.isCompacted || !0 === ec.isSummary)
+                    return eA.slice(el);
+            } return eA; }
+        };
+        pre_message_compact_interceptor_decorate([(0, Av.Autowired)(AQ.ProductManager), pre_message_compact_interceptor_metadata("design:type", "function" == typeof (tM = void 0 !== AQ.ProductManager && AQ.ProductManager) ? tM : Object)], r1.prototype, "productManager", void 0), pre_message_compact_interceptor_decorate([(0, Av.Autowired)(A_.AgentManager), pre_message_compact_interceptor_metadata("design:type", "function" == typeof (tx = void 0 !== A_.AgentManager && A_.AgentManager) ? tx : Object)], r1.prototype, "agentManager", void 0), pre_message_compact_interceptor_decorate([(0, Av.Autowired)(A7.Logger), pre_message_compact_interceptor_metadata("design:type", "function" == typeof (tO = void 0 !== A7.Logger && A7.Logger) ? tO : Object)], r1.prototype, "logger", void 0), r1 = pre_message_compact_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], r1);
+        var r2 = ec(3246), r3 = ec(20852), r4 = ec(39311), r8 = ec(70353), r5 = ec(74674), r6 = ec(64187), r9 = ec(41695), r7 = ec(27368), ne = ec(70890), sandbox_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, sandbox_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nc = 1e4, nu = new WeakMap;
+        function areSandboxExperimentalFeaturesSupported() { return !1; }
+        function isSandboxCLIPlatformSupported() { return "win32" === process.platform || "darwin" === process.platform; }
+        function shouldUseSandboxCLI(eA) { return eA && isSandboxCLIPlatformSupported(); }
+        function isFileBackupSupported() { return "win32" === process.platform; }
+        let nd = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SandboxLifecycle, this._sessionReadySyncedThisTurn = !1; }
+            init() { this.sandboxLifecycle && this.sandboxLifecycle.onSessionReady(async (eA) => { this.logger.info?.(`[SandboxAgentRunInterceptor] onSessionReady | sid=${eA.sessionId} gen=${eA.generation} reason=${eA.reason}`); try {
+                await this.syncModifyBackupConfig(eA.sessionId);
+            }
+            catch (eA) {
+                this.logger.info?.(`[SandboxAgentRunInterceptor] onSessionReady syncModifyBackupConfig failed: ${eA?.message ?? eA}`), this.sandboxTurnConfig.enableFileBackup && (this.sandboxTurnConfig.enableFileBackup = !1);
+            } this.sandboxTurnConfig.useSandboxCLI && await this.sandboxRuleSyncService?.syncRulesOnTurnStart(eA.sessionId, this.sandboxTurnConfig.permissionMode), this._sessionReadySyncedThisTurn = !0; }); }
+            async intercept(eA) { let el, ec; if (this._sessionReadySyncedThisTurn = !1, eA.skipRun)
+                return void this.logger.info?.("[SandboxAgentRunInterceptor] skipped: skipRun=true"); if (!Array.isArray(eA.input) || 0 === eA.input.length)
+                return; if (!eA.input.some(eA => AH.InputItemUtils.isRealUserMessageItem(eA)))
+                return void this.logger.info?.("[SandboxAgentRunInterceptor] skipped: no real user message"); if (eA.session.meta?.parentSessionId) {
+                if (this.logger.info?.(`[SandboxAgentRunInterceptor] sub-agent path | session=${eA.session.id} | useSandboxCLI=${this.sandboxTurnConfig.useSandboxCLI}`), this.sandboxLifecycle && this.sandboxTurnConfig.useSandboxCLI)
+                    try {
+                        await this.sandboxLifecycle.waitReady(), await this.sandboxLifecycle.ensureAlive();
+                    }
+                    catch (eA) {
+                        this.logger.info?.(`[SandboxAgentRunInterceptor] sub-agent sandbox unavailable, proceeding without sandbox: ${eA?.message ?? eA}`);
+                    }
+                return;
+            } let eu = !1, ed = !1, ep = !1, eg = !1, eh = !1; try {
+                this.settingsManager.clearCache(rf.SettingsScope.USER);
+                let ef = await this.settingsManager.list(), em = !!ef.sandbox?.enabled;
+                if (ed = em, eu = shouldUseSandboxCLI(em), em)
+                    isSandboxCLIPlatformSupported() || (el = "unsupported-platform");
+                else {
+                    let ec = (0, r4.getSandboxTurnDisabledReason)(eA.session), eu = (0, r4.getSandboxConfigApplicationState)(eA.session);
+                    switch (ec) {
+                        case "security-center-setting-disabled":
+                        case "session-local-environment-selected":
+                        case "background-automation-no-approval-ui":
+                            el = ec;
+                            break;
+                        default: el = eu?.enabled === !0 ? "sandbox-config-state-mismatch" : "other-configured-disabled";
+                    }
+                }
+                let eE = ef.sandbox, eC = areSandboxExperimentalFeaturesSupported();
+                ep = eC && !!eE?.versionControl, eg = eC && !!eE?.deleteProtection;
+                let ey = ef.sandbox?.fileBackup;
+                eh = eu && isFileBackupSupported() && ey?.enabled !== !1, this.logger.info?.(`[SandboxAgentRunInterceptor] fileBackup resolve: raw=${JSON.stringify(ey ?? null)}, platformSupported=${isFileBackupSupported()}, resolved=${eh}`), eh && (ec = (0, r2.normalizeFileBackupMaxSizeMB)(ey?.maxSizeMB));
+            }
+            catch (eA) {
+                el = "sandbox-settings-read-failed", this.logger.info?.(`[SandboxAgentRunInterceptor] failed to read sandbox setting, defaulting to off: ${eA?.message ?? eA}`);
+            } this.sandboxTurnConfig.useSandboxCLI = eu, this.sandboxTurnConfig.enableVersionControl = ep, this.sandboxTurnConfig.enableDeleteProtection = eg, this.sandboxTurnConfig.enableFileBackup = eh, this.sandboxTurnConfig.fileBackupMaxSizeMB = ec; let ef = eA.session.permissionModeSubject?.value; this.sandboxTurnConfig.permissionMode = ef; let em = await this.bashSandboxManager?.getConfig(); this.sandboxTurnConfig.safeDeleteRuntimeEnabled = (0, r3.isSafeDeleteRuntimeEnabledInSandboxConfig)(em), this.sandboxTurnConfig.configAllowsAllWritePath = (em?.filesystem?.allowWrite ?? []).includes((0, r3.getDefaultSandboxAllowWritePath)()); let eE = eA.session.id, eC = ep || eg; if (this.sandboxTurnConfig.enableProjection = eC, eu || eC) {
+                let ec = eu, ed = !1;
+                this.sandboxLifecycle ? ed = await this.ensureSandboxReady(eE, eC, eA.session.conversationRequestId) : this.logger.info?.("[SandboxAgentRunInterceptor] sandbox lifecycle unavailable, forcing local execution for this turn"), ed || (ec && (el = "sandbox-startup-failed"), this.logger.info?.("[SandboxAgentRunInterceptor] sandbox unavailable, forcing local execution for this turn"), eu = !1, eC = !1, this.sandboxTurnConfig.useSandboxCLI = !1, this.sandboxTurnConfig.enableProjection = !1, this.sandboxTurnConfig.enableVersionControl = !1, this.sandboxTurnConfig.enableDeleteProtection = !1, this.sandboxTurnConfig.enableFileBackup = !1);
+            } if (this._sessionReadySyncedThisTurn)
+                this.logger.info?.("[SandboxAgentRunInterceptor] sync skipped (already done in onSessionReady callback)");
+            else {
+                try {
+                    await this.syncModifyBackupConfig(eE);
+                }
+                catch (eA) {
+                    this.logger.info?.(`[SandboxAgentRunInterceptor] failed to sync modify backup config: ${eA?.message ?? eA}`), this.sandboxTurnConfig.enableFileBackup && (this.sandboxTurnConfig.enableFileBackup = !1);
+                }
+                eu ? await this.sandboxRuleSyncService?.syncRulesOnTurnStart(eE, ef) : this.logger.info?.(`[SandboxRuleSync] skipped: sandbox disabled | sessionId=${eE} permissionMode=${ef ?? "<unset>"}`);
+            } let ey = eu ? "fullAccess" === ef ? "fullAccess-relaxed" : "default-strict" : "sandbox-disabled"; this.sandboxTurnConfig.ruleProfile = ey; let ew = { effectiveEnabled: eu, disabledReason: eu ? void 0 : el ?? "other-configured-disabled" }; try {
+                nu.set(eA, ew), (0, r4.setSandboxTurnDisabledReason)(eA.session, ew.disabledReason);
+            }
+            catch (eA) {
+                this._logTelemetryFailure(eA);
+            } this.logger.info?.(`[SandboxFinalState] sessionId=${eE} permissionMode=${ef ?? "<unset>"} configuredSandboxEnabled=${ed} effectiveSandboxEnabled=${eu} ruleProfile=${ey} platform=${process.platform}`); let eB = await this.resolveWorkdir(eE, eC); this.sandboxTurnConfig.sandboxWorkdir = eB, this.logger.info?.(`[SandboxAgentRunInterceptor] sandboxTurnConfig=${JSON.stringify(this.snapshotSandboxTurnConfig())}, permMode=${eA.session.permissionModeSubject?.value ?? "<unset>"}`); }
+            async syncModifyBackupConfig(eA) { if (!this.sandboxLifecycle || !this.processManager?.isRunning())
+                return; let el = { enabled: this.sandboxTurnConfig.enableFileBackup }; el.enabled && (el.fileBackupMaxSizeMB = (0, r2.normalizeFileBackupMaxSizeMB)(this.sandboxTurnConfig.fileBackupMaxSizeMB)); let ec = { enabled: el.enabled }; void 0 !== el.fileBackupMaxSizeMB && (ec.fileBackupMaxSizeMB = el.fileBackupMaxSizeMB); let eu = await this.sandboxLifecycle.getClient().sendRequest(eA, r5.SANDBOX_COMMANDS.ENABLE_MODIFY_BACKUP, ec); this.logger.info?.(`[SandboxAgentRunInterceptor] modify backup config synced: enabled=${eu?.enabled ?? el.enabled}, previousEnabled=${eu?.previousEnabled ?? "<unknown>"}, fileBackupMaxSizeMB=${el.fileBackupMaxSizeMB ?? "<unset>"}`); }
+            snapshotSandboxTurnConfig() { return { useSandboxCLI: this.sandboxTurnConfig.useSandboxCLI, enableProjection: this.sandboxTurnConfig.enableProjection, enableVersionControl: this.sandboxTurnConfig.enableVersionControl, enableDeleteProtection: this.sandboxTurnConfig.enableDeleteProtection, enableFileBackup: this.sandboxTurnConfig.enableFileBackup, fileBackupMaxSizeMB: this.sandboxTurnConfig.fileBackupMaxSizeMB, sandboxWorkdir: this.sandboxTurnConfig.sandboxWorkdir }; }
+            _logTelemetryFailure(eA) { try {
+                this.logger.warn?.(`[SandboxTurnTelemetry] context preparation failed: ${String(eA)}`);
+            }
+            catch { } }
+            async ensureSandboxReady(eA, el, ec) { let eu = this.sandboxLifecycle.getOpenedSessionId(); if (void 0 !== eu && eu !== eA) {
+                this.logger.info?.(`[SandboxAgentRunInterceptor] session mismatch: opened=${eu}, requested=${eA}, stopping old process`);
+                try {
+                    await this.sandboxLifecycle.stop();
+                }
+                catch (eA) {
+                    this.logger.info?.(`[SandboxAgentRunInterceptor] failed to stop old sandbox process: ${eA?.message ?? eA}`);
+                }
+            } try {
+                let eu = { sessionId: eA, appHomeDir: AH.PathUtils.getHomeDir(), appGroupId: process.env.SANDBOX_APP_GROUP_ID || void 0, autoProjection: el, conversationRequestId: ec };
+                return await Promise.race([this.sandboxLifecycle.ensureReady(eu), new Promise((eA, el) => setTimeout(() => el(Error("sandbox ensureReady timeout (10s)")), nc))]), !0;
+            }
+            catch (eA) {
+                return this.logger.info?.(`[SandboxAgentRunInterceptor] sandbox ensureReady failed: ${eA?.message ?? eA}`), !1;
+            } }
+            async resolveWorkdir(eA, el) { if (!el) {
+                if (this.processManager?.isRunning() && this.sandboxLifecycle)
+                    try {
+                        let el = await this.sandboxLifecycle.getWorkdir(eA, !1) ?? process.cwd();
+                        return this.cwdService.setCwdState(el), el;
+                    }
+                    catch (eA) {
+                        this.logger.info?.(`[SandboxAgentRunInterceptor] getWorkdir(false) failed: ${eA?.message ?? eA}, falling back to process.cwd()`);
+                    }
+                return this.cwdService.setCwdState(process.cwd()), process.cwd();
+            } if (!this.sandboxLifecycle)
+                return this.cwdService.setCwdState(process.cwd()), process.cwd(); try {
+                let ec = await this.sandboxLifecycle.getWorkdir(eA, el);
+                return ec && this.cwdService.setCwdState(ec), ec ?? this.cwdService.getCwd();
+            }
+            catch (eA) {
+                return this.logger.info?.(`[SandboxAgentRunInterceptor] sandbox workdir unavailable: ${eA?.message ?? eA}`), this.cwdService.getCwd();
+            } }
+        };
+        sandbox_interceptor_decorate([(0, Av.Autowired)(A7.Logger), sandbox_interceptor_metadata("design:type", "function" == typeof (tN = void 0 !== A7.Logger && A7.Logger) ? tN : Object)], nd.prototype, "logger", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(rf.SettingsManager), sandbox_interceptor_metadata("design:type", "function" == typeof (tP = void 0 !== rf.SettingsManager && rf.SettingsManager) ? tP : Object)], nd.prototype, "settingsManager", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r9.SandboxTurnConfig), sandbox_interceptor_metadata("design:type", "function" == typeof (tL = void 0 !== r9.SandboxTurnConfig && r9.SandboxTurnConfig) ? tL : Object)], nd.prototype, "sandboxTurnConfig", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(ne.CwdService), sandbox_interceptor_metadata("design:type", Object)], nd.prototype, "cwdService", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r8.SandboxCLILifecycle), (0, Av.Optional)(), sandbox_interceptor_metadata("design:type", Object)], nd.prototype, "sandboxLifecycle", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r5.SandboxCLIProcessManager), (0, Av.Optional)(), sandbox_interceptor_metadata("design:type", Object)], nd.prototype, "processManager", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r6.SandboxRuleSyncService), (0, Av.Optional)(), sandbox_interceptor_metadata("design:type", Object)], nd.prototype, "sandboxRuleSyncService", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r3.BashSandboxManager), (0, Av.Optional)(), sandbox_interceptor_metadata("design:type", Object)], nd.prototype, "bashSandboxManager", void 0), sandbox_interceptor_decorate([(0, Av.PostConstruct)(), sandbox_interceptor_metadata("design:type", Function), sandbox_interceptor_metadata("design:paramtypes", []), sandbox_interceptor_metadata("design:returntype", void 0)], nd.prototype, "init", null), nd = sandbox_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nd);
+        let np = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.Sandbox; }
+            async intercept(eA) { try {
+                let el = nu.get(eA);
+                if (!el || (nu.delete(eA), eA.session.meta?.parentSessionId))
+                    return;
+                let ec = eA.session.meta?.rootRequestId, eu = eA.session.conversationRequestId;
+                if (!ec || !eu)
+                    return void this._logFailure("turn request IDs were not initialized by TelemetryInterceptor");
+                this.telemetryReporter?.reportTurnState?.({ rootRequestId: ec, conversationRequestId: eu, useSandboxCli: el.effectiveEnabled, disabledReason: el.disabledReason });
+            }
+            catch (eA) {
+                this._logFailure(`report failed: ${String(eA)}`);
+            } }
+            _logFailure(eA) { try {
+                this.logger.warn?.(`[SandboxTurnTelemetry] ${eA}`);
+            }
+            catch { } }
+        };
+        sandbox_interceptor_decorate([(0, Av.Autowired)(A7.Logger), sandbox_interceptor_metadata("design:type", "function" == typeof (tF = void 0 !== A7.Logger && A7.Logger) ? tF : Object)], np.prototype, "logger", void 0), sandbox_interceptor_decorate([(0, Av.Autowired)(r7.SandboxTelemetryReporter), (0, Av.Optional)(), sandbox_interceptor_metadata("design:type", Object)], np.prototype, "telemetryReporter", void 0), np = sandbox_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], np);
+        var ng = ec(93928), nh = ec(44735), system_reminder_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, system_reminder_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nf = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SystemReminderContext; }
+            async intercept(eA) {
+                if (Array.isArray(eA.input) && !eA.skipRun) {
+                    if (this.isMetaMessage(eA)) {
+                        this.logger.setContext("SystemReminderAgentRunInterceptor"), this.logger.debug("Detected isMeta message, skipping all system-reminder injection");
+                        return;
+                    }
+                    if (eA.agent.name !== A_.AgentNames.COMPACT) {
+                        if (this.shouldInjectSystemReminder(eA)) {
+                            let el = await this.generateSystemReminder();
+                            el ? AH.MessageUtils.addSystemReminder(eA.input, el, "first") : (this.logger.setContext("SystemReminderAgentRunInterceptor"), this.logger.warn("shouldInjectSystemReminder=true but generateSystemReminder returned empty"));
+                        }
+                        if (this.isUserMessage(eA)) {
+                            let el = await this.generatePlanModeReminder(eA);
+                            el && AH.MessageUtils.addSystemReminder(eA.input, el, "last");
+                        }
+                        if (this.isUserMessage(eA)) {
+                            let el = await this.generateDelegateModeReminder(eA);
+                            el && AH.MessageUtils.addSystemReminder(eA.input, el, "last");
+                        }
+                        if (this.isUserMessage(eA)) {
+                            let el = await this.generateIDESelectionReminder(eA);
+                            el && AH.MessageUtils.addSystemReminder(eA.input, el, "last");
+                        }
+                        if (await this.injectHookContexts(eA), this.isUserMessage(eA)) {
+                            let el = this.generateChannelInstructions();
+                            el && AH.MessageUtils.addSystemReminder(eA.input, el, "last");
+                        }
+                        if (this.isUserMessage(eA)) {
+                            let el = eA.session[ng.MCP_UI_MODEL_CONTEXT];
+                            if (el) {
+                                let ec = [];
+                                if (el.content)
+                                    for (let eA of el.content)
+                                        eA && "object" == typeof eA && "text" === eA.type && ec.push(eA.text);
+                                if (el.structuredContent && ec.push(JSON.stringify(el.structuredContent, null, 2)), ec.length > 0) {
+                                    let el = `<system-reminder data-role="mcp-ui-model-context">
+${ec.join("\n\n")}
+</system-reminder>`;
+                                    AH.MessageUtils.addSystemReminder(eA.input, el, "last"), this.logger.info?.("[SystemReminder] injected mcpUiModelContext");
+                                }
+                                delete eA.session[ng.MCP_UI_MODEL_CONTEXT];
+                            }
+                        }
+                    }
+                }
+            }
+            generateChannelInstructions() {
+                if (!this.channelManager)
+                    return;
+                let eA = Array.from(this.channelManager.channelServers.values());
+                if (0 === eA.length)
+                    return;
+                let el = eA.map(eA => eA.instructions).filter(Boolean).join("\n\n");
+                if (el)
+                    return `<system-reminder data-role="channel-instructions">
+${el}
+</system-reminder>`;
+            }
+            isFirstOrResumeMessage(eA) { let el = 1 === eA.input.filter(eA => "user" === eA.role).length, ec = !!(eA.session.options?.continue && !eA.session.options?.continued); return el || ec; }
+            shouldInjectSystemReminder(eA) { if ("1" === process.env.CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD || "true" === process.env.CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD)
+                return !1; if (this.isFirstOrResumeMessage(eA))
+                return !0; let el = eA.input; return !this.historyContainsSystemReminder(el) && (this.logger.setContext("SystemReminderAgentRunInterceptor"), this.logger.debug("History does not contain system-reminder, re-injecting rules"), !0); }
+            historyContainsSystemReminder(eA) { for (let el of eA)
+                if ("message" === el.type && "user" === el.role) {
+                    let eA = el.content;
+                    if ("string" == typeof eA) {
+                        if (this.hasRulesSystemReminder(eA))
+                            return !0;
+                    }
+                    else if (Array.isArray(eA)) {
+                        for (let el of eA)
+                            if ("input_text" === el.type && "string" == typeof el.text && this.hasRulesSystemReminder(el.text))
+                                return !0;
+                    }
+                } return !1; }
+            hasRulesSystemReminder(eA) { let el = /<system-reminder[^>]*>[\s\S]*?<\/system-reminder>/, ec = eA.match(el); if (!ec)
+                return !1; if (ec[0].split(">")[0].includes("data-role=")) {
+                let el = eA.substring(ec.index + ec[0].length);
+                return this.hasRulesSystemReminder(el);
+            } return !0; }
+            isUserMessage(eA) { let el = eA.input.at(-1); return el?.role === "user"; }
+            isMetaMessage(eA) { if (!Array.isArray(eA.input) || 0 === eA.input.length)
+                return !1; let el = eA.input.at(-1); return el?.type === "message" && "user" === el.role && el.providerData?.isMeta === !0; }
+            async generateSystemReminder() { try {
+                let eA = await this.memoryManager.get({ scope: rN.MemoryScope.USER, type: rN.MemoryType.ALWAYS }), el = await this.memoryManager.get({ scope: rN.MemoryScope.PROJECT, type: rN.MemoryType.ALWAYS }), ec = await this.memoryManager.get({ scope: rN.MemoryScope.PROJECT_LOCAL, type: rN.MemoryType.ALWAYS }), eu = await this.promptManager.get("system-reminder-md");
+                if (!eu) {
+                    this.logger.setContext("SystemReminderAgentRunInterceptor"), this.logger.warn("system-reminder-md template not found, skipping CODEBUDDY.md injection");
+                    return;
+                }
+                let ed = { userMemory: eA, projectMemory: el, localMemory: ec };
+                return this.promptManager.render(eu.template, { variables: ed });
+            }
+            catch (eA) {
+                this.logger.setContext("SystemReminderAgentRunInterceptor"), this.logger.warn("Failed to generate system reminder:", eA);
+                return;
+            } }
+            async generatePlanModeReminder(eA) { try {
+                if (eA.session.permissionModeSubject.value !== rf.PermissionMode.Plan)
+                    return;
+                let el = await this.promptManager.get("system-reminder-planmode");
+                if (!el)
+                    return;
+                let ec = this.planStorageService.initializePlanFilePath(eA.session);
+                return this.promptManager.render(el.template, { variables: { planFilePath: ec } });
+            }
+            catch (eA) {
+                return;
+            } }
+            async generateDelegateModeReminder(eA) { try {
+                if (eA.session.permissionModeSubject.value !== rf.PermissionMode.Delegate)
+                    return;
+                let el = await this.promptManager.get("system-reminder-delegate");
+                if (!el)
+                    return;
+                return this.promptManager.render(el.template, {});
+            }
+            catch (eA) {
+                return;
+            } }
+            async generateIDESelectionReminder(eA) {
+                try {
+                    let eA = this.ideService.selectionChangedSubject.value;
+                    if (!eA || !eA.filePath)
+                        return;
+                    if (!eA.text)
+                        return `<system-reminder data-role="ide-context">The user opened the file ${eA.filePath} in the IDE. This may or may not be related to the current task.</system-reminder>`;
+                    let el = eA.selection?.start.line ?? 0, ec = eA.selection ? eA.selection.end.line - eA.selection.start.line + 1 : 1, eu = el + ec - 1, ed = 2e3, ep = eA.text;
+                    return ep.length > ed && (ep = ep.substring(0, ed) + "\n... (truncated)"), `<system-reminder data-role="ide-context">The user selected the lines ${el} to ${eu} from ${eA.filePath}:
+${ep}
+
+This may or may not be related to the current task.</system-reminder>`;
+                }
+                catch (eA) {
+                    return;
+                }
+            }
+            async injectHookContexts(eA) { if (!Array.isArray(eA.input))
+                return; let { session: el } = eA, ec = el.hookContexts; if (!ec)
+                return; let eu = this.isFirstOrResumeMessage(eA); if (eu && ec.sessionStartReadyPromise)
+                try {
+                    await ec.sessionStartReadyPromise;
+                }
+                catch (eA) {
+                    this.logger.warn?.("SessionStart ready promise failed:", eA);
+                } if (ec.sessionStartContext && eu) {
+                let el = `<system-reminder data-role="hook">${ec.sessionStartContext}</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, el, "first"), delete ec.sessionStartContext;
+            } if (ec.userPromptSubmitContext && this.isUserMessage(eA)) {
+                let el = `<system-reminder data-role="hook">${ec.userPromptSubmitContext}</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, el, "last"), delete ec.userPromptSubmitContext;
+            } if (ec.stopHookFeedback && this.isUserMessage(eA)) {
+                let el = `<system-reminder data-role="hook">${ec.stopHookFeedback}</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, el, "last"), delete ec.stopHookFeedback;
+            } if (ec.subagentStopHookFeedback && this.isUserMessage(eA)) {
+                let el = `<system-reminder data-role="hook">${ec.subagentStopHookFeedback}</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, el, "last"), delete ec.subagentStopHookFeedback;
+            } if (ec.preCompactInstructions && this.isUserMessage(eA)) {
+                let el = `<system-reminder data-role="hook">${ec.preCompactInstructions}</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, el, "last"), delete ec.preCompactInstructions;
+            } }
+        };
+        system_reminder_interceptor_decorate([(0, Av.Autowired)(rD.PromptManager), system_reminder_interceptor_metadata("design:type", "function" == typeof (tU = void 0 !== rD.PromptManager && rD.PromptManager) ? tU : Object)], nf.prototype, "promptManager", void 0), system_reminder_interceptor_decorate([(0, Av.Autowired)(rN.MemoryManager), system_reminder_interceptor_metadata("design:type", "function" == typeof (tj = void 0 !== rN.MemoryManager && rN.MemoryManager) ? tj : Object)], nf.prototype, "memoryManager", void 0), system_reminder_interceptor_decorate([(0, Av.Autowired)(nh.IDEService), system_reminder_interceptor_metadata("design:type", "function" == typeof (tG = void 0 !== nh.IDEService && nh.IDEService) ? tG : Object)], nf.prototype, "ideService", void 0), system_reminder_interceptor_decorate([(0, Av.Autowired)(rv.ChannelManager), (0, Av.Optional)(), system_reminder_interceptor_metadata("design:type", "function" == typeof (tH = void 0 !== rv.ChannelManager && rv.ChannelManager) ? tH : Object)], nf.prototype, "channelManager", void 0), system_reminder_interceptor_decorate([(0, Av.Autowired)(rm.PlanStorageService), system_reminder_interceptor_metadata("design:type", "function" == typeof (tK = void 0 !== rm.PlanStorageService && rm.PlanStorageService) ? tK : Object)], nf.prototype, "planStorageService", void 0), system_reminder_interceptor_decorate([(0, Av.Autowired)(A7.Logger), system_reminder_interceptor_metadata("design:type", "function" == typeof (t$ = void 0 !== A7.Logger && A7.Logger) ? t$ : Object)], nf.prototype, "logger", void 0), nf = system_reminder_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nf);
+        var nm = ec(66805), telemetry_interceptors_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, telemetry_interceptors_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nE = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.Telemetry; }
+            async intercept(eA) { if (eA.session?.meta?.[ra.META_TOKEN_CALCULATION_REQUEST])
+                return; if (eA.skipRun) {
+                if (!Array.isArray(eA.input) && "string" != typeof eA.input) {
+                    let el = eA.input.history, ec = el?.[el?.length - 1];
+                    if (ec && "function_call_result" === ec.type) {
+                        try {
+                            await this.telemetryService.reportModelToolCall(eA.session, ec);
+                        }
+                        catch (eA) {
+                            this.logger.warn("Failed to report tool call cancel telemetry:", eA);
+                        }
+                        try {
+                            await this.telemetryService.reportChatRequestResponseTelemetry(eA.session);
+                        }
+                        catch (eA) {
+                            this.logger.warn("Failed to report request end telemetry:", eA);
+                        }
+                    }
+                }
+                return;
+            } if (!Array.isArray(eA.input) && "string" != typeof eA.input) {
+                let el = eA.input.history, ec = el?.[el?.length - 1];
+                if (ec && "function_call" === ec.type)
+                    return;
+            } let el = eA.session.state, ec = eA.session.conversationRequestId || (0, Av.generateUUUID)().replace(/-/g, ""); el && (el.conversationRequestId = ec); let eu = Date.now(), ed = await AH.TelemetryUtils.getModelInfo(eA.agent), ep = eA.agentOptions; eA.session.conversationRequestId = ec, eA.session.meta || (eA.session.meta = {}); let eg = !eA.session.meta?.parentSessionId; if ((eg || !eA.session.meta.rootRequestId) && (eA.session.meta.rootRequestId = ec), eA.traceId = eA.session.traceId, eA.agent.name !== A_.AgentNames.COMPACT) {
+                let el = this.agentManager.getSettingsAgentName();
+                if (eg && el && eA.agent.name === this.agentManager.getDefaultAgentName() ? eA.session.agentName = el : eA.session.agentName = eA.agent.name || "default", !eA.session.isCompressing && (!eA.session.agentPurpose || this.isCompactPurpose(eA.session.agentPurpose))) {
+                    let el = await this.agentManager.getAgentConfig(eA.agent.name);
+                    el?.tags?.includes(A_.CUSTOM_AGENT_TAG) ? eA.session.agentPurpose = `${AI.CUSTOM_AGENT_PURPOSE_PREFIX}:${eA.agent.name}` : eA.session.agentPurpose = AI.AgentPurpose.Conversation;
+                }
+            } eA.session.lastRequestStartTime = eu, eA.session.telemetry = { agentName: eA.agent.name || "default", agentVersion: void 0, startTime: eu, inputLength: AH.TelemetryUtils.getInputLength(eA.input), inputType: AH.TelemetryUtils.getInputType(eA.input), modelId: ed.modelId, modelName: ed.modelName, maxTurns: ep.maxTurns, isStreaming: !!ep?.stream, temperature: ep?.temperature, maxTokens: ep?.maxTokens, currentTurn: 0, clientSendTime: eA.session.telemetry?.clientSendTime, promptStartTime: eA.session.telemetry?.promptStartTime, traceId: eA.session.traceId }; try {
+                this.frictionAnalysisService.capturePrompt(eA.session, (0, nm.extractVisibleUserPromptFromAgentInput)(eA.input));
+            }
+            catch (eA) {
+                this.logger.warn("Failed to capture prompt friction analysis input:", eA);
+            } try {
+                await this.telemetryService.reportChatRequestSendTelemetry(eA.session);
+            }
+            catch (eA) {
+                this.logger.warn("Failed to report request start telemetry:", eA);
+            } }
+            isCompactPurpose(eA) { return eA === AI.AgentPurpose.ContextCompact || eA === AI.AgentPurpose.ContextSummaryPreMessage || eA === AI.AgentPurpose.ContextSummaryMaxToken; }
+        };
+        telemetry_interceptors_decorate([(0, Av.Autowired)(A_.AgentManager), telemetry_interceptors_metadata("design:type", "function" == typeof (tY = void 0 !== A_.AgentManager && A_.AgentManager) ? tY : Object)], nE.prototype, "agentManager", void 0), telemetry_interceptors_decorate([(0, Av.Autowired)(A7.Logger), telemetry_interceptors_metadata("design:type", "function" == typeof (tJ = void 0 !== A7.Logger && A7.Logger) ? tJ : Object)], nE.prototype, "logger", void 0), telemetry_interceptors_decorate([(0, Av.Autowired)(nm.TelemetryService), telemetry_interceptors_metadata("design:type", "function" == typeof (tq = void 0 !== nm.TelemetryService && nm.TelemetryService) ? tq : Object)], nE.prototype, "telemetryService", void 0), telemetry_interceptors_decorate([(0, Av.Autowired)(nm.FrictionAnalysisService), telemetry_interceptors_metadata("design:type", "function" == typeof (tz = void 0 !== nm.FrictionAnalysisService && nm.FrictionAnalysisService) ? tz : Object)], nE.prototype, "frictionAnalysisService", void 0), nE = telemetry_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nE);
+        let nC = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.TokenCalculation; }
+            async intercept(eA) { eA.session?.meta?.[ra.META_TOKEN_CALCULATION_REQUEST] && (this.logger.debug("[TokenCalculationAgentRunInterceptor] Token calculation callback"), "function" == typeof eA.session.meta[ra.META_TOKEN_CALCULATION_CALLBACK] && eA.session.meta[ra.META_TOKEN_CALCULATION_CALLBACK](eA)); }
+        };
+        telemetry_interceptors_decorate([(0, Av.Autowired)(A7.Logger), telemetry_interceptors_metadata("design:type", "function" == typeof (tW = void 0 !== A7.Logger && A7.Logger) ? tW : Object)], nC.prototype, "logger", void 0), nC = telemetry_interceptors_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nC);
+        var ultracode_effort_reminder_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, ultracode_effort_reminder_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let ny = "workflow-ultra-effort-active", nw = '<system-reminder data-role="ultra_effort_active">\nYou are running in **ultracode** effort mode (set via `/effort ultracode`). Plan a Dynamic Workflow first for substantive requests; drop back with `/effort high`.\n</system-reminder>', nB = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SystemReminderContext - 35; }
+            async intercept(eA) { if (!Array.isArray(eA.input) || 0 === eA.input.length)
+                return; let el = eA.session.meta; if (!el || "ultracode" !== el.workflowEffortLevel)
+                return; let ec = await this.loadReminder(); AH.MessageUtils.addSystemReminder(eA.input, ec, "last"); }
+            async loadReminder() { try {
+                let eA = await this.promptManager?.get?.(ny);
+                if (eA?.template)
+                    return eA.template;
+            }
+            catch { } return nw; }
+        };
+        ultracode_effort_reminder_interceptor_decorate([(0, Av.Autowired)(rD.PromptManager), ultracode_effort_reminder_interceptor_metadata("design:type", "function" == typeof (tV = void 0 !== rD.PromptManager && rD.PromptManager) ? tV : Object)], nB.prototype, "promptManager", void 0), nB = ultracode_effort_reminder_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nB);
+        var n_ = ec(59502), ultracode_keyword_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, ultracode_keyword_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nI = "workflow-keyword-reminder", nv = '<system-reminder data-role="workflow_keyword_request">\nThe user opted in to a Dynamic Workflow (via `ultracode` keyword or "use a workflow"). Consider calling the Workflow tool if the task benefits from many parallel sub-agents.\n</system-reminder>', nS = /\bultracode\b/i, nQ = [/\buse\s+(?:a\s+)?workflow\b/i, /\brun\s+(?:a\s+)?workflow\b/i, /起[一壹]?个?\s*workflow/i, /用\s*workflow/i], nD = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.SystemReminderContext - 35; }
+            async intercept(eA) { if (!Array.isArray(eA.input) || 0 === eA.input.length)
+                return; let el = this.extractUserText(eA.input); if (!el || !this.isUltracodeRequest(el))
+                return; if (await (0, n_.isWorkflowDisabled)())
+                return void this.logger.debug?.("[UltracodeKeywordInterceptor] workflow disabled — skip reminder injection"); let ec = await this.loadReminder(); AH.MessageUtils.addSystemReminder(eA.input, ec, "last"), this.logger.debug?.("[UltracodeKeywordInterceptor] injected workflow_keyword_request reminder"); }
+            async loadReminder() { try {
+                let eA = await this.promptManager?.get?.(nI);
+                if (eA?.template)
+                    return eA.template;
+            }
+            catch { } return nv; }
+            extractUserText(eA) { for (let el = eA.length - 1; el >= 0; el--) {
+                let ec = eA[el];
+                if (!ec || "message" !== ec.type || "user" !== ec.role)
+                    continue;
+                let eu = ec.content;
+                if ("string" == typeof eu) {
+                    if (this.looksLikeUserText(eu))
+                        return eu;
+                    continue;
+                }
+                if (Array.isArray(eu))
+                    for (let eA of eu) {
+                        let el = eA?.text;
+                        if ("string" == typeof el && this.looksLikeUserText(el))
+                            return el;
+                    }
+            } }
+            looksLikeUserText(eA) { return !(!eA || eA.startsWith("<system-reminder") && !eA.includes("<user_query>")); }
+            isUltracodeRequest(eA) { if (nS.test(eA))
+                return !0; for (let el of nQ)
+                if (el.test(eA))
+                    return !0; return !1; }
+        };
+        ultracode_keyword_interceptor_decorate([(0, Av.Autowired)(A7.Logger), ultracode_keyword_interceptor_metadata("design:type", "function" == typeof (tZ = void 0 !== A7.Logger && A7.Logger) ? tZ : Object)], nD.prototype, "logger", void 0), ultracode_keyword_interceptor_decorate([(0, Av.Autowired)(rD.PromptManager), ultracode_keyword_interceptor_metadata("design:type", "function" == typeof (tX = void 0 !== rD.PromptManager && rD.PromptManager) ? tX : Object)], nD.prototype, "promptManager", void 0), nD = ultracode_keyword_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nD);
+        var nT = ec(91943), nR = ec(83651), nk = ec(52898), memory_context_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, memory_context_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nM = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.MemoryContext; }
+            async intercept(eA) { if (!Array.isArray(eA.input) || eA.skipRun || eA.agent.name === A_.AgentNames.COMPACT || !await this.isAutoMemoryEnabled())
+                return; let el = this.extractLastUserQuery(eA.input); if (this.shouldInjectMemoryContext(eA)) {
+                let el = await this.generateMemoryPrompt();
+                if (el) {
+                    let ec = `<system-reminder data-role="memory">${el}</system-reminder>`;
+                    AH.MessageUtils.addSystemReminder(eA.input, ec, "first"), this.logger.setContext("MemoryContextInterceptor"), this.logger.debug("Injected auto memory context prompt");
+                }
+            } await this.injectRelevantMemories(eA, el); }
+            async isAutoMemoryEnabled() { let eA = process.env[rf.ENV_KEY_CODEBUDDY_DISABLE_AUTO_MEMORY]; if (void 0 !== eA) {
+                if ("1" === eA)
+                    return !1;
+                if ("0" === eA)
+                    return !0;
+            } let el = process.env[rf.ENV_KEY_CODEBUDDY_MEMORY_ENABLED]; if (void 0 !== el)
+                return "true" === el.toLowerCase() || "1" === el; let ec = await this.settingsManager.get("memory"); return ec?.autoMemoryEnabled === void 0 || ec.autoMemoryEnabled; }
+            async isTeamMemoryEnabled() { let eA = process.env[rf.ENV_KEY_CODEBUDDY_TEAM_MEMORY_ENABLED]; if (void 0 !== eA)
+                return "true" === eA.toLowerCase() || "1" === eA; let el = await this.settingsManager.get("memory"); return el?.teamMemory?.enabled !== void 0 && el.teamMemory.enabled; }
+            async getTeamUserId() { let eA = process.env[rf.ENV_KEY_CODEBUDDY_USER_ID]; if (eA)
+                return eA; let el = await this.settingsManager.get("memory"); if (el?.teamMemory?.userId)
+                return el.teamMemory.userId; let eu = AH.GitUtils.getGitUserName(); return eu || (await Promise.resolve().then(ec.t.bind(ec, 70857, 23))).userInfo().username || void 0; }
+            async isTypedMemoryEnabled() { let eA = process.env[rf.ENV_KEY_CODEBUDDY_TYPED_MEMORY_ENABLED]; if (void 0 !== eA)
+                return "false" !== eA.toLowerCase() && "0" !== eA; let el = await this.settingsManager.get("memory"); return el?.typedMemory === void 0 || el.typedMemory; }
+            shouldInjectMemoryContext(eA) { let el = 1 === eA.input.filter(eA => "user" === eA.role).length, ec = !!(eA.session.options?.continue && !eA.session.options?.continued); return !!el || !!ec || !AH.MessageUtils.firstUserMessageContainsRole(eA.input, "memory"); }
+            async getMemoryDir() { let eA, el = AH.PathUtils.getCompressedWorkDir(), ec = await this.isTeamMemoryEnabled(), eu = await this.getTeamUserId(); return eA = ec && eu ? AH.PathUtils.getTeamMemoryDir(eu) : AH.PathUtils.getProjectMemoryDir(el), { projectId: el, memoryDir: eA }; }
+            async generateMemoryPrompt() { return await this.isTypedMemoryEnabled() ? this.generateTypedMemoryPrompt() : this.generateLegacyMemoryPrompt(); }
+            async generateTypedMemoryPrompt() {
+                let { projectId: eA, memoryDir: el } = await this.getMemoryDir(), ec = (0, nk.buildMemoryPrompt)({ displayName: "auto memory", memoryDir: el, projectId: eA });
+                return `<memory>
+${ec}
+</memory>`;
+            }
+            async generateLegacyMemoryPrompt() {
+                let { projectId: eA, memoryDir: el } = await this.getMemoryDir(), ec = (0, Aq.join)(el, "MEMORY.md"), eu = "";
+                try {
+                    if ((0, A$.existsSync)(ec)) {
+                        let eA = (eu = (0, A$.readFileSync)(ec, "utf-8")).split("\n");
+                        if (eA.length > 200 && (eu = eA.slice(0, 200).join("\n")), eu.length > 4e4) {
+                            let eA = eu.slice(0, 4e4), el = eA.lastIndexOf("\n");
+                            eu = el > 0 ? eA.slice(0, el + 1) + "\n... (truncated)" : eA + "\n... (truncated)";
+                        }
+                    }
+                }
+                catch (eA) {
+                    this.logger.warn(`[MemoryContextInterceptor] Failed to read ${ec}: ${eA instanceof Error ? eA.message : String(eA)}`);
+                }
+                let ed = eu.length > 0, ep = AH.PathUtils.getSessionHistoryDir(eA);
+                return `<memory>
+# auto memory
+
+You have a persistent auto memory directory at \`${el}/\`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence). Its contents persist across conversations.
+
+As you work, consult your memory files to build on previous experience.
+
+## How to save memories:
+- Organize memory semantically by topic, not chronologically
+- Use the Write and Edit tools to update your memory files
+- \`MEMORY.md\` is always loaded into your conversation context — lines after 200 will be truncated, so keep it concise
+- Create separate topic files (e.g., \`debugging.md\`, \`patterns.md\`) for detailed notes and link to them from MEMORY.md
+- Update or remove memories that turn out to be wrong or outdated
+- Do not write duplicate memories. First check if there is an existing memory you can update before writing a new one.
+
+## What to save:
+- Stable patterns and conventions confirmed across multiple interactions
+- Key architectural decisions, important file paths, and project structure
+- User preferences for workflow, tools, and communication style
+- Solutions to recurring problems and debugging insights
+
+## What NOT to save:
+- Session-specific context (current task details, in-progress work, temporary state)
+- Information that might be incomplete — verify against project docs before writing
+- Anything that duplicates or contradicts existing CODEBUDDY.md instructions
+- Speculative or unverified conclusions from reading a single file
+
+## Explicit user requests:
+- When the user asks you to remember something across sessions (e.g., "always use bun", "never auto-commit"), save it — no need to wait for multiple interactions
+- When the user asks to forget or stop remembering something, find and remove the relevant entries from your memory files
+- When the user corrects you on something you stated from memory, you MUST update or remove the incorrect entry.
+
+## Searching past context
+
+When looking for past context:
+1. Search topic files in your memory directory:
+\`\`\`
+Grep with pattern="<search term>" path="${el}/" glob="*.md"
+\`\`\`
+2. Session transcript logs (last resort — large files, slow):
+\`\`\`
+Grep with pattern="<search term>" path="${ep}/" glob="*.jsonl"
+\`\`\`
+Use narrow search terms (error messages, file paths, function names) rather than broad keywords.
+${ed ? `
+## Current MEMORY.md contents
+
+${eu}` : ""}
+</memory>`;
+            }
+            async injectRelevantMemories(eA, el) { let ec; if (!this.memoryRelevanceService)
+                return; let eu = el || this.extractLastUserQuery(eA.input); if (!eu)
+                return; let { memoryDir: ed } = await this.getMemoryDir(); if (!(0, A$.existsSync)(ed) || !await this.memoryRelevanceService.isEnabled())
+                return; let ep = eA.session.abortSignal; if (ep?.aborted)
+                return; this.stateMachine.transition(eA.session, { type: ry.SessionRunEventType.AGENT_STARTED }), await new Promise(eA => setTimeout(eA, 50)); let eg = !1; try {
+                let el = await this.getRelevantMemoriesContent(eu, ed, eA.session, ep);
+                if (el) {
+                    let ec = `<system-reminder data-role="memory">${el}</system-reminder>`;
+                    AH.MessageUtils.addSystemReminder(eA.input, ec, "last"), this.logger.debug("Injected relevant memories");
+                }
+            }
+            catch (eA) {
+                ec = eA;
+            }
+            finally {
+                eg = !!ep?.aborted;
+            } if (eg) {
+                this.logger.debug("[MemoryContextInterceptor] Aborted by user, setting skipRun"), eA.skipRun = !0;
+                try {
+                    let el = AH.InputItemUtils.createAssistantMessage(AH.INTERRUPTED_BY_USER_MESSAGE, { status: "incomplete", skipRun: !0, error: { message: "Request was aborted." } }), ec = Av.ContainerUtil.get(rC.SessionManager);
+                    await ec.addHistory(eA.session, [el]);
+                }
+                catch (eA) {
+                    this.logger.warn(`[MemoryContextInterceptor] Failed to add interruption message: ${eA.message}`);
+                }
+                this.stateMachine.forceIdle(eA.session, "memory-aborted-by-user");
+                return;
+            } if (ec)
+                throw ec; }
+            async getRelevantMemoriesContent(eA, el, ec, eu) {
+                if (!this.memoryRelevanceService)
+                    return "";
+                try {
+                    ec.memoriesSurfacedInSession || (ec.memoriesSurfacedInSession = new Set);
+                    let ed = ec.memoriesSurfacedInSession, ep = await this.memoryRelevanceService.selectRelevantMemories(eA, el, void 0, ed, eu);
+                    if (0 === ep.length)
+                        return "";
+                    for (let eA of ep)
+                        ed.add(eA.path);
+                    let eg = [];
+                    for (let eA of ep)
+                        try {
+                            let el = await (0, nT.readFile)(eA.path, "utf-8"), ec = (0, nR.memoryAge)(eA.mtimeMs), eu = (0, nR.memoryFreshnessText)(eA.mtimeMs), ed = eA.path.split("/").pop() || eA.path, ep = `### ${ed} (${ec})
+
+${el}`;
+                            eu && (ep += `
+
+> ${eu}`), eg.push(ep);
+                        }
+                        catch (el) {
+                            this.logger.warn(`Skipping unreadable memory file ${eA.path}: ${el.message}`);
+                        }
+                    if (0 === eg.length)
+                        return "";
+                    return `
+## Relevant memories for this query
+
+The following memories were automatically selected as relevant to your current task:
+
+${eg.join("\n\n---\n\n")}`;
+                }
+                catch (eA) {
+                    return this.logger.debug(`Failed to get relevant memories: ${eA.message}`), "";
+                }
+            }
+            extractLastUserQuery(eA) { for (let el = eA.length - 1; el >= 0; el--) {
+                let ec = eA[el];
+                if ("user" === ec.role && ec.content) {
+                    let eA = "";
+                    if ("string" == typeof ec.content ? eA = ec.content : Array.isArray(ec.content) && (eA = ec.content.filter(eA => "input_text" === eA.type || "text" === eA.type).map(eA => eA.text || "").join("\n")), !eA)
+                        continue;
+                    let el = eA.replace(/<system-reminder[^>]*>[\s\S]*?<\/system-reminder>/g, "").replace(/<command-name>[\s\S]*?<\/command-name>/g, "").replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "").replace(/<command-message>[\s\S]*?<\/command-message>/g, "").trim();
+                    if (el)
+                        return el;
+                }
+            } }
+        };
+        memory_context_interceptor_decorate([(0, Av.Autowired)(rf.SettingsManager), memory_context_interceptor_metadata("design:type", "function" == typeof (t0 = void 0 !== rf.SettingsManager && rf.SettingsManager) ? t0 : Object)], nM.prototype, "settingsManager", void 0), memory_context_interceptor_decorate([(0, Av.Autowired)(A7.Logger), memory_context_interceptor_metadata("design:type", "function" == typeof (t1 = void 0 !== A7.Logger && A7.Logger) ? t1 : Object)], nM.prototype, "logger", void 0), memory_context_interceptor_decorate([(0, Av.Optional)(), (0, Av.Autowired)(rN.MemoryRelevanceService), memory_context_interceptor_metadata("design:type", "function" == typeof (t2 = void 0 !== rN.MemoryRelevanceService && rN.MemoryRelevanceService) ? t2 : Object)], nM.prototype, "memoryRelevanceService", void 0), memory_context_interceptor_decorate([(0, Av.Autowired)(ry.SessionRunStateMachine), memory_context_interceptor_metadata("design:type", "function" == typeof (t3 = void 0 !== ry.SessionRunStateMachine && ry.SessionRunStateMachine) ? t3 : Object)], nM.prototype, "stateMachine", void 0), nM = memory_context_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nM);
+        var nx = ec(47005), stream_json_init_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, stream_json_init_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nO = 50, nN = class {
+            constructor() { this.priority = nO; }
+            async intercept(eA) {
+                let el, { session: ec, agent: eu } = eA;
+                if (!ec.options.print || "stream-json" !== ec.options.outputFormat)
+                    return;
+                try {
+                    el = nx.Context.getCurrent()?.response;
+                }
+                catch {
+                    return;
+                }
+                if (!el || el.headersSent)
+                    return;
+                let ed = eu.model.toString(), ep = Av.ContainerUtil.get(AL.SettingsManager), eg = await ep.get("permissions") || {}, eh = ec.permissionModeSubject.value || eg?.defaultMode || AL.PermissionMode.Default, ef = (await this.commandManager.getAll()).map(eA => eA.name.slice(1)), em = (await Promise.all(eu.mcpServers.map(eA => eA.listTools()))).flat().map(eA => eA.name), eE = ec.options, eC = [...eg.deny || [], ...eE?.disallowedTools || []], ey = em.filter(eA => { let el = [eA].map(eA => eA.toLowerCase()), ec = AH.PermissionUtils.matchMcpPermissionRules(eC, el), eu = [{ type: rm.ToolArgType.Unknown, value: "" }]; return !AH.PermissionUtils.checkPermissionRules(ec, eu); }), ew = new Set(AH.PermissionUtils.extractWholeToolRules(eC)), eB = [...ey, ...eu.tools.map(eA => eA.name).filter(eA => !ew.has(eA.toLowerCase()))], e_ = "";
+                try {
+                    e_ = new URL(this.productManager.getEndpoint()).hostname;
+                }
+                catch { }
+                let eI = { ...{ type: "system", subtype: "init", uuid: ec.id, session_id: ec.id, apiKeySource: e_, cwd: AH.PathUtils.getWorkDir(), tools: eB, mcp_servers: eu.mcpServers.map(eA => ({ name: eA.name, status: "connected" })), model: ed, permissionMode: eh, slash_commands: ef, output_style: "default" }, __timestamp: new Date().toISOString(), _requestId: ec.conversationRequestId };
+                el.setHeader("Content-Type", "text/event-stream"), el.setHeader("Cache-Control", "no-cache"), el.flushHeaders(), el.write(`event: next
+data: ${JSON.stringify(eI)}
+
+`);
+                let ev = el.setHeader;
+                el.setHeader = function (eA, el) { if (!this.headersSent)
+                    return ev.call(this, eA, el); }, ec.meta || (ec.meta = {}), ec.meta.systemInitEmitted = !0;
+            }
+        };
+        stream_json_init_interceptor_decorate([(0, Av.Autowired)(AQ.ProductManager), stream_json_init_interceptor_metadata("design:type", "function" == typeof (t4 = void 0 !== AQ.ProductManager && AQ.ProductManager) ? t4 : Object)], nN.prototype, "productManager", void 0), stream_json_init_interceptor_decorate([(0, Av.Autowired)(Ak.CommandManager), stream_json_init_interceptor_metadata("design:type", "function" == typeof (t8 = void 0 !== Ak.CommandManager && Ak.CommandManager) ? t8 : Object)], nN.prototype, "commandManager", void 0), nN = stream_json_init_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nN);
+        var nP = ec(68366), nL = ec(46943), team_context_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, team_context_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nF = "__lastInjectedTeammates", nU = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.TeamContext; }
+            async intercept(eA) { if (!Array.isArray(eA.input) || eA.skipRun)
+                return; let el = eA.session.meta?.teamContext; el ? await this.injectTeammatePrompt(eA, el) : await this.injectTeamLeadPrompt(eA); }
+            async injectTeammatePrompt(eA, el) {
+                let ec = Av.ContainerUtil.get(nP.TeamManager);
+                await ec.refreshFromDisk();
+                let eu = ec.getMembers().filter(eA => eA.name !== el.memberName).map(eA => eA.name), ed = eu.length > 0 ? eu : el.teamMembers, ep = ed.slice().sort().join("|");
+                if (this.shouldInjectTeamPrompt(eA, "Agent Teammate Communication", ep))
+                    try {
+                        let ec = await this.promptManager.get("team-sys-prompt");
+                        if (!ec) {
+                            this.logger.setContext("TeamContextInterceptor"), this.logger.warn("team-sys-prompt template not found, skipping team prompt injection");
+                            return;
+                        }
+                        let { teamName: eu, memberName: eg } = el, eh = await this.promptManager.render(ec.template, { variables: { teamName: eu, memberName: eg, teamMembers: ed.join(", ") } });
+                        eh && (nL.MessageUtils.addSystemReminder(eA.input, `<system-reminder data-role="team-context">
+${eh}
+</system-reminder>`, "last"), this.recordInjectedRoster(eA, ep), this.logger.setContext("TeamContextInterceptor"), this.logger.debug(`Injected team prompt for teammate "${eg}" in team "${eu}" (roster=${ep})`));
+                    }
+                    catch (eA) {
+                        this.logger.setContext("TeamContextInterceptor"), this.logger.error("Failed to inject team prompt:", eA);
+                    }
+            }
+            async injectTeamLeadPrompt(eA) {
+                let el = Av.ContainerUtil.get(nP.TeamManager);
+                if (!el.isInTeam())
+                    return;
+                await el.refreshFromDisk();
+                let ec = el.getTeam(), eu = el.getMembers().filter(eA => "team-lead" !== eA.name), ed = eu.map(eA => `- ${eA.name} (${eA.agentType || "agent"})`).join("\n");
+                if (!ed)
+                    return;
+                let ep = eu.map(eA => eA.name).sort().join("|");
+                if (this.shouldInjectTeamPrompt(eA, "Agent Team Communication", ep))
+                    try {
+                        let el = await this.promptManager.get("team-lead-prompt");
+                        if (!el) {
+                            this.logger.setContext("TeamContextInterceptor"), this.logger.warn("team-lead-prompt template not found, skipping team-lead prompt injection");
+                            return;
+                        }
+                        let eu = await this.promptManager.render(el.template, { variables: { teamName: ec.name, members: ed } });
+                        eu && (nL.MessageUtils.addSystemReminder(eA.input, `<system-reminder data-role="team-context">
+${eu}
+</system-reminder>`, "last"), this.recordInjectedRoster(eA, ep), this.logger.setContext("TeamContextInterceptor"), this.logger.debug(`Injected team-lead prompt for main agent with team "${ec.name}" (roster=${ep})`));
+                    }
+                    catch (eA) {
+                        this.logger.setContext("TeamContextInterceptor"), this.logger.error("Failed to inject team-lead prompt:", eA);
+                    }
+            }
+            shouldInjectTeamPrompt(eA, el, ec) { let eu = eA.input, ed = 1 === eu.filter(eA => "user" === eA.role).length, ep = !!(eA.session.options?.continue && !eA.session.options?.continued); if (ed || ep || void 0 !== ec && eA.session.meta?.[nF] !== ec)
+                return !0; for (let eA of eu)
+                if ("message" === eA.type && "user" === eA.role) {
+                    let ec = eA.content;
+                    if ("string" == typeof ec && ec.includes(el))
+                        return !1;
+                    if (Array.isArray(ec)) {
+                        for (let eA of ec)
+                            if ("input_text" === eA.type && "string" == typeof eA.text && eA.text.includes(el))
+                                return !1;
+                    }
+                } return !0; }
+            recordInjectedRoster(eA, el) { eA.session.meta || (eA.session.meta = {}), eA.session.meta[nF] = el; }
+        };
+        team_context_interceptor_decorate([(0, Av.Autowired)(rD.PromptManager), team_context_interceptor_metadata("design:type", "function" == typeof (t5 = void 0 !== rD.PromptManager && rD.PromptManager) ? t5 : Object)], nU.prototype, "promptManager", void 0), team_context_interceptor_decorate([(0, Av.Autowired)(A7.Logger), team_context_interceptor_metadata("design:type", "function" == typeof (t6 = void 0 !== A7.Logger && A7.Logger) ? t6 : Object)], nU.prototype, "logger", void 0), nU = team_context_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nU);
+        var nj = ec(54193), teammate_failure_interceptor_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, teammate_failure_interceptor_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nG = 6e5, nH = "Teammate Failure Report";
+        function formatTeammateFailuresBlock(eA, el = Date.now()) { let ec = eA.filter(eA => eA.lastFailure && "number" == typeof eA.lastFailure.occurredAt && el - eA.lastFailure.occurredAt <= nG).map(eA => ({ name: eA.name ?? "<unknown>", failure: eA.lastFailure })); if (0 !== ec.length)
+            return [`# ${nH}`, "", "The following teammates FAILED during their most recent run in this session.", "You MUST surface these failures to the user clearly and MUST NOT fabricate", "content on their behalf. When responding:", "  - Acknowledge which teammates failed and the category of failure.", "  - Do NOT synthesize an analysis/report as if the failed teammates had", "    successfully completed their work.", "  - If the failure looks recoverable (e.g. transient network), suggest", "    the user retry; otherwise ask the user how they want to proceed.", "", "Failed teammates:", ...ec.map(({ name: eA, failure: el }) => { let ec = el.category ?? "unknown"; return `  - ${eA} (${ec}): ${el.error}`; })].join("\n"); }
+        let nK = class {
+            constructor() { this.priority = A_.AgentRunInterceptorPriority.TeammateFailureContext; }
+            async intercept(eA) {
+                let el, ec;
+                if (!Array.isArray(eA.input) || eA.skipRun || eA.session.meta?.teamContext)
+                    return;
+                try {
+                    el = Av.ContainerUtil.get(nP.TeamManager);
+                }
+                catch {
+                    return;
+                }
+                if (!el.isInTeam?.() || this.hasExistingFailureMarker(eA.input))
+                    return;
+                try {
+                    ec = (0, nj.getTeamMemberRegistry)().getAll().map(eA => ({ name: eA.info?.name ?? "<unknown>", lastFailure: eA.lastFailure }));
+                }
+                catch {
+                    return;
+                }
+                let eu = formatTeammateFailuresBlock(ec);
+                if (!eu)
+                    return;
+                let ed = `<system-reminder data-role="teammate-failures">
+${eu}
+</system-reminder>`;
+                AH.MessageUtils.addSystemReminder(eA.input, ed, "last"), this.logger.setContext("TeammateFailureInterceptor"), this.logger.info?.("[TeammateFailureInterceptor] Injected <teammate-failures> block for team-lead");
+            }
+            hasExistingFailureMarker(eA) { for (let el of eA) {
+                if ("message" !== el.type)
+                    continue;
+                let eA = el;
+                if ("user" !== eA.role)
+                    continue;
+                let ec = eA.content;
+                if ("string" == typeof ec) {
+                    if (ec.includes(nH))
+                        return !0;
+                    continue;
+                }
+                if (Array.isArray(ec)) {
+                    for (let eA of ec)
+                        if (eA?.type === "input_text" && "string" == typeof eA.text && eA.text.includes(nH))
+                            return !0;
+                }
+            } return !1; }
+        };
+        teammate_failure_interceptor_decorate([(0, Av.Autowired)(A7.Logger), teammate_failure_interceptor_metadata("design:type", "function" == typeof (t9 = void 0 !== A7.Logger && A7.Logger) ? t9 : Object)], nK.prototype, "logger", void 0), nK = teammate_failure_interceptor_decorate([(0, Av.Component)(A_.AgentRunInterceptor)], nK);
+        let n$ = new Map([[nN, "StreamJsonInitInterceptor"], [nM, "MemoryContextInterceptor"], [nU, "TeamContextInterceptor"], [nK, "TeammateFailureInterceptor"], [rI, "InsightsDataAgentRunInterceptor"], [rV, "StateAgentRunInterceptor"], [rZ, "ModelConfigAgentRunInterceptor"], [ContinueAgentRunInterceptor, "ContinueAgentRunInterceptor"], [rX, "ImageFilterAgentRunInterceptor"], [nf, "SystemReminderAgentRunInterceptor"], [nE, "TelemetryAgentRunInterceptor"], [nC, "TokenCalculationAgentRunInterceptor"], [rK, "ImageRehydrationAgentRunInterceptor"], [r$, "ImageCompressionAgentRunInterceptor"], [rU, "ProviderDataAgentRunInterceptor"], [rj, "HistoryAgentRunInterceptor"], [rG, "MessageReorganizeAgentRunInterceptor"], [rL, "ReferencePathProcessorAgentRunInterceptor"], [rF, "ConditionalRulesAgentRunInterceptor"], [rS, "ChannelEventAgentRunInterceptor"], [r1, "PreMessageCompactInterceptor"], [rx, "EnvAgentRunInterceptor"], [rQ, "AgentSwitchAgentRunInterceptor"], [nd, "SandboxAgentRunInterceptor"], [nB, "UltracodeEffortReminderInterceptor"], [nD, "UltracodeKeywordInterceptor"], [rY, "SkipRunAgentRunInterceptor"], [rJ, "UserInputAgentRunInterceptor"], [rq, "MessageQueueAgentRunInterceptor"], [rz, "UserQueryWrapperAgentRunInterceptor"], [rM, "DeepResearchPendingInterceptor"], [rE.WorktreeContextInterceptor, "WorktreeContextInterceptor"]]);
+        function resolveInterceptorName(eA) { return n$.get(eA.constructor) ?? eA.constructor.name; }
+        var agent_service_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, agent_service_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        function agent_service_getProfiler() { try {
+            return Av.ContainerUtil.get(AF.StartupProfiler);
+        }
+        catch {
+            return;
+        } }
+        let nY = class {
+            async waitForPluginRuntimeRefresh() { await this.pluginRuntimeRefreshService?.waitForRefreshSettled(); }
+            isManagedAgentInstance(eA) { return this.agentManager.isManagedAgentInstance?.(eA) === !0; }
+            async joinPluginRuntimeRefreshForRun(eA) { let el = eA.agent, ec = this.isManagedAgentInstance(el); if (await this.waitForPluginRuntimeRefresh(), !ec)
+                return; let eu = await this.agentManager.get(el.name); eu && eu.name === el.name && this.isManagedAgentInstance(eu) && (eA.agent = eu); }
+            async run(eA, el, ec) { let eu = agent_service_getProfiler(); eu?.markStart(AF.StartupPhase.AUTH_WAIT, "Auth Wait (initialized)"), await this.authenticationManager.initialized, eu?.markEnd(AF.StartupPhase.AUTH_WAIT), eu?.markStart(AF.StartupPhase.RUNNER_INIT, "Runner Init"); let ed = await this.runnerProvider.get(); eu?.markEnd(AF.StartupPhase.RUNNER_INIT); let ep = (0, AH.createAbortController)(), eg = process.env[A_.ENV_MAX_TURNS] ? Number(process.env[A_.ENV_MAX_TURNS]) : void 0; ec = { maxTurns: eg && Number.isFinite(eg) && eg > 0 ? eg : A_.DEFAULT_MAX_TURNS, stream: !0, ...ec }; let eh = ec?.bypassMessageQueue === !0; eh && (ec = { ...ec }, delete ec.bypassMessageQueue), ec.signal = ep.signal; let ef = AH.SessionUtils.is(ec?.context) ? ec.context : await this.sessionManager.create(), em = ef.abortController, eE = em?.signal?.aborted === !0; ef.lastCancelledQueue && (ef.lastCancelledQueue = void 0), ef.abortController = ep, ef.abortSignal = ep.signal, ep.signal.addEventListener("abort", () => { em && !em.signal.aborted && (this.logger.info("Aborting previous agent run in AgentService.run: new agent run initiated, canceling previous unfinished run"), em.abort()); }, { once: !0 }), ef.requestOptions || (ef.requestOptions = {}); let eC = { input: el, agent: eA, session: ef, agentOptions: ec, skipRun: !1, bypassMessageQueue: eh }; eu?.markStart(AF.StartupPhase.AGENT_INTERCEPTORS, "Agent Interceptors"); let ey = !1; if (!eh || this.stateMachine.isIdle(ef)) {
+                let eA = this.stateMachine.getSnapshot(ef).status, el = this.stateMachine.transition(ef, { type: ra.SessionRunEventType.RUN_PREPARING }).status;
+                ey = eA === ra.SessionRunStatus.IDLE && el === ra.SessionRunStatus.PREPARING;
+            } let ew = ef.conversationRequestRootSpan, eB = ew?.startSpan("run-interceptors"), e_ = this.agentRunInterceptorProvider.sortSync(), eI = -1; for (let eA = 0; eA < e_.length; eA++)
+                e_[eA].priority === A_.AgentRunInterceptorPriority.History && (eI = eA); let ev = !1; for (let eA = 0; eA < e_.length; eA++) {
+                let el = e_[eA], ec = eB?.startSpan(`run-${resolveInterceptorName(el)}`);
+                try {
+                    await el.intercept(eC), ec?.markAsSuccessful();
+                }
+                catch (eA) {
+                    throw ec?.markAsFailed(eA), eB?.markAsFailed(eA), this.stateMachine.transition(ef, { type: ra.SessionRunEventType.RUN_FAILED, reason: "interceptor-error" }), eA;
+                }
+                eA !== eI || eC.skipRun || (await this.joinPluginRuntimeRefreshForRun(eC), ev = !0);
+            } if (eB?.markAsSuccessful(), eu?.markEnd(AF.StartupPhase.AGENT_INTERCEPTORS), eC.skipRun) {
+                this.logger.info(`[AgentService] skipRun=true for agent=${eA.name}, runState=${ef.runState?.status}, queueLen=${ef.queue?.length}, isCompressing=${ef.isCompressing}`), ey ? this.stateMachine.transition(ef, { type: ra.SessionRunEventType.RUN_SKIPPED, reason: "skipRun" }) : this.logger.info(`[AgentService] skipRun without lifecycle ownership — not emitting RUN_SKIPPED, preserving active run state=${ef.runState?.status} session=${ef.id}`);
+                let el = ef.queue?.some(eA => !AH.InputItemUtils.isQueueHoldItem(eA)) ?? !1;
+                this.stateMachine.isIdle(ef) && !eE && el && !AH.QueueDispatchUtils.isDeferredDispatchEnabledSync() && (this.logger.debug(`[AgentService] skipRun with ${ef.queue.length} queued message(s) while idle, draining`), setImmediate(async () => { try {
+                    let eA = await this.resolveAgentForSession(ef);
+                    await this.run(eA, [], { context: ef });
+                }
+                catch (eA) {
+                    this.logger.warn("[AgentService] Failed to drain queue after skipRun:", eA);
+                } }));
+                return;
+            } ev || await this.joinPluginRuntimeRefreshForRun(eC); let eS = this.isManagedAgentInstance(eC.agent) ? eC.agent : void 0; return await this.agentManager.ensureAgentToolsFreshForRun(eC.agent.name, eC.session, ep.signal, eS), this.logger.info(`[AgentService] runner.run START: agent=${eC.agent.name}, signal.aborted=${ep.signal.aborted}, isCompressing=${eC.session.isCompressing}`), this.sessionManager.run(eC.session, async () => { let eA = await ed.run(eC.agent, eC.input, ec); this.logger.info(`[AgentService] runner.run DONE: agent=${eC.agent.name}, cancelled=${eA?.cancelled}`), eC.session.resultAbortSignalMap.set(eA, ep.signal), eC.session.resultSubject.next(eA); }); }
+            async resolveAgentForSession(eA) { let el = eA?.agentName || eA?.meta?.agentName, ec = this.agentManager.getDefaultAgentName(); if (el && el !== ec)
+                try {
+                    let ec = await this.agentManager.get(el);
+                    if (ec)
+                        return ec;
+                    this.logger.warn(`[AgentService] Agent "${el}" not found for session ${eA?.id}, falling back to default agent`);
+                }
+                catch (ec) {
+                    this.logger.warn(`[AgentService] Error resolving agent "${el}" for session ${eA?.id}, falling back to default agent:`, ec);
+                } return this.agentManager.getDefault(); }
+            async runDefault(eA, el) { let ec = agent_service_getProfiler(), eu = AH.SessionUtils.is(el?.context) ? el.context : void 0; ec?.markStart("agent_get_default", "AgentService.resolveAgentForSession()"); let ed = await this.resolveAgentForSession(eu); return ec?.markEnd("agent_get_default"), this.logger.info(`[MCP][resolveAgentForSession] run agent=${ed?.name} mcpServers=[${(ed?.mcpServers ?? []).map(eA => eA.name).join(",")}] (count=${(ed?.mcpServers ?? []).length})`), this.run(ed, eA, el); }
+            async runOneTime(eA, el, ec) { await this.waitForPluginRuntimeRefresh(); let eu = await this.agentManager.get(eA); if (!eu)
+                throw Error(`Failed find agent [${eA}]`); let ed = (0, AH.createAbortController)(); ec || (ec = {}), ec.signal = ed.signal; let ep = AH.SessionUtils.is(ec.context) ? ec.context : await this.sessionManager.create(); ec.context = ep; let eg = ep.abortController; ep.abortController = ed, ep.abortSignal = ed.signal, ed.signal.addEventListener("abort", () => { eg && !eg.signal.aborted && (this.logger.info("Aborting previous agent run in AgentService.runOneTime: new one-time agent run initiated, canceling previous unfinished run"), eg.abort()); }, { once: !0 }), eu.model = (await this.agentManager.getModel(eA)).id; let eh = await this.runnerProvider.get(); "string" == typeof el && (el = [(0, AB.user)(el)]); let ef = ep.agentPurpose, em = AI.AGENT_PURPOSE_MAP[eA]; (em || !ep.agentPurpose) && (ep.agentPurpose = em ?? eA); let eE = ep.conversationRequestId; return ep.conversationRequestId = (0, Av.generateUUUID)().replace(/-/g, ""), this.sessionManager.run(ep, async () => { try {
+                let eA = await eh.run(eu, el, { ...ec || {}, stream: !0 }), ed = "";
+                for await (let el of eA.toTextStream())
+                    ed += el;
+                try {
+                    for (let el of eA.rawResponses)
+                        el.usage && ep.usage.add(el.usage);
+                }
+                catch { }
+                return ed;
+            }
+            finally {
+                ep.agentPurpose = ef, ep.conversationRequestId = eE;
+            } }); }
+            async runOneTimeWithOverrides(eA, el, ec, eu) { await this.waitForPluginRuntimeRefresh(); let ed = await this.agentManager.get(eA); if (!ed)
+                throw Error(`Failed find agent [${eA}]`); let ep = Object.create(ed); ep.modelSettings = { ...ed.modelSettings }, ec?.systemPrompt && (ep.instructions = ec.systemPrompt), ec?.temperature !== void 0 && (ep.modelSettings = ep.modelSettings || {}, ep.modelSettings.temperature = ec.temperature), ec?.maxTokens !== void 0 && (ep.modelSettings = ep.modelSettings || {}, ep.modelSettings.maxTokens = ec.maxTokens), ec?.stopSequences !== void 0 && (ep.modelSettings = ep.modelSettings || {}, ep.modelSettings.providerData = { ...ep.modelSettings.providerData, stop: ec.stopSequences }); let eg = (0, AH.createAbortController)(); eu || (eu = {}), eu.signal = eg.signal; let eh = AH.SessionUtils.is(eu.context) ? eu.context : await this.sessionManager.create(); eu.context = eh; let ef = eh.abortController; eh.abortController = eg, eh.abortSignal = eg.signal, eg.signal.addEventListener("abort", () => { ef && !ef.signal.aborted && (this.logger.info("Aborting previous agent run in AgentService.runOneTimeWithOverrides: new run initiated, canceling previous unfinished run"), ef.abort()); }, { once: !0 }), ec?.bypassPermissions && eh.permissionModeSubject.next(rf.PermissionMode.BypassPermissions); let em = ec?.model?.trim(); ep.model = (em ? await this.agentManager.resolveConfiguredModelOrFallback(em, "runOneTimeWithOverrides") : void 0) ?? (await this.agentManager.getModel(eA)).id; let eE = await this.runnerProvider.get(); "string" == typeof el && (el = [(0, AB.user)(el)]); let eC = eh.agentPurpose; return eh.agentPurpose = (0, AI.resolveAgentPurpose)(eA), this.sessionManager.run(eh, async () => { try {
+                let eA = await eE.run(ep, el, { ...eu || {}, maxTurns: ec?.maxTurns ?? A_.DEFAULT_MAX_TURNS, stream: !0 }), ed = "";
+                for await (let el of eA.toTextStream())
+                    ed += el;
+                try {
+                    for (let el of eA.rawResponses)
+                        el.usage && eh.usage.add(el.usage);
+                }
+                catch { }
+                return ed;
+            }
+            finally {
+                eh.agentPurpose = eC;
+            } }); }
+            async runForked(eA, el, ec, eu) { let ed; await this.waitForPluginRuntimeRefresh(); let ep = await this.agentManager.get(eA); if (!ep)
+                throw Error(`Failed to find agent [${eA}]`); let eg = [...ec.history], eh = eg.at(-1); eh && "message" === eh.type && "assistant" === eh.role && "in_progress" === eh.status && (eg = eg.slice(0, -1)); let { lastMessageId: ef, hasCompactedHistory: em } = ec; eg = AH.HistoryUtils.getActiveAgentOnlyHistory(eg, { lastMessageId: ef, hasCompactedHistory: em }), eg = AH.HistoryUtils.getCompactHistory(eg), eg = AH.HistoryUtils.filterTaskHistory(ep, eg), eg = AH.HistoryUtils.filterTruncatedHistory(eg); let eE = [...eg = AH.HistoryUtils.fillFunctionCallResultHistory(eg), ..."string" == typeof el ? [(0, AB.user)(el)] : el], eC = await this.sessionManager.create(); eu?.disableTools && (ed = ep.tools, ep.tools = []); try {
+                let el = (0, AH.createAbortController)(), ed = eu?.maxTurns ?? 1;
+                eC.abortController = el, eC.abortSignal = el.signal, ep.model = (await this.agentManager.getModel(eA)).id;
+                let eg = await this.runnerProvider.get();
+                return await this.sessionManager.run(eC, async () => { let eA = await eg.run(ep, eE, { maxTurns: ed, stream: !0, signal: el.signal, context: eC }), eu = ""; for await (let el of eA.toTextStream())
+                    eu += el; try {
+                    for (let el of eA.rawResponses)
+                        el.usage && ec.usage.add(el.usage);
+                }
+                catch { } return eu; });
+            }
+            finally {
+                void 0 !== ed && (ep.tools = ed);
+            } }
+        };
+        agent_service_decorate([(0, Av.Autowired)(A_.RunnerProvider), agent_service_metadata("design:type", "function" == typeof (t7 = void 0 !== A_.RunnerProvider && A_.RunnerProvider) ? t7 : Object)], nY.prototype, "runnerProvider", void 0), agent_service_decorate([(0, Av.Autowired)(A_.AgentManager), agent_service_metadata("design:type", "function" == typeof (An = void 0 !== A_.AgentManager && A_.AgentManager) ? An : Object)], nY.prototype, "agentManager", void 0), agent_service_decorate([(0, Av.Autowired)(rh.PluginRuntimeRefreshService), (0, Av.Optional)(), agent_service_metadata("design:type", "function" == typeof (Al = void 0 !== rh.PluginRuntimeRefreshService && rh.PluginRuntimeRefreshService) ? Al : Object)], nY.prototype, "pluginRuntimeRefreshService", void 0), agent_service_decorate([(0, Av.Autowired)(AS.AuthenticationManager), agent_service_metadata("design:type", "function" == typeof (Ac = void 0 !== AS.AuthenticationManager && AS.AuthenticationManager) ? Ac : Object)], nY.prototype, "authenticationManager", void 0), agent_service_decorate([(0, Av.Autowired)(ra.SessionManager), agent_service_metadata("design:type", "function" == typeof (Au = void 0 !== ra.SessionManager && ra.SessionManager) ? Au : Object)], nY.prototype, "sessionManager", void 0), agent_service_decorate([(0, Av.Autowired)(ra.SessionRunStateMachine), agent_service_metadata("design:type", "function" == typeof (Ad = void 0 !== ra.SessionRunStateMachine && ra.SessionRunStateMachine) ? Ad : Object)], nY.prototype, "stateMachine", void 0), agent_service_decorate([(0, Av.AutowiredProvider)(A_.AgentRunInterceptor), agent_service_metadata("design:type", "function" == typeof (Ap = void 0 !== Av.Provider && Av.Provider) ? Ap : Object)], nY.prototype, "agentRunInterceptorProvider", void 0), agent_service_decorate([(0, Av.Autowired)(rm.ToolManager), agent_service_metadata("design:type", "function" == typeof (Ag = void 0 !== rm.ToolManager && rm.ToolManager) ? Ag : Object)], nY.prototype, "toolManager", void 0), agent_service_decorate([(0, Av.Autowired)(A7.Logger), agent_service_metadata("design:type", "function" == typeof (Ah = void 0 !== A7.Logger && A7.Logger) ? Ah : Object)], nY.prototype, "logger", void 0), nY = agent_service_decorate([(0, Av.Component)(A_.AgentService)], nY);
+        var nJ = ec(43519), nq = ec(8443), nz = ec(90123), custom_agent_manager_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, custom_agent_manager_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nW = class {
+            constructor() { this.customAgents = []; }
+            init() { this.loadCustomAgents(); }
+            async agentSettingsWithAI(eA, el) {
+                let ec = `Create an agent configuration based on this request: "${el}".
+  Return ONLY the JSON object, no other text.`, eu = await this.agentService.runOneTime(A_.AgentNames.AGENT_INSTRUCTIONS, ec, { context: eA });
+                return AH.StringUtils.extractJsonFromString(eu.replace(/\n/g, ""));
+            }
+            async createAgentMd(eA) {
+                let { name: el, tool: ec, description: eu, systemPrompt: ed } = eA, ep = { name: el, description: eu };
+                ec && "*" !== ec && (ep.tools = ec);
+                let eg = (0, nJ.stringify)(ep, { lineWidth: 0 }), eh = `---
+${eg}---
+
+${ed}`, { path: ef, directory: em } = this.getSavePath(eA);
+                try {
+                    await (0, nT.access)(em);
+                }
+                catch {
+                    await (0, nT.mkdir)(em, { recursive: !0 });
+                }
+                await (0, nT.writeFile)(ef, eh);
+            }
+            loadCustomAgents() { let { agents: eA = [] } = this.productManager.getCurrentConfiguration() || {}; this.customAgents = eA.filter(eA => eA.tags?.includes(A_.CUSTOM_AGENT_TAG) && !eA.tags?.includes(A_.PLUGIN_AGENT_TAG)).map(eA => { let { name: el, tags: ec, description: eu, tools: ed = [], models: ep = [], instructions: eg = "", color: eh } = eA; return { name: el, location: ec?.includes(A_.CustomAgentScope.USER) ? A_.CustomAgentScope.USER : A_.CustomAgentScope.PROJECT, description: eu, tool: ed.join(","), model: ep.join(","), systemPrompt: eg, color: eh }; }) || []; }
+            getSavePath(eA) { let el, { location: ec, name: eu } = eA, ed = eu + ".md"; return el = ec === A_.CustomAgentScope.USER ? AH.PathUtils.getHomeAgentsDir() : AH.PathUtils.getProjectAgentsDir(), { path: (0, Aq.join)(el, ed), directory: el, fileName: ed }; }
+            async createByAI(eA, el, ec) { try {
+                let { identifier: eu, whenToUse: ed, systemPrompt: ep } = await this.agentSettingsWithAI(eA, el) || {};
+                if (!eu || !ed || !ep)
+                    return { success: !1, error: "AI generated incomplete agent configuration. Please try with a more detailed description." };
+                let eg = { name: eu, location: ec, systemPrompt: ep, tool: "*", model: "", description: ed };
+                return await this.createAgentMd(eg), this.logger.info("[ProductManager.sync] Triggered by custom agent creation via AI"), await this.productManager.sync(), this.loadCustomAgents(), { success: !0, agent: eg };
+            }
+            catch (eA) {
+                return { success: !1, error: `Create error：${eA instanceof Error ? eA.message : "unknown error"}` };
+            } }
+            async delete(eA) { let el = this.customAgents.find(el => el.name === eA); if (!el)
+                return void this.logger.warn(`Agent ${eA} not found`); let { path: ec } = this.getSavePath(el); try {
+                await (0, nT.access)(ec), await (0, nT.unlink)(ec), this.logger.info("[ProductManager.sync] Triggered by custom agent deletion"), await this.productManager.sync(), this.loadCustomAgents();
+            }
+            catch (eA) {
+                this.logger.debug(eA);
+            } }
+            get(eA) { return this.customAgents.find(el => el.name === eA); }
+            getAll() { return this.customAgents; }
+            async openSettings(eA) {
+                let el = this.getSavePath(eA).path;
+                try {
+                    if (await AH.FileUtils.openFile(el))
+                        return;
+                    if (!nz.ExternalEditorUtils.getAvailableEditor())
+                        return void this.consoleManager.error(`Failed to open agent settings file: ${el}
+No text editor available. Please set $VISUAL or $EDITOR environment variable (e.g., export EDITOR=vim)`);
+                    try {
+                        nz.ExternalEditorUtils.openWithExternalEditor(el);
+                    }
+                    catch (el) {
+                        let eA = el instanceof Error ? el.message : String(el);
+                        this.consoleManager.error(`Failed to open file with editor: ${eA}`);
+                    }
+                }
+                catch (eA) {
+                    this.consoleManager.error(`Error in openSettings: ${eA}`);
+                }
+            }
+        };
+        custom_agent_manager_decorate([(0, Av.Autowired)(AQ.ProductManager), custom_agent_manager_metadata("design:type", "function" == typeof (Af = void 0 !== AQ.ProductManager && AQ.ProductManager) ? Af : Object)], nW.prototype, "productManager", void 0), custom_agent_manager_decorate([(0, Av.Autowired)(ra.SessionManager), custom_agent_manager_metadata("design:type", "function" == typeof (Am = void 0 !== ra.SessionManager && ra.SessionManager) ? Am : Object)], nW.prototype, "sessionManager", void 0), custom_agent_manager_decorate([(0, Av.Autowired)(A_.AgentService), custom_agent_manager_metadata("design:type", "function" == typeof (AE = void 0 !== A_.AgentService && A_.AgentService) ? AE : Object)], nW.prototype, "agentService", void 0), custom_agent_manager_decorate([(0, Av.Autowired)(Av.Logger), custom_agent_manager_metadata("design:type", "function" == typeof (AC = void 0 !== Av.Logger && Av.Logger) ? AC : Object)], nW.prototype, "logger", void 0), custom_agent_manager_decorate([(0, Av.Autowired)(nq.ConsoleManager), custom_agent_manager_metadata("design:type", "function" == typeof (Ay = void 0 !== nq.ConsoleManager && nq.ConsoleManager) ? Ay : Object)], nW.prototype, "consoleManager", void 0), custom_agent_manager_decorate([(0, Av.PostConstruct)(), custom_agent_manager_metadata("design:type", Function), custom_agent_manager_metadata("design:paramtypes", []), custom_agent_manager_metadata("design:returntype", void 0)], nW.prototype, "init", null), nW = custom_agent_manager_decorate([(0, Av.Component)(A_.CustomAgentManager)], nW);
+        var agent_completion_waiter_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; };
+        let nV = class {
+            constructor() { this.completionPromises = new WeakMap; }
+            async waitForCompletion(eA) { let el = this.completionPromises.get(eA); el && 0 !== el.length && await Promise.all(el); }
+            registerCompletion(eA, el) { let ec = this.completionPromises.get(eA); ec || (ec = [], this.completionPromises.set(eA, ec)), ec.push(el); }
+            clearCompletion(eA) { this.completionPromises.delete(eA); }
+        };
+        nV = agent_completion_waiter_decorate([(0, Av.Component)(A_.AgentCompletionWaiter)], nV);
+        var nZ = ec(40038), tool_call_loop_detector_service_decorate = function (eA, el, ec, eu) { var ed, ep = arguments.length, eg = ep < 3 ? el : null === eu ? eu = Object.getOwnPropertyDescriptor(el, ec) : eu; if ("object" == typeof Reflect && "function" == typeof Reflect.decorate)
+            eg = Reflect.decorate(eA, el, ec, eu);
+        else
+            for (var eh = eA.length - 1; eh >= 0; eh--)
+                (ed = eA[eh]) && (eg = (ep < 3 ? ed(eg) : ep > 3 ? ed(el, ec, eg) : ed(el, ec)) || eg); return ep > 3 && eg && Object.defineProperty(el, ec, eg), eg; }, tool_call_loop_detector_service_metadata = function (eA, el) { if ("object" == typeof Reflect && "function" == typeof Reflect.metadata)
+            return Reflect.metadata(eA, el); };
+        let nX = 4, n0 = 40, n1 = 40, n2 = "Read", n3 = new Set(["function_call_result", "reasoning"]), n4 = new Set(["Read", "Grep", "Glob", "Write", "WebFetch", "WebSearch", "Edit", "Skill", "Bash"]), n8 = class {
+            check(eA) { try {
+                let el = this.detectLoop(eA.input);
+                if (el.detected && el.message) {
+                    this.logger.warn(`[ToolCallLoopDetector] Loop detected: tool="${el.toolName}", reason=${el.reason}, consecutiveCount=${el.consecutiveCount}`);
+                    let ec = [...eA.input, { type: "message", role: "user", content: [{ type: "input_text", text: el.message }] }];
+                    return { ...eA, input: ec };
+                }
+            }
+            catch (eA) {
+                this.logger.warn("[ToolCallLoopDetector] Loop detection check failed:", eA);
+            } return null; }
+            detectLoop(eA) { if (!eA || !Array.isArray(eA) || 0 === eA.length || this.hasExistingMarker(eA))
+                return { detected: !1 }; let el = this.collectTailCalls(eA); if (el.length >= nX) {
+                let eA = this.checkGenericLoop(el);
+                if (eA.detected)
+                    return eA;
+                let ec = this.checkReadFileLoop(el);
+                if (ec.detected)
+                    return ec;
+            } let ec = this.checkNonBlacklistLoop(eA); return ec.detected ? ec : { detected: !1 }; }
+            hasExistingMarker(eA) { for (let el of eA)
+                if ("message" === el.type && "user" === el.role && Array.isArray(el.content) && el.content.some(eA => "string" == typeof eA.text && eA.text.includes(nZ.LOOP_DETECTION_MARKER)))
+                    return !0; return !1; }
+            collectTailCalls(eA, el = !0) { let ec = []; for (let eu = eA.length - 1; eu >= 0; eu--) {
+                let ed = eA[eu];
+                if ("function_call" === ed.type)
+                    n4.has(ed.name) === el && ec.unshift({ name: ed.name, arguments: ed.arguments || "" });
+                else if (ed.type && n3.has(ed.type))
+                    continue;
+                else
+                    break;
+            } return ec; }
+            checkGenericLoop(eA) { let el = eA[eA.length - 1], ec = el.name + "\0" + el.arguments, eu = 0; for (let el = eA.length - 1; el >= 0; el--)
+                if (eA[el].name + "\0" + eA[el].arguments === ec)
+                    eu++;
+                else
+                    break; return eu >= nX ? { detected: !0, toolName: el.name, reason: "generic_loop", consecutiveCount: eu, message: this.buildStopMessage(el.name, eu, "generic_loop") } : { detected: !1 }; }
+            checkNonBlacklistLoop(eA) { let el = this.collectTailCalls(eA, !1); if (el.length < n1)
+                return { detected: !1 }; let ec = el[el.length - 1], eu = ec.name + "\0" + ec.arguments, ed = 0; for (let eA = el.length - 1; eA >= 0; eA--)
+                if (el[eA].name + "\0" + el[eA].arguments === eu)
+                    ed++;
+                else
+                    break; return ed >= n1 ? { detected: !0, toolName: ec.name, reason: "generic_loop", consecutiveCount: ed, message: this.buildStopMessage(ec.name, ed, "generic_loop") } : { detected: !1 }; }
+            checkReadFileLoop(eA) { let el = eA[eA.length - 1]; if (el.name !== n2)
+                return { detected: !1 }; let ec = this.extractFilePath(el.arguments); if (!ec)
+                return { detected: !1 }; let eu = 0; for (let el = eA.length - 1; el >= 0; el--) {
+                let ed = eA[el];
+                if (ed.name !== n2)
+                    break;
+                if (this.extractFilePath(ed.arguments) === ec)
+                    eu++;
+                else
+                    break;
+            } return eu >= n0 ? { detected: !0, toolName: n2, reason: "read_file_loop", consecutiveCount: eu, message: this.buildStopMessage(n2, eu, "read_file_loop") } : { detected: !1 }; }
+            buildStopMessage(eA, el, ec) { let eu = []; return eu.push("["), "generic_loop" === ec ? eu.push(`Loop detected: the tool "${eA}" has been called ${el} consecutive times with identical arguments.`) : eu.push(`Loop detected: the tool "${eA}" has been reading the same file ${el} consecutive times.`), eu.push(""), eu.push("STOP calling tools immediately. Do NOT make any more tool calls."), eu.push("Instead, tell the user what happened and suggest they switch models or modify their prompt to retry."), eu.push("]"), eu.push(""), eu.push(nZ.LOOP_DETECTION_MARKER), eu.join("\n"); }
+            extractFilePath(eA) { if (eA)
+                try {
+                    let el = JSON.parse(eA);
+                    return el.file_path || el.filePath;
+                }
+                catch {
+                    let el = eA.match(/"(?:file_path|filePath)"\s*:\s*"([^"]+)"/);
+                    return el?.[1];
+                } }
+        };
+        tool_call_loop_detector_service_decorate([(0, Av.Autowired)(A7.Logger), tool_call_loop_detector_service_metadata("design:type", "function" == typeof (Aw = void 0 !== A7.Logger && A7.Logger) ? Aw : Object)], n8.prototype, "logger", void 0), n8 = tool_call_loop_detector_service_decorate([(0, Av.Component)(nZ.ToolCallLoopDetector)], n8);
+    } });

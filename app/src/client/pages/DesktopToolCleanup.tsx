@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MaintenanceState } from '../../shared/maintenance.js';
-import { desktopInvoke } from './desktop-bridge.js';
+import { desktopInvoke, DesktopResponsePendingError } from './desktop-bridge.js';
 import { acceptedCleanupJob, cleanupFamilies, cleanupProgress, cleanupRows, type CleanupFamily, type CleanupRow, type CleanupStates, type CleanupProgress } from './desktop-cleanup.js';
 type Pending = { row: CleanupRow; requestId: string; jobId?: string; accepted: boolean; result?: CleanupProgress; rescanned?: boolean };
 const storageKey = 'axiom.desktop.cleanup.pending';
@@ -23,7 +22,9 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
     try { if (value) sessionStorage.setItem(storageKey, JSON.stringify(value)); else sessionStorage.removeItem(storageKey); } catch {}
   }
   async function request<T>(op: string, params: object = {}, requestId = crypto.randomUUID()) {
-    return desktopInvoke<{ requestId: string; data: T }>('axiom_cleanup', { request: { op, params, requestId } }, 95_000);
+    const response = await desktopInvoke<{ requestId: string; data: T }>('axiom_cleanup', { request: { op, params, requestId } }, 95_000);
+    if (!response || response.requestId !== requestId || !response.data) throw new DesktopResponsePendingError('清理响应无效，结果尚未确认，请读取状态核实。');
+    return response;
   }
   async function read(family: CleanupFamily) {
     const { data } = await request<CleanupStates[CleanupFamily]>(`${family}.get`);
@@ -57,20 +58,17 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
   async function verify() {
     const current = pendingRef.current; if (!current) return;
     const data = await read(current.row.family);
+    if (pendingRef.current !== current) return;
     let result: CleanupProgress;
     if (!current.accepted) {
       result = { state: 'unknown', message: '提交响应丢失，已读取当前状态；尚不能将其他任务或文件消失归因于本次请求。请结合维护历史核实后再决定是否重新清理。' };
     } else {
-      let history: MaintenanceState | undefined;
-      if (current.row.op === 'modelProxy.importerUninstall') {
-        try { history = (await request<MaintenanceState>('maintenance.get')).data; } catch { /* Keep unknown, but still rescan independently. */ }
-      }
-      result = cleanupProgress(current.row, data, current.jobId, history);
+      result = cleanupProgress(current.row, data, current.jobId);
     }
     let next = { ...current, result }; save(next);
-    if (result.state !== 'running' && !current.rescanned) {
+    if (['verified', 'failed'].includes(result.state) && !current.rescanned) {
       const rescanned = await rescan.current();
-      if (pendingRef.current?.requestId === current.requestId) { next = { ...next, rescanned }; save(next); }
+      if (pendingRef.current === next) { next = { ...next, rescanned }; save(next); }
     }
   }
   async function remove() {
@@ -87,49 +85,61 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
     setPreview(undefined);
     // Persist the attempt before dispatch. A timeout never causes a replay.
     save({ row, requestId, accepted: false, result: { state: 'running', message: '正在提交已确认的清理请求…' } });
+    const accept = async (response: { requestId: string; data: CleanupStates[CleanupFamily] }) => {
+      if (!mounted.current || pendingRef.current?.requestId !== requestId || pendingRef.current.accepted) return;
+      if (!response || response.requestId !== requestId || !response.data) throw new DesktopResponsePendingError('清理响应无效，结果尚未确认。');
+      save({ row, requestId, accepted: true, jobId: acceptedCleanupJob(row, response.data, requestId), result: { state: 'running', message: '清理请求已受理，正在核实结果…' } });
+      await verify();
+    };
     try {
       const response = await request<CleanupStates[CleanupFamily]>(row.op, { ...row.params, revision: row.revision, confirm: true, ...(row.credentials && credentials ? { clearCredentials: true } : {}) }, requestId);
-      save({ row, requestId, accepted: true, jobId: acceptedCleanupJob(row, response.data, requestId), result: { state: 'running', message: '清理请求已受理，正在复读状态并核实结果…' } });
-      await verify();
+      await accept(response);
     } catch (cause) {
       const current = pendingRef.current;
-      if (current) save({ ...current, result: { state: 'unknown', message: cause instanceof Error ? cause.message : String(cause) } });
+      if (current?.requestId === requestId) save({ ...current, result: { state: 'unknown', message: cause instanceof Error ? cause.message : String(cause) } });
+      if (cause instanceof DesktopResponsePendingError && cause.response) {
+        void cause.response.then(value => accept(value as { requestId: string; data: CleanupStates[CleanupFamily] })).catch(failure => {
+          const latest = pendingRef.current;
+          if (mounted.current && latest?.requestId === requestId && latest.result?.state !== 'verified' && latest.result?.state !== 'failed') save({ ...latest, result: { state: 'unknown', message: '原清理请求结果尚未确认，请核实状态，不要重复提交。' } });
+        });
+      }
     }
   }
-  const watching = pending?.accepted && pending.result?.state === 'running';
+  const watching = !!pending && !['verified', 'failed'].includes(pending.result?.state ?? 'unknown');
   useEffect(() => {
     if (!watching) return;
     const timer = setInterval(() => { if (!lock.current) void run(verify); }, 1500);
     return () => clearInterval(timer);
   }, [watching]);
-  const rows = cleanupRows(states);
+  useEffect(() => { void run(refresh); }, []);
+  const rows = cleanupRows(states).filter(row => !['rea:Skill', 'rea:Mcp', 'rtk:stats', 'rtk:originals'].includes(row.id) && (row.available || row.readOnly && !!(states.rtk?.version || states.rtk?.executable || states.rtk?.cleanupPaths?.length)));
+  const incomplete = Object.values(errors).some(Boolean);
   return <section className="environment-item" aria-label="工具与资源卸载">
-    <div className="connect-updates-heading"><h2>工具与资源卸载</h2><button className="connect-secondary" disabled={busy || !!watching} onClick={() => void run(refresh)}>{busy ? '正在读取…' : '读取可卸载项目'}</button></div>
-    <p className="connect-update-detail">管理这台电脑登记的 MCP、技能、资源包和内置工具。RTK 可在后台退出后通过客户端内置维护程序查看范围；缺少历史工作进程退出证明时不能离线删除。工具与资源的自动卸载需要本机后台运行。卸载后会核实任务结果并重新扫描环境；外部安装与共享缓存会单独保留。</p>
-    {error && <p className="connect-error" role="alert">{error}</p>}
-    {Object.entries(errors).map(([family, message]) => message && <p className="connect-error" key={family}>{family}：{message}</p>)}
+    <div className="connect-updates-heading"><h3>内置工具与资源</h3><button className="connection-text-button" aria-label="刷新组件列表" disabled={busy || !!watching} onClick={() => void run(refresh)}>{busy ? '正在读取…' : '刷新'}</button></div>
+    {incomplete && <p className="connect-update-detail" role="status">部分组件状态暂未读到，启动本机后台后可刷新列表。</p>}
+    {!busy && !incomplete && !rows.length && <p className="connect-update-detail">暂无已登记的可卸载工具或资源。</p>}
+    {error && <p className="connect-message" role="status">{error}</p>}
+
     {states.rtk?.dataCleanupError && <p className="connect-error">RTK 保留数据：{states.rtk.dataCleanupError}</p>}
     {(['stats', 'originals'] as const).map(kind => states.rtk?.dataCleanupErrors?.[kind] && <p className="connect-error" key={kind}>RTK {kind === 'stats' ? '效果记录' : '保留原文'}：{states.rtk.dataCleanupErrors[kind]}</p>)}
     {rows.map(row => <div className="environment-cleanup-row" key={row.id}>
-      <div><strong>{row.label}</strong>{row.warning && <p className="connect-update-detail">{row.warning}</p>}</div>
-      <button className="connect-secondary" disabled={busy || !!pending || (!row.available && !row.readOnly)} onClick={() => void run(() => inspect(row))}>{row.readOnly ? '查看只读范围' : row.available ? row.op.startsWith('rtk.cleanup') || row.op === 'rea.clearDownloads' ? '查看数据清理范围' : '查看卸载范围' : '当前不可自动清理'}</button>
+      <div><strong>{row.label}</strong>{row.readOnly && <p className="connect-update-detail">启动本机后台后可卸载</p>}</div>
+      <button className="connect-secondary" disabled={busy || !!pending || !row.available || row.readOnly} onClick={() => void run(() => inspect(row))}>{row.op === 'rea.clearDownloads' ? '清理' : '卸载'}</button>
     </div>)}
-    {preview && <div className="environment-confirm" role="group" aria-label="确认工具清理范围">
-      <strong>{preview.label}</strong><p>{preview.readOnly ? '只读范围（不会删除）：' : '将执行：'}</p><ul>{preview.scope.map((item, i) => <li key={i}>{item}</li>)}</ul>
-      <p>保留：</p><ul>{preview.retained.map((item, i) => <li key={i}>{item}</li>)}</ul>
-      {preview.warning && <p className="environment-issue">{preview.warning}</p>}
-      {preview.credentials && <label><input type="checkbox" checked={credentials} onChange={event => setCredentials(event.target.checked)} /><span>同时清除此 MCP 的专属凭据（仍被共享引用的凭据保留）</span></label>}
-      <p className="connect-update-detail">执行时再次核对配置版本、所列目录身份和占用；发生变化会拒绝本次操作，需要重新查看范围。</p>
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setPreview(undefined)}>返回</button>
-      {!preview.readOnly && preview.available && <button className="connect-secondary" disabled={busy} onClick={() => void run(remove)}>确认清理所列范围</button>}</div>
+    {preview && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认工具清理范围">
+      <strong>{preview.op === 'rea.clearDownloads' ? '清理' : '卸载'} {preview.label}？</strong>
+      <p>{preview.op === 'rea.clearDownloads' ? '删除该组件已下载的安装包，再次安装时需要重新下载。' : '移除此组件的托管程序或接入，保留项目、会话和个人设置。'}外部安装与共享缓存不会删除。</p>
+      {preview.scope.filter(item => !/^(托管版本目录|数据路径|登记下载目录|只读路径)：/.test(item)).map((item, index) => <p key={index}>{item}</p>)}
+      {preview.family === 'rea' && preview.op !== 'rea.clearDownloads' && <p>请先退出正在使用此组件的分析任务。</p>}
+      <details><summary>查看范围与保留项</summary><ul>{preview.scope.map((item, index) => <li key={index}>{item}</li>)}</ul><ul>{preview.retained.map((item, index) => <li key={index}>保留：{item}</li>)}</ul>{preview.warning && <p>{preview.warning}</p>}</details>
+      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setPreview(undefined)}>取消</button>
+      {!preview.readOnly && preview.available && <button className="connect-secondary confirm-danger" disabled={busy} onClick={() => void run(remove)}>{preview.op === 'rea.clearDownloads' ? '确认清理' : '确认卸载'}</button>}</div>
     </div>}
     {pending && <div className="environment-confirm" aria-live="polite">
       <strong>{pending.row.label} · {pending.result?.state === 'verified' ? '选定范围已核实' : pending.result?.state === 'running' ? '处理中' : '尚未完成核实'}</strong>
-      <p>{pending.result?.message}</p><p className="connect-update-detail">请求：{pending.requestId}{pending.jobId ? `；任务：${pending.jobId}` : ''}</p>
-      <ul>{pending.row.retained.map((item, i) => <li key={i}>保留：{item}</li>)}</ul>
-      <p className="connect-update-detail">{pending.rescanned ? '已重新扫描本机已知安装与残留；请查看下方结果。' : '环境复扫尚未完成。'} 未核实来源与保留项仍存在时，不表示环境已清空。</p>
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => void run(verify)}>重新核实与扫描</button>
-      {!watching && <button className="connect-secondary" disabled={busy} onClick={() => { save(undefined); setPreview(undefined); }}>关闭结果，重新选择项目</button>}</div>
+      <p className={pending.result?.state === 'failed' ? 'connect-error' : 'connect-update-detail'} role={pending.result?.state === 'failed' ? 'alert' : 'status'}>{pending.result?.message}</p>
+      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => void run(verify)}>刷新状态</button>
+      {!watching && pending.accepted && ['verified', 'failed'].includes(pending.result?.state ?? '') && <button className="connect-secondary" disabled={busy} onClick={() => { save(undefined); setPreview(undefined); }}>关闭</button>}</div>
     </div>}
   </section>;
 }

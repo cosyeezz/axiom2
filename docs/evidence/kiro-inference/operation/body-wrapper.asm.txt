@@ -1,0 +1,93 @@
+﻿
+Dump of file C:\Users\dane\AppData\Local\Kiro-Cli\kiro-cli.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000145ACDDF0: 55                 push        rbp
+  0000000145ACDDF1: 56                 push        rsi
+  0000000145ACDDF2: 57                 push        rdi
+  0000000145ACDDF3: 53                 push        rbx
+  0000000145ACDDF4: 48 81 EC F8 00 00  sub         rsp,0F8h
+                    00
+  0000000145ACDDFB: 48 8D AC 24 80 00  lea         rbp,[rsp+0000000000000080h]
+                    00 00
+  0000000145ACDE03: 48 C7 45 70 FE FF  mov         qword ptr [rbp+70h],0FFFFFFFFFFFFFFFEh
+                    FF FF
+  0000000145ACDE0B: 48 89 D7           mov         rdi,rdx
+  0000000145ACDE0E: 48 89 CE           mov         rsi,rcx
+  0000000145ACDE11: 48 C7 45 50 00 00  mov         qword ptr [rbp+50h],0
+                    00 00
+  0000000145ACDE19: 48 C7 45 58 01 00  mov         qword ptr [rbp+58h],1
+                    00 00
+  0000000145ACDE21: 48 C7 45 60 00 00  mov         qword ptr [rbp+60h],0
+                    00 00
+  0000000145ACDE29: C6 45 6F 00        mov         byte ptr [rbp+6Fh],0
+  0000000145ACDE2D: 48 C7 44 24 20 01  mov         qword ptr [rsp+20h],1
+                    00 00 00
+  0000000145ACDE36: 48 8D 5D 50        lea         rbx,[rbp+50h]
+  0000000145ACDE3A: 41 B8 01 00 00 00  mov         r8d,1
+  0000000145ACDE40: 41 B9 01 00 00 00  mov         r9d,1
+  0000000145ACDE46: 48 89 D9           mov         rcx,rbx
+  0000000145ACDE49: 31 D2              xor         edx,edx
+  0000000145ACDE4B: E8 C0 73 FE FF     call        0000000145AB5210
+  0000000145ACDE50: 48 8B 45 58        mov         rax,qword ptr [rbp+58h]
+  0000000145ACDE54: 48 8B 4D 60        mov         rcx,qword ptr [rbp+60h]
+  0000000145ACDE58: C6 04 08 7B        mov         byte ptr [rax+rcx],7Bh
+  0000000145ACDE5C: 48 C7 45 60 01 00  mov         qword ptr [rbp+60h],1
+                    00 00
+  0000000145ACDE64: 48 89 5D 40        mov         qword ptr [rbp+40h],rbx
+  0000000145ACDE68: C6 45 48 00        mov         byte ptr [rbp+48h],0
+  0000000145ACDE6C: C6 45 6F 00        mov         byte ptr [rbp+6Fh],0
+  0000000145ACDE70: 48 8D 4D A8        lea         rcx,[rbp-58h]
+  0000000145ACDE74: 48 8D 55 40        lea         rdx,[rbp+40h]
+  0000000145ACDE78: 49 89 F8           mov         r8,rdi
+  0000000145ACDE7B: E8 E0 5F 0B FB     call        0000000140B83E60
+  0000000145ACDE80: 48 B8 02 00 00 00  mov         rax,8000000000000002h
+                    00 00 00 80
+  0000000145ACDE8A: 48 39 45 A8        cmp         qword ptr [rbp-58h],rax
+  0000000145ACDE8E: 0F 85 85 00 00 00  jne         0000000145ACDF19
+  0000000145ACDE94: 48 8B 7D 40        mov         rdi,qword ptr [rbp+40h]
+  0000000145ACDE98: 48 8B 5F 10        mov         rbx,qword ptr [rdi+10h]
+  0000000145ACDE9C: 48 89 D8           mov         rax,rbx
+  0000000145ACDE9F: 48 39 1F           cmp         qword ptr [rdi],rbx
+  0000000145ACDEA2: 0F 84 A7 00 00 00  je          0000000145ACDF4F
+  0000000145ACDEA8: 48 8B 4F 08        mov         rcx,qword ptr [rdi+8]
+  0000000145ACDEAC: C6 04 01 7D        mov         byte ptr [rcx+rax],7Dh
+  0000000145ACDEB0: 48 FF C3           inc         rbx
+  0000000145ACDEB3: 48 89 5F 10        mov         qword ptr [rdi+10h],rbx
+  0000000145ACDEB7: 48 8B 45 60        mov         rax,qword ptr [rbp+60h]
+  0000000145ACDEBB: 48 89 45 30        mov         qword ptr [rbp+30h],rax
+  0000000145ACDEBF: 0F 10 45 50        movups      xmm0,xmmword ptr [rbp+50h]
+  0000000145ACDEC3: 0F 29 45 20        movaps      xmmword ptr [rbp+20h],xmm0
+  0000000145ACDEC7: C6 45 6F 01        mov         byte ptr [rbp+6Fh],1
+  0000000145ACDECB: 48 8D 4D A8        lea         rcx,[rbp-58h]
+  0000000145ACDECF: 48 8D 55 20        lea         rdx,[rbp+20h]
+  0000000145ACDED3: E8 A8 BA 66 FB     call        0000000141139980
+  0000000145ACDED8: 48 8B 45 18        mov         rax,qword ptr [rbp+18h]
+  0000000145ACDEDC: 48 89 46 70        mov         qword ptr [rsi+70h],rax
+  0000000145ACDEE0: 0F 10 45 08        movups      xmm0,xmmword ptr [rbp+8]
+  0000000145ACDEE4: 0F 11 46 60        movups      xmmword ptr [rsi+60h],xmm0
+  0000000145ACDEE8: 0F 10 45 F8        movups      xmm0,xmmword ptr [rbp-8]
+  0000000145ACDEEC: 0F 11 46 50        movups      xmmword ptr [rsi+50h],xmm0
+  0000000145ACDEF0: 0F 10 45 E8        movups      xmm0,xmmword ptr [rbp-18h]
+  0000000145ACDEF4: 0F 11 46 40        movups      xmmword ptr [rsi+40h],xmm0
+  0000000145ACDEF8: 0F 10 45 A8        movups      xmm0,xmmword ptr [rbp-58h]
+  0000000145ACDEFC: 0F 10 4D B8        movups      xmm1,xmmword ptr [rbp-48h]
+  0000000145ACDF00: 0F 10 55 C8        movups      xmm2,xmmword ptr [rbp-38h]
+  0000000145ACDF04: 0F 10 5D D8        movups      xmm3,xmmword ptr [rbp-28h]
+  0000000145ACDF08: 0F 11 5E 30        movups      xmmword ptr [rsi+30h],xmm3
+  0000000145ACDF0C: 0F 11 56 20        movups      xmmword ptr [rsi+20h],xmm2
+  0000000145ACDF10: 0F 11 4E 10        movups      xmmword ptr [rsi+10h],xmm1
+  0000000145ACDF14: 0F 11 06           movups      xmmword ptr [rsi],xmm0
+  0000000145ACDF17: EB 27              jmp         0000000145ACDF40
+  0000000145ACDF19: 48 8B 45 B8        mov         rax,qword ptr [rbp-48h]
+  0000000145ACDF1D: 48 89 46 18        mov         qword ptr [rsi+18h],rax
+  0000000145ACDF21: 0F 10 45 A8        movups      xmm0,xmmword ptr [rbp-58h]
+  0000000145ACDF25: 0F 11 46 08        movups      xmmword ptr [rsi+8],xmm0
+  0000000145ACDF29: 48 C7 06 03 00 00  mov         qword ptr [rsi],3
+                    00
+  0000000145ACDF30: 48
+
+  Summary
+
+     5BF1000 .text

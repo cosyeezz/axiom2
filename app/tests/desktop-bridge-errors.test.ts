@@ -1,0 +1,8 @@
+import assert from 'node:assert/strict';
+import { test, type TestContext } from 'node:test';
+import { desktopInvoke } from '../src/client/pages/desktop-bridge.js';
+function fixture(t: TestContext, invoke: (...args: unknown[])=>Promise<unknown>){const previous=Object.getOwnPropertyDescriptor(globalThis,'window');Object.defineProperty(globalThis,'window',{configurable:true,value:{__TAURI_INTERNALS__:{invoke}}});t.after(()=>{if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');});}
+test('native string rejection retains its actionable message for task controls',async t=>{const message='任务已结束或身份已变化。';fixture(t,async()=>{throw message;});await assert.rejects(desktopInvoke('axiom_update',{action:'cancel',version:'{"id":"owned-task"}'}),cause=>cause instanceof Error&&cause.message===message);});
+test('an existing native Error preserves identity',async t=>{const failure=Error('native failure');fixture(t,async()=>{throw failure;});await assert.rejects(desktopInvoke('axiom_update'),cause=>cause===failure);});
+test('native arguments are not changed and failures are not replayed',async t=>{const args={action:'extend',version:'{"id":"owned-task"}'};let calls=0;fixture(t,async(command,payload)=>{calls++;assert.equal(command,'axiom_update');assert.equal(payload,args);throw '原请求未完成，请读取记录。';});await assert.rejects(desktopInvoke('axiom_update',args),cause=>cause instanceof Error&&cause.message.includes('原请求'));assert.equal(calls,1);});
+test('timeout remains an Error and does not retry the native command',async t=>{let calls=0;fixture(t,async()=>{calls++;return new Promise(()=>{});});await assert.rejects(desktopInvoke('axiom_update',{},5),/客户端响应超时/);assert.equal(calls,1);});

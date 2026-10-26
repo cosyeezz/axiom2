@@ -5,27 +5,27 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 
-const output = resolve(process.env.AXIOM_PI_OUTPUT || "test-results/pi-updates");
+const output = resolve(process.env.AXIOM_PI_OUTPUT || process.env.AXIOM_TEST_ARTIFACTS || "test-results/pi-updates");
 await mkdir(output, { recursive: true });
-const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), cacheDir: resolve(output, ".vite"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null } });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
-  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+  const page = await browser.newPage({ viewport: { width: 1100, height: 1000 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript({ content: "window.__name = value => value;" });
   await page.addInitScript(() => {
     const state = {
       version: null as string | null, release: null as any, job: null as any, missing: true, execution: null as any,
-      failCheck: false, checkDelay: 0, legacy: false, cliError: "", holdStatus: false,
+      failCheck: false, checkDelay: 0, legacy: false, cliError: "", repairRequired: false, clientInstaller: null as any, clientVersion: '0.4.1', holdStatus: false,
       held: null as (() => void) | null, calls: [] as any[],
     };
     (window as any).piFixture = state;
     const snapshot = () => ({
-      clientVersion: "0.4.1", serviceVersion: state.missing ? null : "0.4.1", managed: !state.missing, clientSupported: false, execution: state.execution,
-      release: null, recovery: false, job: state.job, log: "/example/updates/update.log",
-      pi: { runtimeVersion: state.missing ? null : "1.1.0", cli: { version: state.version, legacy: state.legacy, error: state.cliError,
+      clientVersion: state.clientVersion, serviceVersion: state.missing ? null : "0.4.1", managed: !state.missing, clientSupported: false, execution: state.execution,
+      release: null, recovery: false, job: state.job && { ...state.job, task: { id: "fixture-" + state.job.kind, attemptId: "fixture-attempt", endpoint: "desktop", scope: "合成 Pi UI，无真实安装", resource: state.job.kind, label: state.job.message, action: state.job.kind, status: state.job.running ? "running" : state.job.phase === "error" ? "failed" : "succeeded", phase: "installing", steps: ["installing"], completedSteps: state.job.running ? 0 : 1, createdAt: 1, updatedAt: Date.now(), budgets: { headersMs: 30000, idleMs: 60000, installMs: 600000, totalMs: 1200000 }, capabilities: { cancel: false, extend: false } } }, clientInstaller: state.clientInstaller, log: "/example/updates/update.log",
+      pi: { runtimeVersion: state.missing ? null : "1.1.0", cli: { version: state.version, legacy: state.legacy, error: state.cliError, repairRequired: state.repairRequired,
         packageRoot: "/example/node/lib/node_modules/@earendil-works/pi-coding-agent" }, release: state.release },
     });
     let theme = "dark", revision = 0;
@@ -36,46 +36,54 @@ try {
       if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" } : { job: null };
       if (name === "axiom_peers") return { peers: [] };
       if (name === "axiom_reveal_path") return null;
+      if (name === "axiom_cleanup" && args.request?.op.endsWith(".get")) return { requestId: args.request.requestId, data: { revision: "empty-fixture", items: [], scopes: [], warnings: [], installations: {}, engines: [] } };
       if (name !== "axiom_update") throw Error("Unexpected IPC: " + name);
       if (args.action === "status" && state.holdStatus) await new Promise<void>(resolve => { state.held = resolve; });
       if (args.action === "pi-check") {
         if (state.checkDelay) await new Promise(resolve => setTimeout(resolve, state.checkDelay));
         if (state.failCheck) throw Error("Pi 版本查询失败，请稍后重试。");
         state.release = { version: "1.1.1", token: "confirmed-token", checkedAt: Date.now() };
+        state.job = { kind: "pi-check", running: false, phase: "complete", message: "版本检查完成。" };
       }
+      if (args.action === "pi-refresh") state.job = { kind: "pi-refresh", running: false, phase: "complete", message: "Pi 安装状态读取完成。" };
       if (args.action === "pi") state.job = { kind: "pi", running: true, phase: "installing", message: "正在安装终端 Pi 1.1.1…" };
       return snapshot();
     } };
   });
   await page.clock.install();
   await page.goto(server.resolvedUrls!.local[0]);
-  const maintenance = page.locator(".startup-maintenance > summary");
-  assert.match(await maintenance.innerText(), /Pi 引擎/);
+  const maintenance = page.getByRole("region", { name: "版本与更新", exact: true });
+  const pi = page.getByRole("region", { name: "Pi 引擎", exact: true });
+  await pi.waitFor();
   await page.locator(".startup-preparation > summary").click();
-  const entry = await maintenance.boundingBox();
-  const preparation = await page.locator(".startup-preparation").boundingBox();
-  assert.ok(entry && preparation && entry.y + entry.height <= preparation.y && entry.y + entry.height <= 1000, "Pi entry remains above expanded setup and inside the viewport");
+  const entry = await pi.boundingBox(), preparation = await page.locator(".startup-preparation").boundingBox();
+  assert.ok(entry && preparation && entry.y + entry.height <= preparation.y, "Pi controls precede expanded environment setup");
   await page.screenshot({ path: resolve(output, "pi-entry-with-setup.png"), fullPage: true });
   await page.locator(".startup-preparation > summary").click();
-  await maintenance.click();
-  const pi = page.getByRole("region", { name: "Pi 引擎" });
   await pi.getByText("未安装", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi-refresh").length), 1);
-  assert.ok(await pi.getByRole("button", { name: "安装终端 Pi", exact: true }).isDisabled());
-  await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
-  const install = pi.getByRole("button", { name: "安装终端 Pi · 1.1.1", exact: true });
-  await install.waitFor();
+  const install = pi.getByRole("button", { name: "安装终端 Pi", exact: true });
   assert.ok(await install.isEnabled());
-  assert.ok(await pi.getByText("后台未安装", { exact: true }).isVisible());
-  assert.ok(await page.getByRole("button", { name: "更新后台服务", exact: true }).isDisabled());
-  assert.equal(await page.getByText("请先在下方安装后台服务，再检查和管理终端 Pi。", { exact: true }).count(), 0);
+  await install.click();
+  const initialDialog = page.getByRole("dialog", { name: "安装终端 Pi 1.1.1？", exact: true });
+  await initialDialog.waitFor();
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi-check").length), 1, "the initial install action checks a fresh release before confirmation");
+  await initialDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi").length), 0);
+  await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
+  await pi.getByText("可安装 v1.1.1", { exact: true }).waitFor();
+  assert.ok(await install.isEnabled());
+  assert.ok(await maintenance.getByRole("region", { name: "后台服务更新", exact: true }).getByText("未安装", { exact: true }).isVisible());
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "service").length), 0, "Pi installation is independent of background-service installation");
   await page.screenshot({ path: resolve(output, "pi-without-backend.png"), fullPage: true });
   await page.evaluate(() => { (window as any).piFixture.missing = false; });
-  await page.getByRole("button", { name: "刷新服务状态", exact: true }).click();
-  assert.equal(await pi.locator(".connect-pi-location").getAttribute("open"), null);
+  await page.clock.runFor(3100);
+  await page.getByRole("button", { name: "关闭后台服务", exact: true }).waitFor();
+  const details = maintenance.locator(".update-details");
+  assert.equal(await details.getAttribute("open"), null);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await pi.locator(".connect-pi-location > summary").click();
-  const location = pi.locator(".connect-pi-location .local-path");
+  await details.locator(":scope > summary").click();
+  const location = details.locator(".connect-log").filter({ hasText: "Pi 安装位置：" }).locator(".local-path");
   await location.hover();
   await location.getByRole("button", { name: "复制路径", exact: true }).click();
   await location.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
@@ -84,13 +92,13 @@ try {
   await location.getByRole("button", { name: "打开所在文件夹", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.name === "axiom_reveal_path")), [{ name: "axiom_reveal_path", path: packageRoot }]);
   assert.equal(await location.locator("button").first().evaluate(node => getComputedStyle(node).borderTopWidth), "0px", "standalone page loads shared action styles");
-  await pi.locator(".connect-pi-location > summary").click();
+  await details.locator(":scope > summary").click();
   const widths = [1100, 760, 600, 430, 390, 360];
   for (const width of widths) {
     await page.setViewportSize({ width, height: 1000 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no overflow at ${width}`);
-    const boxes = await pi.locator(".connect-versions > div").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().toJSON()));
-    assert.ok(boxes[0].right <= boxes[1].left && boxes[1].right <= boxes[2].left, `three version columns at ${width}`);
+    const boxes = await pi.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
+    assert.ok(boxes.every(box => box.left >= 0 && box.right <= width + 1), `Pi actions remain inside ${width}px viewport`);
     await page.screenshot({ path: resolve(output, `page-${width}.png`), fullPage: true });
   }
   await install.click();
@@ -117,10 +125,12 @@ try {
   await pi.getByRole("status").waitFor();
   await page.evaluate(() => { (window as any).piFixture.execution = { lines: ["npm http fetch GET 200 https://registry.npmjs.org/pi 200ms"], updatedAt: Date.now() }; });
   await page.clock.runFor(2100);
+  await pi.getByText("执行详情", { exact: true }).click();
   await pi.getByText(/npm http fetch GET 200/).waitFor();
   assert.ok(await pi.getByText(/最近日志输出于/).isVisible());
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.find((c: any) => c.action === "pi").version), "confirmed-token");
-  assert.ok(await pi.getByRole("button", { name: /正在安装/ }).isDisabled());
+  assert.ok(await install.isDisabled());
+  assert.match(await install.innerText(), /正在安装/);
   assert.ok(await page.getByRole("button", { name: "关闭后台服务", exact: true }).isDisabled());
   await page.evaluate(() => {
     const f = (window as any).piFixture;
@@ -128,47 +138,81 @@ try {
     f.job = { kind: "pi", running: false, phase: "complete", message: "终端 Pi 已安装至 1.1.1" };
   });
   await page.clock.runFor(2100);
-  await pi.getByText("终端 Pi 已是最新版本。", { exact: true }).waitFor();
-  assert.ok(await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).isDisabled());
+  await pi.getByText("已是最新版本", { exact: true }).waitFor();
+  await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).click();
+  await pi.getByRole("status").filter({ hasText: "Pi 已是最新版本。" }).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 0, "an up-to-date installation must not open a redundant install confirmation");
   assert.ok(await page.getByRole("button", { name: "关闭后台服务", exact: true }).isEnabled());
 
-  await page.evaluate(() => { const f = (window as any).piFixture; f.job = { kind: "pi", running: false, phase: "error", message: "终端 Pi 未通过运行验证" }; f.release.token = null; });
+  await page.evaluate(() => { const f = (window as any).piFixture; f.job = { kind: "pi", running: false, phase: "error", message: "终端 Pi 未通过运行验证" }; f.repairRequired = true; f.release.token = null; });
   await page.clock.runFor(2100);
-  assert.ok(await pi.getByRole("button", { name: "重新安装终端 Pi", exact: true }).isDisabled());
-  assert.ok(await pi.getByText("安装状态已变化，请先重新检查 Pi 更新，再确认安装。", { exact: true }).isVisible());
-  await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
+  assert.ok(await pi.getByText("安装状态已变化，请重新检查更新。", { exact: true }).isVisible());
+  await pi.getByRole("button", { name: "重新安装终端 Pi", exact: true }).click();
+  const repairDialog = page.getByRole("dialog", { name: "更新终端 Pi 1.1.1？", exact: true });
+  await repairDialog.waitFor();
+  assert.equal(await page.evaluate(() => (window as any).piFixture.release.token), "confirmed-token", "a stale repair token is refreshed before showing confirmation");
+  await repairDialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.ok(await pi.getByRole("button", { name: "重新安装终端 Pi", exact: true }).isEnabled());
-  assert.equal(await pi.getByText("终端 Pi 已是最新版本。", { exact: true }).count(), 0);
+  assert.equal(await pi.getByText("已是最新版本", { exact: true }).count(), 0);
 
-  await page.evaluate(() => { const f = (window as any).piFixture; f.version = "1.0.0"; f.job = null; });
-  await pi.getByRole("button", { name: "刷新 Pi 安装状态", exact: true }).click();
-  await pi.getByRole("button", { name: "更新终端 Pi · 1.1.1", exact: true }).click();
+  assert.equal(await page.evaluate(() => (window as any).piFixture.job.kind), "pi-check", "fixture must reproduce production task replacement");
+  await page.evaluate(() => { (window as any).piFixture.job = { kind: "pi-refresh", running: false, phase: "complete", message: "Pi 安装状态读取完成。" }; });
+  await page.clock.runFor(2100);
+  assert.ok(await pi.getByRole("button", { name: "重新安装终端 Pi", exact: true }).isEnabled(), "a refreshed task snapshot cannot erase the independent repair requirement");
+  await page.evaluate(() => { const f = (window as any).piFixture; f.clientInstaller = { version: "0.4.2", readyAt: Date.now() }; f.job = { kind: "client", phase: "ready", running: false, message: "安装包已就绪" }; });
+  await page.clock.runFor(2100);
+  await page.getByRole("button", { name: "安装更新", exact: true }).waitFor();
+  await page.evaluate(() => { (window as any).piFixture.job = { kind: "pi-refresh", running: false, phase: "complete", message: "Pi 安装状态读取完成。" }; });
+  await page.clock.runFor(2100);
+  await page.getByRole("button", { name: "安装更新", exact: true }).click();
+  const installerDialog = page.getByRole("dialog", { name: "打开客户端安装向导？", exact: true });
+  await installerDialog.waitFor();
+  await installerDialog.getByRole("button", { name: "取消", exact: true }).click();
+  for (const clientVersion of ["0.4.2", "0.5.0"]) {
+    await page.evaluate(version => { (window as any).piFixture.clientVersion = version; }, clientVersion);
+    await page.clock.runFor(2100);
+    assert.equal(await page.getByRole("button", { name: "安装更新", exact: true }).count(), 0, `installed client ${clientVersion} must not offer an old installer`);
+  }
+  await page.evaluate(() => { const f = (window as any).piFixture; f.version = "1.0.0"; f.clientVersion = "0.4.1"; f.job = null; f.repairRequired = false; f.clientInstaller = null; });
+  await page.clock.runFor(2100);
+  await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).click();
   await page.getByRole("dialog", { name: "更新终端 Pi 1.1.1？", exact: true }).waitFor();
   await page.keyboard.press("Escape");
-  assert.equal(await page.locator(".startup-maintenance > summary > span").textContent(), "发现新版本");
+  assert.ok(await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).isEnabled());
+  assert.ok(await pi.getByText("可安装 v1.1.1", { exact: true }).isVisible());
 
   await page.evaluate(() => { (window as any).piFixture.failCheck = true; });
   await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
-  await pi.getByRole("alert").waitFor();
+  const checkFailure = pi.getByRole("status").filter({ hasText: "Pi 版本查询失败，请稍后重试。" });
+  await checkFailure.waitFor();
+  assert.equal(await pi.getByRole("alert").count(), 0, "read-only check failures remain neutral and do not imply a failed installation");
   await page.clock.runFor(2100);
-  assert.match(await pi.getByRole("alert").textContent() || "", /版本查询失败/);
+  assert.ok(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).isEnabled());
   await page.evaluate(() => { const f = (window as any).piFixture; f.failCheck = false; f.legacy = true; });
-  await pi.getByRole("button", { name: "刷新 Pi 安装状态", exact: true }).click();
-  await pi.getByText("需迁移", { exact: true }).waitFor();
-  assert.ok(await pi.getByRole("button", { name: /更新终端 Pi/ }).isDisabled());
+  await page.clock.runFor(2100);
+  await pi.getByText(/^需要迁移/).waitFor();
+  await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).click();
+  await pi.getByRole("alert").filter({ hasText: "请先通过原安装方式迁移旧版 Pi。" }).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 0, "legacy installations cannot reach install confirmation");
   await page.evaluate(() => { const f = (window as any).piFixture; f.legacy = false; f.cliError = "无法读取 npm 全局安装"; });
-  await pi.getByRole("button", { name: "刷新 Pi 安装状态", exact: true }).click();
-  await pi.getByText("读取失败", { exact: true }).waitFor();
-  assert.ok(await pi.getByRole("button", { name: /更新终端 Pi/ }).isDisabled());
+  await page.clock.runFor(2100);
+  await pi.getByText(/^状态读取失败/).waitFor();
+  await pi.getByRole("button", { name: "更新终端 Pi", exact: true }).click();
+  assert.equal(await page.getByRole("dialog").count(), 0, "failed installation-state reads cannot reach install confirmation");
   await page.evaluate(() => { const f = (window as any).piFixture; f.cliError = ""; f.checkDelay = 32000; });
   await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).click();
   await page.clock.runFor(30000);
-  assert.ok(await pi.getByRole("button", { name: "正在检查…", exact: true }).isDisabled());
+  assert.ok(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).isDisabled());
+  assert.equal(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).innerText(), "正在检查…");
   await page.clock.runFor(3000);
   assert.ok(await pi.getByRole("button", { name: "检查 Pi 更新", exact: true }).isEnabled());
   assert.equal(await pi.getByRole("alert").count(), 0);
   assert.equal(await page.locator(".startup-global-error").count(), 0, "no caught IPC errors hidden from pageerror checks");
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi").length), 1, "only the explicit frozen-snapshot confirmation submitted installation");
   assert.deepEqual(errors, []);
   await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
   console.log("Pi UI passed: fresh install, upgrade, confirmation snapshot, queued polling, progress, errors, legacy and six widths.");
+} catch (error) {
+  for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) await page.screenshot({ path: resolve(output, `failure-${index}.png`), fullPage: true }).catch(() => {});
+  throw error;
 } finally { await browser.close(); await server.close(); }

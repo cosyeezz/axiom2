@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "./temporary.js";
+import { join } from "node:path";
+import { Store } from "../src/server/storage.js";
+import { Capabilities } from "../src/server/capabilities.js";
+import type { CapabilityReloadSelection } from "../src/shared/capabilities.js";
+import type { Session, Workspace } from "../src/shared/protocol.js";
+
+test("batch reload prepares without mutation and commits defaults plus session atomically with CAS", async () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-capability-batch-")), cwd = join(root, "project");
+  mkdirSync(join(cwd, ".pi/skills/demo"), { recursive: true });
+  writeFileSync(join(cwd, ".pi/skills/demo/SKILL.md"), "---\nname: demo\ndescription: demo guide\n---\nGuide");
+  writeFileSync(join(cwd, ".pi/mcp.json"), JSON.stringify({ mcpServers: { alpha: { command: "not-launched", enabled: false }, beta: { command: "not-launched", enabled: false } } }));
+  const store = new Store(root), caps = new Capabilities(store, () => {}, join(root, "pi"));
+  const workspace = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: cwd, authorized: true } }) as Workspace;
+  const session = () => {
+    const value = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as Session;
+    return { workspaceId: workspace.id, sessionId: value.id };
+  };
+  try {
+    const first = session(), second = session();
+    caps.lock(first, await caps.prepare(first)); caps.lock(second, await caps.prepare(second));
+    const catalog = await caps.get(first), original = caps.state(first), preferences = caps.preferences();
+    const change: CapabilityReloadSelection = { target: "defaults", revision: catalog.preferencesRevision, catalogRevision: catalog.revision, skills: [], mcp: ["alpha", "beta"] };
+    const plan = await caps.prepare(first, true, undefined, change);
+    const rival = await caps.prepare(second, true, undefined, change), rivalState = caps.state(second);
+    assert.deepEqual(caps.state(first), original); assert.deepEqual(caps.preferences(), preferences);
+    caps.appliedReload(first, plan, change);
+    assert.deepEqual(caps.state(first).selection, { skills: [], mcp: ["alpha", "beta"] });
+    assert.equal(caps.preferences().revision, preferences.revision + 1);
+    assert.equal((await caps.get(first)).skills[0].defaultSelected, false);
+    assert.ok((await caps.get(first)).mcp.every(item => item.defaultSelected));
+    const committed = caps.preferences();
+    assert.throws(() => caps.appliedReload(second, rival, change), { code: "REVISION_CONFLICT" });
+    assert.deepEqual(caps.state(second), rivalState, "global conflict cannot partially commit a session");
+    assert.deepEqual(caps.preferences(), committed);
+    await assert.rejects(caps.prepare(second, true, undefined, change), { code: "REVISION_CONFLICT" });
+    const sessionChange: CapabilityReloadSelection = { ...change, target: "session", revision: rivalState.revision, skills: catalog.skills.map(item => item.id), mcp: [] };
+    await assert.rejects(caps.prepare(second, true, undefined, { ...sessionChange, catalogRevision: "stale" }), { code: "REVISION_CONFLICT" });
+    await assert.rejects(caps.prepare(second, true, undefined, { ...sessionChange, mcp: ["missing"] }), { code: "CAPABILITY_UNAVAILABLE" });
+    const sessionPlan = await caps.prepare(second, true, undefined, sessionChange);
+    caps.appliedReload(second, sessionPlan, sessionChange);
+    assert.deepEqual(caps.preferences(), committed, "session batch preserves defaults");
+    assert.deepEqual(caps.state(second).selection, { skills: sessionChange.skills, mcp: [] });
+    assert.throws(() => caps.appliedReload(second, sessionPlan, sessionChange), { code: "REVISION_CONFLICT" });
+    const fresh = await caps.get(second);
+    const defaultChange = { ...change, revision: fresh.preferencesRevision };
+    const defaultPlan = await caps.prepare(second, true, undefined, defaultChange);
+    const intervening = { ...sessionChange, revision: fresh.state.revision, skills: [] };
+    caps.appliedReload(second, await caps.prepare(second, true, undefined, intervening), intervening);
+    const afterIntervening = caps.state(second);
+    assert.throws(() => caps.appliedReload(second, defaultPlan, defaultChange), { code: "REVISION_CONFLICT" });
+    assert.deepEqual(caps.preferences(), committed, "session conflict cannot partially commit defaults");
+    assert.deepEqual(caps.state(second), afterIntervening);
+
+    writeFileSync(join(cwd, ".pi/mcp.json"), "{broken");
+    const broken = await caps.get(first), beforeRecovery = caps.state(first);
+    const recovery: CapabilityReloadSelection = { target: "session", revision: beforeRecovery.revision, catalogRevision: broken.revision, skills: [], mcp: [] };
+    await assert.rejects(caps.prepare(first, true), { code: "CAPABILITY_UNAVAILABLE" }, "ordinary reload still protects the prior MCP selection");
+    await assert.rejects(caps.prepare(first, true, undefined, { ...recovery, mcp: ["alpha"] }), { code: "CAPABILITY_UNAVAILABLE" });
+    const recoveryPlan = await caps.prepare(first, true, undefined, recovery);
+    assert.deepEqual(caps.state(first), beforeRecovery, "recovery is still staged until reload succeeds");
+    caps.appliedReload(first, recoveryPlan, recovery);
+    assert.deepEqual(caps.state(first).selection, { skills: [], mcp: [] }, "explicit empty MCP selection recovers from broken configuration");
+    assert.deepEqual(caps.preferences(), committed, "session recovery preserves global defaults");
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
+});

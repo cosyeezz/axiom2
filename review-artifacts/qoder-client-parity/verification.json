@@ -1,0 +1,28 @@
+{
+  "scope": "Offline native legacy provider parity; no live account verification",
+  "tests": {
+    "files": 8,
+    "passed": 51,
+    "failed": 0,
+    "exitCode": 0,
+    "log": "tests-final.log",
+    "qoderPassed": 27
+  },
+  "types": {
+    "exitCode": 0,
+    "log": "typecheck-final.log"
+  },
+  "productionBuild": {
+    "exitCode": 0,
+    "log": "build-final.log",
+    "warnings": [
+      "Two minified chunks exceed 500 kB"
+    ]
+  },
+  "provenance": {
+    "slicesVerified": 53,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38"
+  },
+  "deployed": false,
+  "liveCredentialsUsed": false
+}

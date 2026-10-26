@@ -1,0 +1,1 @@
+function LEA(A){return P1(A)||"[NOT_EXCEED_QUOTA]"===A||A.startsWith("[EXCEED_QUOTA]")||A.startsWith("[NOTIFICATIONS]")}

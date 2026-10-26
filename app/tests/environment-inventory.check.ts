@@ -185,6 +185,11 @@ try {
   await tools.getByText('已重新扫描本机已知安装与残留；请查看下方结果。', { exact: false }).waitFor();
   assert.equal(await page.evaluate(() => (window as any).scanFixture.mutations.length), 1, 'unknown response never replays removal');
   assert.match(await tools.innerText(), /尚未完成核实/);
+  if (await page.evaluate(() => /Win/i.test(navigator.platform))) {
+    await page.getByRole('region', { name: '终端 Pi 卸载' }).getByRole('note').filter({ hasText: '常规安装的应用内卸载会被拒绝' }).waitFor();
+    await page.getByRole('region', { name: '托管后台卸载' }).getByRole('note').filter({ hasText: '暂不支持安全卸载托管后台' }).waitFor();
+    await page.getByRole('region', { name: '下载归档清理' }).getByRole('note').filter({ hasText: '暂不执行自动删除' }).waitFor();
+  }
   const backend = page.getByRole('region', { name: '托管后台卸载' });
   await backend.getByRole('button', { name: '预览后台卸载' }).click();
   await backend.getByRole('button', { name: '卸载此后台', exact: true }).click();

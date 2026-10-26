@@ -1,0 +1,1 @@
+function jOa(A){let e=A.model;return{key:ROa(A),display_name:e.displayName,is_vl:e.capabilities.vision,is_reasoning:e.capabilities.reasoning.supported&&"none"!==A.reasoningEffort,max_input_tokens:e.limits.maxContextTokens,format:"",api_key:"",url:"",source:TOa(A)}}

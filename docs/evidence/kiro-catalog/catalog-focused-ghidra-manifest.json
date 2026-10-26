@@ -1,0 +1,89 @@
+{
+  "source": "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe",
+  "sourceSha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "sourceSize": 528630968,
+  "analysisOnly": true,
+  "limitations": [
+    "Derived PE, not signed original; never execute",
+    "Only selected code and data mapped; callees outside regions absent",
+    "PE headers intentionally modified; seeds are analyst assertions, not recovered symbols",
+    "Initial non-executable slice was rejected before Ghidra; this derivative has an image role flag solely for analysis admission"
+  ],
+  "output": "C:\\Users\\dane\\AppData\\Local\\Temp\\axiom-kiro-catalog-research\\catalog-focused-ghidra-analysis-only.pe",
+  "sha256": "5fcb5f99e834cea3e8b1572d142c543da9be0b8c9fd2a2c59b30e3e227c50b36",
+  "size": 1364992,
+  "imageBase": "0x140000000",
+  "regions": [
+    {
+      "name": ".ser",
+      "start": 11493376,
+      "end": 11583488,
+      "flags": 1610612768,
+      "sourceOffset": 11490304,
+      "newOffset": 1024,
+      "size": 90112,
+      "sha256": "526d9e2aedfb82a11fd4d7739c28cca6712cb9a2296dc878171be5bf05616224",
+      "virtualStart": "0x140af6000",
+      "virtualEndExclusive": "0x140b0c000"
+    },
+    {
+      "name": ".prof",
+      "start": 20557824,
+      "end": 20570112,
+      "flags": 1610612768,
+      "sourceOffset": 20554752,
+      "newOffset": 91136,
+      "size": 12288,
+      "sha256": "43118c4917e1b75788ff1fe0a825d3a4501bf0642a19ea3932189b1bce4920b4",
+      "virtualStart": "0x14139b000",
+      "virtualEndExclusive": "0x14139e000"
+    },
+    {
+      "name": ".call",
+      "start": 21331968,
+      "end": 21348352,
+      "flags": 1610612768,
+      "sourceOffset": 21328896,
+      "newOffset": 103424,
+      "size": 16384,
+      "sha256": "57142ecfe62c058d983a41b7cffd991901790da3cb4f5b9902248841d7a6a71b",
+      "virtualStart": "0x141458000",
+      "virtualEndExclusive": "0x14145c000"
+    },
+    {
+      "name": ".refs",
+      "start": 97910784,
+      "end": 99155968,
+      "flags": 1073741888,
+      "sourceOffset": 97905664,
+      "newOffset": 119808,
+      "size": 1245184,
+      "sha256": "0616701adc33f338053f434ab8251e0a8e6a4dd2f098d99057d2b374b0e5b74b",
+      "virtualStart": "0x145d60000",
+      "virtualEndExclusive": "0x145e90000"
+    }
+  ],
+  "functions": [
+    [
+      "0x140af6b40",
+      "candidate_query_serializer"
+    ],
+    [
+      "0x140af7630",
+      "candidate_body_serializer"
+    ],
+    [
+      "0x140b0a6f0",
+      "candidate_operation_serializer"
+    ],
+    [
+      "0x1414589e0",
+      "candidate_catalog_cache_miss"
+    ]
+  ],
+  "parentSha256": "49585a5337aaabc9822d187d34e14fc6e94151b183144ee5b38d0f1cbf8235ca",
+  "headerChanges": [
+    "COFF executable-image flag for static REA Windows admission",
+    "Entrypoint set to zero; still analysis-only and never executed"
+  ]
+}

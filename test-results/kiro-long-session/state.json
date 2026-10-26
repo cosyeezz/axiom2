@@ -1,0 +1,1410 @@
+{
+  "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450",
+  "parentSessionId": "fb7031ed-69da-4b00-97da-70bb668d1a1c",
+  "taskRef": "t4003",
+  "createdAt": "2026-10-25T17:20:41.104Z",
+  "turns": [
+    {
+      "label": "text-baseline",
+      "run": {
+        "id": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "high"
+        },
+        "startedAt": 1792948872061,
+        "endedAt": 1792948880030,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "892077c3-b229-4982-a4bc-6e0576cf5212",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "这是连续长会话验收第1轮。不要调用工具。记住会话代号为 ORBIT-K7，初始库存红色=17、蓝色=23、绿色=11，校验词=青鹭。计算17乘19，并只回复一行：ORBIT-K7 READY 323 青鹭。后续会继续追问，请保留本轮数据。",
+      "promptImages": [],
+      "answer": "ORBIT-K7 READY 323 青鹭",
+      "thinkingLength": 234,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "role": "user",
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057"
+        },
+        {
+          "id": "ae4110fe-dd70-4596-af3f-63a76a631157",
+          "role": "assistant",
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792948868137,
+          "runId": "0ae281f1-b1d3-4053-ba6b-7f2a2032ea02",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948872075,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948874484,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948874502,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948877698,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948880008,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948880034,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 11950
+    },
+    {
+      "label": "context-and-arithmetic",
+      "run": {
+        "id": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "high"
+        },
+        "startedAt": 1792948978544,
+        "endedAt": 1792948986376,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "65ebed51-fa06-4a47-99ea-91ee4c0cc31e",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第2轮：不调用工具。沿用第1轮的代号与校验词；红库存减少3、蓝增加5、绿减少2。计算调整后的三个库存与总数。这些调整记为当前库存。只回复JSON，字段code,word,red,blue,green,total。",
+      "promptImages": [],
+      "answer": "```json\n{\"code\":\"ORBIT-K7\",\"word\":\"青鹭\",\"red\":14,\"blue\":28,\"green\":9,\"total\":51}\n```",
+      "thinkingLength": 246,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "role": "user",
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff"
+        },
+        {
+          "id": "fdb691fc-37d3-48b9-8607-8b2aa15fc76b",
+          "role": "assistant",
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792948978309,
+          "runId": "36b684ac-a3a4-44ef-ad56-fc62f50cf057",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948978554,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948980781,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948980793,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948983409,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948986355,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948986379,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 8107
+    },
+    {
+      "label": "real-tools-ledger",
+      "run": {
+        "id": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "high"
+        },
+        "startedAt": 1792948986731,
+        "endedAt": 1792949005003,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "d148e1a1-0436-4942-8bf2-ae2c72bca82c",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第3轮：必须真实调用工具，不能只描述计划。先用 read 读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv，再计算各色 initial+delta，使用 powershell 或 write 在同一目录创建 ledger.json，内容包含 code=ORBIT-K7、word=青鹭、red、blue、green、total，并再次用 read 读取实际写出的 ledger.json 核对。只能在此 workspace 测试目录写入，不改其他文件。最终用一行说明文件已核对和total。",
+      "promptImages": [],
+      "answer": "文件已核对，total=51。",
+      "thinkingLength": 433,
+      "calls": [
+        {
+          "id": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-36e12c405c6b93a98f9d6cb4",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv\"\n}",
+          "messageId": "4359d4f2-7632-4701-8d56-4dfec0a597dc"
+        },
+        {
+          "id": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-7af0e494515b8682b345687c",
+          "name": "powershell",
+          "input": "{\n  \"command\": \"$json = @{\\n    code = \\\"ORBIT-K7\\\"\\n    word = \\\"青鹭\\\"\\n    red = 14\\n    blue = 28\\n    green = 9\\n    total = 51\\n} | ConvertTo-Json -Compress\\n\\n$json | Out-File -FilePath \\\"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json\\\" -Encoding UTF8 -NoNewline\"\n}",
+          "messageId": "7c57cde1-1762-4d47-be5d-cd68e93cdf5d"
+        },
+        {
+          "id": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-53105616762e3f01326f54c1",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json\"\n}",
+          "messageId": "0e00b99d-9a15-4b80-ab44-b6145c8fe193"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-36e12c405c6b93a98f9d6cb4",
+          "callId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-36e12c405c6b93a98f9d6cb4",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "color,initial,delta\nred,17,-3\nblue,23,5\ngreen,11,-2\n",
+          "images": []
+        },
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-7af0e494515b8682b345687c",
+          "callId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-7af0e494515b8682b345687c",
+          "toolName": "powershell",
+          "status": "completed",
+          "error": null,
+          "text": "(no output)",
+          "images": []
+        },
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-53105616762e3f01326f54c1",
+          "callId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d-53105616762e3f01326f54c1",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "﻿{\"word\":\"青鹭\",\"code\":\"ORBIT-K7\",\"red\":14,\"total\":51,\"blue\":28,\"green\":9}",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "role": "user",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "4359d4f2-7632-4701-8d56-4dfec0a597dc",
+          "role": "assistant",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-36e12c405c6b93a98f9d6cb4",
+          "role": "toolResult",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "7c57cde1-1762-4d47-be5d-cd68e93cdf5d",
+          "role": "assistant",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-7af0e494515b8682b345687c",
+          "role": "toolResult",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "0e00b99d-9a15-4b80-ab44-b6145c8fe193",
+          "role": "assistant",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "tool-11576134-36b2-48d0-b7f3-7ceffcf3f59d-53105616762e3f01326f54c1",
+          "role": "toolResult",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        },
+        {
+          "id": "c51a3a05-fc2e-4e9b-96e8-71cc9cfbbd80",
+          "role": "assistant",
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792948986517,
+          "runId": "e19d0e3d-b2d0-495e-a994-1e5fa76e4fff",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948986741,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948988985,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948988996,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948991325,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948994635,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948994658,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948996175,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948997567,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792948997960,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949001473,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949001484,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949001496,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949004602,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949004982,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949005006,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 18558
+    },
+    {
+      "label": "tool-error-recovery",
+      "run": {
+        "id": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "high"
+        },
+        "startedAt": 1792949079917,
+        "endedAt": 1792949094213,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "19c50919-c7e7-4131-8c12-2dd20dda374e",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第4轮：测试真实工具错误恢复。先用 read 读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/does-not-exist.txt（此文件故意不存在，不要创建它）；看到错误后，必须继续用 read 读取同目录 ledger.json，最后只回复 RECOVERED ORBIT-K7 51 青鹭。仅可读工具，禁止写文件。",
+      "promptImages": [],
+      "answer": "RECOVERED ORBIT-K7 51 青鹭",
+      "thinkingLength": 322,
+      "calls": [
+        {
+          "id": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-1559d8187703080da5b93ab0",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/does-not-exist.txt\"\n}",
+          "messageId": "f8143fc4-6b1a-4d27-a7cc-22f29b08ecf4"
+        },
+        {
+          "id": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-be2d03b112a914659f2cac47",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json\"\n}",
+          "messageId": "10beac19-45c2-4de4-98b4-891b305c5b56"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-1559d8187703080da5b93ab0",
+          "callId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-1559d8187703080da5b93ab0",
+          "toolName": "read",
+          "status": "failed",
+          "error": null,
+          "text": "ENOENT: no such file or directory, access 'F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\workspace\\does-not-exist.txt'",
+          "images": []
+        },
+        {
+          "id": "tool-86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-be2d03b112a914659f2cac47",
+          "callId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-be2d03b112a914659f2cac47",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "﻿{\"word\":\"青鹭\",\"code\":\"ORBIT-K7\",\"red\":14,\"total\":51,\"blue\":28,\"green\":9}",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "role": "user",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        },
+        {
+          "id": "f8143fc4-6b1a-4d27-a7cc-22f29b08ecf4",
+          "role": "assistant",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        },
+        {
+          "id": "tool-86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-1559d8187703080da5b93ab0",
+          "role": "toolResult",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        },
+        {
+          "id": "10beac19-45c2-4de4-98b4-891b305c5b56",
+          "role": "assistant",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        },
+        {
+          "id": "tool-86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e-be2d03b112a914659f2cac47",
+          "role": "toolResult",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        },
+        {
+          "id": "90f4ccc8-a973-49a8-af2b-2c55df0ee18f",
+          "role": "assistant",
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949079702,
+          "runId": "11576134-36b2-48d0-b7f3-7ceffcf3f59d",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949079928,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949082348,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949082362,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949085118,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949089613,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949089632,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949091822,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949092350,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949092370,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949094006,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949094192,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949094228,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 14589
+    },
+    {
+      "label": "thinking-off-context",
+      "run": {
+        "id": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "off"
+        },
+        "startedAt": 1792949095040,
+        "endedAt": 1792949101474,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "afb76d32-8aaa-4fc6-ab8b-da2d36fac855",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第5轮：不要调用工具，不要写分析。根据之前的会话数据，给出当前红蓝绿库存、总数、最初会话代号和校验词。只输出JSON对象，字段red,blue,green,total,code,word。",
+      "promptImages": [],
+      "answer": "```json\n{\"red\":14,\"blue\":28,\"green\":9,\"total\":51,\"code\":\"ORBIT-K7\",\"word\":\"青鹭\"}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "role": "user",
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258"
+        },
+        {
+          "id": "4d8b526e-d4a4-47e5-a7b7-cc1310c39731",
+          "role": "assistant",
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949094541,
+          "runId": "86d8c9b3-a206-4fe7-b5ba-14b45d4cb63e",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949095052,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949097300,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949097311,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949100886,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949101353,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949101477,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 7004
+    },
+    {
+      "label": "minimal-reasoning",
+      "run": {
+        "id": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "minimal"
+        },
+        "startedAt": 1792949102290,
+        "endedAt": 1792949110563,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "47f65994-12ff-4754-8e7f-889bf260a8a6",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第6轮：不调用工具。甲乙丙分别负责周二周三周四且不重复。甲不是周二；乙在甲之前；甲在丙之前。求分配，并给出当前蓝色库存减红色库存的差。仅输出一行JSON，字段甲,乙,丙,difference。",
+      "promptImages": [],
+      "answer": "<axiom_prior_reasoning>\n逻辑推理：\n1. 三人分别负责周二、周三、周四，不重复\n2. 甲不是周二\n3. 乙在甲之前（即乙的日期早于甲）\n4. 甲在丙之前（即甲的日期早于丙）\n\n从条件2：甲是周三或周四\n从条件3和4：乙 < 甲 < 丙（时间顺序）\n\n所以顺序是：乙、甲、丙\n\n- 乙 = 周二\n- 甲 = 周三\n- 丙 = 周四\n\n当前库存（从第2轮后一直保持）：\n- 蓝色 = 28\n- 红色 = 14\n- difference = 28 - 14 = 14\n\n</axiom_prior_reasoning>\n\n```json\n{\"甲\":\"周三\",\"乙\":\"周二\",\"丙\":\"周四\",\"difference\":14}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "role": "user",
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b"
+        },
+        {
+          "id": "567eb5e1-75f9-4276-9778-cb4324264537",
+          "role": "assistant",
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949102078,
+          "runId": "9cc5e948-446a-47c7-80ce-e2fc613b8258",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949102299,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949104869,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949104881,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949107360,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949110536,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949110566,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 8531
+    },
+    {
+      "label": "codemode-parallel-reads",
+      "run": {
+        "id": "cc6e7b14-eb01-4488-940e-905873e9124b",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "low"
+        },
+        "startedAt": 1792949111072,
+        "endedAt": 1792949127100,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "509e222d-f2be-4195-87ad-92793a7097ee",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第7轮：必须真实调用 codemode，使用 Promise.allSettled 并行调用 tools.read 读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv 和同目录 ledger.json，把两个工具返回用 text 输出，再根据返回核对初始总数和当前总数是否相等。不可写文件。最后只回复 PARALLEL_OK 51=51。",
+      "promptImages": [],
+      "answer": "我没有 codemode 工具的访问权限。作为子代理，我只能使用 read、grep、find、ls 和 powershell 工具。\n\n我可以用两个独立的 read 调用来读取这两个文件，但无法使用 codemode 和 Promise.allSettled。是否需要主代理来执行这个任务，或者我应该用 powershell 脚本来实现并行读取？",
+      "thinkingLength": 898,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "role": "user",
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b"
+        },
+        {
+          "id": "f4be4bef-2279-41ee-a938-cce1a4663df7",
+          "role": "assistant",
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949110828,
+          "runId": "6935d129-6281-4f85-b067-0d7cbbc6772b",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949111085,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949113734,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949113750,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949116338,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949127080,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949127102,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 16314
+    },
+    {
+      "label": "user-image",
+      "run": {
+        "id": "e2d7cb94-8910-4243-8867-33f54df334f0",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "medium"
+        },
+        "startedAt": 1792949198148,
+        "endedAt": 1792949206222,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "bc9799b5-f25a-42a7-b53b-8d4c1f77e7ce",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "第8轮：只根据本轮附图回答，不调用工具。读出图中CODE后的校验码，以及红、蓝、绿三条柱各自标注的数字，并计算它们之和。只输出JSON对象，字段visualCode,red,blue,green,total。",
+      "promptImages": [
+        {
+          "id": "img1",
+          "name": "visual-a.png",
+          "mimeType": "image/png",
+          "bytes": 10341,
+          "sha256": "db5d9d5a2a4589113bce1648072391be63a71a0fdeac065f9e879cf5ec688136"
+        }
+      ],
+      "answer": "<axiom_prior_reasoning>\n根据图片内容：\n- CODE后的校验码是：N4P8\n- 红色柱标注：RED 7\n- 蓝色柱标注：BLUE 4\n- 绿色柱标注：GREEN 9\n- 总和：7 + 4 + 9 = 20\n\n需要输出JSON对象，字段为 visualCode, red, blue, green, total。\n</axiom_prior_reasoning>\n\n```json\n{\"visualCode\":\"N4P8\",\"red\":7,\"blue\":4,\"green\":9,\"total\":20}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "role": "user",
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0"
+        },
+        {
+          "id": "27ff7738-f952-4188-bca4-97123a14ba10",
+          "role": "assistant",
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949197909,
+          "runId": "cc6e7b14-eb01-4488-940e-905873e9124b",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949198159,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949200775,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949200809,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949203521,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949206201,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949206225,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 8391
+    },
+    {
+      "label": "fixed-worker-high-context",
+      "run": {
+        "id": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "high"
+        },
+        "startedAt": 1792949806293,
+        "endedAt": 1792949816722,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "18eaf8b2-d729-40e2-b5b7-0f714b3422e9",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "继续同一长会话，不调用工具。只回复JSON，字段code为最初标记、word为最初校验词、red/blue/green/total为文件账本中的库存，另给出最初的乘法结果。只返回答案，不复述历史文字。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "```json\n{\"code\":\"ORBIT-K7\",\"word\":\"青鹭\",\"red\":14,\"blue\":28,\"green\":9,\"total\":51,\"multiplication\":323}\n```",
+      "thinkingLength": 362,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "role": "user",
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3"
+        },
+        {
+          "id": "9a27519f-c2f4-4563-860e-52c3c48dd795",
+          "role": "assistant",
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949805495,
+          "runId": "e2d7cb94-8910-4243-8867-33f54df334f0",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949806311,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949809467,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949809500,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949812662,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949816694,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949816726,
+          "runId": "a43329b8-d5e9-46b5-a131-9b39506ba8b3",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 11296
+    },
+    {
+      "label": "cancel-fix-availability-probe",
+      "run": {
+        "id": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+        "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "claude-sonnet-4.5",
+          "thinking": "medium"
+        },
+        "startedAt": 1792953635208,
+        "endedAt": 1792953642429,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+        "inputId": "d0b94220-d12c-4fba-abc3-1fa087e33a3f",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "继续原库存长会话。本轮不调用工具。只回复最初标记、最初中文校验词、磁盘账本总数，以单个空格分隔，不加说明。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "ORBIT-K7 青鹭 51",
+      "thinkingLength": 136,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "role": "user",
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2"
+        },
+        {
+          "id": "52c79924-cc2b-4baf-80db-853e16b2769d",
+          "role": "assistant",
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792953632186,
+          "runId": "ae2e128c-79f6-4a5b-9e68-cf739480c41a",
+          "status": "failed",
+          "phase": null,
+          "retry": null,
+          "error": "模型请求失败：Kiro 历史中存在未完成的工具结果；请重试或开启新会话。"
+        },
+        {
+          "at": 1792953635219,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792953637258,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792953637276,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792953639898,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792953642408,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792953642432,
+          "runId": "03362d29-de75-4ee8-9c85-34604cbaf2f2",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 10368
+    }
+  ],
+  "taskId": "fd02f10d-4b6c-404c-839b-5c1bb8790cff",
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "defaults": {
+    "main": {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "thinking": "max"
+    },
+    "task": {
+      "provider": "sky",
+      "id": "gpt-6-astra",
+      "thinking": "medium"
+    }
+  },
+  "models": [
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "auto",
+      "name": "auto",
+      "levels": [
+        "off"
+      ],
+      "input": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "claude-sonnet-4.5",
+      "name": "claude-sonnet-4.5",
+      "levels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "input": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "claude-haiku-4.5",
+      "name": "claude-haiku-4.5",
+      "levels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "input": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "deepseek-3.2",
+      "name": "deepseek-3.2",
+      "levels": [
+        "off"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "minimax-m2.5",
+      "name": "minimax-m2.5",
+      "levels": [
+        "off"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "minimax-m2.1",
+      "name": "minimax-m2.1",
+      "levels": [
+        "off"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "glm-5",
+      "name": "glm-5",
+      "levels": [
+        "off"
+      ]
+    },
+    {
+      "provider": "kiro",
+      "providerName": "kiro",
+      "id": "qwen3-coder-next",
+      "name": "qwen3-coder-next",
+      "levels": [
+        "off"
+      ]
+    }
+  ],
+  "selection": {
+    "provider": "kiro",
+    "id": "claude-sonnet-4.5",
+    "thinking": "medium"
+  }
+}

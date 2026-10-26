@@ -1,0 +1,1 @@
+function mF(A){if(!A||"object"!=typeof A)return;let e,t=[],i=new Set;for(let r of Object.values(A)){if(!r||"object"!=typeof r)continue;let A=r,n=khA(A.token_count);void 0!==n&&(i.has(n)||(i.add(n),t.push(n)),!0===Lwl(A.is_default)&&(e=n))}return 0!==t.length?(t.sort((A,e)=>A-e),void 0===e?{windows:t}:{windows:t,defaultWindow:e}):void 0}

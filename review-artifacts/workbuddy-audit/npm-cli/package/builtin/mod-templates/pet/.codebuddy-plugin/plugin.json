@@ -1,0 +1,12 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "A native Jobs status companion for CBC Web",
+  "modHost": "web",
+  "client": {
+    "platform": "web",
+    "entry": "client/index.js",
+    "format": "module",
+    "apiVersion": 1
+  }
+}

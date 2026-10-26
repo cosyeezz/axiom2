@@ -73,7 +73,7 @@
 .maintenance-record dd { margin:0; color:var(--fg-2); overflow-wrap:anywhere; }
 .maintenance-budget { padding:8px 0 12px; }
 .maintenance-budget-template { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:16px; margin-bottom:16px; color:var(--fg-2); font-size:11px; }
-.maintenance-budget-template select { min-width:0; width:100%; min-height:38px; font:inherit; color:var(--fg); }
+.maintenance-budget-template .select-trigger { width:100%; min-height:38px; font-size:12px; color:var(--fg); }
 .maintenance-error-kind { display:block; margin-bottom:3px; font-weight:600; }
 .startup-recovery-notice { display:grid; grid-template-columns:14px minmax(0,1fr); align-items:center; margin:16px 20px; }
 .startup-recovery-notice > .maintenance-text-button { grid-column:2; justify-self:start; padding-left:0; }
@@ -160,4 +160,4 @@
  .maintenance-budget-fields { gap:12px; }
  .maintenance-task .maintenance-icon-button { width:32px; min-height:36px; padding:6px; }
 }
-@media(pointer:coarse) { .maintenance-icon-button,.maintenance-text-button,.maintenance-budget input,.maintenance-budget select,.maintenance-budget .btn { min-height:44px; } }
+@media(pointer:coarse) { .maintenance-icon-button,.maintenance-text-button,.maintenance-budget input,.maintenance-budget .select-trigger,.maintenance-budget .btn { min-height:44px; } }

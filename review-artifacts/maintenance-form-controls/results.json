@@ -1,0 +1,155 @@
+{
+  "findings": [],
+  "results": [
+    {
+      "key": "dark-1440-240",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "dark-1440-320",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "dark-1440-480",
+      "failures": [],
+      "columns": 2
+    },
+    {
+      "key": "dark-320-294",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "dark-390-364",
+      "failures": [],
+      "columns": 2
+    },
+    {
+      "key": "dark-820-480",
+      "failures": [],
+      "columns": 2
+    },
+    {
+      "key": "light-1440-240",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "light-1440-320",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "light-1440-480",
+      "failures": [],
+      "columns": 2
+    },
+    {
+      "key": "light-320-294",
+      "failures": [],
+      "columns": 1
+    },
+    {
+      "key": "light-390-364",
+      "failures": [],
+      "columns": 2
+    },
+    {
+      "key": "light-820-480",
+      "failures": [],
+      "columns": 2
+    }
+  ],
+  "operations": [
+    "subscribe",
+    "subscribe",
+    "preview.describe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe",
+    "subscribe",
+    "subscribe",
+    "subscribe",
+    "capabilities.get",
+    "unsubscribe",
+    "unsubscribe",
+    "unsubscribe"
+  ],
+  "errors": []
+}

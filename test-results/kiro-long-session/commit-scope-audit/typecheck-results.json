@@ -1,0 +1,22 @@
+[
+  {
+    "name": "provider-closure",
+    "ref": "7aee7a9eb8ab97f0b001f329ae84539921bcdccc",
+    "added": [
+      "app/scripts/kiro-live-check.mjs",
+      "app/src/server/providers/kiro-chat-protocol.ts",
+      "app/src/server/providers/kiro-chat.ts",
+      "app/tests/kiro-chat.test.ts",
+      "app/tests/kiro-thinking.test.ts",
+      "docs/kiro-thinking.md",
+      "app/src/server/providers/kiro-catalog.ts",
+      "app/src/server/providers/kiro-eventstream.ts",
+      "app/src/server/providers/kiro-thinking.ts",
+      "app/src/server/providers/kiro-thinking-stream.ts",
+      "app/src/server/providers/kiro.ts",
+      "app/tests/fixtures/kiro-eventstream.ts"
+    ],
+    "roots": 992,
+    "diagnostics": 0
+  }
+]

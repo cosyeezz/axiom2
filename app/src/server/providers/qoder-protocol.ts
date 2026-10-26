@@ -25,6 +25,8 @@
  * SOFTWARE.
  */
 import { constants, createCipheriv, createHash, publicEncrypt, randomUUID } from "node:crypto";
+import { hostname } from "node:os";
+import { domainToASCII } from "node:url";
 
 export type QoderRegion = "intl" | "cn";
 export const qoderSites = {
@@ -98,10 +100,14 @@ export function qoderHeaders(body: string, url: string, identity: QoderIdentity)
   const timestamp = String(Math.floor(Date.now() / 1000)), path = new URL(url).pathname.replace(/^\/algo(?=\/)/, "");
   const bytes = Buffer.from(body, "utf8");
   const signature = md5(Buffer.concat([Buffer.from(`${payload}\n${cosyKey}\n${timestamp}\n`), bytes, Buffer.from(`\n${path}`)]));
+  const rawHostname = hostname().trim();
+  const safeHostname = (domainToASCII(rawHostname) || rawHostname).replace(/[^A-Za-z0-9._-]/g, "_");
+  const machineHostname = rawHostname ? `${safeHostname.slice(0, 87)}-${md5(rawHostname).slice(0, 8)}` : "";
   return {
     Authorization: `Bearer COSY.${payload}.${signature}`, "Cosy-Key": cosyKey, "Cosy-User": identity.userId,
-    "Cosy-Date": timestamp, "Cosy-Version": "1.0.0", "Cosy-Machineid": identity.machineId,
-    "Cosy-Machinetoken": identity.machineId, "Cosy-Machinetype": "5", "Cosy-Machineos": "x86_64_windows",
+    "Cosy-Date": timestamp, "Cosy-Version": "1.1.78", "Cosy-Machineid": identity.machineId,
+    "Cosy-Machineos": `${process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch}_${process.platform}`,
+    ...(new URL(url).pathname.includes("/sse/") && machineHostname ? { "Cosy-MachineHostname": machineHostname } : {}),
     "Cosy-Clienttype": "5", "Cosy-Clientip": "127.0.0.1", "Cosy-Bodyhash": md5(bytes),
     "Cosy-Bodylength": String(bytes.length), "Cosy-Sigpath": path, "Cosy-Data-Policy": "disagree",
     "Cosy-Organization-Id": "", "Cosy-Organization-Tags": "", "Login-Version": "v2", "X-Request-Id": randomUUID(),
@@ -110,8 +116,10 @@ export function qoderHeaders(body: string, url: string, identity: QoderIdentity)
 
 export function qoderFailure(status: number, code?: unknown): Error {
   const numericCode = typeof code === "number" || typeof code === "string" && /^\d+$/.test(code) ? Number(code) : undefined;
-  if (status === 401 || status === 403) return new QoderError(`Qoder 认证或权限失败（HTTP ${status}），请检查账号地区并重新登录。`);
-  if (status === 429 || [110, 112, 10605].includes(numericCode ?? -1)) return new QoderError("Qoder 额度不足或请求过于频繁，请检查账号额度后重试。");
+  if (numericCode === 103 && status === 403) return new QoderError("Qoder 检测到重复请求（code 103）；未自动重放，请检查会话状态后重试。");
+  if (numericCode === 105 || status === 401 || status === 403) return new QoderError(`Qoder 认证或权限失败（HTTP ${status}），请检查账号地区并重新登录。`);
+  if (numericCode === 10605) return new QoderError("Qoder 模型正在排队（code 10605）；未自动重放，请稍后重试。");
+  if (status === 429 || [110, 112, 114, 115, 116, 117, 122].includes(numericCode ?? -1)) return new QoderError("Qoder 额度不足或请求过于频繁，请检查账号额度后重试。");
   return new QoderError(`Qoder 请求失败（HTTP ${status}${numericCode === undefined ? "" : `，code ${numericCode}`}）。`);
 }
 export function qoderSignal(signal?: AbortSignal | null, timeout = 15000) {
@@ -148,7 +156,7 @@ export async function qoderJson(transport: typeof fetch, url: string, init: Requ
   const signal = qoderSignal(init.signal);
   try {
     const response = await transport(url, { ...init, redirect: "error", signal });
-    if (!response.ok) { await response.body?.cancel(); throw qoderFailure(response.status); }
+    if (!response.ok) { void response.body?.cancel().catch(() => {}); throw qoderFailure(response.status); }
     return await qoderReadJson(response, encoded, signal);
   } catch (error) {
     init.signal?.throwIfAborted();

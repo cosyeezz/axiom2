@@ -1,0 +1,2 @@
+"use strict";exports.ids=["2319"],exports.modules={13664(e,a,t){t.d(a,{a:()=>r,b:()=>s}),(0,t(98995).createRequire)(__filename);var r={name:"hostname",execute:async function(e,a){return{stdout:`localhost
+`,stderr:"",exitCode:0}}},s={name:"hostname",flags:[]}},84018(e,a,t){t.r(a),t.d(a,{flagsForFuzzing:()=>s.b,hostname:()=>s.a});var r=t(98995),s=t(13664);t(7863),(0,r.createRequire)(__filename)}};

@@ -22,6 +22,8 @@ import {
 } from "./models/draft.js";
 import { createModelRuntime, ensureModelProvider, nativeProviderTemplates } from "./model-runtime.js";
 import { discoverModels } from "./model-discovery.js";
+import { kiroCatalogInput, kiroCatalogScope } from "./providers/kiro-catalog.js";
+import type { KiroProvider } from "./providers/kiro.js";
 import { AppError, object, text } from "../shared/protocol.js";
 import {
   editableBodyOverride,
@@ -311,7 +313,7 @@ export class ModelService {
           ? "oauth" : "custom",
         hasConnectionOverrides: !!(p.baseUrl || p.api || p.apiKey),
         name: p.name ?? provider?.name ?? providerId,
-        api: p.api ?? provider?.getModels()[0]?.api ?? (providerId === "kiro" ? "kiro-auth-only" : "openai-completions"),
+        api: p.api ?? provider?.getModels()[0]?.api ?? (providerId === "kiro" ? "kiro-chat" : "openai-completions"),
         ...urlView(
           p.baseUrl ??
             provider?.baseUrl ??
@@ -368,7 +370,7 @@ export class ModelService {
         ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
         name: p.name,
-        api: p.getModels()[0]?.api ?? (p.id === "kiro" ? "kiro-auth-only" : "openai-completions"),
+        api: p.getModels()[0]?.api ?? (p.id === "kiro" ? "kiro-chat" : "openai-completions"),
         url: urlView(p.baseUrl ?? p.getModels()[0]?.baseUrl ?? "").url,
         methods: [
           ...(p.auth.apiKey?.login ? ["api_key" as const] : []),
@@ -434,6 +436,9 @@ export class ModelService {
           (credential?.type === "oauth" || (!credential && native.auth.oauth && !connection.api && !connection.apiKey)));
         // Qoder's PAT and device-token connections share a signed catalog, not /models.
         const qoderCatalog = (providerId === "qoder" || providerId === "qoder-cn") && !!native.refreshModels;
+        const kiroCatalog = providerId === "kiro" && !!native.refreshModels;
+        if (kiroCatalog && connection.baseUrl)
+          throw new AppError("MODEL_DISCOVERY_FAILED", "Kiro 原生目录使用固定 AWS 服务端点，不支持自定义 Base URL；不会向该地址发送账号令牌。");
         if (qoderCatalog && connection.baseUrl && connection.baseUrl !== native.baseUrl)
           throw new AppError("MODEL_DISCOVERY_FAILED", "Qoder 原生接入使用固定地区接口，不支持自定义 Base URL。请使用其他供应商 ID 配置代理。");
         const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
@@ -441,7 +446,7 @@ export class ModelService {
         let source: ModelCatalog["source"];
         let message: string;
         try {
-          if (!oauth && !qoderCatalog) {
+          if (!oauth && !qoderCatalog && !kiroCatalog) {
             if (!credential)
               throw new AppError("MODEL_AUTH_MISSING", "未配置 API 密钥：auth.json 和 models.json 中均无该供应商密钥，请填写密钥并保存后重试。");
             const baseUrl = connection.baseUrl ?? native.baseUrl ?? runtime.getModels(providerId)[0]?.baseUrl;
@@ -473,22 +478,33 @@ export class ModelService {
             if (!await runtime.checkAuth(providerId, { signal }))
               throw new AppError("MODEL_DISCOVERY_FAILED", qoderCatalog ? "请先登录 Qoder 或保存 Personal Access Token，再拉取模型列表。" : "请先完成 OAuth 登录，再拉取模型列表。");
             if (native.refreshModels) {
+              const kiroNative = kiroCatalog ? runtime.getRegisteredNativeProvider("kiro") as KiroProvider | undefined : undefined;
+              const before = kiroNative?.catalogState().generation;
               const result = await runtime.refresh({ providers: [providerId], allowNetwork: true, force: true, signal });
               if (result.aborted || result.errors.size)
-                throw new AppError("MODEL_DISCOVERY_FAILED", "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
+                throw new AppError("MODEL_DISCOVERY_FAILED", kiroCatalog && !result.aborted && result.errors.get(providerId)
+                  ? result.errors.get(providerId)!.message
+                  : "OAuth 模型目录刷新未完成，请检查网络和认证后重试。");
+              if (kiroCatalog) {
+                const after = kiroNative?.catalogState();
+                const current = kiroCatalogScope(readStoredCredential("kiro", join(this.dir, "auth.json")));
+                if (before === undefined || !after || after.generation <= before || !current || after.scope !== current)
+                  throw new AppError("MODEL_DISCOVERY_FAILED", "Kiro 目录未完成本次实时拉取，或认证在刷新期间已改变；请重新读取认证状态后重试。");
+              }
             }
             source = "native";
             message = providerId === "kiro"
-              ? "Kiro 当前仅接入账号认证，模型推理与模型目录尚未实现；登录成功不代表可以在 Axiom 中调用 Kiro 模型。"
+              ? "已通过 Kiro CLI 原生接口实时拉取当前账号模型目录。添加后可使用原生文本聊天与工具调用；图片能力按目录 IMAGE 声明展示，缺字段不代表模型不支持。思考等级按 kiro.rs 兼容配置展示并发送，不代表上游能力声明；未识别模型需确认后手动配置。账号权限以服务端为准，零值单价不代表免费。"
               : qoderCatalog
-              ? "已通过 Qoder 签名接口刷新账号模型目录；不代表已验证真实推理权限。当前接入仅声明文本能力，单价未核验。"
+              ? "已通过 Qoder 签名接口刷新账号模型目录；文本、图片和思考能力以账号目录为准，不代表已验证真实推理权限。单价未核验，零值不代表免费。"
               : native.refreshModels
               ? "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。"
               : "此 OAuth 连接使用应用内置模型目录；未向供应商查询实时列表，实际可用性以账号权限为准。";
             models = runtime.getModels(providerId).map((model) => ({
               id: model.id, name: model.name, api: model.api,
-              levels: levelsOf(model), input: [...model.input], contextWindow: model.contextWindow,
+              levels: levelsOf(model), input: kiroCatalog ? kiroCatalogInput(model) : [...model.input], contextWindow: model.contextWindow || undefined,
             })).sort((a, b) => a.name.localeCompare(b.name));
+            if (kiroCatalog && !models.length) message = "Kiro 接口请求成功，但当前账号未返回模型；请检查账号权限及所选 profile，不会回退到静态名单或其他模型。";
           }
         } catch (error) {
           if (error instanceof AppError) throw error;

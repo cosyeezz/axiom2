@@ -1,0 +1,2824 @@
+{
+  "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450",
+  "parentSessionId": "fb7031ed-69da-4b00-97da-70bb668d1a1c",
+  "taskRef": "t4016",
+  "createdAt": "2026-10-25T17:38:53.917Z",
+  "turns": [
+    {
+      "label": "long-01-seed",
+      "run": {
+        "id": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792949954947,
+        "endedAt": 1792949976667,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "cd923fa2-17bf-47ba-8f91-98eb5375fbf9",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具。连续验收开始：记住标记 MATRIX-K3 和校验词 白鹭。计算37乘19，只回复 MATRIX-K3 703 白鹭。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "MATRIX-K3 703 白鹭",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "role": "user",
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d"
+        },
+        {
+          "id": "5709f5a5-9cad-404c-b40f-a68423da3fe7",
+          "role": "assistant",
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949933991,
+          "runId": "98f8d7d8-d8f2-4130-b57d-6d63c2667b78",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949933997,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949954961,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949954970,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972094,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972575,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972627,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972627,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972633,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972650,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949972708,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949975991,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976506,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976538,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976600,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976607,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976669,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976715,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 42759
+    },
+    {
+      "label": "long-02-read",
+      "run": {
+        "id": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792949984333,
+        "endedAt": 1792949994249,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "65320067-f1cc-45cb-a27b-916eb50c6d6f",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "必须真实 read 读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv，按 initial+delta 计算red、blue、green和总数，不修改文件。用JSON回答，包含记住的标记和校验词。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "我需要先读取指定的文件。让我使用 read 工具来读取 inventory.csv 文件。\n\n<｜DSML｜function_calls\n\n现在我需要计算 red、blue、green 的初始值加增量值，以及总数。\n\n计算：\n- red: 17 + (-3) = 14\n- blue: 23 + 5 = 28  \n- green: 11 + (-2) = 9\n- 总数: 14 + 28 + 9 = 51\n\n用 JSON 格式回答，包含记住的标记和校验词。\n\n```json\n{\n  \"marker\": \"MATRIX-K3\",\n  \"verification\": \"白鹭\",\n  \"calculations\": {\n    \"red\": 14,\n    \"blue\": 28,\n    \"green\": 9,\n    \"total\": 51\n  }\n}\n```",
+      "thinkingLength": 0,
+      "calls": [
+        {
+          "id": "f7aa167d-332c-4aaa-8106-5d6fe8056929-87dcf82bb1aa2e2ca601cce0",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv\"\n}",
+          "messageId": "c8a297fa-711a-4875-aea4-255a66037192"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-f7aa167d-332c-4aaa-8106-5d6fe8056929-87dcf82bb1aa2e2ca601cce0",
+          "callId": "f7aa167d-332c-4aaa-8106-5d6fe8056929-87dcf82bb1aa2e2ca601cce0",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "color,initial,delta\nred,17,-3\nblue,23,5\ngreen,11,-2\n",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "role": "user",
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929"
+        },
+        {
+          "id": "c8a297fa-711a-4875-aea4-255a66037192",
+          "role": "assistant",
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929"
+        },
+        {
+          "id": "tool-f7aa167d-332c-4aaa-8106-5d6fe8056929-87dcf82bb1aa2e2ca601cce0",
+          "role": "toolResult",
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929"
+        },
+        {
+          "id": "59544f43-0e46-4252-9cd5-9c9057f37645",
+          "role": "assistant",
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949976745,
+          "runId": "fde5b95d-7a8a-42a6-8b53-037e892e7c9d",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949976755,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949979006,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949979794,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949981142,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949984348,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949984358,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949986600,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949986747,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949986765,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949986782,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949986789,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949987635,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949990407,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949990435,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949990455,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949991571,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949993365,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949994225,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949994251,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949994288,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 17949
+    },
+    {
+      "label": "long-03-reasoning",
+      "run": {
+        "id": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950004675,
+        "endedAt": 1792950016734,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "0d1e351d-3c85-4d6a-9544-2aa6223093ef",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具。甲乙丙各负责周二、三、四之一，不重复；甲不是周二，乙在甲前，甲在丙前。给出安排，并计算上一轮蓝减红的差。只输出JSON。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "首先，计算上一轮蓝减红的差：\n- 蓝: 28\n- 红: 14\n- 差: 28 - 14 = 14\n\n现在解决安排问题：\n条件：\n1. 甲乙丙各负责周二、三、四之一，不重复\n2. 甲不是周二\n3. 乙在甲前\n4. 甲在丙前\n\n从条件2可知：甲 ≠ 周二\n\n从条件3\"乙在甲前\"和条件4\"甲在丙前\"可知：乙 < 甲 < 丙（按时间顺序）\n\n可能的顺序：乙、甲、丙\n\n由于只有周二、周三、周四三天：\n- 乙必须在最早的一天（周二或周三）\n- 甲在乙之后\n- 丙在最后\n\n结合甲 ≠ 周二，如果乙是周二，那么甲只能是周三或周四，但甲在丙前，丙只能更晚。\n\n可能的排列：\n1. 乙=周二，甲=周三，丙=周四 ✓\n2. 乙=周二，甲=周四，丙=?（无法安排，没有更晚的日子）\n3. 乙=周三，甲=周四，丙=?（无法安排，没有更晚的日子）\n4. 乙=周二，甲=周三，丙=周四 ✓（同上）\n\n只有一种可行的安排：乙负责周二，甲负责周三，丙负责周四。\n\n```json\n{\n  \"marker\": \"MATRIX-K3\",\n  \"verification\": \"白鹭\",\n  \"blue_minus_red\": 14,\n  \"schedule\": {\n    \"乙\": \"周二\",\n    \"甲\": \"周三\",\n    \"丙\": \"周四\"\n  }\n}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "role": "user",
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf"
+        },
+        {
+          "id": "42e9f19a-a2c4-4d9e-a0fa-bd203ddaa46d",
+          "role": "assistant",
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792949994696,
+          "runId": "f7aa167d-332c-4aaa-8106-5d6fe8056929",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792949994706,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950004685,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950004694,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007002,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007129,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007195,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007210,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007210,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007261,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007275,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950007537,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950011311,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950012043,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950016709,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950016713,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950016737,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950016770,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 22092
+    },
+    {
+      "label": "long-04-error-recovery",
+      "run": {
+        "id": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950019047,
+        "endedAt": 1792950037137,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "120da8d0-45e3-499d-a2a1-2256d85aa0cc",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "必须先用read读取不存在的 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/expected-missing-deepseek-3.2.txt；即使失败也继续真实read读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json。最后输出 RECOVERED 和账本总数，再附最初的标记。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "我需要执行两个读取操作。首先尝试读取不存在的文件，然后读取 ledger.json 文件。\n\n<｜DSML｜function_calls\n\n现在读取 ledger.json 文件：\n\n<｜DSML｜function_calls\n\n从 ledger.json 文件中，我可以看到账本总数为 51。\n\n输出格式：RECOVERED 和账本总数，再附最初的标记。\n\n```\nRECOVERED 51 MATRIX-K3\n```",
+      "thinkingLength": 0,
+      "calls": [
+        {
+          "id": "dce559d7-49eb-4b1b-8f3d-35251597b483-380c537f1d2325d8d1573b9f",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/expected-missing-deepseek-3.2.txt\"\n}",
+          "messageId": "984f3efd-f8f2-4096-847c-1696f7c701e0"
+        },
+        {
+          "id": "dce559d7-49eb-4b1b-8f3d-35251597b483-81ec66cd72d3960e02a244d6",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json\"\n}",
+          "messageId": "6b1eaba3-cf72-4f68-9e94-b858862e83d8"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-dce559d7-49eb-4b1b-8f3d-35251597b483-380c537f1d2325d8d1573b9f",
+          "callId": "dce559d7-49eb-4b1b-8f3d-35251597b483-380c537f1d2325d8d1573b9f",
+          "toolName": "read",
+          "status": "failed",
+          "error": null,
+          "text": "ENOENT: no such file or directory, access 'F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\workspace\\expected-missing-deepseek-3.2.txt'",
+          "images": []
+        },
+        {
+          "id": "tool-dce559d7-49eb-4b1b-8f3d-35251597b483-81ec66cd72d3960e02a244d6",
+          "callId": "dce559d7-49eb-4b1b-8f3d-35251597b483-81ec66cd72d3960e02a244d6",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "﻿{\"word\":\"青鹭\",\"code\":\"ORBIT-K7\",\"red\":14,\"total\":51,\"blue\":28,\"green\":9}",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "role": "user",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        },
+        {
+          "id": "984f3efd-f8f2-4096-847c-1696f7c701e0",
+          "role": "assistant",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        },
+        {
+          "id": "tool-dce559d7-49eb-4b1b-8f3d-35251597b483-380c537f1d2325d8d1573b9f",
+          "role": "toolResult",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        },
+        {
+          "id": "6b1eaba3-cf72-4f68-9e94-b858862e83d8",
+          "role": "assistant",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        },
+        {
+          "id": "tool-dce559d7-49eb-4b1b-8f3d-35251597b483-81ec66cd72d3960e02a244d6",
+          "role": "toolResult",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        },
+        {
+          "id": "9bfc9883-b59d-4c73-a646-842c66b5aa19",
+          "role": "assistant",
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950016787,
+          "runId": "297b35b2-34a6-433d-9d9f-5d363fba9ccf",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950016795,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950019056,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950019065,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950021336,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950021941,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950021961,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950021978,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950022006,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950022602,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950025485,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950026895,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950026913,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950028503,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950030219,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950031128,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950031271,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950031287,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950034146,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950035427,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950037115,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950037141,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950037176,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 20404
+    },
+    {
+      "label": "long-05-off-memory",
+      "run": {
+        "id": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950039197,
+        "endedAt": 1792950044963,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "37eb6fe2-ec0f-42ca-bd07-80f3a399929c",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具，只根据会话记忆，返回最初的校验词、乘法结果、库存red/blue/green/total。只输出JSON。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "```json\n{\n  \"verification\": \"白鹭\",\n  \"multiplication_result\": 703,\n  \"inventory\": {\n    \"red\": 14,\n    \"blue\": 28,\n    \"green\": 9,\n    \"total\": 51\n  }\n}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "role": "user",
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5"
+        },
+        {
+          "id": "0dc54c6c-69e3-4f73-93a5-602774408cf5",
+          "role": "assistant",
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950037194,
+          "runId": "dce559d7-49eb-4b1b-8f3d-35251597b483",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950037202,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950039208,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950039217,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041351,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041485,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041497,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041512,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041517,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950041700,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950044920,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950044935,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950044965,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950044999,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 7887
+    },
+    {
+      "label": "long-06-large-attachment",
+      "run": {
+        "id": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950045310,
+        "endedAt": 1792950054424,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "186e4875-6160-4322-9e69-d9146305c391",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具。附件全是合成资料，找出唯一ARCHIVE_KEY和对应ARCHIVE_VALUE，记住这对值；只输出JSON，不要复述其他行。",
+      "promptImages": [],
+      "attachments": [
+        {
+          "name": "archive-a.txt",
+          "bytes": 73395,
+          "sha256": "7562ba9f5e16e2f06585c4cf6354a79f1775701f0ecf49e2141aba5cb6ddcb3e"
+        }
+      ],
+      "answer": "在提供的文件内容中，我找到了唯一包含 ARCHIVE_KEY 和 ARCHIVE_VALUE 的行：\n\n```\nARCHIVE_KEY=R4Q9; ARCHIVE_VALUE=318; CLASS=acceptance-only\n```\n\n因此，唯一 ARCHIVE_KEY 是 \"R4Q9\"，对应的 ARCHIVE_VALUE 是 \"318\"。\n\n```json\n{\n  \"ARCHIVE_KEY\": \"R4Q9\",\n  \"ARCHIVE_VALUE\": \"318\"\n}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "role": "user",
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935"
+        },
+        {
+          "id": "688c1548-d91e-47e4-b678-e267d0eebf62",
+          "role": "assistant",
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950045083,
+          "runId": "7242af0e-6f0d-482b-8c9f-465bf6d1c2f5",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950045092,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950045321,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950045330,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950047650,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950047813,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950048223,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950048244,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950048256,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950049212,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054005,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054100,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054396,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054400,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054426,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054477,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 9459
+    },
+    {
+      "label": "long-07-delayed-memory",
+      "run": {
+        "id": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950054810,
+        "endedAt": 1792950062532,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "5e30c229-f993-46df-af8a-641af5b119a6",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具。上一份附件的唯一关键记录是什么？再给出最初的标记与校验词。只输出JSON。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "```json\n{\n  \"key_record\": \"ARCHIVE_KEY=R4Q9; ARCHIVE_VALUE=318; CLASS=acceptance-only\",\n  \"marker\": \"MATRIX-K3\",\n  \"verification\": \"白鹭\"\n}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "role": "user",
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02"
+        },
+        {
+          "id": "941f2350-2909-480a-9c97-2f6c44f55899",
+          "role": "assistant",
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950054542,
+          "runId": "ec7d8050-efc4-4c23-b925-d4d80e027935",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054551,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054821,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950054830,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950057048,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950057164,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950057178,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950057193,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950057198,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950059498,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950061969,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950061987,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062487,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062505,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062534,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062570,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 8111
+    },
+    {
+      "label": "long-08-two-reads",
+      "run": {
+        "id": "cd143152-a1ab-44b8-a314-e938541c6f20",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950062894,
+        "endedAt": 1792950080920,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "291479e2-9e75-4f09-9b12-d60a7cbe7f27",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "必须实际用两个read分别读取 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv 和 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json。检查两者导出的red/blue/green/total是否一致，用一行JSON回答。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "我需要读取这两个文件并进行比较。\n\n<｜DSML｜function_calls\n\n\n\n<｜DSML｜function_calls\n\n现在计算 inventory.csv 中的数值：\n- red: 17 + (-3) = 14\n- blue: 23 + 5 = 28\n- green: 11 + (-2) = 9\n- total: 14 + 28 + 9 = 51\n\n从 ledger.json 中读取的数值：\n- red: 14\n- blue: 28  \n- green: 9\n- total: 51\n\n两个文件的导出数值完全一致。\n\n```json\n{\"consistent\": true}\n```",
+      "thinkingLength": 0,
+      "calls": [
+        {
+          "id": "cd143152-a1ab-44b8-a314-e938541c6f20-d559ecf1137b861509d4681d",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/inventory.csv\"\n}",
+          "messageId": "ac1a8f60-285c-405e-b41e-60afefd68c10"
+        },
+        {
+          "id": "cd143152-a1ab-44b8-a314-e938541c6f20-2a4a973344f171cdb29fb25d",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/ledger.json\"\n}",
+          "messageId": "b8275d35-c711-42c8-a1c1-e7bc794b11cb"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-cd143152-a1ab-44b8-a314-e938541c6f20-d559ecf1137b861509d4681d",
+          "callId": "cd143152-a1ab-44b8-a314-e938541c6f20-d559ecf1137b861509d4681d",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "color,initial,delta\nred,17,-3\nblue,23,5\ngreen,11,-2\n",
+          "images": []
+        },
+        {
+          "id": "tool-cd143152-a1ab-44b8-a314-e938541c6f20-2a4a973344f171cdb29fb25d",
+          "callId": "cd143152-a1ab-44b8-a314-e938541c6f20-2a4a973344f171cdb29fb25d",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "﻿{\"word\":\"青鹭\",\"code\":\"ORBIT-K7\",\"red\":14,\"total\":51,\"blue\":28,\"green\":9}",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "role": "user",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        },
+        {
+          "id": "ac1a8f60-285c-405e-b41e-60afefd68c10",
+          "role": "assistant",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        },
+        {
+          "id": "tool-cd143152-a1ab-44b8-a314-e938541c6f20-d559ecf1137b861509d4681d",
+          "role": "toolResult",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        },
+        {
+          "id": "b8275d35-c711-42c8-a1c1-e7bc794b11cb",
+          "role": "assistant",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        },
+        {
+          "id": "tool-cd143152-a1ab-44b8-a314-e938541c6f20-2a4a973344f171cdb29fb25d",
+          "role": "toolResult",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        },
+        {
+          "id": "30d8e294-a3c8-44e1-81c6-9dd9b633f5cd",
+          "role": "assistant",
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950062654,
+          "runId": "ee61bce4-8a3e-421d-a1ff-66906500fd02",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062663,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062903,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950062913,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065153,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065167,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065281,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065288,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065304,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065321,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950065326,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950066522,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950070824,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950070836,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950070850,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950071933,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950075292,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950075304,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950075318,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950076925,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950080412,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950080896,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950080922,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950080958,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 18333
+    },
+    {
+      "label": "long-09-state-update",
+      "run": {
+        "id": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950081260,
+        "endedAt": 1792950091713,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "9ca4c4ee-be34-42d5-beef-d09b10712c09",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具，也不要修改磁盘账本。只在会话中增加yellow库存5，其他颜色保持原值。输出更新后的各色库存和总数，并记住这个新状态。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "我需要使用当前已知的状态：\n1. 从之前会话记忆中获得库存：red=14, blue=28, green=9, total=51\n2. 增加yellow库存5\n3. 其他颜色保持原值\n\n计算：\n- red: 14\n- blue: 28\n- green: 9  \n- yellow: 5\n- total: 14 + 28 + 9 + 5 = 56\n\n更新后的状态已记住。\n\n```json\n{\n  \"red\": 14,\n  \"blue\": 28,\n  \"green\": 9,\n  \"yellow\": 5,\n  \"total\": 56\n}\n```",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "role": "user",
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28"
+        },
+        {
+          "id": "c7a22d09-9675-4950-8f60-8fd0f24a4155",
+          "role": "assistant",
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950080991,
+          "runId": "cd143152-a1ab-44b8-a314-e938541c6f20",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950080999,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950081273,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950081283,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083502,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083648,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083664,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083681,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083695,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950083779,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950090328,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950090698,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950091688,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950091692,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950091716,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950091757,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 10833
+    },
+    {
+      "label": "long-10-write-read",
+      "run": {
+        "id": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "completed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950092069,
+        "endedAt": 1792950125927,
+        "error": null,
+        "phase": null,
+        "retry": null,
+        "reasonCode": null,
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "1267ea74-7095-458c-bca1-bd005b93bc81",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "必须真实用powershell在 F:/Axiom/axiom2/test-results/kiro-long-session/workspace/matrix/deepseek-3.2/receipt.json 创建独立测试JSON（父目录不存在就创建），包含当前会话库存总数、最初标记及校验词；然后必须read这个文件确认。不要改其他文件。最后给出文件中三项值。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "我需要执行以下步骤：\n1. 使用 PowerShell 创建目录和文件\n2. 写入包含当前库存总数、最初标记和校验词的 JSON\n3. 读取文件确认内容\n\n让我先创建目录和文件：\n\n<｜DSML｜function_calls\n\n现在创建 receipt.json 文件：\n\n<｜DSML｜function_calls\n\n现在读取文件确认内容：\n\n<｜DSML｜function_calls\n\n文件中的三项值是：\n1. marker: \"MATRIX-K3\"\n2. total: 56\n3. verification: \"白鹭\"\n\n```json\n{\n  \"marker\": \"MATRIX-K3\",\n  \"total\": 56,\n  \"verification\": \"白鹭\"\n}\n```",
+      "thinkingLength": 0,
+      "calls": [
+        {
+          "id": "19076055-ba2d-43df-b8ed-ea93b2a859b9-32852be7b7ade4d6796538db",
+          "name": "powershell",
+          "input": "{\n  \"command\": \"New-Item -ItemType Directory -Force -Path \\\"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/matrix/deepseek-3.2\\\"\"\n}",
+          "messageId": "deaf650d-0984-4aa3-9d40-6f52169070dc"
+        },
+        {
+          "id": "19076055-ba2d-43df-b8ed-ea93b2a859b9-b4732f929f6dddede77a1fa5",
+          "name": "powershell",
+          "input": "{\n  \"command\": \"$inventoryTotal = 56; $marker = \\\"MATRIX-K3\\\"; $verification = \\\"白鹭\\\"; $data = @{total = $inventoryTotal; marker = $marker; verification = $verification} | ConvertTo-Json; $data | Out-File -FilePath \\\"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/matrix/deepseek-3.2/receipt.json\\\" -Encoding UTF8\"\n}",
+          "messageId": "d31e3f9b-6c86-4a24-995f-fa9072b0fa92"
+        },
+        {
+          "id": "19076055-ba2d-43df-b8ed-ea93b2a859b9-d70e0f84496665396b3dc116",
+          "name": "read",
+          "input": "{\n  \"path\": \"F:/Axiom/axiom2/test-results/kiro-long-session/workspace/matrix/deepseek-3.2/receipt.json\"\n}",
+          "messageId": "38b9a175-45e4-4eff-925d-2e6be3fb905a"
+        }
+      ],
+      "results": [
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-32852be7b7ade4d6796538db",
+          "callId": "19076055-ba2d-43df-b8ed-ea93b2a859b9-32852be7b7ade4d6796538db",
+          "toolName": "powershell",
+          "status": "completed",
+          "error": null,
+          "text": "\r\n\r\n    目录: F:\\Axiom\\axiom2\\test-results\\kiro-long-session\\workspace\\matrix\r\n\r\n\r\nMode                 LastWriteTime         Length Name                                                                 \r\n----                 -------------         ------ ----                                                                 \r\nd-----        2026/10/25     10:41                deepseek-3.2                                                         \r\n\r\n\r\n",
+          "images": []
+        },
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-b4732f929f6dddede77a1fa5",
+          "callId": "19076055-ba2d-43df-b8ed-ea93b2a859b9-b4732f929f6dddede77a1fa5",
+          "toolName": "powershell",
+          "status": "completed",
+          "error": null,
+          "text": "(no output)",
+          "images": []
+        },
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-d70e0f84496665396b3dc116",
+          "callId": "19076055-ba2d-43df-b8ed-ea93b2a859b9-d70e0f84496665396b3dc116",
+          "toolName": "read",
+          "status": "completed",
+          "error": null,
+          "text": "﻿{\r\n    \"marker\":  \"MATRIX-K3\",\r\n    \"total\":  56,\r\n    \"verification\":  \"白鹭\"\r\n}\r\n",
+          "images": []
+        }
+      ],
+      "messageIds": [
+        {
+          "id": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "role": "user",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "deaf650d-0984-4aa3-9d40-6f52169070dc",
+          "role": "assistant",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-32852be7b7ade4d6796538db",
+          "role": "toolResult",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "d31e3f9b-6c86-4a24-995f-fa9072b0fa92",
+          "role": "assistant",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-b4732f929f6dddede77a1fa5",
+          "role": "toolResult",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "38b9a175-45e4-4eff-925d-2e6be3fb905a",
+          "role": "assistant",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "tool-19076055-ba2d-43df-b8ed-ea93b2a859b9-d70e0f84496665396b3dc116",
+          "role": "toolResult",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        },
+        {
+          "id": "7329998a-d1dd-4ec2-b30a-65649c7ee008",
+          "role": "assistant",
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950091824,
+          "runId": "bb1b5503-12a8-415d-981e-6202d67bdb28",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950091833,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950092082,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950092092,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950094323,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950094466,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950094486,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950094502,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950094510,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950097272,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950102898,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950102993,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950103699,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950103735,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950105174,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950105434,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950105606,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950105610,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950106079,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950110924,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950112368,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116025,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116059,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116070,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116113,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116141,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116157,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950116245,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950120025,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950120051,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950120774,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950120835,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950120876,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950125867,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950125892,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "running",
+          "phase": "settling",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950125931,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950125973,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 34202
+    },
+    {
+      "label": "long-11-text-table",
+      "run": {
+        "id": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+        "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+        "status": "failed",
+        "selection": {
+          "provider": "kiro",
+          "id": "deepseek-3.2",
+          "thinking": "off"
+        },
+        "startedAt": 1792950127769,
+        "endedAt": 1792950148093,
+        "error": "模型请求失败：Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。",
+        "phase": null,
+        "retry": {
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+          "attempt": 3,
+          "maxAttempts": 3,
+          "state": "exhausted",
+          "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+        },
+        "reasonCode": "MODEL_ERROR",
+        "resumedFromRunId": null
+      },
+      "receipt": {
+        "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+        "inputId": "453b7257-593f-45a2-942b-5e47f2fe2356",
+        "runId": null,
+        "status": "queued"
+      },
+      "prompt": "不调用工具。另有独立样本A：red=7,blue=4,green=9,code=N4P8。计算总和，记住它不改变会话库存，只输出样本A的JSON。",
+      "promptImages": [],
+      "attachments": [],
+      "answer": "",
+      "thinkingLength": 0,
+      "calls": [],
+      "results": [],
+      "messageIds": [
+        {
+          "id": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "role": "user",
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff"
+        },
+        {
+          "id": "732e2037-a029-47cd-8b68-1ab016c20900",
+          "role": "assistant",
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff"
+        }
+      ],
+      "events": [
+        {
+          "at": 1792950126033,
+          "runId": "19076055-ba2d-43df-b8ed-ea93b2a859b9",
+          "status": "completed",
+          "phase": null,
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950126046,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950127783,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950127796,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950130027,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "starting",
+          "phase": "initializing",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950130181,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "starting",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950130200,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950130217,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950130227,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "requesting",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950131749,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "generating",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950131762,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950132050,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950133750,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950132762,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950133772,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950133750,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950133780,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950134381,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "generating",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950134392,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 1,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950134400,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 2,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950138381,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950138403,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 2,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950138381,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950138419,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 2,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950138495,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950139011,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "generating",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 2,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950139022,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 2,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950139030,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retry_wait",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950147011,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950140850,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        },
+        {
+          "at": 1792950147489,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "waiting",
+            "nextRetryAt": 1792950147011,
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950147504,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "retrying",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950147621,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "generating",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950147632,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "settling",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "retrying",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950148045,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "running",
+          "phase": "settling",
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "exhausted",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": null
+        },
+        {
+          "at": 1792950148096,
+          "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+          "status": "failed",
+          "phase": null,
+          "retry": {
+            "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+            "episodeId": "5e31e8fa-5e8a-4b0b-8bd5-10adec8b490c",
+            "attempt": 3,
+            "maxAttempts": 3,
+            "state": "exhausted",
+            "message": "Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+          },
+          "error": "模型请求失败：Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。"
+        },
+        {
+          "at": 1792950148149,
+          "runId": "cd76ce6c-78ec-4ed7-82b4-ab1a4a192886",
+          "status": "running",
+          "phase": "executing_tools",
+          "retry": null,
+          "error": null
+        }
+      ],
+      "observedMs": 22203
+    }
+  ],
+  "taskId": "fa9073cb-2387-4545-8f90-829cfe83bc3e",
+  "sessionId": "1b60f1a0-e454-441f-9eb6-5d1b2f57129b",
+  "defaults": {
+    "main": {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "thinking": "max"
+    },
+    "task": {
+      "provider": "sky",
+      "id": "gpt-6-astra",
+      "thinking": "medium"
+    }
+  },
+  "selection": {
+    "provider": "kiro",
+    "id": "deepseek-3.2",
+    "thinking": "off"
+  },
+  "checks": [
+    {
+      "label": "long-01-seed",
+      "passed": true
+    },
+    {
+      "label": "long-02-read",
+      "passed": true
+    },
+    {
+      "label": "long-03-reasoning",
+      "passed": true
+    },
+    {
+      "label": "long-04-error-recovery",
+      "passed": true
+    },
+    {
+      "label": "long-05-off-memory",
+      "passed": true
+    },
+    {
+      "label": "long-06-large-attachment",
+      "passed": true
+    },
+    {
+      "label": "long-07-delayed-memory",
+      "passed": true
+    },
+    {
+      "label": "long-08-two-reads",
+      "passed": true
+    },
+    {
+      "label": "long-09-state-update",
+      "passed": true
+    },
+    {
+      "label": "long-10-write-read",
+      "passed": true
+    }
+  ],
+  "checkFailures": []
+}

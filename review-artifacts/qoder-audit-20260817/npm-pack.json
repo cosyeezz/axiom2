@@ -1,0 +1,1126 @@
+﻿[
+  {
+    "id": "@qoder-ai/qodercli@1.1.78",
+    "name": "@qoder-ai/qodercli",
+    "version": "1.1.78",
+    "size": 31015723,
+    "unpackedSize": 70634010,
+    "shasum": "17e3fa01d12cf766df09d366c414858811c6ea22",
+    "integrity": "sha512-VEc/ZDGrCZwdOjxCFGsIb9lEoZo7/4RVeHnr2VFD/PBXkPMrkDRw82No3QZ13QXgAWTGylgeEQe21Wmxtx1S0w==",
+    "filename": "qoder-ai-qodercli-1.1.78.tgz",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 11357,
+        "mode": 420
+      },
+      {
+        "path": "README.md",
+        "size": 10309,
+        "mode": 420
+      },
+      {
+        "path": "bundle/builtin/agent-creator/SKILL.md",
+        "size": 10028,
+        "mode": 420
+      },
+      {
+        "path": "bundle/builtin/hook-config/SKILL.md",
+        "size": 22335,
+        "mode": 420
+      },
+      {
+        "path": "bundle/builtin/sdk/SKILL.md",
+        "size": 10449,
+        "mode": 420
+      },
+      {
+        "path": "bundle/builtin/skill-creator/SKILL.md",
+        "size": 10529,
+        "mode": 420
+      },
+      {
+        "path": "bundle/proto/chat.proto",
+        "size": 8366,
+        "mode": 420
+      },
+      {
+        "path": "bundle/qoder-npm-dispatcher.cjs",
+        "size": 8262,
+        "mode": 493
+      },
+      {
+        "path": "bundle/qoder-worker-runtime.mjs",
+        "size": 34808983,
+        "mode": 420
+      },
+      {
+        "path": "bundle/qodercli.js",
+        "size": 34562870,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/.qoder-plugin/plugin.json",
+        "size": 752,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/.qoder-plugin/qoder-hooks.json",
+        "size": 923,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/assets/logo.svg",
+        "size": 9496,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/bootstrap.cmd",
+        "size": 5858,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/bootstrap.sh",
+        "size": 6031,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/qodersec-launch.cmd",
+        "size": 20575,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/qodersec-launch.sh",
+        "size": 13303,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/qodersec-update.cmd",
+        "size": 10650,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/qodersec-update.sh",
+        "size": 8589,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/security-scan-settings.cmd",
+        "size": 173,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/bin/security-scan-settings.sh",
+        "size": 140,
+        "mode": 493
+      },
+      {
+        "path": "bundle/vendor/qoder-security/config.yaml.example",
+        "size": 9961,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/package.json",
+        "size": 272,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/scripts/postinstall.sh",
+        "size": 687,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/security-patterns.yaml.example",
+        "size": 2757,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-security/skills/security-scan/SKILL.md",
+        "size": 23594,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/artifact.json",
+        "size": 26855,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/cloud-agents.mjs",
+        "size": 15043,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/conversation-stream.mjs",
+        "size": 1363,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/qca-realtime.mjs",
+        "size": 7008,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/realtime-demo/handler.mjs",
+        "size": 2442,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/realtime-demo/index.html",
+        "size": 6616,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/realtime-demo/local.ts",
+        "size": 533,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/dev/memory-service.mjs",
+        "size": 5373,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/dev/server.mjs",
+        "size": 2874,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/export-example.mjs",
+        "size": 1663,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/function-entry.ts",
+        "size": 337,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/handler.mjs",
+        "size": 10382,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/managed-transport.mjs",
+        "size": 1448,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/web/app.js",
+        "size": 17024,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/web/index.html",
+        "size": 4203,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse-chat/web/style.css",
+        "size": 10483,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/sse.mjs",
+        "size": 2953,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/assets/websocket.mjs",
+        "size": 4648,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/api.md",
+        "size": 7355,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/chat-example.md",
+        "size": 9364,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/diagnostics.md",
+        "size": 5154,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/initialization.md",
+        "size": 11185,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/realtime.md",
+        "size": 10240,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/streaming.md",
+        "size": 7965,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/references/websocket.md",
+        "size": 6273,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-build-agent-app/SKILL.md",
+        "size": 15414,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/business.mjs",
+        "size": 2442,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/dev/server.mjs",
+        "size": 5068,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/diagnostics.mjs",
+        "size": 1071,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/introspection/auth.mjs",
+        "size": 2388,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/introspection/index.ts",
+        "size": 599,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/auth.mjs",
+        "size": 11001,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/build.mjs",
+        "size": 559,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/index.ts",
+        "size": 797,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/package-lock.json",
+        "size": 17371,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/package.json",
+        "size": 323,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/oidc/test/flow.check.mjs",
+        "size": 34644,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/http.mjs",
+        "size": 3202,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/index.ts",
+        "size": 698,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/limiter.mjs",
+        "size": 3925,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/passwords.mjs",
+        "size": 2644,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/router.mjs",
+        "size": 8361,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/sessions.mjs",
+        "size": 4214,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/functions/validate.mjs",
+        "size": 1749,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/README.md",
+        "size": 1395,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/schema.sql",
+        "size": 1212,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/test/check.mjs",
+        "size": 17442,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/test/fake-db.mjs",
+        "size": 4029,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/web/api.js",
+        "size": 2751,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/web/app.js",
+        "size": 12281,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/web/index.html",
+        "size": 5308,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/password/web/styles.css",
+        "size": 6822,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/README.md",
+        "size": 2876,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/schema.sql",
+        "size": 209,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/shared.mjs",
+        "size": 2570,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/site-config.mjs",
+        "size": 245,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/web/app.mjs",
+        "size": 2469,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/web/auth-forms.mjs",
+        "size": 1916,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/application-auth/web/index.html",
+        "size": 1400,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-function/adapter.mjs",
+        "size": 2620,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-function/handler.mjs",
+        "size": 1411,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-function/index.ts",
+        "size": 256,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-preview/index.html",
+        "size": 1993,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-preview/server.mjs",
+        "size": 2376,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-react/api.ts",
+        "size": 2861,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-react/App.tsx",
+        "size": 2665,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/database-react/UserProfile.tsx",
+        "size": 4981,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/api.ts",
+        "size": 3100,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/dev/local.mjs",
+        "size": 11731,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/dev/proxy.ts",
+        "size": 268,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/index.ts",
+        "size": 542,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/Notes.tsx",
+        "size": 21010,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/README.md",
+        "size": 3467,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/records.css",
+        "size": 12447,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/routes.mjs",
+        "size": 7405,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/schema.sql",
+        "size": 664,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-backend/setup.mjs",
+        "size": 3381,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-profile/index.ts",
+        "size": 454,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-profile/profile.mjs",
+        "size": 3641,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function-profile/schema.sql",
+        "size": 82,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function/handler.ts",
+        "size": 679,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/function/index.ts",
+        "size": 62,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/static/index.html",
+        "size": 985,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/storage-validation.mjs",
+        "size": 1703,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/user-context/auth.mjs",
+        "size": 2289,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/user-context/index.ts",
+        "size": 916,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/user-context/profile-index.ts",
+        "size": 254,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/user-context/profile.mjs",
+        "size": 3003,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/assets/user-preview/server.mjs",
+        "size": 2653,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/application-auth.md",
+        "size": 8871,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/database-migration.md",
+        "size": 8661,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/database.md",
+        "size": 17486,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/environment.md",
+        "size": 9629,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/examples.md",
+        "size": 2697,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/function-backend.md",
+        "size": 7406,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/functions.md",
+        "size": 14887,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/records-example.md",
+        "size": 3640,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/runtime-acceptance.md",
+        "size": 2788,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/static-site.md",
+        "size": 5168,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/storage.md",
+        "size": 7301,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/user-profile.md",
+        "size": 5468,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/references/visual-design.md",
+        "size": 4918,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/scripts/create-site.mjs",
+        "size": 1572,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/SKILL.md",
+        "size": 20084,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components.json",
+        "size": 421,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/accordion.tsx",
+        "size": 2048,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/alert-dialog.tsx",
+        "size": 5439,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/alert.tsx",
+        "size": 1614,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/aspect-ratio.tsx",
+        "size": 274,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/attachment.tsx",
+        "size": 6002,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/avatar.tsx",
+        "size": 2916,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/badge.tsx",
+        "size": 1776,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/breadcrumb.tsx",
+        "size": 2350,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/bubble.tsx",
+        "size": 4699,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/button-group.tsx",
+        "size": 2202,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/button.tsx",
+        "size": 2392,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/calendar.tsx",
+        "size": 7832,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/card.tsx",
+        "size": 1987,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/carousel.tsx",
+        "size": 5556,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/chart.tsx",
+        "size": 10614,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/checkbox.tsx",
+        "size": 1214,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/collapsible.tsx",
+        "size": 795,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/combobox.tsx",
+        "size": 9158,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/command.tsx",
+        "size": 4818,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/context-menu.tsx",
+        "size": 8268,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/dialog.tsx",
+        "size": 4303,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/direction.tsx",
+        "size": 506,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/drawer.tsx",
+        "size": 4255,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/dropdown-menu.tsx",
+        "size": 8418,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/empty.tsx",
+        "size": 2396,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/field.tsx",
+        "size": 6159,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/form.tsx",
+        "size": 3757,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/hover-card.tsx",
+        "size": 1526,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/input-group.tsx",
+        "size": 5065,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/input-otp.tsx",
+        "size": 2254,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/input.tsx",
+        "size": 962,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/item.tsx",
+        "size": 4486,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/kbd.tsx",
+        "size": 862,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/label.tsx",
+        "size": 606,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/marker.tsx",
+        "size": 1864,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/menubar.tsx",
+        "size": 8389,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/message-scroller.tsx",
+        "size": 3992,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/message.tsx",
+        "size": 2232,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/native-select.tsx",
+        "size": 1995,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/navigation-menu.tsx",
+        "size": 6658,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/pagination.tsx",
+        "size": 2717,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/popover.tsx",
+        "size": 2357,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/progress.tsx",
+        "size": 755,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/radio-group.tsx",
+        "size": 1460,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/resizable.tsx",
+        "size": 1815,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/scroll-area.tsx",
+        "size": 1639,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/select.tsx",
+        "size": 6353,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/separator.tsx",
+        "size": 694,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/sheet.tsx",
+        "size": 4188,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/sidebar.tsx",
+        "size": 21526,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/skeleton.tsx",
+        "size": 276,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/slider.tsx",
+        "size": 1991,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/sonner.tsx",
+        "size": 929,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/spinner.tsx",
+        "size": 331,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/switch.tsx",
+        "size": 1408,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/table.tsx",
+        "size": 2478,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/tabs.tsx",
+        "size": 3782,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/textarea.tsx",
+        "size": 759,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/toggle-group.tsx",
+        "size": 2308,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/toggle.tsx",
+        "size": 1565,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/components/ui/tooltip.tsx",
+        "size": 1830,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/dev/function-local.ts",
+        "size": 112,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/functions/handler.ts",
+        "size": 679,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/functions/index.ts",
+        "size": 62,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/gitignore.template",
+        "size": 102,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/hooks/use-mobile.ts",
+        "size": 565,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/index.html",
+        "size": 355,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/lib/utils.ts",
+        "size": 177,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/package-lock.json",
+        "size": 153015,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/package.json",
+        "size": 1540,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/postcss.config.mjs",
+        "size": 94,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/PROVENANCE.md",
+        "size": 759,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/README.md",
+        "size": 5021,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/scripts/build.mjs",
+        "size": 227,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/scripts/check-node.mjs",
+        "size": 504,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/App.tsx",
+        "size": 653,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/globals.css",
+        "size": 3928,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/main.tsx",
+        "size": 225,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/src/vite-env.d.ts",
+        "size": 38,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/tsconfig.json",
+        "size": 650,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/vendor/shadcn-tailwind-4.13.0.css",
+        "size": 16041,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/vendor/shadcn-tailwind-4.13.0.LICENSE.md",
+        "size": 1063,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-building/templates/react-starter/vite.config.ts",
+        "size": 435,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-hosting/references/deployment.md",
+        "size": 15922,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-hosting/references/limits.md",
+        "size": 5455,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-hosting/references/workflow-examples.md",
+        "size": 11742,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-hosting/SKILL.md",
+        "size": 15680,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-management/references/data-and-logs.md",
+        "size": 7744,
+        "mode": 420
+      },
+      {
+        "path": "bundle/vendor/qoder-sites/skills/sites-management/SKILL.md",
+        "size": 13108,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 1177,
+        "mode": 420
+      },
+      {
+        "path": "postinstall.cjs",
+        "size": 6813,
+        "mode": 420
+      }
+    ],
+    "entryCount": 222,
+    "bundled": []
+  }
+]

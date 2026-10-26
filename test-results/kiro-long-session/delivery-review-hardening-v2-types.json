@@ -1,0 +1,12 @@
+{
+    "types":  {
+                  "command":  "npx tsc --noEmit",
+                  "exitCode":  0
+              },
+    "syntax":  [
+                   {
+                       "command":  "node --check scripts/kiro-live-plan.mjs",
+                       "exitCode":  0
+                   }
+               ]
+}

@@ -1,0 +1,19 @@
+{
+    "actualCommand":  "node --import tsx --test --test-concurrency=1 tests/kiro-live-plan.test.ts tests/kiro-live-check.test.ts tests/kiro-live-evidence.test.ts",
+    "cwd":  "F:/Axiom/axiom-kiro-long-session-fb7031ed/app",
+    "exitCode":  0,
+    "actualCounts":  {
+                         "tests":  81,
+                         "suites":  0,
+                         "pass":  81,
+                         "fail":  0,
+                         "cancelled":  0,
+                         "skipped":  0,
+                         "todo":  0
+                     },
+    "temp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-eof-test-temp",
+    "tmp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-eof-test-temp",
+    "startedAt":  "2026-10-25T22:24:29.2428188Z",
+    "finishedAt":  "2026-10-25T22:24:46.3171197Z",
+    "logPath":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-eof-tests.log"
+}

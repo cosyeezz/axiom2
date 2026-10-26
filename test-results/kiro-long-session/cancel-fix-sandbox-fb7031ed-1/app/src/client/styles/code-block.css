@@ -1,0 +1,16 @@
+.code-card .code-head { flex-wrap: wrap; }
+.code-head .code-language { flex: 1; }
+.code-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-left: auto; }
+.code-head .code-action { min-height: 44px; padding: 0 8px; border-radius: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.code-head .code-action:is(:hover, :focus-visible) { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.code-head .code-action:focus-visible { outline-offset: -3px; }
+.code-card .code-notice { padding: 10px 16px; font-size: 12px; color: var(--muted); }
+.mermaid-preview { padding: 16px; overflow: auto; text-align: center; }
+.mermaid-preview img { display: block; max-width: 100%; height: auto; margin: auto; }
+.markdown .tok-attr { color: color-mix(in srgb, var(--accent) 60%, var(--fg)); }
+.ascii-diagram-preview { max-width: 100%; overflow: auto; padding: 4px; color: var(--fg); }
+.ascii-diagram-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.ascii-diagram-preview > .ascii-diagram-svg { display: block; max-width: none; flex-shrink: 0; margin: auto; }
+.ascii-diagram-svg .ascii-diagram-lines { color: color-mix(in srgb, var(--accent) 60%, var(--fg)); }
+.ascii-diagram-svg .ascii-diagram-labels { font-family: var(--font-mono, monospace); }
+.markdown .code-card pre.ascii-diagram-source { white-space: pre; overflow-wrap: normal; overflow-x: auto; tab-size: 4; }

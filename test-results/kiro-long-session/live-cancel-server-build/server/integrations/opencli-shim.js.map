@@ -1,0 +1,1 @@
+{"version":3,"file":"opencli-shim.js","sourceRoot":"","sources":["../../../../../app/src/server/integrations/opencli-shim.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,uBAAuB,EAAsB,MAAM,sBAAsB,CAAC;AAEnF,wFAAwF;AACxF,MAAM,UAAU,gBAAgB,CAAC,MAAqB;IACpD,MAAM,MAAM,GAAG;;;;;;;;;;;;;;;;;;+CAkB8B,CAAC;IAC9C,OAAO,CAAC,IAAI,EAAE,MAAM,EAAE,uBAAuB,CAAC,MAAM,CAAC,CAAC,CAAC;AACzD,CAAC"}

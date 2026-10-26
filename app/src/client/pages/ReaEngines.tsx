@@ -56,19 +56,19 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
       {manual && downloaded && <a className="btn btn-ghost" href={engine.id === "ghidra" ? "https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_12.1.4_build/GhidraDocs/GettingStarted.md#building-native-components" : "https://www.hopperapp.com/download.html"} target="_blank" rel="noreferrer">安装说明</a>}
     </div>
     {!error && ["error", "incompatible"].includes(engine.status) && <details className="tools-diagnostic"><summary>检测详情</summary><pre>{engine.detail}</pre></details>}
-    {uninstall !== undefined && <div className="tools-conflict" role="group" aria-label={`确认卸载${label}`}>
+    {uninstall !== undefined && <div className="tools-conflict inline-confirmation" role="group" aria-label={`确认卸载${label}`}>
       <p>卸载 Axiom 安装的 {label}？</p>
       {uninstall !== revision && <p role="alert">此组件已变化，请重新确认。</p>}
-      <div className="tools-actions"><button className="btn" disabled={uninstallBusy || uninstall !== revision} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rea.engine-uninstall", { engine: engine.id, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button></div>
+      <div className="tools-actions"><button className="btn" onClick={() => setUninstall(undefined)}>暂不卸载</button><button className="btn confirm-danger" disabled={uninstallBusy || uninstall !== revision} onClick={() => { const revision = uninstall; setUninstall(undefined); void action("rea.engine-uninstall", { engine: engine.id, revision, confirm: true }); }}><Icon name="trash-2" />确认卸载</button></div>
     </div>}
-    {confirm && <div className="tools-conflict" role="group" aria-label={`确认${confirm.operation === "download" ? "下载" : "安装"}${label}`}>
+    {confirm && <div className="tools-conflict inline-confirmation" role="group" aria-label={`确认${confirm.operation === "download" ? "下载" : "安装"}${label}`}>
       <p>{confirm.operation === "download" ? "下载" : "安装"} {label} {confirm.version}？{confirm.operation === "open" ? "将在后台 Mac 打开安装映像，请在系统窗口完成安装。" : confirm.downloadPath ? "将使用已下载的安装包。" : confirm.operation === "download" ? "下载后可继续安装。" : ""}</p>
       {confirm.operation === "install" && engine.id === "ghidra" && state.engineHost?.platform === "darwin" && <p>需要 JDK 21 和 Xcode 命令行工具；会自动准备 Gradle 并构建本机组件。</p>}
       {stale && <p role="alert">此组件或安装版本已变化，请重新确认。</p>}
-      <div className="tools-actions"><button className="btn btn-primary" disabled={busy || stale} onClick={() => {
+      <div className="tools-actions"><button className="btn" onClick={() => setConfirm(undefined)}>暂不{confirm.operation === "download" ? "下载" : "安装"}</button><button className="btn btn-primary" disabled={busy || stale} onClick={() => {
         const selection = confirm; setConfirm(undefined);
         void action(selection.operation === "open" ? "rea.engine-open-installer" : selection.operation === "download" ? "rea.engine-download" : "rea.engine-install", { engine: engine.id, revision: selection.revision, token: selection.release?.token, version: selection.version, ...(selection.downloadPath ? { downloaded: true, confirm: true } : {}) });
-      }}>{confirm.operation === "download" ? "确认下载" : confirm.operation === "open" ? "打开安装程序" : confirm.downloadPath ? "确认安装" : "确认下载安装"}</button><button className="btn" onClick={() => setConfirm(undefined)}>暂不{confirm.operation === "download" ? "下载" : "安装"}</button></div>
+      }}>{confirm.operation === "download" ? "确认下载" : confirm.operation === "open" ? "打开安装程序" : confirm.downloadPath ? "确认安装" : "确认下载安装"}</button></div>
     </div>}
   </BackendMaintenance>;
 }

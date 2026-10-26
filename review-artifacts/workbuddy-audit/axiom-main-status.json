@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-10-25T15:41:10.847Z",
+  "port": 4317,
+  "revision": "2a9fb173b932164a872da6fe7f410f8b527ac29a3f6159307a35b52744c9bae3",
+  "providers": [
+    {
+      "id": "sky",
+      "name": "Sky",
+      "configured": true,
+      "modelCount": 4
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "configured": true,
+      "modelCount": 3
+    },
+    {
+      "id": "kiro",
+      "name": "kiro",
+      "configured": true,
+      "modelCount": 0
+    },
+    {
+      "id": "qoder-cn",
+      "name": "Qoder 国内版",
+      "configured": true,
+      "modelCount": 2
+    }
+  ],
+  "targetTemplates": [
+    {
+      "id": "codebuddy-cn",
+      "name": "CodeBuddy 国内版",
+      "methods": [
+        "api_key",
+        "oauth"
+      ]
+    }
+  ],
+  "templateCount": 47
+}

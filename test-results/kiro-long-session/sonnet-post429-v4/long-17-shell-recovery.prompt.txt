@@ -1,0 +1,1 @@
+这是上轮HTTP 429之后的一条新输入，不重发先前输入，也不得重复工具。前一轮受控PowerShell故意throw和随后的read都已返回。本轮禁止任何工具，只根据已有真实工具结果列出刚读到的文件值。回复以RECOVERED_JSON开头，后接JSON对象，字段marker、checkword、total。不要复述工具内容。

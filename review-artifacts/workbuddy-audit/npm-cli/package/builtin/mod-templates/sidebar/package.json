@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Native sidebar and brand customisation with real Chat and navigation actions",
+  "files": [".codebuddy-plugin", "client"]
+}

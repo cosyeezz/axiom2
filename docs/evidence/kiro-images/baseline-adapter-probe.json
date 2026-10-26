@@ -1,0 +1,98 @@
+{
+  "scope": "Offline adapter characterization, not an official wire golden comparison or account/API acceptance test",
+  "checksPassed": 8,
+  "checks": [
+    {
+      "name": "request-skeleton-and-stable-session",
+      "passed": true,
+      "observation": {
+        "rootFields": [
+          "conversationState"
+        ],
+        "currentContextFields": [
+          "tools"
+        ],
+        "systemPlacement": "first user text prefix",
+        "stableConversationId": true
+      }
+    },
+    {
+      "name": "thinking-is-not-native-replay",
+      "passed": true,
+      "observation": {
+        "reasoningTextBlocks": 1,
+        "opaqueReasoningBlocks": 0,
+        "omittedSignatures": 1
+      }
+    },
+    {
+      "name": "user-image-rejected",
+      "passed": true,
+      "observation": "explicit rejection, not silent loss"
+    },
+    {
+      "name": "empty-tool-result-replaced",
+      "passed": true,
+      "observation": {
+        "toolUseId": "c1",
+        "status": "success",
+        "content": [
+          {
+            "text": "(empty tool result)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiple-tool-text-blocks-flattened",
+      "passed": true,
+      "observation": {
+        "toolUseId": "c1",
+        "status": "success",
+        "content": [
+          {
+            "text": "a\nb"
+          }
+        ]
+      }
+    },
+    {
+      "name": "aborted-assistant-with-retained-result-rejected",
+      "passed": true,
+      "observation": "provider rejects this supplied transcript; does not prove normal UI supplies it"
+    },
+    {
+      "name": "http-400-loses-overflow-classification",
+      "passed": true,
+      "observation": {
+        "mappedMessage": "Kiro 聊天请求失败（HTTP 400）。",
+        "classifiedAsOverflow": false,
+        "historicalRawKiroTextWouldMatch": false,
+        "normalizedOverflowCategoryWouldMatch": true
+      }
+    },
+    {
+      "name": "quota-and-throttle-mapping-is-retryable-to-pi",
+      "passed": true,
+      "observation": {
+        "http429Retryable": true,
+        "serviceQuotaExceededRetryable": true,
+        "note": "classifier only; actual agent settings/loop determine retries"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "relative": "../../../app/src/server/providers/kiro-chat-protocol.ts",
+      "sha256": "9a7ed88783df0c81f40c093ed5e6761a9d30fc260021f641e465c881213ab3d1"
+    },
+    {
+      "relative": "../../../app/node_modules/@earendil-works/pi-ai/dist/utils/retry.js",
+      "sha256": "310ea86dfa001bb3942d16f5d77ce976f5ba35bfb29515b265b87a17836b45f1"
+    },
+    {
+      "relative": "../../../app/node_modules/@earendil-works/pi-ai/dist/utils/overflow.js",
+      "sha256": "85570a78e9ba3e0322fe1b3f14c991b6a439b1d3eb89af306e2e7e9ade3d53b4"
+    }
+  ]
+}

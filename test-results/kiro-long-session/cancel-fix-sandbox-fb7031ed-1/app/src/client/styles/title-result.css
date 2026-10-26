@@ -1,0 +1,73 @@
+/* A quiet metadata card; the Heading glyph is Lucide's title semantic. */
+.title-result-card { width: fit-content; max-width: 100%; min-width: 0; margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--fg) 2%, transparent); }
+.title-result-trigger { display: grid; grid-template-columns: 30px minmax(0, 1fr) 14px; align-items: center; gap: 10px; width: 100%; min-height: 62px; padding: 10px 12px; text-align: left; color: var(--fg-2); border-radius: inherit; }
+.title-result-icon { display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); background: color-mix(in srgb, var(--fg) 5%, transparent); border-radius: 7px; }
+.title-result-icon svg { width: 17px; height: 17px; }
+.title-result-copy { display: grid; gap: 4px; min-width: 0; }
+.title-result-copy strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; line-height: 20px; font-weight: 520; }
+.title-result-copy .activity-title { font-size: inherit; }
+.title-result-copy small { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); font-size: 11px; line-height: 16px; }
+.title-result-trigger > .title-result-open { width: 13px; height: 13px; margin-left: 5px; color: var(--meta); opacity: .7; }
+.title-result-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.title-result-trigger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.title-result-card[data-state="failed"] .title-result-icon, .title-result-card[data-state="interrupted"] .title-result-icon { color: var(--danger, #ce6a6a); }
+.title-process-dialog { --title-dialog-max-height: min(84dvh, 900px); position: fixed; width: min(860px, calc(100vw - 40px)); max-width: none; max-height: var(--title-dialog-max-height); margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 16px; color: var(--fg); background: var(--surface, var(--bg)); box-shadow: 0 24px 100px #0005; overscroll-behavior: contain; }
+/* Only the details body scrolls; override the shared scrollable-dialog shell. */
+dialog.title-process-dialog.scrollable-dialog { overflow: hidden; }
+.title-process-dialog::backdrop { background: #0007; backdrop-filter: blur(4px); }
+dialog.title-process-dialog > .dialog-content { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; max-height: calc(var(--title-dialog-max-height) - 2px); padding: 24px; overflow: hidden; }
+.title-process-dialog .dialog-content > h2 { flex-shrink: 0; margin: 0 44px 20px 0; font-size: 14px; font-weight: 500; color: var(--muted); }
+.title-dialog-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.title-dialog-close { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: transparent; }
+.title-dialog-close svg { width: 14px; height: 14px; }
+.title-dialog-close:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.title-dialog-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.title-dialog-summary { flex-shrink: 0; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.title-dialog-heading { display: flex; align-items: center; gap: 10px; font-size: 20px; line-height: 28px; font-weight: 550; overflow-wrap: anywhere; }
+.title-dialog-heading > svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--muted); }
+.title-dialog-heading .activity-title { font-size: inherit; font-weight: inherit; }
+.title-dialog-summary p { margin: 8px 0 0 32px; color: var(--muted); font-size: 12px; line-height: 20px; }
+.title-dialog-layout { display: grid; grid-template-columns: 175px minmax(0, 1fr); gap: 26px; padding-top: 22px; }
+.title-dialog-layout h3 { margin: 0 0 16px; font-size: 12px; line-height: 20px; font-weight: 550; }
+.title-dialog-layout h3 > span { margin-left: 4px; font-weight: 400; color: var(--muted); }
+.title-dialog-stages ol { list-style: none; margin: 0 0 14px 4px; padding: 0; border-left: 1px solid var(--border); }
+.title-dialog-stages li { position: relative; display: grid; gap: 3px; padding: 0 0 18px 16px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.title-dialog-stages li::before { content: ""; position: absolute; left: -3px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--meta); }
+.title-dialog-stages li[data-current] { color: var(--fg); }
+.title-dialog-stages li[data-current]::before { background: var(--fg); }
+.title-dialog-stages time { color: var(--meta); font-size: 10px; font-variant-numeric: tabular-nums; }
+.title-dialog-calls { min-width: 0; }
+.title-dialog-call { min-width: 0; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.title-dialog-call h4 { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 6px; font-size: 13px; font-weight: 550; }
+.title-dialog-call h4 > span { font-size: 11px; font-weight: 400; color: var(--muted); }
+.title-dialog-call .meta, .title-dialog-stages > .meta { font-size: 11px; line-height: 18px; margin: 4px 0; }
+.title-process-dialog .processing-payload { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.title-process-dialog .processing-payload > summary { color: var(--fg-2); font-size: 12px; cursor: pointer; }
+.title-process-dialog .processing-payload .btn { margin: 8px 0; padding: 4px 8px; font-size: 11px; }
+.title-process-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 18px; margin: 8px 0 0; }
+.title-process-dialog .processing-payload pre { max-height: 260px; overflow: auto; padding: 12px; border-radius: 6px; background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.title-dialog-error, .title-dialog-notice { margin: 16px 0; padding: 12px 14px; border-radius: 8px; font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.title-dialog-error { color: var(--danger, #ce6a6a); background: color-mix(in srgb, var(--danger, #ce6a6a) 8%, transparent); border: 1px solid color-mix(in srgb, var(--danger, #ce6a6a) 25%, transparent); }
+.title-dialog-notice { color: var(--muted); background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.title-dialog-result { display: grid; gap: 8px; margin: 18px 0; padding: 16px; border-radius: 10px; background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.title-dialog-result > span { color: var(--muted); font-size: 11px; }
+.title-dialog-result > strong { font-size: 16px; font-weight: 550; overflow-wrap: anywhere; }
+.title-dialog-diagnostics { margin-top: 20px; color: var(--muted); font-size: 11px; }
+.title-dialog-diagnostics summary { cursor: pointer; }
+.title-dialog-diagnostics dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; }
+.title-dialog-diagnostics dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .title-result-trigger { grid-template-columns: 26px minmax(0, 1fr) 12px; gap: 8px; padding: 9px 10px; }
+  .title-result-icon { width: 26px; height: 28px; }
+  .title-process-dialog { --title-dialog-max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); width: calc(100vw - 20px); border-radius: 12px; }
+  dialog.title-process-dialog > .dialog-content { padding: 18px 16px max(18px, env(safe-area-inset-bottom)); }
+  .title-dialog-heading { font-size: 17px; }
+  .title-dialog-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .title-dialog-stages ol { display: flex; flex-wrap: wrap; gap: 8px 16px; border: 0; margin-left: 0; }
+  .title-dialog-stages li { padding: 0 0 0 10px; }
+  .title-dialog-stages li::before { left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-result-card .process-status-text, .title-process-dialog .process-status-text { animation: none !important; }
+  .title-result-card .process-ellipsis, .title-process-dialog .process-ellipsis { animation: none !important; }
+}

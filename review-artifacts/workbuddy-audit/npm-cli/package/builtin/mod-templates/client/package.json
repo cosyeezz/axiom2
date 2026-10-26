@@ -1,0 +1,7 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Session notes linked to the real conversation and composer",
+  "files": [".codebuddy-plugin", "client"]
+}

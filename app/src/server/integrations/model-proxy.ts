@@ -1,7 +1,7 @@
 import { proxyLaunchSupported, toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
-import { checkXrayImporter, prepareXrayImporter, xrayImporterRelease, xrayImporterVersion } from "./model-proxy-xray-installer.js";
+import { prepareXrayImporter } from "./model-proxy-xray-installer.js";
 import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
-import { assertProxyStopped, proxyImporterRemovalPlan, proxyRemovalPlan } from "./model-proxy-removal.js";
+import { assertProxyStopped, proxyRemovalPlan } from "./model-proxy-removal.js";
 import { readProxyShareSource } from "./model-proxy-share-source.js";
 import { runMaintenance, maintenanceCancelled, maintenanceFailure, maintenancePhase } from "../maintenance.js";
 import { randomUUID } from "node:crypto";
@@ -9,14 +9,17 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { proxySourceLimit, type ModelProxyState, type ProxyKernel } from "../../shared/model-proxy.js";
 import { AppError, text, type Command } from "../../shared/protocol.js";
-import { atomicProxyJson, proxyConfigPath, proxyDirectory, proxyRuntimePath, proxyImporterDirectoryPattern, readProxyConfig, type ProxyConfig, type StoredProxyProfile } from "./model-proxy-config.js";
+import { atomicProxyJson, proxyConfigPath, proxyDirectory, proxyRuntimePath, readProxyConfig, type ProxyConfig, type StoredProxyProfile } from "./model-proxy-config.js";
 import { installProxyKernel, latestProxyRelease, proxyAsset, type ProxyRelease } from "./model-proxy-install.js";
 import { coreConfiguration, ProxyProcess } from "./model-proxy-process.js";
 import { inspectProxySource } from "./model-proxy-import.js";
 import { inspectXraySource } from "./model-proxy-xray-import.js";
 
 type Profile = StoredProxyProfile & { enabled?: boolean };
-export type ModelProxyDependencies = { readSource?: typeof readProxyShareSource; inspectSource?: typeof inspectProxySource };
+export type ModelProxyDependencies = {
+  readSource?: typeof readProxyShareSource; inspectSource?: typeof inspectProxySource;
+  latestRelease?: typeof latestProxyRelease; installKernel?: typeof installProxyKernel; prepareImporter?: typeof prepareXrayImporter;
+};
 export class ModelProxyService {
   private config: ProxyConfig;
   private processes = new Map<string, ProxyProcess>();
@@ -25,47 +28,6 @@ export class ModelProxyService {
   private inspection?: ModelProxyState["inspection"];
   private xrayInspection?: { id: string; source: string; outbounds: Map<string, string> };
   private inspectionTimer?: ReturnType<typeof setTimeout>;
-  private importerBusy = false;
-  private importerPending?: Promise<void>;
-  private importerController?: AbortController;
-  private importerVersion?: string;
-  private importerError?: string;
-  private async useImporter<T>(work: () => Promise<T>): Promise<T> {
-    if (this.importerBusy) throw new AppError("BUSY", "Xray 分享导入组件正在维护或转换节点，请等待当前操作完成。");
-    this.importerBusy = true; this.changed();
-    try { return await work(); } finally { this.importerBusy = false; this.changed(); }
-  }
-  private async importerCommand(c: Command): Promise<ModelProxyState> {
-    if (this.error) throw new AppError("CONFIG_READ_FAILED", this.error);
-    if (this.importerBusy) throw new AppError("BUSY", "Xray 分享导入组件正在维护或转换节点，请等待当前操作完成。");
-    const p = c.params ?? {}, removing = c.op === "modelProxy.importerUninstall";
-    if (!removing && !toolProcessSupported()) throw new AppError("UNSUPPORTED_PLATFORM", toolProcessSupportError);
-    if (removing && p.confirm !== true) throw new AppError("CONFIRM_REQUIRED", "请确认删除 Xray 分享导入组件；现有线路继续运行。");
-    if (removing && (p.revision !== this.config.revision || readProxyConfig(this.root).revision !== this.config.revision)) throw new AppError("REVISION_CONFLICT", "代理配置已改变，请重新读取后操作。");
-    this.importerError = undefined;
-    const controller = this.importerController = new AbortController();
-    this.importerPending = this.useImporter(() => runMaintenance(this.root, { id: c.requestId, resource: "proxy:xray-knife", label: "Xray 分享导入组件", action: removing ? "uninstall" : c.op === "modelProxy.importerCheck" ? "check" : "install", params: p, cancel: !removing, steps: removing ? ["checking", "removing", "validating"] : undefined }, controller, async () => {
-      if (removing) {
-        const plan = proxyImporterRemovalPlan(this.root, this.config);
-        assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
-        this.importerVersion = undefined;
-        this.save({ ...this.config, removalPending: [...new Set([...(this.config.removalPending ?? []), ...plan.names])] });
-        maintenancePhase("removing");
-        try { plan.remove(); } catch { throw Error("导入组件已停用，部分文件未能删除，请解除占用后重试清理。"); }
-        const remaining = this.config.removalPending!.filter(name => !plan.names.includes(name));
-        this.save({ ...this.config, removalPending: remaining.length ? remaining : undefined });
-        maintenancePhase("validating");
-      } else {
-        if (this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name))) throw Error("导入组件有待清理文件，请先完成清理。");
-        this.importerVersion = undefined;
-        if (c.op === "modelProxy.importerInstall") await prepareXrayImporter(this.root, controller.signal, () => this.changed());
-        this.importerVersion = await checkXrayImporter(this.root, controller.signal);
-      }
-    })).catch(error => {
-      if (!maintenanceCancelled(error, controller.signal)) this.importerError = error instanceof Error ? error.message : "导入组件维护失败。";
-    }).finally(() => { this.importerPending = undefined; this.changed(); });
-    return this.snapshot();
-  }
   private clearInspection() {
     clearTimeout(this.inspectionTimer); this.inspectionTimer = undefined;
     this.inspection = undefined; this.xrayInspection = undefined;
@@ -126,13 +88,8 @@ export class ModelProxyService {
     }).finally(() => { this.pending = undefined; this.refreshing = false; this.scheduleRefresh(); });
   }
   snapshot(): ModelProxyState {
-    let filesPresent = false, supported = false, importerError = this.importerError;
-    let importerCleanup: ReturnType<typeof cleanupScope> | undefined;
     const cleanup: ModelProxyState["cleanup"] = {};
     let cleanupError: string | undefined;
-    try { xrayImporterRelease(); supported = toolProcessSupported(); } catch { /* No pinned release for this platform. */ }
-    try { const plan = proxyImporterRemovalPlan(this.root, this.config, false); filesPresent = plan.names.length > 0; importerCleanup = cleanupScope(plan.paths); }
-    catch { importerError ??= "无法核实导入组件目录，请检查安装路径。"; }
     try { for (const kernel of ["xray", "mihomo"] as const) cleanup[kernel] = cleanupScope(proxyRemovalPlan(this.root, kernel, this.config).paths); }
     catch { cleanupError = "无法核实内核卸载目录，请检查安装路径。"; }
     // 线路启停只需记录 PID，任何平台都可用；内核安装、检查与订阅导入仍需进程监督能力，用 managed 单独表达。
@@ -142,8 +99,7 @@ export class ModelProxyService {
       supportError: launchable ? undefined : managed ? "请先安装此线路需要的内核。" : toolProcessSupportError,
       installations: structuredClone(this.config.installations), latest: Object.fromEntries([...this.releases].map(([kernel, release]) => [kernel, release.version])),
       cleanup, cleanupError,
-      importer: { cleanup: importerCleanup, supported, pinnedVersion: xrayImporterVersion, verifiedVersion: this.importerVersion, filesPresent, removalPending: !!this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name)), busy: this.importerBusy, error: importerError },
-      removalPending: Object.fromEntries((["xray", "mihomo"] as const).map(kernel => [kernel, !!this.config.removalPending?.some(name => !proxyImporterDirectoryPattern.test(name) && name.startsWith(`${kernel}-`))])),
+      removalPending: Object.fromEntries((["xray", "mihomo"] as const).map(kernel => [kernel, !!this.config.removalPending?.some(name => kernel === "xray" ? name.startsWith("xray-") : name.startsWith("mihomo-"))])),
       profiles: this.config.profiles.map(({ id, name, kernel, node }) => { const endpoint = this.processes.get(id)?.endpoint; return { id, name, kernel, node, status: endpoint?.status ?? "stopped", message: endpoint?.message }; }),
       bindings: { ...this.config.bindings }, job: this.job && { ...this.job }, inspection: this.inspection && structuredClone(this.inspection), error: this.error };
   }
@@ -192,7 +148,6 @@ export class ModelProxyService {
     if (c.workspaceId || c.sessionId) throw new AppError("INVALID_SCOPE", "模型代理使用应用级配置。");
     if (this.closed) throw new AppError("CLOSING", "服务正在退出。");
     if (c.op === "modelProxy.get") return this.snapshot();
-    if (["modelProxy.importerCheck", "modelProxy.importerInstall", "modelProxy.importerUninstall"].includes(c.op)) return this.importerCommand(c);
     if (c.op === "modelProxy.cancel") {
       if (this.job?.running && this.job.cancellable === false) throw new AppError("NOT_CANCELLABLE", "卸载已开始，正在停止线路并清理文件。");
       if (c.params?.jobId && c.params.jobId !== this.job?.id) throw new AppError("REVISION_CONFLICT", "当前操作已改变。");
@@ -262,8 +217,9 @@ export class ModelProxyService {
     if (inspecting) {
       if (kernel !== "xray" && kernel !== "mihomo") throw new AppError("INVALID_INPUT", "请选择内核。");
       if (!source || Buffer.byteLength(source, "utf8") > proxySourceLimit) throw new AppError("INVALID_INPUT", "请粘贴分享链接、订阅地址或配置内容，最多 2 MB（UTF-8）。");
+      if (!this.config.installations[kernel]) throw new AppError("NOT_INSTALLED", `请先安装 ${kernel === "xray" ? "Xray-core" : "mihomo"}，再识别分享链接或订阅中的节点。`);
+      if (this.config.removalPending?.some(name => name.startsWith(`${kernel}-`))) throw new AppError("REMOVAL_PENDING", "此内核有待清理文件，请先完成清理后重新安装。");
       if (kernel === "mihomo") {
-        if (!this.config.installations.mihomo) throw new AppError("NOT_INSTALLED", "请先安装 mihomo，再识别分享链接或订阅中的节点。");
         try { coreConfiguration({ id: "import", name: "import", node: "unselected", kernel, source }, 0, "validation", "/provider.yaml"); }
         catch { throw new AppError("INVALID_INPUT", "请检查订阅地址；不支持在地址中内嵌账号密码。"); }
       }
@@ -274,7 +230,8 @@ export class ModelProxyService {
     if (c.op !== "modelProxy.start" && kernel !== "xray" && kernel !== "mihomo") throw new AppError("INVALID_INPUT", "请选择内核。");
     const release = this.releases.get(kernel);
     if (c.op === "modelProxy.install" && (!release || release.version !== p.version)) throw new AppError("CHECK_REQUIRED", "请先检查更新，再安装已确认版本。");
-    if (c.op === "modelProxy.install" && this.config.installations[kernel]?.version === release!.version) return this.snapshot();
+    if (c.op === "modelProxy.install" && kernel === "mihomo" && this.config.installations[kernel]?.version === release!.version) return this.snapshot();
+    if (c.op === "modelProxy.install" && this.config.removalPending?.some(name => name.startsWith(`${kernel}-`))) throw new AppError("REMOVAL_PENDING", "此内核有待清理文件，请先完成清理后重新安装。");
     const removing = c.op === "modelProxy.uninstall";
     if (removing && p.confirm !== true) throw new AppError("CONFIRM_REQUIRED", "请确认卸载内核并停止使用它的线路；订阅和供应商绑定会保留。");
     this.controller = new AbortController(); const signal = this.controller.signal;
@@ -303,12 +260,7 @@ export class ModelProxyService {
           this.clearInspection();
         } else if (inspecting) {
           if (kernel === "xray") {
-            const result = await this.useImporter(async () => {
-              if (this.config.removalPending?.some(name => proxyImporterDirectoryPattern.test(name))) throw Error("导入组件有待清理文件，请先完成清理。");
-              const result = await inspectXraySource(this.root, source, signal, message => { this.job!.message = message; this.changed(); });
-              this.importerVersion = xrayImporterVersion;
-              return result;
-            });
+            const result = await inspectXraySource(this.root, source, signal, message => { this.job!.message = message; this.changed(); });
             signal.throwIfAborted();
             this.inspection = { id: this.job!.id, kernel, nodes: result.nodes }; skipped = result.skipped;
             this.xrayInspection = { id: this.job!.id, source, outbounds: result.outbounds };
@@ -318,9 +270,11 @@ export class ModelProxyService {
             const nodes = await inspectProxySource(this.root, this.config.installations.mihomo!, source, signal);
             signal.throwIfAborted(); this.inspection = { id: this.job!.id, ...(p.kernel ? { kernel } : {}), nodes };
           }
-        } else if (c.op === "modelProxy.check") this.releases.set(kernel, await latestProxyRelease(kernel, signal));
+        } else if (c.op === "modelProxy.check") this.releases.set(kernel, await (this.dependencies.latestRelease ?? latestProxyRelease)(kernel, signal));
         else if (c.op === "modelProxy.install") {
-          prepared = await installProxyKernel(this.root, release!, signal); signal.throwIfAborted();
+          prepared = await (this.dependencies.installKernel ?? installProxyKernel)(this.root, release!, signal);
+          if (kernel === "xray") await (this.dependencies.prepareImporter ?? prepareXrayImporter)(this.root, signal, message => { this.job!.message = message; this.changed(); });
+          signal.throwIfAborted();
           this.save({ ...this.config, installations: { ...this.config.installations, [kernel]: prepared } }); prepared = undefined;
         } else {
           await this.start(profile!, signal); signal.throwIfAborted();
@@ -340,8 +294,8 @@ export class ModelProxyService {
     return this.snapshot();
   }
   async close() {
-    this.closed = true; clearTimeout(this.refreshTimer); this.controller?.abort(); this.importerController?.abort(); this.clearInspection();
-    await this.mutation?.catch(() => {}); await this.pending; await this.importerPending;
+    this.closed = true; clearTimeout(this.refreshTimer); this.controller?.abort(); this.clearInspection();
+    await this.mutation?.catch(() => {}); await this.pending;
     await Promise.allSettled([...this.processes.values()].map(process => process.stop())); this.processes.clear(); this.publishRuntime();
   }
 }

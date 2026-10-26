@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "phase": "posthoc-complete-tool-input-observation",
+  "model": "qwen3-coder-next",
+  "taskRef": "t4020",
+  "label": "long-10-write-read",
+  "runId": "fb7b3d3b-5b03-410d-ae4a-48f7bf46f49d",
+  "status": "completed",
+  "selection": {
+    "provider": "kiro",
+    "id": "qwen3-coder-next",
+    "thinking": "off"
+  },
+  "observedAt": "2026-10-25T21:16:07.289Z",
+  "promptCorrelation": {
+    "inputIdSha256": "2036df2a6ac44818c33b4a8e075d3ac3f3bbfd675fd7ad0ffadcf698f5d28c6e",
+    "singleUserInputMatched": true,
+    "actualCompletePromptMatchedAtPosthocObservation": true,
+    "durableReceiptDelivered": true
+  },
+  "originalState": {
+    "sha256": "35b2330eada5f481b9348d6bce33f8dad7e5384a9c4b4928ed52568703d1f3e5",
+    "unchanged": true,
+    "originalCheckPassed": false,
+    "originalSemanticFailureCount": 7
+  },
+  "observation": {
+    "callCount": 6,
+    "completeDetailReadCount": 2,
+    "allOriginalMessageCallIdentitiesMatched": true,
+    "allLengthPrefixAndRevisionChecksPassed": true
+  },
+  "calls": [
+    {
+      "name": "powershell",
+      "callIdSha256": "4f494272e2fc9fab170e781d624b1d11eb26930243a7c13c795a2149b12eef52",
+      "messageIdSha256": "3b5c07a07fcc06ad1bbbf5c77dc7168474a2873df9277a175769a410b583921b",
+      "argumentsSha256": "2be3bd3aecf0f9caca3378722af0085652619678c969bdebf501bbe53eb257aa",
+      "previousProjectionSha256": "aa28f7376e0457bd1eadb6ed6915dde5cf6bc0992ee5742ce1135b921f260767",
+      "inputLength": 517,
+      "fullInputRead": true
+    },
+    {
+      "name": "powershell",
+      "callIdSha256": "6551f2826cfb79672d72d93326c38f81158bb7cddcc99700e90f775a6844778e",
+      "messageIdSha256": "13c9787e99a505065761eacc5a137038514e29b21ade22845c9e31494ad5d0cb",
+      "argumentsSha256": "56247d010445b2675301aebbfe2c0768dd9ef49b981a0cdd657430116dd9cf1c",
+      "previousProjectionSha256": "5ceb0955577f03d6f884d0b3009af372b456d5e902c4cff401416fd29e79fe5f",
+      "inputLength": 527,
+      "fullInputRead": true
+    },
+    {
+      "name": "read",
+      "callIdSha256": "340084c192197b9e2c2f3e369249d82dc1128d12530b12aa5fcbb0ac60bd97b4",
+      "messageIdSha256": "37f3e7a84d0567979725836f1c80a6869199b113d744873595fbde728e2260db",
+      "argumentsSha256": "ebae2e07683df691b351cfa9700aec7f399a8e4d60543f2a10c42e40df2ba065",
+      "previousProjectionSha256": "ebae2e07683df691b351cfa9700aec7f399a8e4d60543f2a10c42e40df2ba065",
+      "inputLength": 121,
+      "fullInputRead": false
+    },
+    {
+      "name": "powershell",
+      "callIdSha256": "41c7004d3fcf72a6fb702318d9c63bd18b96734fc279e8c860e7eba0db15ca93",
+      "messageIdSha256": "fb8f7e7c4d5e36264dd8b144a5676bb68bb3a39dbeb5786b7b75341430a54857",
+      "argumentsSha256": "82db650d578e01a08340c1d9db8221305c0531be23fb5102bde66bd94523d9dd",
+      "previousProjectionSha256": "82db650d578e01a08340c1d9db8221305c0531be23fb5102bde66bd94523d9dd",
+      "inputLength": 140,
+      "fullInputRead": false
+    },
+    {
+      "name": "powershell",
+      "callIdSha256": "de6c0ce54782b34f105441923c93f3919847ddde1e46b6a655d172a71ce74b16",
+      "messageIdSha256": "82798fd3d087b7e54642f4e40a8c42ea5377926f3c3b7512eb0891e9e5fa9394",
+      "argumentsSha256": "09c43fb0aaa0ab165b1d578aa1a7f069d3922c295d11d581d4467f4bbbd39951",
+      "previousProjectionSha256": "09c43fb0aaa0ab165b1d578aa1a7f069d3922c295d11d581d4467f4bbbd39951",
+      "inputLength": 511,
+      "fullInputRead": false
+    },
+    {
+      "name": "read",
+      "callIdSha256": "27957ec4eaf7f1e435d959f81404eef44356d6f4fc385e91ba3ce997783e0f56",
+      "messageIdSha256": "469ad60140285a220d1767ec416dcb32f30b9bc2cb52a7b1f5105987a85d8c12",
+      "argumentsSha256": "ebae2e07683df691b351cfa9700aec7f399a8e4d60543f2a10c42e40df2ba065",
+      "previousProjectionSha256": "ebae2e07683df691b351cfa9700aec7f399a8e4d60543f2a10c42e40df2ba065",
+      "inputLength": 121,
+      "fullInputRead": false
+    }
+  ],
+  "checks": {
+    "originalRuleWithHydratedInputs": {
+      "passed": false,
+      "errorSha256": "bade4fbb44823d4a0297e7ffb0dd113a48c16535d43cf37c79df43e5c2c99396"
+    },
+    "recoveryAwareRuleWithHydratedInputs": {
+      "passed": true
+    },
+    "unchangedAnswerSchemaPassed": true
+  },
+  "counting": {
+    "includedAsAnotherMatrixRound": false,
+    "retroactivelyChangedOriginalScore": false,
+    "newModelRequests": 0
+  },
+  "sourceHashes": {
+    "originalPlan": "c42da46e79adfbcbb67822964be60407c4d1ee1f0383ad50a6d92e6e834e5cd3",
+    "publishedPlan": "83e695cd20dee32089d39c88fa94d7b838d308126131fb5dbd6b6a23755c7620"
+  },
+  "contentPolicy": "No prompt/answer/thinking, full tool arguments/results, session identity, credentials or local transcript name."
+}

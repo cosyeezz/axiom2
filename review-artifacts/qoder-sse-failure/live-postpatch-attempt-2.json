@@ -1,0 +1,27 @@
+{
+  "method": "Axiom UI via OpenCLI; no direct provider requests",
+  "deploymentRecord": "deployment/applied-diagnostic.json",
+  "startedAt": "2026-10-25T15:29:47.243Z",
+  "newIndependentSession": true,
+  "run": {
+    "id": "bb45268b-77d5-4f1d-99be-1591fbb94f5b",
+    "sessionId": "c352640d-542d-46fe-9b0c-c2a14057e571",
+    "status": "failed",
+    "selection": "{\"provider\":\"qoder-cn\",\"id\":\"gmodel\",\"thinking\":\"high\"}",
+    "startedAt": 1792942187986,
+    "endedAt": 1792942191437,
+    "error": "模型请求失败：Qoder 认证或权限失败（HTTP 403），请检查账号地区并重新登录。 [sse_wrapper status=403 event=message body=json code=403]"
+  },
+  "session": {
+    "title": "这是Qoder接入的独立最小测试。不要调用任何工具，不要访问文件或网络。17乘以19等于多少？最终只回复数字。",
+    "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450"
+  },
+  "binding": {
+    "file": "C:\\Users\\dane\\AppData\\Roaming\\Axiom2\\sessions\\0bd0941b-802c-49cb-986d-0333f2b67450\\2026-10-25T15-29-47-762Z_01a173ae-a4f2-7589-a654-272fcb631c7e.jsonl"
+  },
+  "latencyArtifact": "live-postpatch-latency-2.json",
+  "result": "Outer model response HTTP 200, followed by an SSE message envelope with statusCodeValue 403 and JSON body code 403. No answer generated.",
+  "moduleExecutionEvidence": "The [sse_wrapper status=403 event=message body=json code=403] error suffix is emitted only by the newly deployed diagnostic version.",
+  "conclusion": "Blocked by explicit provider stream rejection. Do not ignore this envelope or claim successful missing-choices fix acceptance. Code 403 alone does not establish expired credentials.",
+  "restartPerformed": false
+}

@@ -1,0 +1,119 @@
+{
+  "checkedAt": "2026-10-25T19:51:50.879Z",
+  "readOnly": true,
+  "allOwnedTasksQuiescent": true,
+  "tasks": [
+    {
+      "taskRef": "t4018",
+      "taskStatus": "completed",
+      "runId": "c420c6f3-7e25-4683-82c5-d02a5118446b",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "minimax-m2.1",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 29
+      },
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4015",
+      "taskStatus": "completed",
+      "runId": "115e8e42-50f0-47b1-9918-9508f0eb310d",
+      "runStatus": "completed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-haiku-4.5",
+        "thinking": "high"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 22
+      },
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4017",
+      "taskStatus": "failed",
+      "runId": "6a1ad8e7-023f-488a-bcdb-b166be521cfb",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "auto",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 2
+      },
+      "reloadStatus": "completed"
+    },
+    {
+      "taskRef": "t4019",
+      "taskStatus": "failed",
+      "runId": "78031b9a-2cc5-417f-81a9-f336bb25afb9",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "glm-5",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 2
+      },
+      "reloadStatus": null
+    },
+    {
+      "taskRef": "t4020",
+      "taskStatus": "failed",
+      "runId": "fe170408-e8b9-44f6-8cf3-309a092345a6",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "qwen3-coder-next",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 2
+      },
+      "reloadStatus": null
+    },
+    {
+      "taskRef": "t4016",
+      "taskStatus": "failed",
+      "runId": "8e2b6d44-e7f7-49f9-bc59-f83924c1d4ff",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "deepseek-3.2",
+        "thinking": "off"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 12
+      },
+      "reloadStatus": null
+    },
+    {
+      "taskRef": "t4046",
+      "taskStatus": "failed",
+      "runId": "9fb97b11-b260-458e-bc23-3f415471700f",
+      "runStatus": "failed",
+      "selection": {
+        "provider": "kiro",
+        "id": "claude-sonnet-4.5",
+        "thinking": "medium"
+      },
+      "queueLength": 0,
+      "persistentInputStates": {
+        "delivered": 17
+      },
+      "reloadStatus": null
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+.local-path{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;vertical-align:middle;font:inherit;color:inherit}
+.local-path>.local-path-text{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
+.path-actions{display:inline-flex;align-items:center;flex-shrink:0;gap:4px;position:relative;vertical-align:middle}
+.local-path>.path-actions{opacity:0;pointer-events:none}
+.local-path:hover>.path-actions,.local-path:focus-within>.path-actions{opacity:1;pointer-events:auto}
+.path-actions>.icon-btn{display:grid;place-items:center;width:24px;min-width:24px;height:20px;padding:0;border:0;background:transparent;border-radius:4px;color:var(--fg-2);cursor:pointer}
+.path-actions>.icon-btn:disabled{opacity:.4;cursor:not-allowed}
+.path-actions>.screen-reader{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.path-actions>.icon-btn:hover{color:var(--fg)}
+.path-actions>.icon-btn svg{width:13px;height:13px}
+.path-actions>.icon-btn:focus-visible{outline:2px solid var(--accent,var(--fg));outline-offset:2px}
+.path-actions>.local-path-error{position:absolute;z-index:5;right:0;top:100%;width:max-content;max-width:min(280px,75vw);padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#202020);color:var(--fg);font-size:12px;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
+.local-path:has(.local-path-error)>.path-actions{opacity:1;pointer-events:auto}
+.json-local-paths{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;max-width:100%;margin:6px 0;font-size:12px;color:var(--muted)}
+.file-completion-row{display:flex;align-items:center;gap:4px;min-width:0}
+.file-completion-row>[role=option]{flex:1;min-width:0}
+.memory-path-row{display:flex;align-items:center;gap:8px;min-width:0}
+.memory-path-row>button{flex:1;min-width:0}
+.title-meta .local-path>.local-path-text{display:block}
+.remote-file-dialog .remote-path-actions .icon-btn{display:grid;place-items:center;flex:none;width:24px;min-width:24px;height:24px;min-height:24px;padding:0}
+.remote-file-dialog .remote-path-actions svg{width:13px;height:13px}
+.remote-file-dialog .remote-path-actions{flex:none;align-self:center}
+.remote-file-dialog form>div{overflow:visible}
+.history-row:has(.path-actions),.workspace-row:has(.path-actions){--row-action-clearance:120px}
+@media(hover:none),(pointer:coarse){
+ .local-path>.path-actions{opacity:1;pointer-events:auto}
+ .path-actions>.icon-btn,.remote-file-dialog .remote-path-actions .icon-btn{width:44px;min-width:44px;height:44px;min-height:44px}
+ .history-row:has(.path-actions){flex-wrap:wrap}
+ .history-row:has(.path-actions) .history-item{flex-basis:100%}
+ .history-row:has(.path-actions) .session-actions,.workspace-row:has(.path-actions) .workspace-actions{position:static;transform:none;justify-content:flex-end;width:100%;padding:0 4px 4px;opacity:1;pointer-events:auto}
+ .history-row:has(.path-actions):not([data-editing=true]) :is(.session-title-line,.history-item small),.workspace-row:has(.path-actions):not([data-editing=true]) .workspace-copy :is(strong,small){margin-right:0}
+}

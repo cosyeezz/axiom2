@@ -1,0 +1,129 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { chromium } from "playwright";
+import { tmpdir } from "./temporary.js";
+import { startServer } from "../src/server/index.js";
+import type { AgentViews } from "../src/server/agents/views.js";
+import type { Session, Workspace } from "../src/shared/protocol.js";
+
+const root = mkdtempSync(join(tmpdir(), "axiom-local-path-ui-"));
+const artifacts = process.env.AXIOM_PATH_ARTIFACTS || "/tmp/axiom-local-path-ui";
+mkdirSync(artifacts, { recursive: true });
+const project = join(root, "项目 路径 # with spaces"); mkdirSync(project);
+writeFileSync(join(project, "文档.md"), "# 路径测试\n\n[相对资料](child.txt)\n\n`./child.txt`\n");
+writeFileSync(join(project, "child.txt"), "资料");
+const previous = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
+mkdirSync(process.env.AXIOM_PI_DIR);
+const app = await startServer({ root: join(root, "data"), port: 0, dev: true });
+const workspace = app.store.execute({ requestId: crypto.randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
+const session = app.store.execute({ requestId: crypto.randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
+const scope = { workspaceId: workspace.id, sessionId: session.id };
+const views = (app.agents as unknown as { views: AgentViews }).views;
+views.messageChanged(scope, { id: "path-reply", role: "assistant", text: "[文档路径](文档.md)\n\n本地代码路径：`./child.txt`\n\n[远程页面](https://example.com)" }); views.flush(scope);
+const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
+try {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
+  const requests: any[] = [], errors: string[] = [];
+  let failReveal = false, held: (() => void) | undefined, holdReveal = false;
+  await context.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
+  await context.routeWebSocket("**/ws", socket => {
+    const server = socket.connectToServer();
+    socket.onMessage(raw => {
+      const c = JSON.parse(String(raw));
+      if (["paths.reveal", "files.reveal"].includes(c.op)) {
+        requests.push(c);
+        const reply = () => socket.send(JSON.stringify({ type: "receipt", requestId: c.requestId, ok: !failReveal, ...(failReveal ? { error: { code: "PATH_UNAVAILABLE", message: "测试：文件夹暂不可用" } } : { result: c.params.path }) }));
+        if (holdReveal) { held = reply; holdReveal = false; } else reply();
+      } else server.send(raw);
+    });
+    server.onMessage(raw => socket.send(raw));
+  });
+  const page = await context.newPage(); page.on("pageerror", e => errors.push(e.message));
+  await page.goto(app.origin); await page.locator("#title-path").waitFor();
+  assert.equal(await page.locator("#title-path").textContent(), project);
+  assert.equal(await page.locator(".history-row .path-actions").count(), 0, "sidebar session titles have no path action buttons");
+  const title = page.locator(".title-meta .local-path");
+  await title.hover();
+  await title.getByRole("button", { name: "复制工作空间路径", exact: true }).click();
+  await title.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), project);
+  await title.getByRole("button", { name: "打开系统文件管理器", exact: true }).click();
+  assert.equal(requests.at(-1).params.path, project);
+  await page.getByRole("button", { name: "复制会话标题", exact: true }).click();
+  await page.locator(".title-heading [role=status]").filter({ hasText: "已复制标题" }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await page.locator("#chat-title").textContent());
+  const file = page.locator(".file-link-path"), body = page.locator('[aria-label="助手回复"] .markdown');
+  assert.equal(await body.locator(".path-actions").count(), 0, "message paths have no inline copy/open actions");
+  await file.hover();
+  const fileButton = file.getByRole("button", { name: "文档路径", exact: true });
+  await fileButton.focus();
+  assert.equal(await body.locator(".path-actions").count(), 0, "hover and focus do not reveal body path actions");
+  assert.equal(await body.locator("code").textContent(), "./child.txt");
+  assert.equal(await page.locator('a[href="https://example.com"]').locator(".path-actions").count(), 0);
+  await fileButton.press("Enter");
+  await page.locator('.file-preview-body[aria-busy="false"]').waitFor();
+  const child = page.locator(".file-reading .local-path").first();
+  assert.equal(await child.textContent(), "相对资料");
+  assert.equal(await child.locator(".local-path-text").getAttribute("data-tooltip"), join(project, "child.txt"));
+  assert.equal(await page.locator(".file-reading .path-actions").count(), 0, "document prose has no inline copy/open actions");
+  const previewPath = page.locator(".file-title .local-path"); await previewPath.hover();
+  await previewPath.getByRole("button", { name: "复制文件路径", exact: true }).click();
+  await previewPath.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), join(project, "文档.md"));
+  await previewPath.getByRole("button", { name: "打开所在文件夹", exact: true }).click();
+  assert.equal(requests.at(-1).op, "files.reveal"); assert.equal(requests.at(-1).params.href, "文档.md");
+  assert.equal(await page.locator("button button, a button").count(), 0, "no nested interactive path buttons");
+  await page.evaluate(() => {
+    const original = navigator.clipboard.writeText.bind(navigator.clipboard);
+    (window as any).restorePathClipboard = () => { navigator.clipboard.writeText = original; };
+    navigator.clipboard.writeText = async () => { throw Error("测试剪贴板拒绝"); };
+  });
+  await previewPath.getByRole("button", { name: "复制文件路径", exact: true }).click();
+  await previewPath.getByRole("button", { name: "复制失败，点击重试", exact: true }).waitFor();
+  await page.evaluate(() => (window as any).restorePathClipboard());
+  await previewPath.getByRole("button", { name: "复制失败，点击重试", exact: true }).click();
+  await previewPath.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
+  failReveal = true; await previewPath.getByRole("button", { name: "打开所在文件夹", exact: true }).click();
+  await page.locator(".file-notice").filter({ hasText: "文件夹暂不可用" }).waitFor();
+  failReveal = false; holdReveal = true;
+  await previewPath.getByRole("button", { name: "打开所在文件夹", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.file-title button[aria-busy="true"]'));
+  assert.ok(await previewPath.getByRole("button", { name: "复制文件路径", exact: true }).isDisabled());
+  assert.ok(held); held!();
+  await page.waitForFunction(() => !document.querySelector('.file-title button[aria-busy="true"]'));
+  await previewPath.getByRole("button", { name: "复制文件路径", exact: true }).press("Escape");
+  await page.locator(".file-preview-panel").waitFor({ state: "detached" });
+  assert.ok(await fileButton.evaluate(node => node === document.activeElement));
+  await page.screenshot({ path: join(artifacts, "paths-desktop.png") });
+  const settings = await context.newPage(); await settings.goto(app.origin + "/settings.html");
+  const dataPath = settings.locator(".scope-row").filter({ hasText: "数据目录" }).locator(".local-path");
+  await dataPath.hover(); await dataPath.getByRole("button", { name: "复制路径", exact: true }).click();
+  await dataPath.getByRole("status").filter({ hasText: "已复制路径" }).waitFor();
+  assert.equal(await settings.evaluate(() => navigator.clipboard.readText()), join(root, "data"));
+  for (const width of [360, 390, 820, 1440]) {
+    await settings.setViewportSize({ width, height: 900 });
+    assert.ok(await settings.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `settings overflow at ${width}`);
+  }
+  const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await touch.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
+  const mobile = await touch.newPage(); await mobile.goto(app.origin); await mobile.locator("#title-path").waitFor();
+  assert.equal(await mobile.locator("#title-path").textContent(), project);
+  assert.equal(await mobile.locator(".history-row .path-actions").count(), 0, "mobile sidebar session titles have no path action buttons");
+  assert.equal(await mobile.locator(".title-meta button").count(), 2, "mobile header keeps both path actions");
+  assert.ok(await mobile.getByRole("button", { name: "复制会话标题", exact: true }).isVisible());
+  assert.equal(await mobile.locator('[aria-label="助手回复"] .markdown .path-actions').count(), 0, "mobile message paths have no inline actions");
+  const actions = mobile.locator(".title-meta .path-actions");
+  assert.equal(await actions.evaluate(node => getComputedStyle(node).opacity), "1");
+  for (const button of await actions.locator("button").all()) {
+    const rect = (await button.boundingBox())!; assert.ok(rect.width >= 44 && rect.height >= 44);
+  }
+  assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  await mobile.screenshot({ path: join(artifacts, "paths-mobile.png") });
+  await touch.close(); await context.close(); assert.deepEqual(errors, []);
+  console.log(`PASS local paths: no body copy/open actions on desktop/mobile, keyboard file preview, relative-path tooltips, header clipboard/reveal, error/retry, busy guard, touch targets and responsive layout. Artifacts: ${resolve(artifacts)}`);
+} finally {
+  await browser.close(); await app.close();
+  if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+  rmSync(root, { recursive: true, force: true });
+}

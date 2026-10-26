@@ -1,0 +1,16 @@
+{
+  "mode": "prestage",
+  "filesVerified": 32,
+  "sourceSnapshotFilesVerified": 31,
+  "evidenceParityFiles": 16,
+  "jsonFilesParsed": 12,
+  "markdownFileTargetsChecked": 30,
+  "gitBlobHashesVerified": 0,
+  "revision": "739146f57bb95d9e023e2e3820812bb4e12269a1",
+  "integrationBase": "739146f57bb95d9e023e2e3820812bb4e12269a1",
+  "controlledRecordedRounds": 137,
+  "controlledCompleted": 136,
+  "strictCheckPassed": 115,
+  "wholeTurnFormatPassed": 39,
+  "realModelMatrixComplete": false
+}

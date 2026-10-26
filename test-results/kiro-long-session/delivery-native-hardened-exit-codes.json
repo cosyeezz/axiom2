@@ -1,0 +1,63 @@
+﻿{
+    "workingDirectory":  "F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app",
+    "temp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-native-hardened-temp",
+    "tmp":  "F:/Axiom/axiom2/test-results/kiro-long-session/delivery-native-hardened-temp",
+    "tests":  {
+                  "exitCode":  0,
+                  "command":  "node --import tsx --test --test-concurrency=1 tests/kiro-interrupted-history.test.ts tests/kiro-live-native-proof.test.ts",
+                  "elapsedMs":  3415
+              },
+    "types":  {
+                  "exitCode":  0,
+                  "command":  "npx tsc --noEmit",
+                  "elapsedMs":  23888
+              },
+    "syntax":  {
+                   "exitCode":  0,
+                   "command":  "node --check scripts/kiro-live-native-proof.mjs",
+                   "elapsedMs":  49
+               },
+    "fileHashes":  [
+                       {
+                           "file":  "scripts/kiro-live-evidence.mjs",
+                           "deliverySHA256":  "976067E45563D213F50CB5554290518DEF6C7814A9F2284CADCC5CB44695252B",
+                           "mainSHA256":  "976067E45563D213F50CB5554290518DEF6C7814A9F2284CADCC5CB44695252B",
+                           "match":  true
+                       },
+                       {
+                           "file":  "scripts/kiro-live-native-proof.mjs",
+                           "deliverySHA256":  "EB831A4FCFFAB6A706B0516B80EFBB89A60CA14B38CB2BDA9D8391A5760B6873",
+                           "mainSHA256":  "EB831A4FCFFAB6A706B0516B80EFBB89A60CA14B38CB2BDA9D8391A5760B6873",
+                           "match":  true
+                       },
+                       {
+                           "file":  "tests/kiro-interrupted-history.test.ts",
+                           "deliverySHA256":  "73C3F31ED0937A73FEA3A5FBBD7273E7579408BDED271007CC457CE235523C88",
+                           "mainSHA256":  "73C3F31ED0937A73FEA3A5FBBD7273E7579408BDED271007CC457CE235523C88",
+                           "match":  true
+                       },
+                       {
+                           "file":  "tests/kiro-live-native-proof.test.ts",
+                           "deliverySHA256":  "68D0D75997B670352B8C8EF6BE0F5FEDA189B22A84F55C0ED8129FB48525E548",
+                           "mainSHA256":  "68D0D75997B670352B8C8EF6BE0F5FEDA189B22A84F55C0ED8129FB48525E548",
+                           "match":  true
+                       },
+                       {
+                           "file":  "src/server/providers/kiro-chat-protocol.ts",
+                           "deliverySHA256":  "167E5AB7CCA76487570341AAE21F4A9C901F952FFCFAB15C8A0A721FF71F3F19",
+                           "mainSHA256":  "167E5AB7CCA76487570341AAE21F4A9C901F952FFCFAB15C8A0A721FF71F3F19",
+                           "match":  true
+                       }
+                   ],
+    "testCounts":  {
+                       "total":  26,
+                       "interruptedHistory":  16,
+                       "passed":  26,
+                       "failed":  0,
+                       "skipped":  0,
+                       "runnerDurationMs":  3316.8874,
+                       "cancelled":  0,
+                       "todo":  0,
+                       "nativeProof":  10
+                   }
+}

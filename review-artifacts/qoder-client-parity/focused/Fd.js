@@ -1,0 +1,1 @@
+function Fd(A="default"){if("fast"===A){let A=Qee("inference",YpA());return"vpc"===A.mode||"server-override"===A.mode?A.url:A1||rg("inference")}return rg("security"===A?"securityInference":"inference")}

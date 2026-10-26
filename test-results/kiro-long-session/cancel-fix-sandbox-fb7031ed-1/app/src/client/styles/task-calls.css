@@ -1,0 +1,113 @@
+/* Task operations share the subagent card's surface, with less visual weight. */
+.task-operation, .delegation-card.subagents { width: 100%; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--fg) 2%, transparent); overflow: hidden; min-width: 0; }
+.task-operation { color: var(--fg-2); font-size: 12px; }
+.task-operation > details > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; list-style: none; }
+.task-operation summary::-webkit-details-marker { display: none; }
+.task-operation > details > summary:focus-visible { outline-offset: -3px; }
+.task-operation-icon { position: relative; width: 28px; height: 28px; display: grid; place-items: center; flex-shrink: 0; color: var(--task-icon-color, var(--meta)); border-radius: var(--radius-sm); background: color-mix(in srgb, currentColor 9%, transparent); transition: color var(--motion-fast), background var(--motion-fast); }
+.task-operation-icon svg { width: 18px; height: 18px; }
+.task-operation-heading { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--thread-line-height, 24px); height: var(--thread-line-height, 24px); overflow: hidden; gap: 0; flex: 1; min-width: 0; }
+.task-operation[data-preview="true"] .task-operation-heading { grid-template-rows: repeat(2, var(--thread-line-height, 24px)); height: calc(2 * var(--thread-line-height, 24px)); }
+.task-operation-heading > * { min-width: 0; max-height: var(--thread-line-height, 24px); }
+.task-operation-heading strong { font-size: 12px; font-weight: 510; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-operation-target { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
+.task-operation-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
+.task-running-icon { animation: task-icon-spin 1.4s linear infinite; transform-origin: center; }
+@keyframes task-icon-spin { to { transform: rotate(360deg); } }
+.task-call-error { margin: 0; padding: 8px 12px; color: color-mix(in srgb, var(--danger) 65%, var(--fg)); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.task-call-error .btn { margin-left: 8px; }
+.task-call-meta { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.task-call-detail { border-top: 1px solid var(--border-soft); padding: 12px; min-width: 0; }
+.task-call-detail p:last-child { margin-bottom: 0; }
+.task-call-content p { margin: 4px 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-report .markdown { font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.task-report > .task-call-meta { margin: 0 0 10px; }
+.task-report-notes { border-top: 1px solid var(--border-soft); padding-top: 10px; margin-top: 12px; }
+.task-report-notes ul { padding-left: 20px; margin: 6px 0 12px; overflow-wrap: anywhere; }
+.task-call-raw { margin-top: 8px; color: var(--muted); }
+.task-call-raw > summary { padding: 8px 0; min-height: 44px; }
+.task-call-raw pre { margin: 6px 0 12px; padding: 10px; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: color-mix(in srgb, var(--fg) 3%, transparent); border-radius: var(--radius-sm); font: 11px/1.8 var(--font-mono); color: var(--fg-2); }
+.task-open-link { display: flex; align-items: center; gap: 6px; min-height: 44px; margin: 0 12px; padding: 8px 0; font-size: 12px; color: var(--subagent-icon-color, var(--muted)); transition: color var(--motion-fast); }
+.task-open-link svg { width: 14px; height: 14px; }
+.delegation-card .subagents-head { min-height: 36px; padding: 4px 10px; gap: 6px; flex-wrap: nowrap; border-bottom: 0; }
+.delegation-card .subagents-head > .subagent-identity-icon { width: 18px; height: 18px; flex-shrink: 0; transform-origin: center; transition: color var(--motion-fast), transform var(--motion-fast) var(--ease-standard); }
+/* Greet once per interaction; the member icons continue to own task status. */
+.delegation-card .subagent-identity-icon > use { transform-box: fill-box; transform-origin: center; animation: var(--subagent-greeting, none); }
+.delegation-card:has(.subagent:focus-visible) { --subagent-greeting: subagent-greet 600ms var(--ease-standard); --subagent-identity-color: var(--fg); }
+@media (hover: hover) {
+  .delegation-card:hover { --subagent-greeting: subagent-greet 600ms var(--ease-standard); --subagent-identity-color: var(--fg); }
+}
+.delegation-card:has(.subagent:active) .subagent-identity-icon { transform: scale(.94); }
+@keyframes subagent-greet {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1px) rotate(-8deg); }
+  55% { transform: translateY(-1px) rotate(5deg); }
+  80% { transform: translateY(0) rotate(-2deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delegation-card .subagents-head > .subagent-identity-icon { transition: none; }
+  .delegation-card:has(.subagent:active) .subagent-identity-icon { transform: none; }
+  .delegation-card .subagent-identity-icon > use { animation: none; }
+}
+/* Instance-local feedback preserves the chosen glyphs and the running spinner. */
+.subagent-trigger > svg,
+.task-operation-icon > svg,
+.task-open-link > svg,
+.delegation-card .subagent .agent-open { transform: scale(var(--subagent-press, 1)); transform-origin: center; transition: transform var(--motion-fast) var(--ease-standard), color var(--motion-fast); }
+.subagent-trigger > svg > use { transform-box: fill-box; transform-origin: center; transform: rotate(var(--subagent-branch-angle, 0deg)); transition: transform var(--motion-fast) var(--ease-standard); }
+.delegation-card .subagent .agent-state { transform: scale(var(--subagent-state-scale, 1)); transition: transform var(--motion-fast) var(--ease-standard), color var(--motion-fast); }
+.delegation-card .subagent .agent-open { color: var(--subagent-icon-color, var(--fg-2)); }
+.delegation-card .agent-open > use,
+.task-open-link > svg > use { transform: translate(var(--subagent-open-offset, 0px), calc(-1 * var(--subagent-open-offset, 0px))); transition: transform var(--motion-fast) var(--ease-standard); }
+.task-operation-icon > svg > use { transform-box: fill-box; transform-origin: center; transform: var(--task-icon-transform, none); animation: var(--task-icon-animation, none); transition: transform var(--motion-fast) var(--ease-standard); }
+.task-operation[data-tool="read_result"] { --task-icon-feedback: subagent-read 480ms var(--ease-standard); }
+.task-operation[data-tool="append"] { --task-icon-feedback: subagent-append 480ms var(--ease-standard); }
+.task-operation[data-tool="cancel_task"] { --task-icon-hover-transform: scale(.9); }
+.subagent-trigger:not(:disabled):not([aria-disabled="true"]):is(:focus-visible, [aria-expanded="true"]) { --subagent-branch-angle: -8deg; }
+:is(.delegation-card .subagent, .task-open-link):not(:disabled):not([aria-disabled="true"]):focus-visible { --subagent-icon-color: var(--fg); --subagent-open-offset: 1px; --subagent-state-scale: 1.06; }
+.task-operation > details > summary:focus-visible { --task-icon-color: var(--fg); --task-icon-animation: var(--task-icon-feedback, none); --task-icon-transform: var(--task-icon-hover-transform, none); }
+@media (hover: hover) {
+  .subagent-trigger:not(:disabled):not([aria-disabled="true"]):hover { --subagent-branch-angle: -8deg; }
+  :is(.delegation-card .subagent, .task-open-link):not(:disabled):not([aria-disabled="true"]):hover { --subagent-icon-color: var(--fg); --subagent-open-offset: 1px; --subagent-state-scale: 1.06; }
+  .task-operation > details > summary:hover { --task-icon-color: var(--fg); --task-icon-animation: var(--task-icon-feedback, none); --task-icon-transform: var(--task-icon-hover-transform, none); }
+}
+:is(.subagent-trigger, .delegation-card .subagent, .task-open-link):not(:disabled):not([aria-disabled="true"]):active,
+.task-operation > details > summary:active { --subagent-press: .94; --subagent-state-scale: .94; }
+@keyframes subagent-read {
+  0%, 70%, 100% { transform: scaleY(1); }
+  35% { transform: scaleY(.2); }
+}
+@keyframes subagent-append {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-1px) scale(1.06); }
+  75% { transform: translateY(0) scale(.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .subagent-trigger > svg, .subagent-trigger > svg > use,
+  .task-operation-icon, .task-operation-icon > svg, .task-operation-icon > svg > use,
+  .task-open-link, .task-open-link > svg, .task-open-link > svg > use,
+  .delegation-card .subagent .agent-state, .delegation-card .subagent .agent-open, .delegation-card .agent-open > use { animation: none; transition: none; transform: none; }
+}
+.delegation-card .subagent { grid-template-columns: 18px minmax(0, 1fr) 16px; min-height: 44px; gap: 8px; padding: 6px 10px; }
+.delegation-card .agent-identity { grid-template-columns: minmax(0, 1fr); gap: 0; height: var(--thread-line-height, 24px); overflow: hidden; align-content: center; }
+.delegation-card .subagent .agent-state { display: inline-flex; grid-column: 1; grid-row: 1; }
+.delegation-card .subagent .agent-state svg { width: 18px; height: 18px; padding: 0; border-radius: 0; background: none; }
+.delegation-card .subagent .agent-open { grid-column: 3; }
+.delegation-pending { padding: 6px 10px; color: var(--fg-2); font-size: 13px; }
+.delegation-pending-item { position: relative; height: var(--thread-line-height, 24px); overflow: hidden; }
+.delegation-pending-item p { margin: 0; }
+.delegation-card .agent-identity strong, .delegation-pending-item p { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.delegation-pending-item + .delegation-pending-item { margin-top: 12px; }
+.log-row:has(.task-operation, .delegation-card):not(:has(.message-body .markdown, .message-images)) { padding-block: 0 2px; border-top: 0; }
+/* Status belongs to the left icon; titles and card surfaces stay neutral. */
+.delegation-card .subagent { color: var(--fg-2); }
+.delegation-card .subagent .agent-state { color: var(--subagent-icon-color, var(--meta)); }
+.delegation-card .subagents-head > .subagent-identity-icon { color: var(--subagent-identity-color, var(--meta)); }
+.task-operation:is([data-status="failed"], [data-status="cancelled"]) > details > summary .task-operation-icon,
+.delegation-card:is([data-status="failed"], [data-status="cancelled"]) .subagent-identity-icon,
+.delegation-card .subagent .agent-state:is([data-state="failed"], [data-state="stopped"]) { color: var(--danger-icon); }
+.task-operation-error, .delegation-card .task-call-error { color: var(--danger-text); }
+@media (max-width: 640px) {
+  .task-operation > details > summary { gap: 8px; padding-inline: 10px; }
+  .task-call-detail { padding: 10px; }
+}

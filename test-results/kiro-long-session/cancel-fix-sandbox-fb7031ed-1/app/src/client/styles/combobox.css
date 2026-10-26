@@ -1,0 +1,8 @@
+.combo-input { position:relative; min-width:0; }
+.combo-input>.input { width:100%; }
+.combo-input:has(.combo-toggle)>.input { padding-right:36px; }
+.combo-toggle { position:absolute; right:1px; top:1px; bottom:1px; width:32px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--muted); cursor:pointer; }
+.combo-toggle:hover { color:var(--fg); background:color-mix(in srgb,var(--fg) 6%,transparent); }
+.combo-toggle>svg { width:16px; height:16px; }
+.combo-input>.input[aria-expanded=true] { border-color:var(--accent); }
+@media(pointer:coarse) { .combo-toggle { width:44px; } .combo-input:has(.combo-toggle)>.input { padding-right:48px; } }

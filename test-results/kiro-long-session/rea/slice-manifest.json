@@ -1,0 +1,62 @@
+{
+  "sourceSha256": "0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a",
+  "sourceBytes": 528630968,
+  "analysisOnly": true,
+  "limitations": [
+    "Derived PE; never execute",
+    "Partial mapping; omitted callees; analyst labels"
+  ],
+  "sha256": "eb7c93ef0868f4784048a0a375222ace9a6057db1104c58a24413fcb5112e5cb",
+  "regions": [
+    {
+      "name": ".build",
+      "start": 12582912,
+      "end": 12591104,
+      "flags": 1610612768,
+      "sourceOffset": 12579840,
+      "newOffset": 1024,
+      "size": 8192,
+      "sha256": "c7195a621d7f331ca896cf35549b41ae7cf3b7fc10d6c6b6068240d4359c1d43"
+    },
+    {
+      "name": ".call1",
+      "start": 42758144,
+      "end": 42766336,
+      "flags": 1610612768,
+      "sourceOffset": 42755072,
+      "newOffset": 9216,
+      "size": 8192,
+      "sha256": "5a4c64f80009f436d387bd8d37a46e2ad101208aa56a7a72454e61596e5f390d"
+    },
+    {
+      "name": ".call2",
+      "start": 52584448,
+      "end": 52588544,
+      "flags": 1610612768,
+      "sourceOffset": 52581376,
+      "newOffset": 17408,
+      "size": 4096,
+      "sha256": "bcc8281120baab77c9b92ce815c53aaa48a7d38054c65be3be0b7cd25d76d240"
+    },
+    {
+      "name": ".ser",
+      "start": 12247040,
+      "end": 12255232,
+      "flags": 1610612768,
+      "sourceOffset": 12243968,
+      "newOffset": 21504,
+      "size": 8192,
+      "sha256": "76cca2b19eecb0b34a714aa5a7c01499e5240245ae0155d9ba3de6c94b5c2495"
+    },
+    {
+      "name": ".refs",
+      "start": 97910784,
+      "end": 99155968,
+      "flags": 1073741888,
+      "sourceOffset": 97905664,
+      "newOffset": 29696,
+      "size": 1245184,
+      "sha256": "0616701adc33f338053f434ab8251e0a8e6a4dd2f098d99057d2b374b0e5b74b"
+    }
+  ]
+}

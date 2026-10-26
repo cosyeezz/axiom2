@@ -1,0 +1,16 @@
+[
+  {
+    "line": 38,
+    "instruction": "0000000141ECDBB2: 0F 10 05 67 43 87  movups      xmm0,xmmword ptr [000000015B741F20h]",
+    "offset": "0x1b740b20",
+    "direct": "ed type was not present",
+    "pointers": []
+  },
+  {
+    "line": 41,
+    "instruction": "0000000141ECDBBD: F3 0F 6F 05 4B 43  movdqu      xmm0,xmmword ptr [000000015B741F10h]",
+    "offset": "0x1b740b10",
+    "direct": "params of expected type was not present",
+    "pointers": []
+  }
+]

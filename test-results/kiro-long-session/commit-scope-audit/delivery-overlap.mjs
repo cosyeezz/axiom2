@@ -1,0 +1,10 @@
+﻿import {spawnSync} from 'node:child_process';
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const delivery='F:/Axiom/axiom-kiro-delivery-4bfeec8c';
+const git=(args)=>{const r=spawnSync('git',['-C',delivery,...args],{maxBuffer:5*1024*1024});if(r.status)throw Error(r.stderr.toString());return r.stdout;};
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const paths=['app/src/server/providers/kiro-chat-protocol.ts','app/src/server/providers/kiro-chat.ts','app/tests/kiro-chat.test.ts','app/tests/kiro-thinking.test.ts','docs/kiro-thinking.md','app/src/server/providers/kiro-catalog.ts','app/src/server/providers/kiro-eventstream.ts','app/src/server/providers/kiro-thinking.ts','app/src/server/providers/kiro-thinking-stream.ts','app/src/server/providers/kiro.ts','app/src/server/providers/kiro-auth.ts','app/src/server/model-runtime.ts','app/tests/fixtures/kiro-eventstream.ts'];
+const rows=paths.map(p=>{const staged=git(['show',':'+p]);const base=readFileSync(process.env.TEMP+'/axiom-kiro-fb7031ed-baseline/files/'+p);return {path:p,indexSha256:hash(staged),sameAsBaseline:staged.equals(base),sameAsCurrent:staged.equals(readFileSync(p)),sameAsDeliveryWorktree:staged.equals(readFileSync(delivery+'/'+p))};});
+const result={observedAt:new Date().toISOString(),head:git(['rev-parse','HEAD']).toString().trim(),originMaster:git(['rev-parse','origin/master']).toString().trim(),rows};
+writeFileSync('test-results/kiro-long-session/commit-scope-audit/delivery-overlap.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));

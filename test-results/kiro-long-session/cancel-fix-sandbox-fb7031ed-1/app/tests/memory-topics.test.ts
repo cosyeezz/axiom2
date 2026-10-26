@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { SessionManager, type CompactionEntry } from "@earendil-works/pi-coding-agent";
+import { ensureTopicSnapshot, injectTopicSnapshot, topicSnapshot, validTopicSnapshot } from "../src/server/memory-topics.js";
+import { applyCompression, captureCompression } from "../src/server/compression-context.js";
+import { memoryTopicBlock, type MemoryTopicSnapshot } from "../src/shared/memory-tree.js";
+const snapshot = (text = memoryTopicBlock([])): MemoryTopicSnapshot => ({ version: 2, workspaceId: "workspace", text });
+const native = (topics: MemoryTopicSnapshot): CompactionEntry => ({ type: "compaction", id: "native", parentId: null, timestamp: new Date().toISOString(), summary: "历史任务摘要", firstKeptEntryId: "native", tokensBefore: 100, details: { axiomMemoryTopics: topics } });
+test("old Topic-ID snapshots are refused without changing old branch entries", () => {
+  const manager = SessionManager.inMemory(), legacy = { version: 1, workspaceId: "workspace", text: '<记忆Topic目录>旧ID目录</记忆Topic目录>' };
+  manager.appendCustomEntry("axiom-memory-topic-snapshot", legacy); const oldLeaf = manager.getLeafId()!;
+  assert.equal(validTopicSnapshot(legacy), false); assert.equal(topicSnapshot(manager, "workspace"), undefined);
+  const latest = snapshot(memoryTopicBlock([{ name: "数据库" }])); assert.deepEqual(ensureTopicSnapshot(manager, latest), latest);
+  manager.branch(oldLeaf); assert.equal(topicSnapshot(manager, "workspace"), undefined);
+  assert.deepEqual((manager.getBranch().at(-1) as any).data, legacy, "no old data deletion or branch rewrite");
+});
+test("initial empty directory stays fixed across requests and first-input rewrites", () => {
+  const manager = SessionManager.inMemory(), initial = snapshot(); ensureTopicSnapshot(manager, initial);
+  const root = manager.getLeafId()!;
+  manager.appendMessage({ role: "user", content: "最初输入", timestamp: 1 });
+  assert.deepEqual(ensureTopicSnapshot(manager, snapshot("最新目录")), initial);
+  manager.branch(root); manager.appendMessage({ role: "user", content: "修改首条输入", timestamp: 2 });
+  assert.deepEqual(ensureTopicSnapshot(manager, snapshot("另一个目录")), initial);
+  const messages = [{ role: "system", content: "系统" }, { role: "user", content: "问题" }];
+  const injected = injectTopicSnapshot(messages, initial);
+  assert.equal(injected[0].role, "system"); assert.equal((injected[1] as any).content, initial.text);
+  assert.deepEqual(injectTopicSnapshot(injected, initial), injected);
+  assert.equal(messages.length, 2);
+});
+test("only committed compaction switches directories and abandoned branches cannot leak snapshots", () => {
+  const manager = SessionManager.inMemory(), initial = snapshot("原目录"), next = snapshot("新目录");
+  ensureTopicSnapshot(manager, initial); manager.appendMessage({ role: "user", content: "输入", timestamp: 1 });
+  const oldLeaf = manager.getLeafId()!, captured = captureCompression(manager);
+  const corrupted = structuredClone(captured); corrupted.header.id = "another-session";
+  assert.throws(() => applyCompression(manager, corrupted, native(next), "failed"));
+  assert.deepEqual(topicSnapshot(manager, "workspace"), initial);
+  applyCompression(manager, captured, native(next), "success");
+  assert.deepEqual(topicSnapshot(manager, "workspace"), next);
+  manager.branch(oldLeaf); assert.deepEqual(topicSnapshot(manager, "workspace"), initial);
+});

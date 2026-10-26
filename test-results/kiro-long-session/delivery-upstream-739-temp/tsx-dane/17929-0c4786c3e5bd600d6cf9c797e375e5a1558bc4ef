@@ -1,0 +1,1 @@
+{"code":"const defaultOpenCliSettings={enabled:true,profile:\"\",window:\"foreground\"};export{defaultOpenCliSettings};\n","warnings":[],"map":{"version":3,"mappings":"AAsCO,MAAM,uBAA0C,CAAE,QAAS,KAAM,QAAS,GAAI,OAAQ,YAAa","names":[],"ignoreList":[],"sources":["F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app\\src\\shared\\builtin-tools.ts"],"sourcesContent":[null]}}

@@ -1,0 +1,1 @@
+{"code":"const maxDraftTextLength=2e5;export{maxDraftTextLength};\n","warnings":[],"map":{"version":3,"mappings":"AAEO,MAAM,mBAAqB","names":[],"ignoreList":[],"sources":["F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app\\src\\shared\\drafts.ts"],"sourcesContent":[null]}}

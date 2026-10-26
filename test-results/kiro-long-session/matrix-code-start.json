@@ -1,0 +1,17 @@
+﻿[
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "70D0FC129C754E844E581E5DD5766F3700CF011C5A905EC1E169E939C2D9C885",
+        "Path":  "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\kiro-chat.js"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "3A989FBF20DF1B7D5D0B222B18FF65DCF36CE52A53222ECD41CF871F148E76D8",
+        "Path":  "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\kiro-chat-protocol.js"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "5563E6E8BA6BBBD848B14132AE3204FC79450AB637346EF893F4854CC51FD928",
+        "Path":  "F:\\Axiom\\axiom2\\app\\scripts\\kiro-live-check.mjs"
+    }
+]

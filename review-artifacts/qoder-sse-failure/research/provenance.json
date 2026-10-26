@@ -1,0 +1,122 @@
+[
+  {
+    "name": "P1",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19534929,
+    "endUtf16": 19534963,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "dbd4334f68f9a4e42350e11526bc37839a5fd7a0a5305dd69222bf2767a1c745",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "LEA",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19534963,
+    "endUtf16": 19535083,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "8818f686c8a103fe919e50fc6b84a4983a282d87c4d9a46f34977729495c487a",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "K2",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19535083,
+    "endUtf16": 19536180,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "4abb36a20f9a89d2d3123589a268eabd168356cf2ab81bfcdb39cce7716693ef",
+    "decodedStringConstants": 2
+  },
+  {
+    "name": "Got",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19844302,
+    "endUtf16": 19844695,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "bf65dfb7e464b9279335632440fae91ad0edd5285c119b8115be6e72c9d4cfb2",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "r$l",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 23681576,
+    "endUtf16": 23681750,
+    "sourceLine": 258,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "4802de4909db84ed05b741023b8ef2217c1876c326c0df8bbfbab00a185c4f5b",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "fRe",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 23681750,
+    "endUtf16": 23690614,
+    "sourceLine": 258,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "d24278f5c936ba3d67c35c124ddd945f1a6a554284832972d3c14569fa4e2987",
+    "decodedStringConstants": 4
+  },
+  {
+    "name": "MwA",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 23675120,
+    "endUtf16": 23675370,
+    "sourceLine": 258,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "ba0e3ce0dae97071415cfe0619610e9a65da34304487e841c7172c2d84343ff1",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "lpo",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 23675013,
+    "endUtf16": 23675120,
+    "sourceLine": 258,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "8200893183e44be2e9fd15e066d8cacdf64ebc2852d6b2a6d7706098cfe8bd6c",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "sU",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 23676744,
+    "endUtf16": 23677383,
+    "sourceLine": 258,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "890ea9b4b0afad3108af03cba7f3d5e0296eb51b65be66ee95bd6a98e6e816d0",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "ede",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19237813,
+    "endUtf16": 19237921,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "a592fc4c26692745aa0dd5308436ee2062c773aa9a3da0c7c82bd566e8c4f769",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "mll",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19236309,
+    "endUtf16": 19236675,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "561e17e002d4169115939372ead026359325c4f7adae989876fbf4a78b5875d4",
+    "decodedStringConstants": 0
+  },
+  {
+    "name": "Ntt",
+    "source": "review-artifacts/qoder-audit-20260817/official/package/bundle/qodercli.js",
+    "startUtf16": 19237235,
+    "endUtf16": 19237289,
+    "sourceLine": 81,
+    "sourceSha256": "ec7b2a2c1be206f525ca974c3b9455fbec9ce7411bc5dfdee55f1e82eb90df38",
+    "rawSha256": "c7bf62824be316ca48dc13155730a3d842553f270e186580b7c1fb76dae99c9e",
+    "decodedStringConstants": 0
+  }
+]

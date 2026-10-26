@@ -1,0 +1,12 @@
+{
+  "cwd": "F:\\Axiom\\axiom2",
+  "command": [
+    "node",
+    "C:/Users/dane/AppData/Roaming/Axiom2/integrations/rea/versions/v6.8.0-24c58f2c-502c-4377-be13-4f27772e772a/node_modules/rea-agents/scripts/rea.mjs",
+    "doctor",
+    "--json"
+  ],
+  "exitCode": null,
+  "recovery": "Used existing bundled Node 24.22.1 and previously installed Ghidra 12.1.4 with process-local environment; no installation or configuration writes.",
+  "note": "Initial doctor process exit code not independently preserved; this file is a retrospective recovery note, not a process receipt."
+}

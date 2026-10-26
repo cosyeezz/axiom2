@@ -8,6 +8,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { ModelProxyService } from "../src/server/integrations/model-proxy.js";
 import childProcess from "node:child_process";
 import { once } from "node:events";
+import { proxyRemovalPlan } from "../src/server/integrations/model-proxy-removal.js";
 import { ProxyProcess } from "../src/server/integrations/model-proxy-process.js";
 import { atomicProxyJson, proxyConfigPath, proxyDirectory, readProxyConfig, type ProxyConfig } from "../src/server/integrations/model-proxy-config.js";
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -19,8 +20,6 @@ async function kernelReady(kernel: childProcess.ChildProcess, exited: Promise<un
   } finally { clearTimeout(timer); }
 }
 async function settle(s: ModelProxyService) { const deadline = Date.now() + 5000; await turn(); while (s.snapshot().job?.running) { assert.ok(Date.now() < deadline); await turn(); } return s.snapshot(); }
-async function settleImporter(s: ModelProxyService) { const deadline = Date.now() + 5000; await turn(); while (s.snapshot().importer?.busy) { assert.ok(Date.now() < deadline); await turn(); } return s.snapshot().importer!; }
-const importerCommand = (s: ModelProxyService, action: string) => s.command({ requestId: randomUUID(), op: `modelProxy.importer${action}`, params: { revision: s.snapshot().revision, confirm: true } });
 function fixture() {
   const root = fs.mkdtempSync(join(tmpdir(), "axiom-proxy-remove-"));
   const config: ProxyConfig = { revision: randomUUID(), installations: {}, profiles: [], bindings: {} };
@@ -46,18 +45,31 @@ test("proxy uninstall awaits owned process stop and preserves unrelated kernel, 
     assert.equal(stopping, true); assert.ok(readProxyConfig(f.root).installations.xray); assert.ok(fs.existsSync(f.importer));
     await assert.rejects(s.command({ op: "modelProxy.cancel", requestId: randomUUID() }), { code: "NOT_CANCELLABLE" });
     await assert.rejects(uninstall(s), { code: "BUSY" });
-    await importerCommand(s, "Check");
-    assert.equal((await settleImporter(s)).verifiedVersion, undefined, "an empty directory is not a verified installation");
-    assert.equal(s.snapshot().job?.running, true, "independent importer check finishes while the kernel stop is pending");
+    await assert.rejects(s.command({ op: "modelProxy.inspect", requestId: randomUUID(), params: { kernel: "xray", source: "vless://fixture" } }), { code: "BUSY" });
     release(); assert.equal((await settle(s)).job?.error, undefined);
     const next = readProxyConfig(f.root);
     assert.equal(next.installations.xray, undefined); assert.deepEqual(next.installations.mihomo, f.config.installations.mihomo);
     assert.deepEqual(next.bindings, f.config.bindings); assert.deepEqual(next.profiles.map(p => p.source), f.config.profiles.map(p => p.source));
     assert.equal(next.profiles.find(p => p.kernel === "xray")!.enabled, false);
     assert.equal(s.snapshot().profiles.find(p => p.kernel === "mihomo")!.status, "running");
-    assert.equal(fs.existsSync(f.importer), true); assert.equal(s.snapshot().importer?.filesPresent, true);
+    assert.equal(fs.existsSync(f.importer), false); assert.deepEqual(s.snapshot().cleanup?.xray?.paths, []);
   } finally { release?.(); await s.close(); f.cleanup(); }
 });
+test("combined Xray plan includes all legacy importer versions while mihomo retains them", () => {
+  const f = fixture();
+  try {
+    const oldImporter = join(proxyDirectory(f.root), "importer", "xray-knife-11.4.0-linux-arm64");
+    fs.mkdirSync(oldImporter);
+    const plan = proxyRemovalPlan(f.root, "xray", f.config);
+    for (const path of [f.importer, oldImporter, join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory)]) assert.ok(plan.paths.includes(path));
+    const other = proxyRemovalPlan(f.root, "mihomo", f.config);
+    assert.equal(other.paths.includes(f.importer), false); other.remove();
+    assert.ok(fs.existsSync(f.importer)); assert.ok(fs.existsSync(oldImporter));
+    plan.remove();
+    for (const path of plan.paths) assert.equal(fs.existsSync(path), false);
+  } finally { f.cleanup(); }
+});
+
 test("proxy uninstall rejects stale revision and unsafe parent without modifying configuration", async () => {
   const f = fixture(), versions = join(proxyDirectory(f.root), "versions"), outside = join(f.root, "outside");
   fs.renameSync(versions, outside); fs.symlinkSync(outside, versions, process.platform === "win32" ? "junction" : "dir");
@@ -81,33 +93,36 @@ test("proxy partial removal revokes installation and can be retried after restar
     assert.equal(s.snapshot().removalPending?.xray, true);
     mock.mock.restore(); syncBuiltinESMExports(); await s.close(); s = new ModelProxyService(f.root, () => {});
     await uninstall(s); assert.equal((await settle(s)).job?.error, undefined);
-    assert.equal(readProxyConfig(f.root).removalPending, undefined); assert.equal(fs.existsSync(f.importer), true);
+    assert.equal(readProxyConfig(f.root).removalPending, undefined); assert.equal(fs.existsSync(f.importer), false);
   } finally { mock.mock.restore(); syncBuiltinESMExports(); await s.close(); f.cleanup(); }
 });
 
-test("importer uninstall preserves running kernels and retries its own pending removal after restart", async t => {
-  const f = fixture(), rm = fs.rmSync; let stops = 0, s = new ModelProxyService(f.root, () => {});
-  t.mock.method(ProxyProcess.prototype, "start", async function(this: ProxyProcess) { this.endpoint.status = "running"; });
-  t.mock.method(ProxyProcess.prototype, "stop", async () => { stops++; });
+test("Xray cleanup retries legacy importer-only leftovers after restart", async t => {
+  const f = fixture(), rm = fs.rmSync;
+  fs.rmSync(join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory), { recursive: true });
+  delete f.config.installations.xray;
+  f.config.removalPending = ["xray-knife-11.4.1-win32-x64"];
+  atomicProxyJson(proxyConfigPath(f.root), f.config);
+  let s = new ModelProxyService(f.root, () => {});
   const mock = t.mock.method(fs, "rmSync", ((path, options) => {
     if (String(path) === f.importer) {
+      assert.equal(readProxyConfig(f.root).installations.xray, undefined);
       assert.ok(readProxyConfig(f.root).removalPending?.includes("xray-knife-11.4.1-win32-x64"));
       throw Error("busy");
     }
     return rm(path, options);
   }) as typeof fs.rmSync); syncBuiltinESMExports();
   try {
-    await s.initialize();
-    await importerCommand(s, "Uninstall");
-    assert.match((await settleImporter(s)).error!, /部分文件/);
-    assert.equal(stops, 0); assert.ok(s.snapshot().profiles.every(p => p.status === "running"));
-    assert.deepEqual(readProxyConfig(f.root).installations, f.config.installations);
-    assert.deepEqual(readProxyConfig(f.root).profiles, f.config.profiles);
-    assert.equal(s.snapshot().removalPending?.xray, false);
+    assert.deepEqual(s.snapshot().cleanup!.xray!.paths, [f.importer]);
+    assert.equal(s.snapshot().removalPending?.xray, true);
+    await uninstall(s); assert.match((await settle(s)).job!.error!, /部分文件/);
+    assert.equal(s.snapshot().removalPending?.xray, true);
+    assert.deepEqual(readProxyConfig(f.root).bindings, f.config.bindings);
+    assert.deepEqual(readProxyConfig(f.root).installations.mihomo, f.config.installations.mihomo);
     mock.mock.restore(); syncBuiltinESMExports(); await s.close(); s = new ModelProxyService(f.root, () => {});
-    assert.equal(s.snapshot().importer?.removalPending, true);
-    await importerCommand(s, "Uninstall"); assert.equal((await settleImporter(s)).error, undefined);
+    await uninstall(s); assert.equal((await settle(s)).job?.error, undefined);
     assert.equal(readProxyConfig(f.root).removalPending, undefined); assert.equal(fs.existsSync(f.importer), false);
+    assert.deepEqual(s.snapshot().cleanup!.xray!.paths, []);
   } finally { mock.mock.restore(); syncBuiltinESMExports(); await s.close(); f.cleanup(); }
 });
 
@@ -175,7 +190,10 @@ for (const configured of [true, false]) test(`Windows kernel removal fails close
     assert.match((await settle(s)).job!.error!, /当前平台无法核实全部代理内核进程/);
     assert.deepEqual(fs.readFileSync(proxyConfigPath(f.root)), before);
     assert.equal(readProxyConfig(f.root).removalPending, undefined);
-    for (const path of paths) assert.equal(fs.readFileSync(join(path, "sentinel"), "utf8"), path === old ? "historical kernel" : "xray");
+    for (const path of paths) {
+      if (path === f.importer) { assert.ok(fs.existsSync(path)); continue; }
+      assert.equal(fs.readFileSync(join(path, "sentinel"), "utf8"), path === old ? "historical kernel" : "xray");
+    }
     assert.ok(fs.existsSync(f.importer));
   } finally { await s.close(); f.cleanup(); }
 });

@@ -1,0 +1,15 @@
+.task-notices { margin: 8px 0; min-width: 0; color: var(--muted); }
+.task-notice {
+  --notice-color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  margin: 4px 0 10px;
+  min-width: 0;
+  animation: task-notice-enter 200ms ease-out both;
+}
+.task-notice-text { min-width: 0; color: var(--notice-color); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.task-notice-rule { flex: 1; min-width: 16px; max-width: 160px; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+@keyframes task-notice-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .task-notice { animation: none; } }

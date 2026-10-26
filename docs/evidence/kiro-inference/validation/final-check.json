@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "checkedAt": "2026-10-25T12:09:53.400Z",
+  "staticFiles": 79,
+  "staticBytes": 3141440,
+  "dumpbinRuns": 18,
+  "localLinks": 61,
+  "authoredWhitespaceFiles": 25,
+  "scopedGitDiffCheckExit": 0,
+  "testCounts": {
+    "kiro-tests.log": 42,
+    "compatibility-tests.log": 25
+  },
+  "artifacts": {
+    "app/dist/server/providers/kiro-chat.js": {
+      "bytes": 20495,
+      "sha256": "2fdbf0bf85f33b0d433f1bac57f727d4cafbf90f09c2745c1257d7e81bbbc326"
+    },
+    "app/dist/server/providers/kiro-chat-protocol.js": {
+      "bytes": 10106,
+      "sha256": "4439240584b851b049a12f31f924e1bfd7a574e2b5d602bde69b99c572bcc2d6"
+    },
+    "app/dist/server/providers/kiro-eventstream.js": {
+      "bytes": 4629,
+      "sha256": "25f51e56c6f25d9571349811b3db8dd8642678a00f276373239a26f6508e186d"
+    }
+  },
+  "limitations": "Static/mock only. No live credentials/API, UI end-to-end, deployment, restart or commit. Build artifacts are untracked outputs; hashes identify this local build only."
+}

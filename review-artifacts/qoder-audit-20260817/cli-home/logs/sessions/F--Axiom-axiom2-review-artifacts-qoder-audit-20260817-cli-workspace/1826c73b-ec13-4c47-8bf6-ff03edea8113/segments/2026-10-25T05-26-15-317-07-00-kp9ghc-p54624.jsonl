@@ -1,0 +1,2 @@
+{"ts":"2026-10-25T05:26:17.363-07:00","seq":6,"level":"info","type":"session.config.loaded","data":{"project_root":"F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\cli-workspace","target_dir":"F:\\Axiom\\axiom2\\review-artifacts\\qoder-audit-20260817\\cli-workspace","debug_mode":false,"interactive":false,"model":"","permission_mode":"default","load_config_duration_ms":42}}
+{"ts":"2026-10-25T05:26:17.365-07:00","seq":8,"level":"info","type":"cli.route.entered","data":{"route":"listModels","mode":"headless"}}

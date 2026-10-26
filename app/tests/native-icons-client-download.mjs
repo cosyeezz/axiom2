@@ -1,0 +1,27 @@
+// Real release download into isolated audit data. Opens confirmation only; NEVER launches MSI.
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,mkdtempSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {join,resolve} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {setTimeout as delay} from 'node:timers/promises';
+import {chromium} from 'playwright';
+const root=resolve(process.env.AXIOM_NATIVE_AUDIT_ROOT??'../artifacts/native-click-audit-20261025-layout-r2'),session=JSON.parse(readFileSync(join(root,'active-native-session.json'),'utf8'));
+assert.match(session.identifier,/^local\.axiom2\.desktop\.clickaudit\.r\d+$/);assert.ok(Number.isSafeInteger(session.pid));assert.equal(createHash('sha256').update(readFileSync(session.exe)).digest('hex'),session.sha256);
+const command=`$ProgressPreference='SilentlyContinue';$p=Get-Process -Id ${session.pid} -ErrorAction Stop;@{Path=$p.Path;Responding=$p.Responding}|ConvertTo-Json -Compress`;
+const identity=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-EncodedCommand',Buffer.from(command,'utf16le').toString('base64')],{encoding:'utf8'}));assert.equal(identity.Path.toLowerCase(),session.exe.toLowerCase());assert.equal(identity.Responding,true);
+const out=mkdtempSync(join(session.run,'client-download-')),browser=await chromium.connectOverCDP(session.endpoint),page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url()==='http://tauri.localhost/');assert.ok(page);page.setDefaultTimeout(20000);
+const steps=[],button=(name,scope=page)=>scope.getByRole('button',{name,exact:true}),updates=page.getByRole('region',{name:'版本与更新',exact:true});
+async function poll(predicate,message,ms=180000){const end=Date.now()+ms;do{if(await predicate())return;await delay(200);}while(Date.now()<end);throw Error(message);}
+async function click(target){assert.equal(await target.count(),1);await target.waitFor();await poll(async()=>!await target.isDisabled(),'control stayed disabled');assert.ok(!/打开安装向导|确认(?:安装|更新|恢复|卸载|清理|关闭)/.test(await target.innerText()),'real installation submission prohibited');await target.click();await delay(500);}
+async function step(name,operation){const row={name,at:new Date().toISOString()};steps.push(row);try{row.evidence=await operation();row.outcome=row.evidence?.unavailable?'unavailable; not passed':'verified';}catch(error){row.outcome='failed';row.error=String(error);}await page.screenshot({path:join(out,String(steps.length).padStart(2,'0')+'-'+name+'.png'),fullPage:true});row.alerts=await updates.getByRole('alert').allTextContents();writeFileSync(join(out,'result.json'),JSON.stringify({session,identity,steps,limits:'Permitted MSI download only into isolated data; run may be unavailable; never launches installer or closes client'},null,2));return row;}
+const summary=page.locator('summary').filter({hasText:'版本与更新 · Pi 引擎'});if(!await summary.evaluate(e=>e.parentElement.open))await click(summary);
+if(!await button('下载客户端更新',updates).count())await step('real-release-recheck',async()=>{const target=button('检查更新',updates);await click(target);await poll(async()=>!await target.isDisabled(),'release request did not settle');return {versions:await updates.locator(':scope > .connect-versions').innerText()};});
+await step('real-msi-download',async()=>{const target=button('下载客户端更新',updates);if(!await target.count())return {unavailable:true,reason:'Current real release does not provide supported newer MSI'};await click(target);await poll(async()=>await button('运行安装器',updates).count()===1||!await target.isDisabled(),'client download not terminal');if(!await button('运行安装器',updates).count())return {unavailable:true,alerts:await updates.getByRole('alert').allTextContents(),text:await updates.innerText()};assert.equal(page.url(),'http://tauri.localhost/');return {installerTitle:await button('运行安装器',updates).getAttribute('title'),downloadOnly:true};});
+if(await button('运行安装器',updates).count()){
+ await step('installer-confirm-decline',async()=>{const trigger=button('运行安装器',updates);await click(trigger);const dialog=page.getByRole('dialog',{name:/打开客户端安装向导/});await dialog.waitFor();assert.equal(await button('打开安装向导',dialog).count(),1);await click(button('暂不更新',dialog));await dialog.waitFor({state:'hidden'});assert.equal(await trigger.evaluate(e=>e===document.activeElement),true);return {msiNotLaunched:true};});
+ await step('installer-confirm-escape',async()=>{await click(button('运行安装器',updates));const dialog=page.getByRole('dialog',{name:/打开客户端安装向导/});await dialog.waitFor();await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});return {msiNotLaunched:true};});
+ await step('artifact-survives-real-pi-refresh',async()=>{const target=button('刷新 Pi 安装状态',updates);await click(target);await poll(async()=>!await target.isDisabled(),'Pi refresh not finished');assert.equal(await button('运行安装器',updates).count(),1);return {installerTitle:await button('运行安装器',updates).getAttribute('title')};});
+ await step('artifact-survives-webview-reload',async()=>{await page.reload();await page.locator('.startup-title').waitFor();const summary=page.locator('summary').filter({hasText:'版本与更新 · Pi 引擎'});if(!await summary.evaluate(e=>e.parentElement.open))await click(summary);await button('运行安装器',updates).waitFor();return {installerTitle:await button('运行安装器',updates).getAttribute('title')};});
+}
+console.log(JSON.stringify({out,steps},null,2));process.exit(steps.some(s=>s.outcome==='failed')?1:0);

@@ -1,0 +1,1 @@
+{"code":"const openDialogLimit=50;export{openDialogLimit};\n","warnings":[],"map":{"version":3,"mappings":"AAQO,MAAM,gBAAkB","names":[],"ignoreList":[],"sources":["F:\\Axiom\\axiom-kiro-long-session-fb7031ed\\app\\src\\shared\\open-dialog.ts"],"sourcesContent":[null]}}

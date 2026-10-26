@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "phase": "serial-recovery-attempts",
+  "policy": {
+    "promptPaceMs": 30000,
+    "betweenModelMs": 90000,
+    "oneControlledPassPerModel": true,
+    "noPromptReplay": true,
+    "noModelConcurrency": true
+  },
+  "firstSerialAttempt": {
+    "startedAt": "2026-10-25T19:27:50.648Z",
+    "finishedAt": "2026-10-25T19:50:10.440Z",
+    "complete": false,
+    "halted": true,
+    "completedModels": [
+      "minimax-m2.1",
+      "claude-haiku-4.5"
+    ],
+    "preparationFailure": {
+      "model": "minimax-m2.5",
+      "category": "reload-lock-not-yet-released",
+      "recordedModelRounds": 0,
+      "promptsSent": 0
+    },
+    "ownerExitWasNotAcceptance": true,
+    "summarySha256": "8904d951a02bb8c4ffa2a52b27f41633cddbc39d7a551689d97a3ded012c18f4"
+  },
+  "continuation": {
+    "startedAt": "2026-10-25T19:55:56.824Z",
+    "finishedAt": "2026-10-25T20:50:01.065Z",
+    "controllerExitCode": 1,
+    "halted": false,
+    "models": [
+      {
+        "model": "minimax-m2.5",
+        "exitCode": 1,
+        "recordedRounds": 20,
+        "semanticFailureCount": 5,
+        "formatFailureCount": 16,
+        "stoppedByHttp429": false
+      },
+      {
+        "model": "glm-5",
+        "exitCode": 1,
+        "recordedRounds": 20,
+        "semanticFailureCount": 2,
+        "formatFailureCount": 16,
+        "stoppedByHttp429": false
+      },
+      {
+        "model": "qwen3-coder-next",
+        "exitCode": 1,
+        "recordedRounds": 20,
+        "semanticFailureCount": 7,
+        "formatFailureCount": 0,
+        "stoppedByHttp429": false
+      },
+      {
+        "model": "deepseek-3.2",
+        "exitCode": 1,
+        "recordedRounds": 20,
+        "semanticFailureCount": 3,
+        "formatFailureCount": 17,
+        "stoppedByHttp429": false
+      },
+      {
+        "model": "claude-sonnet-4.5",
+        "exitCode": 1,
+        "recordedRounds": 17,
+        "semanticFailureCount": 1,
+        "formatFailureCount": 16,
+        "stoppedByHttp429": true
+      }
+    ],
+    "summarySha256": "c89f168bfb19abd678d6464dcdc78be72515f443dabc3b95802b6e4779f81063"
+  },
+  "exitCodePolicy": "Controller/driver/curator success is not equivalent to protocol, semantic and whole-turn-format acceptance."
+}

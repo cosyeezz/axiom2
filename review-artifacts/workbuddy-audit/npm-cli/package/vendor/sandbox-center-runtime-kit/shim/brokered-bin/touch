@@ -1,0 +1,2 @@
+#!/bin/sh
+CODEBUDDY_BROKERED_APP="${0##*/}" exec "${0%/*}/codebuddy-toybox-dispatch" "$@"

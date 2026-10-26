@@ -1,0 +1,61 @@
+{
+  "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450",
+  "parentSessionId": "fb7031ed-69da-4b00-97da-70bb668d1a1c",
+  "taskRef": "t4017",
+  "createdAt": "2026-10-25T19:50:07.558Z",
+  "turns": [],
+  "taskId": "4a5ce8c1-8ac5-4590-80c3-353bf643f1c3",
+  "sessionId": "7467a77b-6089-4f45-a329-49962e7a893c",
+  "defaults": {
+    "main": {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "thinking": "max"
+    },
+    "task": {
+      "provider": "sky",
+      "id": "gpt-6-astra",
+      "thinking": "medium"
+    }
+  },
+  "harness": {
+    "version": "v2-controlled",
+    "controlledPrompts": true,
+    "paceMs": 30000,
+    "receiptTag": "recovery-v2",
+    "promptCorrelation": "receipt-inputIds-and-matching-user-text",
+    "sourceHashes": [
+      {
+        "path": "app/scripts/kiro-live-check.mjs",
+        "sha256": "cd685a611fd5de7067fde7db34dc6ededc04723bb31a3717adf52f5c810e266b"
+      },
+      {
+        "path": "app/scripts/kiro-live-plan.mjs",
+        "sha256": "7df6d20d325f826a9a65fa288bf5ac1820a76beca6258ff37118fa1fb6460c6b"
+      }
+    ],
+    "fixtures": [
+      {
+        "name": "inventory.csv",
+        "bytes": 52,
+        "sha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb"
+      },
+      {
+        "name": "ledger.json",
+        "bytes": 78,
+        "sha256": "0fc6d20e1c58558fc5f1e68c5b4ba536147137036895e076753bca9dbcd2ee3f"
+      }
+    ],
+    "workerPreparation": {
+      "strategy": "intermediate-profile-cold-reload",
+      "reloadId": "e3992805-4525-4d81-8efa-3e5d9ec1b471",
+      "status": "completed",
+      "modelMessagesUnchanged": true
+    }
+  },
+  "selection": {
+    "provider": "kiro",
+    "id": "auto",
+    "thinking": "off"
+  }
+}

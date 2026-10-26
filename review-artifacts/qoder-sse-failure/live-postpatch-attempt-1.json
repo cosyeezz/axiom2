@@ -1,0 +1,25 @@
+{
+  "method": "Axiom UI via OpenCLI; no direct provider requests",
+  "deploymentRecord": "deployment/applied.json",
+  "startedAt": "2026-10-25T15:19:52.289Z",
+  "newIndependentSession": true,
+  "run": {
+    "id": "bc71926d-a0ca-4dec-b614-9a5c7e98e028",
+    "sessionId": "7b50a829-c07c-42b8-9f2a-35546d7df053",
+    "status": "failed",
+    "selection": "{\"provider\":\"qoder-cn\",\"id\":\"gmodel\",\"thinking\":\"high\"}",
+    "startedAt": 1792941592995,
+    "endedAt": 1792941596534,
+    "error": "模型请求失败：Qoder 认证或权限失败（HTTP 403），请检查账号地区并重新登录。"
+  },
+  "session": {
+    "title": "这是Qoder接入的独立最小测试。不要调用任何工具，不要访问文件或网络。17乘以19等于多少？最终只回复数字。",
+    "workspaceId": "0bd0941b-802c-49cb-986d-0333f2b67450"
+  },
+  "binding": {
+    "file": "C:\\Users\\dane\\AppData\\Roaming\\Axiom2\\sessions\\0bd0941b-802c-49cb-986d-0333f2b67450\\2026-10-25T15-19-52-783Z_01a173a5-90ce-7589-a654-1fc070f71ee9.jsonl"
+  },
+  "conclusion": "HTTP 200 model.response followed by a 403-classified stream failure; exact frame not yet captured. Do not infer expired credentials. Original missing-choices fix not accepted yet.",
+  "latencyArtifact": "live-postpatch-latency-1.json",
+  "restartPerformed": false
+}

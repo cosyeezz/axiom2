@@ -1,0 +1,6 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "description": "A Notes conversation tab with session-local notes and native Chat actions",
+  "client": {"platform":"web","entry":"client/index.js","format":"module","apiVersion":1}
+}

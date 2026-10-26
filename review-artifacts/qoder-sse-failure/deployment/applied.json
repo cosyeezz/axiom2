@@ -1,0 +1,18 @@
+{
+  "AppliedAt": "2026-10-25T08:18:24.4118118-07:00",
+  "Method": "Atomic file replacement; existing server and workers not restarted",
+  "Records": [
+    {
+      "Target": "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\qoder-sse.js.map",
+      "Backup": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-sse-failure\\deployment\\backup-20261025-081824\\qoder-sse.js.map",
+      "PreviousSha256": "F5F5215E14362F17D2BC3947AED2F8D3E4BB960C606D7148B98FF0E0E569FBE8",
+      "AppliedSha256": "E0D7B6C54F80C31567A3A31B55353A4B1A20C19D6299126622A07083A4AE2269"
+    },
+    {
+      "Target": "F:\\Axiom\\axiom2\\app\\dist\\server\\providers\\qoder-sse.js",
+      "Backup": "F:\\Axiom\\axiom2\\review-artifacts\\qoder-sse-failure\\deployment\\backup-20261025-081824\\qoder-sse.js",
+      "PreviousSha256": "365B3B9461495A1F59F89F00E4A9FEDC64B26DC59B78A1DCDCE8FE02902A79ED",
+      "AppliedSha256": "36A276EABAC46BE63328B1C329C8075DDD2D70B0670A85C370B1961F0CAAD0AB"
+    }
+  ]
+}

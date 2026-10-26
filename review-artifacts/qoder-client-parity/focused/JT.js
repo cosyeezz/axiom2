@@ -1,0 +1,1 @@
+function JT(A){if(!Si(A))return;let e={},t=tAe(A.temperature);void 0!==t&&(e.temperature=t);let i=Zgl(A.topP);void 0!==i&&(e.topP=i);let r=prt(A.topK);void 0!==r&&(e.topK=r);let n=prt(A.maxTokens);void 0!==n&&(e.maxTokens=n);let o=iAe(A.reasoning);return o&&(e.reasoning=o),Object.keys(e).length>0?e:void 0}

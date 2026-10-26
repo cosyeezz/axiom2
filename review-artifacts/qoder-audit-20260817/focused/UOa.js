@@ -1,0 +1,1 @@
+function UOa(A){let e=A.model.capabilities.vision;return A.messages.map(A=>{switch(A.role){case"system":return{role:"system",content:HTg(A.content)};case"user":return{role:"user",...FOa(A.content,e)};case"tool":return{role:"tool",...FOa(A.content,e),tool_call_id:A.toolCallId};case"assistant":return jTg(A)}})}

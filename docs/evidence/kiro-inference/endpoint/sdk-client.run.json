@@ -1,0 +1,11 @@
+{
+  "exe": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/dumpbin.exe",
+  "args": [
+    "/nologo",
+    "/disasm",
+    "/range:0x140bea5b0,0x140beb794",
+    "C:/Users/dane/AppData/Local/Kiro-Cli/kiro-cli.exe"
+  ],
+  "exit": 0,
+  "stderr": ""
+}

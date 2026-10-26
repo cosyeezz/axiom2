@@ -16,7 +16,7 @@ import { checkTasksUI } from "./tasks-ui.js";
 import { checkCompressionUI } from "./compression-ui.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-ui-")),
-  artifacts = resolve("test-results");
+  artifacts = resolve(process.env.AXIOM_UI_ARTIFACTS || "test-results");
 mkdirSync(artifacts, { recursive: true });
 const project = join(root, "项目 A");
 mkdirSync(project);
@@ -529,7 +529,7 @@ try {
   await page.locator("#reset-provider").click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "确认", exact: true })
+    .getByRole("button", { name: "放弃修改", exact: true })
     .click();
   await page.waitForFunction(() => !document.querySelector(".supplier-option"));
   assert.equal(await page.locator("#reset-provider").isDisabled(), true);
@@ -608,7 +608,7 @@ try {
   );
   await page.locator("#provider-key").fill("UI-CANCELLED-KEY");
   await page.locator("#reset-provider").click();
-  await page.getByRole("dialog", { name: "放弃修改？" }).getByRole("button", { name: "确认", exact: true }).click();
+  await page.getByRole("dialog", { name: "放弃修改？" }).getByRole("button", { name: "放弃修改", exact: true }).click();
   await page.waitForFunction(() => (document.querySelector("#provider-key") as HTMLInputElement)?.value === "");
   assert.equal(JSON.parse(readFileSync(join(root, "data/pi/auth.json"), "utf8"))["axiom-ui-check"].key, "UI-LOGIN-TEST-KEY");
   // External updates leave the local draft/focus intact; stale publication cannot overwrite them.
@@ -649,7 +649,7 @@ try {
   await page.getByRole("button", { name: "重新读取配置", exact: true }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "确认", exact: true })
+    .getByRole("button", { name: "放弃并重新读取", exact: true })
     .click();
   await page.waitForFunction(
     () =>
@@ -663,7 +663,7 @@ try {
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "确认", exact: true })
+    .getByRole("button", { name: "删除草稿", exact: true })
     .click();
   await page.locator("#save-provider").click();
   await page
@@ -678,7 +678,7 @@ try {
   await page.locator("#save-provider").click();
   await page
     .getByRole("dialog", { name: "确认供应商级退出登录？" })
-    .getByRole("button", { name: "确认", exact: true })
+    .getByRole("button", { name: "退出并保存", exact: true })
     .click();
   await page.waitForFunction(() =>
     document.body.innerText.includes("配置已发布并刷新目录"),
@@ -701,7 +701,7 @@ try {
   await page.getByRole("button", { name: "删除供应商", exact: true }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "确认", exact: true })
+    .getByRole("button", { name: "删除供应商", exact: true })
     .click();
   await page.waitForFunction(() => !document.querySelector(".supplier-option"));
   assert.equal(

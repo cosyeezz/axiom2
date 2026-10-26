@@ -1,0 +1,29 @@
+"use strict";exports.ids=["1617"],exports.modules={34560(e,t,n){n.d(t,{a:()=>B,b:()=>y,c:()=>F});var i=n(98995),l=n(20869),a=n(29486);function B(e,t,n){if(!Number.isSafeInteger(t)||t<0||t>e.limits.maxInputBytes)throw new l.l(`${n}: input size limit exceeded (${e.limits.maxInputBytes} bytes)`,"string_length");e.executionScope?.consumeInput(t,n)}async function y(e,t,n){let{cmdName:i,allowStdinMarker:l=!0,stopOnError:f=!1,batchSize:c=100}=n;if(0===t.length)return{files:[{filename:"",content:e.stdin}],stderr:"",exitCode:0};let u=[],d="",p=0;for(let n=0;n<t.length;n+=c){let h=t.slice(n,n+c);for(let t of(await Promise.all(h.map(async t=>{if(l&&"-"===t)return{filename:"-",content:e.stdin,error:null};try{let n=e.fs.resolvePath(e.cwd,t),i=await (0,a.g)(e.fs,n);return{filename:t,content:i,error:null}}catch{return{filename:t,content:a.f,error:`${i}: ${t}: No such file or directory
+`}}}))))if(t.error){if(d+=t.error,p=1,f)return{files:u,stderr:d,exitCode:p}}else u.push({filename:t.filename,content:t.content})}return{files:u,stderr:d,exitCode:p}}async function F(e,t,n){let i=await y(e,t,{...n,stopOnError:!0});return 0!==i.exitCode?{ok:!1,error:{stdout:"",stderr:i.stderr,exitCode:i.exitCode}}:{ok:!0,content:i.files.map(e=>e.content).join("")}}(0,i.createRequire)(__filename)},42785(e,t,n){n.d(t,{a:()=>p,b:()=>h});var i=n(98995),l=n(34560),a=n(29486),f=n(99244),c=n(99223);(0,i.createRequire)(__filename);var u={name:"wc",summary:"print newline, word, and byte counts for each file",usage:"wc [OPTION]... [FILE]...",options:["-c, --bytes      print the byte counts","-m, --chars      print the character counts","-l, --lines      print the newline counts","-w, --words      print the word counts","    --help       display this help and exit"]},d={lines:{short:"l",long:"lines",type:"boolean"},words:{short:"w",long:"words",type:"boolean"},bytes:{short:"c",long:"bytes",type:"boolean"},chars:{short:"m",long:"chars",type:"boolean"}},p={name:"wc",async execute(e,t){if((0,c.b)(e))return(0,c.a)(u);let n=(0,f.a)("wc",e,d);if(!n.ok)return n.error;let{lines:i,words:a}=n.result.flags,p=n.result.flags.bytes,h=n.result.flags.chars,m=n.result.positional;i||a||p||h||(i=a=p=!0);let g=p||h,w=await (0,l.b)(t,m,{cmdName:"wc",stopOnError:!1});if(0===m.length){let e=C(w.files[0].content,h);return{stdout:`${x(e,i,a,g,"",0)}
+`,stderr:"",exitCode:0}}let b=[],$=0,S=0,_=0;for(let{filename:e,content:t}of w.files){let n=C(t,h);$+=n.lines,S+=n.words,_+=n.third,b.push({filename:e,stats:n})}let k=m.length>1?$:Math.max(...b.map(e=>e.stats.lines)),v=m.length>1?S:Math.max(...b.map(e=>e.stats.words)),O=m.length>1?_:Math.max(...b.map(e=>e.stats.third)),M=3*(m.length>1);i&&(M=Math.max(M,String(k).length)),a&&(M=Math.max(M,String(v).length)),g&&(M=Math.max(M,String(O).length));let I="";for(let{filename:e,stats:t}of b)I+=`${x(t,i,a,g,e,M)}
+`;return m.length>1&&(I+=`${x({lines:$,words:S,third:_},i,a,g,"total",M)}
+`),{stdout:I,stderr:w.stderr,exitCode:w.exitCode}}};function C(e,t){let n=e.length,i=t?Array.from((0,a.d)(e)).length:n,l=0,f=0,c=!1;for(let t=0;t<n;t++){let n=e[t];n===`
+`?(l++,c&&(f++,c=!1)):" "===n||"	"===n||"\r"===n?c&&(f++,c=!1):c=!0}return c&&f++,{lines:l,words:f,third:i}}function x(e,t,n,i,l,a){let f=[];t&&f.push(String(e.lines).padStart(a)),n&&f.push(String(e.words).padStart(a)),i&&f.push(String(e.third).padStart(a));let c=f.join(" ");return l&&(c+=` ${l}`),c}var h={name:"wc",flags:[{flag:"-l",type:"boolean"},{flag:"-w",type:"boolean"},{flag:"-c",type:"boolean"},{flag:"-m",type:"boolean"}],stdinType:"text",needsFiles:!0}},99223(e,t,n){function s(e){let t=`${e.name} - ${e.summary}
+
+`;if(t+=`Usage: ${e.usage}
+`,e.description){if(t+=`
+Description:
+`,"string"==typeof e.description)for(let n of e.description.split(`
+`))t+=n?`  ${n}
+`:`
+`;else if(e.description.length>0)for(let n of e.description)t+=n?`  ${n}
+`:`
+`}if(e.options&&e.options.length>0)for(let n of(t+=`
+Options:
+`,e.options))t+=`  ${n}
+`;if(e.examples&&e.examples.length>0)for(let n of(t+=`
+Examples:
+`,e.examples))t+=`  ${n}
+`;if(e.notes&&e.notes.length>0)for(let n of(t+=`
+Notes:
+`,e.notes))t+=`  ${n}
+`;return{stdout:t,stderr:"",exitCode:0}}function o(e){return e.includes("--help")}function r(e,t){return{stdout:"",stderr:t.startsWith("--")?`${e}: unrecognized option '${t}'
+`:`${e}: invalid option -- '${t.replace(/^-/,"")}'
+`,exitCode:1}}n.d(t,{a:()=>s,b:()=>o,c:()=>r}),(0,n(98995).createRequire)(__filename)},99244(e,t,n){n.d(t,{a:()=>x});var i=n(98995),l=n(99223);function x(e,t,n){let i=new Map,a=new Map;for(let[e,t]of Object.entries(n)){let n={name:e,type:t.type};t.short&&i.set(t.short,n),t.long&&a.set(t.long,n)}let f=Object.create(null);for(let[e,t]of Object.entries(n))void 0!==t.default?f[e]=t.default:"boolean"===t.type&&(f[e]=!1);let c=[],u=!1;for(let n=0;n<t.length;n++){let d=t[n];if(u||!d.startsWith("-")||"-"===d){c.push(d);continue}if("--"===d){u=!0;continue}if(d.startsWith("--")){let i=d.indexOf("="),c,u;-1!==i?(c=d.slice(2,i),u=d.slice(i+1)):c=d.slice(2);let p=a.get(c);if(!p)return{ok:!1,error:(0,l.c)(e,d)};let{name:h,type:m}=p;if("boolean"===m)f[h]=!0;else{if(void 0===u){if(n+1>=t.length)return{ok:!1,error:{stdout:"",stderr:`${e}: option '--${c}' requires an argument
+`,exitCode:1}};u=t[++n]}f[h]="number"===m?parseInt(u,10):u}}else{let a=d.slice(1);for(let c=0;c<a.length;c++){let u=a[c],d=i.get(u);if(!d)return{ok:!1,error:(0,l.c)(e,`-${u}`)};let{name:p,type:h}=d;if("boolean"===h)f[p]=!0;else{let i;if(c+1<a.length)i=a.slice(c+1);else{if(!(n+1<t.length))return{ok:!1,error:{stdout:"",stderr:`${e}: option requires an argument -- '${u}'
+`,exitCode:1}};i=t[++n]}f[p]="number"===h?parseInt(i,10):i;break}}}}return{ok:!0,result:{flags:f,positional:c}}}(0,i.createRequire)(__filename)},20488(e,t,n){n.r(t),n.d(t,{flagsForFuzzing:()=>l.b,wcCommand:()=>l.a});var i=n(98995),l=n(42785);n(34560),n(94362),n(20869),n(29486),n(99244),n(99223),n(7863),(0,i.createRequire)(__filename)}};

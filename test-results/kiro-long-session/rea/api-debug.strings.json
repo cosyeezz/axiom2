@@ -1,0 +1,86 @@
+[
+  {
+    "instruction": "0000000143223B95: 48 8D 15 34 87 67  lea         rdx,[000000015B89C2D0h]",
+    "text": "conversation_iduser_input_messagehistoryagent_continuation_idadditional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamAssistantResponseEventCode"
+  },
+  {
+    "instruction": "0000000143223BE1: 4C 8D 05 F7 86 67  lea         r8,[000000015B89C2DFh]",
+    "text": "user_input_messagehistoryagent_continuation_idadditional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeRefere"
+  },
+  {
+    "instruction": "0000000143223C5C: 4C 8D 05 8E 86 67  lea         r8,[000000015B89C2F1h]",
+    "text": "historyagent_continuation_idadditional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeReferenceEventFollowupPr"
+  },
+  {
+    "instruction": "0000000143223D76: 4C 8D 05 B3 84 67  lea         r8,[000000015B89C230h]",
+    "text": "AssistantResponseMessageUserInputMessageGifJpegPngWebpBytesToolInputSchemajsonSuccesscontentuser_input_message_contextuser_intentimagesmodel_idConversationStateconversation_iduser_"
+  },
+  {
+    "instruction": "0000000143223DD2: 48 8D 15 FB 86 67  lea         rdx,[000000015B89C4D4h]",
+    "text": "message_idtool_usesreasoning_contentReasoningContentForHistorytextsignatureredacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_varia"
+  },
+  {
+    "instruction": "0000000143223E22: 4C 8D 05 5C 84 67  lea         r8,[000000015B89C285h]",
+    "text": "contentuser_input_message_contextuser_intentimagesmodel_idConversationStateconversation_iduser_input_messagehistoryagent_continuation_idadditional_model_request_fieldsToolSpecifica"
+  },
+  {
+    "instruction": "0000000143223E83: 4C 8D 05 54 86 67  lea         r8,[000000015B89C4DEh]",
+    "text": "tool_usesreasoning_contentReasoningContentForHistorytextsignatureredacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitSta"
+  },
+  {
+    "instruction": "0000000143223F28: 4C 8D 05 19 83 67  lea         r8,[000000015B89C248h]",
+    "text": "UserInputMessageGifJpegPngWebpBytesToolInputSchemajsonSuccesscontentuser_input_message_contextuser_intentimagesmodel_idConversationStateconversation_iduser_input_messagehistoryagen"
+  },
+  {
+    "instruction": "0000000143223FCF: 4C 8D 05 60 85 67  lea         r8,[000000015B89C536h]",
+    "text": "tool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPracticesmcpServersexternal_idpaccessTo"
+  },
+  {
+    "instruction": "0000000143224034: 4C 8D 05 02 83 67  lea         r8,[000000015B89C33Dh]",
+    "text": "namedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeReferenceEventFollowupPromptEventIntentsEventInvalidStateEventMessageMetadataEventContextUsageEventM"
+  },
+  {
+    "instruction": "0000000143224091: 4C 8D 05 A9 84 67  lea         r8,[000000015B89C541h]",
+    "text": "inputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPracticesmcpServersexternal_idpaccessTokenexpiresA"
+  },
+  {
+    "instruction": "0000000143224150: 4C 8D 05 90 83 67  lea         r8,[000000015B89C4E7h]",
+    "text": "reasoning_contentReasoningContentForHistorytextsignatureredacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusI"
+  },
+  {
+    "instruction": "00000001432241BE: 4C 8D 05 4D 83 67  lea         r8,[000000015B89C512h]",
+    "text": "textsignatureredacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPra"
+  },
+  {
+    "instruction": "0000000143224209: 48 8D 15 06 83 67  lea         rdx,[000000015B89C516h]",
+    "text": "signatureredacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPractic"
+  },
+  {
+    "instruction": "0000000143224256: 4C 8D 05 C2 82 67  lea         r8,[000000015B89C51Fh]",
+    "text": "redacted_contentToolUsetool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPracticesmcpServ"
+  },
+  {
+    "instruction": "00000001432242A9: 48 8D 15 07 80 67  lea         rdx,[000000015B89C2B7h]",
+    "text": "model_idConversationStateconversation_iduser_input_messagehistoryagent_continuation_idadditional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamA"
+  },
+  {
+    "instruction": "00000001432243A0: 4C 8D 05 8F 81 67  lea         r8,[000000015B89C536h]",
+    "text": "tool_use_idinputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPracticesmcpServersexternal_idpaccessTo"
+  },
+  {
+    "instruction": "0000000143224405: 4C 8D 05 31 7F 67  lea         r8,[000000015B89C33Dh]",
+    "text": "namedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeReferenceEventFollowupPromptEventIntentsEventInvalidStateEventMessageMetadataEventContextUsageEventM"
+  },
+  {
+    "instruction": "0000000143224462: 4C 8D 05 D8 80 67  lea         r8,[000000015B89C541h]",
+    "text": "inputEnvStateoperating_systemcurrent_working_directoryenvironment_variablesGitStatestatusImageBlockformatToolResultApplyCommonBestPracticesmcpServersexternal_idpaccessTokenexpiresA"
+  },
+  {
+    "instruction": "0000000143224A9B: 48 8D 15 56 78 67  lea         rdx,[000000015B89C2F8h]",
+    "text": "agent_continuation_idadditional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeReferenceEventFollowupPromptEve"
+  },
+  {
+    "instruction": "0000000143224ACC: 48 8D 15 3A 78 67  lea         rdx,[000000015B89C30Dh]",
+    "text": "additional_model_request_fieldsToolSpecificationnamedescriptioninput_schemaChatResponseStreamAssistantResponseEventCodeEventCodeReferenceEventFollowupPromptEventIntentsEventInvalid"
+  }
+]

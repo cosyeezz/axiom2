@@ -1,0 +1,366 @@
+{
+  "sessionId": "67861ec7-05e7-4cfb-92d3-1e1437d0cf4c",
+  "taskRef": "t4003",
+  "transcript": "2026-10-25T17-18-31-507Z_01a17412-3053-70b6-89be-bc65e49cb058.jsonl",
+  "extractedAt": "2026-10-25T18:40:43.015Z",
+  "files": [
+    {
+      "path": "dist/server/providers/kiro-chat.js",
+      "sha256": "c70d7c5759fffc409c156ceaf6010e679d07f466774ae5048f320f6a5f843ff6",
+      "builtAt": "2026-10-25T18:37:14.741Z"
+    },
+    {
+      "path": "dist/server/providers/kiro-chat-protocol.js",
+      "sha256": "a7129472f2cbdc443a24caca117af91d7ec41824f6ed2d1d2ab06a5ae036e161",
+      "builtAt": "2026-10-25T18:37:14.716Z"
+    },
+    {
+      "path": "scripts/kiro-live-check.mjs",
+      "sha256": "5563e6e8ba6bbbd848b14132ae3204fc79450ab637346ef893f4854cc51fd928",
+      "builtAt": "2026-10-25T17:36:11.725Z"
+    },
+    {
+      "path": "scripts/kiro-live-lifecycle.mjs",
+      "sha256": "f358c41fb39ef203f9b9688a50c35f5c7c3f52e72aaab863d628fbe8c33931bf",
+      "builtAt": "2026-10-25T18:38:49.046Z"
+    },
+    {
+      "path": "scripts/kiro-live-native-proof.mjs",
+      "sha256": "1a013c6d577fb956ad467101dbfc707dbe01562b1b4241ee5b05c36ebc77a70f",
+      "builtAt": "2026-10-25T18:37:05.329Z"
+    }
+  ],
+  "records": [
+    {
+      "id": "3da1e8f2",
+      "timestamp": 1792948874449,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "8efc8a9a5addc300812015c26a80c47804b2d0244022e8e8f7f388fae085109e",
+      "diagnostics": []
+    },
+    {
+      "id": "f6cca6dc",
+      "timestamp": 1792948980768,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "1abffc5fd2c5d623507ccd16e8e49a3deb50320c84add80eb78a03fd3847107a",
+      "diagnostics": []
+    },
+    {
+      "id": "3362f32e",
+      "timestamp": 1792948988972,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "5446b6fc",
+      "timestamp": 1792948994501,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "26a3c9e1",
+      "timestamp": 1792948997955,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "3b33da3c",
+      "timestamp": 1792949001451,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "b6f0be40dd67f63d0e54d4f2c3ef0ec656b515a32afd836f55a04fba25810a00",
+      "diagnostics": []
+    },
+    {
+      "id": "6ed1a8b8",
+      "timestamp": 1792949082338,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "00fb3d2d",
+      "timestamp": 1792949089623,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "ea6e5b57",
+      "timestamp": 1792949092357,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f2a327e1cbf7d8c5197d5f85b913adc676713509bdab49d4fc72759e9c546e09",
+      "diagnostics": []
+    },
+    {
+      "id": "2936cf51",
+      "timestamp": 1792949097287,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "off",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e0283aae0be8299560eb7b5530685af3bd371726e6b2084b70d0a4470ba17ad9",
+      "diagnostics": []
+    },
+    {
+      "id": "f60c78af",
+      "timestamp": 1792949104861,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "minimal",
+      "providerThinkingLevel": "1024",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "1c4abfa4b79b76edfbb4eb3c1b85407d94286f219e1cf19abdddd249211cf4d2",
+      "diagnostics": []
+    },
+    {
+      "id": "741d84f3",
+      "timestamp": 1792949113731,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "f5994bdb018aae034438963493e2e38e305465c2aa5518314bc7e9fd5556f530",
+      "diagnostics": []
+    },
+    {
+      "id": "89a9a2ef",
+      "timestamp": 1792949200813,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": true,
+      "answerSha256": "a33a30eff6dc3eec2a27da064bcfc4b69bd13fbad8f1123c1863175d741ed786",
+      "diagnostics": []
+    },
+    {
+      "id": "88aca664",
+      "timestamp": 1792949809485,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "high",
+      "providerThinkingLevel": "20000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "40e214dc101dd4b68bce049381b96bcaafea84fd72a07dfb9d341a5d3e2a59a9",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792949809490,
+          "omittedReasoningTextBlocks": 5,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "ac62e340",
+      "timestamp": 1792950123242,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950123244,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "5ff82892",
+      "timestamp": 1792950157014,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950157015,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "4fa1b539",
+      "timestamp": 1792950159428,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950159428,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "b5ef72fd",
+      "timestamp": 1792950163811,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950163812,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "0a9b8381",
+      "timestamp": 1792950172213,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950172213,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "aa0cb001",
+      "timestamp": 1792950307182,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "toolUse",
+      "thinkingLevel": "low",
+      "providerThinkingLevel": "4000",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792950307184,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        }
+      ]
+    },
+    {
+      "id": "ad936748",
+      "timestamp": 1792950314122,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "error",
+      "thinkingLevel": "low",
+      "localThinkingBlocks": 0,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostics": []
+    },
+    {
+      "id": "9bf2d3d3",
+      "timestamp": 1792953637245,
+      "model": "claude-sonnet-4.5",
+      "stopReason": "stop",
+      "thinkingLevel": "medium",
+      "providerThinkingLevel": "16000",
+      "localThinkingBlocks": 1,
+      "answerHasPriorReasoningWrapper": false,
+      "answerSha256": "86f9229bf37fb420adfc69ee4ea1e8ee2522877802be619f15df506df9209e54",
+      "diagnostics": [
+        {
+          "type": "kiro-reasoning-history-omitted",
+          "timestamp": 1792953637247,
+          "omittedReasoningTextBlocks": 6,
+          "opaqueReasoningBlocks": 0,
+          "omittedSignatures": 0
+        },
+        {
+          "type": "kiro-interrupted-tools-omitted",
+          "timestamp": 1792953637247,
+          "omittedToolCalls": 1
+        }
+      ]
+    }
+  ]
+}
