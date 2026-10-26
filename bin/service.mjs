@@ -214,8 +214,9 @@ async function initialize(options) {
 }
 export async function serve(background = false, { initialize: bootService = initialize, cli: installationCli = cli, version: installedVersion } = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error("AXIOM_PORT 无效");
-  // Resolve package metadata before acquiring a reservation that must be released.
-  const version = installedVersion ?? (await readJson(new URL("../package.json", import.meta.url)))?.version ?? null;
+  // Install the daemon IPC listener before yielding to metadata reads: a launcher
+  // (or a gated bootstrap) may already have the startup token ready to deliver.
+  let version = installedVersion;
   let record;
   if (background && process.env.AXIOM_START_TOKEN) {
     const token = process.env.AXIOM_START_TOKEN;
@@ -283,6 +284,7 @@ export async function serve(background = false, { initialize: bootService = init
   control.headersTimeout = 5000;
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { void shutdown(); });
   try {
+    version ??= (await readJson(new URL("../package.json", import.meta.url)))?.version ?? null;
     await new Promise((resolve, reject) => { control.once("error", reject); control.listen(0, "127.0.0.1", resolve); });
     controlPort = control.address().port;
     await atomicJson(descriptor, { port: controlPort, token, pid: process.pid });
