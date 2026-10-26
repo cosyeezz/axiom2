@@ -185,8 +185,9 @@ export class ExecutionPool {
         void this.retireInstance(i, 'prepare_timeout');
       }, this.limits.prepareTimeoutMs);
       try {
-        const child=fork(e.workerPath,[],{cwd:e.cwd,execArgv:e.execArgv,env:{...e.env,AXIOM_EXECUTION_INSTANCE:i.id,AXIOM_EXECUTION_GENERATION:String(i.generation),AXIOM_EXECUTION_PROFILE:e.profileHash},stdio:['ignore','ignore','pipe','ipc'],detached:process.platform!=='win32'});
-        i.child=child;this.created++;child.stderr?.resume();
+        // Discard stderr without a pipe that inherited handles could keep open after worker exit.
+        const child=fork(e.workerPath,[],{cwd:e.cwd,execArgv:e.execArgv,env:{...e.env,AXIOM_EXECUTION_INSTANCE:i.id,AXIOM_EXECUTION_GENERATION:String(i.generation),AXIOM_EXECUTION_PROFILE:e.profileHash},stdio:['ignore','ignore','ignore','ipc'],detached:process.platform!=='win32'});
+        i.child=child;this.created++;
         child.on('error',()=>{i.processReady.reject(Error('工作进程启动失败'));i.environmentReady.reject(Error('执行环境准备失败'));});
         child.on('message',(event:any)=>{
           if(event.instance?.instanceId===i.id&&event.instance?.generation===i.generation&&event.instance?.profileHash===e.profileHash){

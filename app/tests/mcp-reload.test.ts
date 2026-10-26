@@ -8,6 +8,7 @@ import { tmpdir } from "./temporary.js";
 import { Agents } from "../src/server/agents.js";
 import { Store } from "../src/server/storage.js";
 import { ModelService } from "../src/server/model-service.js";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import { resourceChanges } from "../src/shared/reload.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
@@ -19,8 +20,8 @@ const wait = async (check: () => boolean, message: string) => {
 test("MCP reload applies membership and same-name configuration changes without inference; malformed config preserves the applied baseline", { timeout: 120000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-mcp-reload-")), pi = join(root, "pi"), cwd = join(root, "project");
   mkdirSync(pi); mkdirSync(cwd);
-  const previous = process.env.AXIOM_PI_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
-  process.env.AXIOM_PI_DIR = pi; process.env.AXIOM_EXECUTION_MODE = "managed";
+  const previous = process.env.AXIOM_PI_DIR, previousNative = process.env.PI_CODING_AGENT_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
+  process.env.AXIOM_PI_DIR = pi; process.env.PI_CODING_AGENT_DIR = join(root, "native-auth"); process.env.AXIOM_EXECUTION_MODE = "managed";
   const script = join(root, "mcp.cjs"), log = join(root, "mcp.log"), config = join(pi, "mcp.json");
   writeFileSync(script, `const {createInterface}=require('node:readline'); const {appendFileSync}=require('node:fs');
 const [log,label]=process.argv.slice(2); const record=kind=>appendFileSync(log,JSON.stringify({kind,label,pid:process.pid})+'\\n'); record('start');
@@ -36,7 +37,9 @@ setTimeout(()=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result
   const requests: any[] = [];
   const http = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    const body = JSON.parse(raw); requests.push(body);
+    const body = JSON.parse(raw);
+    if (replyToFixtureTitle(body, res)) return;
+    requests.push(body);
     const tool = body.tools?.find((entry: any) => entry.function?.name?.startsWith("mcp__"));
     const call = tool && body.messages.at(-1)?.role !== "tool";
     const delta = call ? { role: "assistant", tool_calls: [{ index: 0, id: randomUUID(), type: "function", function: { name: tool.function.name, arguments: "{}" } }] }
@@ -93,6 +96,7 @@ setTimeout(()=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result
   } finally {
     await agents.close(); store.close(); http.closeAllConnections(); await new Promise<void>(resolve => http.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+    if (previousNative === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previousNative;
     if (previousMode === undefined) delete process.env.AXIOM_EXECUTION_MODE; else process.env.AXIOM_EXECUTION_MODE = previousMode;
     rmSync(root, { recursive: true, force: true });
   }

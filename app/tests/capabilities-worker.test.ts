@@ -15,8 +15,11 @@ const wait = async (check: () => boolean) => {
 };
 test("all catalog skills stay manually usable, automatic selection controls the prompt, and MCP locks survive restart", { timeout: 120000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-capabilities-worker-")), cwd = join(root, "项目 workspace"), modelDir = join(root, "共享 Pi agent");
-  const previous = process.env.AXIOM_PI_DIR;
+  const previous = process.env.AXIOM_PI_DIR, previousNative = process.env.PI_CODING_AGENT_DIR;
+  const nativeDir = join(root, ".pi", "agent");
   process.env.AXIOM_PI_DIR = relative(process.cwd(), modelDir);
+  // Keep OAuth/refresh locks private without relocating them to the model directory.
+  process.env.PI_CODING_AGENT_DIR = nativeDir;
   mkdirSync(modelDir, { recursive: true });
   for (const name of ["chosen-skill", "unused-skill"]) {
     mkdirSync(join(cwd, ".pi", "skills", name), { recursive: true });
@@ -118,6 +121,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
     assert.ok(catalog.mcp.some(item => item.id === "chosen"));
     assert.ok(!catalog.mcp.some(item => item.id === "app-only"), "uses the configured shared Pi directory, not the application resource directory");
     assert.equal(connections, 0, "catalog does not connect MCP");
+    assert.equal(existsSync(nativeDir), false, "native OAuth storage is cold before execution preparation");
     const selectedSkill = catalog.skills.find(item => item.name === "chosen-skill")!;
     const sharedSkill = catalog.skills.find(item => item.name === "shared-chosen")!;
     assert.equal(sharedSkill?.source, join(modelDir, "skills", "shared-chosen", "SKILL.md"));
@@ -139,6 +143,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
     assertCompleted(scope);
     assert.equal(app.agents.capabilities.state(scope).locked, true);
     assert.equal(connections, 1); assert.equal(calls, 1); assert.equal(blockedConnections, 0);
+    assert.equal(readFileSync(join(nativeDir, "mcp-auth.json"), "utf8"), "{}", "MCP keeps using the original native credential namespace");
     assert.ok(discoveryCount() > 0, "extension resource discovery actually ran");
     const first = requests[0];
     assertRequestSelection(first, true);
@@ -204,6 +209,7 @@ test("all catalog skills stay manually usable, automatic selection controls the 
   } finally {
     await app?.close(); fixture.closeAllConnections(); await new Promise<void>(resolve => fixture.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+    if (previousNative === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previousNative;
     rmSync(root, { recursive: true, force: true });
   }
 });

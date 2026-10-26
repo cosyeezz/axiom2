@@ -1,3 +1,6 @@
+import "./pi-settings-storage.js";
+import { getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { AppError } from "../shared/protocol.js";
 import { modelProxyRevision, providerProxyUrl, parseProviderProxy } from "./integrations/model-proxy-env.js";
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -69,15 +72,35 @@ export class ExecutionProfiles {
     // Store's service lock protects this data root. Never clean the shared pi directory.
     for (const name of readdirSync(this.directory)) if (/^[a-f0-9]{64}(?:\.[a-f0-9-]{36})?\.json$/.test(name)) rmSync(join(this.directory, name), { force: true });
   }
-  prepare(input: EnvironmentInput): PreparedEnvironment { return this.prepareWithResources(input); }
+  private initializeAgent(input: EnvironmentInput): boolean {
+    if (input.entry !== "agent") return true;
+    let ready = true;
+    // Match the worker before capturing resources: even an SDK settings read can
+    // create its parent directories and acquire the application settings lock.
+    try { ready = SettingsManager.create(input.cwd, join(this.root, "pi"), { projectTrusted: true }).drainErrors().length === 0; }
+    catch { ready = false; }
+    // Keep the SDK OAuth account/refresh-lock namespace, including relative paths
+    // resolved by the worker cwd. Do not open, create or migrate credential files.
+    try { mkdirSync(resolve(input.cwd, getAgentDir()), { recursive: true, mode: 0o700 }); }
+    catch { ready = false; }
+    // Optional initialization failure keeps cold execution available. It does not
+    // turn off the independent resource identity and drift checks below.
+    return ready;
+  }
+  prepare(input: EnvironmentInput): PreparedEnvironment {
+    return this.prepareWithResources(input, undefined, this.initializeAgent(input));
+  }
   async prepareAsync(input: EnvironmentInput, signal?: AbortSignal): Promise<PreparedEnvironment> {
     if (input.entry !== 'agent') return this.prepare(input);
+    if (signal?.aborted) throw new AppError("AGENT_STOPPED", "执行环境准备已停止");
+    const ready = this.initializeAgent(input);
     let captured: { version: string; verifiable: boolean };
     try { captured = { version: await resourceIdentityAsync(input.cwd, join(this.root, 'pi'), signal), verifiable: true }; }
     catch { captured = { version: randomUUID(), verifiable: false }; }
-    return this.prepareWithResources(input, captured);
+    if (signal?.aborted) throw new AppError("AGENT_STOPPED", "执行环境准备已停止");
+    return this.prepareWithResources(input, captured, ready);
   }
-  private prepareWithResources(input: EnvironmentInput, captured?: { version: string; verifiable: boolean }): PreparedEnvironment {
+  private prepareWithResources(input: EnvironmentInput, captured?: { version: string; verifiable: boolean }, ready = true): PreparedEnvironment {
     const source = import.meta.url.endsWith(".ts");
     const workerPath = fileURLToPath(new URL(`./${input.entry === "agent" ? "agent" : input.entry === "memory" ? "memory" : "compression"}-worker.${source ? "ts" : "js"}`, import.meta.url));
     const modelDigest = digest(stable(JSON.parse(input.modelsRaw)));
@@ -107,7 +130,7 @@ export class ExecutionProfiles {
     const proxyRevision = digest(modelProxyRevision(this.root));
     const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "" };
     const execArgv = source ? ["--import", import.meta.resolve("tsx")] : [];
-    const reuse: ReuseMode = input.entry === "agent" ? (verifiable ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
+    const reuse: ReuseMode = input.entry === "agent" ? (verifiable && ready ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,
       entry: input.entry, reuse, cwd: canonicalPath(input.cwd), agentDir: resolve(this.root, "pi"),
       modelDir: canonicalPath(input.modelDir), env, execArgv, modelDigest, configRevision, settings, resourceVersion,
@@ -157,7 +180,7 @@ export class ExecutionProfiles {
     };
     return Object.freeze({ profileHash, entry: input.entry, reuse, cwd: input.cwd, root: this.root, modelDir: input.modelDir,
       modelsFile: snapshot.path, workerPath, execArgv, env, environmentWarm: input.entry === "memory" && input.mode === "D",
-      provider, configRevision, prewarmAllowed: verifiable,
+      provider, configRevision, prewarmAllowed: verifiable && ready,
       current,
       currentAsync: async (signal?: AbortSignal, onReject?: RejectionObserver) => {
         if (signal?.aborted) return rejectExecution(onReject, { check: 'aborted', stage: 'pre_io' });
