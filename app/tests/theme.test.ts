@@ -136,11 +136,12 @@ test("workbench in a client without native theme sync falls back to local themes
 test("plain-string native failures still reject", async () => {
   const f = fixture(false, "dark", false);
   const choice = f.api.chooseTheme("light");
-  const rejected = assert.rejects(choice, error => error === "页面来源无效。");
+  const rejected = assert.rejects(choice, { name: "Error", message: "页面来源无效。" });
   await tick();
   f.requests[0].reject("页面来源无效。");
   await tick();
   f.requests[1]?.reject("页面来源无效。");
   await rejected;
   assert.equal(f.document.documentElement.dataset.theme, "dark");
+  assert.equal(f.store.get("axiom.theme"), "dark");
 });

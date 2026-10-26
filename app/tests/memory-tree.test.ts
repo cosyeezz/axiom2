@@ -90,12 +90,12 @@ test("context freezes nearest four same-file titles/statuses without indexing un
     assert.deepEqual(f.tree.entries(f.workspace.id)[0].context, p.context);
   } finally { await f.close(); }
 });
-test("classification accepts arbitrary semantic depth but rejects omission, duplicates, forged IDs and legacy fields", async () => {
+test("classification accepts semantic depth but rejects missing, duplicate, forged or rewritten titles and ID fields", async () => {
   const f = purposeFixture(); try {
     const scope = f.create("# [Completed] 事务发布\n# [Completed] 界面验证\n"); f.memories.scan(scope); const purposes = f.tree.entries(f.workspace.id), [a, b] = purposes;
-    const valid = [{ name: "数据库", children: [{ name: "事务", children: [{ purposeId: a.id }] }] }, { name: "界面", children: [{ purposeId: b.id }] }];
+    const valid = [{ name: "数据库", children: [{ name: "事务", children: [{ title: a.text }] }] }, { name: "界面", children: [{ title: b.text }] }];
     const roots = f.tree.classify(JSON.stringify(valid), purposes); assert.equal(roots[0].children[0].children[0].name, a.text);
-    for (const value of [[], [{ purposeId: a.id }], [{ name: "其他", children: [{ purposeId: a.id }, { purposeId: b.id }] }], [{ name: "事务", children: [{ purposeId: a.id }, { purposeId: a.id }] }], [{ name: "事务", children: [{ purposeId: "forged" }] }], [{ topic: "旧机制", section: "旧字段", item: "旧事项", content: "旧摘要" }], [{ name: "事务", children: [{ purposeId: a.id, text: "模型改写" }, { purposeId: b.id }] }]]) assert.throws(() => f.tree.classify(JSON.stringify(value), purposes));
+    for (const value of [[], [{ title: a.text }], [{ name: "其他", children: [{ title: a.text }, { title: b.text }] }], [{ name: "事务", children: [{ title: a.text }, { title: a.text }] }], [{ name: "事务", children: [{ title: "forged" }] }], [{ topic: "旧机制", section: "旧字段", item: "旧事项", content: "旧摘要" }], [{ name: "事务", children: [{ title: a.text, text: "模型改写" }, { title: b.text }] }], [{ name: "事务", children: [{ purposeId: a.id }, { title: b.text }] }]]) assert.throws(() => f.tree.classify(JSON.stringify(value), purposes));
     assert.throws(() => memoryTopicBlock([{ name: "字".repeat(1001) }])); assert.doesNotMatch(memoryTopicBlock(roots), /p-|d-|sessionId|purposeId/);
   } finally { await f.close(); }
 });
@@ -117,7 +117,7 @@ test("publication and application receipt roll back together on callback or comm
       const scope = f.create(); f.memories.scan(scope);
       const records = ProcessingRecords.for(f.store), id = records.start(scope, "memory.organize", "事务回执");
       const batch = f.tree.batch(f.workspace.id, Date.now() + memoryBatchWaitMs), before = f.tree.snapshot(f.workspace.id);
-      const roots = f.tree.classify(JSON.stringify([{ name: "事务", children: batch.map(p => ({ purposeId: p.id })) }]), batch);
+      const roots = f.tree.classify(JSON.stringify([{ name: "事务", children: batch.map(p => ({ title: p.text })) }]), batch);
       const body = () => String(f.store.db.prepare("SELECT body FROM processing_records WHERE id=?").get(id)!.body);
       const beforeBody = body(), beforeQueue = f.tree.entries(f.workspace.id);
       await new Promise(resolve => setImmediate(resolve));

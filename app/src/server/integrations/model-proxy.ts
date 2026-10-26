@@ -1,3 +1,4 @@
+import type { IntegrationRemoval } from "./managed-removal.js";
 import { proxyLaunchSupported, toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { prepareXrayImporter } from "./model-proxy-xray-installer.js";
 import { cleanupScope, assertCleanupScope } from "./cleanup-scope.js";
@@ -17,6 +18,7 @@ import { inspectXraySource } from "./model-proxy-xray-import.js";
 
 type Profile = StoredProxyProfile & { enabled?: boolean };
 export type ModelProxyDependencies = {
+  removal?: IntegrationRemoval;
   readSource?: typeof readProxyShareSource; inspectSource?: typeof inspectProxySource;
   latestRelease?: typeof latestProxyRelease; installKernel?: typeof installProxyKernel; prepareImporter?: typeof prepareXrayImporter;
 };
@@ -242,7 +244,9 @@ export class ModelProxyService {
       let prepared: { directory: string; version: string } | undefined, skipped = 0;
       try {
         if (removing) {
-          if (readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
+          await (this.dependencies.removal ?? (async work => work()))(async () => {
+          signal.throwIfAborted();
+          if (p.revision !== this.config.revision || readProxyConfig(this.root).revision !== this.config.revision) throw new AppError("REVISION_CONFLICT", "代理配置已变化，请重新读取后卸载。");
           const plan = proxyRemovalPlan(this.root, kernel, this.config);
           assertCleanupScope(p.cleanupRevision, cleanupScope(plan.paths));
           await Promise.all([...this.processes.values()].filter(process => process.profile.kernel === kernel).map(process => process.stop()));
@@ -258,6 +262,7 @@ export class ModelProxyService {
           const remaining = this.config.removalPending!.filter(name => !plan.names.includes(name));
           this.save({ ...this.config, removalPending: remaining.length ? remaining : undefined });
           this.clearInspection();
+          });
         } else if (inspecting) {
           if (kernel === "xray") {
             const result = await inspectXraySource(this.root, source, signal, message => { this.job!.message = message; this.changed(); });

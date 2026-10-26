@@ -8,7 +8,7 @@
 
 将构建产物 `Axiom2-Android.apk` 传到手机并安装。推荐使用「扫码连接」：在电脑本机 Axiom 工作台打开「配置」，页面内的「手机连接」分区会自动生成二维码，无需填写地址或打开弹窗；手机允许摄像头后扫描二维码，即会尝试连接，无需填写 OAuth 凭据。连接成功后，下拉保留最多8条最近成功连接记录；下次点选历史即可连接。
 
-也可点「选择 Tailscale 设备」，或手动输入电脑的 Tailscale 地址，省略端口时使用 `4317`；完整格式为 `http://IP:端口`，IPv6 使用方括号。选中设备仅填入地址，点击「连接工作台」后才开始连接；工作台本身无需访问密钥或登录。版本默认取根 `package.json`，客户端独立构建可显式指定版本；升级需使用更高 versionCode 并保留原签名。工作台根页面按返回键可选择“切换连接”；连接中可取消。
+也可点「选择 Tailscale 设备」，或手动输入电脑的 Tailscale 地址，省略端口时使用 `4317`；完整格式为 `http://IP:端口`，IPv6 使用方括号。选中设备仅填入地址，点击「连接工作台」后才开始连接；工作台本身无需访问密钥或登录。版本默认取根 `package.json`，客户端独立构建可显式指定版本；升级需使用更高 versionCode 并保留原签名。工作台根页面沿用系统返回键／返回手势，直接连接已保存成功历史中的下一项，不再弹出确认；按下拉历史当前顺序循环，最后一项回到第一项。循环连接成功不会重排列表，手动／扫码连接成功仍置于最近历史首位；只有一项时重连该项，没有历史时回到地址页。连接中可取消，失败或取消不会改写成功历史。
 
 ## 扫码连接
 
@@ -34,7 +34,7 @@ Client secret 默认隐藏，已保存的 secret 不回填，编辑时留空可�
 
 后台默认开启 Tailnet 监听。仍在运行旧开发服务时，可在仓库根目录运行 `node scripts/dev-tailnet.mjs`，保持原服务和任务运行；其目标默认是 `http://127.0.0.1:4317`，检测到新版后台后自动交回监听。
 
-连接失败可点「重新连接」，返回前台也会再次尝试。系统返回键优先关闭工作台弹层／侧栏，再处理页面历史或退出；连接期间按返回可取消。没有设备数、模型或任务的移动端专属限额，工作台原有约束仍适用。
+连接失败可点「重新连接」，返回前台也会再次尝试。系统返回键优先关闭工作台弹层／侧栏，再返回同一工作台内的页面历史；根页面直接循环切换已保存连接。新连接就绪后清除上一台电脑的网页历史，避免返回到旧电脑。连接期间按返回保留取消并离开应用的原有行为；取消按钮则回到地址页。没有设备数、模型或任务的移动端专属限额，工作台原有约束仍适用。
 
 安卓启动默认全屏阅读，会话填满可用屏幕，移除右侧最上／最下等滚动按钮及其空白槽；状态栏与系统导航栏隐藏，可通过边缘滑动临时唤出。右下角「展开」恢复输入与会话操作，收起／展开保留草稿。展开后的输入框固定单行高度、14px文字，长行横向滚动而不自动折行；下方统计与工具图标为连续单排，图标16px，窄屏可横向滑动访问。文件入口支持浏览电脑项目目录、选择电脑文件／文件夹，或使用「手机文件」上传。任务不会因关闭手机应用而停止。
 
@@ -77,6 +77,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-android.ps1 `
 脚本创建并复用 `%LOCALAPPDATA%\Axiom2\android-signing\release.p12`，密码通过当前 Windows 用户的 DPAPI 保存。后续安装升级必须保留原签名；迁移构建电脑需单独、安全地迁移签名材料，不能只复制 DPAPI 密文到其他账户。密钥不进入 APK、仓库或发布目录。
 
 该目录也提供 Gradle 工程，可在 Android Studio 中打开 `app/android`，或使用现有 Gradle 执行 `:app:assembleDebug`／`:sdk:assembleRelease`。没有内置 Gradle wrapper；Gradle 方式需要能获取工程声明的 Android Gradle Plugin。正式 APK 的固定签名由上述 PowerShell 脚本负责。
+
+### 独立发布安卓客户端
+
+GitHub Actions 的 `Publish Axiom2 Android` 仅接受 `master` 上的手动触发，固定构建触发时的源码 SHA；先运行 API 35 原生模拟器专项，再用既有证书签名。仓库需配置 `AXIOM_ANDROID_RELEASE_KEYSTORE_BASE64`（原 PKCS12 密钥库）和 `AXIOM_ANDROID_RELEASE_STOREPASS`；缺失或证书与已发布 v0.4.12 不同都会失败，不会创建替代签名。签名材料只写入 runner 临时目录并在构建后清除，不进入产物。
+
+```sh
+gh workflow run publish-android.yml --ref master -f client_version=0.4.18
+```
+
+版本须高于已发布 APK 的 versionCode。流程核对非调试配置、包名、版本、v2／v3签名及对齐，先上传草稿并核对每个附件的哈希，再公开发布和匿名下载校验。独立标签使用 `android-v<版本>`，不会占用后台自动分配的 `v*` 标签，也不会替换后台 Latest；附件为 APK、SDK AAR、`android-release.json`（源码／证书／检查记录）和 `SHA256SUMS.txt`。同标签禁止覆盖。触发流程不等于发布成功，须检查 workflow 结果与公开下载。
 
 电脑 Web／服务端须另外更新，安卓 APK 不包含它们。同一版本的后台包与客户端在 [GitHub Releases](https://github.com/cosyeezz/axiom2/releases) 下载。已有 npm 方式安装的电脑可先通过原服务管理入口停止后台，再安装对应 Release 的 `axiom2.tgz`：
 
@@ -159,7 +169,7 @@ python scripts/check-android-tailnet.py --build-only
 python scripts/check-android-tailnet.py --serial emulator-5554
 ```
 
-可用 `--sdk`、`--java-home`、`--build-tools` 和 `--output` 指定工具及独立产物目录。运行前会清除独立测试包数据以恢复首次权限状态，并在所选隔离模拟器标记系统全屏提示已确认，避免遮挡测试截图。GitHub workflow `Android Tailnet checks` 在带模拟后置摄像头的 API 35 模拟器执行，保存逐项结果和原生页面截图。覆盖地址与解析边界、OAuth scope／编码／错误脱敏、IPv6回退、实际HTTP重定向拒绝／限流／取消、Keystore加密／损坏／移除、原生配置与旧请求隔离、实际触摸选择、搜索分页、前后台恢复及跨进程读取；扫码覆盖严格地址、四方向帧解码、真实权限拒绝、相机暂停释放／恢复、取消、重复结果与成功历史时机。构建成功与模拟器运行通过分别记录，不能替代真实 OAuth client、实体手机及跨设备 Tailnet 验收。
+可用 `--sdk`、`--java-home`、`--build-tools` 和 `--output` 指定工具及独立产物目录。运行前会清除独立测试包数据以恢复首次权限状态，并在所选隔离模拟器标记系统全屏提示已确认，避免遮挡测试截图。GitHub workflow `Android Tailnet checks` 在带模拟后置摄像头的 API 35 模拟器执行，保存逐项结果和原生页面截图。覆盖地址与解析边界、OAuth scope／编码／错误脱敏、IPv6回退、实际HTTP重定向拒绝／限流／取消、Keystore加密／损坏／移除、原生配置与旧请求隔离、实际触摸选择、搜索分页、前后台恢复及跨进程读取；扫码覆盖严格地址、四方向帧解码、真实权限拒绝、相机暂停释放／恢复、取消、重复结果与成功历史时机。连接切换另有独立 JVM 历史检查，以及真实 WebView 三个本地 HTTP 工作台的多轮首尾循环、弹层／侧栏／页面历史返回优先级、跨连接历史清理、快速重复返回、迟到回调、失败／取消、单项／空列表与手动 MRU 历史回归。构建成功与模拟器运行通过分别记录，不能替代真实 OAuth client、实体手机及跨设备 Tailnet 验收。
 
 电脑端专项在 `app/` 执行 `node --import tsx tests/phone-connect.check.ts`，使用独立Vite端口与模拟诊断响应；可通过 `AXIOM_TEST_BROWSER` 指定已安装的Chrome、`AXIOM_QR_OUTPUT` 指定输出目录。生成实际页面CSS下的二维码截图后，由 `tests-jvm/QrImageCheck.java` 配合固定ZXing JAR独立解码，核对IPv4／IPv6载荷。
 

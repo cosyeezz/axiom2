@@ -1,0 +1,85 @@
+name: Build Axiom2 Android Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing public release tag to build (vX.Y.Z)
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Record source revision
+        run: git rev-parse HEAD
+      - name: Verify public versioned source
+        env:
+          AXIOM_RELEASE_TAG: ${{ inputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e '
+          import assert from "node:assert/strict";
+          import {execFileSync} from "node:child_process";
+          import {readFileSync} from "node:fs";
+          const tag=process.env.AXIOM_RELEASE_TAG;
+          assert.match(tag,/^v\d+\.\d+\.\d+$/);
+          const api=path=>JSON.parse(execFileSync("gh",["api",`repos/cosyeezz/axiom2/${path}`],{encoding:"utf8"}));
+          const release=api(`releases/tags/${tag}`);
+          assert.equal(release.draft,false);assert.equal(release.prerelease,false);
+          const source=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
+          assert.equal(api(`commits/${tag}`).sha,source);
+          assert.equal(JSON.parse(readFileSync("package.json","utf8")).version,tag.slice(1));
+          console.log(JSON.stringify({tag,source,releaseId:release.id}));'
+          if ($LASTEXITCODE -ne 0) { throw 'Public release source verification failed' }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android platform and build tools
+        shell: pwsh
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed' }
+      - name: Build and verify production-signed APK and SDK
+        shell: pwsh
+        env:
+          AXIOM_ANDROID_KEYSTORE_BASE64: ${{ secrets.AXIOM_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          AXIOM_ANDROID_STOREPASS: ${{ secrets.AXIOM_ANDROID_RELEASE_STOREPASS }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (!$env:AXIOM_ANDROID_KEYSTORE_BASE64 -or !$env:AXIOM_ANDROID_STOREPASS) { throw 'Original Android release signing secrets are required; a replacement key will not be generated' }
+          $keystore = Join-Path $env:RUNNER_TEMP 'axiom2-android-release.p12'
+          try {
+            $bytes = [Convert]::FromBase64String($env:AXIOM_ANDROID_KEYSTORE_BASE64)
+            if ($bytes.Length -lt 1024 -or $bytes.Length -gt 16384) { throw 'Unexpected production keystore size' }
+            [IO.File]::WriteAllBytes($keystore, $bytes)
+            [Array]::Clear($bytes, 0, $bytes.Length)
+            Remove-Item Env:AXIOM_ANDROID_KEYSTORE_BASE64
+            ./scripts/build-android.ps1 -JavaHome $env:JAVA_HOME -AndroidPlatform (Join-Path $env:ANDROID_HOME 'platforms/android-35') -BuildTools (Join-Path $env:ANDROID_HOME 'build-tools/35.0.0') -OutputDirectory (Join-Path $PWD 'artifacts/android-release') -SigningStore $keystore
+          } finally {
+            if (Test-Path -LiteralPath $keystore) { Remove-Item -LiteralPath $keystore -Force }
+            Remove-Item Env:AXIOM_ANDROID_STOREPASS -ErrorAction SilentlyContinue
+            Remove-Item Env:AXIOM_ANDROID_KEYSTORE_BASE64 -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-Android-release
+          path: |
+            artifacts/android-release/Axiom2-Android.apk
+            artifacts/android-release/axiom2-android-sdk.aar
+            artifacts/android-release/SHA256SUMS.txt
+            artifacts/android-release/android-release.json
+          if-no-files-found: error
+          retention-days: 30

@@ -20,17 +20,20 @@ export function useComposerHeight(input: RefObject<HTMLTextAreaElement | null>, 
       mirror.value = node.value;
       if (form) {
         const layout = getComputedStyle(form);
-        const mobile = layout.getPropertyValue("--composer-mobile-layout").trim() === "1";
-        // Always test the compact column, even after expanding to full width.
-        // Otherwise a soft-wrapped draft could alternate between the two layouts.
-        const compactWidth = parseFloat(layout.gridTemplateColumns.split(/\s+/)[1]);
-        if (mobile && compactWidth > 0) {
+        // Derive the compact text budget independently of the current grid:
+        // multiline controls span columns 2–3, so its second track is wider.
+        const controls = form.querySelector<HTMLElement>('.composer-model-controls, .model-picker');
+        const compactWidth = form.clientWidth - parseFloat(layout.paddingLeft) - parseFloat(layout.paddingRight)
+          - 88 - (controls?.getBoundingClientRect().width ?? 0) - 3 * (parseFloat(layout.columnGap) || 0);
+        if (compactWidth > 0) {
           mirror.style.width = `${compactWidth}px`;
+          mirror.style.paddingLeft = mirror.style.paddingRight = '0px';
           const singleLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
           form.toggleAttribute("data-multiline", mirror.scrollHeight > singleLine + 1);
         } else form.removeAttribute("data-multiline");
         style = getComputedStyle(node);
         mirror.style.width = style.width;
+        mirror.style.paddingLeft = style.paddingLeft; mirror.style.paddingRight = style.paddingRight;
       }
       const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
       const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);

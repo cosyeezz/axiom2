@@ -69,6 +69,26 @@ test("combined Xray plan includes all legacy importer versions while mihomo reta
     for (const path of plan.paths) assert.equal(fs.existsSync(path), false);
   } finally { f.cleanup(); }
 });
+for (const outcome of ["remove", "changed", "denied"] as const) test(`combined Xray uninstall waits at shared barrier and handles ${outcome}`, { skip: process.platform === "win32" }, async () => {
+  const f = fixture(); let release!: () => void, entered = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const s = new ModelProxyService(f.root, () => {}, { removal: async work => {
+    entered = true; await gate;
+    if (outcome === "denied") throw Error("fixture barrier denied");
+    return work();
+  } });
+  const path = join(proxyDirectory(f.root), "versions", f.config.installations.xray!.directory);
+  try {
+    await uninstall(s); await turn();
+    assert.equal(entered, true); assert.equal(fs.existsSync(path), true);
+    assert.deepEqual(readProxyConfig(f.root).installations, f.config.installations);
+    if (outcome === "changed") atomicProxyJson(proxyConfigPath(f.root), { ...f.config, revision: randomUUID() });
+    release();
+    const error = (await settle(s)).job?.error;
+    if (outcome === "remove") { assert.equal(error, undefined); assert.equal(fs.existsSync(path), false); }
+    else { assert.match(error!, outcome === "changed" ? /配置已改|配置已变/ : /barrier denied/); assert.equal(fs.existsSync(path), true); }
+  } finally { release(); await s.close(); f.cleanup(); }
+});
 
 test("proxy uninstall rejects stale revision and unsafe parent without modifying configuration", async () => {
   const f = fixture(), versions = join(proxyDirectory(f.root), "versions"), outside = join(f.root, "outside");

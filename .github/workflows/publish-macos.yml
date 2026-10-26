@@ -17,7 +17,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 10
     concurrency:
-      group: axiom-macos-publication
+      group: axiom-client-publication
       cancel-in-progress: false
     permissions:
       actions: read

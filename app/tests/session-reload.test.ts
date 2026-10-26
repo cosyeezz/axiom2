@@ -11,22 +11,28 @@ import { ModelService } from "../src/server/model-service.js";
 import { resourceChanges } from "../src/shared/reload.js";
 import type { Workspace, Session } from "../src/shared/protocol.js";
 
-const wait = async (check: () => boolean, message: string) => {
+const wait = async (check: () => boolean, message: string, details?: () => unknown) => {
   const deadline = Date.now() + 20000;
-  while (!check()) { assert.ok(Date.now() < deadline, message); await new Promise(r => setTimeout(r, 10)); }
+  while (!check()) {
+    const timely = Date.now() < deadline;
+    assert.ok(timely, !timely && details ? message + ": " + JSON.stringify(details()) : message);
+    await new Promise(r => setTimeout(r, 10));
+  }
 };
 
 test("native reload waits for the whole tool batch, refreshes prompts, continues once, and cold reload makes no request", { timeout: 60000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-native-reload-")), pi = join(root, "pi"), cwd = join(root, "project");
   for (const path of [pi, cwd, join(cwd, ".pi/extensions"), join(cwd, ".pi/skills/demo")]) mkdirSync(path, { recursive: true });
-  const previous = process.env.AXIOM_PI_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
-  process.env.AXIOM_PI_DIR = pi; process.env.AXIOM_EXECUTION_MODE = "managed";
+  const previous = process.env.AXIOM_PI_DIR, previousNative = process.env.PI_CODING_AGENT_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
+  process.env.AXIOM_PI_DIR = pi; process.env.PI_CODING_AGENT_DIR = join(root, "native-auth"); process.env.AXIOM_EXECUTION_MODE = "managed";
   const entered = join(root, "entered"), release = join(root, "release"), finished = join(root, "finished");
   const resources = (version: string) => {
     writeFileSync(join(cwd, "AGENTS.md"), `InstructionMarker${version}`);
     writeFileSync(join(cwd, ".pi/skills/demo/SKILL.md"), `---\nname: demo\ndescription: SkillMarker${version}\n---\nSkill content ${version}\n`);
-    writeFileSync(join(cwd, ".pi/extensions/reload-fixture.ts"), `import { appendFileSync, existsSync } from 'node:fs';
+    writeFileSync(join(cwd, ".pi/extensions/reload-fixture.ts"), `import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 export default function(pi) {
+  // Observe delivery after the production worker's synchronous reload handler.
+  process.on('message', value => { if(value?.type === 'reload' && /^[0-9a-f-]{36}$/.test(value.id)) writeFileSync(${JSON.stringify(root)}+'/received-'+value.id, 'received'); });
   pi.registerTool({ name:'checkpoint', label:'checkpoint', description:'ToolMarker${version}', parameters:{type:'object',properties:{}},
     async execute(id) { appendFileSync(${JSON.stringify(entered)}, id+'\\n'); while (!existsSync(${JSON.stringify(release)})) await new Promise(r=>setTimeout(r,10)); appendFileSync(${JSON.stringify(finished)}, id+'\\n'); return {content:[{type:'text',text:'batch completed'}],details:{}}; } });
 }`);
@@ -97,8 +103,14 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     assert.deepEqual(agents.capabilities.preferences(), defaultsBeforeBatch);
     assert.equal(requests.length, 1);
     assert.equal(existsSync(finished), false, "reload must not interrupt a tool");
-    resources("V2"); writeFileSync(release, "go");
-    await wait(() => !agents.active(scope), "reloaded run did not settle");
+    resources("V2");
+    await wait(() => existsSync(join(root, "received-" + requestId)), "reload received by worker before releasing the batch");
+    writeFileSync(release, "go");
+    await wait(() => !agents.active(scope), "reloaded run did not settle", () => ({
+      run: agents.info(scope).run, reload: agents.reloads.state(scope), requests: requests.length,
+      finished: existsSync(finished) ? readFileSync(finished, "utf8") : null,
+      mcp: existsSync(mcpLog) ? readFileSync(mcpLog, "utf8") : null,
+    }));
     assert.equal(agents.info(scope).run?.status, "completed", JSON.stringify(agents.info(scope).run));
     const state = agents.reloads.state(scope)!;
     assert.equal(state.status, "completed", JSON.stringify(state)); assert.equal(state.resumed, true);
@@ -194,6 +206,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n'); });`
     writeFileSync(release, "cleanup");
     await agents.close(); store.close(); http.closeAllConnections(); await new Promise<void>(r => http.close(() => r()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+    if (previousNative === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previousNative;
     if (previousMode === undefined) delete process.env.AXIOM_EXECUTION_MODE; else process.env.AXIOM_EXECUTION_MODE = previousMode;
     rmSync(root, { recursive: true, force: true });
   }

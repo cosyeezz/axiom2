@@ -9,6 +9,10 @@ import type {
   ProviderProxy,
 } from "../../shared/models.js";
 import { assignModelConfigIds, validModelPricing } from "../../shared/models.js";
+// Optional false flags mean the same thing as omitted flags in server drafts.
+const draftSnapshot = (value: unknown) => JSON.stringify(value, (key, item) =>
+  ["clearKey", "keepUrl", "keep"].includes(key) && item === false ? undefined : item,
+);
 const empty: Configuration = {
   revision: "",
   providerCount: 0,
@@ -34,8 +38,8 @@ export function useConfiguration() {
   const [templates, setTemplates] = useState<ModelConfiguration["templates"]>(
     [],
   );
-  const [dirty, setDirty] = useState(false),
-    [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [savedProviders, setSavedProviders] = useState<Provider[]>([]);
   const initialized = useRef(false);
   const logoutInFlight = useRef(false);
   const [needsReconcile, setNeedsReconcile] = useState(false);
@@ -57,10 +61,11 @@ export function useConfiguration() {
   const [copyFeedback, setCopyFeedback] = useState("");
   const [decision, setDecision] = useState<ConfigurationDecision | null>(null);
   const p = providers.find((p) => p.id === selected);
+  const dirty = draftSnapshot(providers) !== draftSnapshot(savedProviders);
   const editorDirty =
     !!editor &&
-    JSON.stringify(editor) !==
-      JSON.stringify(
+    draftSnapshot(editor) !==
+      draftSnapshot(
         p?.models.find((m) => m.key === editor.key) ?? {
           key: editor.key,
           id: "",
@@ -74,6 +79,10 @@ export function useConfiguration() {
   // One staging path for Finish, unified Save (including a hidden editor), and supplier switches.
   const stageEditor = (): Provider[] | null => {
     if (!editor || !p) return providers;
+    if (!editorDirty) {
+      setEditor(null);
+      return providers;
+    }
     const id = editor.id.trim();
     if (!id) {
       setFeedback(
@@ -99,7 +108,6 @@ export function useConfiguration() {
     );
     setProviders(next);
     setEditor(null);
-    setDirty(true);
     setFeedback("已结束行内编辑；仍是未保存草稿。");
     return next;
   };
@@ -108,6 +116,7 @@ export function useConfiguration() {
     try {
       const data = await command<ModelConfiguration>("configuration.get");
       setProviders(data.providers);
+      setSavedProviders(data.providers);
       setRevision(data.revision);
       setTemplates(data.templates);
       setStorage(data.storage);
@@ -120,7 +129,6 @@ export function useConfiguration() {
             : (data.providers[0]?.id ?? ""),
       );
       setEditor(null);
-      setDirty(false);
       setNeedsReconcile(false);
       setShowKey(false);
       setFeedback("已读取已发布配置；已保存密钥和请求头值不回传。");
@@ -208,13 +216,12 @@ export function useConfiguration() {
   const patch = (change: Partial<Provider>) => {
     setSaved(false);
     setFeedback("");
-    setDirty(true);
     setProviders((all) =>
       all.map((item) => (item.id === selected ? { ...item, ...change } : item)),
     );
   };
   const discardEditor = (proceed: () => void) => {
-    if (!editor) {
+    if (!editorDirty) {
       proceed();
       return;
     }
@@ -244,7 +251,6 @@ export function useConfiguration() {
           models: [],
         },
       ]);
-      setDirty(true);
       setSelected(id);
       setTab("suppliers");
       setEditor(null);
@@ -259,7 +265,7 @@ export function useConfiguration() {
     setFeedback("已保留其他供应商的草稿；下方保存才会发布配置。");
   };
   const logoutProvider = async (provider: Provider, confirmStop = false) => {
-    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId || provider.connectionType === "oauth") return;
+    if (logoutInFlight.current || busy || dirty || editor || needsReconcile || login || !provider.originalId) return;
     logoutInFlight.current = true;
     setBusy(true);
     setSaved(false);
@@ -282,8 +288,10 @@ export function useConfiguration() {
         const remaining = refreshed.providers.find((item) => item.providerId === provider.providerId);
         setFeedback(remaining?.auth?.configured
           ? "已清除受管理认证；供应商和模型已保留。当前仍有环境变量等其他来源提供认证。"
-          : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
-        requestAnimationFrame(() => document.getElementById("provider-key")?.focus());
+          : provider.connectionType === "oauth"
+            ? "已退出授权；供应商和模型已保留，可重新进行 OAuth 登录。"
+            : "已退出认证；供应商和模型已保留，可填写新密钥后保存。");
+        requestAnimationFrame(() => document.getElementById(provider.connectionType === "oauth" ? "oauth-login-provider" : "provider-key")?.focus());
       }
     } catch (error) {
       const e = error as Error & { code?: string };
@@ -317,7 +325,6 @@ export function useConfiguration() {
           setProviders((all) => all.filter((p) => p.id !== provider.id));
           setSelected("");
           setEditor(null);
-          setDirty(true);
           return;
         }
         setBusy(true);
@@ -391,6 +398,7 @@ export function useConfiguration() {
     saved: saved && !dirty && !editorDirty,
     templates,
     dirty: dirty || editorDirty,
+    editorDirty,
     stageEditor,
     busy,
     needsReconcile,

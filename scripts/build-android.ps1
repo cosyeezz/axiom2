@@ -3,7 +3,10 @@ param(
   [string]$AndroidPlatform = 'F:\Tools\Android\platforms\android-35',
   [string]$BuildTools = 'F:\Tools\Android\build-tools\android-15',
   [string]$OutputDirectory = '',
-  [string]$ClientVersion = ''
+  [string]$ClientVersion = '',
+  [string]$SigningStore = '',
+  [string]$ExpectedCertificateSha256 = 'ae00055c6143ea3739613150527aed2f91135daab0ab9c8ef0dd2e74872993a2',
+  [long]$MinimumVersionCode = 4012
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -13,6 +16,15 @@ if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { 
 $major = [long]$Matches[1]; $minor = [long]$Matches[2]; $patch = [long]$Matches[3]
 $versionCode = $major * 1000000 + $minor * 1000 + $patch
 if ($minor -gt 999 -or $patch -gt 999 -or $versionCode -le 404 -or $versionCode -gt 2100000000) { throw "Release version cannot be encoded as an upgradeable Android versionCode: $version" }
+if ($versionCode -le $MinimumVersionCode) { throw "Android release must upgrade versionCode $MinimumVersionCode, got $versionCode" }
+$ExpectedCertificateSha256 = $ExpectedCertificateSha256.Replace(':','').ToLowerInvariant()
+if ($ExpectedCertificateSha256 -notmatch '^[a-f0-9]{64}$') { throw 'A trusted Android signing certificate SHA-256 is required' }
+$localSigning = !$SigningStore
+$signing = Join-Path $env:LOCALAPPDATA 'Axiom2\android-signing'
+if ($localSigning) { $SigningStore = Join-Path $signing 'release.p12' }
+if (!(Test-Path -LiteralPath $SigningStore -PathType Leaf)) { throw 'Original Android release keystore is missing; refusing to create a new upgrade-incompatible signing key' }
+if (!$localSigning -and !$env:AXIOM_ANDROID_STOREPASS) { throw 'Android release signing password is missing' }
+if ($localSigning -and !(Test-Path -LiteralPath (Join-Path $signing 'password.dpapi') -PathType Leaf)) { throw 'Original Android signing password is missing' }
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts\android' }
 $build = Join-Path $OutputDirectory 'build'
 $java = Join-Path $JavaHome 'bin\java.exe'
@@ -51,22 +63,33 @@ Run $java @('-cp',(Join-Path $BuildTools 'lib\d8.jar'),'com.android.tools.r8.D8'
 $zip = [System.IO.Compression.ZipFile]::Open($unsigned,[System.IO.Compression.ZipArchiveMode]::Update)
 try { Get-ChildItem $dex -Filter '*.dex' | ForEach-Object { [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$_.FullName,$_.Name) | Out-Null } } finally { $zip.Dispose() }
 $aligned = Join-Path $build 'aligned.apk'; Run (Join-Path $BuildTools 'zipalign.exe') @('-f','-p','4',$unsigned,$aligned)
-$signing = Join-Path $env:LOCALAPPDATA 'Axiom2\android-signing'; New-Item -ItemType Directory -Force $signing | Out-Null
-$keystore = Join-Path $signing 'release.p12'; $passwordFile = Join-Path $signing 'password.dpapi'
-if (!(Test-Path $keystore)) {
-  $random = New-Object byte[] 32; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($random); $rng.Dispose()
-  $password = [Convert]::ToBase64String($random)
-  ConvertTo-SecureString $password -AsPlainText -Force | ConvertFrom-SecureString | Set-Content $passwordFile
-  $env:AXIOM_ANDROID_STOREPASS = $password
-  Run (Join-Path $JavaHome 'bin\keytool.exe') @('-genkeypair','-keystore',$keystore,'-storetype','PKCS12','-storepass:env','AXIOM_ANDROID_STOREPASS','-alias','axiom2','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=Axiom2 Android, O=Axiom2')
-} else {
-  $secure = (Get-Content $passwordFile -Raw).Trim() | ConvertTo-SecureString
-  $env:AXIOM_ANDROID_STOREPASS = [System.Net.NetworkCredential]::new('', $secure).Password
-}
 $apk = Join-Path $OutputDirectory 'Axiom2-Android.apk'
-try { Run $java @('-jar',(Join-Path $BuildTools 'lib\apksigner.jar'),'sign','--ks',$keystore,'--ks-key-alias','axiom2','--ks-pass','env:AXIOM_ANDROID_STOREPASS','--out',$apk,$aligned) }
-finally { Remove-Item Env:\AXIOM_ANDROID_STOREPASS -ErrorAction SilentlyContinue }
-Run $java @('-jar',(Join-Path $BuildTools 'lib\apksigner.jar'),'verify','--verbose',$apk)
-Run $aapt @('dump','badging',$apk)
-Get-FileHash $apk,(Join-Path $OutputDirectory 'axiom2-android-sdk.aar') -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } | Set-Content (Join-Path $OutputDirectory 'SHA256SUMS.txt')
+$previousPassword = $env:AXIOM_ANDROID_STOREPASS
+try {
+  if ($localSigning) {
+    $secure = (Get-Content (Join-Path $signing 'password.dpapi') -Raw).Trim() | ConvertTo-SecureString
+    try { $env:AXIOM_ANDROID_STOREPASS = [System.Net.NetworkCredential]::new('', $secure).Password } finally { $secure.Dispose() }
+  }
+  Run $java @('-jar',(Join-Path $BuildTools 'lib\apksigner.jar'),'sign','--ks',$SigningStore,'--ks-key-alias','axiom2','--ks-pass','env:AXIOM_ANDROID_STOREPASS','--out',$apk,$aligned)
+} finally {
+  if ($null -eq $previousPassword) { Remove-Item Env:\AXIOM_ANDROID_STOREPASS -ErrorAction SilentlyContinue } else { $env:AXIOM_ANDROID_STOREPASS = $previousPassword }
+}
+$verification = & $java @('-jar',(Join-Path $BuildTools 'lib\apksigner.jar'),'verify','--verbose','--print-certs',$apk)
+if ($LASTEXITCODE -ne 0) { throw 'Release APK signature verification failed' }
+$verification | Write-Output
+$signers = @($verification | Select-String -Pattern '^Signer #[0-9]+ certificate SHA-256 digest: ([a-fA-F0-9]{64})$')
+if ($signers.Count -ne 1 -or $signers[0].Matches[0].Groups[1].Value.ToLowerInvariant() -ne $ExpectedCertificateSha256) { throw 'Release APK certificate differs from the original production certificate' }
+$badging = & $aapt @('dump','badging',$apk)
+if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect release APK metadata' }
+$badging | Write-Output
+$metadata = $badging -join "`n"
+if ($metadata -cnotmatch "(?m)^package: name='com\.axiom2\.android' versionCode='$versionCode' versionName='$([regex]::Escape($version))'" -or $metadata -notmatch "(?m)^(?:sdkVersion|minSdkVersion):'26'$" -or $metadata -notmatch "(?m)^targetSdkVersion:'35'" -or $metadata -match '(?m)^application-debuggable') { throw 'APK package, version, SDK, or release-mode validation failed' }
+Run (Join-Path $BuildTools 'zipalign.exe') @('-c','-p','4',$apk)
+$files = @(Get-FileHash $apk,(Join-Path $OutputDirectory 'axiom2-android-sdk.aar') -Algorithm SHA256)
+$files | ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } | Set-Content -Encoding ascii (Join-Path $OutputDirectory 'SHA256SUMS.txt')
+$source = & git -C $repo rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Unable to record Android release source revision' }
+$proof = @{ source = $source.Trim(); version = $version; versionCode = $versionCode; packageName = 'com.axiom2.android'; minSdk = 26; targetSdk = 35; debuggable = $false; certificateSha256 = $ExpectedCertificateSha256; files = @{} }
+foreach ($file in $files) { $proof.files[[System.IO.Path]::GetFileName($file.Path)] = @{ sha256 = $file.Hash.ToLowerInvariant(); size = (Get-Item -LiteralPath $file.Path).Length } }
+[System.IO.File]::WriteAllText((Join-Path $OutputDirectory 'android-release.json'), ($proof | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
 Write-Output "APK and SDK: $OutputDirectory"

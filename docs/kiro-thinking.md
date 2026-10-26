@@ -2,7 +2,7 @@
 
 本轮将 Axiom 已有的等级选择、保存及 Agent 传递链真正接入 Kiro 原生请求，不是只把 `reasoning` 改为 `true`。实现仍使用 `kiro-chat`，不运行官方 CLI 或 kiro.rs，不把 OAuth 令牌交给通用接口。
 
-**离线实现及验证不等于服务已遵从预算或 effort。** 没有读取真实凭据、请求受保护接口、部署、重启或提交。下述模型配置是基于固定版本 kiro.rs 的**适配器兼容政策**，不是 Kiro 目录返回的思考能力声明，也不是已恢复的官方当前 caller。验证结果见[本轮证据](evidence/kiro-thinking/README.md)。
+**离线实现及验证不等于服务已遵从预算或 effort。** 原实现与离线验收阶段没有读取真实凭据、请求受保护接口、部署、重启或提交。后续按用户明确授权，经 Axiom 实测 Sonnet 4.5 的 high/off 文本请求均成功，见[实调记录](evidence/kiro-live/README.md)；不等于测得预算硬上限或其他档位可用。下述模型配置是基于固定版本 kiro.rs 的**适配器兼容政策**，不是 Kiro 目录返回的思考能力声明，也不是已恢复的官方当前 caller。验证结果见[本轮证据](evidence/kiro-thinking/README.md)。
 
 ## 选择和保存
 

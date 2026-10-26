@@ -10,7 +10,11 @@ pub fn loaded(view: &Webview) {
     eprintln!("[Axiom native probe] loaded {}", view.label());
     if view.label() == "pake" {
         let mode = if std::env::var("AXIOM_DESKTOP_PROBE_MODE").as_deref() == Ok("reopen") { "reopen" } else { "full" };
-        let _ = view.eval(&format!("window.__axiomProbeMode = '{}';\n{}", mode, include_str!("axiom_controller_probe.js")));
+        let port = match std::env::var("AXIOM_PORT").ok().and_then(|value| value.parse::<u16>().ok()).filter(|port| *port != 0 && *port != 4317) {
+            Some(port) => port,
+            None => { eprintln!("[Axiom native probe] expected an explicit isolated AXIOM_PORT"); return; }
+        };
+        let _ = view.eval(&format!("window.__axiomProbePort = {port};\nwindow.__axiomProbeMode = '{}';\n{}", mode, include_str!("axiom_controller_probe.js")));
     } else if view.label() == "axiom-workbench" {
         let _ = view.eval(include_str!("axiom_workbench_probe.js"));
     }
@@ -37,7 +41,11 @@ pub async fn axiom_test_probe(view: Webview, action: String, observation: Option
                 workbench.eval(r#"window.__TAURI_INTERNALS__.invoke('axiom_test_probe', {action: 'record', observation: {diagnostic: true, url: location.href, readyState: document.readyState, started: !!window.__axiomWorkbenchProbeStarted, sampleReady: !!window.__axiomProbeSample, appPresent: !!document.querySelector('.app'), sessionPresent: !!document.querySelector('[data-session-id="desktop-probe-session"]'), inputPresent: !!document.querySelector('textarea[data-od-id="message-input"]')}})"#).map_err(|e| e.to_string())?;
             }
         },
-        "sample" => { app.get_webview("axiom-workbench").ok_or("Workbench missing")?.eval("window.__axiomProbeSample()").map_err(|e| e.to_string())?; },
+        "sample" => {
+            let sample_id = observation.as_ref().and_then(|value| value.get("sampleId")).and_then(Value::as_str).filter(|id| !id.is_empty() && id.len() <= 128).ok_or("Missing sample request identity")?;
+            let script = format!("window.__axiomProbeSample({})", serde_json::to_string(sample_id).map_err(|e| e.to_string())?);
+            app.get_webview("axiom-workbench").ok_or("Workbench missing")?.eval(&script).map_err(|e| e.to_string())?;
+        },
         "resize" => { window.set_size(tauri::LogicalSize::new(900.0, 650.0)).map_err(|e| e.to_string())?; },
         "resize-large" => { window.set_size(tauri::LogicalSize::new(1480.0, 900.0)).map_err(|e| e.to_string())?; },
         "maximize" => { window.maximize().map_err(|e| e.to_string())?; },

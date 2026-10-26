@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifySourceProof } from "./native-source-proof.mjs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
@@ -76,6 +77,10 @@ try {
     assert.deepEqual(nativeEvidence.full.detail.header.colors[state], { text: "rgb(174, 182, 176)", icon });
   }
   const dmg = await readFile(join(directory, "Axiom2.dmg"));
+  verifySourceProof(nativeEvidence.sourceProof, { productSha: source, probeSha: run.head_sha, dmg: { size: dmg.length, sha256: sha(dmg) } });
+  for (const check of ["explicit-isolated-ui-endpoint", "direct-restart-preserves-view", "managed-stop-discards-view"]) assert.ok(nativeEvidence.full.detail.checks.includes(check), check);
+  assert.equal(nativeEvidence.full.snapshot.observation.denied.length, 6);
+  assert.ok(nativeEvidence.full.snapshot.observation.denied.every(value => value === true));
   const macSum = `${sha(dmg)}  Axiom2.dmg\n`;
   assert.equal(await readFile(join(directory, "SHA256SUMS-macos"), "utf8"), macSum);
   gh("release", "download", tag, "--repo", repo, "--pattern", "SHA256SUMS", "--dir", directory);
@@ -104,7 +109,7 @@ try {
     assert.equal(published.assets.find(item => item.name === asset.name)?.digest, asset.digest);
   }
   assert.equal(api(`commits/${tag}`).sha, source);
-  const evidence = { tag, source, runId, artifactId: artifact.id, artifactDigest: artifact.digest, native: { artifactId: nativeArtifact.id, artifactDigest: nativeArtifact.digest, header: nativeEvidence.full.detail.header }, dmg: { size: dmg.length, sha256: sha(dmg) }, checksums: sums };
+  const evidence = { tag, source, runId, artifactId: artifact.id, artifactDigest: artifact.digest, native: { artifactId: nativeArtifact.id, artifactDigest: nativeArtifact.digest, sourceProof: nativeEvidence.sourceProof, header: nativeEvidence.full.detail.header }, dmg: { size: dmg.length, sha256: sha(dmg) }, checksums: sums };
   await writeFile("macos-publish.json", JSON.stringify(evidence, null, 2));
   console.log(JSON.stringify(evidence));
 } finally {

@@ -67,7 +67,7 @@ export function unwrapQoderSse(response: Response, signal?: AbortSignal, options
           : envelope.body == null ? "null" : Array.isArray(envelope.body) ? "array" : typeof envelope.body === "object" ? "object" : "other";
         const eventKind = frameEvent === "error" ? "error" : frameEvent ? "other" : "message";
         const numericCode = (typeof code === "number" || typeof code === "string" && /^\d+$/.test(code)) && Number.isSafeInteger(Number(code)) && Number(code) >= 0 && Number(code) <= 1_000_000 ? Number(code) : "none";
-        throw new QoderError(`${qoderFailure(status, code).message} [sse_wrapper status=${status} event=${eventKind} body=${bodyKind} code=${numericCode}]`);
+        throw new QoderError(`${qoderFailure(status, envelope.body, "sse").message} [sse_wrapper status=${status} event=${eventKind} body=${bodyKind} code=${numericCode}]`);
       }
       if (envelope.body == null) return;
       if (typeof envelope.body === "string") {
@@ -78,8 +78,8 @@ export function unwrapQoderSse(response: Response, signal?: AbortSignal, options
         chunk = parse(body);
       } else chunk = object(envelope.body);
     }
-    if (chunk.error || chunk.code !== undefined && ![0, "0", 200, "200"].includes(chunk.code as number | string)) throw qoderFailure(502, chunk.code ?? (typeof chunk.error === "object" && chunk.error ? (chunk.error as Record<string, unknown>).code : undefined));
-    if (chunk.queue && object(chunk.queue).isQueued === true) throw qoderFailure(502, 10605);
+    if (chunk.error || chunk.code !== undefined && ![0, "0", 200, "200"].includes(chunk.code as number | string)) throw qoderFailure(502, chunk, "sse");
+    if (chunk.queue && object(chunk.queue).isQueued === true) throw qoderFailure(502, 10605, "sse");
     if (!Array.isArray(chunk.choices) && chunk.choices != null) throw new QoderError("Qoder 事件流 choices 格式无效。");
     if (chunk.choices == null || (chunk.choices as unknown[]).length === 0) {
       // Official fRe skips auxiliary JSON without choices. Limit that tolerance to empty

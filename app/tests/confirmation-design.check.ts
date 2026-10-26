@@ -46,7 +46,7 @@ try {
       const cancelBox = (await cancel().boundingBox())!, confirmBox = (await confirm.boundingBox())!;
       assert.ok(cancelBox.x < confirmBox.x, "safe action precedes destructive action");
       assert.ok(await dialog.getAttribute("aria-describedby"));
-      assert.match(await dialog.innerText(), /保存时会退出整个供应商/);
+      assert.match(await dialog.locator(".confirm-warning").innerText(), /移除前请核对模型名称与 ID/);
       assert.equal(await dialog.locator(".confirm-danger").evaluate(el => getComputedStyle(el).color), "rgb(255, 255, 255)");
       const [symbolColor, dangerColor] = await dialog.evaluate(el => { const sample = document.createElement("span"); sample.style.color = "var(--danger-text)"; el.append(sample); const expected = getComputedStyle(sample).color; sample.remove(); return [getComputedStyle(el.querySelector(".confirm-symbol")!).color, expected]; });
       assert.equal(symbolColor, dangerColor, "destructive title glyph uses the danger semantic color");

@@ -1,0 +1,9 @@
+{
+    "exitCode":  null,
+    "cwd":  "F:/Axiom/axiom-kiro-delivery-4bfeec8c/app",
+    "command":  "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/images.test.ts tests/model-input.test.ts tests/model-catalog.test.ts tests/model-runtime.test.ts tests/model-config-validation.test.ts tests/model-overrides.test.ts tests/model-copy-runtime.test.ts tests/model-auth-preparation.test.ts tests/model-switch.test.ts tests/model-network.test.ts tests/model-oauth-config.test.ts tests/model-oauth.test.ts tests/qoder-runtime.test.ts tests/codebuddy-runtime.test.ts",
+    "startedUtc":  "2026-10-25T17:43:07.3429678Z",
+    "reason":  "Tool timeout after 60 seconds",
+    "status":  "interrupted",
+    "recordedUtc":  "2026-10-25T17:44:30.6170792Z"
+}

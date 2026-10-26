@@ -135,6 +135,8 @@ test("the entire memory instruction exactly matches the approved concise prompt 
     assert.doesNotMatch(prompt, /RULES|entryRevision|oldText|newText/);
     assert.doesNotMatch(body, /\p{Script=Han}/u);
     assert.match(prompt, /The main memory file contains one or more task trees at the same level/);
+    assert.match(prompt, /Take ownership of achieving the goal\. When obstacles arise, proactively find solutions, adapt your approach, and keep moving forward rather than stopping prematurely or handing the problem back to the user\./);
+    assert.match(prompt, /Pause only the blocked portion once you have confirmed that you cannot resolve the blocker yourself; continue other authorized work/);
     assert.match(prompt, /After maintaining memory, immediately continue authorized work that can proceed/);
   }
 });

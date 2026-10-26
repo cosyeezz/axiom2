@@ -1,0 +1,8 @@
+{
+    "command":  "npm.cmd run build",
+    "cwd":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+    "startUtc":  "2026-10-25T17:44:00.6959914Z",
+    "endUtc":  "2026-10-25T17:44:52.6550700Z",
+    "exitCode":  0,
+    "log":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\build\\03-npm-build.log"
+}

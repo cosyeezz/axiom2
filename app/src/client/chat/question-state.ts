@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { QuestionAnswer } from "../../shared/model-question.js";
 // UI state must outlive virtual rows, including an unresolved submission.
-interface QuestionState { answers: QuestionAnswer[]; expanded: boolean[]; submitted: boolean }
+interface QuestionState { answers: QuestionAnswer[]; expanded: boolean[]; collapsed?: boolean; submitted: boolean }
 const states = new Map<string, QuestionState>();
 const listeners = new Map<string, Set<() => void>>();
 export function useQuestionState(key: string, count: number) {

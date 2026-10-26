@@ -112,11 +112,28 @@ try {
     assert.equal(filledInput.x, emptyInput.x, "showing clear never moves the text start right");
     await assertClearLayout();
     if (width === 1440) await page.locator(".composer").screenshot({ path: join(artifacts, "desktop-single-line.png") });
+    if (width >= 740) for (const words of [6, 12, 18, 24, 30]) {
+      await input.fill('draft '.repeat(words));
+      await page.waitForTimeout(80);
+      const frames = await input.evaluate(async node => {
+        const states: string[] = [];
+        for (let frame = 0; frame < 12; frame++) {
+          await new Promise(requestAnimationFrame);
+          states.push(`${node.closest('form')!.hasAttribute('data-multiline')}:${node.getBoundingClientRect().width}:${node.getBoundingClientRect().height}`);
+        }
+        return states;
+      });
+      assert.equal(new Set(frames).size, 1, `soft-wrap layout remains stable at ${width}px/${words} words: ${frames}`);
+    }
     await input.fill("这是需要真正自动换行的长文本。".repeat(12));
     await page.waitForTimeout(100);
     const long = await geometry(page);
     assert.ok(long.height > short.height, `input grows at ${width}x${height}: ${JSON.stringify({ short, long })}`);
     assert.ok(long.scrollWidth <= long.width + 1, "wrapped prose never scrolls horizontally");
+    const longInput = (await input.boundingBox())!, longForm = (await page.locator('.composer').boundingBox())!;
+    const tools = (await page.locator('.composer-model-controls').boundingBox())!;
+    assert.ok(longInput.width >= longForm.width - 42, 'multiline text uses the full form, including space above plus/model/send');
+    assert.ok(longInput.y + longInput.height <= tools.y + 1, 'controls have their own bottom row on desktop and mobile');
     assert.ok(long.height <= long.maxHeight + 1, "growth is capped");
     await input.fill("https://example.com/" + "unbroken".repeat(60));
     const token = await geometry(page);

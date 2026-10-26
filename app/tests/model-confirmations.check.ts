@@ -16,13 +16,37 @@ const app = await startServer({ root: join(root, "data"), port: 0 });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
 const errors: string[] = [], deleteRequests: { confirmStop?: boolean }[] = [];
+let connectionChecks = 0;
+const wire: Record<string, unknown>[] = [];
 page.on("pageerror", error => errors.push(error.message));
 let requireActiveStop = false;
+async function readConnectedConfiguration() {
+  // waitForFunction treats an async predicate's Promise as truthy even if it resolves false.
+  // Await each read-only probe in Node, and do not send any mutation until it really succeeds.
+  const deadline = Date.now() + 15_000;
+  let connected = false;
+  while (!connected && Date.now() < deadline) {
+    connectionChecks++;
+    connected = await page.evaluate(async () => {
+      try { await (window as any).axiomLatency(); return true; } catch { return false; }
+    });
+    if (!connected) await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(connected, true, "a real diagnostic round trip must succeed before configuration setup");
+  const start = wire.length;
+  await page.getByRole("button", { name: "重新读取配置", exact: true }).click();
+  await page.locator("#add-supplier").and(page.locator(":enabled")).waitFor();
+  const request = wire.slice(start).find(event => event.source === "client" && event.op === "configuration.get");
+  assert.ok(request, "explicit configuration reload must reach the isolated server");
+  assert.equal(wire.find(event => event.source === "server" && event.requestId === request.requestId)?.ok, true,
+    "configuration reload must receive a successful receipt");
+}
 try {
   await page.routeWebSocket("**/ws", route => {
     const server = route.connectToServer();
     route.onMessage(message => {
       const command = JSON.parse(message.toString());
+      wire.push({ at: Date.now(), source: "client", op: command.op, requestId: command.requestId });
       if (requireActiveStop && command.op === "configuration.save" && !command.params.providers.some((provider: { providerId: string }) => provider.providerId === "confirmation-fixture")) {
         deleteRequests.push({ confirmStop: command.params.confirmStop });
         if (!command.params.confirmStop) {
@@ -32,9 +56,14 @@ try {
       }
       server.send(message);
     });
-    server.onMessage(message => route.send(message));
+    server.onMessage(message => {
+      const reply = JSON.parse(message.toString());
+      if (reply.type !== "snapshot") wire.push({ at: Date.now(), source: "server", type: reply.type, requestId: reply.requestId, ok: reply.ok, error: reply.error });
+      route.send(message);
+    });
   });
   await page.goto(app.origin + "/model-config.html");
+  await readConnectedConfiguration();
   await page.locator("#add-supplier").click();
   await page.getByRole("menuitem", { name: "自定义接口", exact: true }).click();
   await page.locator("#provider-id").fill("confirmation-fixture");
@@ -67,7 +96,8 @@ try {
     await deletion.waitFor(); await safeFocus();
     assert.match(await deletion.locator(".confirm-subject").innerText(), /确认框验收模型\nconfirmation-model/);
     assert.match(await deletion.locator(".confirm-description").innerText(), /本页草稿.*保存后/);
-    assert.match(await deletion.locator(".confirm-warning").innerText(), /退出整个供应商/);
+    assert.match(await deletion.locator(".confirm-description").innerText(), /供应商授权和其他模型保持不变/);
+    assert.equal(await deletion.locator(".confirm-warning").count(), 0);
     await capture(`saved-delete-${theme}-${width}.png`);
     await deletion.getByRole("button", { name: "取消", exact: true }).click();
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
@@ -76,7 +106,7 @@ try {
   await trigger.click(); await deletion.getByRole("button", { name: "删除草稿", exact: true }).click();
   assert.equal(await rows.count(), 0);
   assert.equal(readFileSync(modelsPath, "utf8"), baseline, "confirmed deletion changes only this page until Save");
-  await page.reload(); await page.locator("#models-tab").click(); await trigger.waitFor();
+  await page.reload(); await readConnectedConfiguration(); await page.locator("#models-tab").click(); await trigger.waitFor();
   await page.locator("#add-model").click();
   await page.locator("#new-model-id").fill("unpublished-draft"); await page.locator("#new-model-name").fill("未发布模型草稿");
   await page.getByRole("button", { name: "完成编辑", exact: true }).click();
@@ -90,7 +120,7 @@ try {
   assert.equal(await rows.count(), 1); assert.equal(readFileSync(modelsPath, "utf8"), baseline);
 
   // Start the independent provider-removal scenario with the unchanged saved snapshot.
-  await page.reload(); await page.locator("#provider-key").waitFor();
+  await page.reload(); await readConnectedConfiguration(); await page.locator("#provider-key").waitFor();
   await page.evaluate(() => document.documentElement.dataset.theme = "light");
   // Real asynchronous decision replacement: remove -> stop consent -> remove again.
   await page.locator("#suppliers-tab").click(); requireActiveStop = true;
@@ -112,9 +142,10 @@ try {
   assert.equal(JSON.parse(readFileSync(join(root, "shared-pi", "auth.json"), "utf8"))["confirmation-fixture"], undefined);
   assert.equal(deleteRequests.length, 3); assert.equal(deleteRequests.at(-1)?.confirmStop, true);
   assert.deepEqual(errors, []);
-  writeFileSync(join(artifacts, "result.json"), JSON.stringify({ passed: true, cases: ["saved/unsaved model wording and warning", "dark/light real-page screenshots", "safe focus and restoration", "cancel and draft-only deletion preserve disk", "asynchronous chained provider confirmation and cancellation", "final removal carries explicit stop authorization"], errors }, null, 2));
+  writeFileSync(join(artifacts, "result.json"), JSON.stringify({ passed: true, cases: ["saved/unsaved model wording and warning", "dark/light real-page screenshots", "safe focus and restoration", "cancel and draft-only deletion preserve disk", "asynchronous chained provider confirmation and cancellation", "final removal carries explicit stop authorization"], connectionChecks, deleteRequests, errors }, null, 2));
   console.log("Model confirmations passed: actual-page saved/unsaved drafts, safe cancel/focus, disk preservation, dual-theme visuals and asynchronous chained provider removal.");
 } catch (error) {
+  writeFileSync(join(artifacts, "failure.json"), JSON.stringify({ error: String(error), errors, connectionChecks, wire, text: await page.locator("body").innerText() }, null, 2));
   await page.screenshot({ path: join(artifacts, "failure.png"), fullPage: true }).catch(() => {});
   throw error;
 } finally {

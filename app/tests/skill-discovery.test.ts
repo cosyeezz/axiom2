@@ -18,8 +18,8 @@ for (const mode of ["section patches", "forced", "folded"] as const) test(`live 
   const forced = mode === "forced";
   const root = mkdtempSync(join(tmpdir(), "axiom-live-skills-")), cwd = join(root, "project"), piDir = join(root, "pi");
   for (const path of [piDir, join(cwd, ".pi/extensions"), join(cwd, ".pi/skills/alpha"), join(cwd, ".pi/skills/beta")]) mkdirSync(path, { recursive: true });
-  const previous = process.env.AXIOM_PI_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
-  process.env.AXIOM_PI_DIR = piDir; process.env.AXIOM_EXECUTION_MODE = "managed";
+  const previous = process.env.AXIOM_PI_DIR, previousNative = process.env.PI_CODING_AGENT_DIR, previousMode = process.env.AXIOM_EXECUTION_MODE;
+  process.env.AXIOM_PI_DIR = piDir; process.env.PI_CODING_AGENT_DIR = join(root, "native-auth"); process.env.AXIOM_EXECUTION_MODE = "managed";
   const skillFile = (name: string) => join(cwd, ".pi/skills", name, "SKILL.md");
   for (const name of ["alpha", "beta"]) writeFileSync(skillFile(name), `---\nname: ${name}\ndescription: ${name.toUpperCase()}_DISCOVERY\n${name === "beta" ? "disable-model-invocation: true\n" : ""}---\n${name.toUpperCase()}_BODY`);
   const betaSource = readFileSync(skillFile("beta"), "utf8");
@@ -27,6 +27,8 @@ for (const mode of ["section patches", "forced", "folded"] as const) test(`live 
   const lifecycle = join(root, "lifecycle"), entered = (n: number) => join(root, `entered-${n}`), release = (n: number) => join(root, `release-${n}`);
   writeFileSync(join(cwd, ".pi/extensions/checkpoint.ts"), `import {appendFileSync,writeFileSync,existsSync} from 'node:fs';
 export default pi => {
+  // The production message handler is registered before this extension listener.
+  process.on('message', value => { if(value?.type === 'reload' && /^[0-9a-f-]{36}$/.test(value.id)) writeFileSync(${JSON.stringify(root)}+'/received-'+value.id, 'received'); });
   pi.on('session_start', () => appendFileSync(${JSON.stringify(lifecycle)}, 'start\\n'));
   pi.on('session_shutdown', () => appendFileSync(${JSON.stringify(lifecycle)}, 'shutdown\\n'));
   pi.on('before_agent_start', e => { e.systemPromptOptions.sections.extension_fixture = 'EXTENSION_PRESERVED';
@@ -66,9 +68,7 @@ export default pi => {
     const workspace = store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: cwd, authorized: true } }) as Workspace;
     const session = store.execute({ op: "session.create", requestId: randomUUID(), workspaceId: workspace.id }) as Session;
     const scope = { workspaceId: workspace.id, sessionId: session.id };
-    let signalled = 0;
-    const signal = agents.signal.bind(agents);
-    agents.signal = (...args) => { const sent = signal(...args); if (sent && args[2].type === "reload") signalled++; return sent; };
+    const received = () => existsSync(join(root, "received-" + agents.reloads.state(scope)?.id));
     const command = (op: string, params = {}, requestId = randomUUID()) => agents.command({ op, requestId, ...scope, params });
     const toggle = async (name: string, checked: boolean) => {
       const catalog = await agents.capabilities.get(scope), item = catalog.skills.find(item => item.name === name)!;
@@ -94,6 +94,8 @@ export default pi => {
     await assert.rejects(command("agent.skills", { revision: applied.revision, catalogRevision: catalog.revision, id: betaId, checked: false }), { code: "RELOAD_BUSY" });
     // Unrelated resources must not be refreshed as a side effect of a skill toggle.
     writeFileSync(join(cwd, "AGENTS.md"), "PROJECT_CHANGED_MUST_NOT_LOAD");
+    // Waiting and child.send both precede delivery; keep the batch blocked until the worker receives this reload.
+    await wait(received, "addition received by worker before releasing the tool");
     writeFileSync(release(1), "go");
     await wait(() => existsSync(entered(11)), "second tool in the same batch");
     assert.equal(requests.length, 1); assert.deepEqual(agents.capabilities.state(scope), applied);
@@ -117,9 +119,8 @@ export default pi => {
     assert.deepEqual(agents.capabilities.preferences(), defaults, "current session changes leave global preferences untouched");
     // Even malformed MCP configuration cannot block a skill-only change or restart its connection.
     writeFileSync(join(piDir, "mcp.json"), "{ invalid");
-    const signalsBeforeRemoval = signalled;
     await toggle("beta", false);
-    await wait(() => signalled > signalsBeforeRemoval, "removal reaches worker before releasing the tool");
+    await wait(received, "removal received by worker before releasing the tool");
     writeFileSync(release(2), "go");
     await wait(() => !agents.active(scope), "run completes");
     assert.equal(agents.info(scope).run?.status, "completed", agents.info(scope).run?.error ?? undefined);
@@ -142,9 +143,9 @@ export default pi => {
     gates.set(requests.length + 1, 3);
     await command("prompt", { text: "Check failure handling." });
     await wait(() => existsSync(entered(3)), "failure checkpoint");
-    const beforeFailure = agents.capabilities.state(scope), signalsBeforeFailure = signalled;
+    const beforeFailure = agents.capabilities.state(scope);
     await toggle("alpha", false);
-    await wait(() => signalled > signalsBeforeFailure, "skill change reaches worker");
+    await wait(received, "skill change received by worker");
     rmSync(skillFile("beta")); writeFileSync(release(3), "go");
     await wait(() => !agents.active(scope), "failed application settles");
     assert.equal(agents.reloads.state(scope)?.status, "failed");
@@ -164,6 +165,7 @@ export default pi => {
     for (const n of [1, 2, 3, 11]) writeFileSync(release(n), "cleanup");
     await agents.close(); store.close(); http.closeAllConnections(); await new Promise<void>(resolve => http.close(() => resolve()));
     if (previous === undefined) delete process.env.AXIOM_PI_DIR; else process.env.AXIOM_PI_DIR = previous;
+    if (previousNative === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previousNative;
     if (previousMode === undefined) delete process.env.AXIOM_EXECUTION_MODE; else process.env.AXIOM_EXECUTION_MODE = previousMode;
     rmSync(root, { recursive: true, force: true });
   }

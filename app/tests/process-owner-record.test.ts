@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { createProcessOwner, recoverProcessOwner } from "../src/server/process-owner-record.js";
+import { canRecoverProcessOwner, createProcessOwner, recoverProcessOwner } from "../src/server/process-owner-record.js";
 import { forkLinuxOwned, monotonicMilliseconds } from "../src/server/owned-process-linux.js";
 import { runRtk } from "../src/server/integrations/rtk-process.js";
 
@@ -28,6 +28,21 @@ test("owner journal persists intent and armed; changed records are never removed
     assert.ok(!existsSync(path));
     assert.throws(() => journal.arm({ platform: "win32", workerPid: process.pid }));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("revoked native cleanup receipt recovers in the same host without weakening intent protection", () => {
+  const root = mkdtempSync(join(tmpdir(), "axiom-journal-receipt-")), path = join(root, "owner.json");
+  const journal = createProcessOwner(path);
+  try {
+    assert.equal(canRecoverProcessOwner(path), false);
+    assert.equal(recoverProcessOwner(path), false);
+    assert.ok(existsSync(path), "an intent without a cleanup receipt must be retained");
+    journal.stopped("not-started");
+    journal.revoke();
+    assert.equal(canRecoverProcessOwner(path), true);
+    assert.equal(recoverProcessOwner(path), true);
+    assert.equal(existsSync(path), false);
+  } finally { journal.revoke(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("business commands only observe a persisted armed owner", { skip: !["win32", "linux"].includes(process.platform), timeout: 15000 }, async () => {

@@ -57,10 +57,12 @@ export function ProviderConnection({
           {p.hasConnectionOverrides && <p className="field-help">此连接保留已有自定义接口覆盖，登录不会修改原配置。协议：{p.api}；地址：{p.keepUrl ? "已保存敏感地址" : p.url}</p>}
           <ProviderProxyFields value={p.proxy} onChange={proxy => patch({ proxy })} disabled={busy || needsReconcile} error={p.auth?.error} />
           <div className="row">
-            <button type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>OAuth 登录</button>
+            <button id="oauth-login-provider" type="button" className="btn btn-primary" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => setLogin({ providerId: p.providerId, type: "oauth" })}>OAuth 登录</button>
+            <button id="logout-provider" type="button" className="btn btn-ghost" disabled={!p.originalId || !p.auth?.configured || dirty || !!editor || busy || needsReconcile} onClick={() => logoutProvider(p)} data-tooltip="立即退出授权，保留供应商和模型">退出授权</button>
             <button type="button" className="btn btn-ghost" disabled={dirty || !!editor || busy || needsReconcile} onClick={() => removeProvider(p)}>退出登录并移除</button>
           </div>
-          {dirty && <p className="field-help">请先保存或放弃当前草稿，再重新登录或移除账号。</p>}
+          <p className="field-help">删除模型不会退出授权；「退出授权」立即清除受管理认证，保留供应商和模型配置。</p>
+          {dirty && <p className="field-help">请先保存或放弃当前草稿，再登录、退出授权或移除账号。</p>}
           {storage && <p className="meta credential-path">凭据保存位置：<LocalPath path={storage.authPath} /></p>}
         </div>
       </section>

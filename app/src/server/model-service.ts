@@ -502,7 +502,7 @@ export class ModelService {
               : "此 OAuth 连接使用应用内置模型目录；未向供应商查询实时列表，实际可用性以账号权限为准。";
             models = runtime.getModels(providerId).map((model) => ({
               id: model.id, name: model.name, api: model.api,
-              levels: levelsOf(model), input: kiroCatalog ? kiroCatalogInput(model) : [...model.input], contextWindow: model.contextWindow || undefined,
+              levels: levelsOf(model), input: kiroCatalog ? kiroCatalogInput(model) : [...model.input], contextWindow: kiroCatalog ? model.contextWindow || undefined : model.contextWindow,
             })).sort((a, b) => a.name.localeCompare(b.name));
             if (kiroCatalog && !models.length) message = "Kiro 接口请求成功，但当前账号未返回模型；请检查账号权限及所选 profile，不会回退到静态名单或其他模型。";
           }

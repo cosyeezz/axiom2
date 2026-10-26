@@ -203,8 +203,8 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
       const oauth = p.connectionType === "oauth";
       if (oauth && !runtime.getProvider(providerId)?.auth.oauth?.login)
         invalid("该供应商不支持 OAuth 登录，请使用自定义接口");
-      if (oauth && (p.key || p.clearKey))
-        invalid("OAuth 连接不接受 API 密钥；退出登录请删除该供应商");
+      if (oauth && p.key)
+        invalid("OAuth 连接不接受 API 密钥；退出登录请使用独立的退出授权按钮");
       next.name = text(p.name, "供应商名称", 80);
       next.axiomProxy = parseProviderProxy(p.proxy, original.axiomProxy);
       if (!oauth) {
@@ -437,11 +437,10 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
                 next.modelOverrides[modelId] = remaining;
             }
           }
-          if (oldId && oldId !== modelId) logout.add(providerId);
         });
       }
-      if ([...previousModels.keys()].some((m) => !modelIds.has(m)))
-        logout.add(providerId);
+      // Model edits only change configuration; provider credentials are independent.
+      // Logout is reserved for explicit credential clearing or provider removal.
       if (
         typeof p.key !== "string" ||
         p.key.length > 8192 ||
@@ -470,7 +469,7 @@ export function prepareDraft(draft: Json, config: Json, runtime: ModelRuntime) {
   if (logout.size && draft.confirmLogout !== true)
     throw new AppError(
       "LOGOUT_CONFIRMATION_REQUIRED",
-      "删除或清除认证会退出整个供应商，同供应商其他模型也可能需要重新认证；请确认影响。",
+      "移除供应商或清除认证会退出整个供应商，同供应商其他模型也可能需要重新认证；请确认影响。",
     );
   for (const providerId of logout) {
     if (keys.has(providerId))

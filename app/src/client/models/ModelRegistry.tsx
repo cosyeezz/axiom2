@@ -20,6 +20,7 @@ export function ModelRegistry({
   filter,
   setFilter,
   editor,
+  editorDirty,
   setEditor,
   discardEditor,
   stageEditor,
@@ -39,6 +40,7 @@ export function ModelRegistry({
   filter: string;
   setFilter: (s: string) => void;
   editor: Model | null;
+  editorDirty: boolean;
   setEditor: (m: Model | null) => void;
   discardEditor: (fn: () => void) => void;
   stageEditor: () => unknown;
@@ -129,7 +131,7 @@ export function ModelRegistry({
       )}
       {editor && (
         <ModelEditor
-          {...{ editor, setEditor, p, stageEditor, discardEditor, feedback }}
+          {...{ editor, editorDirty, setEditor, p, stageEditor, discardEditor, feedback }}
         />
       )}
       <p className="model-duplicate-feedback" role="status">{duplicateFeedback}</p>
@@ -217,9 +219,8 @@ export function ModelRegistry({
                           danger: true,
                           subject: `${m.name}\n${m.id}`,
                           text: m.originalId
-                            ? "将此模型移出本页草稿，保存后才会生效。"
+                            ? "将此模型移出本页草稿，保存后才会生效；供应商授权和其他模型保持不变。"
                             : "该模型尚未发布；仅从本页草稿移除。",
-                          warning: m.originalId ? "保存时会退出整个供应商，同供应商其他模型也可能需要重新认证。" : undefined,
                           proceed: () => remove(m),
                         })
                       }

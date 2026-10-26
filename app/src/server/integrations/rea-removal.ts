@@ -1,4 +1,4 @@
-import { assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, builtinRemovalDirectories, markBuiltinRemovals, forgetBuiltinDirectory } from "./builtin-operation.js";
+import { builtinDirectoryRecorded, assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, builtinRemovalDirectories, markBuiltinRemovals, forgetBuiltinDirectory } from "./builtin-operation.js";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../shared/protocol.js";
@@ -17,13 +17,16 @@ export function reaRemovalPlan(root: string, fresh: ReaConfig, previousRemovals:
   const parents = ["integrations", "rea", engine ? "engines" : "versions"];
   const records = engine ? fresh.managedEngines?.[engine] ?? [] : [];
   const pending = [...new Set([...fresh.removalPending ?? [], ...previousRemovals.filter(path => dirname(path) === join(root, ...parents)).map(path => basename(path))])].filter(name => engine ? name.startsWith(`${engine}-`) : reaProgramDirectoryPattern.test(name));
+  const children = engine ? [] : managedChildren(root, parents.slice(0, -1), "versions", pattern);
+  const owned = children.filter(name => builtinDirectoryRecorded(root, "rea", join(root, ...parents, name)));
   const names = [...new Set([...pending, ...(engine ? records.map(record => record.directory) : [
-    ...managedChildren(root, parents.slice(0, -1), "versions", pattern), ...(fresh.installation ? [fresh.installation.directory] : []),
+    ...owned, ...(fresh.installation ? [fresh.installation.directory] : []),
   ])])].sort();
+  const unverified = children.filter(name => !names.includes(name)).map(name => join(root, ...parents, name));
   for (const name of names) managedDirectory(root, parents, name, pattern);
   for (const record of records) if (!insideReaDirectory(join(reaDirectory(root), "engines", record.directory), record.path))
     throw Error("组件托管记录与路径不一致，未删除文件。");
-  return { names, parents, pattern, pending, records, paths: names.map(name => join(root, ...parents, name)) };
+  return { names, parents, pattern, pending, records, unverified, paths: names.map(name => join(root, ...parents, name)) };
 }
 /** Called only while the application's worker maintenance barrier is held. */
 export function removeRea(root: string, revision: string, engine?: ReaEngineId, scopeRevision?: unknown) {

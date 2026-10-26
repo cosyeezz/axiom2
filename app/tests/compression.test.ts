@@ -1,4 +1,5 @@
 import { compressionMemoryRead, afterCompressionMemoryRead } from "./compression-memory-fixture.js";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type ServerResponse } from "node:http";
@@ -57,6 +58,10 @@ test(
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw);
+      if ((body.messages ?? []).some((message: any) => ["system", "developer"].includes(message.role) && typeof message.content === "string" && message.content.includes("为会话生成简明标题"))) {
+        replyToFixtureTitle(body, res);
+        return;
+      }
       requests.push(body);
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
@@ -563,6 +568,10 @@ test("running compression snapshots and applies only at paired-tool safe points 
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw);
+      if ((body.messages ?? []).some((message: any) => ["system", "developer"].includes(message.role) && typeof message.content === "string" && message.content.includes("为会话生成简明标题"))) {
+        replyToFixtureTitle(body, res);
+        return;
+      }
       requests.push(body);
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();

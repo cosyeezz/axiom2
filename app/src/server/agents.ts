@@ -393,6 +393,7 @@ export class Agents {
       this.owner(scope);
       if (this.reloads.active(scope)) throw new AppError("RELOAD_BUSY", "会话正在重载，请等待完成后操作。");
       if (c.op === "prompt" || resuming) {
+        if (!this.store.workspace(scope.workspaceId).authorized) throw new AppError("AUTHORIZATION_REQUIRED", "请先授权工作空间文件访问");
         this.runs.assertEpoch(scope, epoch);
         if (internal.memoryContinuation) {
           this.assertMemoryContinuation(scope, internal.memoryContinuation.expectedRunId, ownStart);
@@ -728,6 +729,7 @@ export class Agents {
           await this.models.prepareAuth(start.selection, start.modelsFile, ownStart!.controller.signal);
           validate();
         }, ownStart!.controller.signal);
+        validate();
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
           modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
           mode: this.pool.mode }, ownStart!.controller.signal);

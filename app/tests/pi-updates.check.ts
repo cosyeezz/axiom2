@@ -19,7 +19,7 @@ try {
     const state = {
       version: null as string | null, release: null as any, job: null as any, missing: true, execution: null as any,
       failCheck: false, checkDelay: 0, legacy: false, cliError: "", repairRequired: false, clientInstaller: null as any, clientVersion: '0.4.1', holdStatus: false,
-      held: null as (() => void) | null, calls: [] as any[],
+      held: null as (() => void) | null, calls: [] as any[], unexpected: [] as string[],
     };
     (window as any).piFixture = state;
     const snapshot = () => ({
@@ -31,13 +31,17 @@ try {
     let theme = "dark", revision = 0;
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, ...args });
-      if (name === "axiom_theme") { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
-      if (name === "axiom_service") return { desktopView: "control", state: state.missing ? "missing" : "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
-      if (name === "axiom_setup") return args.action === "check" ? { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" } : { job: null };
-      if (name === "axiom_peers") return { peers: [] };
-      if (name === "axiom_reveal_path") return null;
-      if (name === "axiom_cleanup" && args.request?.op.endsWith(".get")) return { requestId: args.request.requestId, data: { revision: "empty-fixture", items: [], scopes: [], warnings: [], installations: {}, engines: [] } };
-      if (name !== "axiom_update") throw Error("Unexpected IPC: " + name);
+      if (name === "axiom_theme" && args.action === undefined) { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
+      if (name === "axiom_service" && args.action === "status") return { desktopView: "control", state: state.missing ? "missing" : "running", active: ["现有任务"], url: "http://127.0.0.1:4317/" };
+      if (name === "axiom_setup" && args.action === "check") return { nodeReady: true, nodeVersion: "v22.23.2", tailscale: true, writable: true, platform: "darwin" };
+      if (name === "axiom_setup" && args.action === "status") return { job: null };
+      if (name === "axiom_peers" && args.action === undefined) return { peers: [] };
+      if (name === "axiom_reveal_path" && args.action === undefined) return null;
+      if (name === "axiom_cleanup" && args.action === undefined && ["resources.get", "rea.get", "rtk.get", "opencli.get", "modelProxy.get"].includes(args.request?.op)) return { requestId: args.request.requestId, data: { revision: "empty-fixture", items: [], scopes: [], warnings: [], installations: {}, engines: [] } };
+      if (name !== "axiom_update" || !["status", "pi-refresh", "pi-check", "pi"].includes(args.action)) {
+        state.unexpected.push(name + ":" + args.action);
+        throw Error("Unexpected IPC: " + name + ":" + args.action);
+      }
       if (args.action === "status" && state.holdStatus) await new Promise<void>(resolve => { state.held = resolve; });
       if (args.action === "pi-check") {
         if (state.checkDelay) await new Promise(resolve => setTimeout(resolve, state.checkDelay));
@@ -110,6 +114,19 @@ try {
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   assert.ok(await install.evaluate(node => document.activeElement === node));
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi").length), 0);
+
+  // A current safety gate can invalidate an open confirmation without changing its frozen target.
+  await install.click();
+  await page.evaluate(() => { (window as any).piFixture.release.token = null; });
+  await page.clock.runFor(2100);
+  const acceptInstall = dialog.getByRole("button", { name: "确认安装 Pi", exact: true });
+  await acceptInstall.and(page.locator(":disabled")).waitFor();
+  await acceptInstall.dispatchEvent("click");
+  assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((c: any) => c.action === "pi").length), 0);
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.evaluate(() => { (window as any).piFixture.release.token = "confirmed-token"; });
+  await page.clock.runFor(2100);
+  await install.and(page.locator(":enabled")).waitFor();
 
   // Polling may change the latest release, but never the version being confirmed.
   await install.click();
@@ -209,10 +226,15 @@ try {
   assert.equal(await pi.getByRole("alert").count(), 0);
   assert.equal(await page.locator(".startup-global-error").count(), 0, "no caught IPC errors hidden from pageerror checks");
   assert.equal(await page.evaluate(() => (window as any).piFixture.calls.filter((call: any) => call.action === "pi").length), 1, "only the explicit frozen-snapshot confirmation submitted installation");
+  const unexpected = await page.evaluate(() => (window as any).piFixture.unexpected);
+  assert.deepEqual(unexpected, [], "unknown IPC names or actions must never receive fixture success");
   assert.deepEqual(errors, []);
-  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
+  await writeFile(resolve(output, "result.json"), JSON.stringify({ passed: true, widths, errors, unexpected, scope: "actual React page with fixture IPC; no real installation" }, null, 2));
   console.log("Pi UI passed: fresh install, upgrade, confirmation snapshot, queued polling, progress, errors, legacy and six widths.");
 } catch (error) {
-  for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) await page.screenshot({ path: resolve(output, `failure-${index}.png`), fullPage: true }).catch(() => {});
+  for (const [index, page] of browser.contexts().flatMap(context => context.pages()).entries()) {
+    await page.screenshot({ path: resolve(output, `failure-${index}.png`), fullPage: true }).catch(() => {});
+    await writeFile(resolve(output, `failure-${index}.txt`), await page.locator("body").innerText()).catch(() => {});
+  }
   throw error;
 } finally { await browser.close(); await server.close(); }

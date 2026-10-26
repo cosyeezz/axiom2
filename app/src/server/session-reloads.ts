@@ -209,6 +209,7 @@ export class SessionReloads {
       const raw = await agents.models.raw(); check();
       return { selection, task, capabilities, file, raw };
     }, controller.signal);
+    check();
     const environment = await agents.profiles.prepareAsync({ entry: "agent", cwd, modelDir: agents.models.dir, modelsRaw: prepared.raw,
       selection: prepared.selection, capabilities: prepared.capabilities?.runtime, mode: agents.pool.mode }, controller.signal);
     let lease: Awaited<ReturnType<typeof agents.pool.acquire>> | undefined;

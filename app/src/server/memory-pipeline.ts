@@ -1,11 +1,12 @@
 import { basename, relative } from "node:path";
 import type { Memories, MemoryExecution, MemoryReadAccess } from "./memories.js";
-import { MemoryTreeStore, type QueuedPurpose } from "./memory-tree.js";
+import { MemoryTreeStore, type QueuedPurpose, type OrganizationClaim } from "./memory-tree.js";
+import { organizationJSON } from "./memory-organization-state.js";
 import { memoryDirectory, referencedPaths } from "./memory-files.js";
 import { memoryOrganizerPrompt, memoryMatchPrompt, memoryAnswerPrompt } from "../shared/memory-prompts.js";
 import { projectMemoryTree } from "../shared/memory-query-projection.js";
 import { uniqueMemoryDocuments } from "../shared/memory-directory.js";
-import type { MemoryPurpose, MemoryDocumentRef } from "../shared/memory-tree.js";
+import { memoryOrganizationWatermarks, memoryOrganizationOutputChars, type MemoryPurpose, type MemoryDocumentRef, type MemoryIndexNode } from "../shared/memory-tree.js";
 import { AppError, type Scope } from "../shared/protocol.js";
 import { type MemoryDocument, type MemoryQueryResult } from "../shared/memory.js";
 import { memoryPurposes } from "../shared/memory-purposes.js";
@@ -15,7 +16,15 @@ import type { LeaseRef } from "./execution-protocol.js";
 
 export class MemoryPipeline {
   readonly tree: MemoryTreeStore;
-  constructor(private memories: Memories) { this.tree = new MemoryTreeStore(memories.store); }
+  constructor(private memories: Memories) {
+    this.tree = new MemoryTreeStore(memories.store, (_workspaceId, purposes) => {
+      const { organizerModel, timeoutMs, readChars } = memories.preferences();
+      const pending = purposes.find(purpose => memories.store.db.prepare("SELECT 1 FROM memory_purposes WHERE id=? AND processedAt IS NULL").get(purpose.id));
+      const row = pending && memories.store.db.prepare("SELECT selection FROM agent_sessions WHERE sessionId=?").get(pending.source.sessionId);
+      const selection: Selection | undefined = organizerModel ?? (row?.selection ? JSON.parse(String(row.selection)) : undefined);
+      return organizationJSON([selection, timeoutMs, readChars, memories.runner?.configurationKey?.(selection) ?? ""]);
+    });
+  }
   private full(scope: Scope, path: string, signal?: AbortSignal): MemoryDocument & { access: MemoryReadAccess } {
     let content = "", offset = 0, first: MemoryDocument | undefined, access: MemoryReadAccess | undefined;
     do {
@@ -34,7 +43,9 @@ export class MemoryPipeline {
   private verify(scope: Scope, documents: Array<MemoryDocument & { sessionId: string; access: MemoryReadAccess }>, refs: MemoryDocumentRef[]) {
     this.memories.owner(scope);
     const live = new Set(this.tree.entries(scope.workspaceId).filter(purpose => !purpose.blocked && purpose.processedAt !== null).map(purpose => purpose.id));
-    if (refs.some(ref => !ref.purposeIds.some(id => live.has(id))))
+    const currentReferences = new Map(this.tree.nodes.documentReferences(scope.workspaceId).map(ref => [JSON.stringify([ref.sessionId, ref.path]), ref]));
+    const actualBindings = documents.flatMap(document => currentReferences.get(JSON.stringify([document.sessionId, document.path])) ?? []);
+    if ([...refs, ...actualBindings].some(ref => !ref.purposeIds.some(id => live.has(id))))
       throw new AppError("MEMORY_LOCATOR_INVALID", "资料来源已撤销，结果未发布");
     const corrections = this.memories.store.db.prepare("SELECT target FROM memory_corrections WHERE workspaceId=?").all(scope.workspaceId);
     for (const document of documents) {
@@ -71,13 +82,21 @@ export class MemoryPipeline {
     if (!batch.length) return;
     const scope = { workspaceId: batch[0].workspaceId, sessionId: batch[0].source.sessionId };
     const processingId = recordId ?? this.startOrganization(batch), originalBatch = batch, peers = this.tree.entries(scope.workspaceId);
+    const deadlineAt = Date.now() + this.memories.preferences().timeoutMs;
+    signal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, deadlineAt - Date.now()))]);
+    let claim: OrganizationClaim | undefined, guardedPurposes: MemoryPurpose[] = batch;
     const batchContext = (published = false) => ({ purposeIds: originalBatch.map(purpose => purpose.id), sessionIds: [...new Set(originalBatch.map(purpose => purpose.source.sessionId))], published, skipped: originalBatch.length - batch.length });
-    const guard = () => {
+    const guardDeadline = () => {
       signal.throwIfAborted();
-      for (const purpose of batch) {
+      if (Date.now() >= deadlineAt) throw new AppError("MEMORY_BUDGET", "整理总执行时限已到，未发布");
+    };
+    const guard = () => {
+      guardDeadline();
+      for (const purpose of guardedPurposes) {
         const source = { workspaceId: scope.workspaceId, sessionId: purpose.source.sessionId };
         this.memories.owner(source); this.locate(purpose, this.full(source, "MEMORY.md", signal), peers);
       }
+      guardDeadline();
     };
     try {
       this.memories.records.stage(processingId, "核对批次来源", selection);
@@ -95,21 +114,37 @@ export class MemoryPipeline {
         this.memories.records.finish(processingId, "invalidated", "全部目的定位已失效，未请求模型");
         this.memories.publishTree(scope.workspaceId); return;
       }
-      guard();
-      const snapshot = this.tree.snapshot(scope.workspaceId), entries = new Map(this.tree.entries(scope.workspaceId).map(purpose => [purpose.id, purpose]));
-      const purposes = [...snapshot.purposes, ...batch];
-      // No source/session/path, original details or execution tree enter classification.
-      const prompt = JSON.stringify({ existingTree: this.tree.modelTree(snapshot.roots),
-        purposes: purposes.map(purpose => ({ id: purpose.id, text: purpose.text, context: entries.get(purpose.id)?.context ?? [] })),
-        batchIds: batch.map(purpose => purpose.id) });
-      if (prompt.length + memoryOrganizerPrompt.length > this.memories.preferences().readChars)
-        throw new AppError("MEMORY_LIMIT", "完整分类输入超过预算，未截断目的或目录，队列保留");
-      this.memories.records.stage(processingId, "批量语义分类", selection);
-      const result = await this.execute({ scope, selection, kind: "organize", signal, processingId,
-        systemPrompt: memoryOrganizerPrompt, prompt }, "批量语义分类");
+      guardedPurposes = batch; guard();
+      const snapshot = this.tree.snapshot(scope.workspaceId), purposes = [...snapshot.purposes, ...batch];
+      guardedPurposes = purposes; guard();
+      claim = this.tree.claim(scope.workspaceId, batch, purposes, snapshot.version, processingId);
+      const size = (roots: MemoryIndexNode[]) => Array.from(projectMemoryTree(roots).catalog).length;
+      const organize = async (roots: MemoryIndexNode[], sources: MemoryPurpose[], stage: string, target?: number) => {
+        signal.throwIfAborted();
+        const titles = [...new Set(sources.map(purpose => purpose.text))];
+        // Only tree text and exact titles enter the model. Bindings remain frozen here.
+        const prompt = JSON.stringify({ existingTree: this.tree.modelTree(roots), titles });
+        const systemPrompt = `${memoryOrganizerPrompt}\n\n语义目录体积按实际查询文本计数：前缀“目录：”及换行、每级两个空格缩进、目录名称和换行；不计原标题叶。${target ? `本阶段是压缩重整，必须不超过${target}个Unicode码点。` : `最终不得超过${memoryOrganizationWatermarks.maximum}个Unicode码点。`}`;
+        if (Array.from(prompt).length + Array.from(systemPrompt).length > this.memories.preferences().readChars)
+          throw new AppError("MEMORY_LIMIT", "完整整理输入超过预算，未截断目的或目录，队列保留");
+        this.memories.records.stage(processingId, stage, selection);
+        const result = await this.execute({ scope, selection, kind: "organize", signal, deadlineAt, processingId,
+          systemPrompt, prompt, outputReserve: Buffer.byteLength(JSON.stringify(titles.map(title => ({ title }))), "utf8") + 1024 }, stage);
+        signal.throwIfAborted();
+        if (result.incomplete || result.answer.length > memoryOrganizationOutputChars)
+          throw new AppError("MEMORY_BUDGET", "整理输出未完整完成或超过容量，未发布");
+        this.memories.records.stage(processingId, "校验分类结果");
+        const candidate = this.tree.classify(result.answer, sources);
+        if (target && size(candidate) > target) throw new AppError("MEMORY_LIMIT", "重整未达到目标体积，未发布任何中间结果");
+        return candidate;
+      };
+      let existing = snapshot.roots;
+      if (size(existing) >= memoryOrganizationWatermarks.early)
+        existing = await organize(existing, snapshot.purposes, "前置重整旧目录", memoryOrganizationWatermarks.target);
+      let roots = await organize(existing, purposes, "纳入本批原标题");
+      if (size(roots) > memoryOrganizationWatermarks.maximum)
+        roots = await organize(roots, purposes, "压缩超限候选目录", memoryOrganizationWatermarks.target);
       this.memories.records.stage(processingId, "校验分类结果");
-      if (result.incomplete) throw new AppError("MEMORY_BUDGET", "批分类未完整完成，队列保留");
-      const roots = this.tree.classify(result.answer, purposes);
       this.memories.records.stage(processingId, "复核目的来源");
       guard();
       this.memories.records.stage(processingId, "原子发布分类");
@@ -117,10 +152,10 @@ export class MemoryPipeline {
         this.memories.records.annotate(processingId, { outcome: "applied", batch: batchContext(true) });
         this.memories.records.stage(processingId, "分类已发布");
         this.memories.records.finish(processingId, "completed", undefined, { publishedPurposeIds: batch.map(purpose => purpose.id), indexVersion: snapshot.version + 1 });
-      });
+      }, claim, deadlineAt);
       this.memories.publishTree(scope.workspaceId);
     } catch (error) {
-      this.tree.failure(batch, error); this.memories.publishTree(scope.workspaceId);
+      this.tree.failure(batch, error, claim); this.memories.publishTree(scope.workspaceId);
       this.memories.records.failure(processingId, error, signal); throw error;
     }
   }
@@ -153,7 +188,11 @@ export class MemoryPipeline {
       this.memories.records.annotate(processingId, { outcome: "no_match" });
       this.memories.records.stage(processingId, "无匹配目录"); return empty;
     }
-    const refs = uniqueMemoryDocuments(selected.flatMap(node => node.documentRefs ?? []));
+    // Expand captured descendants in program code, never a second model lookup.
+    const descendants = (node: MemoryIndexNode): MemoryDocumentRef[] => [
+      ...node.documentRefs ?? [], ...node.children.flatMap(descendants),
+    ];
+    const refs = uniqueMemoryDocuments(selected.flatMap(descendants));
     const verifiedRefs = new Map(refs.map(ref => [JSON.stringify([ref.sessionId, ref.path]), ref]));
     const documents = new Map<string, MemoryDocument & { sessionId: string; access: MemoryReadAccess }>();
     const read = (sessionId: string, path: string) => {
@@ -190,6 +229,7 @@ export class MemoryPipeline {
         if (path === ref.path || path === "MEMORY.md") continue;
         const key = JSON.stringify([ref.sessionId, path]), bound = knownReferences.get(key);
         if (bound) { this.verify(scope, [], [bound]); verifiedRefs.set(key, bound); }
+        else if (path.startsWith("details/")) throw new AppError("MEMORY_LOCATOR_INVALID", "链接任务详情不在捕获的来源快照中，不能猜测其归属或绕过撤销");
         const reference = read(ref.sessionId, path);
         // A linked task detail retains its own purpose/state, not the linking
         // task's identity. Unbound reference material has no asserted task state.

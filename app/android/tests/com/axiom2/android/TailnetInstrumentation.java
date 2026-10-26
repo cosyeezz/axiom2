@@ -49,6 +49,8 @@ public final class TailnetInstrumentation extends Instrumentation {
                 test("bounded HTTP, redirect refusal and cancellation", this::http);
                 test("Keystore encryption, corruption and removal", this::storage);
                 test("native selection, stale callbacks, configuration and lifecycle", this::ui);
+                test("cyclic Back switching, readiness, cancellation and stale callbacks", () -> ConnectionSwitchChecks.racesAndFailures(this));
+                test("real WebView Back priorities and three-workstation wraparound", () -> ConnectionSwitchChecks.realWebView(this));
                 test("QR address contract and rotated camera frames", QrInstrumentationChecks::contract);
                 test("QR camera permission, pause, resume and cancellation", () -> QrInstrumentationChecks.lifecycle(this));
                 test("QR results, failure, readiness and successful history", () -> QrInstrumentationChecks.results(this));

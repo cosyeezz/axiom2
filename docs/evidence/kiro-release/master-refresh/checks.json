@@ -1,0 +1,1291 @@
+{
+  "passed": true,
+  "command": "node docs/evidence/kiro-release/master-refresh/check.cjs",
+  "generatedUtc": "2026-10-25T17:55:57.853Z",
+  "latestMaster": "c27cf947ff0debbb59ac74de5d694c894f45a81e",
+  "implementation": "6b929cc27f8264f09383afd8fdbfe518fa3bb4c6",
+  "validatedHead": "7ef9f4a08c20c00d5f1bc942b33dc59694c45a3d",
+  "coveredModelInputsUnchanged": [
+    "app/src/server/providers",
+    "app/src/server/model-service.ts",
+    "app/src/server/model-runtime.ts",
+    "app/src/server/integrations/model-proxy-env.ts",
+    "app/src/server/agent-worker.ts",
+    "app/src/server/agents.ts",
+    "app/tests/kiro*.test.ts",
+    "app/tests/fixtures/kiro*",
+    "app/tests/model-default.test.ts",
+    "app/tests/images.test.ts",
+    "app/tests/model-input.test.ts",
+    "app/tests/model-catalog.test.ts",
+    "app/tests/model-runtime.test.ts",
+    "app/tests/model-config-validation.test.ts",
+    "app/tests/model-overrides.test.ts",
+    "app/tests/model-copy-runtime.test.ts",
+    "app/tests/model-auth-preparation.test.ts",
+    "app/tests/model-switch.test.ts",
+    "app/tests/model-network.test.ts",
+    "app/tests/model-oauth-config.test.ts",
+    "app/tests/model-oauth.test.ts",
+    "app/tests/qoder-runtime.test.ts",
+    "app/tests/codebuddy-runtime.test.ts"
+  ],
+  "reusedTests": {
+    "focused": {
+      "tests": 82,
+      "pass": 82,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "compatibility": {
+      "tests": 48,
+      "pass": 48,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "build": [
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit",
+      "cwd": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+      "startUtc": "2026-10-25T17:52:46.3746701Z",
+      "endUtc": "2026-10-25T17:53:09.0930060Z",
+      "exitCode": 0,
+      "log": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\master-refresh\\build\\01-tsc.log"
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.server.json",
+      "cwd": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+      "startUtc": "2026-10-25T17:53:16.0545056Z",
+      "endUtc": "2026-10-25T17:53:24.7315686Z",
+      "exitCode": 0,
+      "log": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\master-refresh\\build\\02-tsc-server.log"
+    },
+    {
+      "command": "npm.cmd run build",
+      "cwd": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+      "startUtc": "2026-10-25T17:53:31.4769754Z",
+      "endUtc": "2026-10-25T17:54:06.5590627Z",
+      "exitCode": 0,
+      "log": "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\master-refresh\\build\\03-npm-build.log"
+    }
+  ],
+  "opencli": {
+    "command": "node --import tsx --import ./tests/vite-assets.mjs --test --test-concurrency=1 tests/opencli.test.ts tests/opencli-private.test.ts tests/opencli-browser.test.ts",
+    "executable": "C:\\Program Files\\nodejs\\node.exe",
+    "cwd": "F:/Axiom/axiom-kiro-delivery-4bfeec8c/app",
+    "startedUtc": "2026-10-25T17:54:44.733Z",
+    "finishedUtc": "2026-10-25T17:55:24.485Z",
+    "exitCode": 0,
+    "signal": null,
+    "error": null,
+    "counts": {
+      "tests": 19,
+      "pass": 19,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "initialPublicationReport": {
+    "preserved": true,
+    "sha256": "c34676a20d4edde40b6053c132d3bc27c9149906687aa288bf272eb89ad0ebc9"
+  },
+  "historicalIntegrity": {
+    "passed": true,
+    "originalReportPreserved": true,
+    "originalReportSHA256": "8c87a27e45d80893acec67c482523e7a9f1a9e0740ba72ca49411477a7ecf7bc",
+    "linksChecked": 137,
+    "SHA256Entries": 43,
+    "protocolProbeSourceBindings": 8
+  },
+  "frozenIndex": {
+    "files": 79,
+    "bytes": 3141440,
+    "unchanged": true
+  },
+  "localLinks": 257,
+  "stagedDiffCheckExitCode": 0,
+  "files": [
+    {
+      "file": ".gitattributes",
+      "bytes": 471,
+      "sha256": "2ff31b473ef36359aed06829c2074ef285ca27c0d9adbd06cfa83a01fb0a427a"
+    },
+    {
+      "file": "app/src/client/models/ModelCatalogPicker.tsx",
+      "bytes": 6714,
+      "sha256": "c8bb1c20d5007decc9c825386570a0e7133d8b127f472e9202e0d14dad67f602"
+    },
+    {
+      "file": "app/src/client/models/ProviderConnection.tsx",
+      "bytes": 13680,
+      "sha256": "0eba7edc5bb713d646e3c4e89faaaea39a3766b204b079b822cafa18fffe6899"
+    },
+    {
+      "file": "app/src/server/integrations/model-proxy-env.ts",
+      "bytes": 6874,
+      "sha256": "2aafc1ed5cb93e68a25b9071219c065d464d2b129db3693c6adb7d05391f4f22"
+    },
+    {
+      "file": "app/src/server/model-runtime.ts",
+      "bytes": 5735,
+      "sha256": "5499e33578172d8140b28ea6a756817c1511ccb9aa73bc004d77e64ab150ca3f"
+    },
+    {
+      "file": "app/src/server/model-service.ts",
+      "bytes": 37321,
+      "sha256": "26bb052e7731525a5f603e261a8305be993e1938455b99e81dafc6a8a54b982c"
+    },
+    {
+      "file": "app/src/server/providers/kiro-auth.ts",
+      "bytes": 14967,
+      "sha256": "d7851d8ab8104427717dc11cf5ed57c779deb8e344e55ed041bc83a6fbe6511f"
+    },
+    {
+      "file": "app/src/server/providers/kiro-callback.ts",
+      "bytes": 5799,
+      "sha256": "bc0be9c0b632d7e2595b31119826f69b7efa37a9925667382ce3dbfd3a4aed1a"
+    },
+    {
+      "file": "app/src/server/providers/kiro-catalog.ts",
+      "bytes": 10569,
+      "sha256": "803c557f307b14c934e3c1951795b7f24760f268a75089495c6ab95c6c5a9d12"
+    },
+    {
+      "file": "app/src/server/providers/kiro-chat-protocol.ts",
+      "bytes": 11821,
+      "sha256": "667a5696d879f50dd5ce9ae62900465ec63561e25188f1862f80fd7d04809508"
+    },
+    {
+      "file": "app/src/server/providers/kiro-chat.ts",
+      "bytes": 19697,
+      "sha256": "0750e92f3d3e1f71e6dc517c98ed33838392b855d66024708aec139e3edf3b2e"
+    },
+    {
+      "file": "app/src/server/providers/kiro-eventstream.ts",
+      "bytes": 4104,
+      "sha256": "7b85863198215eb60cf88a0e0f2173585cc7474e036ee33c7a664963dc8fe470"
+    },
+    {
+      "file": "app/src/server/providers/kiro-thinking-stream.ts",
+      "bytes": 4438,
+      "sha256": "1603340b565ae5e2b0591fe8fce357719c01f0563fd74d1255c40a5788c1abc5"
+    },
+    {
+      "file": "app/src/server/providers/kiro-thinking.ts",
+      "bytes": 5593,
+      "sha256": "80cce09f6ef304c87e16119d56db5a2e6b0c132b615983646e0a0fb467ad7f47"
+    },
+    {
+      "file": "app/src/server/providers/kiro.ts",
+      "bytes": 2306,
+      "sha256": "8585d7d5cded1394dda25a19a8f9d6e9e60eaeb5a4da1de685e9d8e8c5fdbdad"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-eventstream.ts",
+      "bytes": 1717,
+      "sha256": "f34599d960e17c5e4852f480259ad51703cd4716951badd45b6bf854155caffe"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-network.cjs",
+      "bytes": 2408,
+      "sha256": "41bcf8f0e2137710a014048493f5d4f54a7aa9bc09ba8f7d4e1b7af5b03c4bd5"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-pooling-cert.pem",
+      "bytes": 1229,
+      "sha256": "6c32c935e11e4e8e1e607cb9179e39a6a2543f5a6c8c3f17cb1281a9c2dce43a"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-pooling-key.pem",
+      "bytes": 1700,
+      "sha256": "f035943765579232827ec0c740b477d63e6d4749cb50d5ef1ae504141f720027"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-pooling.md",
+      "bytes": 1238,
+      "sha256": "0df51c0c1b907ce7b4e9d799074ad5021701311175ca5a0980a44b424cdeb084"
+    },
+    {
+      "file": "app/tests/fixtures/kiro-pooling.ts",
+      "bytes": 8487,
+      "sha256": "6a9250ef3ad6e9a4486fa40407e5fc11b054e175f3e6bb610784a47dcdb0aba7"
+    },
+    {
+      "file": "app/tests/kiro-auth.test.ts",
+      "bytes": 11666,
+      "sha256": "6277d0c84e29277defd926d9292dc2955c5e1de967d31648f86135bd3e9b56ed"
+    },
+    {
+      "file": "app/tests/kiro-callback.test.ts",
+      "bytes": 3743,
+      "sha256": "55e6e5b858e87f144428806d1052160aedcc4b5fb138910e609591ed960e49bb"
+    },
+    {
+      "file": "app/tests/kiro-catalog.test.ts",
+      "bytes": 17459,
+      "sha256": "ab6aa3ea4d71abd86aeffdf90f73b9a2f5def66bd716b6473c4f2f11ff49b9d3"
+    },
+    {
+      "file": "app/tests/kiro-chat.test.ts",
+      "bytes": 27033,
+      "sha256": "1a225f9a4bfd6681ed2dfcfb5890e4322cb6fccb69bda28642e113e2669fbfad"
+    },
+    {
+      "file": "app/tests/kiro-images.test.ts",
+      "bytes": 11734,
+      "sha256": "797fc168d170adffa5bd8aa9b618be25e5d7bd51e318dab8a3d3c8a524eab36e"
+    },
+    {
+      "file": "app/tests/kiro-pooling.test.ts",
+      "bytes": 1604,
+      "sha256": "0081367c8fee201dab01de884572cecc994b729abe6d41f33af307e8dc487297"
+    },
+    {
+      "file": "app/tests/kiro-runtime.test.ts",
+      "bytes": 13654,
+      "sha256": "4c742d6ea68e1ea8db7cfaac8d615d95fb4152769451235eb6895625e0480c04"
+    },
+    {
+      "file": "app/tests/kiro-thinking.test.ts",
+      "bytes": 21513,
+      "sha256": "7dfa851d8637f64f19ab721de30d084b23e5adea7e44bd848c0944df763f6b57"
+    },
+    {
+      "file": "app/tests/model-default.test.ts",
+      "bytes": 14772,
+      "sha256": "fd241f773a46b26e21995be57a39f0ba479f7e2b136c1ba8318c8baa6cd11abe"
+    },
+    {
+      "file": "docs/design.md",
+      "bytes": 262776,
+      "sha256": "df488cb139bfbc687937772e34159c43e58cabea633b6a84c9740fc08b9a4fc2"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/README.md",
+      "bytes": 3394,
+      "sha256": "0e12e837f027739ea2f72d3e25484ed6a413452c22ec48aed9003175cb6611ca"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/body-wrapper.asm.txt",
+      "bytes": 12406,
+      "sha256": "80d4d68ba07ea286b714bbc4ba40fc6a2d5a63196f48e22a5bbd12f680da298a"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/caller.asm.txt",
+      "bytes": 40891,
+      "sha256": "8ee9860e16ac2fb1e3050d32ce2d5dfec2c3208dc895cb6115110b9057e616aa"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/catalog-focused-ghidra-manifest.json",
+      "bytes": 2821,
+      "sha256": "f3d96c2be6f78bfcdbe40ffaf46590c899c17b94b20fd49d5403d7e8d8d2e6f6"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/catalog-focused-seeds.tsv",
+      "bytes": 197,
+      "sha256": "f749596a62c46540c14d7614445f22e0b2ac9b8651d7c2c48640f0439f91988c"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/origin-source-bytes.json",
+      "bytes": 1379,
+      "sha256": "895534ccfab02b73bd29c4fcacd05e2f04c25e8481042aaad8e2c50f8bce6954"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/origin.asm.txt",
+      "bytes": 8078,
+      "sha256": "9dcb0479034cbf52d101cd7b1ad1866f20ddefaeff35ab575ec6ab8e3e152c0f"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-body-v2.json",
+      "bytes": 17731,
+      "sha256": "0d78f250f341269adb88c09410fdb5f6dd9a9a9ad01d0fe37d9114b04741e132"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-body-v2.run.json",
+      "bytes": 884,
+      "sha256": "e77719bb13e967f2f4d9fe44cfd5cc219a94c1a700549987d397144bc8333b18"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-caller-v2.json",
+      "bytes": 233769,
+      "sha256": "cb6bebe7358425f686b58a5c34c655f817af37dd16025eff45944a0b02c5bd1f"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-caller-v2.run.json",
+      "bytes": 884,
+      "sha256": "833d41e70a6f4ca96840cde5fda120c21557e72241f1db0bd6d246ab7e3ed93b"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-operation-v2.json",
+      "bytes": 69945,
+      "sha256": "02e6b79df78aef3c5aac8cda933e5c89c04e962e5a6d97c49f045883b781689e"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-operation-v2.run.json",
+      "bytes": 884,
+      "sha256": "a8ecf002c74be8a3de4dd0a61488b8cd28b3175fd9a9f8a08ee4513ca167f9e1"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-query-v2.json",
+      "bytes": 12265,
+      "sha256": "0364342a77be6accd6f9eb8c38a6c550ff3ede4cc8f199720844877684d43b37"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/rea-query-v2.run.json",
+      "bytes": 884,
+      "sha256": "d9d7862360f9646360a0f64fa4062b809c48a02300cea9cf562fe01c00bf9238"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/serializer.asm.txt",
+      "bytes": 45848,
+      "sha256": "c1df51161122033e87bee10cfdd3c8a720028c2e1fafc41fdcc2907d45b8eba4"
+    },
+    {
+      "file": "docs/evidence/kiro-catalog/stderr-records.json",
+      "bytes": 862,
+      "sha256": "bace55ccc6aeb17e0a8f31f4a60eb1ed42920387b57db6100c0ae553bdb5a137"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/README.md",
+      "bytes": 4807,
+      "sha256": "ea1cf442a8ad927017a13428db18751dad6f302b5036f65d084c792d8fdc20f2"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/adapter-probe.json",
+      "bytes": 3027,
+      "sha256": "0659612acedbf6d887db5902703244a0cba76a2abff9efff04db44c7cd624525"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/adapter-probe.ts",
+      "bytes": 6805,
+      "sha256": "2fa04899202ca2954ce449f15ab441fae526ea9ae93785734bfcfa194fabd72d"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/assistant.asm.txt",
+      "bytes": 50923,
+      "sha256": "2e00f35de82c59ac9b45d0094b95f6c313ffdf04a6ca32ef39a51f2f6282bc75"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/check.cjs",
+      "bytes": 4054,
+      "sha256": "de9285fe215385a4a0799cc59b2887ae8c2690b1b3a8fab23e9cd8ad5852dcf4"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/checks.json",
+      "bytes": 1602,
+      "sha256": "c229be0069743c3c4641f7f3e717221d2fcbc170f00f1d2ca1c840b77b980962"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/dumpbin-run.json",
+      "bytes": 661,
+      "sha256": "fc2d6832b47180a7c5329a5973f8ae86ab9a4fc8b78c0585173067c380f10c9c"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/reasoning.asm.txt",
+      "bytes": 10767,
+      "sha256": "ac66e2357fe044b578e6d3125f845086271719ffd6a7e7800daeffbb2792d941"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/serializer-fields.json",
+      "bytes": 11530,
+      "sha256": "f5d41972d8c03a0602d6a68499999fefb35ad0c5edbdfb4762986fa701f62a8d"
+    },
+    {
+      "file": "docs/evidence/kiro-cli-parity/serializer-scan.cjs",
+      "bytes": 3558,
+      "sha256": "8f530d79139aecbe19dca0ad3745d75ddec4a9129ab4177af68e4451e5edfe62"
+    },
+    {
+      "file": "docs/evidence/kiro-images/README.md",
+      "bytes": 5515,
+      "sha256": "082fe72014a8dcf726f0b8cbcc793d15116aaccbacb7e17ab4134b7f1d52cd78"
+    },
+    {
+      "file": "docs/evidence/kiro-images/baseline-adapter-probe.json",
+      "bytes": 2753,
+      "sha256": "74f67a7d4a9e0d8cb2b9454ea1d0e1a4b14da37ca913c883047e332563bb3496"
+    },
+    {
+      "file": "docs/evidence/kiro-images/baseline-adapter-probe.ts.txt",
+      "bytes": 6603,
+      "sha256": "20a58232bdbdcc5997c27edb40f22362beb7939c25650cdb28d638fcd2c063f1"
+    },
+    {
+      "file": "docs/evidence/kiro-images/build-exit.json",
+      "bytes": 190,
+      "sha256": "89308173810b23eaff604fecc822dabb1c62f37501c24a32943c25620d33784d"
+    },
+    {
+      "file": "docs/evidence/kiro-images/build.log",
+      "bytes": 16460,
+      "sha256": "4d106907876a592dd006c6a87eb06fc90c34a817c0021bb944442836e25f31bc"
+    },
+    {
+      "file": "docs/evidence/kiro-images/check.cjs",
+      "bytes": 5801,
+      "sha256": "44c54ef8c2724509688d4753b655fe5c85f9f386b37fa39fa7ec95683dcb4161"
+    },
+    {
+      "file": "docs/evidence/kiro-images/checks.json",
+      "bytes": 6889,
+      "sha256": "939df10eca0a857a96a9ceba313f2cb160e6d928e3f64fb3eeff97fec4da6c8d"
+    },
+    {
+      "file": "docs/evidence/kiro-images/compatibility-tests-exit.json",
+      "bytes": 574,
+      "sha256": "c90ed386488b14b6932c1d5aa4a25a2b1e81aebc8a364693f92789c1cd41fbc8"
+    },
+    {
+      "file": "docs/evidence/kiro-images/compatibility-tests.log",
+      "bytes": 3749,
+      "sha256": "d8258f096ceb69bf1c772fdcebba8a1d9797bc4095e32316600703c2f068a4d6"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-kiro-tests-exit.json",
+      "bytes": 533,
+      "sha256": "b2f9ad6371c8ad86e84a2593d3773c163a048a1de89041fb026a631dd80c5fb4"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-kiro-tests.log",
+      "bytes": 6963,
+      "sha256": "766129cb05c1e525a43e11e766a4e47aecfd737a703ac9dd1492df5cd00b90b6"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-typecheck-exit.json",
+      "bytes": 452,
+      "sha256": "ada5b97bec46e1db514851e260b7fe4500f843fc67a15569baa2ec2fc34ddd40"
+    },
+    {
+      "file": "docs/evidence/kiro-images/initial-typecheck.log",
+      "bytes": 486,
+      "sha256": "76df73ecae8b7b447e424717d4e248f8f2b5e0b9f3124d9519a15f8e98784874"
+    },
+    {
+      "file": "docs/evidence/kiro-images/kiro-tests-exit.json",
+      "bytes": 523,
+      "sha256": "4aab43ab7e06988afec438248635a0eb7d44015deff58aa0f53345025e1d6171"
+    },
+    {
+      "file": "docs/evidence/kiro-images/kiro-tests.log",
+      "bytes": 5651,
+      "sha256": "b5282de0061b3ffbf5a6154c26f1d78040002deb7c8f957e212e2b6b8ab768dc"
+    },
+    {
+      "file": "docs/evidence/kiro-images/parity-check.log",
+      "bytes": 1602,
+      "sha256": "c229be0069743c3c4641f7f3e717221d2fcbc170f00f1d2ca1c840b77b980962"
+    },
+    {
+      "file": "docs/evidence/kiro-images/probe-run.json",
+      "bytes": 384,
+      "sha256": "09cfd7958a72f130e1286a5ae12dff3025ba3a20db41cce7062dcf2b02a915a9"
+    },
+    {
+      "file": "docs/evidence/kiro-images/typecheck-exit.json",
+      "bytes": 556,
+      "sha256": "ddb7f8a444a6d28f05910a7d53268eb1c2a5472db0a0f3417445119d310e592b"
+    },
+    {
+      "file": "docs/evidence/kiro-images/typecheck.log",
+      "bytes": 379,
+      "sha256": "3ef78cca5be24b7381f34a068e60e54c045d7b8e577bcdc756f58c2989fc657a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/README.md",
+      "bytes": 3456,
+      "sha256": "cb31c219f5584c36b60855e5f56cc126cee85b31e9473be7409893009efd7f79"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/defense-notes.md",
+      "bytes": 14256,
+      "sha256": "2dff200ee1fee6258a341be3b11a2d19957e865521e81e0c0e42e1756438ab86"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/annotate.cjs",
+      "bytes": 1274,
+      "sha256": "4390ab5d9d7ce4c57a3b27902f2334d3b1483a0de9c42577ac11fcc1cab50cb0"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/apikey2.asm.txt",
+      "bytes": 323416,
+      "sha256": "3871ae22ecdffc4a622ecfb4f57bfbf7df0b28b2eb36219b6f69943441ecc88f"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/apikey2.run.json",
+      "bytes": 301,
+      "sha256": "66cb4ed1072793c1f380f96a12ce68bf81d1d6b08966b1d01247cfb9018a3332"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/apikey2.strings.json",
+      "bytes": 24814,
+      "sha256": "a72b5d41d64d152ff2829aaa731015acbf422d4513b84a08c9c0937d43acb589"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/callers-140bdacc0.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/callers-142278780-1435add80-142278350-1435af2e0-142279cd0.json",
+      "bytes": 1112,
+      "sha256": "bb305c0c24e8f93dd7352f38e1caa149e994a1c94615dcca15502ec2332cf157"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/callers.cjs",
+      "bytes": 1046,
+      "sha256": "c44bbb4456304d3138dc41b269b18e465280c10de78c04731d57d99b498dc2b6"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/config-build2.asm.txt",
+      "bytes": 3770,
+      "sha256": "79666a6e3ccc62b0fcb8baf0d22dc43df9ab2f1792746b8fe9cf129cffbd7f1d"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/config-build2.run.json",
+      "bytes": 301,
+      "sha256": "04057a152e1661e50a29345a81d867dcc47de67e77488dfd97b2cb422ee0908b"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/config-build2.strings.json",
+      "bytes": 287,
+      "sha256": "c5a1d2212d8d611c4b4aada2aaa0ac16af23674206abc1123c45f95c838a777a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/config-setter.asm.txt",
+      "bytes": 5128,
+      "sha256": "a627cbc3b584be17e0522729c180551081a0497098a4ddcdaebca8ae652e75d8"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/config-setter.run.json",
+      "bytes": 301,
+      "sha256": "3b36e19d5678ebecfe932ec2c26425783ca08362b3b470aa35ded21b47aeb43f"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constant-structures.json",
+      "bytes": 3209,
+      "sha256": "ecae5383440abaca4c58f57477fa4847224293f13a4632e1ecbc0d97f7259571"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constructor1.asm.txt",
+      "bytes": 145137,
+      "sha256": "da5e55c5956fde37507af29dccbd6b1a52551887a9ed3181395a5181b0e1f298"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constructor1.run.json",
+      "bytes": 301,
+      "sha256": "d3b767124d7c4154c167db46e7f83a006557fdce9e72dd53c5c1e5ac8ea90dfd"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constructor2.asm.txt",
+      "bytes": 172410,
+      "sha256": "7d54a4e90bd7160c0a7241fe894a724f60c948221b579150d8adee07f9a73980"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constructor2.run.json",
+      "bytes": 301,
+      "sha256": "2a392359efbc87ed214adad1bfbffcd469d0d27d997dc7eaf16ba64d7fe2c6b1"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/constructor2.strings.json",
+      "bytes": 11208,
+      "sha256": "f66ffb77a62477edf5130fdfb498d6c85090094aeb79684699adf611688e01f7"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/disasm.cjs",
+      "bytes": 913,
+      "sha256": "252389ece9fe946d4ff5f976183164989bd992686683eeda6f557cf15dab8363"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/dump.cjs",
+      "bytes": 623,
+      "sha256": "aececd5b357281e0ecf874ca9622899b409d04a12fe56683d1be68900399c86b"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/dumpbin-runs.json",
+      "bytes": 1520,
+      "sha256": "feb7f164afc88a4318429cbcac8c8891cfec2d416dfa2d98cecd5e20680b9f41"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/endpoint-followup.md",
+      "bytes": 7935,
+      "sha256": "bb3bdddb02227c1eee79aa290faeb99b6afb7e22a138eaeb1d5db156cbd8d59a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/endpoint-setter2.asm.txt",
+      "bytes": 4951,
+      "sha256": "e083b7fcdb27f6bd3990a423ad6abda436cdeb5ae4b28f2c975c2552ad5038a8"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/endpoint-setter2.run.json",
+      "bytes": 301,
+      "sha256": "9a9e75fa72137f6d39a20441e229abc19f8f08303d7d579486df5809fe367965"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/endpoint-setter2.strings.json",
+      "bytes": 373,
+      "sha256": "25dbcdd0621357f6da4c6944608d035489b0230c174ccbe4fae926625f2a9262"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/endpoint-xrefs.json",
+      "bytes": 44284,
+      "sha256": "ba8ca89244544c41be58272d5c29e8d4bd4ae31c9cc61d0f52ab5813e58e41d5"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/keys.cjs",
+      "bytes": 520,
+      "sha256": "5c7b922006449af62bce1a786f8db2abd7ce1005214b0a2aad8713c896e3a151"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/management1.asm.txt",
+      "bytes": 18550,
+      "sha256": "13e782d6d18346c3fecfb050e092eebe3606cf0a7e1cc357fb6b9a0454dd464e"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/override1.asm.txt",
+      "bytes": 32207,
+      "sha256": "a53cf0341fccad6ee705d321bb830ebb2796ce942a893b4059e53ca3e6b5d1ec"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/override2.asm.txt",
+      "bytes": 43522,
+      "sha256": "a979ef0fc43c96bca6f3ee345620d7cc6f2e761056a9e76a8706ba1a1984d93d"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/override2.run.json",
+      "bytes": 301,
+      "sha256": "a533830a9b8597e41a107f1a23d046d88e4493b6ce7e4a18b5bba8f8545d21a7"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/override2.strings.json",
+      "bytes": 4259,
+      "sha256": "b615265c405f962e67591b4ec4d60c592c58331fe75b7c7313c328b699d72ad4"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/owner.cjs",
+      "bytes": 408,
+      "sha256": "81b6ba2ae9b7f75ae740e9b56ca91063a04e30a7712f47f2a4c3119019d9afb6"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/q1.asm.txt",
+      "bytes": 11863,
+      "sha256": "8d8b282ed0075eabf714fd8c56f1eb18e493853b93bb1dc4477dbe40ddeae13b"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/q2.asm.txt",
+      "bytes": 11863,
+      "sha256": "92931899d57c7128aa8f29fce75905780ca3454af7364770204ef99c16151d87"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/range-refs.json",
+      "bytes": 103517,
+      "sha256": "8765ab094aa7e6decb0f6dbe8070d8d75c307fbd9d586ddcf9594f4e15b2c90d"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/range.cjs",
+      "bytes": 1214,
+      "sha256": "19df036a6ebc69a958a844e4f0dc5311347e9c3d7321b10c5b58b8f73969dcf6"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/resolver-vtable-method.asm.txt",
+      "bytes": 4683,
+      "sha256": "06c372ae19c5d88496bb53492567de96e7f233b0ef513dcfb24b97b8037a7211"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/resolver-vtable-method.run.json",
+      "bytes": 301,
+      "sha256": "2ca3423ccfd8c0acafc47bb9041f665f66e8a3751f75106132daf8e94c5c739a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/resolver-vtable-method.strings.json",
+      "bytes": 460,
+      "sha256": "fa54c380dbaa693236185dd2ee77707d5e71f84f0887fc8314eddb8cd7d5ec36"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/routing1.asm.txt",
+      "bytes": 43877,
+      "sha256": "7a4d6936e781dd2c59647027a48c1ba82479f2095e2fb7c00348fba37dce1a5a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/routing1.strings.json",
+      "bytes": 5558,
+      "sha256": "1b86c4168096306184c3f4775e469ce67fe5f00f242c170ba423361fa8d51004"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/routing2.asm.txt",
+      "bytes": 47111,
+      "sha256": "2a7b96d7c9880aed0aee0ec46d369c3d54a1d398945a44684c4fb038123d1639"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/routing2.run.json",
+      "bytes": 301,
+      "sha256": "5af1f705748c427b04a5a29b503180e739f42d7ba1b81bf8b3989b4465b88b6d"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/routing2.strings.json",
+      "bytes": 5029,
+      "sha256": "f85d39afe41c88d601ef298b1e4517a8aef3999b1a0d15c57f6b3a9d13ce54d7"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/runtime1.asm.txt",
+      "bytes": 18550,
+      "sha256": "5d67f798b3a6f563e6143773a97333a1dabfed5f18ea773d0d81c13264adb6bc"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/runtime2.asm.txt",
+      "bytes": 18550,
+      "sha256": "e311c0f054aba166963cde3e3338c6cf59ef9d4b988eabac99f0e7cf640e4422"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/scan.cjs",
+      "bytes": 2902,
+      "sha256": "3327b202cf1be41217dbbb8b00174b619ef9143588dabc2afc5785405d370ee2"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-builder.asm.txt",
+      "bytes": 14118,
+      "sha256": "0e0ff4255e6f3aab98ebdc358895b0fbc0da59ad345fc69e1d98e0bf1d3d0eff"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-builder.run.json",
+      "bytes": 301,
+      "sha256": "5fb7e58ebfe7bbca04c02371f8664d69c46fa15aa9c061214c677af0d1656296"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-builder.strings.json",
+      "bytes": 1097,
+      "sha256": "46dcf68a1108ee47d71a8980db5663f05bb982c1463d563e8a3755a4ec83fdc7"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-client.asm.txt",
+      "bytes": 70269,
+      "sha256": "f016589f0fe4d70e4070ebc51965d1f44d559f6839d4429c39d4faea6ffe4807"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-client.run.json",
+      "bytes": 301,
+      "sha256": "354b7bebefa496961040d54e2fac136e53f1e6ef65bc4192871472038a9ac367"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/sdk-client.strings.json",
+      "bytes": 3588,
+      "sha256": "498c4f33644c200bfbd23e3a82dbabe567fb02b57e56bbdcfc4a402024cffb80"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/setting-key.asm.txt",
+      "bytes": 885,
+      "sha256": "e1ca104a3a7cd1fdf451e36097758dd675d27c1d0c050d92fa1d39384e845f54"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/setting-key.run.json",
+      "bytes": 301,
+      "sha256": "cf068f582ace77d279753ae147d0ce0f77a5dd00fa5ca01511269793d2c5db47"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/setting-keys.json",
+      "bytes": 525,
+      "sha256": "5f0eceb3c5944394c862393d5658ea24e0cabf70d9c9895489ac06b212c6e840"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/streaming-setter.asm.txt",
+      "bytes": 4450,
+      "sha256": "e9399f959c365e7158964d18d67f1ca9455d5cf0f35b2679ff179bcd272741ad"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/streaming-setter.run.json",
+      "bytes": 301,
+      "sha256": "3c1c3ba24f686ded9db6e6c87119887ecd4f48cf35fa463b850aaae25f216de8"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/endpoint/structures.cjs",
+      "bytes": 702,
+      "sha256": "841c898e10ae9b43d069021ac072df72c22c54022eeb805484dad6e09308fbf2"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/manifest.json",
+      "bytes": 13186,
+      "sha256": "d32b35bb87ce1877b09a2b0aac066bc77aede910fe3a266102edf0b7194d5989"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/body-wrapper.asm.txt",
+      "bytes": 5667,
+      "sha256": "e0406864468f8893ddc19b16aa5e8b1defa8fe3fefad76182894eb08641e88e1"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/body.asm.txt",
+      "bytes": 8313,
+      "sha256": "2619d998bda82f97a8dc0ca869ef649780da08647933c8599232243104553c32"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/call-candidates.json",
+      "bytes": 262,
+      "sha256": "5a153cb539d68fc023793c093deb5da9bc3a5db557e50b2d6f710ac11fcfec5a"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/calls.cjs",
+      "bytes": 592,
+      "sha256": "823f5a2951bed63a66cf32fbad8e00eda64356fd04c2de2c5990471da9304714"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/conversation.asm.txt",
+      "bytes": 25078,
+      "sha256": "6c4d4515f7a49e46dd3467d3bae3516403203bd18311e5423c5b7b8be5b320ff"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/disasm.cjs",
+      "bytes": 911,
+      "sha256": "2ede805b773bcaf7c2b4873a3d7dc501142cfa045a68b29cf8f72bea253ff3a3"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/dumpbin-runs.json",
+      "bytes": 1637,
+      "sha256": "e523370172ba4561422b5c0be71ee63b9ae615339b54513654db6f70f75674c4"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/message.asm.txt",
+      "bytes": 8424,
+      "sha256": "b91f3f9c3539de335242be06cbc652e7c0838141fe77a6a8661385b220b6e711"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/operation.asm.txt",
+      "bytes": 56575,
+      "sha256": "9e1ff8f7b6c2043f075414e358e20a3698bbbf755ef620a808a5cb3e37bb68c0"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/report.cjs",
+      "bytes": 1976,
+      "sha256": "1a444b0a18793c07420e4d2165f994c539bc854d3c86bdaf5335d302893568e4"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/report.json",
+      "bytes": 17044,
+      "sha256": "d80e4299e007f8bda71b9397ed3791b0f1ff2f6a9ee0a6ef1846e098b60a4a52"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/report.md",
+      "bytes": 2452,
+      "sha256": "303912ac20a625f59e1663c313350d3f5050eea3a04b51cbe830d63c56918a48"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/scan.cjs",
+      "bytes": 1269,
+      "sha256": "7677d1123675c804937042fad859beda8d79af6d332b5145cc80bb8e2fd5b6d1"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/strings.json",
+      "bytes": 1599988,
+      "sha256": "61a61014fad9546498c57ec23262dba8b8b5677717d28123b417f804c407ecd4"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/user.asm.txt",
+      "bytes": 120677,
+      "sha256": "821d6c850a4a1f16c4241c07e7dd2b45cd4667e43fd7fecdfd14d8135b847c30"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/xrefs.cjs",
+      "bytes": 3144,
+      "sha256": "35c62bfe57b8f2e41b4e8f06861b1245278391276ce6ad1fa5421c532d4772ff"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/operation/xrefs.json",
+      "bytes": 43722,
+      "sha256": "d3660edcc7fded472e78c775229b7a1485e7ec16487f7b73e7c3289da83bd94c"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/stream-notes.md",
+      "bytes": 1851,
+      "sha256": "617b4d03a58c83d92b8214f5424a1a551f7fd02b4e8f4638fc4be0fb1a0fa984"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/README.md",
+      "bytes": 2432,
+      "sha256": "f67e14d52fe93e1eb84fbe4f0f96fadb7d8d98a8a6aeca0db01233ef010ac4c7"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/build.log",
+      "bytes": 17003,
+      "sha256": "361ea493a750a2ca71fa7f08dda133944eff6571072d9ff900ecaf154bf89bd5"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/compatibility-tests.log",
+      "bytes": 2709,
+      "sha256": "1833ed49f08dc0f1fac4b5a412e1e444512d363a0afca502a2a3624da40a801b"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/final-check.cjs",
+      "bytes": 5236,
+      "sha256": "813d339e629762635e30d3e8e2286e413a129c815b2565e44c484c05e2cb12b6"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/final-check.json",
+      "bytes": 1006,
+      "sha256": "62d3cbf12956862fbb686a3de51f75d3861cd71dfeed13dbe5c7ebc337af88ad"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/kiro-tests.log",
+      "bytes": 4322,
+      "sha256": "26f3d7cd0aa20887a35f88d85be8b80f491df17a0a8aea7b2357f9564a185a5f"
+    },
+    {
+      "file": "docs/evidence/kiro-inference/validation/server-tsc.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-live/README.md",
+      "bytes": 3123,
+      "sha256": "4ab62a284604ec6d01c401e021235ddb5f64cfab580b204c11858c576213b331"
+    },
+    {
+      "file": "docs/evidence/kiro-live/axiom-calls.json",
+      "bytes": 3345,
+      "sha256": "8f8f1ad7f43eae7156088782c1812b9888d8653c1019a21ac34e9b2ec2e9888e"
+    },
+    {
+      "file": "docs/evidence/kiro-live/checks.json",
+      "bytes": 927,
+      "sha256": "0e4e97522321dd29ed2038a4169c4232c27aba34b1812c9a6cda766ba8fbd271"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/README.md",
+      "bytes": 2605,
+      "sha256": "7e41de61882518e1d471881f84f86f0cdb03b95f9443e6f68315c7283f1823ad"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/build.log",
+      "bytes": 17003,
+      "sha256": "87a783da744af18fa095906e12832a8f1d3215c9604f612e766d52fcfb274129"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/compatibility-tests.log",
+      "bytes": 2710,
+      "sha256": "949f53f84a0d5da5c12f7a7885e0eedf040480e5e559a1b14b1232eb2752c074"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/kiro-tests.log",
+      "bytes": 4542,
+      "sha256": "60f074280bc1485d8b62ec8f6e3ab9bd65feab2463d8f59e02049f95eba75643"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/pooling-tests.log",
+      "bytes": 347,
+      "sha256": "c44285c0aef1ddbf94992076b3d5c28c15f12e1715a5326778b14287b393b87c"
+    },
+    {
+      "file": "docs/evidence/kiro-pooling/results.json",
+      "bytes": 1841,
+      "sha256": "df1642b4c19a83b0c50c19eb0b4e2065cc725ff29d744b772a9ac111580b5560"
+    },
+    {
+      "file": "docs/evidence/kiro-release/01-tsc.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/01-tsc.metadata.json",
+      "bytes": 358,
+      "sha256": "46ba6c4539357b8a4e1533b2729aedc5e710fa38c24197bbe6ef2d4002bf071d"
+    },
+    {
+      "file": "docs/evidence/kiro-release/02-tsc-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/02-tsc-server.metadata.json",
+      "bytes": 389,
+      "sha256": "33e133f8949160882404f64e8d7771c8f6917674a2d732d3d6be7046950d77b7"
+    },
+    {
+      "file": "docs/evidence/kiro-release/03-npm-build.log",
+      "bytes": 17761,
+      "sha256": "1dc9fbc7d829d302d6afdc77f05fa7cf000746c18284105df0a5ee43391e2efb"
+    },
+    {
+      "file": "docs/evidence/kiro-release/03-npm-build.metadata.json",
+      "bytes": 336,
+      "sha256": "5d293cc9a75165e4f444af0cc561bb58fcec59a16e58823a603b1b8f81e8b0fb"
+    },
+    {
+      "file": "docs/evidence/kiro-release/README.md",
+      "bytes": 5207,
+      "sha256": "775e0b4e0f44e2db6d6cc09adb7d87f0ce8ecbb2ae351d42531dec47dc7726ec"
+    },
+    {
+      "file": "docs/evidence/kiro-release/check.cjs",
+      "bytes": 6877,
+      "sha256": "ac703c7f39ce3d71c263165e92235a6430940d6a869ae05a62a4f711e3aa3d3f"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-interrupted-metadata.json",
+      "bytes": 784,
+      "sha256": "b0507d0e5b81dfb8d45e878e5ff61b6490f7c686d0bc9575207901eb618dbbe0"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-interrupted-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-interrupted-stdout.log",
+      "bytes": 971,
+      "sha256": "2ba6ea6ac2dbfd886f7a65b48cf3e6238ccb8f0f642d2fbb06520217eb1df97c"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-run.json",
+      "bytes": 704,
+      "sha256": "0f88514dae6f54cc1270f0ed834221b653be8b1b58c64c79922190a9456f8a01"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/compatibility-tests.log",
+      "bytes": 5130,
+      "sha256": "d3269a931c7878649fbadc898c53ab9cff9e17f18a10e404eff32911bfd9c86c"
+    },
+    {
+      "file": "docs/evidence/kiro-release/focused-run.json",
+      "bytes": 634,
+      "sha256": "7b9cdd972ab67cc1cccb17e9fe5be8e208396f1a9b8b78f5c3c2814ffabd96d0"
+    },
+    {
+      "file": "docs/evidence/kiro-release/focused-tests.log",
+      "bytes": 8518,
+      "sha256": "e5096927ef2e2667cb6856986d89cbcaa2e475c2c6aaddfa50d6d48e0ec63e54"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/01-tsc.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/01-tsc.metadata.json",
+      "bytes": 374,
+      "sha256": "79c7d46127470c0e4a294a32c4143161b745c219867516119b4d91202a5e80fa"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/02-tsc-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/02-tsc-server.metadata.json",
+      "bytes": 405,
+      "sha256": "ec7bc8046ea54c2094658eac9527f7940f6ba44242f8210e761ab5308aeaf842"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/03-npm-build.log",
+      "bytes": 17306,
+      "sha256": "5b82a4ce31c09aeea0eb102fcba548a0b8e6b9920e27b09ed00f0b4789a95d24"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/03-npm-build.metadata.json",
+      "bytes": 352,
+      "sha256": "a3e92b10746b0a8176b5410b55cff30e5028b17a46bc8ccd999202d1ca81287d"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/README.md",
+      "bytes": 2435,
+      "sha256": "e3052fd9c5077b42ab9cac6573689dc1428b39f713c819ae06a70289999996ad"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/check.cjs",
+      "bytes": 4950,
+      "sha256": "5b7eb40862f46cc8b4c40f2c5d8d6e36501caa2c8c9a78b335e91b21eeed544e"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/opencli-run.json",
+      "bytes": 430,
+      "sha256": "12124e07950ac92f672b27a0454aed8ce54aaaa6d4791673a979e32e5e09ff5c"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/opencli-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-release/master-refresh/opencli-stdout.log",
+      "bytes": 2109,
+      "sha256": "423f48ff72b0bc00fe656441938f1fae90dbcb56b28b10924d3e722e3b2f89d4"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/README.md",
+      "bytes": 6101,
+      "sha256": "fb835cd9305bb1146c2abfbcf15526ea31e364335999ee4efa0fd6e5a2e1eb97"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe-exit.json",
+      "bytes": 279,
+      "sha256": "16be37ca89cf54d8e301736add4011691f86aeddfb8bb47246f229c916bb42a0"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.json",
+      "bytes": 3027,
+      "sha256": "0659612acedbf6d887db5902703244a0cba76a2abff9efff04db44c7cd624525"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.log",
+      "bytes": 6242,
+      "sha256": "17db6b63bb5bd6202ae0afa79f1e3ecce0770702f866fbdb257696ab83e2af01"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/adapter-probe.ts",
+      "bytes": 6899,
+      "sha256": "7bb2ec78a00566809f5e1382a89697f1ddd67248368f500e8ea6e6e04a644c45"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/build-exit.json",
+      "bytes": 195,
+      "sha256": "53b6408754cd998684d946bc743bcfab456b2bfefa34a128e20aa7702f7a9ab8"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/build.log",
+      "bytes": 16954,
+      "sha256": "dd06db4dbdd5c3cd72722edbf19122f9b556137fdec04309f987bf34b92c0ecf"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/check.cjs",
+      "bytes": 5685,
+      "sha256": "2625939367356385907d231caf24135afadb266c639393abb640cde356285b7d"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/checks.json",
+      "bytes": 8437,
+      "sha256": "8c87a27e45d80893acec67c482523e7a9f1a9e0740ba72ca49411477a7ecf7bc"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-exit.json",
+      "bytes": 530,
+      "sha256": "cbd00a08549ab0580bc4bea2c6c3275596412ac65bc62b67ba921faa19ea27c4"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-full.log",
+      "bytes": 442,
+      "sha256": "fa98c878aed8e4d0dfe17f882d2495807afcc17da6af61afa4fbffc187e8977e"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/es2023-failed-typecheck-server.log",
+      "bytes": 229,
+      "sha256": "cf9542f735d79fb011531f9e8fa8f9bd6dd0a7feec4c22c9d7fafe7da4e66e8a"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-compatibility-tests.log",
+      "bytes": 4085,
+      "sha256": "d9d205b6fdc08211952d040c38985ce1ad02053a03e40e95e0a617152978bf7c"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "383b87b325b8f49020f8619763f623abbe52712195437251664df29fcc901c02"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-kiro-tests.log",
+      "bytes": 9433,
+      "sha256": "15bc728cb2390776eae30c5c1f3889ebc199e0c29228d18f3bfe7e4dfa37024c"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-typecheck-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-typecheck-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/initial-validation-exit.json",
+      "bytes": 1080,
+      "sha256": "22f03a49a7063d0d08c9ad58d70bdcf5836df83c272ceec908f4b99f4ebb7920"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "e86b8fb1ef441efc663ab8c1a996e6e88576e3ee954c8024e946ddef16bf3b17"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/kiro-tests.log",
+      "bytes": 8505,
+      "sha256": "a87a47b7c5e8cb62924697fb7574cbd3a59e2a491e3e74c21b49ab8b94fa37e1"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/pre-es2023-fix-kiro-tests-exit.json",
+      "bytes": 505,
+      "sha256": "9d7d43c52539a1f9f126dc8fa4e5925a993d73eebc4bb39d6bc6931d62bcd54b"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/pre-es2023-fix-kiro-tests.log",
+      "bytes": 8512,
+      "sha256": "b1cd17c72dd0b9d9255594732979401aaa8fecda10ac188a0cef8f29e4ef987b"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-exit.json",
+      "bytes": 530,
+      "sha256": "fabafee2061df85286e5068b57e455262760534a33e77b7b9ea2f67317ad6d69"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-full.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/evidence/kiro-thinking/typecheck-server.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "docs/kiro-auth.md",
+      "bytes": 18017,
+      "sha256": "72ccf28f024dcedcf1270b2668e7098a8283c61b4e03a39f4dc998d840a58650"
+    },
+    {
+      "file": "docs/kiro-catalog-audit.md",
+      "bytes": 15850,
+      "sha256": "b941296e182b513eb1b6b74674167489e1188618a09b3c665ccefbcae648e84a"
+    },
+    {
+      "file": "docs/kiro-cli-parity-audit.md",
+      "bytes": 21703,
+      "sha256": "407c9a5243f5add7c9325d1691e9e493f73fe39b35c1dad512827c408d278f31"
+    },
+    {
+      "file": "docs/kiro-connection-pooling.md",
+      "bytes": 4270,
+      "sha256": "d67e3512bd0890cc64feced8655aeae391ebbd488ee64bec2637c95ad0ac2596"
+    },
+    {
+      "file": "docs/kiro-images.md",
+      "bytes": 6240,
+      "sha256": "6277cf01f3037a9dd7ad844449829d0293a3e3d03c3350134056fb74ede9cebc"
+    },
+    {
+      "file": "docs/kiro-inference-audit.md",
+      "bytes": 13714,
+      "sha256": "78aca3a2ab9a44e0dac144446c0024b90f570fb9091a1b9e164dcc1554b12647"
+    },
+    {
+      "file": "docs/kiro-protocol-audit.md",
+      "bytes": 8233,
+      "sha256": "0ff9d4d46d60a61e9d770d5876c6e582841ec2f8c93f77daf772b2b7065acaa6"
+    },
+    {
+      "file": "docs/kiro-thinking.md",
+      "bytes": 8855,
+      "sha256": "5b97374d0cc1c5d94b7bfcefffa73989fad68941dfd1f0977779c5140882f481"
+    },
+    {
+      "file": "docs/ui-sync.md",
+      "bytes": 109747,
+      "sha256": "aba5137784a38d23e3bd6425e7cd0fc1ce28b380da5a55a161ab9078ce2c33fc"
+    }
+  ]
+}

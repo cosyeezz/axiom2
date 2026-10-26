@@ -23,7 +23,8 @@ public class MainActivity extends Activity {
     private AutoCompleteTextView address;
     private String connectingAddress = "";
     private ProgressBar progress;
-    private boolean connecting, loaded, scanPending;
+    private boolean connecting, loaded, scanPending, cyclingConnection, backPending;
+    private int connectionGeneration;
     private TextView scan;
     private ValueCallback<Uri[]> upload;
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -46,7 +47,7 @@ public class MainActivity extends Activity {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         web = new AxiomWebView(this); root.addView(web, new FrameLayout.LayoutParams(-1, -1)); web.setVisibility(View.GONE);
         web.setListener(new AxiomWebView.Listener() {
-            public void onReady() { if (!connecting) return; loaded = true; connecting = false; saveConnection(); status.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); }
+            public void onReady() { if (!connecting) return; loaded = true; connecting = false; web.clearHistory(); saveConnection(); status.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); }
             public void onError(String message) { showError(message); }
             public void onRendererGone() { loaded = false; recreate(); }
             public void onExternalLink(Uri uri) { try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception e) { Toast.makeText(MainActivity.this, "没有可打开此链接的浏览器。", Toast.LENGTH_LONG).show(); } }
@@ -98,33 +99,45 @@ public class MainActivity extends Activity {
         }
     }
     @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if (focused) enterFullscreen(); }
-    private void begin() {
+    private void invalidateBack() { connectionGeneration++; backPending = false; }
+    private void begin() { begin(false); }
+    private void begin(boolean cycling) {
         if (connecting) return;
         try { connectingAddress = AxiomWebView.normalizeAddress(address.getText().toString()); } catch (Exception e) { showError(e.getMessage()); return; }
+        invalidateBack(); cyclingConnection = cycling;
         connecting = true; loaded = false; scan.setVisibility(View.GONE); address.setEnabled(false); tailnet.setAvailable(false); web.setVisibility(View.GONE); status.setVisibility(View.VISIBLE);
         progress.setVisibility(View.VISIBLE); retry.setVisibility(View.GONE); vpn.setVisibility(View.GONE); cancel.setVisibility(View.VISIBLE); feedback.setTextColor(muted); feedback.setText("正在连接 " + connectingAddress + "…");
         web.connect(connectingAddress);
     }
     private void showError(String message) {
-        connecting = false; if (status == null) return;
+        invalidateBack(); connecting = false; loaded = false; if (status == null) return;
         status.setVisibility(View.VISIBLE); scan.setVisibility(View.VISIBLE); web.setVisibility(View.GONE); address.setEnabled(true); tailnet.setAvailable(true); progress.setVisibility(View.GONE); retry.setVisibility(View.VISIBLE); vpn.setVisibility(View.VISIBLE); cancel.setVisibility(View.GONE); feedback.setTextColor(0xffe6ac94); feedback.setText(message);
     }
     private void updateHistory() {
         String saved = getSharedPreferences("connection", MODE_PRIVATE).getString("history", "");
-        address.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_dropdown_item_1line, saved.isEmpty() ? new String[0] : saved.split("\\n")));
+        address.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_dropdown_item_1line, ConnectionHistory.entries(saved)));
     }
     private void saveConnection() {
-        java.util.LinkedHashSet<String> history = new java.util.LinkedHashSet<>(); history.add(connectingAddress);
         String saved = getSharedPreferences("connection", MODE_PRIVATE).getString("history", "");
-        for (String entry : saved.split("\\n")) if (!entry.isEmpty() && history.size() < 8) history.add(entry);
-        getSharedPreferences("connection", MODE_PRIVATE).edit().putString("last", connectingAddress).putString("history", android.text.TextUtils.join("\n", history)).apply();
+        String history = ConnectionHistory.record(saved, connectingAddress, cyclingConnection);
+        getSharedPreferences("connection", MODE_PRIVATE).edit().putString("last", connectingAddress).putString("history", history).apply();
         updateHistory();
     }
+    private void switchConnection() {
+        String saved = getSharedPreferences("connection", MODE_PRIVATE).getString("history", "");
+        String next = ConnectionHistory.next(saved, connectingAddress);
+        if (next.isEmpty()) { web.cancelConnect(); showError("尚无已保存的连接，请选择或输入连接地址。"); return; }
+        address.setText(next); address.dismissDropDown(); begin(true);
+    }
     @Override public void onBackPressed() {
-        if (status.getVisibility() == View.VISIBLE) { if (tailnet.back()) return; web.cancelConnect(); connecting = false; super.onBackPressed(); return; }
+        if (status.getVisibility() == View.VISIBLE) { if (tailnet.back()) return; invalidateBack(); web.cancelConnect(); connecting = false; super.onBackPressed(); return; }
+        if (backPending || connecting || !loaded) return;
+        backPending = true; int owned = connectionGeneration;
         web.evaluateJavascript("(()=>{try{const p=document.querySelector('[popover]:popover-open');if(p){p.hidePopover();return true}}catch(e){}const ds=document.querySelectorAll('dialog[open]:not([popover])');const d=ds[ds.length-1];if(d){const event=new Event('cancel',{cancelable:true});if(d.dispatchEvent(event)&&d.open)d.close();return true}const h=document.querySelector('.history-open #collapse-history');if(h){h.click();return true}return false})()", result -> {
-            if ("true".equals(result)) return;
-            if (web.canGoBack()) web.goBack(); else new android.app.AlertDialog.Builder(this).setTitle("工作台连接").setMessage("切换电脑会离开当前工作台，后台任务继续运行。").setPositiveButton("切换连接", (d, which) -> { web.cancelConnect(); loaded = false; showError("选择或输入连接地址。"); }).setNegativeButton("留在工作台", null).setNeutralButton("返回后台", (d, which) -> moveTaskToBack(true)).show();
+            if (owned != connectionGeneration || isFinishing() || isDestroyed()) return;
+            backPending = false;
+            if ("true".equals(result) || !loaded || connecting || status.getVisibility() == View.VISIBLE) return;
+            if (web.canGoBack()) web.goBack(); else switchConnection();
         });
     }
     @Override protected void onSaveInstanceState(Bundle state) { state.putBoolean("scanPending", scanPending); super.onSaveInstanceState(state); }
@@ -141,5 +154,5 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); if (tailnet != null) tailnet.resume(); }
     @Override protected void onPause() { if (tailnet != null) tailnet.pause(); if (web != null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { if (tailnet != null) tailnet.close(); if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { invalidateBack(); if (tailnet != null) tailnet.close(); if (upload != null) upload.onReceiveValue(null); root.removeView(web); web.destroy(); super.onDestroy(); }
 }

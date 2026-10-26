@@ -1,6 +1,8 @@
 // Native WKWebView integration check. Only an isolated --test-instance app runs the probe.
 import assert from "node:assert/strict";
-import { spawn, execFile } from "node:child_process";
+import { spawn, execFile, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { verifySourceProof } from "./native-source-proof.mjs";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, writeFile, rm, realpath, copyFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
@@ -14,13 +16,21 @@ import { setTimeout as delay } from "node:timers/promises";
 assert.equal(process.platform, "darwin");
 assert.ok(process.env.AXIOM_DESKTOP_BINARY, "Set the isolated probe application binary");
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceProof = JSON.parse(await readFile(join(repo, "app/test-results/native-source-proof.json"), "utf8"));
+const productionDmg = await readFile(join(repo, "app/Axiom2.dmg"));
+verifySourceProof(sourceProof, { productSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(), probeSha: process.env.AXIOM_REGRESSION_REF || process.env.GITHUB_SHA, dmg: { size: productionDmg.length, sha256: createHash("sha256").update(productionDmg).digest("hex") } });
 const root = await realpath(await mkdtemp(join(tmpdir(), "axiom-native-views-")));
 const data = join(root, "data"), pi = join(root, "pi"), workspace = join(root, "workspace");
 await Promise.all([mkdir(data), mkdir(pi), mkdir(workspace)]);
-const socket = createServer();
-await new Promise((done) => socket.listen(0, "127.0.0.1", done));
-const port = socket.address().port;
-await new Promise((done) => socket.close(done));
+let port;
+do {
+  const socket = createServer();
+  await new Promise((done) => socket.listen(0, "127.0.0.1", done));
+  port = socket.address().port;
+  await new Promise((done) => socket.close(done));
+} while (port === 4317);
+const fixtureURL = `http://127.0.0.1:${port}/`;
+const assertFixtureURL = (snapshot) => assert.equal(snapshot.views.find((view) => view.label === "axiom-workbench")?.url, fixtureURL, "Native workbench must use the isolated fixture endpoint");
 const env = { ...process.env, AXIOM_DATA_DIR: data, AXIOM_PI_DIR: pi, PI_CODING_AGENT_DIR: pi, AXIOM_PORT: String(port) };
 const cli = join(repo, "bin/axiom2.mjs"), report = join(root, "probe.json");
 const run = promisify(execFile);
@@ -73,6 +83,7 @@ try {
   assert.deepEqual(checkpoint.snapshot.windows, ["pake"]);
   assert.equal(checkpoint.snapshot.views.length, 2);
   assert.equal(checkpoint.snapshot.current, "workbench");
+  assertFixtureURL(checkpoint.snapshot);
   const visible = await run("/usr/bin/swift", [join(repo, "scripts/check-macos-window.swift"), String(native.pid)], { timeout: 45000 });
   console.log("Native window while workbench is visible:", visible.stdout.trim());
   await run(process.env.AXIOM_DESKTOP_BINARY, [], { env, timeout: 15000 });
@@ -84,17 +95,20 @@ try {
     await run("/usr/bin/open", ["-a", resolve(dirname(process.env.AXIOM_DESKTOP_BINARY), "../..")], { timeout: 15000 });
   }
   const full = await waitReport("finished");
+  assertFixtureURL(full.snapshot);
   await waitExit();
   const running = await service("status");
   assert.equal(running.state, "running", "Closing the native window must preserve the background service");
   await copyFile(report, join(root, "full-result.json"));
   await launch("reopen");
   const reopened = await waitReport("finished");
+  assert.equal(reopened.snapshot.current, "control");
+  assert.deepEqual(reopened.snapshot.views.map(view => view.label), ["pake"]);
   await waitExit();
   const afterReopen = await service("status");
   assert.equal(afterReopen.state, "running");
   assert.equal(afterReopen.pid, running.pid, "Reopening must reuse the existing service");
-  const evidence = { success: true, node: process.version, full, reopened, nativeWindow: JSON.parse(visible.stdout), backendSurvivedNativeClose: true, secondInstanceReusedWindow: true, macMenusAndDock: process.platform === "darwin" };
+  const evidence = { success: true, node: process.version, fixtureURL, sourceProof, full, reopened, nativeWindow: JSON.parse(visible.stdout), backendSurvivedNativeClose: true, secondInstanceReusedWindow: true, macMenusAndDock: process.platform === "darwin" };
   await mkdir(join(repo, "app/test-results"), { recursive: true });
   await writeFile(join(repo, "app/test-results/desktop-macos.json"), JSON.stringify(evidence, null, 2));
   console.log("PASS: native macOS single-window control/workbench switching, command isolation, draft/scroll/selection/focus, resize, start/stop, native close, and reopening with the existing backend.");

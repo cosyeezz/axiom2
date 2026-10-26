@@ -34,5 +34,8 @@
   --disclosure-surface: color-mix(in srgb, var(--surface) 55%, var(--bg));
 }
 /* Clip rounded cards without introducing a scroll ancestor that traps sticky headers. */
-.thread .task-operation { overflow: clip; }
+.thread :is(.tool-activity, .compaction-card, .task-operation) { overflow: clip; }
+/* Summary backgrounds and hover states must follow the card, including closed cards. */
+.thread :is(.tool-activity, .compaction-card) > summary { border-radius: inherit; }
+.thread :is(.tool-activity, .compaction-card)[open] > summary { border-end-start-radius: 0; border-end-end-radius: 0; }
 .thread [data-sticky-disclosure]:focus-visible { outline-offset: -3px; }

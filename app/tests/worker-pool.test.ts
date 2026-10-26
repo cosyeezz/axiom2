@@ -430,3 +430,16 @@ test('maintenance rejects active leases and waits for physical worker close befo
   await assert.rejects(h.pool.maintenance(() => { throw Error('disk busy'); }), /disk busy/);
   const next = await h.acquire(); await h.pool.retire(next.ref, 'end');
 });
+
+for (const cancel of [false, true]) test(`maintenance ${cancel ? 'cancellation' : 'close timeout'} preserves files until physical close and allows retry`, async t => {
+  const h = harness(t), lease = await h.acquire(); await lease.ensureReady(); await h.cleaned(lease);
+  let removed = false;
+  const controller = new AbortController();
+  const pending = h.pool.maintenance(() => { removed = true; }, controller.signal, cancel ? 5000 : 20);
+  if (cancel) controller.abort(Error('cancelled fixture'));
+  await assert.rejects(pending, cancel ? /cancelled fixture/ : { code: 'stop-unconfirmed' });
+  assert.equal(removed, false); assert.equal(h.refs(), 1);
+  const retry = h.pool.maintenance(() => { assert.equal(h.refs(), 0); removed = true; });
+  await turn(); assert.equal(removed, false);
+  h.children[0].close(); await retry; assert.equal(removed, true);
+});

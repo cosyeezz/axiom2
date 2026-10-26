@@ -33,6 +33,7 @@ export default function Models() {
     setFilter,
     tab,
     editor,
+    editorDirty,
     setEditor,
     showKey,
     setShowKey,
@@ -247,6 +248,7 @@ export default function Models() {
                       setFilter,
                       editor,
                       setEditor,
+                      editorDirty,
                       discardEditor,
                       stageEditor,
                       patch,
@@ -284,13 +286,16 @@ export default function Models() {
                   className="btn btn-ghost"
                   id="reset-provider"
                   disabled={busy || !!login || (!dirty && !editor)}
-                  onClick={() => setDecision({
-                    title: "放弃修改？",
-                    confirmLabel: "放弃修改",
-                    danger: true,
-                    text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
-                    proceed: () => void load(),
-                  })}
+                  onClick={() => {
+                    if (!dirty) { setEditor(null); return; }
+                    setDecision({
+                      title: "放弃修改？",
+                      confirmLabel: "放弃修改",
+                      danger: true,
+                      text: "丢弃本页所有草稿及临时密钥，重新读取已发布配置；不会改变服务端配置。",
+                      proceed: () => void load(),
+                    });
+                  }}
                 >
                   取消
                 </button>
@@ -301,7 +306,7 @@ export default function Models() {
                   data-tooltip="重新读取配置"
                   disabled={busy || !!login}
                   onClick={() => {
-                    if (dirty || editor) setDecision({
+                    if (dirty) setDecision({
                       title: "重新读取配置？",
                       confirmLabel: "放弃并重新读取",
                       danger: true,

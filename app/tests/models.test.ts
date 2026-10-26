@@ -337,17 +337,16 @@ test("Model configuration: validation, atomic publish, pi credentials, redaction
     );
     draft = await service.read();
     draft.providers[0].models.pop();
-    await assert.rejects(service.save(draft), {
-      code: "LOGOUT_CONFIRMATION_REQUIRED",
-    });
-    await service.save({ ...draft, confirmLogout: true });
+    const credentialsBeforeDelete = readFileSync(join(service.dir, "auth.json"), "utf8");
+    const headersBeforeDelete = JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"].headers;
+    const deletion = await service.save(draft);
+    assert.deepEqual(deletion.loggedOut, []);
     assert.equal((await configuration(root)).modelCount, 1);
-    assert.equal((await configuration(root)).available.length, 0);
-    assert.deepEqual(await (await service.runtime()).listCredentials(), []);
+    assert.equal((await configuration(root)).available.length, 1);
+    assert.equal(readFileSync(join(service.dir, "auth.json"), "utf8"), credentialsBeforeDelete);
     assert.deepEqual(
-      JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"]
-        .headers,
-      {},
+      JSON.parse(readFileSync(path, "utf8")).providers["axiom-config-test"].headers,
+      headersBeforeDelete,
     );
 
     // Configuration responses and hashes are persisted, never submitted secrets.

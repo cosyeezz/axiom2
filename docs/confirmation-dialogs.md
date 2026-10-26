@@ -16,7 +16,7 @@
 
 `onConfirm`（及次操作）可返回 Promise；组件会防止重复提交、阻止处理中取消，在失败时保留窗口并提示错误，允许重试。不要用 `void somePromise()` 代替 Promise 返回值，除非调用方已经管理进度与错误，并确实需要先关闭复核界面。
 
-原有业务快照、revision/version 校验、清理范围与授权检查仍由调用方负责，不能因样式统一删减。取消后不得提交命令；删除模型草稿只修改本页草稿，不能描述为立即删除服务端模型。Pi 安装确认应展示已核对快照中的安装位置，并保留冻结的版本/token；后台轮询可以使确认失效，但不能偷偷替换用户已核对的目标。
+原有业务快照、revision/version 校验、清理范围与授权检查仍由调用方负责，不能因样式统一删减。取消后不得提交命令；删除模型草稿只修改本页草稿，不能描述为立即删除服务端模型；保存删除模型不退出供应商授权，供应商删除/主动退出认证才显示相应授权风险。Pi 安装确认应展示已核对快照中的安装位置，并保留冻结的版本/token；后台轮询可以使确认失效，但不能偷偷替换用户已核对的目标。
 
 连续确认须避免旧 `onClose` 清空新的 decision。例如：
 
@@ -42,10 +42,13 @@ OpenCLI、代理内核、REA、RTK 以及桌面清理/卸载保留原有内联�
 
 ```powershell
 npm run build
+npx --no-install tsc --noEmit
 npx --no-install tsx --test tests/native-dialogs.test.ts
 npx --no-install tsx tests/confirmation-design.check.ts
 npx --no-install tsx tests/confirm-dialog.check.ts
 npx --no-install tsx tests/model-confirmations.check.ts
+npx --no-install tsx tests/desktop-confirmations.check.ts
+npx --no-install tsx tests/pi-updates.check.ts
 ```
 
 专项设计测试使用隔离 React fixture，不操作用户配置或文件，覆盖深浅主题、320/390/1440px、窄高长正文、焦点、取消/背景、拖出保护、异步防重、失败重试、双操作和连续确认。产物默认写入 `app/test-results/confirmation-design`；`AXIOM_TEST_ARTIFACTS` 可覆盖。若 Playwright 默认浏览器未安装，可通过 `AXIOM_TEST_BROWSER` 指定现有兼容 Chromium 可执行文件。

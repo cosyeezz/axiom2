@@ -67,13 +67,13 @@ try {
   assert.equal(await page.locator("#provider-key").inputValue(), "");
   assert.match(await page.locator("#provider-key").getAttribute("placeholder") || "", /已保存/);
   assert.match(await page.locator("#provider-key-status").innerText(), /已保存到本地/);
-  await page.locator(".configuration-feedback").scrollIntoViewIfNeeded();
   const banner = await page.locator(".configuration-feedback").boundingBox();
-  assert.ok(banner && banner.y >= 0 && banner.y + banner.height < 900, `save feedback remains reachable before expanding credential details: ${JSON.stringify(banner)}`);
+  assert.ok(banner && banner.y >= 0 && banner.y + banner.height <= 902, `save feedback must fit viewport: ${JSON.stringify({ banner, scroll: await page.evaluate(() => ({ page: scrollY, detail: document.querySelector(".supplier-detail")?.scrollTop })) })}`);
   await page.locator(".credential-details summary").click();
   assert.ok(await page.getByText(join(root, "shared-pi", "auth.json"), { exact: true }).isVisible());
   const keyOnDisk = () => JSON.parse(readFileSync(join(root, "shared-pi", "auth.json"), "utf8"))["save-feedback-test"]?.key;
   assert.ok(keyOnDisk() === "TEST-ONLY-FIRST-KEY", "initial key must reach disk");
+  await page.locator(".credential-details summary").click();
 
   // Tall windows must not stretch the form and push its actions to the viewport bottom.
   await page.setViewportSize({ width: 1440, height: 1400 });
@@ -89,6 +89,12 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.reload();
   await page.locator("#provider-key-status").filter({ hasText: "已保存到本地" }).waitFor();
+  await page.locator("#provider-key").fill("TEMPORARY");
+  await page.locator("#provider-key").fill("");
+  assert.ok(await page.locator("#save-provider").isDisabled(), "clearing a temporary key restores the clean state");
+  await page.locator("#provider-url").fill("http://127.0.0.1:2/v1");
+  await page.locator("#provider-url").fill("http://127.0.0.1:1/v1");
+  assert.ok(await page.locator("#save-provider").isDisabled(), "restoring the endpoint restores the clean state");
   await page.locator("#provider-key").fill("TEST-ONLY-REPLACEMENT");
   await page.locator("#save-provider").click();
   await page.locator(".configuration-feedback[data-saved=true]").waitFor();

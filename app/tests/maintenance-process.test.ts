@@ -108,12 +108,15 @@ test("bounded output modes and structured output overflow", { skip: !supported }
   } finally { await stopMaintenanceProcesses(root); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("failed cleanup callback preserves durable owner without a live admission", { skip: !supported }, async () => {
+test("failed cleanup callback preserves a receipt recoverable in the same host", { skip: !supported }, async () => {
   const root = temporary(); let owner = "";
   try {
     await assert.rejects(runTool(process.execPath, ["-e", "process.exit(0)"], { root, timeout: 10000, beforeStart(path) { owner = path; }, onStopped() { throw Error("persist failed"); } }), { code: "stop-unconfirmed" });
     assert.ok(existsSync(owner)); assert.equal(processOwnerIsLive(owner), false);
-    assert.throws(() => assertToolProcessesStopped(root), { code: "stop-unconfirmed" });
+    assert.equal(JSON.parse(readFileSync(owner, "utf8")).cleaned, "tree-cleaned");
+    assert.equal(canRecoverProcessOwner(owner), true);
+    assertToolProcessesStopped(root);
+    assert.equal(existsSync(owner), false);
   } finally { await stopMaintenanceProcesses(root); rmSync(root, { recursive: true, force: true }); }
 });
 

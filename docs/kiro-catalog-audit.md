@@ -105,7 +105,7 @@ Axiom 实现位于 [kiro-catalog.ts](../app/src/server/providers/kiro-catalog.ts
 
 目录缓存白名单包含规范模型、版本、scope 摘要及 checkedAt，不保留原始 token / profile ARN / 完整响应。scope 输入包括认证方式、认证区域、refresh token、profile 和服务区域；OAuth 旋转前后均检查。换号、注销、legacy/unscoped store、损坏 store 及缺失 store 不保留旧暖内存目录。同 scope 的网络失败可留下原先合法目录供离线配置恢复，但拉取操作仍失败；分页中途失败不发布部分结果。摘要不是磁盘签名，也不是多进程全局最新写入保证。
 
-推理没有实现：原生 `stream` / `streamSimple` 拒绝；OAuth `toAuth` 也拒绝派生推理 key，防止手动配置 OpenAI API / 自定义 base URL 绕过原生护栏发送账号令牌。目录入口拒绝 Kiro Base URL 覆盖。现有冷启动不创建空 store 的保护保持不变。
+在本目录阶段，推理当时尚未实现：原生 `stream` / `streamSimple` 拒绝，OAuth `toAuth` 也拒绝派生推理 key。后续已接入[原生聊天](kiro-inference-audit.md)，由一次性内部票据向原生适配器交接认证；通用 OAuth `toAuth` 仍拒绝派生 key，防止手动配置 OpenAI API / 自定义 base URL 绕过护栏发送账号令牌。目录入口拒绝 Kiro Base URL 覆盖，冷启动不创建空 store 的保护保持不变。后续 Sonnet 4.5 文本 high/off 的[实调结果](evidence/kiro-live/README.md)独立保留，不冒作本阶段目录请求的线上抓包。
 
 ## 实际验证
 

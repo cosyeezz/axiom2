@@ -5,7 +5,7 @@ import { writeNodeLauncher } from "./node-launcher.js";
 import { openCliShimProbe } from "./opencli-shim.js";
 import { currentMaintenance, maintenanceCancelled, maintenancePhase, runMaintenance } from "../maintenance.js";
 import { MaintenanceError } from "../../shared/maintenance.js";
-import { beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, builtinRemovalDirectories, markBuiltinRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration } from "./builtin-operation.js";
+import { recoverBuiltinOperations, reconcileBuiltinOperationStopping, beginBuiltinOperation, builtinPendingOperation, builtinPendingRemovals, builtinRemovalDirectories, markBuiltinRemovals, reconcileBuiltinOperation, bindBuiltinTask, runBuiltinTool, trackBuiltinDirectory, assertBuiltinDirectoryOwned, assertBuiltinFilesSafe, forgetBuiltinDirectory, withBuiltinConfiguration } from "./builtin-operation.js";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -98,7 +98,8 @@ export class OpenCliService {
       value.pendingOperation = builtinPendingOperation(this.root, "opencli");
       const pending = builtinPendingRemovals(this.root, "opencli");
       value.removalPending ||= pending.length > 0;
-      value.cleanup = cleanupScope(openCliRemovalPlan(this.root, readOpenCliConfig(this.root), pending).paths);
+      const plan = openCliRemovalPlan(this.root, readOpenCliConfig(this.root), pending);
+      value.cleanup = cleanupScope(plan.paths); value.cleanupUnverified = plan.unverified;
     }
     catch (error) { value.error = errorMessage(error, "维护归属记录不可读取，已保留文件。"); }
     return value;
@@ -204,8 +205,13 @@ export class OpenCliService {
       const actual = await this.run([validated.entry, "--version"], 30_000, candidate);
       const matchesVersion = (value: unknown) => typeof value === "string" && value.trim().replace(/^(?:opencli\s+)?v?/i, "") === version;
       if (!matchesVersion(actual)) throw Error("安装后的命令版本未通过校验。");
-      const shims: unknown = JSON.parse(await this.run(openCliShimProbe(candidate), 30_000, candidate));
-      if (!Array.isArray(shims) || shims.length !== (process.platform === "win32" ? 2 : 1) || !shims.every(matchesVersion)) throw Error("OpenCLI 实际命令入口的版本未通过校验，原接入保持不变。");
+      // Windows npm shims are regular files, not target-checked symlinks. Validate
+      // them as well as our private-Node commands before publishing this version.
+      const probeConfigs = process.platform === "win32" ? [candidate, { ...candidate, runtime: undefined }] : [candidate];
+      for (const probeConfig of probeConfigs) {
+        const shims: unknown = JSON.parse(await this.run(openCliShimProbe(probeConfig), 30_000, candidate));
+        if (!Array.isArray(shims) || shims.length !== (process.platform === "win32" ? 2 : 1) || !shims.every(matchesVersion)) throw Error("OpenCLI 实际命令入口的版本未通过校验，原接入保持不变。");
+      }
       this.controller!.signal.throwIfAborted();
       if ((readOpenCliConfig(this.root)?.revision ?? "") !== revision) throw Error("接入配置已变化，未切换新版本；请重新读取后重试。");
       assertBuiltinFilesSafe();
@@ -261,7 +267,8 @@ export class OpenCliService {
     }
     if (c.op === "opencli.reconcile") {
       if (this.pending) throw new AppError("BUSY", "请等待当前操作完成。");
-      reconcileBuiltinOperation(this.root, "opencli", c.params?.operationId);
+      if (c.params?.force === true) await reconcileBuiltinOperationStopping(this.root, "opencli", c.params.operationId);
+      else reconcileBuiltinOperation(this.root, "opencli", c.params?.operationId);
       this.loadConfig(); this.changed(); return this.snapshot();
     }
     if (c.op === "opencli.openExtension") {
@@ -283,6 +290,8 @@ export class OpenCliService {
     if (kind === "uninstall" && (c.params?.confirm !== true || c.params.revision !== this.state.revision)) throw new AppError("CONFIRM_REQUIRED", "请读取当前配置并确认卸载。");
     const version = this.state.latest, revision = this.state.revision;
     let installationPublished = false;
+    await recoverBuiltinOperations(this.root, "opencli");
+    if (this.pending || this.closed) throw new AppError("BUSY", "已有 OpenCLI 操作正在进行或服务正在退出。");
     const operation = beginBuiltinOperation(this.root, "opencli");
     this.controller = new AbortController();
     this.state.job = { id: randomUUID(), kind, running: true, cancellable: kind !== "uninstall", version, message: "正在检查本机环境…" };

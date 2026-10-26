@@ -132,6 +132,7 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
       {preview.scope.filter(item => !/^(托管版本目录|数据路径|登记下载目录|只读路径)：/.test(item)).map((item, index) => <p key={index}>{item}</p>)}
       {preview.family === 'rea' && preview.op !== 'rea.clearDownloads' && <p>请先退出正在使用此组件的分析任务。</p>}
       <details><summary>查看范围与保留项</summary><ul>{preview.scope.map((item, index) => <li key={index}>{item}</li>)}</ul><ul>{preview.retained.map((item, index) => <li key={index}>保留：{item}</li>)}</ul>{preview.warning && <p>{preview.warning}</p>}</details>
+      {preview.credentials && <label><input type="checkbox" checked={credentials} onChange={event => setCredentials(event.target.checked)} /><span>同时清除此 MCP 的专属凭据（仍被共享引用的凭据保留）</span></label>}
       <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setPreview(undefined)}>取消</button>
       {!preview.readOnly && preview.available && <button className="connect-secondary confirm-danger" disabled={busy} onClick={() => void run(remove)}>{preview.op === 'rea.clearDownloads' ? '确认清理' : '确认卸载'}</button>}</div>
     </div>}

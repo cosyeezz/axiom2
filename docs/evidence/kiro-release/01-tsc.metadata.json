@@ -1,0 +1,8 @@
+{
+    "command":  "node node_modules/typescript/bin/tsc --noEmit",
+    "cwd":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app",
+    "startUtc":  "2026-10-25T17:43:06.0092039Z",
+    "endUtc":  "2026-10-25T17:43:35.5300096Z",
+    "exitCode":  0,
+    "log":  "F:\\Axiom\\axiom-kiro-delivery-4bfeec8c\\app\\test-results\\kiro-delivery\\build\\01-tsc.log"
+}

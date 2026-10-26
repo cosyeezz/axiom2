@@ -221,7 +221,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     {historyOpen && <DesktopTaskCenter kind="setup" current={job?.task} onClose={() => setHistoryOpen(false)} onSource={() => { setHistoryOpen(false); window.requestAnimationFrame(() => workflow.current?.focus()); }} onChanged={() => { void status().catch(cause => setError(String(cause))); }} />}
     {confirmRecovery && interrupted && <ConfirmDialog title="确认安装器已退出？" danger
       description="请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。"
-      confirmLabel="我已确认安装器全部退出" confirmDisabled={submitting || uncertain || !interrupted}
+      confirmLabel="我已确认安装器全部退出" confirmDisabled={submitting || blocked || uncertain || !interrupted}
       onClose={() => setConfirmRecovery(false)} onConfirm={() => { setConfirmRecovery(false); void action("acknowledge-interruption"); }} />}
   </section>;
 }

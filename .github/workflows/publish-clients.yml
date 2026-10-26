@@ -1,0 +1,52 @@
+name: Publish Axiom2 Clients
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing public release tag (vX.Y.Z)
+        type: string
+        required: true
+      desktop_run:
+        description: Successful all-platform desktop build run
+        type: string
+        required: true
+      android_run:
+        description: Successful production-signed Android release build run
+        type: string
+        required: true
+      macos_publish_run:
+        description: Successful native-gated macOS publication run
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    concurrency:
+      group: axiom-client-publication
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify, publish and anonymously download every release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AXIOM_RELEASE_TAG: ${{ inputs.release_tag }}
+          AXIOM_DESKTOP_RUN: ${{ inputs.desktop_run }}
+          AXIOM_ANDROID_RUN: ${{ inputs.android_run }}
+          AXIOM_MACOS_PUBLISH_RUN: ${{ inputs.macos_publish_run }}
+          AXIOM_PUBLICATION_LOCK: axiom-client-publication
+        run: node scripts/publish-clients.mjs --publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-client-publication-evidence
+          path: clients-publish.json
+          if-no-files-found: error
+          retention-days: 30
