@@ -115,6 +115,8 @@ async function inspect() {
 }
 export async function status() { return (await inspect()).value; }
 async function reserve() {
+  // Reserving a first launch needs storage, but must not register its CLI yet.
+  await mkdir(root, { recursive: true, mode: 0o700 });
   const record = { token: randomBytes(32).toString("hex"), pid: process.pid };
   const inserted = startupDatabase((db) => db.prepare("INSERT OR IGNORE INTO startup(id,token,pid) VALUES(1,?,?)").run(record.token, record.pid), true);
   if (!inserted.changes) throw Object.assign(Error("服务已经在启动"), { code: "EEXIST" });

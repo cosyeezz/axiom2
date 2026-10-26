@@ -20,8 +20,8 @@ async function fixture(t) {
   });
   return { root, env: { ...process.env, AXIOM_DATA_DIR: root, AXIOM_PORT: String(port), AXIOM_PI_DIR: join(root, 'pi') } };
 }
-function child(t, args, env) {
-  const process = spawn(globalThis.process.execPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+function child(t, args, env, cwd) {
+  const process = spawn(globalThis.process.execPath, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let out = '', err = ''; process.stdout.on('data', bytes => { out += bytes.toString(); }); process.stderr.on('data', bytes => { err += bytes.toString(); });
   const done = new Promise((resolve, reject) => { process.once('error', reject); process.once('close', (code, signal) => resolve({ code, signal, out, err })); });
   const timer = setTimeout(() => process.kill(), 10000);
@@ -34,6 +34,24 @@ async function noStartup(root) {
   const db = new DatabaseSync(join(root, 'service-startup.sqlite'));
   try { assert.equal(db.prepare('SELECT count(*) AS n FROM startup').get().n, 0); } finally { db.close(); }
 }
+test('first foreground launch creates a missing relative data directory before reserving startup', async t => {
+  const f = await fixture(t), data = join(f.root, 'fresh', 'data');
+  const script = `import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {join} from 'node:path';import {serve} from ${JSON.stringify(pathToFileURL(join(repo, 'bin/service.mjs')).href)};await serve(false,{cli:'fresh-installation',version:'0.4.19',initialize:async({root})=>{assert.equal(root,${JSON.stringify(data)});assert.equal(JSON.parse(await readFile(join(root,'installation.json'),'utf8')).cli,'fresh-installation');return {accessUrl:'http://127.0.0.1/fixture',store:{db:{prepare(){return {all(){return []}}}}},async close(){}}}});`;
+  const running = child(t, ['--input-type=module', '--eval', script], { ...f.env, AXIOM_DATA_DIR: join('fresh', 'data') }, f.root);
+  await new Promise((resolve, reject) => {
+    let output = '';
+    running.process.stdout.on('data', bytes => { output += bytes; if (output.includes('Axiom2 已启动')) resolve(); });
+    running.done.then(result => reject(Error(`fresh launch exited before readiness: ${JSON.stringify(result)}`)), reject);
+  });
+  const meta = JSON.parse(await readFile(join(data, 'service-control.json'), 'utf8'));
+  const options = { headers: { Authorization: `Bearer ${meta.token}` }, signal: AbortSignal.timeout(2000) };
+  const state = await (await fetch(`http://127.0.0.1:${meta.port}/status`, options)).json();
+  assert.equal(state.state, 'running'); assert.equal(state.background, false);
+  const response = await fetch(`http://127.0.0.1:${meta.port}/stop`, { ...options, method: 'POST', signal: AbortSignal.timeout(2000) });
+  assert.equal(response.status, 200);
+  const result = await running.done; assert.equal(result.code, 0, result.err); assert.equal(result.signal, null);
+  await noStartup(data); await assert.rejects(readFile(join(data, 'service-control.json')), { code: 'ENOENT' });
+});
 test('a service appearing inside reserve cannot change the prior installation registration', async t => {
   const f = await fixture(t), token = 'a'.repeat(64); let requests = 0;
   const server = httpServer((_req, res) => {
