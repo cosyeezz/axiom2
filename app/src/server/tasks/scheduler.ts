@@ -19,6 +19,7 @@ import {
   type TaskRow as Row,
 } from "./records.js";
 import { TaskDelivery } from "./delivery.js";
+import { TaskAdmission, type TaskAdmissionTurn } from "./admission.js";
 import { configuration } from "../models.js";
 import { imagesInput, requireImageModel } from "../images.js";
 import { taskSummaryMs, type TaskBudget } from "../task-budget.js";
@@ -27,6 +28,7 @@ export class TaskScheduler {
   private timers = new Map<string, NodeJS.Timeout>();
   private cancelling = new Map<string, Promise<void>>();
   private launching = new Set<string>();
+  private admission = new TaskAdmission();
   private nativePending = new Map<string, Set<string>>();
   private nativeQueues = new Map<string, string>();
   private pendingViews = new Set<string>();
@@ -379,8 +381,10 @@ export class TaskScheduler {
         if (this.launching.has(row.id) || this.recalling.has(row.id) || this.cancelling.has(row.id) || this.agents.active(target(row))) continue;
         this.launching.add(row.id);
         active++;
+        const turn = this.admission.reserve();
         this.track(
-          this.start(row).finally(() => {
+          this.start(row, turn).finally(() => {
+            turn.release();
             this.launching.delete(row.id);
             this.kick();
           }),
@@ -390,7 +394,7 @@ export class TaskScheduler {
       this.pumping = false;
     }
   }
-  private async start(row: Row) {
+  private async start(row: Row, turn: TaskAdmissionTurn) {
     const recovery = this.store.recoveries.get(row.sessionId);
     const queued = this.records.inputs(row, "queued");
     // Keep the initial delegation distinct from queued appends so its durable
@@ -434,6 +438,7 @@ export class TaskScheduler {
           params: resuming ? { expectedRunId: inputs[0].body } : rewriting ? { ...JSON.parse(inputs[0].body), images } : { text: "处理明确委派／追加的子任务", images, skills: this.records.skills(inputs[0].id) },
         },
         {
+          admission: { turn, reserve: () => this.admission.reserve() },
           prompt: resuming || rewriting ? undefined : inputs.map((i) => i.body).join("\n\n"),
           task: {
             id: row.id,

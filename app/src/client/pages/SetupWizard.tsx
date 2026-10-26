@@ -9,14 +9,15 @@ import { isSubmissionRefused, validOperationJob } from "./desktop-operation.js";
 import InstallProgress from "./InstallProgress.js";
 import { CommandLine, IconButton, ResourceLink } from "./StartupControls.js";
 type Environment = { nodeReady: boolean; nodeVersion: string; writable: boolean; tailscale: boolean; platform: string };
-export type PreparationDetection = { environment: Environment | null; checking: boolean; failed: boolean; attention?: boolean; job?: Job | null; uncertain?: boolean; feedback?: { message: string; neutral: boolean } };
-export type SetupControls = { installService: () => void; showRuntime: () => void };
-type Job = { recovery?: { state: string; message?: string }; task?: MaintenanceTask; id?: string; action: string; running: boolean; phase: string; message: string; lines: string[]; progress?: unknown; startedAt?: number; logUpdatedAt?: number; exitCode?: number };
+export type PreparationDetection = { environment: Environment | null; checking: boolean; failed: boolean; attention?: boolean; job?: Job | null; foreground?: boolean; uncertain?: boolean; feedback?: { message: string; neutral: boolean } };
+export type SetupControls = { installService: () => void; maintainService: (version?: string) => void; showRuntime: () => void };
+const repairable = (job: Job | null | undefined) => job?.repairable === true && job.action === "service" && !job.running;
+type Job = { foreground?: boolean; repairable?: boolean; recovery?: { state: string; message?: string }; task?: MaintenanceTask; id?: string; action: string; running: boolean; phase: string; message: string; lines: string[]; progress?: unknown; startedAt?: number; logUpdatedAt?: number; exitCode?: number };
 function readJob(value: unknown): Job | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== "object" || typeof (value as Job).running !== "boolean" || typeof (value as Job).phase !== "string") throw Error("安装记录不完整，请重新读取状态。");
   const job = value as Job;
-  return { ...job, action: typeof job.action === "string" ? job.action : "", message: typeof job.message === "string" ? job.message : "正在核实安装状态", lines: Array.isArray(job.lines) ? job.lines.filter(line => typeof line === "string") : [] };
+  return { ...job, foreground: job.foreground === true, repairable: job.repairable === true, action: typeof job.action === "string" ? job.action : "", message: typeof job.message === "string" ? job.message : "正在核实安装状态", lines: Array.isArray(job.lines) ? job.lines.filter(line => typeof line === "string") : [] };
 }
 export default function SetupWizard({ remote, service, blocked, onBusy, onComplete, onDetection, controls, children }: { remote: boolean; service: { state: string } | null; blocked: boolean; onBusy: (busy: boolean) => void; onComplete: () => void; onDetection: (detection: PreparationDetection) => void; controls?: Ref<SetupControls>; children?: ReactNode }) {
   const [budgets, setBudgets] = useState(defaultMaintenanceBudgets);
@@ -33,10 +34,11 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const [error, setError] = useState("");
   const [readWarning, setReadWarning] = useState(true);
   const [statusUnknown, setStatusUnknown] = useState(true);
-  useEffect(() => { onDetection({ environment, checking, failed: checkFailed, attention: job?.phase === "interrupted" || job?.task?.status === "unknown" || job?.task?.status === "interrupted" || uncertain || statusUnknown && !checking, job, uncertain, feedback: error ? { message: error, neutral: readWarning || uncertain || !!job?.running } : undefined }); }, [environment, checking, checkFailed, onDetection, job, uncertain, error, readWarning, statusUnknown]);
+  useEffect(() => { onDetection({ environment, checking, failed: checkFailed, attention: !repairable(job) && (job?.phase === "interrupted" || job?.task?.status === "unknown" || job?.task?.status === "interrupted") || uncertain || statusUnknown && !checking, foreground: job?.foreground || repairable(job), job, uncertain, feedback: error ? { message: error, neutral: readWarning || uncertain || !!job?.running } : undefined }); }, [environment, checking, checkFailed, onDetection, job, uncertain, error, readWarning, statusUnknown]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const workflow = useRef<HTMLElement>(null);
   const [confirmRecovery, setConfirmRecovery] = useState(false);
+  const [confirmReinstall, setConfirmReinstall] = useState(false);
   const windows = /Win/i.test(navigator.platform);
   const pending = useRef(false), alive = useRef(true), jobEpoch = useRef(0), checkEpoch = useRef(0);
   const wasRunning = useRef(false);
@@ -88,7 +90,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   }, []);
   const running = !!job?.running;
   useEffect(() => { callbacks.current.onBusy(running || submitting || uncertain || autoInstalling); }, [running, submitting, uncertain, autoInstalling]);
-  async function action(name: string, targetId?: string) {
+  async function action(name: string, targetId?: string, reinstall = false, targetVersion?: string) {
     if (pending.current || unconfirmed.current) return;
     let acceptedJob: Job | null | undefined;
     const request = ++submission.current;
@@ -103,7 +105,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       if (name === "reconcile-service") { void check(); callbacks.current.onComplete(); }
     };
     try {
-      const result = await desktopInvoke<{ job?: unknown }>("axiom_setup", { action: name, confirmed: name === "acknowledge-interruption", ...(name === "reconcile-service" ? { maintenance: { id: targetId || job?.id } } : {}) });
+      const result = await desktopInvoke<{ job?: unknown }>("axiom_setup", { action: name, confirmed: name === "acknowledge-interruption" || name === "service" && reinstall, ...(name === "reconcile-service" ? { maintenance: { id: targetId || job?.id } } : name === "service" && targetVersion ? { maintenance: { version: targetVersion } } : {}) });
       accept(result);
     } catch (cause) {
       if (alive.current) {
@@ -130,7 +132,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     } finally { ++jobEpoch.current; pending.current = false; if (alive.current) setSubmitting(false); }
     return acceptedJob;
   }
-  async function installService() {
+  async function installService(reinstall = false, targetVersion?: string) {
     if (installFlow.current || pending.current || unconfirmed.current || blocked || running) return;
     installFlow.current = true; setAutoInstalling(true); setError("");
     const pause = () => new Promise<void>(resolve => window.setTimeout(resolve, 1500));
@@ -138,11 +140,11 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       let current: Job | null | undefined = await status();
       if (current === undefined) throw Error("暂未读到安装状态，请重试安装。");
       // Complete an already-exited attempt first, without replaying its writes.
-      while (current?.recovery?.state === "checking") {
+      while (current?.recovery?.state === "checking" && !repairable(current)) {
         await pause(); if (!alive.current) return;
         current = await status();
       }
-      if (current?.phase === "interrupted") {
+      if (current?.phase === "interrupted" && !repairable(current)) {
         if (current.action !== "service") { setConfirmRecovery(true); throw Error("请先确认上次系统安装器已退出，然后重新点击安装。"); }
         current = await action("reconcile-service", current.id);
         if (!current || current.phase === "interrupted" || current.running) return;
@@ -171,7 +173,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
         if (!runtime) return;
         if (!runtime.nodeReady) throw Error("Node.js 安装后尚未就绪，请重新打开客户端再安装。");
       }
-      if (alive.current) await action("service");
+      if (alive.current) await action("service", undefined, reinstall, targetVersion);
     } catch (cause) { if (alive.current) { setReadWarning(false); setError(cause instanceof Error ? cause.message : String(cause)); } }
     finally { installFlow.current = false; if (alive.current) setAutoInstalling(false); }
   }
@@ -179,13 +181,14 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     const result = await desktopInvoke<{ job?: unknown; budgets?: MaintenanceBudgets }>("axiom_setup", { action, maintenance });
     if (alive.current) { if (result.budgets) setBudgets(result.budgets); await status(); }
   }
-  const interrupted = job?.phase === "interrupted" || job?.task?.status === "unknown" || job?.task?.status === "interrupted";
+  const interrupted = !repairable(job) && (job?.phase === "interrupted" || job?.task?.status === "unknown" || job?.task?.status === "interrupted");
   useEffect(() => {
     if (!interrupted) setConfirmRecovery(false);
   }, [interrupted]);
   const disabled = running || interrupted || uncertain || statusUnknown || submitting || autoInstalling || blocked;
   useImperativeHandle(controls, () => ({
     installService: () => { if (service?.state === "missing") void installService(); },
+    maintainService: version => { void installService(true, version); },
     showRuntime: () => { if (checkFailed || !environment) void check(); requestAnimationFrame(() => workflow.current?.focus()); },
   }));
   const recovering = job?.recovery?.state === "checking";
@@ -195,6 +198,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       <div className="connect-actions"><button className="connect-secondary" disabled={checking || running || submitting || autoInstalling} onClick={() => void check()}>检查</button>
         {!(remote ? environment?.tailscale : environment?.nodeReady) && <button className="connect-secondary" disabled={disabled || checking || !environment} onClick={() => void action(remote ? "tailscale" : "node")}>{submitting ? "正在安装…" : "安装"}</button>}
         {remote && environment?.tailscale && <button className="connect-secondary" disabled={submitting} onClick={() => void action("launch-tailscale")}>打开</button>}
+        {!remote && service?.state !== "missing" && <button className="connect-secondary" disabled={disabled || checking || !environment} onClick={() => setConfirmReinstall(true)}>重新安装服务</button>}
       </div>
     </div>
     {!remote && environment && !environment.writable && <p className="connect-error" role="alert">安装目录不可写，请检查目录权限。</p>}
@@ -206,7 +210,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     </div>}
     {interrupted && !running && (job?.action === "service" ? <div className="startup-step-actions">{(windows || environment?.platform === "windows") && <button className="connect-primary" disabled={submitting || uncertain || recovering} onClick={() => void action("reconcile-service")}><Icon name={recovering ? "loader-circle" : "refresh-cw"} className={recovering ? "startup-spin" : ""} />{submitting || recovering ? "正在核实安装…" : "核实并恢复安装"}</button>}<p className="connect-footnote">核实退出后恢复安装入口，不会自动重装或停止后台。</p></div> : <button className="connect-secondary" disabled={submitting || uncertain} onClick={() => setConfirmRecovery(true)}>确认安装器退出后恢复</button>)}
     {error && !historyOpen && <p className={readWarning || uncertain || checking || checkFailed || running ? "connect-message" : "connect-error"} role={readWarning || uncertain || checking || checkFailed || running ? "status" : "alert"}>{error}</p>}
-    {running && <p className="connect-footnote">安装在后台继续；请完成系统请求的授权。</p>}
+    {running && <p className="connect-footnote">{job?.foreground ? "安装在可见终端执行；可查看实际进度和错误，服务会在独立前台窗口运行。" : "安装在后台继续；请完成系统请求的授权。"}</p>}
     <details className="maintenance-details setup-details"><summary>安装详情</summary>
       <button className="maintenance-text-button" onClick={() => setHistoryOpen(true)}><Icon name="history" />安装任务记录</button>
       {!!job?.lines.length && <details><summary>执行日志</summary><pre>{job.lines.join("\n").replaceAll("@@phase:", "")}</pre></details>}
@@ -219,6 +223,10 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       </details>
     </details>
     {historyOpen && <DesktopTaskCenter kind="setup" current={job?.task} onClose={() => setHistoryOpen(false)} onSource={() => { setHistoryOpen(false); window.requestAnimationFrame(() => workflow.current?.focus()); }} onChanged={() => { void status().catch(cause => setError(String(cause))); }} />}
+    {confirmReinstall && <ConfirmDialog title="前台重新安装服务？" danger
+      description="会先尝试正常关闭自管服务（正在执行的后台任务会中断），只清理确认属于 Axiom 的程序目录；清理失败则换新目录。项目、会话、模型设置与凭据保留。安装与服务均在可见终端执行。"
+      confirmLabel="前台重新安装" confirmDisabled={disabled} onClose={() => setConfirmReinstall(false)}
+      onConfirm={() => { setConfirmReinstall(false); void installService(true); }} />}
     {confirmRecovery && interrupted && <ConfirmDialog title="确认安装器已退出？" danger
       description="请先确认本次系统安装器已经全部退出。仍在运行时解除占用可能导致重复安装。"
       confirmLabel="我已确认安装器全部退出" confirmDisabled={submitting || blocked || uncertain || !interrupted}

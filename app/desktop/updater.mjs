@@ -1,6 +1,7 @@
 // Bundled with the desktop client; uses only Node.js built-ins so old backends can update.
 import { inspectArchives, removeArchive, archiveWorker } from './archive-cleanup.mjs';
 import { serviceAdmission } from './service-admission.mjs';
+import { inspectInstallation } from './foreground-artifacts.mjs';
 import { inspectServiceRemoval, removeManagedService, serviceRemovalPending, verifyServiceRemoval } from './service-removal.mjs';
 import { inspectPiRemoval, verifyPiRemoval } from './pi-removal.mjs';
 import { DesktopExecution, desktopTask, budgetsDefault, validBudgets } from './maintenance.mjs';
@@ -119,8 +120,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   async function piStatus(refresh = false) {
     let runtimeVersion = null;
-    const installed = await installation(true);
     try {
+      const installed = await installation(true);
       if (!installed) throw Error("后台尚未安装");
       // Read from Node's dependency lookup directories without requiring the SDK:
       // pi exports only an ESM import condition, so require.resolve(piPackage) fails.
@@ -501,10 +502,15 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const clientInstaller = pending.candidate && await exists(join(directory, `${pending.candidate.asset.sha256}-Axiom2.msi`)) ? { version: pending.candidate.version, readyAt: pending.candidate.readyAt } : null;
     let installed, installationError;
     try { installed = await installation(true); }
-    catch (error) {
-      if (!['archive-preview', 'archive-remove'].includes(current?.kind)) throw error;
-      installationError = error.message;
-    }
+    catch (error) { installationError = error.message; }
+    // Installed package facts do not require a running service or its active
+    // registration. Reuse the same receipt inspector as the install/start UI.
+    let program;
+    try { program = await inspectInstallation(root); }
+    catch (error) { program = { state: 'unknown', message: error.message }; }
+    const serviceVersion = program.state === 'verified' ? program.version : installed?.version ?? null;
+    const serviceInstallation = program.state === 'verified' ? 'foreground' : installed ? 'registered' : program.state;
+    const serviceError = serviceVersion ? null : installationError || program.message || null;
     const release = await json(releaseFile);
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
@@ -513,7 +519,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (current) { current.reconciled = current.reconciliation?.state === "complete" && !updaterOwnerPresent(root); delete current.pid; delete current.token; delete current.installer; delete current.reconciliation; }
     const pi = ['archive-preview', 'archive-remove'].includes(current?.kind) ? null : await piStatus();
     if (current?.kind === "pi" && ["failed", "cancelled", "unknown", "interrupted"].includes(current.task?.status) && pi.release && pi.release.token === current.version) pi.release.token = null;
-    return { installationError, clientInstaller, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion: installed?.version ?? null, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
+    return { installationError, clientInstaller, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion, serviceInstallation, serviceError, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
       job: current, budgets: await json(join(directory, "budgets.json"), budgetsDefault), recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
   async function npmCli(node) {

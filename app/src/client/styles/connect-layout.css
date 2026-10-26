@@ -1,0 +1,171 @@
+/* Service controls retain the workspace palette, with a compact, responsive layout. */
+.connect-page.connect-refined {
+  --control-panel: #1a1d20;
+  --control-inset: #202428;
+  --control-line: #30363b;
+  --control-soft-line: #ffffff0c;
+  --control-text: #eef1f2;
+  --control-muted: #a8b2b9;
+  --control-accent: #d4bb8d;
+  --control-icon-bg: #c8ac790d;
+  --control-shadow: 0 8px 28px #00000012;
+  padding: 32px max(28px, calc((100% - 1040px) / 2));
+  justify-content: safe center;
+}
+html[data-theme="light"] .connect-page.connect-refined {
+  --control-panel: #fffefa;
+  --control-inset: #f6f5f0;
+  --control-line: #dcded5;
+  --control-soft-line: #252d2510;
+  --control-text: #292f2b;
+  --control-muted: #657068;
+  --control-accent: #876731;
+  --control-icon-bg: #8767310a;
+  --control-shadow: 0 6px 24px #252d2506;
+  color-scheme: light;
+}
+.connect-refined .connect-header-actions { display: flex; align-items: center; gap: 20px; }
+.connect-refined .connect-header { min-height: 36px; }
+.connect-refined .startup-title { margin: 30px 0 24px; }
+.connect-refined .startup-title h1 { font-size: 34px; font-weight: 550; letter-spacing: -.045em; }
+/* Use the workspace's shared sweep and theme colors for the brand heading. */
+.connect-refined .startup-title .startup-brand-title { width: fit-content; max-width: 100%; white-space: normal; overflow: visible; text-overflow: clip; }
+@media (prefers-reduced-motion: reduce) {
+  .connect-refined .startup-title .startup-brand-title { animation: none; background: none; color: var(--control-text); -webkit-text-fill-color: currentColor; }
+}
+.connect-refined .startup-title p { margin-top: 7px; color: var(--control-muted); font-size: 12px; }
+.connect-page.connect-refined .startup-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: start;
+  gap: 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.connect-refined .startup-device,
+.connect-refined .startup-update-section,
+.connect-refined .startup-tools {
+  min-width: 0;
+  background: var(--control-panel);
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  box-shadow: var(--control-shadow);
+}
+.connect-refined .startup-device { grid-column: 1 / -1; padding: 22px 24px; }
+.connect-refined .startup-target-row { gap: 20px; }
+.connect-refined .connection-actions { grid-template-columns: 92px 112px; gap: 12px; }
+.connect-refined .connection-label,
+.connect-refined .connection-field { font-size: 11px; color: var(--control-muted); }
+.connect-refined .device-trigger,
+.connect-refined .connection-field input { background: var(--control-inset); border-color: var(--control-line); border-radius: 8px; }
+.connect-refined .connection-submit,
+.connect-refined .connection-submit .startup-connect-button { height: 56px; }
+.connect-refined .connection-primary-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 24px;
+  border-top: 1px solid var(--control-soft-line);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+.connect-refined .connect-primary.connection-primary-button {
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  min-width: 120px;
+  min-height: 44px;
+  max-width: 260px;
+  padding: 10px 20px;
+  border-radius: 7px;
+  font-size: 13px !important;
+}
+.connect-refined .connection-primary-meta { grid-column: 1; grid-row: 1; padding: 0; min-width: 0; }
+.connect-refined .connection-service-overview { min-width: 0; }
+.connect-refined .connection-service-heading { gap: 10px; margin-bottom: 5px; }
+.connect-refined .connection-service-heading strong { color: var(--control-text); font-size: 13px; font-weight: 500; }
+.connect-refined .connection-service-overview > span { color: var(--control-muted); overflow-wrap: anywhere; }
+.connect-refined .connection-status-tag { font-size: 10px; padding: 1px 7px; border-radius: 4px; }
+.connect-refined .connection-primary-area > :is(.connect-error, .connect-message) { grid-column: 1 / -1; margin: 0; }
+.connect-refined .startup-update-section { padding: 22px 24px 4px; }
+.connect-refined .updates-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
+.connect-refined .updates-section-heading h2,
+.connect-refined .startup-tools-heading h2 { color: var(--control-text); font-size: 14px; font-weight: 550; margin: 0; }
+.connect-refined .updates-section-heading p,
+.connect-refined .startup-tools-heading p { color: var(--control-muted); font-size: 11px; margin: 4px 0 0; }
+.connect-refined .updates-section-heading > svg { width: 17px; height: 17px; color: var(--control-muted); }
+.connect-refined .update-component { padding: 17px 0; }
+.connect-refined .update-component + .update-component { border-color: var(--control-soft-line); }
+.connect-refined .update-component-row { gap: 12px; }
+.connect-refined .update-component-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.connect-refined .update-component-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--control-soft-line); border-radius: 8px; background: var(--control-icon-bg); color: var(--control-accent); }
+.connect-refined .update-component-icon svg { width: 17px; height: 17px; }
+.connect-refined .update-component-copy h3 { color: var(--control-text); font-size: 12px; }
+.connect-refined .update-component-copy p { color: var(--control-muted); font-size: 11px; line-height: 1.7; }
+.connect-refined .update-component-copy p > span { display: block; margin: 0; color: var(--control-accent); }
+.connect-refined .update-component-row > .connect-actions { gap: 6px; }
+.connect-refined .update-component-row .connect-secondary { min-height: 40px; padding: 8px 11px; font-size: 11px !important; border-radius: 6px; }
+.connect-refined .update-details { border-color: var(--control-soft-line); }
+.connect-refined .update-details > summary { display: flex; gap: 9px; min-height: 48px; list-style: none; color: var(--control-muted); }
+.connect-refined .update-details > summary::-webkit-details-marker { display: none; }
+.connect-refined .update-details > summary > svg { width: 13px; height: 13px; }
+.connect-refined .update-details > summary > svg:last-child { width: 10px; height: 10px; margin-left: auto; }
+.connect-refined .update-details[open] > summary > svg:last-child { transform: rotate(180deg); }
+.connect-refined .startup-tools-heading { padding: 22px 20px 16px; }
+.connect-refined .startup-tools > details { border-top: 1px solid var(--control-soft-line); margin: 0; padding: 0; }
+.connect-refined .startup-tools > details > summary { justify-content: flex-start; min-height: 78px; padding: 15px 20px; gap: 12px; color: var(--control-text); }
+.connect-refined .startup-tools > details > summary > svg:first-child { width: 17px; height: 17px; color: var(--control-muted); transform: none; flex-shrink: 0; }
+.connect-refined .startup-tools > details > summary > svg:last-child { width: 10px; height: 10px; margin-left: auto; flex-shrink: 0; }
+.connect-refined .startup-tools .startup-tool-copy { margin-left: 0; color: var(--control-text); min-width: 0; font-size: 12px; }
+.connect-refined .startup-tool-copy small { display: block; margin-top: 4px; font-size: 11px; color: var(--control-muted); font-weight: 400; }
+.connect-refined .startup-tools > details > :not(summary) { margin-inline: 20px; }
+.connect-refined .startup-tools > details > .setup-simple { margin: 0; padding: 4px 20px 20px; }
+/* Expanded maintenance needs room for paths and previews, not a narrow sidebar. */
+.connect-refined .startup-panel:has(.startup-tools > details[open]) { grid-template-columns: minmax(0, 1fr); }
+.connect-refined .startup-panel:has(.startup-update-section[hidden]) .startup-tools { grid-column: 1 / -1; }
+.connect-refined .startup-recovery-notice { margin: 12px 16px; }
+.connect-refined .startup-global-error { grid-column: 1 / -1; margin: 0; }
+.connect-refined .connect-footer { margin-top: 18px; color: var(--control-muted); font-size: 10px; line-height: 1.7; }
+@media (max-width: 1000px) {
+  .connect-page.connect-refined { padding: 24px; }
+  .connect-page.connect-refined .startup-panel { grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; }
+  .connect-refined .startup-update-section { padding-inline: 20px; }
+  .connect-refined .update-component-row { flex-wrap: wrap; }
+  .connect-refined .update-component-row > .connect-actions { flex-basis: 100%; padding-left: 48px; }
+}
+@media (max-width: 820px) {
+  .connect-page.connect-refined .startup-panel { grid-template-columns: minmax(0, 1fr); }
+  .connect-refined .startup-title { margin-top: 24px; }
+  .connect-refined .update-component-row { flex-wrap: nowrap; }
+  .connect-refined .update-component-row > .connect-actions { flex-basis: auto; padding-left: 0; }
+  .connect-refined .startup-tools-heading { padding-bottom: 12px; }
+  .connect-refined .startup-tools > details > summary { min-height: 70px; }
+}
+@media (max-width: 580px) {
+  .connect-page.connect-refined { padding: 20px 16px; }
+  .connect-refined .connect-header-actions { gap: 10px; }
+  .connect-refined .connect-local { display: none; }
+  .connect-refined .startup-title h1 { font-size: 26px; }
+  .connect-refined .startup-title { margin: 22px 0 20px; }
+  .connect-refined .startup-device { padding: 18px; }
+  .connect-refined .startup-target-row { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .connect-refined .connection-actions { grid-template-columns: minmax(0, 1fr) 112px; }
+  .connect-refined .connection-submit,
+  .connect-refined .connection-submit .startup-connect-button,
+  .connect-refined .connection-port input { height: 44px; }
+  .connect-refined .connection-primary-area { gap: 12px; }
+  .connect-refined .connect-primary.connection-primary-button { min-width: 92px; padding-inline: 13px; max-width: 150px; }
+  .connect-refined .connection-primary-meta { flex-wrap: wrap; }
+  .connect-refined .startup-update-section { padding: 20px 18px 4px; }
+  .connect-refined .update-component-row { flex-wrap: wrap; }
+  .connect-refined .update-component-row > .connect-actions { flex: 1 1 100%; padding-left: 0; }
+  .connect-refined .update-component-row .connect-secondary { min-height: 44px; flex: 1 1 auto; }
+  .connect-refined .connect-footer { flex-direction: column; gap: 4px; }
+}
+@media (max-height: 700px) and (min-width: 821px) {
+  .connect-page.connect-refined { padding-block: 20px; }
+  .connect-refined .startup-title { margin: 16px 0 18px; }
+  .connect-refined .startup-title h1 { font-size: 26px; }
+}

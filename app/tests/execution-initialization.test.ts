@@ -11,7 +11,9 @@ import { ExecutionProfiles, type PreparedEnvironment } from "../src/server/execu
 import type { ExecutionRejection } from "../src/server/execution-diagnostics.js";
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "axiom-init-")), cwd = join(root, "project"), data = join(root, "data");
+  // Keep private fixture paths aligned with the SDK's resolved settings paths
+  // when the system temporary directory is an alias (for example macOS /var).
+  const root = fs.realpathSync.native(mkdtempSync(join(tmpdir(), "axiom-init-"))), cwd = join(root, "project"), data = join(root, "data");
   const modelDir = join(root, "models"), nativeDir = join(root, "native-auth"), home = join(root, "home");
   for (const dir of [cwd, modelDir, home]) mkdirSync(dir);
   const keys = ["HOME", "USERPROFILE", "AXIOM_PI_DIR", "PI_CODING_AGENT_DIR"] as const;
@@ -182,13 +184,15 @@ for (const code of ["EACCES", "EROFS", "ENOTDIR"]) {
 
 test("missing read-only settings retain SDK defaults without bypassing a later real directory change", async t => {
   const f = fixture(), mkdir = fs.mkdirSync, projectPi = join(f.cwd, ".pi");
+  let denied = 0;
   const blocked = t.mock.method(fs, "mkdirSync", ((path: fs.PathLike, ...args: unknown[]) => {
-    if (String(path) === projectPi) throw Object.assign(Error("fixture read-only project"), { code: "EACCES" });
+    if (String(path) === projectPi) { denied++; throw Object.assign(Error("fixture read-only project"), { code: "EACCES" }); }
     return (mkdir as any)(path, ...args);
   }) as typeof fs.mkdirSync);
   syncBuiltinESMExports();
   try {
     const environment = f.keep(await f.profiles.prepareAsync(f.input));
+    assert.ok(denied > 0, "permission fault must hit the SDK's resolved settings directory");
     assert.equal(existsSync(projectPi), false); assert.equal(environment.current(), true);
     assert.equal(environment.reuse, "single-use"); assert.equal(environment.prewarmAllowed, false);
     blocked.mock.restore(); syncBuiltinESMExports();

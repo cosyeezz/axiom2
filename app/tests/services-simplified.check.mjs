@@ -31,7 +31,7 @@ async function fresh(config = {}) {
     window.setInterval = (fn, ms, ...args) => interval(fn, [1500,2000,3000].includes(ms) ? 80 : ms, ...args);
     const budgets = { headersMs:30000, idleMs:60000, installMs:600000, totalMs:1200000 };
     const state = {
-      node: config.node !== false, service: config.service || 'missing', view: 'control', calls: [], unexpected: [], setupJob: null,
+      node: config.node !== false, downloaded: config.downloaded === true, service: config.service || 'missing', view: 'control', calls: [], unexpected: [], setupJob: null,
       update: { clientVersion:'0.4.1', serviceVersion:['running','stopped'].includes(config.service)?'0.4.1':null, managed:true, clientSupported:true, release:null, recovery:false, log:'', job:null,
         pi:{runtimeVersion:null,cli:{version:null},release:null} },
       setupMode: 'normal', removalMode: 'normal', updateMode: 'normal', cleanupMode: 'normal', controlsFailures: 0,
@@ -45,11 +45,11 @@ async function fresh(config = {}) {
     function job(kind,status='running') {const t=task(kind,status); return {kind,action:kind,id:t.id,startedAt:t.createdAt,running:status==='running',phase:status==='succeeded'?'done':status==='failed'?'error':status==='unknown'?'interrupted':'running',message:t.message,task:t,lines:[]};}
     function hold(key,value) {return new Promise((resolve,reject)=>{state.held[key]={resolve:()=>resolve(clone(value)),reject:reason=>reject(reason)};});}
     state.makeJob=job;
-    state.finishSetup=()=>{if(state.setupJob.action==='node')state.node=true;if(state.setupJob.action==='service')state.service='running';state.setupJob={...state.setupJob,running:false,phase:'done',message:'安装完成',task:{...state.setupJob.task,status:'succeeded',completedSteps:3}};};
+    state.finishSetup=()=>{if(state.setupJob.action==='node')state.node=true;if(state.setupJob.action==='service'){state.service='stopped';state.downloaded=true;}state.setupJob={...state.setupJob,running:false,phase:'done',message:'安装完成',task:{...state.setupJob.task,status:'succeeded',completedSteps:3}};};
     state.publishPending=()=>{state.update.job=state.pendingJob;};
     state.release=(key,error)=>{const h=state.held[key];if(!h)throw Error(`No held invocation ${key}`); delete state.held[key];if(error)h.reject(error);else h.resolve();};
     window.fixture=state;
-    if(config.interrupted)state.setupJob=job('service','unknown');
+    if(config.interrupted)state.setupJob={...job('service','unknown'),repairable:config.repairable===true};
     if(config.oldJob) {state.update.job=job(config.oldJob,'succeeded');state.update.job.task.createdAt=1;}
     window.__TAURI_INTERNALS__={invoke:async(name,args={})=>{
       state.calls.push({name,args:clone(args)});
@@ -59,7 +59,7 @@ async function fresh(config = {}) {
         if(args.action==='status') {const snapshot={job:clone(state.setupJob),budgets};if(state.statusMode==='hold-once'){state.statusMode='normal';return hold(`status-${++state.sequence}`,snapshot);}return snapshot;}
         if(args.action==='uninstall-settings')return {opened:true};
         if(['service','node','tailscale'].includes(args.action)) {
-          const next=job(args.action); state.pendingSetup=next; if(state.setupMode==='malformed')return {job:{}}; if(state.setupMode!=='unaccepted')state.setupJob=next;
+          const next={...job(args.action),foreground:args.action==='service'&&config.foreground===true}; state.pendingSetup=next; if(state.setupMode==='malformed')return {job:{}}; if(state.setupMode!=='unaccepted')state.setupJob=next;
           if(state.setupMode!=='normal')return hold(`setup-${next.id}`,{job:next});
           return {job:clone(next)};
         }
@@ -67,9 +67,9 @@ async function fresh(config = {}) {
         return {opened:true};
       }
       if(name==='axiom_service') {
-        if(args.action==='start')state.service='running';
+        if(args.action==='start'){if(state.startFailure)throw '测试启动失败';state.service='running';}
         if(args.action==='stop')state.service='stopped';
-        return {state:state.service,active:[],desktopView:state.view};
+        return {state:state.service,active:[],desktopView:state.view,artifact:{download:{state:state.downloaded?'verified':'absent'},installation:{state:state.service==='missing'?'absent':'verified'}}};
       }
       if(name==='axiom_peers')return {peers:[{name:'Studio',ip:'100.64.0.8'},{name:'Laptop',ip:'100.70.1.2'}]};
       if(name==='axiom_controls') { ++state.revision;if(state.controlsFailures-->0)throw '测试屏障拒绝';state.view='control';return; }
@@ -119,12 +119,12 @@ async function fresh(config = {}) {
       state.unexpected.push({name,args});throw Error(`Unexpected simulated IPC ${name}`);
     }};
   }, config);
-  await page.goto(origin); await page.locator('.connection-primary-button').waitFor();
+  await page.goto(origin); await page.locator('.startup-connect-button').waitFor();
   await page.waitForFunction(()=>window.fixture.calls.some(c=>c.name==='axiom_setup'&&c.args.action==='check'));
   await page.waitForTimeout(120);
   return page;
 }
-const primary = page=>page.locator('.connection-primary-button');
+const primary = page=>page.locator('.startup-connect-button, .connection-primary-button:not([hidden])').last();
 async function select(page,name) {await page.getByRole('combobox',{name:'连接设备',exact:true}).click();await page.getByRole('option',{name,exact:false}).click();}
 async function calls(page,name,action) {return page.evaluate(({name,action})=>fixture.calls.filter(c=>c.name===name&&(action===undefined||c.args.action===action)),{name,action});}
 async function waitFor(page,fn) {await page.waitForFunction(fn,undefined,{timeout:5000});}
@@ -133,36 +133,93 @@ async function environment(page) {await page.locator('.startup-maintenance > sum
 async function updates(page) {await page.locator('.updates-simple').scrollIntoViewIfNeeded();}
 try {
   await scenario('missing-runtime-direct',async()=>{
-    const p=await fresh({node:false});assert.equal(await primary(p).textContent(),'安装并启动服务');await primary(p).click();
+    const p=await fresh({node:false});assert.equal(await primary(p).textContent(),'下载和安装');await primary(p).click();
     await waitFor(p,()=>fixture.setupJob?.action==='node');assert.equal((await calls(p,'axiom_setup','service')).length,0);
     assert.equal((await calls(p,'axiom_setup','node')).length,1);assert.equal(await p.locator('.startup-preparation').getAttribute('open'),null);
     await select(p,'Studio');await p.evaluate(()=>fixture.finishSetup());await waitFor(p,()=>fixture.setupJob?.action==='service');
     assert.equal((await calls(p,'axiom_setup','service')).length,1);await select(p,'本地电脑');await p.evaluate(()=>fixture.finishSetup());
-    await primary(p).filter({hasText:'连接工作台'}).waitFor();await noErrors(p);
+    await primary(p).filter({hasText:'启动'}).waitFor();assert.equal((await calls(p,'axiom_service','start')).length,0);await noErrors(p);
   });
   await scenario('direct-install-switch-preserves-task',async()=>{
-    const p=await fresh();assert.equal(await primary(p).textContent(),'安装并启动服务');await primary(p).click();
+    const p=await fresh();assert.equal(await primary(p).textContent(),'下载和安装');await primary(p).click();
     await waitFor(p,()=>fixture.setupJob?.running);assert.equal((await calls(p,'axiom_setup','service')).length,1);
     assert.equal(await p.getByRole('combobox',{name:'连接设备'}).isEnabled(),true);assert.equal(await p.locator('.startup-preparation').getAttribute('open'),null);
     await select(p,'Studio');await p.getByRole('button',{name:'连接工作台',exact:true}).waitFor();
     await select(p,'本地电脑');assert.match(await primary(p).textContent(),/正在安装/);assert.equal((await calls(p,'axiom_setup','service')).length,1);
-    await p.evaluate(()=>fixture.finishSetup());await primary(p).filter({hasText:'连接工作台'}).waitFor();await noErrors(p);
+    await p.evaluate(()=>fixture.finishSetup());await primary(p).filter({hasText:'启动'}).waitFor();await noErrors(p);
   });
-  await scenario('enter-installs-once',async()=>{
-    const p=await fresh();await p.getByLabel('本地端口',{exact:true}).press('Enter');await waitFor(p,()=>fixture.setupJob?.running);
-    assert.equal((await calls(p,'axiom_setup','service')).length,1);assert.equal((await calls(p,'axiom_local')).length,0);await noErrors(p);
+  await scenario('default-port-enter-connects-without-install',async()=>{
+    const p=await fresh({node:false});await p.getByLabel('本地端口',{exact:true}).press('Enter');
+    await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();
+    assert.equal((await calls(p,'axiom_local')).at(-1).args.port,4317);
+    for(const action of ['node','service','reconcile-service'])assert.equal((await calls(p,'axiom_setup',action)).length,0);
+    await noErrors(p);
   });
-  await scenario('stopped-starts-running-connects',async()=>{
-    const p=await fresh({service:'stopped'});assert.equal(await primary(p).textContent(),'启动服务');await primary(p).click();
-    await primary(p).filter({hasText:'连接工作台'}).waitFor();assert.equal((await calls(p,'axiom_service','start')).length,1);
-    await primary(p).click();await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();assert.equal((await calls(p,'axiom_local')).length,1);await noErrors(p);
+  for(const state of ['missing','unmanaged','interrupted','installing'])await scenario(`independent-default-connect-during-${state}`,async()=>{
+    const p=await fresh({node:false,service:state==='unmanaged'?'unmanaged':'missing',interrupted:state==='interrupted'});
+    if(state==='installing') {await p.evaluate(()=>fixture.setupJob=fixture.makeJob('service','running'));await p.waitForTimeout(160);}
+    const connect=p.getByRole('button',{name:'连接工作台',exact:true});assert.equal(await connect.count(),1);assert.equal(await connect.isEnabled(),true);
+    assert.match(await connect.textContent(),/连接/);const box=await connect.boundingBox();assert.ok(box&&box.height>=44);
+    await connect.click();await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();
+    assert.equal((await calls(p,'axiom_local')).at(-1).args.port,4317);
+    for(const action of ['node','service','reconcile-service'])assert.equal((await calls(p,'axiom_setup',action)).length,0);
+    await noErrors(p);
+  });
+  await scenario('stopped-starts-running-closes-and-connection-remains-independent',async()=>{
+    const p=await fresh({service:'stopped'});assert.equal(await primary(p).textContent(),'启动');await primary(p).click();
+    await primary(p).filter({hasText:'关闭'}).waitFor();assert.equal((await calls(p,'axiom_service','start')).length,1);
+    await primary(p).click();await p.getByRole('dialog').waitFor();assert.equal((await calls(p,'axiom_service','stop')).length,0);
+    await p.getByRole('button',{name:'确认关闭服务',exact:true}).click();await primary(p).filter({hasText:'启动'}).waitFor();
+    assert.equal((await calls(p,'axiom_service','stop')).length,1);assert.equal((await calls(p,'axiom_setup','service')).length,0);
+    await p.getByRole('button',{name:'连接工作台',exact:true}).click();await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();assert.equal((await calls(p,'axiom_local')).length,1);await noErrors(p);
+  });
+  await scenario('downloaded-package-installs-once-and-stays-installed-after-start-failure',async()=>{
+    const p=await fresh({downloaded:true,foreground:true});assert.equal(await primary(p).textContent(),'安装');
+    await primary(p).click();await waitFor(p,()=>fixture.setupJob?.running);
+    const writes=await calls(p,'axiom_setup','service');assert.equal(writes.length,1);assert.equal(writes[0].args.confirmed,false);
+    await p.evaluate(()=>fixture.finishSetup());await primary(p).filter({hasText:'启动'}).waitFor();
+    await select(p,'Studio');await select(p,'本地电脑');await p.waitForTimeout(250);
+    assert.equal(await primary(p).textContent(),'启动');assert.equal((await calls(p,'axiom_setup','service')).length,1);
+    await p.evaluate(()=>fixture.startFailure=true);await primary(p).click();
+    await p.getByText('测试启动失败',{exact:false}).first().waitFor();
+    await primary(p).filter({hasText:'启动'}).waitFor();assert.equal((await calls(p,'axiom_service','start')).length,1);
+    assert.equal((await calls(p,'axiom_setup','service')).length,1);
+    await p.reload();await primary(p).filter({hasText:'安装'}).waitFor();
+    assert.equal((await calls(p,'axiom_setup','service')).length,0);await noErrors(p);
   });
   await scenario('development-port-does-not-install',async()=>{
-    const p=await fresh({node:false});await p.getByLabel('本地端口',{exact:true}).fill('8123');await primary(p).filter({hasText:'连接工作台'}).waitFor();await primary(p).click();
+    const p=await fresh({node:false});await p.getByLabel('本地端口',{exact:true}).fill('8123');await primary(p).filter({hasText:'连接'}).waitFor();await primary(p).click();
     await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();assert.equal((await calls(p,'axiom_setup','service')).length,0);assert.equal((await calls(p,'axiom_local')).at(-1).args.port,8123);await noErrors(p);
   });
+  await scenario('legacy-unknown-explicit-foreground-repair-without-replay',async()=>{
+    const p=await fresh({interrupted:true,repairable:true,foreground:true});
+    assert.equal((await calls(p,'axiom_setup','service')).length,0);
+    await primary(p).filter({hasText:'下载和安装'}).click();await waitFor(p,()=>fixture.setupJob?.running);
+    assert.equal((await calls(p,'axiom_setup','reconcile-service')).length,0);
+    assert.equal((await calls(p,'axiom_setup','service')).length,1);assert.equal((await calls(p,'axiom_setup','node')).length,0);
+    await p.getByText('安装在可见终端执行，可以切换设备',{exact:true}).waitFor();await noErrors(p);
+  });
+  await scenario('explicit-reinstall-needs-consent-and-submits-once',async()=>{
+    const p=await fresh({service:'stopped',foreground:true});await p.locator('.startup-preparation > summary').click();
+    await p.getByRole('button',{name:'重新安装服务',exact:true}).click();
+    await p.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
+    assert.equal((await calls(p,'axiom_setup','service')).length,0);
+    await p.getByRole('button',{name:'重新安装服务',exact:true}).click();
+    await p.getByRole('dialog').getByRole('button',{name:'前台重新安装',exact:true}).click();
+    await waitFor(p,()=>fixture.setupJob?.running);
+    assert.equal((await calls(p,'axiom_setup','service')).length,1);assert.equal((await calls(p,'axiom_setup','service'))[0].args.confirmed,true);assert.equal((await calls(p,'axiom_setup','reconcile-service')).length,0);
+    assert.equal((await calls(p,'axiom_service','stop')).length,0);await noErrors(p);
+  });
+  await scenario('foreground-install-finished-does-not-claim-service-ready',async()=>{
+    const p=await fresh({foreground:true});await primary(p).filter({hasText:'下载和安装'}).click();
+    await waitFor(p,()=>fixture.setupJob?.running);
+    await p.evaluate(()=>{fixture.setupJob={...fixture.setupJob,running:false,phase:'done',task:{...fixture.setupJob.task,status:'succeeded',completedSteps:3}};fixture.service='starting';});
+    await primary(p).filter({hasText:'正在启动'}).waitFor();assert.equal(await primary(p).isDisabled(),true);
+    assert.equal(await p.locator('.startup-connect-button').isEnabled(),true);assert.equal((await calls(p,'axiom_local')).length,0);
+    assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
+  });
   await scenario('interrupted-primary-recovers-then-installs',async()=>{
-    const p=await fresh({interrupted:true});await primary(p).filter({hasText:'安装并启动服务'}).waitFor();await primary(p).click();
+    const p=await fresh({interrupted:true});await primary(p).filter({hasText:'下载和安装'}).waitFor();await primary(p).click();
     await waitFor(p,()=>fixture.setupJob?.running);assert.equal((await calls(p,'axiom_setup','reconcile-service')).length,1);
     assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
   });
@@ -178,7 +235,7 @@ try {
   await scenario('failed-node-does-not-install-service',async()=>{
     const p=await fresh({node:false});await primary(p).click();await waitFor(p,()=>fixture.setupJob?.action==='node');
     await p.evaluate(()=>{fixture.setupJob.running=false;fixture.setupJob.phase='error';fixture.setupJob.message='系统安装被取消，请重试。';fixture.setupJob.task.status='failed';});
-    await primary(p).filter({hasText:'安装并启动服务'}).waitFor();assert.equal((await calls(p,'axiom_setup','service')).length,0);
+    await primary(p).filter({hasText:'下载和安装'}).waitFor();assert.equal((await calls(p,'axiom_setup','service')).length,0);
     assert.equal(await primary(p).isEnabled(),true);await noErrors(p);
   });
   await scenario('automatic-recovery-checking-continues-current-intent',async()=>{
@@ -211,12 +268,13 @@ try {
     const p=await fresh({service:'running'});await updates(p);
     if(maintenance==='pi-running') {await p.evaluate(()=>fixture.update.job=fixture.makeJob('pi','running'));await p.waitForTimeout(200);}
     else {await p.evaluate(()=>{fixture.update.release={version:'0.4.2',checkedAt:Date.now(),assets:{'Axiom2.msi':{url:'https://fixture.invalid/Axiom2.msi'}}};fixture.updateMode='hold';fixture.publish=false;});await p.getByRole('button',{name:'下载客户端更新',exact:true}).click();await p.waitForTimeout(220);}
-    assert.equal(await primary(p).textContent(),'连接工作台');assert.equal(await primary(p).isEnabled(),true);
-    await primary(p).click();await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();
+    const connect=p.getByRole('button',{name:'连接工作台',exact:true});assert.equal(await connect.textContent(),'连接');assert.equal(await connect.isEnabled(),true);
+    await connect.click();await p.locator('.desktop-workbench-bar:not([hidden])').waitFor();
     assert.equal((await calls(p,'axiom_local')).length,1);assert.equal((await calls(p,'axiom_setup','service')).length,0);await noErrors(p);
   });
   await scenario('first-screen-is-status-and-actions-only',async()=>{
-    const p=await fresh();assert.equal(await p.getByRole('heading',{name:'服务与更新',exact:true}).count(),1);
+    const p=await fresh({oldJob:'check'});assert.equal(await p.getByRole('heading',{name:'服务与更新',exact:true}).count(),1);
+    assert.equal(await p.locator('.updates-simple').getByText('任务完成',{exact:true}).count(),0);
     assert.equal(await p.locator('.startup-steps').count(),0);assert.equal(await p.locator('.updates-simple').isVisible(),true);
     for(const selector of ['.startup-preparation','.update-details','.startup-maintenance'])assert.equal(await p.locator(selector).first().getAttribute('open'),null);
     assert.equal(await p.locator('.connect-details:visible').count(),0);await noErrors(p);
@@ -238,15 +296,15 @@ try {
   await scenario('setup-late-running-cannot-revert-completed',async()=>{
     const p=await fresh();await p.evaluate(()=>fixture.setupMode='hold');await primary(p).click();
     await waitFor(p,()=>Object.keys(fixture.held).some(k=>k.startsWith('setup-')));await p.waitForTimeout(130);
-    await p.evaluate(()=>fixture.finishSetup());await primary(p).filter({hasText:'连接工作台'}).waitFor();
+    await p.evaluate(()=>fixture.finishSetup());await primary(p).filter({hasText:'启动'}).waitFor();
     await p.evaluate(()=>fixture.release(Object.keys(fixture.held).find(k=>k.startsWith('setup-'))));await p.waitForTimeout(100);
-    assert.equal(await primary(p).textContent(),'连接工作台');assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
+    assert.equal(await primary(p).textContent(),'启动');assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
   });
   await scenario('setup-unconfirmed-refusal-unlocks-safely',async()=>{
     const p=await fresh();await p.evaluate(()=>fixture.setupMode='unaccepted');await primary(p).click();await p.waitForTimeout(130);
     assert.equal(await primary(p).isDisabled(),true);assert.equal(await p.getByRole('combobox',{name:'连接设备'}).isEnabled(),true);
     await p.evaluate(()=>fixture.release(Object.keys(fixture.held).find(k=>k.startsWith('setup-')),'已有安装任务正在执行或结果待核实。'));
-    await primary(p).filter({hasText:'安装并启动服务'}).waitFor();assert.equal(await primary(p).isEnabled(),true);assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
+    await primary(p).filter({hasText:'下载和安装'}).waitFor();assert.equal(await primary(p).isEnabled(),true);assert.equal((await calls(p,'axiom_setup','service')).length,1);await noErrors(p);
   });
   await scenario('component-list-and-once-confirmation',async()=>{
     const p=await fresh({service:'running'});await environment(p);

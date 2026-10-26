@@ -39,7 +39,12 @@ fn snapshot_unlocked() -> Result<Option<Value>, String> {
 }
 fn snapshot_at(dir: &std::path::Path) -> Result<Option<Value>, String> {
     let job: Value = match fs::read(dir.join("job.json")) { Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| "安装记录损坏，请检查安装日志。")?, Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None), Err(error) => return Err(error.to_string()) };
-    snapshot_job_at(dir, job, true).map(Some)
+    let foreground = job["foreground"] == true;
+    let mut job = snapshot_job_at(dir, job, !foreground)?;
+    // Keep legacy uncertainty in its history. An explicit foreground repair
+    // uses a new prefix and must not replay or pretend to reconcile that job.
+    job["repairable"] = json!(cfg!(windows) && job["action"] == "service" && job["running"] == false && job["phase"] == "interrupted");
+    Ok(Some(job))
 }
 fn snapshot_job_at(dir: &std::path::Path, mut job: Value, current: bool) -> Result<Value, String> {
     let id = job["id"].as_str().filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit() || c == '-')).ok_or("安装任务编号无效")?.to_string();
@@ -87,7 +92,7 @@ fn snapshot_job_at(dir: &std::path::Path, mut job: Value, current: bool) -> Resu
             else { job["message"] = json!(last_phase.unwrap_or_else(|| "正在执行安装命令；下方显示最近的实际输出。".into())); }
         }
         if job["phase"] == "error" {
-            if let Some(message) = last_error.or_else(|| lines.iter().rev().find(|line| !line.trim().is_empty() && !line.contains("请查看执行详情")).cloned()) { job["message"] = json!(message); }
+            if let Some(message) = last_error.or_else(|| text.lines().rev().find(|line| !line.trim().is_empty() && !line.starts_with("@@") && !line.contains("请查看执行详情")).map(|line| line.chars().take(4000).collect::<String>())) { job["message"] = json!(message); }
         }
         job["lines"] = json!(lines.into_iter().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>());
     }
@@ -102,7 +107,17 @@ fn snapshot_job_at(dir: &std::path::Path, mut job: Value, current: bool) -> Resu
     }
     if job["task"].is_object() && job["running"] != true {
         if job["phase"] == "interrupted" && job["task"]["status"] != "unknown" { job["task"]["status"] = json!("interrupted"); }
-        else if job["task"]["status"] == "running" || job["task"]["status"] == "cancelling" { job["task"]["status"] = json!(if job["phase"] == "done" { "succeeded" } else { "failed" }); }
+        else if job["task"]["status"] == "running" || job["task"]["status"] == "cancelling" {
+            // A console interruption before installation has a real exit receipt,
+            // but the terminated helper may not have published its final task.
+            let cancelled_download = job["foreground"] == true && job["exitCode"].as_i64() == Some(-1073741510)
+                && matches!(job["task"]["phase"].as_str(), Some("checking" | "downloading" | "verifying"));
+            job["task"]["status"] = json!(if job["phase"] == "done" { "succeeded" } else if cancelled_download { "cancelled" } else { "failed" });
+            job["task"]["message"] = if cancelled_download { json!("下载已取消。") } else { job["message"].clone() };
+            if job["task"]["status"] == "failed" || cancelled_download {
+                job["task"]["error"] = json!({"code":if cancelled_download { "cancelled" } else { "operation" },"phase":job["task"]["phase"],"message":job["task"]["message"]});
+            }
+        }
         job["task"]["capabilities"] = json!({"cancel":false,"extend":false});
     }
     merge_system_budgets(&mut job["task"], &files);
@@ -133,7 +148,36 @@ fn snapshot_job_at(dir: &std::path::Path, mut job: Value, current: bool) -> Resu
     if !service_pending && job["phase"] == "error" && job["task"]["reconciliation"]["writerStopped"] == true && job["task"]["reconciliation"]["parentExited"] == true {
         job["message"] = job["task"]["message"].clone();
     }
+    if job["running"] == false {
+        // A terminal error/cancellation is authoritative over the last progress
+        // message. Keep raw transfer evidence in task history, not as live progress.
+        job["progress"] = Value::Null;
+        if job["phase"] == "error" {
+            if job["task"]["status"] == "cancelled" { job["phase"] = json!("cancelled"); }
+            if let Some(message) = job["task"]["error"]["message"].as_str().filter(|message| !message.is_empty()).map(str::to_owned) {
+                job["message"] = json!(message);
+                job["task"]["message"] = job["message"].clone();
+            }
+        }
+    }
     Ok(job)
+}
+// Persist the uncertainty observed while this job is still current. Do not
+// rewrite its raw task, result, or owner into fabricated process-exit evidence.
+fn preserve_unresolved_history(dir: &std::path::Path, job: &Value) -> Result<(), String> {
+    if job["task"]["status"] != "unknown" { return Ok(()); }
+    let id = job["id"].as_str().filter(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit() || c == '-')).ok_or("安装任务编号无效")?;
+    let files = dir.join(id);
+    let path = files.join("historical-unknown.json");
+    if path.exists() {
+        let record = read_json(&path).ok_or("旧安装不确定性记录无法读取，已保留现场。")?;
+        if record["id"] != job["id"] || record["task"]["id"] != job["id"] || record["task"]["status"] != "unknown" { return Err("旧安装不确定性记录无效，已保留现场。".into()); }
+        return Ok(());
+    }
+    let record = json!({"id":job["id"],"task":job["task"],"source":"prior-current-snapshot","processExitConfirmed":false});
+    let temporary = files.join("historical-unknown.next");
+    fs::write(&temporary, serde_json::to_vec(&record).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::rename(temporary, path).map_err(|e| e.to_string())
 }
 fn history_at(dir: &std::path::Path) -> Result<Value, String> {
     let mut warnings = Vec::new();
@@ -170,7 +214,12 @@ fn history_at(dir: &std::path::Path) -> Result<Value, String> {
             if job["id"].as_str() != Some(name.as_str()) { return Err("安装记录编号与目录不一致。".into()); }
             // With a missing/corrupt pointer, an existing service owner cannot
             // be assigned to one task safely. Preserve that uncertainty.
-            snapshot_job_at(dir, job, current_id.is_none())
+            let mut snapshot = snapshot_job_at(dir, job, current_id.is_none())?;
+            if let Some(record) = read("historical-unknown.json")? {
+                if record["id"].as_str() != Some(name.as_str()) || record["task"]["id"] != record["id"] || record["task"]["status"] != "unknown" { return Err("旧安装不确定性记录无效。".into()); }
+                snapshot["task"] = record["task"].clone();
+            }
+            Ok(snapshot)
         })();
         match record {
             Ok(job) if job["task"].is_object() && job["task"]["id"] == job["id"] => tasks.push(job["task"].clone()),
@@ -208,7 +257,7 @@ fn system_deadline(task: &Value, now: u64) -> Option<Value> {
     Some(json!({"code":code,"phase":"installing","observedAt":now,"message":"系统安装超过等待时限，结果待核实；未终止系统安装器，安装占用已保留。"}))
 }
 pub fn ensure_idle() -> Result<(), String> {
-    if snapshot()?.as_ref().is_some_and(|j| j["running"] == true || j["phase"] == "interrupted") { Err("安装正在进行或上次结果待核实，请在安装区查看进度。".into()) } else { Ok(()) }
+    if snapshot()?.as_ref().is_some_and(|j| j["running"] == true || j["phase"] == "interrupted" && j["repairable"] != true) { Err("安装正在进行或上次结果待核实，请在安装区查看进度。".into()) } else { Ok(()) }
 }
 pub fn is_running() -> bool { snapshot().ok().flatten().is_some_and(|j| j["running"] == true) }
 fn hidden(command: &mut Command) {
@@ -355,7 +404,7 @@ fn status_with_service_recovery() -> Result<Value, String> {
     let dir = crate::axiom_service::data_root()?.join("setup");
     let mut job = snapshot()?;
     if cfg!(windows) { if let Some(ref mut current) = job {
-        let candidate = service_recovery_candidate(&dir, current);
+        let candidate = if current["repairable"] == true { None } else { service_recovery_candidate(&dir, current) };
         let id = current["id"].as_str().ok_or("安装任务编号无效")?.to_string();
         let mut attempt = SERVICE_RECOVERY.lock().map_err(|_| "安装核实状态不可用")?;
         let schedule = candidate.as_ref().filter(|key| recovery_due(attempt.as_ref(), key, Instant::now())).cloned();
@@ -405,9 +454,50 @@ fn wait_installer(child: &mut Child, dir: &std::path::Path, system: bool) -> Res
         std::thread::sleep(Duration::from_millis(100));
     }
 }
+fn completed_foreground_result(dir: &std::path::Path) -> Result<Value, String> {
+    let completed = recovery_record(&dir.join("task.json")).ok_or("前台安装终态尚未确认，不会自动启动服务。")?;
+    if completed["id"].as_str() != dir.file_name().and_then(|id| id.to_str()) || completed["status"] != "succeeded" {
+        return Err(completed["error"]["message"].as_str().unwrap_or("前台安装未成功结算，不会自动启动服务。").into());
+    }
+    recovery_record(&dir.join("foreground-result.json")).ok_or("前台安装未返回有效结果；请查看可见终端的真实错误。".into())
+}
+#[cfg(windows)]
+fn install_foreground(dir: &std::path::Path) -> Result<(), String> {
+    let root = crate::axiom_service::data_root()?;
+    let state: Value = serde_json::from_str(capture(&mut script("check")?, 20)?.trim()).map_err(|_| "运行环境检测未返回有效状态。")?;
+    if state["nodeReady"] != true { return Err("请先安装 Node.js 22.19.0+ 与 npm。".into()); }
+    let node = std::path::PathBuf::from(state["node"].as_str().ok_or("缺少 Node.js")?);
+    let npm = std::path::PathBuf::from(state["npm"].as_str().ok_or("缺少 npm")?);
+    if !node.is_absolute() || !node.is_file() || !npm.is_absolute() || !npm.is_file() { return Err("Node.js 或 npm 路径不可用。".into()); }
+    let files = [
+        ("foreground-install.ps1", include_str!("foreground-install.ps1")),
+        ("foreground-install.mjs", include_str!("foreground-install.mjs")),
+        ("foreground-artifacts.mjs", include_str!("foreground-artifacts.mjs")),
+        ("atomic-json.mjs", include_str!("atomic-json.mjs")),
+        ("maintenance.mjs", include_str!("maintenance.mjs")),
+        ("service-admission.mjs", include_str!("service-admission.mjs")),
+    ];
+    let runtime = crate::axiom_bundled::publish(&dir.join("foreground"), &files).map_err(|e| e.to_string())?;
+    let mut command = crate::axiom_service::visible_powershell()?;
+    command.arg("-File").arg(runtime.join("foreground-install.ps1"))
+        .arg("-Node").arg(&node).arg("-Helper").arg(runtime.join("foreground-install.mjs"))
+        .arg("-TaskDirectory").arg(dir).arg("-DataRoot").arg(&root).arg("-Npm").arg(npm).current_dir(&root);
+    let job = read_json(&dir.join("job.json")).ok_or("安装任务记录缺失")?;
+    command.env("AXIOM_SETUP_REPAIR", if job["repair"] == true { "1" } else { "0" });
+    command.env("AXIOM_SETUP_VERSION", job["targetVersion"].as_str().unwrap_or(""));
+    let mut child = command.spawn().map_err(|e| format!("无法打开前台安装终端：{e}"))?;
+    let status = wait_installer(&mut child, dir, false)?;
+    fs::write(dir.join("foreground-exit.json"), serde_json::to_vec(&json!({"code":status.code(),"success":status.success()})).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    if status.success() { completed_foreground_result(dir)?; }
+    // Installation and launching are separate explicit actions. A successful
+    // short installer never starts a long-lived service or claims it is ready.
+    fs::write(dir.join("result.txt"), status.code().unwrap_or(1).to_string()).map_err(|e| e.to_string())?;
+    Ok(())
+}
 fn install(action: String, id: String) -> Result<(), String> {
     let _control = crate::axiom_service::CONTROL.lock().map_err(|_| "服务控制器不可用")?;
     let dir = crate::axiom_service::data_root()?.join("setup").join(id);
+    #[cfg(windows)] if action == "service" { return install_foreground(&dir); }
     let log = fs::File::create(dir.join("install.log")).map_err(|e| e.to_string())?;
     let mut command = script(&action)?; hidden(&mut command);
     command.env("AXIOM_SETUP_RESULT", dir.join("result.txt")).env("AXIOM_SETUP_TASK_DIR", &dir);
@@ -501,19 +591,28 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         return Ok(json!({"opened":true}));
     }
     if !["node", "tailscale", "service"].contains(&action.as_str()) { return Err("不支持的安装步骤。".into()); }
+    let target_version = maintenance.as_ref().and_then(|value| value.get("version")).map(|value| {
+        let version = value.as_str().ok_or("安装版本无效")?;
+        let parts: Vec<_> = version.split('.').collect();
+        if parts.len() != 3 || parts.iter().any(|part| part.is_empty() || part.len() > 9 || !part.chars().all(|c| c.is_ascii_digit())) { return Err("安装版本无效"); }
+        Ok(version.to_string())
+    }).transpose()?;
+    if target_version.is_some() && (action != "service" || confirmed != Some(true)) { return Err("指定版本安装需要明确确认。".into()); }
     tauri::async_runtime::spawn_blocking(move || {
     let id = format!("{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos());
     let lease = {
         let _registry = registry_lock()?;
-        if snapshot_unlocked()?.as_ref().is_some_and(|j| j["running"] == true || j["phase"] == "interrupted") { return Err("已有安装任务正在执行或结果待核实。".into()); }
+        let previous = snapshot_unlocked()?;
+        if previous.as_ref().is_some_and(|j| j["running"] == true || j["phase"] == "interrupted" && j["repairable"] != true) { return Err("已有安装任务正在执行或结果待核实。".into()); }
         let dir = crate::axiom_service::data_root()?.join("setup");
+        if let Some(previous) = previous { preserve_unresolved_history(&dir, &previous)?; }
         fs::create_dir_all(dir.join(&id)).map_err(|e| e.to_string())?;
         let lease = open_lock(&dir.join(&id).join("owner.lock"))?;
         lease.try_lock().map_err(|e| e.to_string())?;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis() as u64;
         let task = json!({"id":id,"attemptId":id,"endpoint":"desktop","scope":"当前电脑 · 系统安装","resource":action,"label":match action.as_str() {"node"=>"Node.js 与 npm","tailscale"=>"Tailscale",_=>"后台服务"},"action":"install","status":"running","phase":"checking","steps":["checking","downloading","verifying","installing","validating"],"completedSteps":0,"createdAt":now,"startedAt":now,"updatedAt":now,"budgets":read_budgets(&dir),"capabilities":{"cancel":false,"extend":false}});
         fs::write(dir.join(&id).join("task.json"), serde_json::to_vec(&task).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let job = json!({"id":id,"action":action,"task":task,"startedAt":now,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","lines":[]});
+        let job = json!({"id":id,"action":action,"targetVersion":target_version,"repair":action == "service" && confirmed == Some(true),"foreground":cfg!(windows) && action == "service","task":task,"startedAt":now,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","lines":[]});
         fs::write(dir.join(&id).join("job.json"), serde_json::to_vec(&job).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         // Readers hold registry.lock, so they cannot observe a partial publication.
         fs::write(dir.join("job.next"), serde_json::to_vec(&job).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
@@ -540,6 +639,72 @@ mod tests {
     use super::*;
     fn test_root() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("axiom-system-budget-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()))
+    }
+    #[test]
+    fn foreground_launch_requires_same_task_success_even_with_a_ready_result() {
+        let root = test_root(); let files = root.join("123-1"); fs::create_dir_all(&files).unwrap();
+        fs::write(files.join("foreground-result.json"), r#"{"readyToStart":true}"#).unwrap();
+        for status in ["running", "cancelling", "cancelled", "failed", "unknown"] {
+            fs::write(files.join("task.json"), serde_json::to_vec(&json!({"id":"123-1","status":status})).unwrap()).unwrap();
+            assert!(completed_foreground_result(&files).is_err(), "{status} must not authorize a launch");
+        }
+        fs::write(files.join("task.json"), r#"{"id":"123-2","status":"succeeded"}"#).unwrap(); assert!(completed_foreground_result(&files).is_err());
+        fs::write(files.join("task.json"), r#"{"id":"123-1","status":"succeeded"}"#).unwrap(); assert_eq!(completed_foreground_result(&files).unwrap()["readyToStart"], true);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn foreground_job_keeps_legacy_uncertainty_as_history_not_its_own_lifecycle() {
+        let root = test_root(); fs::create_dir_all(&root).unwrap();
+        let old_id = "123-1"; let next_id = "123-2";
+        let old_task = json!({"id":old_id,"resource":"service","status":"unknown","phase":"validating","steps":["installing","validating"],"createdAt":1,"capabilities":{"cancel":false,"extend":false},"budgets":read_budgets(&root)});
+        let old_dir = root.join(old_id); fs::create_dir_all(&old_dir).unwrap();
+        fs::write(old_dir.join("task.json"), serde_json::to_vec(&old_task).unwrap()).unwrap();
+        let evidence = r#"{"historicalOwner":"retain","state":"armed"}"#;
+        fs::write(root.join("service-owner.json"), evidence).unwrap();
+        let next_task = json!({"id":next_id,"resource":"service","status":"succeeded","phase":"validating","steps":["installing","validating"],"createdAt":2,"capabilities":{"cancel":false,"extend":false},"budgets":read_budgets(&root)});
+        let next_dir = root.join(next_id); fs::create_dir_all(&next_dir).unwrap();
+        fs::write(next_dir.join("task.json"), serde_json::to_vec(&next_task).unwrap()).unwrap();
+        fs::write(next_dir.join("result.txt"), "0").unwrap();
+        let job = json!({"id":next_id,"action":"service","foreground":true,"running":true,"phase":"running","task":next_task});
+        fs::write(root.join("job.json"), serde_json::to_vec(&job).unwrap()).unwrap();
+        let next = snapshot_at(&root).unwrap().unwrap();
+        assert_eq!(next["phase"], "done"); assert_eq!(next["running"], false); assert_eq!(next["task"]["status"], "succeeded");
+        let history = history_at(&root).unwrap();
+        assert!(history["tasks"].as_array().unwrap().iter().any(|task| task["id"] == old_id && task["status"] == "unknown"));
+        assert_eq!(fs::read_to_string(root.join("service-owner.json")).unwrap(), evidence);
+        assert_eq!(serde_json::from_slice::<Value>(&fs::read(old_dir.join("task.json")).unwrap()).unwrap(), old_task);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn derived_owner_uncertainty_survives_pointer_replacement_without_rewriting_raw_evidence() {
+        let root = test_root(); let id = "123-1"; let files = root.join(id); fs::create_dir_all(&files).unwrap();
+        let task = json!({"id":id,"resource":"service","status":"running","phase":"validating","steps":["installing","validating"],"createdAt":1,"capabilities":{"cancel":false,"extend":false},"budgets":read_budgets(&root)});
+        let raw = serde_json::to_vec(&task).unwrap(); fs::write(files.join("task.json"), &raw).unwrap(); fs::write(files.join("result.txt"), "0").unwrap();
+        let owner = b"{\"state\":\"armed\",\"exitUnknown\":true}"; fs::write(root.join("service-owner.json"), owner).unwrap();
+        let old = json!({"id":id,"action":"service","running":true,"phase":"running","task":task});
+        fs::write(root.join("job.json"), serde_json::to_vec(&old).unwrap()).unwrap(); fs::write(files.join("job.json"), serde_json::to_vec(&old).unwrap()).unwrap();
+        let snapshot = snapshot_at(&root).unwrap().unwrap(); assert_eq!(snapshot["task"]["status"], "unknown");
+        preserve_unresolved_history(&root, &snapshot).unwrap();
+        let next_id = "123-2"; let next_files = root.join(next_id); fs::create_dir_all(&next_files).unwrap();
+        let next_task = json!({"id":next_id,"resource":"service","status":"succeeded","phase":"validating","steps":["validating"],"createdAt":2,"budgets":read_budgets(&root)});
+        fs::write(next_files.join("task.json"), serde_json::to_vec(&next_task).unwrap()).unwrap(); fs::write(next_files.join("result.txt"), "0").unwrap();
+        fs::write(root.join("job.json"), serde_json::to_vec(&json!({"id":next_id,"action":"service","foreground":true,"running":true,"phase":"running","task":next_task})).unwrap()).unwrap();
+        fs::rename(root.join("service-owner.json"), next_files.join("legacy-service-owner.json")).unwrap();
+        let history = history_at(&root).unwrap(); assert!(history["tasks"].as_array().unwrap().iter().any(|entry| entry["id"] == id && entry["status"] == "unknown"));
+        assert_eq!(fs::read(files.join("task.json")).unwrap(), raw); assert_eq!(fs::read(files.join("result.txt")).unwrap(), b"0"); assert_eq!(fs::read(next_files.join("legacy-service-owner.json")).unwrap(), owner);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn legacy_service_repair_never_bypasses_a_live_owner_lease() {
+        let root = test_root(); let id = "123-1"; let files = root.join(id); fs::create_dir_all(&files).unwrap();
+        let task = json!({"id":id,"resource":"service","status":"unknown","phase":"validating","capabilities":{"cancel":false,"extend":false}});
+        fs::write(files.join("task.json"), serde_json::to_vec(&task).unwrap()).unwrap();
+        fs::write(root.join("job.json"), serde_json::to_vec(&json!({"id":id,"action":"service","running":true,"phase":"running","task":task})).unwrap()).unwrap();
+        let lease = open_lock(&files.join("owner.lock")).unwrap(); lease.try_lock().unwrap();
+        let active = snapshot_at(&root).unwrap().unwrap(); assert_eq!(active["running"], true); assert_eq!(active["repairable"], false);
+        drop(lease);
+        let orphan = snapshot_at(&root).unwrap().unwrap(); assert_eq!(orphan["task"]["status"], "unknown"); assert_eq!(orphan["repairable"], cfg!(windows));
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn history_keeps_old_installations_and_scopes_owner_to_current_job() {

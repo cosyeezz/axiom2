@@ -7,7 +7,7 @@ function savedTarget() {
   try { const url = new URL(value); return { address: `${url.protocol}//${url.hostname}`, port: url.port || (url.protocol === "https:" ? "443" : "80") }; } catch { return { address: value, port: "4317" }; }
 }
 export type ConnectionControls = { connect: () => void };
-export default function RemoteConnect({ local, target, disabled, onBusy, onOpen, onPortChange, beforeConnect, primaryAction, onPrimaryAction, controls, children }: { local: boolean; target: string; disabled: boolean; onBusy: (busy: boolean) => void; onOpen: (url: string) => void; onPortChange: (port: string) => void; beforeConnect?: () => Promise<void>; primaryAction?: ReactNode; onPrimaryAction?: () => void; controls?: Ref<ConnectionControls>; children: ReactNode }) {
+export default function RemoteConnect({ local, target, disabled, onBusy, onOpen, onPortChange, beforeConnect, primaryAction, controls, children }: { local: boolean; target: string; disabled: boolean; onBusy: (busy: boolean) => void; onOpen: (url: string) => void; onPortChange: (port: string) => void; beforeConnect?: () => Promise<void>; primaryAction?: ReactNode; controls?: Ref<ConnectionControls>; children: ReactNode }) {
   const [address, setAddress] = useState(() => local ? "127.0.0.1" : target || savedTarget().address);
   const [port, setPort] = useState(() => local ? stored("axiom.local.port", "4317") : target ? "4317" : savedTarget().port);
   const [connecting, setConnecting] = useState(false);
@@ -44,11 +44,11 @@ export default function RemoteConnect({ local, target, disabled, onBusy, onOpen,
   }
   useImperativeHandle(controls, () => ({ connect: () => { void connect(); } }));
   return <section className="target-connect" aria-label="连接所选设备">
-    <form onSubmit={event => { event.preventDefault(); if (primaryAction && onPrimaryAction) onPrimaryAction(); else void connect(); }}>
+    <form onSubmit={event => { event.preventDefault(); void connect(); }}>
       <div className="startup-target-row">
         <div className="connection-device-field"><span className="connection-label">连接设备</span>{children}</div>
-        <div className={`connection-actions${primaryAction ? " connection-actions-port-only" : ""}`}><label className="connection-field connection-port">端口<input aria-label={local ? "本地端口" : "远程端口"} inputMode="numeric" value={port} onChange={event => setPort(event.target.value)} disabled={disabled || connecting} /></label>
-          {!primaryAction && <div className="connection-submit"><button className="connect-primary startup-connect-button" type="submit" aria-label="连接工作台" disabled={disabled || connecting || !address.trim()}>{connecting ? <Icon name="loader-circle" className="startup-spin" /> : <ConnectionIcon name="plug" />}<span>{connecting ? "连接中…" : "连接"}</span></button></div>}
+        <div className="connection-actions"><label className="connection-field connection-port">端口<input aria-label={local ? "本地端口" : "远程端口"} inputMode="numeric" value={port} onChange={event => setPort(event.target.value)} disabled={disabled || connecting} /></label>
+          <div className="connection-submit"><button className="connect-primary startup-connect-button" type="submit" aria-label="连接工作台" disabled={disabled || connecting || !address.trim()}>{connecting ? <Icon name="loader-circle" className="startup-spin" /> : <ConnectionIcon name="plug" />}<span>{connecting ? "连接中…" : "连接"}</span></button></div>
         </div>
       </div>
       {!local && !target && <div className="connection-address-row"><label className="connection-field">连接地址<input aria-label="远程连接地址" value={address} onChange={event => { const value = event.target.value; setAddress(value); try { const url = new URL(value.includes("://") ? value : `http://${value}`); if (url.port) setPort(url.port); else if (/:\d+\/?$/.test(value)) setPort(url.protocol === "https:" ? "443" : "80"); } catch {} }} placeholder="100.x.x.x" disabled={disabled || connecting} autoComplete="off" spellCheck={false} /></label></div>}

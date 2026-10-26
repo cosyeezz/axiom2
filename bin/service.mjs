@@ -29,9 +29,9 @@ async function atomicJson(path, value) {
     await rename(temporary, path);
   } finally { await rm(temporary, { force: true }); }
 }
-export async function registerInstallation() {
+export async function registerInstallation(installationCli = cli) {
   await mkdir(root, { recursive: true, mode: 0o700 });
-  await atomicJson(join(root, "installation.json"), { node: process.execPath, cli });
+  await atomicJson(join(root, "installation.json"), { node: process.execPath, cli: installationCli });
 }
 async function readJson(path) {
   try { return JSON.parse(await readFile(path, "utf8")); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
@@ -142,7 +142,6 @@ export async function start({ timeoutMs = 40_000 } = {}) {
   if (current.value.state === "running") return current.value;
   if (current.value.state === "starting") return waitForStart(current.token, timeoutMs);
   if (current.value.state !== "stopped") throw Error(current.value.message || "服务正在退出，请稍后再启动");
-  await registerInstallation();
   let record;
   try { record = await reserve(); }
   catch (error) {
@@ -154,6 +153,7 @@ export async function start({ timeoutMs = 40_000 } = {}) {
   }
   let child, handedOff = false;
   try {
+    await registerInstallation();
     try { if ((await stat(log)).size > 5 * 1024 * 1024) await rename(log, log + ".previous"); } catch (error) { if (error.code !== "ENOENT") throw error; }
     const output = await open(log, "a", 0o600);
     try {
@@ -210,8 +210,10 @@ async function initialize(options) {
   const { startServer } = await import("../app/dist/server/index.js");
   return startServer(options);
 }
-export async function serve(background = false, { initialize: bootService = initialize } = {}) {
+export async function serve(background = false, { initialize: bootService = initialize, cli: installationCli = cli, version: installedVersion } = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error("AXIOM_PORT 无效");
+  // Resolve package metadata before acquiring a reservation that must be released.
+  const version = installedVersion ?? (await readJson(new URL("../package.json", import.meta.url)))?.version ?? null;
   let record;
   if (background && process.env.AXIOM_START_TOKEN) {
     const token = process.env.AXIOM_START_TOKEN;
@@ -228,12 +230,12 @@ export async function serve(background = false, { initialize: bootService = init
     record = await startup();
     if (record?.token !== token || record.pid !== process.pid) throw Error("服务启动已取消");
   } else {
-    await registerInstallation();
+    // Registration belongs to the process that actually acquired startup.
+    // A failed foreground attempt must not replace a live service's CLI.
     if ((await status()).state !== "stopped") throw Error("服务已经运行或正在启动，请先检查 axiom2 status");
     record = await reserve();
   }
   const { token } = record;
-  const version = (await readJson(new URL("../package.json", import.meta.url)))?.version || null;
   let app, closing = false, controlPort = 0, finishing;
   let resolveBoot, rejectBoot;
   const boot = new Promise((resolve, reject) => { resolveBoot = resolve; rejectBoot = reject; });
@@ -281,7 +283,6 @@ export async function serve(background = false, { initialize: bootService = init
   try {
     await new Promise((resolve, reject) => { control.once("error", reject); control.listen(0, "127.0.0.1", resolve); });
     controlPort = control.address().port;
-    await registerInstallation();
     await atomicJson(descriptor, { port: controlPort, token, pid: process.pid });
     let cancelled = false;
     try { await stat(cancellation(token)); cancelled = true; } catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -290,6 +291,7 @@ export async function serve(background = false, { initialize: bootService = init
       await shutdown();
       return;
     }
+    await registerInstallation(installationCli);
     resolveBoot(bootService({ root, port }));
     app = await boot;
     if (closing) { await shutdown(); return; }

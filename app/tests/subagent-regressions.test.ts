@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
@@ -67,6 +68,36 @@ function fixture(real = false, count = 1) {
       rmSync(root, { recursive: true, force: true });
     } };
 }
+
+test("parallel preparation preserves FIFO admission and cancellation before any run starts", async () => {
+ const f=fixture(true,4), pool=f.agents.pool;
+ pool.limits.maxLiveProcesses=2;pool.limits.nestedLeafReserve=1;pool.limits.targetReadyTotal=0;
+ const profiles=(f.agents as any).profiles;
+ const environment=profiles.prepare({entry:"agent",cwd:f.root,modelDir:join(f.root,"pi"),modelsRaw:readFileSync(join(f.root,"pi","models.json"),"utf8"),selection:f.selection,mode:"managed"});
+ const blocker=await pool.acquire({environment,kind:"agent",signal:new AbortController().signal,requestStartedAtMonoMs:performance.now()});
+ const trace:unknown[]=[], launches:string[]=[], prepared=new Set<string>(), gates=new Map(f.ids.map(id=>[f.row(id).sessionId,gate()])), context=new AsyncLocalStorage<string>();
+ const command=f.agents.command.bind(f.agents); (f.agents as any).command=(request:any,internal:any)=>context.run(request.sessionId,()=>command(request,internal));
+ const prepare=profiles.prepareAsync.bind(profiles);
+ profiles.prepareAsync=async(...args:any[])=>{const id=context.getStore();assert.ok(id && gates.has(id),"task identity must be propagated through preparation");const value=await prepare(...args);prepared.add(id!);trace.push({stage:"prepared",id});await gates.get(id!)!.promise;trace.push({stage:"released-for-acquire",id});return value;};
+ (f.agents as any).runs.launchWorker=async(_scope:unknown,run:Run,input:any,lease:any)=>{trace.push({stage:"launch",id:run.sessionId});launches.push(run.sessionId);await pool.retire(lease.ref,"causal_fixture");};
+ try {
+  f.store.db.prepare("INSERT OR REPLACE INTO task_settings VALUES(1,?)").run(JSON.stringify({concurrency:4,workMs:600000}));
+  f.scheduler.kick();await until(()=>prepared.size===4);
+  // This deliberately controlled schedule is legal for async resource scans.
+  // Resolve barriers in one turn: promise reactions preserve preparation order.
+  // Waiting for each enqueue would deadlock a correct FIFO gate on task two.
+  const order=[0,2,3,1];for(const index of order)gates.get(f.row(f.ids[index]).sessionId)!.release();
+  await until(()=>pool.stats().queued===4);
+  assert.deepEqual(trace.filter((entry:any)=>entry.stage==="released-for-acquire").map((entry:any)=>entry.id),order.map(index=>f.row(f.ids[index]).sessionId));
+  assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n,0);
+  const head=f.row();f.scheduler.cancel(head,{reason:"cancel resource wait"});await pool.retire(blocker.ref,"release_resource");
+  await until(()=>(f.scheduler as any).launching.size===0 && (f.scheduler as any).jobs.size===0);
+  trace.push({stage:"expected-fifo",ids:f.ids.slice(1).map(id=>f.row(id).sessionId)});
+  trace.push({stage:"actual-launches",ids:launches,pool:pool.stats()});
+  console.log("CAUSAL-TRACE "+JSON.stringify(trace));
+  assert.deepEqual(launches,f.ids.slice(1).map(id=>f.row(id).sessionId));
+ }finally{for(const g of gates.values())g.release();await pool.retire(blocker.ref,"cleanup");environment.release();await f.close();}
+});
 
 test("unknown input requires worker withdrawal and only acknowledged IDs restore drafts", async () => {
   const f = fixture();

@@ -5,6 +5,7 @@ import { Capabilities } from "./capabilities.js";
 import { previewEnvironment } from "./session-environment.js";
 import { performance } from "node:perf_hooks";
 import { ExecutionPool, type ExecutionLease } from "./execution-pool.js";
+import type { TaskAdmissionTurn } from "./tasks/admission.js";
 import { ExecutionProfiles, fileRevision } from "./execution-profile.js";
 import type { LeaseRef } from "./execution-protocol.js";
 import { assertRewrite, editableMessage, rewriteBranch, rewriteTarget } from "./session-rewrite.js";
@@ -283,6 +284,7 @@ export class Agents {
       notification?: WorkerInput["notification"];
       memoryContinuation?: { expectedRunId: string; validate: () => void };
       compressionPreparation?: { id: string; validate: () => void; signal: AbortSignal };
+      admission?: { turn: TaskAdmissionTurn; reserve: () => TaskAdmissionTurn };
       beforeStart?: () => void;
       onCommit?: (run: Run) => void;
       onStart?: (run: Run) => void;
@@ -292,6 +294,7 @@ export class Agents {
     let ownStart: PendingStart | undefined;
     let continuationRunId: string | undefined;
     let cancelPreparation: (() => void) | undefined;
+    let admission = internal.admission?.turn;
     const scope = { workspaceId: c.workspaceId!, sessionId: c.sessionId! },
       p = object(c.params ?? {});
     this.owner(scope);
@@ -733,22 +736,27 @@ export class Agents {
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
           modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
           mode: this.pool.mode }, ownStart!.controller.signal);
+        if (admission) await admission.wait(ownStart!.controller.signal);
         const revision = fileRevision(start.file);
         validate();
         ownStart!.provider = start.selection.provider;
-        lease = await this.pool.acquire({ environment, kind: "agent", bindingGate: true, requestStartedAtMonoMs,
+        const acquiring = this.pool.acquire({ environment, kind: "agent", bindingGate: true, requestStartedAtMonoMs,
           onBindingRejected: start.onBindingRejected,
           beforeExecute: internal.memoryContinuation ? () => {
             this.assertMemoryContinuation(scope, internal.memoryContinuation!.expectedRunId, ownStart, false, continuationRunId);
             internal.memoryContinuation!.validate();
           } : internal.compressionPreparation?.validate,
           affinity: { sessionId: scope.sessionId, fileRevision: revision }, signal: ownStart!.controller.signal });
+        admission?.release();
+        lease = await acquiring;
         ownStart!.lease = lease;
         // Full resource checks guard binding dispatch and execution_permit. Intermediate
         // admission still rechecks configuration and the JSONL owner outside the writer queue.
         if (!environment.current(false) || fileRevision(start.file) !== revision) {
           await this.pool.retire(lease.ref, "changed_during_admission"); ownStart!.lease = undefined;
           if (attempt >= 2) throw new AppError("REVISION_CONFLICT", "执行准备期间配置或会话持续变化；消息未发送。");
+          // A rejected snapshot needs a new admission, not a bypass of later tickets.
+          admission = internal.admission?.reserve();
           continue;
         }
         const launched = await this.models.serial(async () => {
@@ -779,6 +787,7 @@ export class Agents {
       }
       }
       } finally {
+        admission?.release();
         if (cancelPreparation) internal.compressionPreparation?.signal.removeEventListener("abort", cancelPreparation);
         if (this.starts.get(scope.sessionId) === ownStart) this.starts.delete(scope.sessionId);
         ownStart?.finish();

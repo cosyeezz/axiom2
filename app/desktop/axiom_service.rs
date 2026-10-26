@@ -24,8 +24,33 @@ pub(crate) fn data_root() -> Result<PathBuf, String> {
     else { env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or(home.join(".local/share")).join("Axiom2") })
 }
 
+fn foreground_artifacts() -> Result<Value, String> {
+    let root = data_root()?;
+    if !root.is_dir() || !["foreground-prefix.json", "foreground-download.json", "foreground-installation.json"].iter().any(|name| fs::symlink_metadata(root.join("setup").join(name)).is_ok()) { return Ok(json!({"download":{"state":"absent"},"installation":{"state":"absent"}})); }
+    let node = crate::axiom_setup::runtime_node()?;
+    let runtime = crate::axiom_bundled::publish(&root.join("setup/artifact-reader"), &[("foreground-artifacts.mjs", include_str!("foreground-artifacts.mjs"))]).map_err(|e| e.to_string())?;
+    let mut command = Command::new(node);
+    command.arg(runtime.join("foreground-artifacts.mjs")).env("AXIOM_DATA_DIR", &root).current_dir(root);
+    let text = crate::axiom_setup::capture(&mut command, 20)?;
+    serde_json::from_str(text.trim()).map_err(|_| "程序和安装包校验未返回有效状态。".into())
+}
 fn installation_paths(require_cli: bool) -> Result<(PathBuf, PathBuf), String> {
+    installation_paths_with(require_cli, None)
+}
+fn installation_paths_with(require_cli: bool, artifact: Option<&Value>) -> Result<(PathBuf, PathBuf), String> {
     let path = data_root()?.join("installation.json");
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let discovered;
+            let artifact = match artifact { Some(value) => value, None => { discovered = foreground_artifacts()?; &discovered } };
+            if artifact["installation"]["state"] == "verified" {
+                return Ok((crate::axiom_setup::runtime_node()?, PathBuf::from(artifact["installation"]["cli"].as_str().ok_or("已安装程序入口缺失")?)));
+            }
+            return Err(artifact["installation"]["message"].as_str().unwrap_or("尚未安装服务。").into());
+        }
+        Err(error) => return Err(error.to_string()),
+        Ok(_) => {}
+    }
     let value: Value = serde_json::from_slice(&service_record::read(&path)?).map_err(|_| "服务安装记录损坏，请重新运行安装命令。")?;
     let node = PathBuf::from(value["node"].as_str().ok_or("缺少 Node.js 路径，请重新安装服务。")?);
     let cli = PathBuf::from(value["cli"].as_str().ok_or("缺少服务路径，请重新安装服务。")?);
@@ -35,10 +60,51 @@ fn installation_paths(require_cli: bool) -> Result<(PathBuf, PathBuf), String> {
     Ok((node, cli))
 }
 
+#[cfg(windows)]
+pub(crate) fn visible_powershell() -> Result<Command, String> {
+    use std::os::windows::process::CommandExt;
+    let system = env::var_os("SystemRoot").ok_or("无法定位系统 PowerShell")?;
+    let mut command = Command::new(PathBuf::from(system).join("System32/WindowsPowerShell/v1.0/powershell.exe"));
+    command.args(["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"]);
+    command.creation_flags(0x00000010); // CREATE_NEW_CONSOLE, deliberately not CREATE_NO_WINDOW.
+    Ok(command)
+}
+#[cfg(windows)]
+pub(crate) fn start_foreground() -> Result<Value, String> {
+    let before = run("status")?;
+    if ["running", "starting"].contains(&before["state"].as_str().unwrap_or("")) { return Ok(before); }
+    if before["state"] != "stopped" { return Err(before["message"].as_str().unwrap_or("服务状态不允许启动，请直接连接现有服务或查看终端。").into()); }
+    let artifact = foreground_artifacts()?;
+    let (node, cli) = if artifact["installation"]["state"] == "verified" {
+        (crate::axiom_setup::runtime_node()?, PathBuf::from(artifact["installation"]["cli"].as_str().ok_or("已安装程序入口缺失")?))
+    } else { installation_paths(true)? };
+    let root = data_root()?;
+    let runtime = crate::axiom_bundled::publish(&root.join("setup/foreground-service"), &[
+        ("foreground-service.ps1", include_str!("foreground-service.ps1")),
+        ("foreground-service.mjs", include_str!("foreground-service.mjs")),
+        ("foreground-artifacts.mjs", include_str!("foreground-artifacts.mjs")),
+        ("service-controller.mjs", include_str!("service-controller.mjs")),
+    ]).map_err(|e| e.to_string())?;
+    let mut command = visible_powershell()?;
+    command.arg("-File").arg(runtime.join("foreground-service.ps1")).arg("-Node").arg(node).arg("-Cli").arg(cli).arg("-Helper").arg(runtime.join("foreground-service.mjs")).arg("-DataRoot").arg(&root).current_dir(root);
+    let mut terminal = command.spawn().map_err(|e| format!("无法打开前台服务终端：{e}"))?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let current = run("status")?;
+        if ["running", "starting"].contains(&current["state"].as_str().unwrap_or("")) { return Ok(current); }
+        if current["state"] != "stopped" { return Err(current["message"].as_str().unwrap_or("前台服务未就绪，请查看终端或连接已有服务。").into()); }
+        if let Some(status) = terminal.try_wait().map_err(|e| e.to_string())? { return Err(format!("前台服务终端已退出（{status}）；请查看终端中的具体错误。")); }
+        if Instant::now() >= deadline { return Err("前台终端已打开，但服务尚未确认启动；请查看可见终端，不会隐藏重试。".into()); }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
 fn run(action: &str) -> Result<Value, String> {
-    let (node, cli) = match installation_paths(action != "cleanup-status") {
+    #[cfg(windows)] if action == "start" { return start_foreground(); }
+    let artifact = if action == "status" { Some(foreground_artifacts()?) } else { None };
+    let (node, cli) = match installation_paths_with(action != "cleanup-status", artifact.as_ref()) {
         Ok(value) => value,
-        Err(message) if action == "status" || action == "cleanup-status" => return Ok(json!({"state":"missing", "active":[], "message":message})),
+        Err(message) if action == "status" && !data_root()?.join("installation.json").exists() && artifact.as_ref().is_some_and(|value| value["installation"]["state"] == "absent") => return Ok(json!({"state":"missing", "active":[], "message":message, "artifact":artifact})),
+        Err(message) if action == "cleanup-status" => return Ok(json!({"state":"missing", "active":[], "message":message})),
         Err(message) => return Err(message),
     };
     let mut command = Command::new(node);
@@ -69,7 +135,8 @@ fn run(action: &str) -> Result<Value, String> {
         std::thread::sleep(Duration::from_millis(80));
     }
     let output = reader.join().map_err(|_| "服务状态读取失败")?.map_err(|e| e.to_string())?;
-    let result: Value = serde_json::from_str(output.trim()).map_err(|_| "服务控制程序没有返回有效状态，请更新服务到支持桌面控制的版本。")?;
+    let mut result: Value = serde_json::from_str(output.trim()).map_err(|_| "服务控制程序没有返回有效状态，请更新服务到支持桌面控制的版本。")?;
+    if let Some(artifact) = artifact { result["artifact"] = artifact; }
     if result["state"] == "error" { return Err(result["message"].as_str().unwrap_or("服务操作失败").into()); }
     Ok(result)
 }
@@ -77,18 +144,20 @@ fn run(action: &str) -> Result<Value, String> {
 fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     let _guard = UPDATES.lock().map_err(|_| "更新控制器不可用")?;
     let root = data_root()?;
-    // Terminal Pi needs Node/npm, not a backend installation record.
-    // Keep a damaged existing registration visible rather than silently switching Node.
+    // Version checks can use the available runtime even when the old program
+    // registration is damaged; status still reports the installation error.
+    // Mutating the registered installation keeps its original runtime gate.
     let node = if root.join("installation.json").exists() {
         match installation_paths(false) {
             Ok(value) => value.0,
-            Err(_) if ["archive-preview", "archive-remove", "status", "reconcile", "history"].contains(&action) => crate::axiom_setup::runtime_node()?,
+            Err(_) if ["archive-preview", "archive-remove", "status", "check", "pi-check", "pi-refresh", "reconcile", "history"].contains(&action) => crate::axiom_setup::runtime_node()?,
             Err(error) => return Err(error),
         }
     } else { crate::axiom_setup::runtime_node()? };
     let cache = root.join("updates");
     let files = [
         ("updater.mjs", include_str!("axiom_updater.mjs")),
+        ("foreground-artifacts.mjs", include_str!("foreground-artifacts.mjs")),
         ("archive-cleanup.mjs", include_str!("archive-cleanup.mjs")),
         ("pi-removal.mjs", include_str!("pi-removal.mjs")),
         ("service-removal.mjs", include_str!("service-removal.mjs")),
@@ -135,6 +204,7 @@ fn run_updater(action: &str, version: Option<&str>) -> Result<Value, String> {
     if result["state"] == "error" { return Err(result["message"].as_str().unwrap_or("更新失败").into()); }
     result["clientVersion"] = json!(env!("CARGO_PKG_VERSION"));
     result["clientSupported"] = json!(cfg!(windows));
+    result["foregroundSupported"] = json!(cfg!(windows));
     Ok(result)
 }
 

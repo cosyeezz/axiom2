@@ -51,7 +51,11 @@ export async function startService({ file = process.execPath, args, cwd, env, si
     child.once('close', code => {
       requestStopped = true;
       if (failure) return finish(failure);
-      if (code !== 0) return finish(uncertain(`后台启动请求退出 ${code}，服务状态尚未确认。${errorTail.toString('utf8')}`));
+      if (code !== 0) {
+        let detail = errorTail.toString('utf8').trim();
+        try { const result = JSON.parse(Buffer.concat(output).toString('utf8')); if (typeof result.message === 'string') detail = result.message; } catch { /* Preserve ordinary stderr when stdout is not a CLI JSON response. */ }
+        return finish(uncertain(`后台启动请求退出 ${code}，服务状态尚未确认。${detail}`));
+      }
       try {
         const service = JSON.parse(Buffer.concat(output).toString('utf8'));
         if (service.state !== 'running') throw Error('后台尚未就绪');
