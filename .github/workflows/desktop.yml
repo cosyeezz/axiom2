@@ -37,11 +37,20 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: npm ci
       - run: npm --prefix app run build:desktop
-      - name: Capture macOS production inputs
+      - name: Load source proof verifier from workflow revision
         if: runner.os == 'macOS'
+        shell: bash
         env:
           AXIOM_REGRESSION_REF: ${{ github.sha }}
-        run: node scripts/native-source-proof.mjs capture
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$AXIOM_REGRESSION_REF"
+          tool="$RUNNER_TEMP/axiom-native-source-proof.mjs"
+          git show "$AXIOM_REGRESSION_REF:scripts/native-source-proof.mjs" > "$tool"
+          echo "AXIOM_PROOF_TOOL=$tool" >> "$GITHUB_ENV"
+      - name: Capture macOS production inputs
+        if: runner.os == 'macOS'
+        run: node --input-type=module -e 'import {pathToFileURL} from "node:url"; const {sourceProofAction}=await import(pathToFileURL(process.env.AXIOM_PROOF_TOOL)); await sourceProofAction("capture",process.cwd(),process.env.GITHUB_SHA);'
       - run: node scripts/build-desktop.mjs --targets ${{ runner.os == 'macOS' && 'universal' || 'x64' }}
       - name: Verify native resources
         env:
@@ -76,7 +85,7 @@ jobs:
           fi
           ditto "$bundle" "$RUNNER_TEMP/axiom-macos-smoke/Axiom2.app"
           (cd app && shasum -a 256 Axiom2.dmg > SHA256SUMS-macos)
-          node scripts/native-source-proof.mjs seal-production
+          node --input-type=module -e 'import {pathToFileURL} from "node:url"; const {sourceProofAction}=await import(pathToFileURL(process.env.AXIOM_PROOF_TOOL)); await sourceProofAction("seal-production",process.cwd(),process.env.GITHUB_SHA);'
       - name: Smoke test macOS controller window
         if: runner.os == 'macOS'
         shell: bash
@@ -132,7 +141,7 @@ jobs:
           set -euo pipefail
           target="$(node -p 'process.arch === "arm64" ? "arm64" : "x64"')"
           node scripts/build-desktop.mjs --targets "$target" --test-instance
-          node scripts/native-source-proof.mjs verify
+          node --input-type=module -e 'import {pathToFileURL} from "node:url"; const {sourceProofAction}=await import(pathToFileURL(process.env.AXIOM_PROOF_TOOL)); await sourceProofAction("verify",process.cwd(),process.env.GITHUB_SHA);'
       - name: Check macOS single-window WebViews and service lifecycle
         if: runner.os == 'macOS'
         shell: bash
