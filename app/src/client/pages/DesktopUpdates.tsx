@@ -11,7 +11,12 @@ import InstallProgress from "./InstallProgress.js";
 
 type UpdateAction = "status" | "check" | "pi-check" | "pi-refresh" | "pi" | "service" | "client" | "recover" | "installer" | "cancel" | "extend" | "defaults" | "reconcile";
 type Update = {
-  pi?: { runtimeVersion: string | null; cli: { version?: string | null; packageRoot?: string; error?: string; legacy?: boolean; repairRequired?: boolean; repairReason?: string } | null; release: { version: string; checkedAt: number; token: string | null } | null };
+  pi?: {
+    /** Dependency version in the registered backend installation, not a live runtime probe. */
+    runtimeVersion: string | null;
+    cli: { version?: string | null; packageRoot?: string; error?: string; legacy?: boolean; repairRequired?: boolean; repairReason?: string } | null;
+    release: { version: string; checkedAt: number; token: string | null } | null;
+  };
   clientInstaller?: { version: string; readyAt: number } | null;
   clientVersion: string; serviceVersion: string | null; managed: boolean; clientSupported: boolean;
   foregroundSupported?: boolean; serviceInstallation?: "foreground" | "registered" | "absent" | "unknown"; serviceError?: string | null;
@@ -64,6 +69,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   const disabled = !!busy || running || serviceBusy || uncertain || needsReconciliation;
   const ordinaryDisabled = disabled || !!update?.job?.servicePending;
   const pi = update?.pi;
+  const installedPiVersionLabel = pi?.runtimeVersion ? `v${pi.runtimeVersion}` : serviceMissing ? "后台未安装" : !update && !error ? "正在读取…" : "版本未能读取";
   const piNewer = newer(pi?.release?.version, pi?.cli?.version);
   const piReady = !!pi?.cli && !pi.cli.error && !pi.cli.legacy;
   const piRetry = !!pi?.cli?.repairRequired || update?.job?.kind === "pi" && ["error", "interrupted"].includes(update.job.phase) && pi?.cli?.version === pi?.release?.version;
@@ -150,7 +156,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
         return;
       }
       const retry = next.cli.repairRequired || current?.job?.kind === "pi" && ["error", "interrupted"].includes(current.job.phase) && next.cli.version === next.release.version;
-      if (next.cli.version && !newer(next.release.version, next.cli.version) && !retry) { setError({ action: "pi-check", message: "Pi 已是最新版本。", neutral: true }); return; }
+      if (next.cli.version && !newer(next.release.version, next.cli.version) && !retry) { setError({ action: "pi-check", message: "终端 Pi 已是最新版本。", neutral: true }); return; }
       confirmedPi.current = { token: next.release.token, version: next.release.version, installed: !!next.cli.version, packageRoot: next.cli.packageRoot };
     } else if (action === "service" || action === "service-reinstall") {
       const current = update?.release || action === "service-reinstall" && update?.serviceVersion ? update : await act("check");
@@ -166,7 +172,7 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
   };
   return (
     <section ref={section} tabIndex={-1} className="connect-updates updates-simple" aria-label="版本与更新">
-      <div className="updates-section-heading"><div><h2>版本与更新</h2><p>管理后台、引擎与桌面客户端</p></div><Icon name="refresh-cw" aria-hidden="true" /></div>
+      <div className="updates-section-heading"><div><h2>版本与更新</h2><p>管理本机后台、应用内引擎、终端 Pi 与客户端</p></div><Icon name="refresh-cw" aria-hidden="true" /></div>
       <section className="update-component" aria-label="后台服务更新">
         <div className="update-component-row">
           <div className="update-component-identity"><span className="update-component-icon"><Icon name="server" /></span><div className="update-component-copy"><h3>后台服务</h3><p>{serviceVersionLabel}{latest && serviceVersion && <span>{newer(latest, serviceVersion) ? `可更新至 v${latest}` : "已是最新版本"}</span>}</p></div></div>
@@ -177,18 +183,20 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
             {update?.recovery && <button className="connect-secondary" disabled={actionDisabled.recover} onClick={() => ask("recover")}>恢复旧版本</button>}
           </div>
         </div>
+        <p className="connect-update-detail update-runtime-version">应用内 Pi 引擎（后台安装版本）：<strong>{installedPiVersionLabel}</strong>。随后台服务更新，用于应用内会话与工具执行。</p>
         {update?.serviceError && <p className="connect-message">{update.serviceError}</p>}
         {update?.job && !["pi", "client"].includes(update.job.kind) && progress}
         {error && !historyOpen && !piError && error.message !== update?.job?.message && <p className={error.neutral || running ? "connect-message" : "connect-error"} role={error.neutral || running ? "status" : "alert"}>{error.message}</p>}
       </section>
       <section className="update-component" aria-labelledby="pi-heading" aria-busy={busy?.startsWith("pi") || (running && update?.job?.kind === "pi")}>
         <div className="update-component-row">
-          <div className="update-component-identity"><span className="update-component-icon"><Icon name="square-terminal" /></span><div className="update-component-copy"><h3 id="pi-heading">Pi 引擎</h3><p>{pi?.cli?.error ? "状态读取失败" : pi?.cli?.legacy ? "需要迁移" : pi?.cli?.version ? `v${pi.cli.version}` : pi?.cli ? "未安装" : "正在读取…"}{pi?.release && <span>{!pi.cli?.version || piNewer ? `可安装 v${pi.release.version}` : piRetry ? "需要重新安装" : "已是最新版本"}</span>}</p></div></div>
+          <div className="update-component-identity"><span className="update-component-icon"><Icon name="square-terminal" /></span><div className="update-component-copy"><h3 id="pi-heading">终端 Pi</h3><p>{pi?.cli?.error ? "状态读取失败" : pi?.cli?.legacy ? "需要迁移" : pi?.cli?.version ? `v${pi.cli.version}` : pi?.cli ? "未安装" : "正在读取…"}{piReady && pi?.release && <span>{!pi.cli?.version || piNewer ? `可安装 v${pi.release.version}` : piRetry ? "需要重新安装" : "终端已是最新版本"}</span>}</p></div></div>
           <div className="connect-actions">
-            <button className="connect-secondary" aria-label="检查 Pi 更新" disabled={ordinaryDisabled} onClick={() => void act("pi-check")}>{busy === "pi-check" ? "正在检查…" : "检查更新"}</button>
+            <button className="connect-secondary" aria-label="检查终端 Pi 更新" disabled={ordinaryDisabled} onClick={() => void act("pi-check")}>{busy === "pi-check" ? "正在检查…" : "检查更新"}</button>
             <button className="connect-secondary" aria-label={piRetry ? "重新安装终端 Pi" : pi?.cli?.version ? "更新终端 Pi" : "安装终端 Pi"} disabled={ordinaryDisabled} onClick={() => void ask("pi")}>{busy === "pi" || (running && update?.job?.kind === "pi") ? "正在安装…" : piRetry ? "重新安装" : pi?.cli?.version ? "更新" : "安装"}</button>
           </div>
         </div>
+        <p className="connect-update-detail">独立的终端程序；此处仅管理终端 Pi。应用内 Pi 引擎请通过后台服务更新。</p>
         {pi?.cli?.error && !historyOpen && <p className="connect-error" role="alert">{pi.cli.error}<button className="maintenance-text-button" disabled={ordinaryDisabled} onClick={() => void act("pi-refresh")}>重试</button></p>}
         {pi?.cli?.repairRequired && <p className="connect-message">{pi.cli.repairReason || "请检查更新后重新安装。"}</p>}
         {pi?.cli?.legacy && <p className="connect-message">请先通过原安装方式迁移旧版 Pi。</p>}
@@ -209,19 +217,19 @@ export default function DesktopUpdates({ service, serviceBusy, onBusyChange, onA
       {(needsReconciliation || update?.job?.servicePending) && <div className="update-recovery" role="status"><p>上次更新尚未完成核实，不会重复安装。</p>{needsReconciliation && update?.job?.task && <button className="connect-secondary" disabled={!!busy || running || serviceBusy || uncertain} onClick={() => void control("reconcile", { id: update.job!.task!.id }).catch(cause => setError({ action: "reconcile", message: String(cause), neutral: true }))}>核实并恢复</button>}</div>}
       <details className="maintenance-details update-details"><summary><Icon name="history" /><span>更新详情与记录</span><Icon name="chevron-down" /></summary>
         <button className="maintenance-text-button" onClick={() => setHistoryOpen(true)}><Icon name="history" />更新任务记录</button>
-        <p className="connect-update-detail">应用内 Pi {pi?.runtimeVersion || "未检测到"} 随后台服务更新；这里的 Pi 安装按钮管理独立终端程序。</p>
-        {pi?.cli?.packageRoot && <p className="connect-log">Pi 安装位置：<LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p>}
+        <p className="connect-update-detail">应用内 Pi 版本来自本机登记后台的安装依赖，并非运行中进程的版本查询；终端 Pi 版本来自所选 npm 全局安装。</p>
+        {pi?.cli?.packageRoot && <p className="connect-log">终端 Pi 安装位置：<LocalPath path={pi.cli.packageRoot} onOpen={() => desktopInvoke("axiom_reveal_path", { path: pi.cli!.packageRoot })} /></p>}
         <details className="maintenance-details"><summary>下载与安装设置</summary><BudgetEditor value={update?.budgets ?? defaultMaintenanceBudgets} onSave={budgets => control("defaults", { budgets })} /></details>
         {update?.log && <p className="connect-log">更新日志：<LocalPath path={update.log} onOpen={() => desktopInvoke("axiom_reveal_path", { path: update.log })} /></p>}
       </details>
       {historyOpen && <DesktopTaskCenter kind="update" current={update?.job?.task} onClose={() => setHistoryOpen(false)} onSource={() => { setHistoryOpen(false); window.requestAnimationFrame(() => section.current?.focus()); }} onChanged={() => void act("status", true)} />}
       {confirm && <ConfirmDialog
         title={confirm === "pi" ? `${confirmedPi.current?.installed ? "更新" : "安装"}终端 Pi ${confirmedPi.current?.version}？` : confirm === "installer" ? "打开客户端安装向导？" : confirm === "recover" ? "恢复之前的服务版本？" : confirm === "service-reinstall" ? `重新安装后台 v${confirmedService.current}？` : `更新后台至 ${confirmedService.current}？`}
-        description={confirm === "pi" ? "保留个人设置。请先结束使用此安装的 Pi 终端会话，完成后重新打开。" : confirm === "installer" ? "安装包已经校验。将关闭本客户端并打开安装向导，后台服务继续运行。" : foregroundMaintenance && (confirm === "service" || confirm === "service-reinstall") ? "会正常关闭可管理的旧服务，并安装所选版本；项目、会话和设置保留。完成后点击启动。" : "将停止本机后台及其正在执行的任务，保留项目和会话。请先保存工作。"}
+        description={confirm === "pi" ? "仅管理独立终端程序，应用内 Pi 引擎随后台服务更新。保留个人设置。请先结束使用此安装的 Pi 终端会话，完成后重新打开。" : confirm === "installer" ? "安装包已经校验。将关闭本客户端并打开安装向导，后台服务继续运行。" : foregroundMaintenance && (confirm === "service" || confirm === "service-reinstall") ? "会正常关闭可管理的旧服务，并安装所选版本；项目、会话和设置保留。完成后点击启动。" : "将停止本机后台及其正在执行的任务，保留项目和会话。请先保存工作。"}
         warning={confirm !== "installer" && confirm !== "pi" && !foregroundMaintenance ? "此功能要求当前数据目录独占此安装；共用安装请使用原安装方式更新。" : undefined}
         danger={confirm === "service" || confirm === "service-reinstall" || confirm === "recover"} confirmDisabled={confirmationDisabled(confirm)}
         cancelLabel={confirm === "service" ? "暂不更新" : "取消"}
-        confirmLabel={confirm === "pi" ? confirmedPi.current?.installed ? "确认更新 Pi" : "确认安装 Pi" : confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : confirm === "service-reinstall" ? "确认重新安装" : "确认更新服务"}
+        confirmLabel={confirm === "pi" ? confirmedPi.current?.installed ? "确认更新终端 Pi" : "确认安装终端 Pi" : confirm === "installer" ? "打开安装向导" : confirm === "recover" ? "确认恢复" : confirm === "service-reinstall" ? "确认重新安装" : "确认更新服务"}
         onClose={() => setConfirm(null)} onConfirm={() => {
           if (confirmationDisabled(confirm)) return;
           setConfirm(null);

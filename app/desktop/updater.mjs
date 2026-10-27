@@ -123,6 +123,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     try {
       const installed = await installation(true);
       if (!installed) throw Error("后台尚未安装");
+      // Report the registered backend's on-disk dependency, not a live process probe.
       // Read from Node's dependency lookup directories without requiring the SDK:
       // pi exports only an ESM import condition, so require.resolve(piPackage) fails.
       for (const path of createRequire(installed.cli).resolve.paths(piPackage) ?? []) {

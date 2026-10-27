@@ -248,7 +248,7 @@ try {
   await scenario('pi-install-prepares-version-before-single-confirmation',async()=>{
     const p=await fresh();await updates(p);await p.getByRole('button',{name:'安装终端 Pi',exact:true}).click();
     await p.getByRole('dialog').waitFor();assert.equal((await calls(p,'axiom_update','pi-check')).length,1);assert.equal((await calls(p,'axiom_update','pi')).length,0);
-    await p.getByRole('button',{name:'确认安装 Pi',exact:true}).click();await waitFor(p,()=>fixture.update.job?.kind==='pi');
+    await p.getByRole('button',{name:'确认安装终端 Pi',exact:true}).click();await waitFor(p,()=>fixture.update.job?.kind==='pi');
     const writes=await calls(p,'axiom_update','pi');assert.equal(writes.length,1);assert.equal(writes[0].args.version,'pi-update-token');await noErrors(p);
   });
   await scenario('service-update-prepares-version-before-single-confirmation',async()=>{
@@ -394,10 +394,10 @@ try {
   });
   await scenario('reconciled-update-can-check-and-only-recover-pending-service',async()=>{
     const p=await fresh();await updates(p);await p.evaluate(()=>fixture.update.job=fixture.makeJob('pi','unknown'));
-    const check=p.getByRole('button',{name:'检查 Pi 更新',exact:true});await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查 Pi 更新'&&b.disabled));
+    const check=p.getByRole('button',{name:'检查终端 Pi 更新',exact:true});await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查终端 Pi 更新'&&b.disabled));
     await p.evaluate(()=>{fixture.update.job.reconciled=true;fixture.update.job.task.status='interrupted';});
-    await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查 Pi 更新'&&!b.disabled));assert.equal(await check.isEnabled(),true);
-    await p.evaluate(()=>{fixture.update.job.servicePending=true;fixture.update.recovery=true;});await p.getByRole('button',{name:'恢复旧版本',exact:true}).waitFor();await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查 Pi 更新'&&b.disabled));
+    await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查终端 Pi 更新'&&!b.disabled));assert.equal(await check.isEnabled(),true);
+    await p.evaluate(()=>{fixture.update.job.servicePending=true;fixture.update.recovery=true;});await p.getByRole('button',{name:'恢复旧版本',exact:true}).waitFor();await waitFor(p,()=>Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='检查终端 Pi 更新'&&b.disabled));
     assert.equal(await check.isDisabled(),true);assert.equal(await p.getByRole('button',{name:'恢复旧版本',exact:true}).isEnabled(),true);await noErrors(p);
   });
   await scenario('responsive-dark-light',async()=>{
