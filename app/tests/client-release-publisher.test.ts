@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CERT, sha256, parseSums, verifyBinary, verifyAndroid, verifyRun, verifySourceLogs, selectArtifact } from '../../scripts/publish-clients.mjs';
+import { CERT, sha256, parseSums, verifyBinary, verifyAndroid, verifyRun, verifySourceLogs, verifySourceJobLog, selectArtifact } from '../../scripts/publish-clients.mjs';
 
 test('release artifacts are selected only inside their required run', () => {
   const name = 'Axiom2-macOS-publish-evidence';
@@ -56,6 +56,28 @@ test('release run must be successful manual run of the exact repository workflow
   verifyRun(run, 'desktop');
   for (const changes of [{ event: 'pull_request' }, { conclusion: 'failure' }, { status: 'in_progress' }, { path: '.github/workflows/ci.yml' }, { repository: { full_name: 'other/axiom2' } }]) assert.throws(() => verifyRun({ ...run, ...changes }, 'desktop'));
 });
+test('raw source proof requires the successful job step and the sole exact command output', () => {
+  const job = { conclusion: 'success', steps: [{ name: 'Record source revision', conclusion: 'success' }] };
+  const raw = (body: string[]) => body.map(line => `2026-10-26T08:31:51.9530618Z ${line}`).join('\r\n');
+  const lines = [source, '##[group]Run git rev-parse HEAD', '\u001b[36;1mgit rev-parse HEAD\u001b[0m', 'shell: bash -e {0}', '##[endgroup]', source, '##[group]Run next step', '##[endgroup]'];
+  verifySourceJobLog(raw(lines), source, job);
+  verifySourceJobLog('\uFEFF' + raw(lines) + '\nunprefixed multiline input from another step', source, job);
+  for (const bad of [
+    [],
+    [source],
+    lines.map((line, index) => index === 5 ? 'b'.repeat(40) : line),
+    lines.filter((_, index) => index !== 4),
+    lines.flatMap((line, index) => index === 5 ? [line, source] : [line]),
+    lines.map(line => line === '##[group]Run git rev-parse HEAD' ? '##[group]Run echo git rev-parse HEAD' : line),
+    [...lines, ...lines],
+  ]) assert.throws(() => verifySourceJobLog(raw(bad), source, job));
+  assert.throws(() => verifySourceJobLog(raw(lines), source, { ...job, conclusion: 'failure' }));
+  assert.throws(() => verifySourceJobLog(raw(lines), source, { ...job, steps: [] }));
+  assert.throws(() => verifySourceJobLog(raw(lines), source, { ...job, steps: [...job.steps, ...job.steps] }));
+  assert.throws(() => verifySourceJobLog(raw(lines), source, { ...job, steps: [{ name: 'Record source revision', conclusion: 'skipped' }] }));
+  assert.throws(() => verifySourceJobLog('not timestamped', source, job));
+});
+
 test('release checks every checkout source, not just workflow head SHA or one matching job', () => {
   const line = (job: string, sha = source) => `${job}\tRecord source revision\t2026-10-25T12:00:00Z ${sha}\n`;
   const desktop = ['win', 'mac', 'x64', 'arm64'].map(name => line(name)).join('');

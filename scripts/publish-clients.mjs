@@ -81,6 +81,32 @@ export function verifySourceLogs(logs, source, expected) {
   assert.ok(records.every(line => line.trimEnd().endsWith(` ${source}`)), 'Artifact source differs from release tag');
 }
 
+export function verifySourceJobLog(logs, source, job) {
+  assert.match(source, /^[a-f0-9]{40}$/);
+  assert.equal(job?.conclusion, 'success', 'Source job must have succeeded');
+  const steps = job.steps.filter(step => step.name === 'Record source revision');
+  assert.equal(steps.length, 1, 'Expected one structured source step');
+  assert.equal(steps[0].conclusion, 'success', 'Source step must have succeeded');
+  // Read the job-specific API log, not gh's inferred step labels: gh may emit
+  // UNKNOWN STEP for modern archive filenames. Bind the exact command group
+  // and its sole output, never any incidental checkout SHA elsewhere in a log.
+  const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z /;
+  const raw = logs.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+  // Other steps may contain multiline input descriptions without timestamps.
+  // The source command group and its output must still be runner records.
+  const lines = raw.map(line => line.replace(timestamp, ''));
+  const groups = lines.flatMap((line, index) => line === '##[group]Run git rev-parse HEAD' ? [index] : []);
+  assert.equal(groups.length, 1, 'Expected one exact source command group');
+  const start = groups[0];
+  assert.match(raw[start], timestamp, 'Expected timestamped source group');
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('##[group]'));
+  const block = lines.slice(start + 1, end < 0 ? undefined : end);
+  const close = block.indexOf('##[endgroup]');
+  assert.ok(close >= 0, 'Missing source command header end');
+  assert.deepEqual(block.slice(close + 1).filter(Boolean), [source], 'Artifact source command output differs from release tag');
+  assert.match(raw[start + close + 2], timestamp, 'Expected timestamped source output');
+}
+
 export function selectArtifact(artifacts, name) {
   const matches = artifacts.filter(item => item.name === name);
   assert.equal(matches.length, 1, `Ambiguous or missing artifact in the required run: ${name}`);
@@ -133,8 +159,13 @@ export async function publishClients({ tag, desktopRun, androidRun, macosPublish
   const jobs = api(`actions/runs/${desktopRun}/jobs?per_page=100`).jobs;
   const sourceJobs = jobs.filter(job => job.name.startsWith('desktop (') || job.name.startsWith('linux-desktop ('));
   assert.equal(sourceJobs.length, 4);
-  verifySourceLogs(gh('run', 'view', desktopRun, '--repo', REPO, '--log'), source, sourceJobs.map(job => job.name));
-  verifySourceLogs(gh('run', 'view', androidRun, '--repo', REPO, '--log'), source, ['android']);
+  const androidJobs = api(`actions/runs/${androidRun}/jobs?per_page=100`).jobs;
+  assert.equal(androidJobs.length, 1, 'Expected the single Android build job');
+  assert.equal(androidJobs[0].name, 'android');
+  for (const job of [...sourceJobs, ...androidJobs]) {
+    assert.ok(Number.isSafeInteger(job.id) && job.id > 0);
+    verifySourceJobLog(gh('api', `repos/${REPO}/actions/jobs/${job.id}/logs`), source, job);
+  }
   verifyRun(api(`actions/runs/${macosPublishRun}`), 'publish-macos');
   const macPublishJob = api(`actions/runs/${macosPublishRun}/jobs?per_page=100`).jobs.find(job => job.name === 'publish');
   assert.equal(macPublishJob?.steps.find(step => step.name === 'Verify and publish existing macOS build')?.conclusion, 'success');
@@ -144,7 +175,7 @@ export async function publishClients({ tag, desktopRun, androidRun, macosPublish
   const linux = jobs.filter(job => job.name.startsWith('linux-desktop ('));
   assert.equal(linux.length, 2);
   for (const job of linux) for (const name of ['Verify Linux desktop artifacts', 'Check native supervisor and offline cleanup', 'Verify packaged archive worker without a display']) assert.equal(job.steps.find(step => step.name === name)?.conclusion, 'success');
-  const androidJob = api(`actions/runs/${androidRun}/jobs?per_page=100`).jobs.find(job => job.name === 'android');
+  const androidJob = androidJobs[0];
   for (const name of ['Verify public versioned source', 'Build and verify production-signed APK and SDK']) assert.equal(androidJob?.steps.find(step => step.name === name)?.conclusion, 'success');
   const desktopArtifacts = api(`actions/runs/${desktopRun}/artifacts?per_page=100`).artifacts;
   const androidArtifacts = api(`actions/runs/${androidRun}/artifacts?per_page=100`).artifacts;
