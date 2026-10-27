@@ -23,6 +23,16 @@ function records(files) {
   const names = files.map(file => file.path);
   assert.deepEqual(names, [...new Set(names)].sort(), 'Source proof inputs must be unique and sorted');
 }
+function gitlinkRecords(links, productFiles) {
+  assert.ok(Array.isArray(links), 'Missing gitlink provenance');
+  const paths = links.map(link => {
+    assert.ok(cleanPath(link.path) && link.path.startsWith('review-artifacts/'), 'Gitlink outside audit artifacts');
+    assert.match(link.commit || '', /^[a-f0-9]{40}$/);
+    assert.ok(!productFiles.some(file => file.path === link.path || file.path.startsWith(`${link.path}/`)), 'Gitlink overlaps product inputs');
+    return link.path;
+  });
+  assert.deepEqual(paths, [...new Set(paths)].sort(), 'Gitlink inputs must be unique and sorted');
+}
 export function verifySourceProof(proof, { productSha, probeSha, dmg }) {
   assert.equal(proof?.format, 1);
   assert.equal(proof.phase, 'verified');
@@ -31,6 +41,8 @@ export function verifySourceProof(proof, { productSha, probeSha, dmg }) {
   assert.equal(proof.productSha, productSha, 'Native product source differs from release');
   assert.equal(proof.probeSha, probeSha, 'Native JS probe source differs from workflow');
   records(proof.productFiles);
+  gitlinkRecords(proof.gitlinks, proof.productFiles);
+  assert.equal(proof.gitlinksSha256, hash(JSON.stringify(proof.gitlinks)));
   const paths = new Set(proof.productFiles.map(file => file.path));
   for (const required of REQUIRED) assert.ok(paths.has(required), `Missing product input ${required}`);
   assert.ok(PROBE_PATHS.every(path => !paths.has(path)), 'Workflow probes must be separate from product inputs');
@@ -53,7 +65,31 @@ async function fileRecord(root, path) {
   return { path, size: info.size, sha256: hash(await readFile(join(root, path))) };
 }
 async function inventory(root) {
-  const paths = git(root, 'ls-tree', '-r', '--name-only', '-z', 'HEAD').split('\0').filter(path => path && !PROBE_PATHS.includes(path)).sort();
+  const paths = [], gitlinks = [];
+  for (const entry of git(root, 'ls-tree', '-r', '-z', 'HEAD').split('\0').filter(Boolean)) {
+    const tab = entry.indexOf('\t');
+    const [mode, type, oid] = entry.slice(0, tab).split(' ');
+    const path = entry.slice(tab + 1);
+    assert.ok(tab > 0 && cleanPath(path), 'Invalid tracked source path');
+    if (mode === '160000' && type === 'commit') {
+      assert.ok(path.startsWith('review-artifacts/'), 'Gitlink outside audit artifacts');
+      // Only uninitialized, empty audit gitlinks are excluded from file bytes.
+      // Check every parent so an ancestor symlink cannot escape the checkout.
+      let directory = root;
+      for (const part of path.split('/')) {
+        directory = join(directory, part);
+        const info = await lstat(directory);
+        assert.ok(info.isDirectory() && !info.isSymbolicLink(), 'Expected real gitlink directory');
+      }
+      assert.deepEqual(await readdir(directory), [], 'Audit gitlink must remain empty');
+      gitlinks.push({ path, commit: oid });
+    } else {
+      assert.ok(type === 'blob' && ['100644', '100755'].includes(mode), 'Expected regular tracked source input');
+      if (!PROBE_PATHS.includes(path)) paths.push(path);
+    }
+  }
+  paths.sort(); gitlinks.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  gitlinkRecords(gitlinks, paths.map(path => ({ path })));
   // Check ignored files too: --exclude-standard would silently allow an ignored
   // source input. Only the four documented native compiler outputs are allowed.
   const generated = new Set(['bin/native/linux-x64/axiom-owner', 'bin/native/linux-x64/manifest.json', 'bin/native/linux-arm64/axiom-owner', 'bin/native/linux-arm64/manifest.json']);
@@ -76,11 +112,11 @@ async function inventory(root) {
   }
   await visit('app/dist/desktop');
   const webFiles = await Promise.all(webPaths.sort().map(path => fileRecord(root, path)));
-  return { productSha: git(root, 'rev-parse', 'HEAD').trim(), productFiles, webFiles };
+  return { productSha: git(root, 'rev-parse', 'HEAD').trim(), productFiles, gitlinks, webFiles };
 }
 async function unchanged(root, proof) {
   const current = await inventory(root);
-  for (const key of ['productSha', 'productFiles', 'webFiles']) assert.deepEqual(current[key], proof[key], `Production and test-instance ${key} differ`);
+  for (const key of ['productSha', 'productFiles', 'gitlinks', 'webFiles']) assert.deepEqual(current[key], proof[key], `Production and test-instance ${key} differ`);
 }
 export async function sourceProofAction(action, root, probeSha) {
   assert.match(probeSha || '', /^[a-f0-9]{40}$/);
@@ -88,7 +124,7 @@ export async function sourceProofAction(action, root, probeSha) {
   let proof;
   if (action === 'capture') {
     const current = await inventory(root);
-    proof = { format: 1, phase: 'captured', ...current, probeSha, productInputsSha256: hash(JSON.stringify(current.productFiles)), webInputsSha256: hash(JSON.stringify(current.webFiles)) };
+    proof = { format: 1, phase: 'captured', ...current, probeSha, productInputsSha256: hash(JSON.stringify(current.productFiles)), gitlinksSha256: hash(JSON.stringify(current.gitlinks)), webInputsSha256: hash(JSON.stringify(current.webFiles)) };
   } else {
     proof = JSON.parse(await readFile(path, 'utf8'));
     assert.equal(proof.format, 1); assert.equal(proof.probeSha, probeSha);

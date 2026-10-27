@@ -16,7 +16,8 @@ const source = 'a'.repeat(40), commit = 'b'.repeat(40);
 
 test('every Linux isolation consumer configures the runner before execution', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const jobs = workflow.split(/(?=^  [a-z]+:\s*$)/m);
+  const publisher = readFileSync(new URL('../.github/workflows/backend-release.yml', import.meta.url), 'utf8');
+  const jobs = `${workflow}\n${publisher}`.split(/(?=^  [a-z]+:\s*$)/m);
   for (const job of ['native', 'validate', 'package', 'publish']) {
     const block = jobs.find((entry) => entry.startsWith(`  ${job}:\n`));
     assert.ok(block, `Missing ${job} job`);
@@ -32,7 +33,8 @@ test('every Linux isolation consumer configures the runner before execution', ()
 
 test('CI explicitly permits fetching native archive fixture dependencies before offline tests', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /- run: npm test\n        env:\n          AXIOM_TEST_CARGO_FETCH: '1'/);
+  assert.match(workflow, /AXIOM_TEST_CARGO_FETCH: '1'/);
+  assert.match(workflow, /node scripts\/test-ci\.mjs '\$\{\{ matrix\.shard \}\}\/4'/);
 });
 
 test('Windows Node 22 package validation has bounded time for installation and cleanup', () => {

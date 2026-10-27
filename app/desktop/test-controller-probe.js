@@ -43,10 +43,14 @@
     // A custom port is navigation-only. Restore the managed controls explicitly.
     await setPort(4317);
     return wait(async () => {
-      const visible = [...document.querySelectorAll('.connection-primary-meta > span[role="status"]')].some((item) => item.textContent.trim() === label && item.getClientRects().length);
+      const visible = [...document.querySelectorAll('.connection-service-heading .connection-status-tag')].some((item) => item.dataset.state === state && item.textContent.trim() === label && item.getClientRects().length);
       const service = await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "status" });
       return visible && service.state === state;
     });
+  };
+  const serviceButton = async (state, label) => {
+    await heading(state === "running" ? "服务运行中" : "服务已停止");
+    return wait(() => [...document.querySelectorAll('button.connection-primary-button')].find((item) => item.textContent.trim() === label && !item.disabled && item.getClientRects().length));
   };
   const observation = async (condition) => wait(async () => {
     const value = (await invoke("snapshot")).observation;
@@ -140,7 +144,7 @@
       void invoke("close"); return;
     }
     await heading("服务已停止");
-    (await button("启动服务")).click();
+    (await serviceButton("stopped", "启动")).click();
     await heading("服务运行中");
     await connectFixture();
     stage = "workbench-initial-observation";
@@ -202,13 +206,13 @@
     stage = "direct-service-lifecycle";
     (await button("服务与更新")).click();
     await heading("服务运行中");
-    (await button("关闭后台服务")).click();
+    (await serviceButton("running", "关闭")).click();
     (await button("确认关闭服务")).click();
     await heading("服务已停止");
     const directStopped = await invoke("snapshot");
     check(directStopped.views.length === 2 && directStopped.current === "control", "Stopping must preserve the direct workbench");
     await wait(async () => await window.__TAURI_INTERNALS__.invoke("axiom_connection") === "disconnected");
-    (await button("启动服务")).click();
+    (await serviceButton("stopped", "启动")).click();
     await heading("服务运行中");
     await connectFixture();
     await wait(async () => await window.__TAURI_INTERNALS__.invoke("axiom_connection") === "connected");
@@ -224,12 +228,12 @@
     await settledBounds();
     (await button("服务与更新")).click();
     await heading("服务运行中");
-    (await button("关闭后台服务")).click();
+    (await serviceButton("running", "关闭")).click();
     (await button("确认关闭服务")).click();
     await heading("服务已停止");
     const stopped = await invoke("snapshot");
     check(stopped.views.length === 1 && stopped.current === "control", "Stopping must discard the managed workbench and preserve controls");
-    (await button("启动服务")).click();
+    (await serviceButton("stopped", "启动")).click();
     await heading("服务运行中");
     await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "open" });
     await observation((value) => value.token !== before.token);

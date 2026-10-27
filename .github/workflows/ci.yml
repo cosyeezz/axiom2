@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# A newer push supersedes the whole older pipeline, including its pending publisher.
-# Retrying an old run must not cancel the pipeline for the current master head.
+# Supersede validation only. Publication has its own non-cancelling lock in
+# backend-release.yml, so a new push cannot interrupt asset publication.
+# Retrying an old run must not cancel validation for the current master head.
 concurrency:
   group: axiom-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.run_attempt == 1 && 'latest' || github.run_id }}
   cancel-in-progress: true
@@ -42,10 +43,10 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
         node: ['22.19.0', '24']
+        shard: [1, 2, 3, 4]
     runs-on: ${{ matrix.os }}
-    # Windows Node 22 was still completing test 1750 at the 45-minute job limit.
-    # Give that lane bounded headroom without relaxing any test assertions.
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && matrix.node == '22.19.0' && 60 || matrix.os == 'windows-latest' && 45 || 30 }}
+    # Isolated runners bound serial test duration without dropping any tests.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,10 +82,21 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - run: npm ci
-      - run: node --test scripts/auto-release.test.mjs
-      - run: npm test
+      - run: node --test scripts/auto-release.test.mjs scripts/release-controller.test.mjs scripts/test-ci.test.mjs
+      - name: Run serial test shard
+        shell: bash
         env:
           AXIOM_TEST_CARGO_FETCH: '1'
+        run: |
+          set -o pipefail
+          node scripts/test-ci.mjs '${{ matrix.shard }}/4' 2>&1 | tee "$RUNNER_TEMP/axiom-tests.log"
+      - name: Preserve test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ runner.os }}-${{ matrix.node }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/axiom-tests.log
+          if-no-files-found: ignore
   package:
     # Windows tests and package checks can exceed 30 minutes together.
     # Run installation, upgrade, rollback and cleanup with their own bounded job.
@@ -112,63 +124,3 @@ jobs:
           fi
       - run: npm ci
       - run: npm run check:package
-  publish:
-    needs: [native, validate, package]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'cosyeezz/axiom2'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - name: Configure Linux namespace test environment
-        shell: bash
-        run: |
-          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-      - name: Allocate or resume release version
-        id: release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/auto-release.mjs prepare "$RUNNER_TEMP/axiom-release-state.json"
-      - name: Build versioned release snapshot
-        if: steps.release.outputs.publish == 'true'
-        run: npm ci
-      - name: Include both Linux ownership helpers
-        if: steps.release.outputs.publish == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: linux-ownership-*
-          path: bin/native/
-          merge-multiple: true
-      - name: Restore native executable permissions
-        if: steps.release.outputs.publish == 'true'
-        run: chmod 755 bin/native/linux-*/axiom-owner
-      - name: Validate and retain the exact release package
-        if: steps.release.outputs.publish == 'true'
-        env:
-          AXIOM_VERIFIED_PACKAGE_DIR: ${{ runner.temp }}/axiom-release-assets
-        run: npm run check:package
-      - name: Publish and verify backend release
-        if: steps.release.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/auto-release.mjs publish "$RUNNER_TEMP/axiom-release-state.json" "$RUNNER_TEMP/axiom-release-assets"
-      - name: Preserve release diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-release-diagnostics
-          path: |
-            ${{ runner.temp }}/axiom-release-state.json
-            ${{ runner.temp }}/axiom-release-assets/
-          if-no-files-found: ignore
-          retention-days: 7

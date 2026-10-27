@@ -138,7 +138,8 @@ export function verifyTag(tag, source, root = process.cwd()) {
 }
 function output(state, path) {
   writeJson(path, state);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!state.skip}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!state.skip}\nverified=${state.verified === true}\n`);
+  if (state.skip && process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Backend publication skipped: ${state.reason}. Source: \`${state.source}\`.\n`);
   console.log(JSON.stringify(state));
 }
 
@@ -216,7 +217,7 @@ export function existingReleaseStatus(release, source, commit) {
 export async function prepare(stateFile) {
   assert.equal(process.env.GITHUB_REPOSITORY, repository);
   assert.equal(process.env.GITHUB_REF, 'refs/heads/master');
-  const source = process.env.GITHUB_SHA;
+  const source = process.env.AXIOM_RELEASE_SOURCE ?? process.env.GITHUB_SHA;
   assert.match(source || '', /^[a-f0-9]{40}$/);
   assert.equal(git('rev-parse', 'HEAD'), source);
   assert.equal(git('status', '--porcelain'), '', 'Release checkout must be clean');
@@ -231,7 +232,7 @@ export async function prepare(stateFile) {
     const existing = published.find((release) => release.tag_name === tag);
     if (existingReleaseStatus(existing, source, git('rev-parse', `${tag}^{commit}`)) === 'published') {
       await verifyPublished(existing, source, git('rev-parse', `${tag}^{commit}`));
-      return output({ skip: true, reason: 'already published and verified', source, tag }, stateFile);
+      return output({ skip: true, verified: true, reason: 'already published and verified', source, tag }, stateFile);
     }
     git('checkout', '--detach', tag);
     version = tag.slice(1);
@@ -245,6 +246,9 @@ export async function prepare(stateFile) {
     git('tag', tag);
   }
   assertVersions(process.cwd(), version);
+  // Reserve the immutable snapshot before building. Interrupted builds/reruns
+  // resume this same version instead of allocating another tag or commit.
+  git('push', 'origin', `refs/tags/${tag}:refs/tags/${tag}`);
   output({ skip: false, source, tag, version, commit: git('rev-parse', 'HEAD') }, stateFile);
 }
 
@@ -277,6 +281,7 @@ export async function publish(stateFile, directory) {
     if (existingReleaseStatus(release, source, commit) === 'published') {
       await verifyPublished(release, source, commit, sha256(bytes));
       console.log(`Already published and verified: ${release.html_url}`);
+      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'verified=true\n');
       return;
     }
     assert.ok(release.assets.every((asset) => Object.hasOwn(files, asset.name)), 'Draft contains unexpected assets; refusing to replace checksums');
@@ -299,13 +304,16 @@ export async function publish(stateFile, directory) {
   if (!sourceIsCurrent(source)) { console.log(`Keep ${tag} as draft: master has advanced.`); return; }
   const newerRelease = releases().find((item) => !item.draft && !item.prerelease && /^v/.test(item.tag_name) && pattern.test(item.tag_name.slice(1)) && compareVersions(item.tag_name.slice(1), version) > 0);
   assert.ok(!newerRelease, 'A newer release is already published; refusing to move Latest backwards');
-  gh('release', 'edit', tag, '--repo', repository, '--draft=false', '--latest');
+  // Draft tag lookup may return 404 even immediately after successful creation.
+  // Mutate the identity already verified above, never rediscover a draft by tag.
+  gh('api', '--method', 'PATCH', `repos/${repository}/releases/${release.id}`, '-F', 'draft=false', '-f', 'make_latest=true');
   const latest = await verifyWithRetry(() => api('releases/latest'), async (fresh) => {
     assertReleaseIdentity(fresh, release, source, commit, 'published');
     assert.equal(fresh.tag_name, tag);
     await verifyPublicRelease(fresh, fetch, sha256(bytes));
   });
   console.log(`Published and verified: ${latest.html_url}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'verified=true\n');
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Published [${tag}](${latest.html_url}) from \`${source}\`. Package and checksum downloads verified.\n`);
 }
 
