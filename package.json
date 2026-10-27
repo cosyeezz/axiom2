@@ -1,6 +1,6 @@
 {
   "name": "@cosyeezz/axiom2",
-  "version": "0.4.1",
+  "version": "0.4.21",
   "description": "Local multi-workspace coding agent workbench powered by pi",
   "type": "module",
   "license": "UNLICENSED",
