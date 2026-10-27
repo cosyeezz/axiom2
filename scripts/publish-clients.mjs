@@ -81,6 +81,14 @@ export function verifySourceLogs(logs, source, expected) {
   assert.ok(records.every(line => line.trimEnd().endsWith(` ${source}`)), 'Artifact source differs from release tag');
 }
 
+export function sourceJobLogArgs(jobId, apiHelp) {
+  assert.ok(Number.isSafeInteger(jobId) && jobId > 0, 'Expected numeric job identity');
+  const args = ['api', `repos/${REPO}/actions/jobs/${jobId}/logs`];
+  // New gh versions require explicit opt-in for ANSI in raw logs. These bytes
+  // are captured by execFileSync and parsed, never evaluated or streamed to a TTY.
+  if (/(?:^|\s)--allow-escape-sequences(?:\s|$)/.test(apiHelp)) args.push('--allow-escape-sequences');
+  return args;
+}
 export function verifySourceJobLog(logs, source, job) {
   assert.match(source, /^[a-f0-9]{40}$/);
   assert.equal(job?.conclusion, 'success', 'Source job must have succeeded');
@@ -162,9 +170,9 @@ export async function publishClients({ tag, desktopRun, androidRun, macosPublish
   const androidJobs = api(`actions/runs/${androidRun}/jobs?per_page=100`).jobs;
   assert.equal(androidJobs.length, 1, 'Expected the single Android build job');
   assert.equal(androidJobs[0].name, 'android');
+  const apiHelp = gh('api', '--help');
   for (const job of [...sourceJobs, ...androidJobs]) {
-    assert.ok(Number.isSafeInteger(job.id) && job.id > 0);
-    verifySourceJobLog(gh('api', `repos/${REPO}/actions/jobs/${job.id}/logs`), source, job);
+    verifySourceJobLog(gh(...sourceJobLogArgs(job.id, apiHelp)), source, job);
   }
   verifyRun(api(`actions/runs/${macosPublishRun}`), 'publish-macos');
   const macPublishJob = api(`actions/runs/${macosPublishRun}/jobs?per_page=100`).jobs.find(job => job.name === 'publish');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CERT, sha256, parseSums, verifyBinary, verifyAndroid, verifyRun, verifySourceLogs, verifySourceJobLog, selectArtifact } from '../../scripts/publish-clients.mjs';
+import { CERT, sha256, parseSums, verifyBinary, verifyAndroid, verifyRun, verifySourceLogs, verifySourceJobLog, sourceJobLogArgs, selectArtifact } from '../../scripts/publish-clients.mjs';
 
 test('release artifacts are selected only inside their required run', () => {
   const name = 'Axiom2-macOS-publish-evidence';
@@ -56,6 +56,13 @@ test('release run must be successful manual run of the exact repository workflow
   verifyRun(run, 'desktop');
   for (const changes of [{ event: 'pull_request' }, { conclusion: 'failure' }, { status: 'in_progress' }, { path: '.github/workflows/ci.yml' }, { repository: { full_name: 'other/axiom2' } }]) assert.throws(() => verifyRun({ ...run, ...changes }, 'desktop'));
 });
+test('source log API enables raw escape bytes only when supported and preserves job identity', () => {
+  assert.deepEqual(sourceJobLogArgs(123, 'FLAGS\n  --allow-escape-sequences  Allow terminal escape sequences\n'), ['api', 'repos/cosyeezz/axiom2/actions/jobs/123/logs', '--allow-escape-sequences']);
+  assert.deepEqual(sourceJobLogArgs(123, 'FLAGS\n  --include  Include headers\n'), ['api', 'repos/cosyeezz/axiom2/actions/jobs/123/logs']);
+  assert.deepEqual(sourceJobLogArgs(123, '--allow-escape-sequences-other'), ['api', 'repos/cosyeezz/axiom2/actions/jobs/123/logs']);
+  for (const id of [0, -1, 1.5, NaN, '123/logs']) assert.throws(() => sourceJobLogArgs(id, ''));
+});
+
 test('raw source proof requires the successful job step and the sole exact command output', () => {
   const job = { conclusion: 'success', steps: [{ name: 'Record source revision', conclusion: 'success' }] };
   const raw = (body: string[]) => body.map(line => `2026-10-26T08:31:51.9530618Z ${line}`).join('\r\n');
