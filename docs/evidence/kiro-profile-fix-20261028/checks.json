@@ -1,0 +1,277 @@
+[
+  {
+    "label": "c01-seed",
+    "passed": true,
+    "runId": "afd3b640-799d-4a4b-abbd-0d76e15ae55a",
+    "observedMs": 4744,
+    "answer": "MATRIX-K3 703 白鹭",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c02-read",
+    "passed": true,
+    "runId": "058ed5ae-0e01-40e6-b406-575a82b93dfc",
+    "observedMs": 5351,
+    "answer": "```json\n{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"red\":14,\"blue\":28,\"green\":9,\"total\":51}\n```",
+    "thinkingLength": 111,
+    "calls": [
+      "read"
+    ]
+  },
+  {
+    "label": "c03-reasoning",
+    "passed": true,
+    "runId": "4d95a3cf-dbc3-4d27-85a8-50e86c756750",
+    "observedMs": 5164,
+    "answer": "{\"甲\":\"星期三\",\"乙\":\"星期二\",\"丙\":\"星期四\",\"blueMinusRed\":14}",
+    "thinkingLength": 143,
+    "calls": []
+  },
+  {
+    "label": "c04-tool-error",
+    "passed": true,
+    "runId": "b5c7f14b-4900-4fcf-97ac-0689ab744ce2",
+    "observedMs": 6405,
+    "answer": "{\"status\":\"RECOVERED\",\"total\":51,\"marker\":\"MATRIX-K3\"}",
+    "thinkingLength": 0,
+    "calls": [
+      "read",
+      "read"
+    ]
+  },
+  {
+    "label": "c05-off-history",
+    "passed": true,
+    "runId": "67182073-6223-4919-a15b-37af8089b0f8",
+    "observedMs": 3496,
+    "answer": "{\"checkword\":\"白鹭\",\"multiplication\":703,\"red\":14,\"blue\":28,\"green\":9,\"total\":51}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c06-long-attachment",
+    "passed": true,
+    "runId": "81df45ed-a0e5-4628-8dad-7b53eae2c8c7",
+    "observedMs": 3079,
+    "answer": "{\"ARCHIVE_KEY\":\"R4Q9\",\"ARCHIVE_VALUE\":318}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c07-delayed-recall",
+    "passed": true,
+    "runId": "0b37cf3c-5e89-4fe0-8860-68dd1322296c",
+    "observedMs": 2049,
+    "answer": "{\"ARCHIVE_KEY\":\"R4Q9\",\"ARCHIVE_VALUE\":318,\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c08-multiple-tools",
+    "passed": true,
+    "runId": "b3f25a15-8753-4b6f-9d4c-26b0fc52c30b",
+    "observedMs": 4759,
+    "answer": "{\"consistent\":true,\"total\":51}",
+    "thinkingLength": 0,
+    "calls": [
+      "read",
+      "read"
+    ]
+  },
+  {
+    "label": "c09-low-recovery",
+    "passed": true,
+    "runId": "db0b7063-d5fc-4be9-8b8b-c27903b30171",
+    "observedMs": 4254,
+    "answer": "{\"red\":14,\"blue\":28,\"green\":9,\"yellow\":5,\"total\":56}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c10-write-edit",
+    "passed": true,
+    "runId": "ad70c3a2-2b12-487e-8cb5-2ce8d0aa1f87",
+    "observedMs": 16741,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"total\":56,\"verified\":true}",
+    "thinkingLength": 0,
+    "calls": [
+      "write",
+      "edit",
+      "read"
+    ]
+  },
+  {
+    "label": "c11-direct-image",
+    "passed": true,
+    "runId": "1cd15571-fd86-4c5b-8f27-490a9824310f",
+    "observedMs": 2152,
+    "answer": "{\"CODE\":\"N4P8\",\"red\":7,\"blue\":4,\"green\":9,\"total\":20}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c12-image-history",
+    "passed": true,
+    "runId": "8a77653a-daad-43bb-9692-b61e2a07c1e6",
+    "observedMs": 4564,
+    "answer": "{\"CODE\":\"N4P8\",\"total\":20,\"sessionTotal\":56}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c13-tool-image",
+    "passed": true,
+    "runId": "f609b4d3-3e19-4f32-a8b8-e8974d107cbf",
+    "observedMs": 4714,
+    "answer": "{\"CODE\":\"R6W2\",\"red\":3,\"blue\":8,\"green\":5,\"total\":16}",
+    "thinkingLength": 0,
+    "calls": [
+      "read"
+    ]
+  },
+  {
+    "label": "c14-two-image-recall",
+    "passed": true,
+    "runId": "0598bc56-f3d3-4155-9c52-d69644b5ff89",
+    "observedMs": 3065,
+    "answer": "{\"totalDifference\":4,\"redDifference\":4,\"aCODE\":\"N4P8\",\"bCODE\":\"R6W2\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c15-second-long-attachment",
+    "passed": true,
+    "runId": "06692578-1483-46c7-bcb3-561f5e311022",
+    "observedMs": 3803,
+    "answer": "{\"archiveA\":{\"ARCHIVE_KEY\":\"R4Q9\",\"ARCHIVE_VALUE\":318},\"archiveB\":{\"ARCHIVE_KEY\":\"F2M6\",\"ARCHIVE_VALUE\":427},\"sum\":745}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c16-long-history",
+    "passed": true,
+    "runId": "35579d73-13a2-482b-addb-73c726196ccb",
+    "observedMs": 5930,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"multiplication\":703,\"diskTotal\":51,\"sessionTotal\":56,\"archiveAValue\":318,\"archiveBValue\":427,\"archiveSum\":745}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c17-shell",
+    "passed": true,
+    "runId": "fed16335-17f7-47cc-9069-cb44ba178482",
+    "observedMs": 6908,
+    "answer": "{\"shellValue\":397,\"marker\":\"MATRIX-K3\",\"sessionTotal\":56}",
+    "thinkingLength": 0,
+    "calls": [
+      "bash"
+    ]
+  },
+  {
+    "label": "c18-unicode",
+    "passed": true,
+    "runId": "cbd5f938-c6f6-4450-90c9-d04fbfef80e8",
+    "observedMs": 3239,
+    "answer": "{\"word\":\"白鹭\",\"quote\":\"a\\\"b\",\"path\":\"C:\\\\probe\\\\receipt.json\",\"emoji\":\"🐦\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c19-final-history",
+    "passed": true,
+    "runId": "0d288933-5e2a-48ae-84d1-b1f9b5d514bb",
+    "observedMs": 7181,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"multiplication\":703,\"diskTotal\":51,\"sessionTotal\":56,\"archiveAValue\":318,\"archiveBValue\":427,\"archiveSum\":745,\"aCODE\":\"N4P8\",\"bCODE\":\"R6W2\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c20-checksum",
+    "passed": false,
+    "runId": "25b31e4e-4442-4849-8ec8-4b7c8c287ba1",
+    "error": "AssertionError('703+51+56+745 = 1555\\n\\nMATRIX-K3 白鹭 1555')",
+    "answer": "703+51+56+745 = 1555\n\nMATRIX-K3 白鹭 1555"
+  },
+  {
+    "label": "c21-cancel-scoped",
+    "passed": false,
+    "runId": "a95da757-e8fd-4548-add0-b099aef1d1ef",
+    "error": "AssertionError('Cancellation before output: did not verify partial stream')",
+    "answer": ""
+  },
+  {
+    "label": "c22-after-cancel",
+    "passed": true,
+    "runId": "393b243f-d439-4a7b-8fb5-be779aa7fe27",
+    "observedMs": 4746,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"sessionTotal\":56,\"archiveSum\":745,\"aCODE\":\"N4P8\",\"bCODE\":\"R6W2\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c23-effort-xhigh",
+    "passed": true,
+    "runId": "360168b3-8506-4230-9c14-26c6a76b60ac",
+    "observedMs": 4711,
+    "answer": "{\"value\":221,\"marker\":\"MATRIX-K3\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c23-effort-max",
+    "passed": true,
+    "runId": "821a792f-3e9e-43ed-b6b6-93ebab855c80",
+    "observedMs": 6390,
+    "answer": "{\"value\":323,\"marker\":\"MATRIX-K3\"}",
+    "thinkingLength": 65,
+    "calls": []
+  },
+  {
+    "label": "opus01-history",
+    "passed": true,
+    "runId": "b7034720-6431-4086-a53e-360c01ed29ed",
+    "observedMs": 11529,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"sessionTotal\":56,\"archiveSum\":745,\"aCODE\":\"N4P8\",\"bCODE\":\"R6W2\"}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "opus02-read",
+    "passed": true,
+    "runId": "cbc2a5c7-d3f1-42b6-a439-7d1b62ae6d49",
+    "observedMs": 4882,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"total\":56,\"verified\":true}",
+    "thinkingLength": 0,
+    "calls": [
+      "read"
+    ]
+  },
+  {
+    "label": "opus03-image",
+    "passed": true,
+    "runId": "675ce83e-1ec7-40c1-be63-c2672ca9d985",
+    "observedMs": 2907,
+    "answer": "{\"CODE\":\"N4P8\",\"red\":7,\"blue\":4,\"green\":9,\"total\":20}",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c24-cancel-after-output",
+    "passed": true,
+    "runId": "b185d6a4-4142-4281-98b8-59675ef8354f",
+    "observedMs": 8267,
+    "answer": "",
+    "thinkingLength": 0,
+    "calls": []
+  },
+  {
+    "label": "c25-after-partial-cancel",
+    "passed": true,
+    "runId": "636898d5-a31c-4461-a462-a191b98e1c30",
+    "observedMs": 4300,
+    "answer": "{\"marker\":\"MATRIX-K3\",\"checkword\":\"白鹭\",\"sessionTotal\":56,\"archiveSum\":745,\"aCODE\":\"N4P8\",\"bCODE\":\"R6W2\"}",
+    "thinkingLength": 0,
+    "calls": []
+  }
+]

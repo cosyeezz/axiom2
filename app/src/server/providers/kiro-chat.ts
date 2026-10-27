@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createAssistantMessageEventStream, parseStreamingJson, getCurrentTools, validateToolArguments, type Api, type AssistantMessage, type Model, type OAuthAuth, type StreamOptions, type ToolCall, type TranscriptContext } from "@earendil-works/pi-ai";
 import { validateKiroCredential } from "./kiro-catalog.js";
 import type { KiroCredential } from "./kiro-auth.js";
@@ -9,6 +9,7 @@ import { KiroThinkingError, kiroThinkingRequest } from "./kiro-thinking.js";
 import { KiroThinkingStream } from "./kiro-thinking-stream.js";
 import { KiroToolInput } from "./kiro-tool-input.js";
 import { kiroRequestUsage } from "./kiro-usage.js";
+import { resolveKiroProfile } from "./kiro-profile.js";
 
 // Hooks and injected transports may ignore signals. Bound our waiting independently;
 // a late response is cancelled without allowing it to publish events or retain a body.
@@ -32,6 +33,8 @@ function cancelBody(response: Response) { if (response.body && !response.body.lo
 /** Only an opaque, one-use in-process capability crosses Pi's generic auth pipeline. */
 export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
   const tickets = new Map<string, { account: KiroCredential; expires: number }>();
+  // Credential-bound, in-memory discovery cache: no token or refresh secret retained.
+  const profiles = new Map<string, { arn: string; expires: number }>();
   const auth: OAuthAuth = { ...oauth, async toAuth(credential) {
     const account = validateKiroCredential(credential), now = Date.now();
     if (account.expires <= now) throw new KiroChatError("Kiro 访问令牌已过期，请刷新认证。");
@@ -95,7 +98,23 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
         const ticket = options.apiKey ? tickets.get(options.apiKey) : undefined;
         if (options.apiKey) tickets.delete(options.apiKey);
         if (!ticket || ticket.expires <= Date.now() || ticket.account.expires <= Date.now()) throw new KiroChatError("Kiro 原生认证交接无效或已过期，请重试；不接受通用 API 密钥。");
-        const account = ticket.account, { payload, names, seenCalls, historyNotice, interruptionNotice } = kiroChatRequest(model, context, account, options.sessionId);
+        let account = ticket.account;
+        if (account.authMethod === "identity-center" && !account.profileArn) {
+          const key = createHash("sha256").update(JSON.stringify([account.authMethod, account.authRegion, account.access])).digest("hex");
+          for (const [id, value] of profiles) if (value.expires <= Date.now()) profiles.delete(id);
+          const cached = profiles.get(key);
+          if (cached) account = { ...account, profileArn: cached.arn };
+          else {
+            const discoverySignal = AbortSignal.any([bounded, AbortSignal.timeout(15_000)]);
+            account = await waitForKiro(resolveKiroProfile(account, discoverySignal, options.fetch ?? transport ?? globalThis.fetch), discoverySignal);
+            bounded.throwIfAborted();
+            if (account.profileArn) {
+              if (profiles.size >= 128) profiles.delete(profiles.keys().next().value!);
+              profiles.set(key, { arn: account.profileArn, expires: Math.min(account.expires, Date.now() + 15 * 60_000) });
+            }
+          }
+        }
+        const { payload, names, seenCalls, historyNotice, interruptionNotice } = kiroChatRequest(model, context, account, options.sessionId);
         const thinking = kiroThinkingRequest(model, advanced);
         if (thinking) {
           message.providerThinkingLevel = thinking.providerLevel;

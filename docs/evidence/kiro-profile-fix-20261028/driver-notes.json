@@ -1,0 +1,42 @@
+{
+  "firstStopAttempt": {
+    "label": "c21-cancel",
+    "runId": "9d0459d1-7f32-444b-bf53-9c343bc62f42",
+    "observedError": {
+      "code": "RUN_MISMATCH",
+      "message": "执行已变化，未停止其他执行"
+    },
+    "provenance": "Error object parsed from local driver log, not a complete receipt envelope",
+    "finalRunStatus": "completed"
+  },
+  "historicalHydration": [
+    {
+      "label": "c06-long-attachment",
+      "runId": "81df45ed-a0e5-4628-8dad-7b53eae2c8c7",
+      "checks": [
+        {
+          "messageId": "81df45ed-a0e5-4628-8dad-7b53eae2c8c7",
+          "field": "text",
+          "length": 86791,
+          "sha256": "a1ab09b02555920ba4142576740c8f0772749183a81ed665ef708f04756acc59",
+          "prefixMatched": true,
+          "revisionMatched": true
+        }
+      ]
+    },
+    {
+      "label": "c15-second-long-attachment",
+      "runId": "06692578-1483-46c7-bcb3-561f5e311022",
+      "checks": [
+        {
+          "messageId": "06692578-1483-46c7-bcb3-561f5e311022",
+          "field": "text",
+          "length": 86828,
+          "sha256": "7633496590735d56c1393e77fced60abc468548bdd3f012e40a3efbdb06a97a6",
+          "prefixMatched": true,
+          "revisionMatched": true
+        }
+      ]
+    }
+  ]
+}

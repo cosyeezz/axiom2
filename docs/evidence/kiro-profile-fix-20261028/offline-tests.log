@@ -1,0 +1,352 @@
+TAP version 13
+# Subtest: Kiro native chat sends selected model and full system prompt, uses fixed AWS protocol and hooks
+ok 1 - Kiro native chat sends selected model and full system prompt, uses fixed AWS protocol and hooks
+  ---
+  duration_ms: 39.478208
+  type: 'test'
+  ...
+# Subtest: Kiro tool JSON chunks map names back, validate schema and round-trip results without history model/tools
+ok 2 - Kiro tool JSON chunks map names back, validate schema and round-trip results without history model/tools
+  ---
+  duration_ms: 4.246709
+  type: 'test'
+  ...
+# Subtest: Kiro handles interleaved tools but rejects unended, repeated, unknown and invalid-schema calls
+ok 3 - Kiro handles interleaved tools but rejects unended, repeated, unknown and invalid-schema calls
+  ---
+  duration_ms: 13.823958
+  type: 'test'
+  ...
+# Subtest: Kiro rejects corrupted CRC, incomplete prelude/frame, wrong media and empty streams
+ok 4 - Kiro rejects corrupted CRC, incomplete prelude/frame, wrong media and empty streams
+  ---
+  duration_ms: 7.449333
+  type: 'test'
+  ...
+# Subtest: Kiro preserves native reasoning, separate credits and usage absence, rejects filtered responses
+ok 5 - Kiro preserves native reasoning, separate credits and usage absence, rejects filtered responses
+  ---
+  duration_ms: 0.7995
+  type: 'test'
+  ...
+# Subtest: Kiro sanitizes failures and publishes no replay hint after partial output
+ok 6 - Kiro sanitizes failures and publishes no replay hint after partial output
+  ---
+  duration_ms: 2.62275
+  type: 'test'
+  ...
+# Subtest: Kiro honors abort and timeout, including transport ignoring an abort and stalled body
+ok 7 - Kiro honors abort and timeout, including transport ignoring an abort and stalled body
+  ---
+  duration_ms: 22.436625
+  type: 'test'
+  ...
+# Subtest: Kiro rejects malformed images, orphan tool results and payload identity changes before network
+ok 8 - Kiro rejects malformed images, orphan tool results and payload identity changes before network
+  ---
+  duration_ms: 0.6765
+  type: 'test'
+  ...
+# Subtest: Kiro opaque auth capabilities contain no tokens, are isolated and one-use
+ok 9 - Kiro opaque auth capabilities contain no tokens, are isolated and one-use
+  ---
+  duration_ms: 0.68675
+  type: 'test'
+  ...
+# Subtest: Kiro cancels permanently stalled hooks and transports, and releases responses arriving after cancellation
+ok 10 - Kiro cancels permanently stalled hooks and transports, and releases responses arriving after cancellation
+  ---
+  duration_ms: 61.953084
+  type: 'test'
+  ...
+# Subtest: Kiro never replays hidden reasoning as assistant prose and rejects old call IDs before completion
+ok 11 - Kiro never replays hidden reasoning as assistant prose and rejects old call IDs before completion
+  ---
+  duration_ms: 1.880208
+  type: 'test'
+  ...
+# Subtest: Kiro preserves literal reasoning-like tags in user and final answer text without exposing thinking blocks
+ok 12 - Kiro preserves literal reasoning-like tags in user and final answer text without exposing thinking blocks
+  ---
+  duration_ms: 0.241667
+  type: 'test'
+  ...
+# Subtest: Kiro partial usage cannot erase a complete snapshot or pretend missing counters are exact
+ok 13 - Kiro partial usage cannot erase a complete snapshot or pretend missing counters are exact
+  ---
+  duration_ms: 4.249583
+  type: 'test'
+  ...
+# Subtest: Kiro explicit European profile selects runtime EU, not its SSO authentication region
+ok 14 - Kiro explicit European profile selects runtime EU, not its SSO authentication region
+  ---
+  duration_ms: 0.37025
+  type: 'test'
+  ...
+# Subtest: Kiro drives a real Pi Agent tool loop and never executes a tool from an errored stream
+ok 15 - Kiro drives a real Pi Agent tool loop and never executes a tool from an errored stream
+  ---
+  duration_ms: 3.334042
+  type: 'test'
+  ...
+# Subtest: Kiro native OAuth refresh remains serialized and opaque capabilities expire
+ok 16 - Kiro native OAuth refresh remains serialized and opaque capabilities expire
+  ---
+  duration_ms: 0.882875
+  type: 'test'
+  ...
+# Subtest: Kiro parses every AWS header type and rejects malformed, duplicate pseudoheaders and oversized preludes
+ok 17 - Kiro parses every AWS header type and rejects malformed, duplicate pseudoheaders and oversized preludes
+  ---
+  duration_ms: 2.263416
+  type: 'test'
+  ...
+# Subtest: Kiro enforces request and argument limits, and does not silently override tool choice
+ok 18 - Kiro enforces request and argument limits, and does not silently override tool choice
+  ---
+  duration_ms: 69.351834
+  type: 'test'
+  ...
+# Subtest: Kiro sends current user images in native AWS blob JSON, without mutating the transcript
+ok 19 - Kiro sends current user images in native AWS blob JSON, without mutating the transcript
+  ---
+  duration_ms: 1.440125
+  type: 'test'
+  ...
+# Subtest: Kiro preserves image order through adjacent users, current image-only input and historical replay
+ok 20 - Kiro preserves image order through adjacent users, current image-only input and historical replay
+  ---
+  duration_ms: 0.483166
+  type: 'test'
+  ...
+# Subtest: Kiro serializes all CLI image formats as unchanged base64 bytes, including JPEG alias
+ok 21 - Kiro serializes all CLI image formats as unchanged base64 bytes, including JPEG alias
+  ---
+  duration_ms: 0.264208
+  type: 'test'
+  ...
+# Subtest: Kiro lifts parallel tool images beside native toolResults and preserves IDs, status and text blocks
+ok 22 - Kiro lifts parallel tool images beside native toolResults and preserves IDs, status and text blocks
+  ---
+  duration_ms: 0.395459
+  type: 'test'
+  ...
+# Subtest: Kiro validates image formats and canonical base64 without fetching URLs or dropping unknown content
+ok 23 - Kiro validates image formats and canonical base64 without fetching URLs or dropping unknown content
+  ---
+  duration_ms: 0.415208
+  type: 'test'
+  ...
+# Subtest: Kiro runs a Pi Agent image prompt and screenshot tool loop, then replays both images on a later turn
+ok 24 - Kiro runs a Pi Agent image prompt and screenshot tool loop, then replays both images on a later turn
+  ---
+  duration_ms: 10.7445
+  type: 'test'
+  ...
+# Subtest: Kiro sends Pi read-tool image output through the same native image path
+ok 25 - Kiro sends Pi read-tool image output through the same native image path
+  ---
+  duration_ms: 3.7725
+  type: 'test'
+  ...
+# Subtest: Kiro rejects an over-budget image request before transport and still aborts image requests
+ok 26 - Kiro rejects an over-budget image request before transport and still aborts image requests
+  ---
+  duration_ms: 44.321958
+  type: 'test'
+  ...
+# Subtest: Kiro a new user input can recover an unfinished tool call without inventing a result
+ok 27 - Kiro a new user input can recover an unfinished tool call without inventing a result
+  ---
+  duration_ms: 1.6705
+  type: 'test'
+  ...
+# Subtest: Kiro interruption cleanup preserves the assistant's ordinary text
+ok 28 - Kiro interruption cleanup preserves the assistant's ordinary text
+  ---
+  duration_ms: 0.206709
+  type: 'test'
+  ...
+# Subtest: Kiro partially completed parallel tools retain their actual paired results and drop only outstanding calls
+ok 29 - Kiro partially completed parallel tools retain their actual paired results and drop only outstanding calls
+  ---
+  duration_ms: 0.395708
+  type: 'test'
+  ...
+# Subtest: Kiro drops all unfinished calls at a new user boundary without losing that user's image
+ok 30 - Kiro drops all unfinished calls at a new user boundary without losing that user's image
+  ---
+  duration_ms: 0.192875
+  type: 'test'
+  ...
+# Subtest: Kiro interruption cleanup does not remove an earlier completed tool cycle
+ok 31 - Kiro interruption cleanup does not remove an earlier completed tool cycle
+  ---
+  duration_ms: 0.176417
+  type: 'test'
+  ...
+# Subtest: Kiro partial interruption retains completed tool images alongside the new user's image
+ok 32 - Kiro partial interruption retains completed tool images alongside the new user's image
+  ---
+  duration_ms: 0.168041
+  type: 'test'
+  ...
+# Subtest: Kiro still rejects unresolved continuation, assistant-crossing, orphan results and call ID reuse
+ok 33 - Kiro still rejects unresolved continuation, assistant-crossing, orphan results and call ID reuse
+  ---
+  duration_ms: 0.412084
+  type: 'test'
+  ...
+# Subtest: Kiro complete tool histories are unchanged and do not claim interruption cleanup
+ok 34 - Kiro complete tool histories are unchanged and do not claim interruption cleanup
+  ---
+  duration_ms: 0.0745
+  type: 'test'
+  ...
+# Subtest: Kiro streaming continuation reports omission diagnostics and only sends valid tool pairs
+ok 35 - Kiro streaming continuation reports omission diagnostics and only sends valid tool pairs
+  ---
+  duration_ms: 7.091
+  type: 'test'
+  ...
+# Subtest: Kiro rejects service reuse of an omitted interrupted call ID before any tool-call event
+ok 36 - Kiro rejects service reuse of an omitted interrupted call ID before any tool-call event
+  ---
+  duration_ms: 1.003959
+  type: 'test'
+  ...
+# Subtest: Kiro recovery uses a normalized user role, including converted non-displayed custom input
+ok 37 - Kiro recovery uses a normalized user role, including converted non-displayed custom input
+  ---
+  duration_ms: 0.258667
+  type: 'test'
+  ...
+# Subtest: Kiro unknown tool outcomes constrain side-effect replay even for synthetic input or no original system
+ok 38 - Kiro unknown tool outcomes constrain side-effect replay even for synthetic input or no original system
+  ---
+  duration_ms: 0.357167
+  type: 'test'
+  ...
+# Subtest: Kiro system updates do not close pending calls and remain part of the full policy
+ok 39 - Kiro system updates do not close pending calls and remain part of the full policy
+  ---
+  duration_ms: 0.116583
+  type: 'test'
+  ...
+# Subtest: Kiro skips error assistant content without registering its calls or closing earlier pending
+ok 40 - Kiro skips error assistant content without registering its calls or closing earlier pending
+  ---
+  duration_ms: 0.194291
+  type: 'test'
+  ...
+# Subtest: Kiro skips aborted assistant content without registering its calls or closing earlier pending
+ok 41 - Kiro skips aborted assistant content without registering its calls or closing earlier pending
+  ---
+  duration_ms: 0.102625
+  type: 'test'
+  ...
+# Subtest: Kiro rejects a late result after its call was omitted at a normalized user boundary
+ok 42 - Kiro rejects a late result after its call was omitted at a normalized user boundary
+  ---
+  duration_ms: 0.087042
+  type: 'test'
+  ...
+# Subtest: Kiro repeatedly builds the same frozen normalized context without mutation or system-prefix accumulation
+ok 43 - Kiro repeatedly builds the same frozen normalized context without mutation or system-prefix accumulation
+  ---
+  duration_ms: 0.479917
+  type: 'test'
+  ...
+# Subtest: Kiro without model overrides survives native catalog access, credential login and logout without recursion
+ok 44 - Kiro without model overrides survives native catalog access, credential login and logout without recursion
+  ---
+  duration_ms: 37.896208
+  type: 'test'
+  ...
+# Subtest: Kiro empty current-scope catalog routes legitimate explicit models natively without a global API or fake models
+ok 45 - Kiro empty current-scope catalog routes legitimate explicit models natively without a global API or fake models
+  ---
+  duration_ms: 12.169958
+  type: 'test'
+  ...
+# Subtest: Kiro empty other-scope catalog routes legitimate explicit models natively without a global API or fake models
+ok 46 - Kiro empty other-scope catalog routes legitimate explicit models natively without a global API or fake models
+  ---
+  duration_ms: 5.044792
+  type: 'test'
+  ...
+# Subtest: Kiro SDK stream APIs re-resolve each physical request instead of reusing a prefetched one-use handoff
+ok 47 - Kiro SDK stream APIs re-resolve each physical request instead of reusing a prefetched one-use handoff
+  ---
+  duration_ms: 7.474083
+  type: 'test'
+  ...
+# Subtest: enterprise discovery uses native AWS operation, not OIDC refresh or personal ARN
+ok 48 - enterprise discovery uses native AWS operation, not OIDC refresh or personal ARN
+  ---
+  duration_ms: 5.679292
+  type: 'test'
+  ...
+# Subtest: existing profile and non-enterprise credentials never trigger discovery
+ok 49 - existing profile and non-enterprise credentials never trigger discovery
+  ---
+  duration_ms: 0.160084
+  type: 'test'
+  ...
+# Subtest: empty successful region can fall back, explicit enterprise region wins
+ok 50 - empty successful region can fall back, explicit enterprise region wins
+  ---
+  duration_ms: 0.608083
+  type: 'test'
+  ...
+# Subtest: pagination preserves one identity and rejects multiple profiles
+ok 51 - pagination preserves one identity and rejects multiple profiles
+  ---
+  duration_ms: 0.999083
+  type: 'test'
+  ...
+# Subtest: HTTP, empty, invalid and cyclic discovery fail closed without leaking body
+ok 52 - HTTP, empty, invalid and cyclic discovery fail closed without leaking body
+  ---
+  duration_ms: 2.330583
+  type: 'test'
+  ...
+# Subtest: discovery checks abort before sending
+ok 53 - discovery checks abort before sending
+  ---
+  duration_ms: 0.099833
+  type: 'test'
+  ...
+# Subtest: native chat discovers before inference, routes by profile and caches only within credential
+ok 54 - native chat discovers before inference, routes by profile and caches only within credential
+  ---
+  duration_ms: 3.685291
+  type: 'test'
+  ...
+# Subtest: failed discovery never sends inference
+ok 55 - failed discovery never sends inference
+  ---
+  duration_ms: 0.300125
+  type: 'test'
+  ...
+# Subtest: Kiro live discovery rejects failed or skipped refresh instead of reporting cached success
+ok 56 - Kiro live discovery rejects failed or skipped refresh instead of reporting cached success
+  ---
+  duration_ms: 86.254917
+  type: 'test'
+  ...
+# Subtest: Kiro login and live catalog survive worker/reopen without changing other OAuth providers
+ok 57 - Kiro login and live catalog survive worker/reopen without changing other OAuth providers
+  ---
+  duration_ms: 3304.615
+  type: 'test'
+  ...
+1..57
+# tests 57
+# suites 0
+# pass 57
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4296.911458

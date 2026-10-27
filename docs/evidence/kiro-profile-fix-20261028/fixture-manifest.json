@@ -1,0 +1,37 @@
+[
+  {
+    "name": "inventory.csv",
+    "bytes": 52,
+    "sha256": "53f68320ea594e2deeed539d902ec30008e8c51ab465ac0d8cd83bc3a2acbbfb"
+  },
+  {
+    "name": "ledger.json",
+    "bytes": 48,
+    "sha256": "bfa582dcd894aa42192094c4352eeabf8b6832ff9148ae1f2b219f6ba141b2ea"
+  },
+  {
+    "name": "receipt.json",
+    "bytes": 71,
+    "sha256": "dcbfbbb15ec7ee1c16869bdfc64dd0015e81d6ad4d7e751bf6fb8854b08f3bb9"
+  },
+  {
+    "name": "visual-a.png",
+    "bytes": 13739,
+    "sha256": "7926040895f18297ae9023ca90a72267bfea67a3390aaf704bebc26baa6e0e8d"
+  },
+  {
+    "name": "visual-b.png",
+    "bytes": 15337,
+    "sha256": "8d79383355e656074028a27914d0f1210eb16c2ba050830b68ca552d241d431a"
+  },
+  {
+    "name": "archive-a.txt",
+    "bytes": 85807,
+    "sha256": "ef0e0670bb2688dcb89194223ae66cd9a7a2b225ffa5043d8897af5d00d195fc"
+  },
+  {
+    "name": "archive-b.txt",
+    "bytes": 85807,
+    "sha256": "3e5bd452097e4cfab5b68238e15ef3d793fe2589947c8f9dec7dfa016a0b4dd0"
+  }
+]

@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "command": "node --import tsx --test tests/kiro-profile.test.ts tests/kiro-chat.test.ts tests/kiro-native-compat.test.ts tests/kiro-runtime.test.ts tests/kiro-interrupted-history.test.ts tests/kiro-images.test.ts",
+      "cwd": "app",
+      "exitCode": 0,
+      "tests": 57,
+      "passed": 57,
+      "log": "offline-tests.log"
+    },
+    {
+      "command": "npx --no-install tsc -p tsconfig.server.json --noEmit",
+      "cwd": "app",
+      "exitCode": 0,
+      "log": "types-server.log"
+    },
+    {
+      "command": "npm run build",
+      "cwd": ".",
+      "exitCode": 0,
+      "warning": "Vite chunk size"
+    },
+    {
+      "command": "node --check app/scripts/kiro-acceptance.mjs",
+      "cwd": ".",
+      "exitCode": 0
+    }
+  ],
+  "deployment": {
+    "oldPid": 23222,
+    "newPid": 27072,
+    "state": "verified",
+    "httpStatus": 200,
+    "webSocket": "connected"
+  },
+  "sourceSha256": {
+    "app/src/server/providers/kiro-profile.ts": "cdb5aba2b663ed6c211d1f2a4b340d03152d7a8d509a3cfea5059dfb325e2b2e",
+    "app/src/server/providers/kiro-chat.ts": "e4c0e7fc0666701b51738f9369b9ceb7c294ef5fbf45e789783830a8adec526b",
+    "app/tests/kiro-profile.test.ts": "804c4c3a8395d37032c65549fd509864c610c46377973cb642b0f64da79cbc1a",
+    "app/scripts/kiro-acceptance.mjs": "035520fc2a72ad5ff70db0ca8ecb9709c3290cd45761f2668b61411d3ce45c90"
+  }
+}
