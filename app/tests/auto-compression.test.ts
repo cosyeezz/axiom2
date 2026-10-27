@@ -115,6 +115,8 @@ test("automatic compression uses real pi usage and the chat window, shares persi
       nativeRequests++;
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       reply(res, "## Goal\nPI_NATIVE_SAFETY_SUMMARY");
+      // Subsequent turns see the compressed context, not the pre-compaction usage.
+      tokens = 100;
       return;
     }
     if (!isCompressionRequest(body)) chatBodies.push(body);
@@ -246,7 +248,7 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     await prompt(fallbackScope, "FALLBACK_OLD_HISTORY ".repeat(100)); await idle(fallbackScope);
     await wait(() => app.agents.compressions.info(fallbackScope)?.state === "failed", "host failure before fallback was not visible");
     assert.equal(nativeEntries(fallbackScope).length, 0, "Pi must not trigger below 70%");
-    const nativeBefore = nativeRequests;
+    const nativeBefore = nativeRequests, fallbackChatStart = chatBodies.length;
     tokens = 22401; // Pi is strict > 70% of the 32k window.
     await prompt(fallbackScope); await idle(fallbackScope);
     await wait(() => app.agents.compressions.info(fallbackScope)?.state === "failed", "host failure must remain visible after native recovery");
@@ -260,10 +262,15 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     await preferences({ auto: { enabled: false } });
     tokens = 100;
     await prompt(fallbackScope); await idle(fallbackScope);
-    const rebuilt = JSON.stringify(chatBodies.at(-1).messages);
+    const fallbackChats = chatBodies.slice(fallbackChatStart).filter((body) =>
+      body.tools?.length && JSON.stringify(body.messages).includes(fallbackScope.sessionId));
+    assert.ok(fallbackChats.length, "native recovery issues an execution request for its scope");
+    const rebuilt = JSON.stringify(fallbackChats.at(-1).messages);
     assert.match(rebuilt, /PI_NATIVE_SAFETY_SUMMARY/);
     assert.doesNotMatch(rebuilt, /FALLBACK_OLD_HISTORY/);
-    assert.match(rebuilt, /上下文压缩已实际应用/, "native compaction also asks the session to recover memory");
+    // A maintenance read may acknowledge recovery before the final probe; it must have been requested.
+    assert.ok(fallbackChats.some((body) => JSON.stringify(body.messages).includes("上下文压缩已实际应用")),
+      "native compaction also asks the session to recover memory");
 
     // Turning off Axiom does not turn off Pi; memory-enabled main sessions also allow overflow.
     for (const measured of [22401, 33000]) {

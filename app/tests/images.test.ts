@@ -1,5 +1,6 @@
 // Real pi SDK/worker transport against a loopback fixture; no remote-provider claim.
 import { projectionFixture } from "./projection-fixture.js";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type ServerResponse } from "node:http";
@@ -93,7 +94,9 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
   };
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    requests.push(JSON.parse(raw));
+    const body = JSON.parse(raw);
+    if (replyToFixtureTitle(body, res)) return;
+    requests.push(body);
     res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders();
     if (holdNext) { holdNext = false; held = res; return; }
     finish(res);

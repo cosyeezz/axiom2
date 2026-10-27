@@ -238,10 +238,25 @@ test("connection replacement is refused pre-spawn and queued calls cannot reuse 
     const h = harness(root, async () => { calls++; start(); await gate; throw Error("transport closed"); });
     const first = assert.rejects(h.run(), /transport closed/);
     await started;
-    const queued = assert.rejects(h.run(), /排队期间/);
+    const ownerPath = join(root, "integrations/rea/budget/active.json");
+    const originalOwner = readFileSync(ownerPath, "utf8");
+    // Windows retains uncertain ownership, so admission fails before the
+    // queued call can reach the retired-policy check used on POSIX.
+    const queued = assert.rejects(h.run(), process.platform === "win32" ? /尚未确认退出/ : /排队期间/);
     assert.throws(() => h.policy.attachTransport({ pid: 2147483645, close: async () => {} }), /连接已更换/);
     finish(); await first; await queued;
     assert.equal(calls, 1);
+    // POSIX admits the queued call before retiring it, then closes/releases
+    // its admission too. Windows refuses that second admission entirely.
+    assert.equal(h.closed(), process.platform === "win32" ? 1 : 2);
+    assert.equal(existsSync(ownerPath), process.platform === "win32");
+    if (process.platform === "win32") {
+      assert.equal(readFileSync(ownerPath, "utf8"), originalOwner);
+      const fresh = harness(root, async () => { calls++; return result({}); });
+      await assert.rejects(fresh.run(), /尚未确认退出/);
+      assert.equal(readFileSync(ownerPath, "utf8"), originalOwner);
+      assert.equal(calls, 1, "a fresh policy cannot bypass uncertain same-root ownership");
+    }
     await assert.rejects(h.run(), /已隔离/);
   } finally { finish(); rmSync(root, { recursive: true, force: true }); }
 });
