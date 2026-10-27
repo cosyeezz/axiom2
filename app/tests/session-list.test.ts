@@ -17,7 +17,7 @@ function fixture(t: TestContext) {
   const store = new Store(join(root, "data"));
   const workspaces = ["main", "other", "archived"].map(name => {
     const path = join(root, name); mkdirSync(path);
-    return store.execute({ requestId: randomUUID(), op: "workspace.add", params: { path } }) as { id: string };
+    return store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path, authorized: true } }) as { id: string };
   });
   const [workspace, foreign, archived] = workspaces.map(row => row.id);
   store.db.prepare("UPDATE workspaces SET archived=1 WHERE id=?").run(archived);
