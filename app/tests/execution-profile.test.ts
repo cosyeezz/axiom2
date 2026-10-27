@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { ExecutionProfiles } from '../src/server/execution-profile.js';
 import { resourceIdentity, resourceIdentityAsync } from '../src/server/agents/resource-identity.js';
 
-test('async resource verification preserves ordered bytes and rechecks config after I/O',async()=>{
+test('async resource verification preserves ordered bytes without gating on credentials',async()=>{
   const root=mkdtempSync(join(tmpdir(),'axiom-resource-async-')),cwd=join(root,'project'),pi=join(root,'pi'),skills=join(cwd,'.pi','skills');
   mkdirSync(skills,{recursive:true});mkdirSync(pi);
   const raw='{"providers":{}}';writeFileSync(join(pi,'models.json'),raw);
@@ -19,7 +19,7 @@ test('async resource verification preserves ordered bytes and rechecks config af
     sync=profiles.prepare(input);asyncEnvironment=await profiles.prepareAsync(input);assert.equal(asyncEnvironment.profileHash,sync.profileHash);
     assert.equal(await asyncEnvironment.currentAsync!(),true);
     const checking=asyncEnvironment.currentAsync!();writeFileSync(join(pi,'auth.json'),'{"changed":true}');
-    assert.equal(await checking,false,'credentials changed during asynchronous I/O cannot pass');
+    assert.equal(await checking,true,'credential writes are independent of resource verification');
     const controller=new AbortController(),cancelled=resourceIdentityAsync(cwd,pi,controller.signal);controller.abort();await assert.rejects(cancelled);
   }finally{sync?.release();asyncEnvironment?.release();rmSync(root,{recursive:true,force:true});}
 });
@@ -113,8 +113,8 @@ test('profiles use effective content and owned snapshot references, never reques
     writeFileSync(join(modelDir,'models.json'), formatted);
     const equivalent = profiles.prepare({...input, modelsRaw: formatted});
     assert.equal(equivalent.profileHash, c.profileHash); assert.equal(c.current(), true); equivalent.release();
-    writeFileSync(join(modelDir,'auth.json'),'{"updated":true}');assert.equal(c.current(),false,'partial credential write invalidates before overall save succeeds');
-    const d=profiles.prepare(input);assert.notEqual(c.profileHash,d.profileHash);c.release();d.release();
+    writeFileSync(join(modelDir,'auth.json'),'{"updated":true}');assert.equal(c.current(),true,'credential edits cannot invalidate resource admission');
+    const d=profiles.prepare(input);assert.equal(c.profileHash,d.profileHash);c.release();d.release();
   }finally{rmSync(root,{recursive:true,force:true});}
 });
 
@@ -125,7 +125,7 @@ test('agent resource contents and corrupted snapshot invalidate reuse even if mo
   const a=profiles.prepare(input);
   try{const old=statSync(instructions);writeFileSync(instructions,'other');utimesSync(instructions,old.atime,old.mtime);assert.equal(a.current(),false);
     assert.equal(a.current(false),true,'intermediate check defers only resource traversal to binding checks');
-    writeFileSync(join(modelDir,'auth.json'),'{"changed":true}');assert.equal(a.current(false),false,'intermediate check still rejects credential changes');
+    writeFileSync(join(modelDir,'auth.json'),'{"changed":true}');assert.equal(a.current(false),true,'intermediate resource checks are independent of credentials');
     writeFileSync(a.modelsFile,'corrupt');assert.equal(a.snapshotValid(),false);
     const b=profiles.prepare(input);
     assert.notEqual(b.modelsFile,a.modelsFile,'replacement never mutates a snapshot still owned by another instance');

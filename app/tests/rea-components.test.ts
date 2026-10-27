@@ -26,6 +26,7 @@ const temporary = () => mkdtempSync(join(tmpdir(), "axiom-rea-components-"));
 test("REA components install and uninstall independently without changing external files or running npm", async () => {
   const root = temporary(), fixture = reaFixture(), service = new ReaService(root, () => {}, fixture.dependencies);
   try {
+    await call(service, "rea.check"); await settle(service); // Confirm the legacy fixture version.
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     const external = join(root, ".pi", "skills", reaSkillName), other = join(root, ".pi", "skills", "other-guide");
     for (const [path, name] of [[external, reaSkillName], [other, "other-guide"]]) {
@@ -64,6 +65,7 @@ test("REA components install and uninstall independently without changing extern
 test("REA component choices survive default changes, restart, reinstall and upgrade; old configs keep both components", async () => {
   const root = temporary(), fixture = reaFixture(); let service = new ReaService(root, () => {}, fixture.dependencies);
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     assert.equal(readReaConfig(root).skillInstalled, undefined); assert.equal(readReaConfig(root).mcpInstalled, undefined);
     assert.equal(service.snapshot().skillInstalled, true); assert.equal(service.snapshot().mcpInstalled, true);
@@ -87,6 +89,7 @@ test("REA component choices survive default changes, restart, reinstall and upgr
 test("broken skill cannot block MCP, broken MCP cannot block skill, and failed component installation preserves config", async () => {
   const root = temporary(), fixture = reaFixture(), service = new ReaService(root, () => {}, fixture.dependencies);
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     const packageRoot = reaPackageRoot(root)!, guide = join(packageRoot, "skills", reaSkillName, "references", "guide.md");
     const original = readFileSync(guide, "utf8"); rmSync(guide);
@@ -117,6 +120,7 @@ test("component commands reject missing packages, stale revisions, concurrent in
   const operations = ["rea.installSkill", "rea.uninstallSkill", "rea.installMcp", "rea.uninstallMcp"];
   try {
     for (const op of operations) await assert.rejects(change(service, op), { code: "NOT_INSTALLED" });
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     for (const op of operations) await assert.rejects(call(service, op, { revision: "stale" }), { code: "CONFIGURATION_CONFLICT" });
     fixture.hold(new Promise<void>(resolve => { release = resolve; }));
@@ -136,6 +140,7 @@ test("locked sessions report removed REA components unavailable and can reuse se
   const root = temporary(), fixture = reaFixture(), service = new ReaService(root, () => {}, fixture.dependencies), store = new Store(root);
   const capabilities = new Capabilities(store, () => {});
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
     const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;

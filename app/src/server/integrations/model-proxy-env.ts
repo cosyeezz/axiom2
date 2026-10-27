@@ -5,6 +5,7 @@ import { Agent, EnvHttpProxyAgent, install, setGlobalDispatcher } from "undici";
 import { AppError } from "../../shared/protocol.js";
 import type { ProviderProxy } from "../../shared/models.js";
 import { proxyRuntimePath, readProxyConfig } from "./model-proxy-config.js";
+import type { SessionSafePoint } from "../session-safe-point.js";
 
 const proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"];
 const originalProxyEnvironment = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]));
@@ -78,8 +79,10 @@ function localModelHosts(modelsFile: string, provider: string): string[] {
   });
 }
 let configured: string | undefined;
-/** A worker owns a single provider network for its entire lifetime. */
-export function configureModelNetwork(root: string, modelsFile: string, provider: string) {
+let ownedDispatcher: Agent | EnvHttpProxyAgent | undefined;
+/** Initial binding needs no capability. Rebinding consumes centralized admission
+ * from a native Session boundary or the independent worker's own request gap. */
+export function configureModelNetwork(root: string, modelsFile: string, provider: string, options?: { safePoint: SessionSafePoint }) {
   const url = providerProxyUrl(root, readProviderProxy(modelsFile, provider));
   const noProxy = ["localhost", ".localhost", ".local", "127.0.0.1", "[::1]", "::1", ...localModelHosts(modelsFile, provider)].join(",");
   // Kiro tool/user turns often pause longer than Undici's 4s idle default.
@@ -88,7 +91,10 @@ export function configureModelNetwork(root: string, modelsFile: string, provider
   const poolOptions = provider === "kiro" ? { keepAliveTimeout: 60_000, keepAliveMaxTimeout: 120_000 } : {};
   const key = JSON.stringify([url ?? "direct", noProxy, poolOptions]);
   if (configured === key) return;
-  if (configured !== undefined) throw Error("模型代理环境已改变，需要重新创建执行进程。");
+  if (configured !== undefined && !options?.safePoint.allows("network-rebind")) throw Error("模型代理环境已改变，需要重新创建执行进程。");
+  // Construct first: an invalid target must not partially replace the old network.
+  const dispatcher = url ? new EnvHttpProxyAgent({ ...poolOptions, httpProxy: url, httpsProxy: url, noProxy }) : new Agent(poolOptions);
+  const previous = ownedDispatcher;
   for (const name of proxyKeys) delete process.env[name];
   if (url) {
     process.env.HTTP_PROXY = process.env.http_proxy = url;
@@ -97,8 +103,12 @@ export function configureModelNetwork(root: string, modelsFile: string, provider
     // Private configured model endpoints bypass the entry; the built-in core also routes private addresses directly.
     process.env.NO_PROXY = process.env.no_proxy = noProxy;
   }
-  setGlobalDispatcher(url ? new EnvHttpProxyAgent(poolOptions) : new Agent(poolOptions));
+  setGlobalDispatcher(dispatcher);
   install();
+  ownedDispatcher = dispatcher;
   configured = key;
+  // No agent request or tool is in flight at a rebind. Gracefully drain any
+  // unrelated extension traffic rather than destroying its sockets mid-request.
+  void previous?.close().catch(() => {});
 }
 export const defaultModelsPath = (root: string) => join(process.env.AXIOM_PI_DIR || join(root, "pi"), "models.json");

@@ -31,7 +31,7 @@ export function AutoCompressionSettings({ contextWindow }: { contextWindow?: num
         <span>启用自动压缩</span>
       </label>
     </div>
-    <p>上下文达到 Token 数或容量百分比时触发，两者取较小值。主／子会话分别计算，使用上方压缩模型。</p>
+    <p>上下文达到 Token 数或容量百分比时触发，两者取较小值。主／子会话分别计算，各自使用所属会话的模型。</p>
     <div className="auto-compression-fields">
       <ThresholdField name="tokens" label="Token 阈值" value={settings?.tokens} max={Number.MAX_SAFE_INTEGER} disabled={!connected} />
       <ThresholdField name="percent" label="上下文百分比（%）" value={settings?.percent} max={100} disabled={!connected} />

@@ -24,11 +24,19 @@ export function useSubmissionError(scope: Scope) {
   }, [key]), () => errors.get(key) ?? "");
 }
 
-// Only an explicit recovery of a confirmed rejection may become editable again.
-// Preserve newer typing and attachments; an uncertain result must never be replayed.
+// Confirmed rejections may be restored directly. Unknown outcomes require a
+// separate, explicit risk confirmation; neither path sends or changes a receipt.
 export function restoreFailedSubmission(scope: Scope, id: string) {
+  return restoreSubmission(scope, id, "failed");
+}
+export function restoreUncertainSubmission(scope: Scope, id: string) {
+  const restored = restoreSubmission(scope, id, "uncertain");
+  if (restored) setSubmissionError(scope, "原消息已恢复编辑，尚未发送。此前发送结果仍未确认，请核对会话记录，避免重复执行。");
+  return restored;
+}
+function restoreSubmission(scope: Scope, id: string, state: "failed" | "uncertain") {
   const pending = pendingMessages(scope).find((item) => item.id === id);
-  if (pending?.state !== "failed") return false;
+  if (pending?.state !== state) return false;
   if (pending.rewrite) {
     if (getComposerEdit(scope)) {
       setSubmissionError(scope, "请先完成或取消当前修改，再恢复这条消息。");

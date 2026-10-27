@@ -15,7 +15,7 @@ const errors: string[] = []; page.on("pageerror", error => errors.push(error.mes
 try {
   await page.goto(app.origin + "/tools.html#rtk");
   const tool = page.locator("#rtk");
-  await tool.getByRole("heading", { name: "RTK", exact: true }).waitFor();
+  await tool.getByRole("heading", { name: "RTK", exact: true, level: 2 }).waitFor();
   await tool.getByRole("button", { name: "检查 RTK 更新", exact: true }).click();
   await page.waitForFunction(() => !(document.querySelector('#rtk button.btn-primary') as HTMLButtonElement)?.disabled);
   f.hold(); await tool.getByRole("button", { name: "安装 RTK", exact: true }).click();

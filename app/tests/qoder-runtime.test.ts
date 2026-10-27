@@ -67,6 +67,7 @@ test("Qoder isolated worker login, signed catalog, reopened settings and snapsho
     assert.ok(!JSON.stringify(view).includes("dt-FIXTURE"));
     const catalog = await reopened.catalog(providerId, view.revision);
     assert.equal(catalog.source, "native"); assert.equal(catalog.models.length, 1); assert.equal(catalog.models[0].id, "auto");
+    assert.match(catalog.message, /is_vl/); assert.match(catalog.message, /不代表已验证真实推理权限/); assert.doesNotMatch(catalog.message, /仅声明文本|实验性/);
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));
     assert.ok(requests.some(item => item.path === "/algo/api/v2/model/list"));
     assert.ok(requests.every(item => item.worker === "1"));

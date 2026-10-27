@@ -45,10 +45,83 @@ XcW+ML9FoCI6AOvOzwIDAQAB
 const standard = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 const alphabet = "_doRTgHZBKcGVjlvpC,@aFSx#DPuNJme&i*MzLOEn)sUrthbf%Y^w.(kIQyXqWA!$";
 
+export const qoderBodyLimit = 6 * 1024 * 1024;
+export function assertQoderBodySize(jsonBytes: number) {
+  if (4 * Math.ceil(jsonBytes / 3) > qoderBodyLimit)
+    throw new QoderError("Qoder 请求超过本地 6 MiB 安全限制，请压缩会话或缩小图片后重试。");
+}
+// Count JSON UTF-8 bytes before serialization, including escapes and duplicate content/contents.
+// Payloads are plain JSON objects; do not execute arbitrary toJSON hooks during a budget check.
+export function assertQoderBodyBudget(value: unknown) {
+  let bytes = 0;
+  const ancestors = new Set<object>();
+  const add = (size: number) => { bytes += size; assertQoderBodySize(bytes); };
+  const string = (text: string) => {
+    add(Buffer.byteLength(text, "utf8") + 2);
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code === 34 || code === 92) add(1);
+      else if (code < 32) add([8, 9, 10, 12, 13].includes(code) ? 1 : 5);
+      else if (code >= 0xd800 && code <= 0xdbff) {
+        const next = text.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) i++;
+        else add(3); // JSON escapes a lone surrogate instead of UTF-8 replacement bytes.
+      } else if (code >= 0xdc00 && code <= 0xdfff) add(3);
+    }
+  };
+  const omitted = (item: unknown) => {
+    // JSON.stringify checks toJSON even on functions before deciding to omit them.
+    if (typeof item === "function" && typeof property(item, "toJSON") === "function")
+      throw new QoderError("Qoder 请求不能包含自定义 JSON 序列化钩子。");
+    return item === undefined || typeof item === "function" || typeof item === "symbol";
+  };
+  const property = (item: object, key: string): unknown => {
+    for (let current: object | null = item; current; current = Object.getPrototypeOf(current)) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, key);
+      if (!descriptor) continue;
+      if (descriptor.get || descriptor.set) throw new QoderError("Qoder 请求不能包含访问器或自定义 JSON 序列化钩子。");
+      return descriptor.value;
+    }
+  };
+  const visit = (item: unknown, depth: number) => {
+    if (depth > 128) throw new QoderError("Qoder 请求结构超过本地 128 层安全限制。");
+    if (item === null || omitted(item)) { add(4); return; }
+    if (typeof item === "string") { string(item); return; }
+    if (typeof item === "boolean") { add(item ? 4 : 5); return; }
+    if (typeof item === "number") { add(Number.isFinite(item) ? String(item).length : 4); return; }
+    if (typeof item !== "object" || ancestors.has(item)) throw new QoderError("Qoder 请求须为无循环的 JSON 数据。");
+    if (!Array.isArray(item) && ![Object.prototype, null].includes(Object.getPrototypeOf(item)))
+      throw new QoderError("Qoder 请求须为普通 JSON 数据。");
+    if (typeof property(item, "toJSON") === "function") throw new QoderError("Qoder 请求不能包含自定义 JSON 序列化钩子。");
+    ancestors.add(item); add(2);
+    if (Array.isArray(item)) {
+      for (let i = 0; i < item.length; i++) { if (i) add(1); visit(property(item, String(i)), depth + 1); }
+    } else {
+      let first = true;
+      for (const key in item) {
+        if (!Object.hasOwn(item, key)) continue;
+        const child = property(item, key);
+        if (omitted(child)) continue;
+        if (!first) add(1);
+        first = false; string(key); add(1); visit(child, depth + 1);
+      }
+    }
+    ancestors.delete(item);
+  };
+  visit(value, 0);
+  return bytes;
+}
+const encoding = new Uint8Array(128);
+for (let i = 0; i < standard.length; i++) encoding[standard.charCodeAt(i)] = alphabet.charCodeAt(i);
 export function encodeQoderBody(text: string): string {
+  assertQoderBodySize(Buffer.byteLength(text, "utf8")); // Before UTF-8/base64 buffers or per-byte work.
   const base = Buffer.from(text, "utf8").toString("base64"), third = Math.floor(base.length / 3);
-  return (base.slice(base.length - third) + base.slice(third, base.length - third) + base.slice(0, third))
-    .split("").map(char => alphabet[standard.indexOf(char)]).join("");
+  const result = Buffer.allocUnsafe(base.length);
+  for (let i = 0; i < base.length; i++) {
+    const source = i < third ? base.length - third + i : i < base.length - third ? i : i - (base.length - third);
+    result[i] = encoding[base.charCodeAt(source)];
+  }
+  return result.toString("ascii");
 }
 // CLI 1.1.78 decrypt_server_response: swap thirds, custom Base64, strict UTF-8.
 export function decodeQoderBody(text: string): string {
@@ -91,7 +164,7 @@ export async function qoderInference(region: QoderRegion, identity: QoderIdentit
 
 const md5 = (value: string | Buffer) => createHash("md5").update(value).digest("hex");
 export function qoderHeaders(body: string, url: string, identity: QoderIdentity): Record<string, string> {
-  if (!identity.userId || !identity.token || !identity.machineId) throw Error("Qoder 凭据不完整，请重新登录。");
+  if (!identity.userId || !identity.token || !identity.machineId) throw new QoderError("Qoder 凭据不完整，请重新登录。");
   const key = Buffer.from(randomUUID().slice(0, 16));
   const cipher = createCipheriv("aes-128-cbc", key, key);
   const info = Buffer.concat([cipher.update(JSON.stringify({ uid: identity.userId, security_oauth_token: identity.token, name: "", aid: "", email: "" }), "utf8"), cipher.final()]).toString("base64");
@@ -181,6 +254,6 @@ export async function qoderJson(transport: typeof fetch, url: string, init: Requ
   } catch (error) {
     init.signal?.throwIfAborted();
     if (error instanceof QoderError) throw error;
-    throw Error(signal.aborted ? "Qoder 请求超时，请重试。" : "Qoder 网络或响应异常，请检查连接后重试。");
+    throw new QoderError(signal.aborted ? "Qoder 请求超时，请重试。" : "Qoder 网络或响应异常，请检查连接后重试。");
   }
 }

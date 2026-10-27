@@ -134,7 +134,8 @@ try {
   assert.equal(await finalCard.locator(".tool-call").count(), 0);
   assert.ok(!operations.some(command => command.op === "agent.history.read" && command.params.groupId === finalKey), "final card does not prefetch its bodies");
   const delivery = fixture.deliveries.find(item => item.text.startsWith("第 2 段回复 1："))!;
-  const deliveryKey = `archive:${fixture.compressions[1]}:${delivery.id}`;
+  // Delivery rows keep one key across live and archive storage (message:<id>), so the anchor survives compaction.
+  const deliveryKey = `message:${delivery.id}`;
   const deliveryRow = page.locator(`[data-timeline-key="${deliveryKey}"]`);
   const assertDeliveryActions = async () => {
     await deliveryRow.scrollIntoViewIfNeeded(); await settle();

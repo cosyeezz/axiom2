@@ -18,6 +18,7 @@ try {
   mkdirSync(join(project, ".pi", "skills", "preview-skill"), { recursive: true });
   writeFileSync(join(project, ".pi", "skills", "preview-skill", "SKILL.md"), "---\nname: preview-skill\ndescription: Skill visible before sending\n---\nFixture");
   writeFileSync(join(project, ".pi", "APPEND_SYSTEM.md"), "PRELOADED_PROJECT_INSTRUCTION");
+  mkdirSync(join(root, "data", "pi"), { recursive: true });
   writeFileSync(join(root, "data", "pi", "mcp.json"), JSON.stringify({ mcpServers: {
     fixture: { command: "never-start-this-server", description: "Preloaded MCP fixture", env: { TOKEN: "hidden-env-secret" } },
   } }));
@@ -150,6 +151,12 @@ try {
   await openSection("系统提示词");
   assert.ok((await prompt.textContent())?.includes("Skill visible before sending"), "hiding the skill list does not disable skill injection");
   const preloadsBeforeChange = commands.filter(command => command.op === "agent.environment").length;
+  await page.evaluate(() => {
+    const w = window as unknown as { __promptGaps: number };
+    w.__promptGaps = 0;
+    new MutationObserver(() => { if (!document.querySelector('pre[aria-label="系统提示词"]')) w.__promptGaps++; })
+      .observe(document.body, { childList: true, subtree: true });
+  });
   const catalog = await app.agents.capabilities.get(scope(fresh));
   await app.agents.capabilities.command({ requestId: crypto.randomUUID(), op: "capabilities.defaults.save", ...scope(fresh),
     params: { revision: catalog.preferencesRevision, catalogRevision: catalog.revision, kind: "skills", id: "preview-skill", checked: false } });
@@ -158,6 +165,7 @@ try {
     return text?.includes("PRELOADED_PROJECT_INSTRUCTION") && !text.includes("Skill visible before sending");
   });
   assert.ok(commands.filter(command => command.op === "agent.environment").length > preloadsBeforeChange, "preference revision refreshes an open preview");
+  assert.equal(await page.evaluate(() => (window as unknown as { __promptGaps: number }).__promptGaps), 0, "refresh keeps the previous preview instead of blanking it");
   await select(a);
   await expectPrompt(promptA);
   await expectMemoryDirectory(a);

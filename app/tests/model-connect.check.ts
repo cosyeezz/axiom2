@@ -115,7 +115,10 @@ try {
     });
   });
   await page.goto(app.origin + "/model-config.html");
-  await page.locator("#add-supplier").click();
+  await page.locator("#add-supplier").click().catch(async error => {
+    console.error("Model settings startup:", await page.locator(".models-workspace").innerText(), errors);
+    throw error;
+  });
   const menu = page.getByRole("menu", { name: "接入方式" });
   assert.equal(await page.getByRole("dialog").count(), 0);
   await menu.getByRole("menuitem", { name: "OAuth 登录", exact: true }).click();
@@ -240,6 +243,8 @@ try {
   await page.locator("#configured-model-table tbody tr").first().hover();
   await page.locator("#configured-model-table button[aria-label^='编辑模型']").first().click();
   await capture("editor");
+  // Only dirty editors prompt before discarding; opening one alone is not a change.
+  await page.locator("#new-model-name").fill("Unsaved fixture rename");
   await page.locator("#model-editor").getByRole("button", { name: "取消", exact: true }).click();
   await page.getByRole("dialog", { name: "放弃当前模型编辑？" }).getByRole("button", { name: "放弃编辑", exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });

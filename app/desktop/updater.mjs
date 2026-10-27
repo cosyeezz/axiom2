@@ -123,6 +123,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     try {
       const installed = await installation(true);
       if (!installed) throw Error("后台尚未安装");
+      // This is the dependency on disk for the registered backend, not the SDK
+      // version reported by a running (possibly different) backend process.
       // Read from Node's dependency lookup directories without requiring the SDK:
       // pi exports only an ESM import condition, so require.resolve(piPackage) fails.
       for (const path of createRequire(installed.cli).resolve.paths(piPackage) ?? []) {
@@ -799,8 +801,15 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (await json(journalFile)) throw Error("上次更新尚未恢复，请先恢复旧版本。");
     const release = validateRelease(await json(releaseFile));
     if (version !== release.version) throw Error("更新版本已变化，请重新检查并确认。");
-    if (kind === "service") await updateService(installed, release);
-    else if (kind === "client") {
+    if (kind === "service") {
+      // A cached release is not authority to install an old "latest". Recheck at
+      // the execution boundary, before any download, stop or program replacement.
+      await progress("checking", "正在重新核实最新后台版本…");
+      const fresh = validateRelease((await check()).release);
+      const previous = release.assets["axiom2.tgz"], current = fresh.assets["axiom2.tgz"];
+      if (version !== fresh.version || previous.url !== current.url || previous.sha256 !== current.sha256 || previous.size !== current.size) throw Error("最新版本或发布附件已变化，请重新检查并确认；未停止旧服务。");
+      await updateService(installed, fresh);
+    } else if (kind === "client") {
       const installer = await download(release, "Axiom2.msi");
       const artifact = { version: release.version, asset: release.assets['Axiom2.msi'], taskId: execution.task.id, readyAt: Date.now() };
       await database(db => db.prepare('INSERT OR REPLACE INTO client_installer VALUES(1,?)').run(JSON.stringify(artifact)));

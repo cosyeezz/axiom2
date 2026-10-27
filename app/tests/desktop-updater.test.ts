@@ -107,6 +107,30 @@ test("desktop update refuses release assets outside the fixed repository", async
   assert.deepEqual(f.calls, []);
 });
 
+test("service execution rechecks latest and refuses an old confirmed cached version before downloading", async t => {
+  const f = await fixture(t); await f.updater.check();
+  f.release.tag_name = "v0.3.1";
+  for (const asset of f.release.assets) asset.browser_download_url = `${base}v0.3.1/${asset.name}`;
+  const requests: string[] = [];
+  const updater = createUpdater({ root: f.root, command: f.command, fetcher: async (url: string) => { requests.push(url); return f.fetcher(url); } });
+  const result = await updater.runJob("service", nextVersion);
+  assert.equal(result.job.phase, "error"); assert.match(result.job.message, /最新版本.*变化/);
+  assert.equal(requests.length, 1); assert.ok(requests[0].endsWith("/latest"));
+  assert.deepEqual(f.calls, []); assert.equal(f.state(), "running"); assert.equal(await f.installedVersion(), oldVersion);
+});
+test("latest metadata failure never falls back to cached service installation", async t => {
+  const f = await fixture(t); await f.updater.check(); let requests = 0;
+  const updater = createUpdater({ root: f.root, command: f.command, fetcher: async () => { requests++; return new Response("fixture denied", { status: 401 }); } });
+  const result = await updater.runJob("service", nextVersion);
+  assert.equal(result.job.phase, "error"); assert.match(result.job.message, /HTTP 401/); assert.equal(requests, 1);
+  assert.deepEqual(f.calls, []); assert.equal(await f.installedVersion(), oldVersion);
+});
+test("same-version changed release digest needs fresh confirmation, not a silent asset swap", async t => {
+  const f = await fixture(t); await f.updater.check(); f.release.assets[0].digest = `sha256:${"b".repeat(64)}`;
+  const result = await f.updater.runJob("service", nextVersion);
+  assert.equal(result.job.phase, "error"); assert.match(result.job.message, /发布附件已变化/); assert.deepEqual(f.calls, []);
+});
+
 test("download checksum failure preserves the running service and installed version", async (t) => {
   const f = await fixture(t);
   await f.updater.check();

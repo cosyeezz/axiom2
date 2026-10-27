@@ -1,11 +1,12 @@
 import { Fragment, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { nextDelivery, type ScrollDirection } from "./delivery-navigation.js";
+import { flushSync } from "react-dom";
 
 export interface TimelineNavigation {
   step: (direction: ScrollDirection) => boolean;
   cancel: () => void;
   /** Owns the viewport for an explicit jump to a physical edge. */
-  edge: (target: "top" | "bottom") => void;
+  edge: (target: "top" | "bottom", behavior?: "instant" | "smooth") => void;
   /** The jump's own scrolling must not be mistaken for a manual gesture. */
   edgeActive: () => boolean;
 }
@@ -18,6 +19,8 @@ export interface TimelineRow {
   isDelivery?: () => boolean;
   estimate: number;
   revision?: string;
+  /** A mounted lazy body still has only its loading placeholder. */
+  isPending?: () => boolean;
   /** The card disappears on expansion; anchor to its first source message. */
   expandTo?: string;
   segmentId?: string;
@@ -36,6 +39,17 @@ function selectedRows(root: HTMLElement | null) {
   return keys;
 }
 /** Variable-height windowing at whole-message/process boundaries. No visible pagination. */
+/**
+ * Keys that mean "go to an edge" (Home/End, macOS Cmd+Up/Down). A native
+ * Home/End animation targets the estimated edge: rows mounting on the way change
+ * it (Chrome stops short) and anchor correction cancels it (WebKit stops
+ * midway). Callers route these to the controlled `edge()` jump instead.
+ */
+export function timelineKeyEdge(event: Pick<KeyboardEvent, "key" | "metaKey" | "shiftKey" | "altKey" | "ctrlKey">) {
+  if (event.shiftKey || event.altKey || event.ctrlKey) return null;
+  return event.key === "Home" || event.metaKey && event.key === "ArrowUp" ? "top"
+    : event.key === "End" || event.metaKey && event.key === "ArrowDown" ? "bottom" : null;
+}
 export function VirtualTimeline({ rows, scroller, following, scrollPosition, reveal: editReveal, navigation }: {
   rows: TimelineRow[]; scroller: RefObject<HTMLElement | null>; following: RefObject<boolean>;
   scrollPosition?: RefObject<number>;
@@ -52,18 +66,23 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   // looks like a jump to a nearby delivery instead of the real top or bottom.
   const edgeHold = useRef<"top" | "bottom" | null>(null);
   const edgeFrame = useRef(0);
+  const edgeWatch = useRef<(() => void) | null>(null);
   const releaseEdge = () => {
     edgeHold.current = null;
     cancelAnimationFrame(edgeFrame.current);
     edgeFrame.current = 0;
+    edgeWatch.current?.(); edgeWatch.current = null;
   };
   useLayoutEffect(() => () => releaseEdge(), []);
   useLayoutEffect(() => { deliveryCursor.current = null; setReveal(editReveal); }, [editReveal?.key, editReveal?.revision]);
   const heights = useRef(new Map<string, number>());
   const [viewport, setViewport] = useState({ top: 0, height: 800 });
+  const renderedViewport = useRef(viewport); renderedViewport.current = viewport;
+  const fillBudget = useRef({ passes: 0, frame: 0, pending: false });
   const [, invalidate] = useState(0);
   const anchor = useRef<{ key: string; offset: number; messageId?: string } | null>(null);
   const positioning = useRef(false);
+  const scrollGesture = useRef({ active: false, position: 0 });
   const expandFocus = useRef<string | null>(null);
   const signature = rows.map(row => `${row.key}:${row.revision ?? ""}`).join("\n");
   const previousSignature = useRef(signature);
@@ -85,17 +104,28 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const el = scrollElement(), node = root.current;
     return el && node ? node.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop : 0;
   };
-  const record = () => {
+  const record = (manual = false) => {
     const el = scrollElement();
     if (!el || !hasLayout() || positioning.current) return;
-    // A native disclosure can shrink before ResizeObserver updates the window.
-    // The browser may temporarily clamp scrollTop while following rows are
-    // still estimated. Do not replace the reading anchor with that clamp.
-    for (const row of root.current?.querySelectorAll<HTMLElement>(':scope > [data-timeline-key]') ?? []) {
+    const mounted = [...root.current?.querySelectorAll<HTMLElement>(':scope > [data-timeline-key]') ?? []];
+    // A native disclosure can clamp scrollTop before its new height is measured.
+    // Preserve the old anchor for layout-only scrolling, but never discard a
+    // reader's new position just because an unrelated row is still resizing.
+    if (!manual) for (const row of mounted) {
       const measured = heights.current.get(row.dataset.timelineKey!);
       if (measured !== undefined && Math.abs(row.getBoundingClientRect().height - measured) > .5) return;
     }
     const { rows, offsets } = geometry.current;
+    const viewTop = el.getBoundingClientRect().top;
+    const visible = mounted.find(row => row.getBoundingClientRect().bottom > viewTop);
+    if (visible && (visible.getBoundingClientRect().top <= viewTop || visible.dataset.timelineKey === rows[0]?.key)) {
+      // Newly mounted rows already have real DOM heights while offsets can still
+      // contain estimates. Anchor to what the reader sees, not that stale model.
+      const key = visible.dataset.timelineKey!;
+      anchor.current = { key, offset: visible.getBoundingClientRect().top - viewTop,
+        messageId: rows.find(row => row.key === key)?.messageIds?.[0] };
+      return;
+    }
     const top = el.scrollTop - topInScroller();
     const i = rows.findIndex((_, i) => offsets[i + 1] > top);
     if (i >= 0) anchor.current = { key: rows[i].key, offset: offsets[i] - top, messageId: rows[i].messageIds?.[0] };
@@ -106,53 +136,107 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const top = el.scrollTop - topInScroller(), height = el.clientHeight;
     setViewport(old => old.top === top && old.height === height ? old : { top, height });
   };
+  const captureGesture = () => {
+    const el = scrollElement();
+    // Capture against the DOM/offset generation that received the gesture,
+    // before replacing offsets with a new batch of measured heights.
+    if (el && scrollGesture.current.active && Math.abs(el.scrollTop - scrollGesture.current.position) > .5) record(true);
+  };
   const restore = () => {
-    const el = scrollElement(), saved = anchor.current;
-    if (!el || !saved || following.current || !hasLayout() || edgeHold.current) return;
+    const el = scrollElement();
+    if (!el || following.current || !hasLayout() || edgeHold.current) return;
+    const saved = anchor.current;
+    if (!saved) return;
     const { rows, offsets } = geometry.current;
     let i = rows.findIndex(row => row.key === saved.key);
     const fallback = i < 0;
     if (i < 0 && saved.messageId) i = rows.findIndex(row => row.messageIds?.includes(saved.messageId!));
     if (i < 0) return;
-    const offset = fallback ? Math.max(0, Math.min(24, saved.offset)) : saved.offset;
+    // Storage promotion/renaming is not expansion to a different body. Keep a
+    // reader's negative inset inside the same first message, even after a key
+    // changes; clamping it to 0 would jump a tall reply back to its beginning.
+    const sameMessage = saved.messageId && rows[i].messageIds?.[0] === saved.messageId;
+    const offset = fallback && !sameMessage ? Math.max(0, Math.min(24, saved.offset)) : saved.offset;
     const top = topInScroller() + offsets[i] - offset;
     if (Math.abs(el.scrollTop - top) > .5) el.scrollTop = top;
+    scrollGesture.current.position = el.scrollTop;
     if (scrollPosition) scrollPosition.current = el.scrollTop;
   };
+  const commitHeights = () => {
+    captureGesture();
+    const current = geometry.current, offsets = [0];
+    for (const row of current.rows) offsets.push(offsets.at(-1)! + (heights.current.get(row.key) ?? row.estimate));
+    geometry.current = { ...current, offsets };
+    restore(); invalidate(n => n + 1); measureViewport();
+  };
   useImperativeHandle(navigation, () => ({
-    cancel: () => { releaseEdge(); deliveryCursor.current = null; positioning.current = false; setReveal(undefined); },
+    cancel: () => {
+      const controlled = positioning.current || edgeHold.current !== null;
+      releaseEdge(); deliveryCursor.current = null; positioning.current = false;
+      // A gesture can interrupt a smooth/streaming jump before its first scroll
+      // event. Transfer the DOM position now, not the anchor from before the jump.
+      if (controlled) record(true);
+      setReveal(undefined);
+    },
     edgeActive: () => edgeHold.current !== null,
-    edge: target => {
+    edge: (target, behavior = "instant") => {
       const el = scrollElement();
       if (!el) return;
       releaseEdge();
       edgeHold.current = target;
       positioning.current = true;
-      // Mounting and measurement happen over several frames. Keep the anchor
-      // untouched until the edge and the measured height both stop changing.
-      let previousHeight = -1, previousTop = -1, stable = 0, frames = 0;
-      const settle = () => {
+      // Native smooth scrolling runs on the compositor: even a synchronous
+      // scroll listener can mount the body AFTER a blank spacer was painted.
+      // Keep smooth motion, but commit each position and its virtual window in
+      // one main-thread frame. Newly measured rows can change the destination.
+      const start = performance.now();
+      const distance = Math.abs((target === "top" ? 0 : el.scrollHeight - el.clientHeight) - el.scrollTop);
+      const duration = behavior === "smooth" ? Math.min(1000, 180 + Math.sqrt(distance) * 2.5) : 0;
+      let previousProgress = 0, previousHeight = -1, stable = 0, frames = 0;
+      const settle = (now: number) => {
         edgeFrame.current = 0;
         const current = scrollElement();
         if (!current || edgeHold.current !== target || ++frames > 240) { releaseEdge(); positioning.current = false; record(); return; }
-        const top = current.scrollTop, moving = Math.abs(top - previousTop) > .5;
-        previousTop = top;
+        const elapsed = duration ? Math.min(1, (now - start) / duration) : 1;
+        const progress = 1 - (1 - elapsed) ** 3;
+        const fraction = previousProgress < 1 ? (progress - previousProgress) / (1 - previousProgress) : 1;
+        previousProgress = progress;
         const edge = target === "top" ? 0 : current.scrollHeight - current.clientHeight;
-        if (Math.abs(edge - top) > .5) {
-          // A smooth jump is still travelling. Only re-assert the edge once it
-          // stops, when newly mounted rows have displaced the final position.
-          if (!moving) current.scrollTo({ top: edge, behavior: "instant" });
-          stable = 0;
-        } else stable = current.scrollHeight === previousHeight ? stable + 1 : 0;
+        current.scrollTo({ top: current.scrollTop + (edge - current.scrollTop) * fraction, behavior: "instant" });
+        if (scrollPosition) scrollPosition.current = current.scrollTop;
+        flushSync(measureViewport);
+        const measuredEdge = target === "top" ? 0 : current.scrollHeight - current.clientHeight;
+        // Engines snap scrollTop to (device) pixels: WebKit to whole CSS px, so a
+        // fractional edge or target is reached within 1px, never within .5px.
+        stable = elapsed === 1 && Math.abs(measuredEdge - current.scrollTop) < 1 && current.scrollHeight === previousHeight ? stable + 1 : 0;
         previousHeight = current.scrollHeight;
-        if (stable >= 2) { releaseEdge(); positioning.current = false; record(); return; }
+        if (stable >= 2) {
+          const mounted = new Set([...root.current?.querySelectorAll<HTMLElement>("[data-timeline-key]") ?? []].map(row => row.dataset.timelineKey!));
+          if (geometry.current.rows.some(row => mounted.has(row.key) && row.isPending?.())) {
+            // Stable placeholder height is not a settled edge. Sleep until a
+            // body/measurement changes, retaining ownership without a busy rAF
+            // loop; the arriving body must get its own committed final position.
+            frames = 0;
+            return;
+          }
+          releaseEdge(); positioning.current = false; record(); return;
+        }
         edgeFrame.current = requestAnimationFrame(settle);
       };
-      edgeFrame.current = requestAnimationFrame(settle);
+      const schedule = () => {
+        if (!edgeFrame.current && edgeHold.current === target) edgeFrame.current = requestAnimationFrame(settle);
+      };
+      const changes = new MutationObserver(schedule), resize = new ResizeObserver(schedule);
+      if (root.current) { changes.observe(root.current, { childList: true, subtree: true, characterData: true }); resize.observe(root.current); }
+      resize.observe(el);
+      edgeWatch.current = () => { changes.disconnect(); resize.disconnect(); };
+      schedule();
     },
     step: direction => {
       const el = scrollElement(), node = root.current;
       if (!el || !node || !hasLayout()) return false;
+      // A reveal still in flight owns the cursor (rapid clicks).
+      const revealing = positioning.current && edgeHold.current === null;
       // Stepping returns to delivery control after a jump to an edge.
       releaseEdge(); positioning.current = false;
       const { rows, offsets } = geometry.current;
@@ -164,7 +248,13 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
         if (!row.delivery && !row.isDelivery?.() && !bounds) return [];
         return [{ key: row.key, start: bounds ? bounds.top - scrollerTop + el.scrollTop - origin : offsets[i] }];
       });
-      const target = nextDelivery(candidates, el.scrollTop - origin + 24, direction, deliveryCursor.current);
+      // The cursor also covers a delivery clamped at an edge, which can never sit
+      // on the reading line. Any other scroll since the reveal (selection or
+      // find autoscroll, programmatic jumps) leaves it off-screen: the reading
+      // line is then authoritative, not a stale step from an old position.
+      const top = el.scrollTop - origin, cursor = candidates.find(candidate => candidate.key === deliveryCursor.current);
+      const current = cursor && (revealing || cursor.start >= top - 1 && cursor.start <= top + el.clientHeight) ? cursor.key : null;
+      const target = nextDelivery(candidates, top + 24, direction, current);
       if (!target) return false;
       deliveryCursor.current = target.key;
       setReveal(previous => ({ key: target.key,
@@ -175,11 +265,58 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   useLayoutEffect(() => {
     const el = scrollElement();
     if (!el) return;
+    let gestureFrame = 0;
+    let scrollbarPointer: number | undefined;
+    // Keep ownership through touch/keyboard inertia, not just the first scroll
+    // event. Release after movement settles, including browsers without scrollend.
+    const settleGesture = () => {
+      cancelAnimationFrame(gestureFrame);
+      let top = el.scrollTop, stable = 0;
+      const settle = () => {
+        stable = Math.abs(el.scrollTop - top) <= .5 ? stable + 1 : 0;
+        top = el.scrollTop;
+        if (stable >= 2 && scrollbarPointer === undefined) { scrollGesture.current.active = false; gestureFrame = 0; }
+        else gestureFrame = requestAnimationFrame(settle);
+      };
+      gestureFrame = requestAnimationFrame(settle);
+    };
+    const gesture = () => {
+      if (!scrollGesture.current.active) scrollGesture.current.position = el.scrollTop;
+      scrollGesture.current.active = true; settleGesture();
+    };
+    const wheel = (event: WheelEvent) => { if (event.deltaY && !event.ctrlKey) gesture(); };
+    const key = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true]"))) return;
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) gesture();
+    };
+    const pointer = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" || event.target !== el) return;
+      const rect = el.getBoundingClientRect(), gutter = Math.max(14, el.offsetWidth - el.clientWidth);
+      if (event.clientX >= rect.right - gutter || event.clientX <= rect.left + gutter) { scrollbarPointer = event.pointerId; gesture(); }
+    };
+    const pointerMove = (event: PointerEvent) => { if (event.pointerId === scrollbarPointer) gesture(); };
+    const pointerUp = () => { scrollbarPointer = undefined; };
     const update = () => {
-      record();
-      if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; measureViewport(); });
+      record(scrollGesture.current.active);
+      scrollGesture.current.position = el.scrollTop;
+      if (scrollGesture.current.active) settleGesture();
+      const top = el.scrollTop - topInScroller(), previous = renderedViewport.current;
+      const buffer = Math.max(600, previous.height);
+      if (top < previous.top - buffer || top + el.clientHeight > previous.top + previous.height + buffer) {
+        // A thumb drag / large wheel step can outrun overscan in one event.
+        // Do not paint the old spacer for another frame before mounting its body.
+        cancelAnimationFrame(frame.current); frame.current = 0;
+        flushSync(measureViewport);
+      } else if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; measureViewport(); });
     };
     el.addEventListener("scroll", update, { passive: true });
+    el.addEventListener("wheel", wheel, { passive: true });
+    el.addEventListener("touchmove", gesture, { passive: true });
+    el.addEventListener("keydown", key);
+    el.addEventListener("pointerdown", pointer);
+    window.addEventListener("pointermove", pointerMove);
+    window.addEventListener("pointerup", pointerUp);
+    window.addEventListener("pointercancel", pointerUp);
     const selection = () => {
       const signature = JSON.stringify([...selectedRows(root.current)]);
       if (selectionSignature.current === signature) return;
@@ -192,6 +329,7 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
       if (!hasLayout()) return;
       const nextWidth = root.current?.getBoundingClientRect().width;
       if (width !== undefined && nextWidth !== undefined && Math.abs(nextWidth - width) > .5) {
+        captureGesture();
         heights.current.clear();
         const current = geometry.current, offsets = [0];
         for (const row of current.rows) offsets.push(offsets.at(-1)! + row.estimate);
@@ -202,10 +340,21 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     });
     resize.observe(el); if (root.current) resize.observe(root.current);
     measureViewport(); record();
-    return () => { el.removeEventListener("scroll", update); document.removeEventListener("selectionchange", selection); resize.disconnect(); cancelAnimationFrame(frame.current); frame.current = 0; };
+    return () => {
+      el.removeEventListener("scroll", update);
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("touchmove", gesture);
+      el.removeEventListener("keydown", key);
+      el.removeEventListener("pointerdown", pointer);
+      window.removeEventListener("pointermove", pointerMove);
+      window.removeEventListener("pointerup", pointerUp);
+      window.removeEventListener("pointercancel", pointerUp);
+      document.removeEventListener("selectionchange", selection);
+      resize.disconnect(); cancelAnimationFrame(gestureFrame); cancelAnimationFrame(frame.current); frame.current = 0;
+    };
   }, []);
   useLayoutEffect(() => {
-    if (previousSignature.current !== signature) { restore(); previousSignature.current = signature; }
+    if (previousSignature.current !== signature) { captureGesture(); restore(); previousSignature.current = signature; }
     measureViewport(); record();
   }, [rows]);
   useLayoutEffect(() => {
@@ -239,7 +388,7 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
       measureViewport();
       // At either physical edge the requested inset can be impossible.
       const clamped = Math.max(0, Math.min(top, el!.scrollHeight - el!.clientHeight));
-      stable = Math.abs(previousTop - top) < .5 && Math.abs(el!.scrollTop - clamped) < .5 ? stable + 1 : 0;
+      stable = Math.abs(previousTop - top) < .5 && Math.abs(el!.scrollTop - clamped) < 1 ? stable + 1 : 0;
       previousTop = top;
       if (stable >= 2) { positioning.current = false; record(); observer.disconnect(); }
       else schedule();
@@ -261,7 +410,6 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
     const observer = rowObserver.current ??= new ResizeObserver(entries => {
       if (!hasLayout()) return;
       let changed = false;
-      const current = geometry.current;
       for (const entry of entries) {
         const key = (entry.target as HTMLElement).dataset.timelineKey!;
         const height = entry.borderBoxSize[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
@@ -269,17 +417,32 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
         if (height >= 0 && Math.abs((heights.current.get(key) ?? -1) - height) > .5) { heights.current.set(key, height); changed = true; }
       }
       if (!changed) return;
-      const offsets = [0];
-      for (const row of current.rows) offsets.push(offsets.at(-1)! + (heights.current.get(row.key) ?? row.estimate));
-      geometry.current = { ...current, offsets };
-      restore(); invalidate(n => n + 1); measureViewport();
+      commitHeights();
     });
     const mounted = new Set(node.querySelectorAll<HTMLElement>(":scope > [data-timeline-key]"));
     for (const row of observed.current) if (!mounted.has(row)) observer.unobserve(row);
     for (const row of mounted) if (!observed.current.has(row)) observer.observe(row);
     observed.current = mounted;
+    if (!hasLayout()) return;
+    const unknown = [...mounted].filter(row => !heights.current.has(row.dataset.timelineKey!));
+    if (!unknown.length) return;
+    const budget = fillBudget.current;
+    if (budget.passes >= 24) { budget.pending = true; return; }
+    // Correct new rows before paint, rather than discovering a few short rows
+    // per ResizeObserver frame while the rest of the viewport is still spacer.
+    // Reads are batched, and pathological/empty histories get a bounded budget.
+    for (const row of unknown) heights.current.set(row.dataset.timelineKey!, row.getBoundingClientRect().height);
+    budget.passes++;
+    if (!budget.frame) budget.frame = requestAnimationFrame(() => {
+      budget.frame = 0; budget.passes = 0;
+      if (budget.pending) { budget.pending = false; invalidate(n => n + 1); }
+    });
+    commitHeights();
   });
-  useLayoutEffect(() => () => { rowObserver.current?.disconnect(); rowObserver.current = null; observed.current.clear(); }, []);
+  useLayoutEffect(() => () => {
+    rowObserver.current?.disconnect(); rowObserver.current = null; observed.current.clear();
+    cancelAnimationFrame(fillBudget.current.frame);
+  }, []);
   // Selection and focus pin only their own rows, never the entire history window.
   const pinned = selectedRows(root.current);
   const pin = (node: Node | null | undefined) => {
@@ -297,10 +460,20 @@ export function VirtualTimeline({ rows, scroller, following, scrollPosition, rev
   const expandedKey = expandFocus.current && rows.find(row => row.messageIds?.includes(expandFocus.current!))?.key;
   if (expandedKey) pinned.add(expandedKey);
   const overscan = Math.max(600, viewport.height);
+  // A keyed thread follows its tail before the parent can scroll the new DOM.
+  // Select that window from the current geometry on every render, including
+  // late catalogues and row measurements; never hydrate a head window first.
+  // Explicit navigation and selected/focused reading still own their viewport.
+  const windowTop = following.current && !positioning.current && !edgeHold.current && !pinned.size
+    ? Math.max(0, offsets.at(-1)! - viewport.height) : viewport.top;
   const visible = rows.map((row, i) => ({ row, i })).filter(({ row, i }) =>
-    offsets[i + 1] >= viewport.top - overscan && offsets[i] <= viewport.top + viewport.height + overscan || pinned.has(row.key));
+    offsets[i + 1] >= windowTop - overscan && offsets[i] <= windowTop + viewport.height + overscan || pinned.has(row.key));
   let end = 0;
-  return <div ref={root} className="virtual-timeline" data-total-rows={rows.length} data-window-top={Math.round(viewport.top)}>
+  // React deletes the old window's rows/spacers before inserting the new ones.
+  // WebKit clamps scrollTop to that transiently short content (Chrome does not),
+  // which threw a bottom/edge jump or a fast wheel back to 0. The root keeps the
+  // virtual total during commit; its own style updates after the children.
+  return <div ref={root} className="virtual-timeline" style={{ minHeight: offsets.at(-1) }} data-total-rows={rows.length} data-window-top={Math.round(windowTop)}>
     {visible.map(({ row, i }) => {
       const gap = offsets[i] - end; end = offsets[i + 1];
       return <Fragment key={row.key}>

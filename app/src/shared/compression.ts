@@ -1,5 +1,4 @@
 import type { Scope } from "./protocol.js";
-import type { Selection } from "./agent.js";
 
 export interface AutoCompression {
   enabled: boolean;
@@ -13,11 +12,10 @@ export function autoCompressionThreshold(settings: AutoCompression, contextWindo
     : settings.tokens;
 }
 export interface CompressionPreferences {
-  selection: Selection | null;
   auto: AutoCompression;
 }
 export const compressionPreferencesScope = "compression-preferences";
-export const emptyCompressionPreferences: CompressionPreferences = { selection: null, auto: defaultAutoCompression };
+export const emptyCompressionPreferences: CompressionPreferences = { auto: defaultAutoCompression };
 
 export interface Compression {
   id: string;
@@ -43,6 +41,10 @@ export interface Compression {
     output: number;
     total: number;
     cost: number | null;
+    cacheRead?: number;
+    cacheWrite?: number;
+    costParts?: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+    axiomKiro?: import("./kiro-usage.js").KiroUsageInfo;
   } | null;
 }
 export const compressionScope = (s: Scope) =>

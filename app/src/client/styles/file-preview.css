@@ -32,6 +32,11 @@
 .file-edit-action:hover:not(:disabled) { background:var(--surface);color:var(--fg) }
 .file-edit-action>.ui-glyph { width:16px;height:16px;--icon-stroke:1.2px }
 .file-editor { flex:1;min-height:0;min-width:0;width:100%;resize:none;border:0;border-radius:0;padding:16px 20px;background:var(--bg);color:var(--fg-2);font:12px/24px var(--font-mono);tab-size:2;outline-offset:-2px;overflow:auto }
+.file-section-bar { display:flex;flex:none;align-items:center;justify-content:space-between;gap:8px;padding:4px 16px;border-bottom:1px solid var(--border-soft);background:color-mix(in srgb, var(--accent) 5%, var(--bg));font-size:12px;line-height:1.6; }
+.file-section-bar > span { min-width:0;overflow-wrap:anywhere; }
+.file-section-bar strong { color:var(--fg);font-weight:500; }
+.file-section-bar small { display:inline-block;margin-left:10px;color:var(--muted);font-size:10px; }
+.file-section-bar > button { flex-shrink:0;color:var(--accent-hover); }
 .file-editor-notice { flex:none;margin:0;padding:8px 16px;font-size:12px;line-height:1.6;overflow-wrap:anywhere;border-bottom:1px solid var(--border);color:var(--fg-2) }
 .file-zoom { min-width: 36px; text-align: center; color: var(--muted); font: 10px var(--font-mono); }
 .file-preview-body { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }

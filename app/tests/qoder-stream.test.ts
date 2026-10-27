@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createModels, Type, type Context } from "@earendil-works/pi-ai";
 import { qoderProvider } from "../src/server/providers/qoder.js";
+import type { QoderStreamOptions } from "../src/server/providers/qoder-client.js";
 import { qoderFailure, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
 import { unwrapQoderSse } from "../src/server/providers/qoder-sse.js";
 
@@ -18,7 +19,7 @@ const envelope = (body: unknown, statusCodeValue = 200) => `data: ${JSON.stringi
 const sse = (chunks: unknown[]) => new Response(chunks.map(value => envelope(value)).join("") + envelope("[DONE]"), { headers: { "content-type": "text/event-stream" } });
 const context: Context = { systemPrompt: "保留所有工具和安全要求。".repeat(100), messages: [{ role: "user", content: "读取测试文件", timestamp: 1 }], tools: [{ name: "read", description: "读取", parameters: Type.Object({ path: Type.String() }) }] };
 const modelConfig = { key: "auto", display_name: "Auto fixture", max_input_tokens: 64000, max_output_tokens: 1024, is_reasoning: true, is_vl: true, source: "system", unknown_field: { retain: true } };
-async function fixture(region: QoderRegion = "cn") {
+async function fixture(region: QoderRegion = "cn", config: Record<string, unknown> = modelConfig) {
   const provider = qoderProvider(region), models = createModels(), calls: string[] = [];
   const transport: typeof fetch = async (input, init) => {
     const url = new URL(String(input)); calls.push(url.href);
@@ -27,7 +28,7 @@ async function fixture(region: QoderRegion = "cn") {
     if (url.pathname.endsWith("userinfo")) return json({ id: "fixture-user" });
     if (url.pathname.endsWith("model/list")) {
       assert.match(new Headers(init?.headers).get("authorization")!, /^Bearer COSY\./);
-      return json({ chat: [modelConfig, { key: "hidden", enable: false }] });
+      return json({ chat: [config, { key: "hidden", enable: false }] });
     }
     throw Error("Unexpected fixture endpoint");
   };
@@ -39,7 +40,8 @@ async function fixture(region: QoderRegion = "cn") {
   } finally { globalThis.fetch = previous; }
   models.setProvider(provider);
   const model = provider.getModels()[0];
-  assert.equal(provider.getModels().length, 1); assert.deepEqual(model.input, ["text", "image"]); assert.equal(model.reasoning, true);
+  assert.equal(provider.getModels().length, 1); assert.deepEqual(model.input, config.is_vl === true ? ["text", "image"] : ["text"]);
+  assert.equal(model.reasoning, config.is_reasoning === true);
   return { provider, models, model, calls, transport };
 }
 
@@ -124,7 +126,7 @@ test("Qoder fragmented parallel tools and tool results survive round-trip", asyn
   } });
   assert.equal(result.stopReason, "stop", result.errorMessage);
 });
-test("Qoder missing models, custom endpoint, images and HTTP errors fail without fallback, leakage or replay", async () => {
+test("Qoder missing models, custom endpoint, invalid images and HTTP errors fail without fallback, leakage or replay", async () => {
   const { models, model } = await fixture();
   let calls = 0;
   const fail: typeof fetch = async () => { calls++; return new Response("SECRET provider body", { status: 503 }); };
@@ -140,6 +142,260 @@ test("Qoder missing models, custom endpoint, images and HTTP errors fail without
   assert.equal(toolImage.stopReason, "error"); assert.equal(calls, 0);
   const error = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxRetries: 4, fetch: fail });
   assert.equal(error.stopReason, "error"); assert.equal(calls, 1); assert.ok(!error.errorMessage?.includes("SECRET"));
+});
+const png = { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } as const;
+const pngUrl = `data:${png.mimeType};base64,${png.data}`;
+test("Qoder catalog vision capability preserves ordered multi-turn images and official content/contents fields", async () => {
+  for (const region of ["cn", "intl"] as const) {
+    const { models, model } = await fixture(region);
+    const initial: Context = { ...context, messages: [{ role: "user", timestamp: 1, content: [
+      { type: "text", text: "before" }, png, { type: "text", text: "between" }, png, { type: "text", text: "after" },
+    ] }] };
+    let payloads = 0;
+    const first = await models.completeSimple(model, initial, { apiKey: "pt-FIXTURE", onPayload() { payloads++; }, fetch: async (_input, init) => {
+      const body = decode(String(init?.body)), user = body.messages.find((message: any) => message.role === "user");
+      assert.deepEqual(user.content, [{ type: "text", text: "before" }, { type: "image_url", image_url: { url: pngUrl } },
+        { type: "text", text: "between" }, { type: "image_url", image_url: { url: pngUrl } }, { type: "text", text: "after" }]);
+      assert.deepEqual(user.contents, user.content); assert.equal(body.model_config.is_vl, true);
+      assert.equal(body.chat_context.text, "before\nbetween\nafter"); assert.equal(body.chat_context.extra.originalContent, body.chat_context.text);
+      assert.equal(body.chat_context.imageUrls, null); assert.ok(!("image_urls" in body));
+      return sse([chunk({ content: "seen", reasoning_content: "compare" }, "stop")]);
+    } });
+    assert.equal(first.stopReason, "stop", first.errorMessage); assert.equal(payloads, 1);
+    const next: Context = { ...initial, messages: [...initial.messages, first, { role: "user", content: [{ type: "text", text: "recall" }, png], timestamp: 2 }] };
+    const result = await models.complete(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+      const body = decode(String(init?.body));
+      const messages = body.messages.filter((message: any) => message.role !== "system");
+      assert.equal(messages.length, 3); assert.deepEqual(messages[0].contents, messages[0].content);
+      assert.equal(messages[1].content, "seen"); assert.equal(messages[1].reasoning_content, "compare");
+      assert.deepEqual(messages[2].content, [{ type: "text", text: "recall" }, { type: "image_url", image_url: { url: pngUrl } }]);
+      assert.deepEqual(messages[2].contents, messages[2].content); assert.equal(body.chat_context.text, "recall");
+      return sse([chunk({ content: "recalled" }, "stop")]);
+    } });
+    assert.equal(result.stopReason, "stop", result.errorMessage);
+  }
+});
+test("Qoder native tool-result image projection preserves tool IDs, images and following user turn", async () => {
+  const { models, model } = await fixture();
+  const first = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", fetch: async () => sse([
+    chunk({ reasoning_content: "inspect", tool_calls: [{ index: 0, id: "image-read", type: "function", function: { name: "read", arguments: '{"path":"probe.png"}' } }] }, "tool_calls"),
+  ]) });
+  assert.equal(first.stopReason, "toolUse", first.errorMessage);
+  const next: Context = { ...context, messages: [...context.messages, first,
+    { role: "toolResult", toolCallId: "image-read", toolName: "read", isError: false, timestamp: 2,
+      content: [{ type: "text", text: "image from read" }, png] },
+    { role: "user", timestamp: 3, content: [{ type: "text", text: "Attached image(s) from tool result:" }, png] },
+  ] };
+  const result = await models.completeSimple(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+    const body = decode(String(init?.body)), tool = body.messages.findIndex((message: any) => message.role === "tool");
+    assert.equal(body.messages[tool].tool_call_id, "image-read");
+    assert.deepEqual(body.messages[tool].content, [{ type: "text", text: "image from read" }, { type: "image_url", image_url: { url: pngUrl } }]);
+    assert.deepEqual(body.messages[tool].contents, body.messages[tool].content);
+    assert.equal(body.messages[tool - 1].reasoning_content, "inspect");
+    assert.equal(body.messages[tool + 1].role, "user"); assert.deepEqual(body.messages[tool + 1].content[1], { type: "image_url", image_url: { url: pngUrl } });
+    assert.deepEqual(body.messages[tool + 1].contents, body.messages[tool + 1].content);
+    assert.equal(body.messages.length, tool + 2, "native tool images must not synthesize or remove a real user turn");
+    return sse([chunk({ content: "image read" }, "stop")]);
+  } });
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+});
+test("Qoder rejects nonvision catalogs, stale image metadata and invalid image data before inference", async () => {
+  for (const is_vl of [false, undefined, "true", "false", 1]) {
+    const { models, model } = await fixture("cn", { ...modelConfig, is_vl });
+    let calls = 0;
+    const fetch: typeof globalThis.fetch = async () => { calls++; throw Error("must not infer"); };
+    const imageContext: Context = { messages: [{ role: "user", timestamp: 1, content: [png] }] };
+    for (const selected of [model, { ...model, input: ["text", "image"] as ("text" | "image")[] }]) {
+      const result = await models.completeSimple(selected, imageContext, { apiKey: "pt-FIXTURE", fetch });
+      assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /图片/); assert.equal(calls, 0);
+    }
+  }
+  const { models, model } = await fixture();
+  const invalid = [
+    { ...png, data: "" }, { ...png, data: "!!!!" }, { ...png, data: "aGVsbG8=" }, { ...png, data: png.data.replace(/=$/, "") },
+    { ...png, mimeType: "image/svg+xml" }, { ...png, mimeType: "image/jpeg" },
+    { ...png, data: Buffer.alloc(5 * 1024 * 1024 + 1).toString("base64") },
+  ];
+  for (const content of [...invalid.map(image => [image]), Array.from({ length: 5 }, () => png)]) {
+    let calls = 0;
+    const result = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content }] }, {
+      apiKey: "pt-FIXTURE", fetch: async () => { calls++; throw Error("must not infer"); },
+    });
+    assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /图片/); assert.equal(calls, 0);
+  }
+  const stale = await models.completeSimple({ ...model, input: ["text"] }, { messages: [{ role: "toolResult", toolCallId: "image", toolName: "read", isError: false, timestamp: 1, content: [png] }] }, {
+    apiKey: "pt-FIXTURE", fetch: async () => { throw Error("must not infer"); },
+  });
+  assert.equal(stale.stopReason, "error"); assert.match(stale.errorMessage!, /重新拉取目录/);
+});
+test("Qoder explicit BYOK vision overrides work through provider option paths without reviving old user text", async () => {
+  const { models, model } = await fixture("cn", { ...modelConfig, is_vl: false });
+  const imageContext: Context = { messages: [...context.messages, { role: "user", timestamp: 2, content: [png] }] };
+  const customModelOverride = { api_key: "sk-FIXTURE", isVl: true };
+  for (const path of ["direct", "metadata", "sampling", "model"] as const) {
+    let calls = 0;
+    const options: QoderStreamOptions = {
+      apiKey: "pt-FIXTURE",
+      ...(path === "direct" ? { customModelOverride } : path === "metadata" ? { metadata: { qoder: { customModelOverride } } }
+        : path === "sampling" ? { samplingParams: { qoder: { customModelOverride } } } : {}),
+      fetch: async (_input, init) => {
+        calls++;
+        const body = decode(String(init?.body));
+        assert.equal(body.model_config.is_vl, true); assert.equal(body.model_config.key, "custom_model");
+        assert.equal(body.custom_model.parameters.api_key, "sk-FIXTURE");
+        assert.deepEqual(body.messages.at(-1).content, [{ type: "image_url", image_url: { url: pngUrl } }]);
+        assert.equal(body.chat_context.text, ""); assert.equal(body.chat_context.extra.originalContent, "");
+        return sse([chunk({ content: "custom image seen" }, "stop")]);
+      },
+    };
+    const selected = path === "model" ? { ...model, samplingParams: { qoder: { customModelOverride } } } : model;
+    const result = await models.completeSimple(selected, imageContext, options);
+    assert.equal(result.stopReason, "stop", `${path}: ${result.errorMessage}`); assert.equal(calls, 1);
+  }
+  let calls = 0;
+  const result = await models.completeSimple({ ...model, input: ["text", "image"] }, imageContext, {
+    apiKey: "pt-FIXTURE", metadata: { qoder: { customModelOverride: { ...customModelOverride, isVl: false } } },
+    samplingParams: { qoder: { customModelOverride } },
+    fetch: async () => { calls++; throw Error("must not infer"); },
+  });
+  assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /图片/); assert.equal(calls, 0);
+});
+test("Qoder accepts supported MIME headers and preserves image-only input without claiming full decoding", async () => {
+  const { models, model } = await fixture();
+  const images = [png, { type: "image", mimeType: "image/jpeg", data: Buffer.from([255, 216, 255, 224]).toString("base64") },
+    { type: "image", mimeType: "image/gif", data: Buffer.from("GIF89a").toString("base64") },
+    { type: "image", mimeType: "image/webp", data: Buffer.from("RIFF0000WEBP").toString("base64") }] as const;
+  const result = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content: [...images] }] }, {
+    apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+      const body = decode(String(init?.body));
+      assert.deepEqual(body.messages[0].content, images.map(image => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.data}` } })));
+      assert.deepEqual(body.messages[0].contents, body.messages[0].content); assert.equal(body.chat_context.text, "");
+      return sse([chunk({ content: "headers accepted" }, "stop")]);
+    },
+  });
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+});
+test("Qoder preserves adjacent tool-result IDs and ordered grouped images", async () => {
+  const { models, model } = await fixture();
+  const first = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", fetch: async () => sse([chunk({ tool_calls: [
+    { index: 0, id: "left", type: "function", function: { name: "read", arguments: '{"path":"left.png"}' } },
+    { index: 1, id: "right", type: "function", function: { name: "read", arguments: '{"path":"right.gif"}' } },
+  ] }, "tool_calls")]) });
+  const gif = { type: "image", mimeType: "image/gif", data: Buffer.from("GIF89a").toString("base64") } as const;
+  const next: Context = { ...context, messages: [...context.messages, first,
+    { role: "toolResult", toolCallId: "left", toolName: "read", isError: false, timestamp: 2, content: [png] },
+    { role: "toolResult", toolCallId: "right", toolName: "read", isError: false, timestamp: 2, content: [{ type: "text", text: "right" }, gif] },
+  ] };
+  const result = await models.completeSimple(model, next, { apiKey: "pt-FIXTURE", fetch: async (_input, init) => {
+    const body = decode(String(init?.body)), tools = body.messages.filter((message: any) => message.role === "tool");
+    assert.deepEqual(tools.map((message: any) => message.tool_call_id), ["left", "right"]);
+    assert.deepEqual(tools[0].content, [{ type: "image_url", image_url: { url: pngUrl } }]);
+    assert.deepEqual(tools[1].content, [{ type: "text", text: "right" }, { type: "image_url", image_url: { url: `data:${gif.mimeType};base64,${gif.data}` } }]);
+    for (const tool of tools) assert.deepEqual(tool.contents, tool.content);
+    assert.equal(body.messages.at(-1).role, "tool");
+    return sse([chunk({ content: "both" }, "stop")]);
+  } });
+  assert.equal(result.stopReason, "stop", result.errorMessage);
+});
+test("Qoder rejects single and replay-aggregate oversized images before hooks, serialization or transport, including concurrent requests", async () => {
+  const { models, model } = await fixture();
+  const image = (size: number) => {
+    const bytes = Buffer.alloc(size); Buffer.from(png.data, "base64").copy(bytes);
+    return { ...png, data: bytes.toString("base64") };
+  };
+  const large = image(2 * 1024 * 1024), small = image(1024 * 1024);
+  let calls = 0, hooks = 0;
+  const options = { apiKey: "pt-FIXTURE", onPayload() { hooks++; }, fetch: async () => { calls++; return sse([chunk({ content: "must not infer" }, "stop")]); } };
+  const transcripts: Context[] = [
+    { messages: [{ role: "user", timestamp: 1, content: [large] }] },
+    { messages: [{ role: "user", timestamp: 1, content: [small] }, { role: "user", timestamp: 2, content: [small] }] },
+    { messages: [{ role: "user", timestamp: 1, content: [small] }, { role: "toolResult", toolName: "read", toolCallId: "image", isError: false, timestamp: 2, content: [small] }] },
+  ];
+  const results = await Promise.all([...transcripts, ...transcripts].map(transcript => models.completeSimple(model, transcript, options)));
+  for (const result of results) { assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /6 MiB/); }
+  assert.deepEqual([calls, hooks], [0, 0]);
+});
+test("Qoder accounts for text escaping, final chat_context duplication and post-hook replacement before transport", async () => {
+  const { models, model } = await fixture();
+  let calls = 0;
+  const fetch: typeof globalThis.fetch = async () => { calls++; throw Error("must not infer"); };
+  const escaped = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content: "\u0000".repeat(800000) }] }, { apiKey: "pt-FIXTURE", fetch });
+  assert.equal(escaped.stopReason, "error"); assert.match(escaped.errorMessage!, /6 MiB/);
+  const duplicate = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content: "x".repeat(2 * 1024 * 1024) }] }, { apiKey: "pt-FIXTURE", fetch });
+  assert.equal(duplicate.stopReason, "error"); assert.match(duplicate.errorMessage!, /6 MiB/);
+  const replacement = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", fetch, onPayload: () => ({ messages: [{ role: "user", content: "x".repeat(5 * 1024 * 1024) }] }) });
+  assert.equal(replacement.stopReason, "error"); assert.match(replacement.errorMessage!, /6 MiB/); assert.equal(calls, 0);
+});
+test("Qoder rejects callable serialization hooks returned by onPayload without executing them or reaching transport", async () => {
+  const { models, model } = await fixture();
+  let hooks = 0, calls = 0, getters = 0;
+  const replacements = [
+    { toJSON() { hooks++; return { messages: [{ role: "user", content: "x".repeat(8 * 1024 * 1024) }] }; } },
+    { get messages() { getters++; return []; } },
+    { model: model.id, messages: [{ role: "user", content: Object.assign(function () {}, { toJSON() { hooks++; return "injected"; } }) }], stream: true },
+    { model: model.id, messages: [{ role: "user", content: Object.defineProperty(function () {}, "toJSON", { get() { getters++; return () => "injected"; } }) }], stream: true },
+  ];
+  for (const replacement of replacements) {
+    const result = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", onPayload: () => replacement,
+      fetch: async () => { calls++; throw Error("must not infer"); } });
+    assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /序列化钩子|访问器/);
+  }
+  assert.deepEqual([hooks, getters, calls], [0, 0, 0]);
+});
+test("Qoder HTTP error cleanup never blocks on body cancellation and preserves caller abort", { timeout: 2000 }, async () => {
+  const { models, model } = await fixture();
+  let cancelled = 0, calls = 0;
+  const response = (reject = false) => new Response(new ReadableStream({ cancel() {
+    cancelled++;
+    return reject ? Promise.reject(Error("SECRET cancellation failure")) : new Promise<void>(() => {});
+  } }), { status: 503 });
+  for (const reject of [false, true]) {
+    const result = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxRetries: 4,
+      fetch: async () => { calls++; return response(reject); } });
+    assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /HTTP 503/); assert.doesNotMatch(result.errorMessage!, /SECRET/);
+  }
+  const controller = new AbortController();
+  const aborted = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", signal: controller.signal,
+    fetch: async () => { calls++; controller.abort(); return response(); } });
+  assert.equal(aborted.stopReason, "aborted"); assert.deepEqual([cancelled, calls], [3, 3]);
+});
+test("Qoder keeps sanitized auth, catalog and network diagnostics without replay and preserves caller cancellation", async () => {
+  const { models, model } = await fixture();
+  let calls = 0;
+  const fail: typeof fetch = async () => { calls++; throw Error("Qoder SECRET-token"); };
+  const network = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", maxRetries: 4, fetch: fail });
+  assert.equal(network.stopReason, "error"); assert.match(network.errorMessage!, /网络请求失败.*未自动重放/); assert.equal(calls, 1);
+  const invalid = await models.completeSimple(model, context, { apiKey: "dt-SECRET-token", fetch: fail });
+  assert.equal(invalid.stopReason, "error"); assert.match(invalid.errorMessage!, /Personal Access Token/); assert.equal(calls, 1);
+  const exchange = await models.completeSimple(model, context, { apiKey: "pt-UNSEEN", fetch: fail });
+  assert.equal(exchange.stopReason, "error"); assert.match(exchange.errorMessage!, /网络或响应异常/); assert.equal(calls, 2);
+  const fresh = createModels(); fresh.setProvider(qoderProvider("cn"));
+  const catalog = await fresh.completeSimple(model, context, {
+    apiKey: JSON.stringify({ region: "cn", token: "dt-FIXTURE", userId: "fixture-user", machineId: "fixture-machine" }),
+    fetch: async input => { calls++; return String(input).includes("endpoints") ? json({ inferNodes: ["https://gateway.qoder.com.cn"] }) : json({ chat: [] }); },
+  });
+  assert.equal(catalog.stopReason, "error"); assert.match(catalog.errorMessage!, /账号没有可用模型/); assert.equal(calls, 4);
+  for (const result of [network, invalid, exchange, catalog]) assert.doesNotMatch(result.errorMessage!, /SECRET|Connection error/);
+  const controller = new AbortController(); let inference = 0;
+  const cancelled = await models.completeSimple(model, context, { apiKey: "pt-FIXTURE", signal: controller.signal, fetch: async (_input, init) => {
+    inference++; controller.abort(); init?.signal?.throwIfAborted(); throw Error("unreachable");
+  } });
+  assert.equal(cancelled.stopReason, "aborted"); assert.equal(inference, 1);
+});
+test("Qoder forced catalog refresh revokes stale vision capability without fallback", async () => {
+  const { provider, models, model, transport } = await fixture();
+  const previous = globalThis.fetch;
+  globalThis.fetch = async (input, init) => String(input).includes("model/list") ? json({ chat: [{ ...modelConfig, is_vl: false }] }) : transport(input, init);
+  try {
+    await provider.refreshModels!({ allowNetwork: true, force: true, signal: new AbortController().signal,
+      credential: { type: "api_key", key: "pt-FIXTURE" }, publish: async publication => { publication.update?.(); return true; } });
+  } finally { globalThis.fetch = previous; }
+  assert.deepEqual(provider.getModels()[0].input, ["text"]);
+  let calls = 0;
+  const result = await models.completeSimple(model, { messages: [{ role: "user", timestamp: 1, content: [png] }] }, {
+    apiKey: "pt-FIXTURE", fetch: async () => { calls++; throw Error("must not infer"); },
+  });
+  assert.equal(result.stopReason, "error"); assert.match(result.errorMessage!, /所选模型不支持图片/); assert.equal(calls, 0);
 });
 test("Qoder SSE handles bytewise Unicode and stops terminal keepalive", async () => {
   const bytes = new TextEncoder().encode(envelope(chunk({ content: "中文🙂" })) + envelope(chunk({ finish_reason: "stop" })) + envelope({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } }));

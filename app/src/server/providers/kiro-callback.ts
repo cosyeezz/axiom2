@@ -91,10 +91,23 @@ export async function kiroCallback(state: string, signal: AbortSignal, options: 
     async wait(interaction: ProviderAuthInteraction) {
       const promptController = new AbortController();
       try {
-        const manual = interaction.prompt({
-          type: "manual_code", signal: AbortSignal.any([signal, promptController.signal]),
-          message: `${options.oidc ? "请在浏览器完成 AWS 授权。" : "请在浏览器选择 Google / GitHub。"}若未自动完成，请粘贴最终 http://127.0.0.1 回调完整 URL；不要粘贴令牌。`,
-        }).then(parse);
+        const promptSignal = AbortSignal.any([signal, promptController.signal]);
+        const manual = (async () => {
+          for (;;) {
+            promptSignal.throwIfAborted();
+            // Prompt cancellation/rejection must propagate, not become a retry.
+            const value = await interaction.prompt({
+              type: "manual_code", signal: promptSignal,
+              message: `${options.oidc ? "请在浏览器完成 AWS 授权。" : "请在浏览器选择 Google / GitHub。"}若未自动完成，请粘贴最终 http://127.0.0.1 回调完整 URL；不要粘贴令牌。`,
+            });
+            promptSignal.throwIfAborted();
+            try { return parse(value); }
+            catch (error) {
+              if (error instanceof TerminalCallbackError) throw error;
+              interaction.notify({ type: "progress", message: "Kiro 回调 URL 无效或 state 不匹配，请检查并重新粘贴；也可继续等待浏览器回调。" });
+            }
+          }
+        })();
         return await Promise.race([result, manual]);
       } finally { settled = true; promptController.abort(); }
     },

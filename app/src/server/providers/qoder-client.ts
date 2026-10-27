@@ -46,7 +46,7 @@ export function qoderGeneration(value: unknown): Record<string, unknown> {
   if (typeof reasoning.preserve === "boolean") result.preserve_thinking = reasoning.preserve;
   return result;
 }
-function optionsFrom(input: QoderStreamOptions | undefined, body: Record<string, unknown>): QoderClientOptions {
+export function qoderClientOptions(input: QoderStreamOptions | undefined, body: Record<string, unknown>): QoderClientOptions {
   // metadata is useful to SDK callers; samplingParams.qoder is also editable in Axiom's model body editor.
   return { ...record(body.qoder), ...record(input?.metadata?.qoder), ...input };
 }
@@ -144,7 +144,7 @@ export function qoderMessages(context: TranscriptContext, model: Model<Api>, sup
   return { system, messages };
 }
 export function buildQoderRequest(body: Record<string, unknown>, config: QoderConfig, region: QoderRegion, model: Model<Api>, context: TranscriptContext, input?: QoderStreamOptions) {
-  const options = optionsFrom(input, body), { projection, custom } = modelProjection(config, options, model.id);
+  const options = qoderClientOptions(input, body), { projection, custom } = modelProjection(config, options, model.id);
   const parameters: Record<string, unknown> = { ...qoderGeneration(options.generation) };
   // Named Pi options and model sampling overrides are serialized into this intermediate body.
   const sampling = qoderGeneration({ temperature: body.temperature, topP: body.top_p, topK: body.top_k, maxTokens: body.max_tokens ?? body.max_completion_tokens });
@@ -178,7 +178,9 @@ export function buildQoderRequest(body: Record<string, unknown>, config: QoderCo
   delete parameters.context_length;
   if (qoderSupportsContext(config, window)) parameters.context_length = window;
   const { system, messages } = qoderMessages(context, model, !!projection.is_vl, parameters.preserve_thinking !== false);
-  const text = [...messages].reverse().find(message => message.role === "user" && typeof message.content === "string")?.content ?? "";
+  const lastUser = [...messages].reverse().find(message => message.role === "user")?.content;
+  const text = typeof lastUser === "string" ? lastUser : Array.isArray(lastUser)
+    ? lastUser.filter(part => object(part).type === "text").map(part => object(part).text).join("\n") : "";
   const requestId = options.requestId || randomUUID(), sessionId = input?.sessionId || requestId;
   const features = qoderFeatureSelections(config, options.functionSwitchSelections);
   const business = { ...(options.business ?? { product: "cli", version: "1.1.78", type: "agent", stage: "start", id: randomUUID(), name: String(text).slice(0, 30), begin_at: Date.now() }), ...(features ? { feature_switches: features } : {}) };

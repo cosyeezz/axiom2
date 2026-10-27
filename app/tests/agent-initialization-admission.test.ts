@@ -60,19 +60,20 @@ for (const kind of ["prompt", "child", "resume"] as const) {
   });
 }
 
-test("revocation after model-lock completion is checked again before initializing the execution profile", async () => {
-  const f = await fixture(), serial = f.models.serial.bind(f.models), prepareAuth = f.models.prepareAuth.bind(f.models);
-  let preparedAuth = false, revoked = false;
-  f.models.prepareAuth = async (...args: Parameters<typeof f.models.prepareAuth>) => { await prepareAuth(...args); preparedAuth = true; };
-  f.models.serial = (async (...args: Parameters<typeof f.models.serial>) => {
-    const result = await serial(...args);
-    if (preparedAuth && !revoked) { revoked = true; f.authorize(false); }
+test("revocation after model capture is checked again before initializing the execution profile", async () => {
+  const f = await fixture(), raw = f.models.raw.bind(f.models);
+  let revoked = false;
+  f.models.serial = async () => assert.fail("execution cannot wait on the model editor writer");
+  f.models.prepareAuth = async () => assert.fail("resource admission cannot preflight authentication");
+  f.models.raw = async () => {
+    const result = await raw();
+    if (!revoked) { revoked = true; f.authorize(false); }
     return result;
-  }) as typeof f.models.serial;
+  };
   const command = { requestId: randomUUID(), op: "prompt", ...f.scope, params: { text: "not sent" } };
   try {
     await assert.rejects(f.agents.command(command), { code: "AUTHORIZATION_REQUIRED" });
-    assert.equal(revoked, true, "revocation lands after the existing in-lock validation");
+    assert.equal(revoked, true, "revocation lands after capturing the request model definition");
     assert.equal(f.counts().profiles, 0); assert.equal(f.counts().acquisitions, 0);
     assert.equal(existsSync(join(f.cwd, ".pi")), false);
     assert.equal(f.store.receipt(command.requestId, f.scope).status, "failed");
@@ -83,17 +84,18 @@ test("revocation after model-lock completion is checked again before initializin
 });
 
 for (const change of ["revoke", "cancel"] as const) {
-  test(`cold reload ${change} after model-lock completion cannot initialize a profile`, async () => {
-    const f = await fixture(), serial = f.models.serial.bind(f.models); let changed = false;
-    f.models.serial = (async (...args: Parameters<typeof f.models.serial>) => {
-      const result = await serial(...args);
+  test(`cold reload ${change} after model capture cannot initialize a profile`, async () => {
+    const f = await fixture(), raw = f.models.raw.bind(f.models); let changed = false;
+    f.models.serial = async () => assert.fail("resource reload cannot wait on the model editor writer");
+    f.models.raw = async () => {
+      const result = await raw();
       if (!changed) {
         changed = true;
         if (change === "revoke") f.authorize(false);
         else (f.agents.reloads as any).jobs.get(f.scope.sessionId).controller.abort();
       }
       return result;
-    }) as typeof f.models.serial;
+    };
     try {
       await f.agents.command({ requestId: randomUUID(), op: "agent.reload", ...f.scope, params: {} });
       const deadline = Date.now() + 5000;

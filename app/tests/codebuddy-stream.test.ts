@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createModels, getSupportedThinkingLevels, Type, type Context, type AssistantMessage, type ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { createModels, getSupportedThinkingLevels, isContextOverflow, Type, type Context, type AssistantMessage, type ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { codeBuddyProvider } from "../src/server/providers/codebuddy-cn.js";
 
 function fixture() {
@@ -135,7 +135,7 @@ test("CodeBuddy tools aggregate fragmented arguments and replay tool results wit
   assert.equal(result.stopReason, "stop", result.errorMessage);
 });
 
-test("CodeBuddy reasoning is opt-in and none/off are omitted even after a payload hook", async () => {
+test("CodeBuddy reasoning is opt-in and explicit none/off omit summaries, not the disable signal", async () => {
   const { models, model } = fixture();
   for (const effort of [undefined, "none", "off"]) {
     const result = await models.completeSimple(model, context, {
@@ -143,7 +143,7 @@ test("CodeBuddy reasoning is opt-in and none/off are omitted even after a payloa
       onPayload: payload => ({ ...(payload as object), reasoning_effort: effort, reasoning_summary: "auto" }),
       fetch: async (_input, init) => {
         const body = JSON.parse(String(init?.body));
-        assert.equal(body.reasoning_effort, undefined);
+        assert.equal(body.reasoning_effort, effort === undefined ? undefined : "none");
         assert.equal(body.reasoning_summary, undefined);
         return sse([chunk({ content: "done" }, "stop")]);
       },
@@ -160,6 +160,26 @@ test("CodeBuddy reasoning is opt-in and none/off are omitted even after a payloa
   assert.equal(result.stopReason, "stop", result.errorMessage);
 });
 
+test("CodeBuddy UI off maps to explicit none for GLM and DeepSeek without suppressing received thinking", async () => {
+  const provider = codeBuddyProvider(), models = createModels();
+  models.setProvider(provider);
+  for (const id of ["glm-5.3", "deepseek-v4.1-flash"]) {
+    const model = provider.getModels().find(m => m.id === id)!;
+    const result = await models.completeSimple(model, context, {
+      // Agent maps UI off to undefined; pi then uses thinkingLevelMap.off.
+      apiKey: "FIXTURE", reasoning: undefined, maxRetries: 0,
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.reasoning_effort, "none", id);
+        assert.equal(body.reasoning_summary, undefined, id);
+        return sse([chunk({ reasoning_content: "fixture-only noncompliance", content: "done" }, "stop")]);
+      },
+    });
+    assert.equal(result.stopReason, "stop", result.errorMessage);
+    assert.equal(result.content.find(block => block.type === "thinking")?.thinking, "fixture-only noncompliance", "do not hide upstream thinking to fake a successful off request");
+  }
+});
+
 test("CodeBuddy surfaces HTTP-200 business errors, stream errors and incomplete streams", async () => {
   const { models, model } = fixture();
   for (const [response, pattern] of [
@@ -174,6 +194,112 @@ test("CodeBuddy surfaces HTTP-200 business errors, stream errors and incomplete 
     assert.match(result.errorMessage!, pattern);
     assert.ok(!result.errorMessage?.includes("SECRET"));
   }
+});
+
+test("CodeBuddy normalizes nested HTTP and SSE errors before SDK parsing without leaking upstream echoes", async () => {
+  const { models, model } = fixture();
+  const secret = "PRIVATE_AUTH_AND_REQUEST_ECHO";
+  const event = (value: unknown, name = "") => new Response(`${name ? `event: ${name}\n` : ""}data: ${JSON.stringify(value)}\n\n`, { headers: { "content-type": "text/event-stream" } });
+  for (const [label, response, pattern, overflow] of [
+    ["HTTP nested overflow", new Response(JSON.stringify({ error: { code: "context_length_exceeded", message: `prompt is too long ${secret}` } }), { status: 400 }), /context_length_exceeded/, true],
+    ["HTTP-200 nested overflow", new Response(JSON.stringify({ error: { code: "context_length_exceeded", message: secret } })), /context_length_exceeded/, true],
+    ["SSE nested overflow", event({ error: { code: "context_length_exceeded", message: secret, metadata: { raw: secret } } }), /context_length_exceeded/, true],
+    ["SSE message overflow", event({ error: { message: `Prompt is too long: 12345 ${secret}` } }), /context_length_exceeded/, true],
+    ["SSE unknown error", event({ error: { code: "unknown", message: secret, metadata: { raw: secret } } }), /CodeBuddy 请求失败/, false],
+    ["SSE named error", event({ code: 11102, message: secret }, "error"), /11102.*选择其他模型/, false],
+    ["SSE malformed named error", new Response(`event: error\ndata: ${secret}\n\n`, { headers: { "content-type": "text/event-stream" } }), /CodeBuddy 请求失败/, false],
+    ["SSE nested quota", event({ error: { code: 6004, message: `prompt is too long ${secret}` } }), /6004.*429/, false],
+    ["HTTP auth", new Response(JSON.stringify({ code: 401, msg: secret })), /401.*重新登录/, false],
+    ["HTTP model access", new Response(JSON.stringify({ code: 11102, msg: secret })), /11102.*选择其他模型/, false],
+    ["HTTP rate limit is not overflow", new Response(JSON.stringify({ error: { code: "context_length_exceeded", message: secret } }), { status: 429 }), /429/, false],
+  ] as const) {
+    const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0, fetch: async () => response });
+    assert.equal(result.stopReason, "error", label);
+    assert.match(result.errorMessage!, pattern, label);
+    assert.equal(isContextOverflow(result, model.contextWindow), overflow, label);
+    assert.ok(!result.errorMessage?.includes(secret), label);
+  }
+});
+
+test("CodeBuddy recognizes top-level string overflow codes and types in SSE errors", async () => {
+  const { models, model } = fixture();
+  for (const [field, code] of [["code", "context_length_exceeded"], ["type", "model_context_window_exceeded"], ["code", "prompt_too_long"], ["type", "input_too_long"]]) {
+    const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0,
+      fetch: async () => sse([{ [field]: code, message: "PRIVATE_ECHO" }]),
+    });
+    assert.equal(result.stopReason, "error");
+    assert.equal(isContextOverflow(result, model.contextWindow), true, `${field}: ${code}`);
+    assert.ok(!result.errorMessage?.includes("PRIVATE_ECHO"));
+  }
+});
+
+test("CodeBuddy authentication, permission and quota codes cannot be hidden by nested overflow strings", async () => {
+  const { models, model } = fixture();
+  for (const [code, expected] of [[401, 401], [403, 403], [429, 429], [11102, 403], [6004, 429], ["6004", 429]] as const) {
+    for (const nestedCode of ["context_length_exceeded", "unknown"]) {
+      for (const stream of [false, true]) {
+        const value = { code, error: { code: nestedCode, message: "prompt is too long PRIVATE_ECHO" } };
+        const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0,
+          fetch: async () => stream ? sse([value]) : new Response(JSON.stringify(value)),
+        });
+        assert.equal(result.stopReason, "error");
+        assert.equal(isContextOverflow(result, model.contextWindow), false, `${code}/${nestedCode}/SSE=${stream}`);
+        const pattern = stream ? code === 11102 ? /11102.*选择其他模型/ : new RegExp(`HTTP ${expected}`) : new RegExp(`^${expected}(?::| )`);
+        assert.match(result.errorMessage!, pattern);
+        assert.ok(!result.errorMessage?.includes("PRIVATE_ECHO"));
+      }
+    }
+  }
+  // Known nested codes also outrank an unrelated generic outer code.
+  const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0,
+    fetch: async () => sse([{ code: 12345, error: { code: 6004, message: "prompt is too long PRIVATE_ECHO" } }]),
+  });
+  assert.equal(isContextOverflow(result, model.contextWindow), false);
+  assert.match(result.errorMessage!, /6004.*429/);
+});
+
+test("CodeBuddy known HTTP-200 business failures retain correct statuses and do not masquerade as retryable gateways", async () => {
+  const { models, model } = fixture();
+  for (const [code, expected] of [[401, 401], [403, 403], [11102, 403], [6004, 429], [12345, 400]] as const) {
+    const result = await models.completeSimple(model, context, {
+      apiKey: "FIXTURE", maxRetries: 0,
+      fetch: async () => new Response(JSON.stringify({ code, msg: "PRIVATE_ECHO" }), { headers: { "retry-after": "7" } }),
+    });
+    assert.equal(result.stopReason, "error");
+    assert.match(result.errorMessage!, new RegExp(`^${expected}(?::| )`), `code ${code}`);
+    assert.ok(!result.errorMessage?.includes("PRIVATE_ECHO"));
+  }
+});
+
+test("CodeBuddy fragmented UTF-8, CRLF/multiline SSE, tool arguments and usage remain streaming", async () => {
+  const { models, model } = fixture();
+  const wire = `: heartbeat\r\n\r\ndata: ${JSON.stringify(chunk({ reasoning_content: "核验🧪", content: "银杏🧪" }))}\r\n\r\ndata: {"id":"chat-fixture",\r\ndata: "choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"read","arguments":"{\\\"path\\\":\\\"a\\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}\r\n\r\ndata: [DONE]\r\n\r\n`;
+  const bytes = new TextEncoder().encode(wire);
+  let cursor = 0;
+  const result = await models.completeSimple(model, context, { apiKey: "FIXTURE", maxRetries: 0, fetch: async () => new Response(new ReadableStream({
+    pull(controller) { if (cursor === bytes.length) controller.close(); else controller.enqueue(bytes.slice(cursor, ++cursor)); },
+  }), { headers: { "content-type": "text/event-stream" } }) });
+  assert.equal(result.stopReason, "toolUse", result.errorMessage);
+  assert.equal(result.content.find(block => block.type === "text")?.text, "银杏🧪");
+  assert.equal(result.content.find(block => block.type === "thinking")?.thinking, "核验🧪");
+  assert.deepEqual(result.content.find(block => block.type === "toolCall")?.arguments, { path: "a" });
+  assert.equal(result.usage.totalTokens, 12);
+});
+
+test("CodeBuddy active stream cancellation propagates through response normalization", async () => {
+  const { models, model } = fixture();
+  const controller = new AbortController();
+  let cancelled = false;
+  const stream = models.streamSimple(model, context, { apiKey: "FIXTURE", signal: controller.signal, maxRetries: 0, fetch: async (_input, init) => new Response(new ReadableStream({
+    start(source) {
+      source.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk({ content: "partial🧪" }))}\n\n`));
+      init?.signal?.addEventListener("abort", () => { cancelled = true; source.error(new DOMException("Aborted", "AbortError")); }, { once: true });
+    },
+  }), { headers: { "content-type": "text/event-stream" } }) });
+  for await (const event of stream) if (event.type === "text_delta") { controller.abort(); break; }
+  const result = await stream.result();
+  assert.equal(result.stopReason, "aborted");
+  assert.equal(cancelled, true);
 });
 
 test("CodeBuddy cancellation reaches the transport and produces an aborted result", async () => {

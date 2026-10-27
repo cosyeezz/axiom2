@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { startServer } from "../src/server/index.js";
 import { replyToFixtureTitle } from "./model-request-fixture.js";
+import { isCompressionRequest } from "./compression-memory-fixture.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "../src/server/request-selection.js";
 import { threadGroups } from "../src/shared/thread-layout.js";
 import { running, type Selection, type ChatMessage } from "../src/shared/agent.js";
@@ -60,7 +61,7 @@ test("change sits above the matching request or resumed process and is not folde
   assert.deepEqual(resumed[1].selectionChange, change);
 });
 
-test("real worker applies model/effort to the next run, retains active steering settings and persists notices", { timeout: 90000 }, async (t) => {
+test("real worker switches model/effort at the safe point before active steering and persists notices", { timeout: 90000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "axiom-model-switch-")), project = join(root, "project");
   mkdirSync(project); mkdirSync(join(root, "pi"));
   mkdirSync(join(project, ".pi", "extensions"), { recursive: true });
@@ -95,7 +96,7 @@ test("real worker applies model/effort to the next run, retains active steering 
     res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders();
     const chunk = (delta: unknown, finish_reason: string | null = null) => res.write(`data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
     chunk({ role: "assistant", content: "working" });
-    if (!body.tools?.length) {
+    if (isCompressionRequest(body) || JSON.stringify(body.messages?.[0]?.content).includes("You are a context summarization assistant")) {
       summaries++;
       chunk({ content: " summary" }); chunk({}, "stop"); res.end("data: [DONE]\n\n");
       return;
@@ -131,18 +132,23 @@ test("real worker applies model/effort to the next run, retains active steering 
     assert.deepEqual(app.agents.info(scope).selection, second);
     assert.deepEqual(app.agents.info(scope).run!.selection, first);
     assert.equal(notices().length, 0, "menu confirmation does not claim application");
+    const switchedRun = app.agents.info(scope).run!.id;
     await call("prompt", { text: "steer current execution" });
+    assert.equal(bodies.length, 1, "selection and steering cannot interrupt the active response");
     releases[0]();
-    await wait(() => releases.length === 2, "steering request starts");
-    assert.deepEqual(bodies.slice(0, 2).map((b) => [b.model, b.reasoning_effort]), [[first.id, "high"], [first.id, "high"]]);
+    await wait(() => releases.length === 2 && notices().length === 1, "steering request switches at the safe point");
+    assert.deepEqual(bodies.slice(0, 2).map((b) => [b.model, b.reasoning_effort]), [[first.id, "high"], [second.id, "low"]]);
+    assert.deepEqual(notices()[0].selectionChange, change);
+    assert.equal(app.agents.message(scope, notices()[0].id)?.role, "assistant", "mid-run notice anchors to the matching new-model response");
+    assert.equal(app.agents.message(scope, notices()[0].id)?.runId, switchedRun);
+    assert.deepEqual(app.agents.info(scope).run!.selection, second);
     await finish(1);
-    assert.equal(notices().length, 0);
+    assert.equal(notices().length, 1);
 
     await call("prompt", { text: "new model request" });
-    await wait(() => releases.length === 3 && notices().length === 1, "change visible during streaming");
+    await wait(() => releases.length === 3, "next run keeps the already applied model");
     assert.deepEqual([bodies[2].model, bodies[2].reasoning_effort], [second.id, "low"]);
-    assert.deepEqual(notices()[0].selectionChange, change);
-    assert.equal(app.agents.message(scope, notices()[0].id)?.text, "new model request");
+    assert.equal(notices().length, 1, "same model in the next run adds no duplicate notice");
     await finish(2);
 
     const effort = { ...second, thinking: "high" as const };
@@ -193,26 +199,26 @@ test("real worker applies model/effort to the next run, retains active steering 
 
     writeFileSync(join(root, "pi", "settings.json"), JSON.stringify({ retry: { enabled: false },
       compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 1 } }));
-    const beforeTruncation = notices();
     truncateNext = true;
     await call("agent.model", { selection: second });
     await call("prompt", { text: "recover a truncated switched response" });
     await wait(() => releases.length === 8, "truncated response starts");
     releases[7]();
-    await wait(() => !running(app.agents.info(scope).run), "truncated execution settles through the host compression flow");
-    assert.equal(releases.length, 8, "native overflow cannot start an automatic retry");
-    assert.equal(summaries, 0, "native overflow cannot bypass host compression preparation");
-    assert.deepEqual(notices(), beforeTruncation, "native recovery omits the truncated response from the visible projection");
+    await wait(() => releases.length === 9, "native overflow summarizes and retries the truncated response");
+    assert.ok(summaries > 0, "native overflow is an independent safety net");
+    await finish(8);
+    assert.equal(notices().length, 1, "native compaction folds older notices; only the retained retry announces the new selection");
+    assert.deepEqual(notices().at(-1)?.selectionChange, { from: first, to: second });
     await app.agents.compressions.command({ op: "compression.start", ...scope, requestId: randomUUID() });
-    await wait(() => releases.length === 9, "platform compression prepares session memory");
-    releases[8]();
+    await wait(() => releases.length === 10, "platform compression prepares session memory");
+    releases[9]();
     await wait(() => app.agents.compressions.info(scope)?.state !== "running" && !running(app.agents.info(scope).run), "platform compression settles");
     assert.equal(app.agents.compressions.info(scope)?.state, "completed", app.agents.compressions.info(scope)?.error ?? undefined);
     assert.ok(summaries > 0, "platform compression sends the summary request");
     await call("agent.model", { selection: first });
     await call("prompt", { text: "request after platform compression" });
-    await wait(() => releases.length === 10, "request after compression starts");
-    await finish(9);
+    await wait(() => releases.length === 11, "request after compression starts");
+    await finish(10);
     assert.deepEqual(notices().at(-1)?.selectionChange, { from: second, to: first }, "compaction preserves the last effective selection");
     assert.doesNotMatch(JSON.stringify(bodies.map((b) => b.messages)), /axiomSelectionChange|后续请求生效/);
     const before = notices(), requestCount = bodies.length;

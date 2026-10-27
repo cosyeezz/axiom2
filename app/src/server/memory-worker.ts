@@ -1,5 +1,6 @@
 import { configureModelNetwork, defaultModelsPath } from "./integrations/model-proxy-env.js";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { sessionSafePoint } from "./session-safe-point.js";
 import { cleanupSessionResources, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
@@ -9,6 +10,7 @@ import { memoryOrganizationOutputChars } from "../shared/memory-tree.js";
 import { organizationModelBudget } from "./memory-organization-capacity.js";
 import { AppError } from "../shared/protocol.js";
 import { ModelService } from "./model-service.js";
+import { invalidModelDefinition } from "./model-runtime.js";
 import { acceptsLease, awaitExecutionPermit, instanceSend, leaseSender, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 
 export interface MemoryWorkerInput {
@@ -17,14 +19,16 @@ export interface MemoryWorkerInput {
 }
 type Binding = { ref?: LeaseRef; controller: AbortController };
 let runtime: ModelRuntime | undefined, preparing: Promise<void> | undefined, active: Binding | undefined, closing = false;
+let requestInFlight = false;
 // This identifies a transport slot, never a model conversation. Each call sends a new complete Context.
 const transportId = `memory-${workerInstance?.instanceId ?? randomUUID()}`;
 async function prepare(input: Pick<MemoryWorkerInput, "root" | "modelsFile"> & { selection?: Selection }) {
   const provider = input.selection?.provider ?? process.env.AXIOM_MODEL_PROVIDER;
   if (!provider) throw Error("记忆执行环境缺少供应商配置。");
-  configureModelNetwork(input.root, input.modelsFile ?? defaultModelsPath(input.root), provider);
-  runtime ??= await new ModelService(input.root).runtime(input.modelsFile);
-  if (runtime.getError()) throw Error("记忆模型不可用，未静默切换");
+  configureModelNetwork(input.root, input.modelsFile ?? defaultModelsPath(input.root), provider,
+    { safePoint: sessionSafePoint({ phase: "worker-idle", requestInFlight }) });
+  runtime ??= await new ModelService(input.root).runtime(input.modelsFile, false, provider);
+  if (await invalidModelDefinition(input.modelsFile ?? defaultModelsPath(input.root), provider)) throw Error("记忆模型定义无效，未静默切换");
 }
 function exit() {
   cleanupSessionResources(transportId);
@@ -64,6 +68,7 @@ async function run(input: MemoryWorkerInput, binding: Binding) {
     const usageId = randomUUID();
     send({ type: "usage", id: usageId, provider: model.provider, model: model.id, usage: null });
     send({ type: "model_call" });
+    requestInFlight = true;
     const result = await runtime!.completeSimple(model, {
       systemPrompt: input.systemPrompt,
       messages: [{ role: "user", content: input.prompt, timestamp: Date.now() }],
@@ -71,6 +76,7 @@ async function run(input: MemoryWorkerInput, binding: Binding) {
       signal, sessionId: transportId, transport: "websocket", cacheRetention: "short", maxRetries: 0, ...outputOptions,
       ...(input.selection.thinking === "off" ? {} : { reasoning: input.selection.thinking }),
     });
+    requestInFlight = false;
     send({ type: "model_result", result });
     // Record incurred usage even when cancellation or an invalid stop reason prevents publication.
     send({ type: "usage", id: usageId, provider: result.provider, model: result.responseModel ?? result.model, usage: result.usage });
@@ -94,6 +100,7 @@ async function run(input: MemoryWorkerInput, binding: Binding) {
     success = true;
   } catch (error) { send({ type: "failed", error: error instanceof Error ? error.message : "记忆执行失败", code: error instanceof AppError ? error.code : undefined }); }
   finally {
+    requestInFlight = false;
     active = undefined;
     if (success && !closing && !signal.aborted) {
       send({ type: "execution_phase", stage: "clean", durationMs: 0 });

@@ -249,6 +249,41 @@ test('first foreground client receipt remains discoverable after a new job repla
   await writeFile(join(f.taskDir, 'foreground-exit.json'), JSON.stringify({ code: 1, success: false }));
   await assert.rejects(inspectInstallation(f.root), /完成凭据待核实/);
 });
+test('foreground latest update refuses changed target before any old command, stop or cleanup', async t => {
+  const f = await fixture(t), old = await oldInstall(f);
+  await assert.rejects(installForeground({ ...f.options, targetVersion: '1.2.2', requireLatest: true }), /最新版本已变化/);
+  assert.deepEqual(f.calls, []); assert.equal(await readFile(old.cli, 'utf8'), '// never executed');
+  assert.equal((await json(join(f.root, 'installation.json'))).cli, old.cli);
+});
+test('foreground latest-check failure preserves old program and never uses cached metadata', async t => {
+  const f = await fixture(t), old = await oldInstall(f);
+  await assert.rejects(installForeground({ ...f.options, targetVersion: '1.2.3', requireLatest: true, fetcher: async () => new Response('fixture denied', { status: 401 }) }), /HTTP 401/);
+  assert.deepEqual(f.calls, []); assert.equal(await readFile(old.cli, 'utf8'), '// never executed');
+});
+test('foreground latest update propagates pinned version and checks official metadata before old program calls', async t => {
+  const f = await fixture(t); await oldInstall(f); const events: string[] = [];
+  await installForeground({ ...f.options, targetVersion: '1.2.3', requireLatest: true,
+    fetcher: async (url: string) => {
+      events.push(url);
+      const result = await f.options.fetcher(url);
+      if (!url.endsWith('/latest')) return result;
+      const data = await result.json(); for (const asset of data.assets) asset.digest = `sha256:${checksum}`;
+      return Response.json(data);
+    }, command: async (node: string, args: string[]) => { events.push(`command:${args[1]}`); return f.command(node, args); },
+  });
+  assert.ok(events[0].endsWith('/latest')); assert.ok(!events.some(value => value.includes('/releases/tags/')));
+  assert.equal((await json(join(f.taskDir, 'foreground-result.json'))).version, '1.2.3');
+  assert.ok(!f.calls.some(args => args.includes('start')));
+});
+test('explicit foreground reinstall stays pinned rather than being forced to newest release', async t => {
+  const f = await fixture(t); const requests: string[] = [];
+  await installForeground({ ...f.options, repair: true, targetVersion: '1.2.3', requireLatest: false, fetcher: async (url: string) => {
+    requests.push(url); return f.options.fetcher(url.endsWith('/tags/v1.2.3') ? 'https://fixture.invalid/latest' : url);
+  } });
+  assert.ok(requests[0].endsWith('/tags/v1.2.3')); assert.ok(!requests.some(url => url.endsWith('/latest')));
+  assert.equal((await json(join(f.taskDir, 'foreground-result.json'))).version, '1.2.3');
+});
+
 test('normal native stderr is not an installation failure when actual close is zero', async () => {
   const output = await foregroundCommand(process.execPath, ['-e', 'process.stderr.write("npm WARN isolated fixture\\n");process.stdout.write("ok");'], { capture: true }); assert.equal(output, 'ok');
 });

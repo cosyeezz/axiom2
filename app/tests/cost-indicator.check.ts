@@ -32,7 +32,7 @@ const server = await createServer({
 });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
-type Amount = { dollars: number; unknown?: boolean; records?: number };
+type Amount = { dollars: number; unknown?: boolean; records?: number; estimated?: boolean };
 type Scope = { workspaceId: string; sessionId: string };
 const amounts = new Map<string, Amount>(), delays = new Map<string, number>();
 const key = (scope: Scope) => JSON.stringify([scope.workspaceId, scope.sessionId]);
@@ -42,11 +42,12 @@ const reads: Scope[] = [], inFlight = new Map<string, number>(), maxInFlight = n
 const reportFor = (scope: Scope): CostReport => {
   const amount = amounts.get(key(scope)) ?? { dollars: 0 };
   const own: CostRow = { ...emptyCostTotals(), records: amount.records ?? 1, knownCost: amount.dollars, unknownCost: amount.unknown ? 1 : 0,
-    id: "own", category: scope.sessionId === "parent" ? "main" : "subagent", sessionId: scope.sessionId, source: "fixture", provider: "fixture", model: "fixture" };
+    id: "own", category: scope.sessionId === "parent" ? "main" : "subagent", sessionId: scope.sessionId, source: "fixture", provider: "fixture", model: "fixture",
+    ...(amount.estimated ? { estimatedCost: amount.dollars, estimatedRecords: 1, estimateSources: ["glm-5.3 · 2026-10-27 · https://docs.z.ai/guides/overview/pricing"] } : {}) };
   own.tokens.input = 100; own.parts.input = amount.dollars;
   // Family spending is intentionally high: it must never color the current-session icon.
   const otherId = scope.sessionId === "parent" ? "sibling" : "parent";
-  const other: CostRow = { ...own, id: "other", category: "main", sessionId: otherId, knownCost: 250, unknownCost: 0, records: 1 };
+  const other: CostRow = { ...own, id: "other", category: "main", sessionId: otherId, knownCost: 250, unknownCost: 0, records: 1, estimatedCost: undefined, estimatedRecords: undefined, estimateSources: undefined };
   const rows = own.records ? [own, other] : [other];
   return { scope: { ...scope, sessionId: "parent" }, requestedSessionId: scope.sessionId, title: "费用图标测试", updatedAt: Date.now(),
     sessions: [{ id: scope.sessionId, title: "当前会话", taskId: scope.sessionId === "parent" ? null : "task", status: "completed" },
@@ -117,8 +118,8 @@ try {
   await update(12, { unknown: true }); await expectAmount("$12.0000 + 未知"); await expectLevel(1);
   assert.match((await cost.getAttribute("data-tooltip"))!, /至少橙色.*已知下限/);
   await update(1, { unknown: true }); await expectAmount("$1.0000 + 未知"); await show({ minutes: 1 }); await expectLevel(null);
-  await update(0, { unknown: true }); await expectAmount("预计费用（pi 定价）：未知"); await show({ minutes: 31 }); await expectLevel(3);
-  await show(); await update(0, { records: 0 }); await expectAmount("预计费用（pi 定价）：—"); await expectLevel(null);
+  await update(0, { unknown: true }); await expectAmount("预计费用（已记录价格／公开价估算）：未知"); await show({ minutes: 31 }); await expectLevel(3);
+  await show(); await update(0, { records: 0 }); await expectAmount("预计费用（已记录价格／公开价估算）：—"); await expectLevel(null);
 
   // Parent and child use their own row sums, never AgentInfo.usage.cost or report.total.
   await update(40); await expectLevel(4);
@@ -205,9 +206,16 @@ try {
     assert.equal(await pulsing.evaluate(el => getComputedStyle(el).animationName), "none");
     assert.equal(await pulsing.evaluate(el => getComputedStyle(el).opacity), "1");
   }
+  await show(); await update(2.36, { estimated: true }); await expectAmount("$2.3600（含估算）");
+  await cost.click(); await page.locator(".cost-session-facts").waitFor();
+  assert.equal(await page.locator(".cost-session-facts dd").first().textContent(), "$2.3600（含估算）");
+  await page.locator("#cost-main .cost-line > summary").first().click();
+  await page.waitForFunction(() => document.querySelector("#cost-main .cost-breakdown")?.textContent?.includes("https://docs.z.ai"));
+  assert.match(await page.locator("#cost-main .cost-breakdown").first().innerText(), /公开价估算.*2026-10-27/);
+  await page.screenshot({ path: join(output, "public-estimate-popover.png") }); await escape();
   assert.deepEqual(errors, [], "no browser runtime errors");
   writeFileSync(join(output, "results.json"), JSON.stringify({ passed: true, reads: reads.length, maxInFlight: Object.fromEntries(maxInFlight), errors,
-    checks: ["all dollar/minute boundaries", "max of both metrics", "unknown and partial prices", "own-session ledger not family/agent usage", "workspace/child/late-response isolation", "shared popover reads", "coalescing and serialized follow-up", "live threshold without timer scans", "dark/light hover/focus/expanded", "deeper cost red without changing the shared danger palette", "44px target and 16px glyph", "real CSS opacity and reduced motion"] }, null, 2));
+    checks: ["public estimate labels and source in current-session card and popover", "all dollar/minute boundaries", "max of both metrics", "unknown and partial prices", "own-session ledger not family/agent usage", "workspace/child/late-response isolation", "shared popover reads", "coalescing and serialized follow-up", "live threshold without timer scans", "dark/light hover/focus/expanded", "deeper cost red without changing the shared danger palette", "44px target and 16px glyph", "real CSS opacity and reduced motion"] }, null, 2));
   console.log("PASS: five cost tiers, ledger scope isolation, shared/serialized reads, live time, theme/interaction and reduced-motion animation");
 } finally {
   await browser.close(); await server.close(); rmSync(temporary, { recursive: true, force: true });

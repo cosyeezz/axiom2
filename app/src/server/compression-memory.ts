@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSession, BoundaryState, BoundaryResult } from "@earendil-works/pi-coding-agent";
+import { sessionSafePoint } from "./session-safe-point.js";
 
 export const compressionMemoryPrompt = "即将压缩上下文，请先整理并更新本会话记忆。记忆维护是当前任务的中间步骤，不改变用户目标或授权范围。维护后立即继续当前仍可推进的工作；压缩由程序在后台处理，无需等待，也不要仅以‘已更新记忆’结束回复。只有任务及必要验证完成，或确实需要用户输入、授权或遇到阻塞时才结束。";
 const customType = "axiom-compression-memory";
@@ -32,7 +33,8 @@ export class CompressionMemory {
   }
 
   boundary(id: string, event: BoundaryState): BoundaryResult | undefined {
-    if (!this.pending.has(id) || this.sent(id) || event.outcome !== "completed") return;
+    if (!this.pending.has(id) || this.sent(id) ||
+      !sessionSafePoint({ phase: "boundary", boundary: event }).allows("compression-memory")) return;
     if (event.context.contextMessages.some(value => matches(value, id))) return { continue: true };
     return { entries: [...event.entries, { type: "custom_message", ...message(id) }], continue: true };
   }

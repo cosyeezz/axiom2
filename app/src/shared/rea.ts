@@ -1,6 +1,11 @@
 import type { CleanupScope } from "./cleanup-scope.js";
 import type { ReaEngineId, ReaEngineState } from "./rea-engines.js";
-export const reaVersion = "6.7.0";
+export const reaVersion = "6.8.0";
+export type ReaAutoBudget = {
+  mode: "auto"; memoryMiB: number; heapMiB: number; heapMaximumMiB: number; cpus: number;
+  operationTimeoutMs: number; operationMaximumMs: number; requestTimeoutSeconds: number;
+  concurrency: number; retryLimit: number; totalDeadlineMs: number;
+};
 export type ReaJob = { id: string; kind: "check" | "install" | "doctor" | "engines-check" | "engine-check" | "engine-install" | "engine-download" | "engine-open-installer" | "uninstall" | "engine-uninstall" | "clearDownloads"; engine?: ReaEngineId; running: boolean; message: string; error?: string; startedAt?: number; recommendation?: { version: string; reaVersion: string; platform: string; arch: string } };
 export type ReaState = {
   revision: string;
@@ -26,6 +31,7 @@ export type ReaState = {
   job?: ReaJob;
   jobs?: ReaJob[];
   diagnostic?: { text: string; toolCount: number; at: number };
+  autoEnvironment?: { budget: ReaAutoBudget; dependencies: { variable: string; path: string; source: "environment" | "discovered" }[] };
   engines?: ReaEngineState[];
   engineHost?: { platform: string; arch: string };
   error?: string;

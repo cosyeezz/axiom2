@@ -1,11 +1,13 @@
 import { latencyFor } from "../latency.js";
 import { randomUUID } from "node:crypto";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import { ExecutionPool, type ExecutionLease } from "../execution-pool.js";
 import { fileRevision } from "../execution-profile.js";
 import { sameLease, ExecutionPermitDeniedError } from "../execution-protocol.js";
 import { AppError, type Scope, type Draft } from "../../shared/protocol.js";
-import { agentScope, threadScope, type Run } from "../../shared/agent.js";
+import { agentScope, threadScope, type Run, type Selection } from "../../shared/agent.js";
 import type { Store } from "../storage.js";
 import type { StopSource } from "../../shared/tasks.js";
 import type { WorkerInput } from "../agent-worker.js";
@@ -25,6 +27,10 @@ type Live = {
   terminating?: boolean;
   validatingIdle?: boolean;
   closed?: boolean;
+  modelRevision?: number;
+  modelSelection?: Selection;
+  modelChanged?: boolean;
+  provider?: string;
   receive?: (event: any) => void;
   timer?: NodeJS.Timeout;
   inputs: Map<string, { draft: Draft; mode: "steer" | "followUp"; pending: boolean; failed?: boolean }>;
@@ -41,6 +47,7 @@ export class AgentRuns {
     readonly pool = new ExecutionPool(),
   ) {}
   private live = new Map<string, Live>();
+  private modelFiles = new Map<ChildProcess, string>();
   private epochs = new Map<string, number>();
   private automaticStops = new Map<string, Promise<void>>();
   private pending = new Map<string, { scope: Scope; run: Run; input: WorkerInput; lease: ExecutionLease; done: Promise<void> }>();
@@ -75,6 +82,13 @@ export class AgentRuns {
     }).catch(() => {});
     return stopped;
   }
+  setModel(scope: Scope, selection: Selection, modelsRaw: string) {
+    const live = this.live.get(scope.sessionId);
+    if (!live || live.closed || live.finish || live.run.status === "stopping") return;
+    live.modelSelection = { ...selection };
+    const revision = live.modelRevision = (live.modelRevision ?? 0) + 1;
+    this.signal(scope, live.run.id, { type: "model", revision, selection, modelsRaw });
+  }
   signal(scope: Scope, runId: string, value: Record<string, unknown>) {
     this.store.session(scope.workspaceId, scope.sessionId);
     const live = this.live.get(scope.sessionId);
@@ -93,8 +107,13 @@ export class AgentRuns {
       return false;
     let reported = false;
     const uncertain = () => {
-      if (reported || value.type !== "input") return;
+      if (reported || !["input", "model"].includes(String(value.type))) return;
       reported = true;
+      if (value.type === "model") {
+        queueMicrotask(() => live.receive?.({ type: "model-switch-error", runId, lease: live.lease.ref,
+          error: "模型切换发送结果未获确认；已停止当前执行，所选模型已保留。请核对记录后继续执行。" }));
+        return;
+      }
       // send() failure does not prove the worker received nothing. Report it
       // after enqueue has installed its receipt waiter, without replaying.
       const items = Array.isArray(value.notifications) ? value.notifications : [{ id: value.id }];
@@ -108,7 +127,7 @@ export class AgentRuns {
       return true; // false from child.send() is backpressure, not rejection.
     } catch {
       uncertain();
-      return value.type === "input";
+      return value.type === "input" || value.type === "model";
     }
   }
   private confirmLateInput(live: Live, id: string, status: "committed" | "failed", data: object) {
@@ -215,9 +234,22 @@ export class AgentRuns {
     this.assertEpoch(scope, epoch);
     if (!this.pool.isActive(lease.ref)) throw new AppError("AGENT_STOPPED", "启动期间会话已停止；未发送请求。");
     if (!verified || !lease.environment.current(false) || !lease.environment.snapshotValid())
-      throw new AppError("REVISION_CONFLICT", "工作进程准备期间配置或资源已变化；消息未发送。");
+      throw new AppError("REVISION_CONFLICT", "工作进程准备期间资源已变化或内部执行快照损坏；消息未发送。");
     lease.beforeExecute?.();
-    input.modelsFile = lease.environment.modelsFile;
+    // The shared execution snapshot remains immutable. A physical agent owns a
+    // private writable copy for later safe-point selections, even across affinity reuse.
+    let modelsFile = this.modelFiles.get(child);
+    if (!modelsFile) {
+      modelsFile = join(this.store.root, "execution-models", `${lease.ref.instanceId}.live.json`);
+      writeFileSync(modelsFile, readFileSync(lease.environment.modelsFile), { flag: "wx", mode: 0o600 });
+      this.modelFiles.set(child, modelsFile);
+      const owned = modelsFile;
+      child.once("close", () => {
+        this.modelFiles.delete(child);
+        try { rmSync(owned, { force: true }); } catch { /* Startup retries owned-file cleanup. */ }
+      });
+    }
+    input.modelsFile = modelsFile;
     input.executionGate = true;
     let exited!: () => void;
     const live: Live = {
@@ -238,7 +270,7 @@ export class AgentRuns {
     const onMessage = async (event: any) => {
       if (this.live.get(scope.sessionId) !== live || live.run.status === "stopping" || event.runId !== run.id || !sameLease(event.lease, lease.ref)) return;
       try {
-        if (event.type === "idle" && live.finish && !live.storageFailed && !live.terminating && !this.closing) {
+        if (event.type === "idle" && live.finish && !live.storageFailed && !live.terminating && !live.modelChanged && !this.closing) {
           if (live.validatingIdle) return;
           live.validatingIdle = true;
           // Worker cleanup has completed. Bound resource verification separately;
@@ -249,6 +281,23 @@ export class AgentRuns {
           if (verified && !live.storageFailed && lease.environment.current(false) && lease.environment.snapshotValid()) settle(true);
           else this.kill(live);
           return;
+        }
+        if (event.type === "model-switch-error") {
+          live.finish = { status: "failed", reasonCode: "MODEL_SWITCH_UNCERTAIN", error: event.error };
+          this.kill(live);
+          return;
+        }
+        if (event.type === "model-applied") {
+          live.provider = event.selection.provider;
+          live.modelChanged ||= event.changed;
+        }
+        if (event.type === "model-request") {
+          live.provider = event.provider;
+          if (JSON.stringify(live.run.selection) !== JSON.stringify(event.selection)) {
+            live.run.selection = event.selection;
+            this.store.db.prepare("UPDATE runs SET selection=? WHERE id=?").run(JSON.stringify(event.selection), run.id);
+            this.views.changed(scope);
+          }
         }
         if (event.type === "input-accepted") {
           const input = live.inputs.get(event.id);
@@ -528,7 +577,12 @@ export class AgentRuns {
   }
   affected(providers: string[]) {
     return [...new Map([...this.live.values(), ...this.pending.values()]
-      .filter((l) => providers.includes(l.run.selection.provider))
+      .filter((l) => {
+        const live = this.live.get(l.scope.sessionId);
+        return providers.includes(l.run.selection.provider) ||
+          !!live?.provider && providers.includes(live.provider) ||
+          !!live?.modelSelection && providers.includes(live.modelSelection.provider);
+      })
       .map((l) => [l.scope.sessionId, l])).values()]
       .map((l) => ({
         ...l.scope,

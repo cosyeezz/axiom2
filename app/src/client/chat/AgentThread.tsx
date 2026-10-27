@@ -13,8 +13,7 @@ import { ProcessFlow } from "./ProcessFlow.js";
 import { ModelRequestStatus, pendingModelActivity } from "./ProcessStatus.js";
 import { RetryAction } from "./RetryAction.js";
 import { Environment } from "./SessionState.js";
-import { RestoreSubmission } from "./RestoreSubmission.js";
-import { optimisticState, pendingMessageStatus, useOptimistic } from "./optimistic.js";
+import { optimisticState, useOptimistic } from "./optimistic.js";
 import { SkillCards } from "./SkillCards.js";
 import { Markdown } from "./Markdown.js";
 import { MessageImages } from "./MessageImages.js";
@@ -25,7 +24,7 @@ import { useDisclosureReveal } from "./useDisclosureReveal.js";
 import { useThreadScrollIntent } from "./useThreadScrollIntent.js";
 import { OriginalMessages, useHistoryConversation, useThreadMessage } from "./OriginalConversation.js";
 import { useHistoryRows } from "./HistoryTimeline.js";
-import { VirtualTimeline, type TimelineNavigation } from "./VirtualTimeline.js";
+import { VirtualTimeline, timelineKeyEdge, type TimelineNavigation } from "./VirtualTimeline.js";
 import type { ScrollDirection } from "./delivery-navigation.js";
 import { DerivedContext, sessionDerivedCache } from "./derived-cache.js";
 import "../styles/thread-navigation.css";
@@ -69,6 +68,9 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
       (el.contains(selection.anchorNode) || el.contains(selection.focusNode));
   };
   const scrollToBottom = () => {
+    // An explicit edge jump owns its animation and settles new row measurements.
+    // ResizeObserver must not turn that smooth movement into an instant tail snap.
+    if (timelineNavigation.current?.edgeActive()) return;
     cancelReveal();
     const el = scroller.current;
     if (!el) return;
@@ -215,16 +217,29 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
     // No more delivery starts in this direction: the same arrow reaches the edge.
     cancelNavigation();
     bottom.current = direction === "down";
-    const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
-    smoothBottomTarget.current = direction === "down" && behavior === "smooth" ? el.scrollHeight - el.clientHeight : null;
-    el.scrollTo({ top: direction === "up" ? 0 : el.scrollHeight, behavior });
-    // A physical edge is not a delivery: the virtual window keeps owning this jump
-    // so rows it mounts above or below cannot restore an older reading anchor.
-    timelineNavigation.current?.edge(direction === "up" ? "top" : "bottom");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A long jump crosses rows whose heights are still estimates: every frame
+    // mounts and measures them, the tail keeps moving, and the animation
+    // repaints shifting content — that reads as constant flicker. Reserve the
+    // animation for distances whose heights are known and stable.
+    const distance = Math.abs((direction === "up" ? 0 : el.scrollHeight - el.clientHeight) - el.scrollTop);
+    const behavior = reduced || distance > el.clientHeight * 1.5 ? "instant" : "smooth";
+    // Only the native fallback needs a fixed destination. A virtual edge owns
+    // and remeasures its target; retaining an estimated old height can leave
+    // following stuck in "still navigating" after the real height shrinks.
+    smoothBottomTarget.current = !timelineNavigation.current && direction === "down" && behavior === "smooth" ? el.scrollHeight - el.clientHeight : null;
+    // The virtual window commits the smooth position and newly mounted bodies
+    // together; a native compositor animation can otherwise paint only spacer.
+    if (timelineNavigation.current) timelineNavigation.current.edge(direction === "up" ? "top" : "bottom", behavior);
+    else el.scrollTo({ top: direction === "up" ? 0 : el.scrollHeight, behavior });
   };
   return <div className="thread-shell">
     <section ref={scroller} className="thread" id={nested ? undefined : "thread"} tabIndex={-1} aria-label="消息记录"
-      onWheel={() => { manualScroll.current = performance.now(); cancelNavigation(); }}
+      onWheel={(event) => {
+        // Pinch-zoom (ctrl+wheel) and horizontal scrolling in code blocks do not move the thread.
+        if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        manualScroll.current = performance.now(); cancelNavigation();
+      }}
       onTouchMove={() => { manualScroll.current = performance.now(); cancelNavigation(); }}
       onPointerDown={(event) => {
         // A plain tap is not scrolling. Only a mouse grab in the scrollbar
@@ -232,9 +247,21 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         if (event.pointerType !== "mouse" || event.target !== event.currentTarget) return;
         const rect = event.currentTarget.getBoundingClientRect();
         const gutter = Math.max(14, event.currentTarget.offsetWidth - event.currentTarget.clientWidth);
-        if (event.clientX >= rect.right - gutter || event.clientX <= rect.left + gutter) manualScroll.current = performance.now();
+        if (event.clientX >= rect.right - gutter || event.clientX <= rect.left + gutter) {
+          manualScroll.current = performance.now();
+          cancelNavigation();
+        }
       }}
-      onKeyDown={(event) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) { manualScroll.current = performance.now(); cancelNavigation(); } }}
+      onKeyDown={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        // Keys handled by inputs or buttons do not scroll the thread.
+        if (event.defaultPrevented
+          || target?.closest("input, textarea, select, [contenteditable=true]")) return;
+        if (event.key === " " && target?.closest("button, summary, [role=button]")) return;
+        const edge = timelineKeyEdge(event);
+        if (edge && timelineNavigation.current) { event.preventDefault(); scroll(edge); return; }
+        if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) { manualScroll.current = performance.now(); cancelNavigation(); }
+      }}
       onClickCapture={(event) => {
         // Plain text/background clicks do not express an intent to stop following.
         // Pause before controls expand or asynchronously load content for reading.
@@ -246,9 +273,10 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         const delta = n.scrollTop - scrollPosition.current;
         const movedDown = delta > 0;
         if (Math.abs(delta) > 1) {
-          // Our own jump to a physical edge keeps owning the viewport until the
-          // mounted rows settle; its scroll events are not a new gesture.
-          if (!timelineNavigation.current?.edgeActive()) cancelNavigation();
+          // Scroll is also emitted by row measurement, layout clamps and a
+          // lazy delivery reveal. It is not evidence of user takeover. The
+          // wheel/touch/key/scrollbar handlers above cancel navigation directly;
+          // cancelling here can discard a target before its body has arrived.
           if (performance.now() - manualScroll.current < 1500) {
             manualScroll.current = performance.now();
             showNavigation(delta > 0 ? "down" : "up");
@@ -270,7 +298,9 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
         {history.error && <p className="execution-alert" role="alert">历史索引读取失败，已保留当前对话。{history.error} <button type="button" className="btn" onClick={history.retry}>重新加载</button></p>}
         <DerivedContext.Provider value={sessionDerivedCache(`${scope?.workspaceId}:${scope?.sessionId}`)}>
         <OriginalMessages.Provider value={history.store}>
-        {scope?.sessionId && <VirtualTimeline rows={rows} scroller={scroller} following={bottom} scrollPosition={scrollPosition} navigation={timelineNavigation}
+        {/* A catalogue can arrive before its message collection. Do not measure
+            those missing bodies as zero-height rows and fill the entire history. */}
+        {scope?.sessionId && historyReceived && <VirtualTimeline rows={rows} scroller={scroller} following={bottom} scrollPosition={scrollPosition} navigation={timelineNavigation}
           reveal={editReveal && revealKey ? { key: revealKey, selector: `[data-edit-message-id="${CSS.escape(editReveal.messageId)}"]`, revision: editReveal.revision } : undefined} />}
         </OriginalMessages.Provider>
         </DerivedContext.Provider>
@@ -279,13 +309,10 @@ function ThreadView({ scope, nested = false, readingRevision = 0, task, briefRev
             {(item.draft.attachments ?? []).filter((a) => a.kind !== "image").map((a) => <span className="meta" key={a.id}>{a.name} </span>)}
             <SkillCards skills={item.draft.skills} scope={scope} />
             <MessageImages images={item.message.images} scope={scope} messageId={item.id} />
-          </div><small className="meta" role="status">
-            {pendingMessageStatus(item)}
-          </small>
-          {item.state === "failed" && <RestoreSubmission scope={scope} id={item.id} nested={nested} />}</div>
+          </div></div>
         </article>)}
         {scope?.sessionId && (pendingModelActivity(index) && (tailBoundary || !groups.at(-1)?.activity && (!groups.at(-1)?.delivery || index.runPhase !== "generating")) ||
-          !activeStatus(index.runStatus) && pending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus tool={tailBoundary && index.runPhase === "executing_tools"} />}
+          !activeStatus(index.runStatus) && visiblePending.some(item => item.state === "sending" || item.state === "accepted")) && <ModelRequestStatus tool={tailBoundary && index.runPhase === "executing_tools"} />}
         {historyReceived && !task && !groups.length && !segments.length && !pending.length && !index.error && !history.loading && !history.error && <div className="empty-state">
           <h2>从一个想法，一行代码开始。</h2><p>描述目标、粘贴代码，或附上需要检查的文件。支持 Markdown。</p>
           <div className="quick-prompts">{[["审查代码", "帮我分析这段代码的潜在问题："], ["规划功能", "请帮我规划以下功能的实现步骤："], ["排查错误", "请解释以下错误，并给出排查建议："]].map(([label, text]) =>

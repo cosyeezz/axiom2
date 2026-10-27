@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { acceptSnapshot, scopeSnapshot, subscribeScope } from "../src/client/transport.js";
+import { acceptSnapshot, scopeSnapshot, SESSION_CACHE_BYTES, SESSION_CACHE_ENTRIES, subscribeScope } from "../src/client/transport.js";
+import { HistoryCache } from "../src/client/chat/history-cache.js";
 import { optimisticStart, optimisticState, pendingMessages } from "../src/client/chat/optimistic.js";
 
 test("collection observers see atomic replacement and duplicate consumers unsubscribe symmetrically", () => {
@@ -29,7 +30,7 @@ test("session LRU preserves mounted scopes, ignores late snapshots, and reconcil
   const a = { workspaceId: "w", sessionId: "a" };
   const unpin = subscribeScope("messages:w:a", () => {});
   event("messages:w:a", [{ id: "a1", role: "user", text: "retained" }]);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < SESSION_CACHE_ENTRIES + 3; i++) {
     const off = subscribeScope(`messages:w:s${i}`, () => {});
     event(`messages:w:s${i}`, [{ id: "m", role: "user", text: String(i) }]);
     off();
@@ -46,4 +47,22 @@ test("session LRU preserves mounted scopes, ignores late snapshots, and reconcil
   event("messages:w:a", [{ id: "compaction", role: "notice", text: "summary" }]);
   assert.equal(scopeSnapshot("message:w:a:real"), undefined, "reset removes compacted messages");
   unpin();
+});
+
+test("switching back within twelve sessions reuses cached content until the size budget", () => {
+  let seq = 0;
+  const visit = (id: string, bytes = 0) => {
+    const off = subscribeScope(`messages:r:${id}`, () => {});
+    acceptSnapshot({ type: "snapshot", scope: `messages:r:${id}`, streamId: "rotate", seq: ++seq, data: [{ id: "m", role: "user", text: id }] }, 0, 0, bytes);
+    off();
+  };
+  for (let i = 0; i < 12; i++) visit(`s${i}`);
+  for (let i = 0; i < 12; i++) assert.equal(scopeSnapshot<any>(`message:r:s${i}:m`)?.text, `s${i}`, `s${i} still cached`);
+  // Each parsed snapshot counts twice its wire length; four sessions exceed the budget.
+  for (let i = 0; i < 4; i++) visit(`big${i}`, SESSION_CACHE_BYTES / 6);
+  assert.equal(scopeSnapshot("message:r:big0:m"), undefined, "oldest large session evicted by size");
+  assert.equal(scopeSnapshot<any>("message:r:big3:m")?.text, "big3");
+  const history = new HistoryCache();
+  for (let i = 0; i < 12; i++) history.set(`h${i}`, { index: { revision: "r", segments: [] }, ranges: [], bytes: 1000 } as any);
+  for (let i = 0; i < 12; i++) assert.ok(history.get(`h${i}`), `history h${i} still cached`);
 });

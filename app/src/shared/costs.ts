@@ -1,5 +1,6 @@
 import type { Scope } from "./protocol.js";
 
+export const nativeCompactionAttemptKind = "native_compaction_attempt";
 export const costCategories = ["main", "subagent", "compression", "tool", "other"] as const;
 export type CostCategory = typeof costCategories[number];
 export const costLabels: Record<CostCategory, string> = {
@@ -13,8 +14,13 @@ export const costPartLabels: Record<CostPart, string> = {
 export interface CostTotals {
   /** Usage records, not necessarily individual API calls (summaries/tools may aggregate). */
   records: number;
+  /** Recorded charges plus explicitly marked public-price estimates (USD). */
   knownCost: number;
   unknownCost: number;
+  /** Subset of knownCost, never an additional charge. Optional for old billing snapshots. */
+  estimatedCost?: number;
+  estimatedRecords?: number;
+  estimateSources?: string[];
   tokens: Record<CostPart, number>;
   unknownTokens: number;
   parts: Record<CostPart, number>;
@@ -57,6 +63,11 @@ export function sumCosts(rows: readonly CostTotals[]): CostTotals {
     total.records += row.records;
     total.knownCost += row.knownCost;
     total.unknownCost += row.unknownCost;
+    if (row.estimatedRecords) {
+      total.estimatedCost = (total.estimatedCost ?? 0) + (row.estimatedCost ?? 0);
+      total.estimatedRecords = (total.estimatedRecords ?? 0) + row.estimatedRecords;
+      total.estimateSources = [...new Set([...(total.estimateSources ?? []), ...(row.estimateSources ?? [])])];
+    }
     total.unknownTokens += row.unknownTokens;
     total.unknownParts += row.unknownParts;
     for (const part of costParts) { total.tokens[part] += row.tokens[part]; total.parts[part] += row.parts[part]; }
@@ -72,5 +83,5 @@ export function costTokens(total: CostTotals): string {
 export function costAmount(total: CostTotals): string {
   if (!total.records) return "—";
   if (total.unknownCost && !total.knownCost) return "未知";
-  return `$${total.knownCost.toFixed(4)}${total.unknownCost ? " + 未知" : ""}`;
+  return `$${total.knownCost.toFixed(4)}${total.estimatedRecords ? "（含估算）" : ""}${total.unknownCost ? " + 未知" : ""}`;
 }

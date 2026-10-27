@@ -1,4 +1,5 @@
 import { statSync } from "node:fs";
+import { totalmem } from "node:os";
 import { historyProjection, type HistoryProjection } from "../history-projection.js";
 import type { HistoryRead } from "../../shared/history.js";
 import { AppError, scopeKey, type Scope } from "../../shared/protocol.js";
@@ -26,6 +27,13 @@ import {
   transcriptEntries,
   transcriptImage,
 } from "../transcript.js";
+/** Estimated projection text kept across switches: 1/160 of physical memory, 64–256 MiB (~200 MiB on 32 GB). */
+export function historyCacheBytes(memory = totalmem()) {
+  const MiB = 1024 * 1024;
+  return Math.min(256 * MiB, Math.max(64 * MiB, Math.floor(memory / 160 / MiB) * MiB));
+}
+export const HISTORY_CACHE_BYTES = historyCacheBytes();
+export const HISTORY_CACHE_ENTRIES = 20;
 export class AgentViews {
   constructor(
     readonly store: Store,
@@ -40,7 +48,7 @@ export class AgentViews {
   private layouts = new WeakMap<Map<string, ChatMessage>, Pick<ThreadIndex, "ids" | "groups">>();
   private originals = new Lru<string, { source: string; messages: Map<string, ChatMessage>; bytes: number }>(5);
   private originalCleanup?: NodeJS.Immediate;
-  private histories = new Lru<string, { source: string; projection: HistoryProjection }>(5);
+  private histories = new Lru<string, { source: string; projection: HistoryProjection }>(HISTORY_CACHE_ENTRIES);
   private counts = new Lru<string, { source: string; ids: Set<string> }>(256);
   private countChanges = new Set<string>();
   private timers = new Map<string, NodeJS.Timeout>();
@@ -113,14 +121,20 @@ export class AgentViews {
       const row = this.store.db
         .prepare("SELECT file FROM agent_sessions WHERE sessionId=?")
         .get(scope.sessionId);
-      const manager = row?.file
-        ? openTranscript(String(row.file), this.store.workspace(scope.workspaceId).path, { readOnly: true })
+      const file = row?.file ? String(row.file) : null;
+      // Tie a count to the exact source opened here, never to a later stat of an
+      // older cached manager. Counting must not add another native-file read.
+      let countSource: string | undefined;
+      try { const current = this.countSource(scope); if (current.file === file) countSource = current.source; } catch { /* Count remains unknown. */ }
+      const manager = file
+        ? openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true })
         : null;
       const origins = this.origins(scope);
       const list = manager ? transcriptMessages(manager).map(message => this.source(scope, message, origins)) : [];
       messages = new Map(list.map((m) => [m.id, m]));
       for (const [id, message] of this.transient.get(scope.sessionId) ?? []) messages.set(id, message);
       this.messages.set(scope.sessionId, messages);
+      if (countSource !== undefined) this.rememberCount(scope, manager, countSource, true);
     }
     return messages;
   }
@@ -149,24 +163,44 @@ export class AgentViews {
       return { ids: [], groups: [], error: (e as Error).message };
     }
   }
-  messageCount(scope: Scope): number | undefined {
+  private countSource(scope: Scope) {
+    const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
+    const file = row?.file ? String(row.file) : null;
+    const stat = file ? statSync(file, { bigint: true }) : null;
+    return { file, source: `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}` };
+  }
+  private countWithTransient(scope: Scope, ids: Set<string>) {
+    let count = ids.size;
+    for (const [id, message] of this.transient.get(scope.sessionId) ?? [])
+      if (!ids.has(id) && (message.role === "user" || message.role === "assistant")) count++;
+    return count;
+  }
+  private rememberCount(scope: Scope, manager: ReturnType<typeof openTranscript> | null, source: string, notify = false) {
     try {
-      const row = this.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId);
-      const file = row?.file ? String(row.file) : null;
-      const stat = file ? statSync(file, { bigint: true }) : null;
-      const source = `${file}:${stat?.dev}:${stat?.ino}:${stat?.size}:${stat?.mtimeNs}:${stat?.ctimeNs}:${this.contextRevision.get(scope.sessionId) ?? 0}`;
+      const entries = manager ? transcriptEntries(manager, true) : [];
+      const ids = new Set(entries.filter(({ message }) => message.role === "user" || message.role === "assistant" ||
+        message.role === "custom" && message.customType === "axiom-append").map(entry => entry.id));
+      // Native writers may append/replace the file while this read is in flight.
+      // The binding, file identity and context revision must still match.
+      if (this.countSource(scope).source !== source) return;
+      const previous = this.counts.peek(scope.sessionId), saved = { source, ids };
+      this.counts.set(scope.sessionId, saved);
+      if (notify && (!previous || previous.source !== source || this.countWithTransient(scope, previous.ids) !== this.countWithTransient(scope, ids)))
+        this.publish(`sessions:${scope.workspaceId}`);
+      return saved;
+    } catch { return; } // Optional statistics must not make a valid body read fail.
+  }
+  /** Title lists use cachedOnly: a cold/changed source is unknown, never a synchronous full-file scan. */
+  messageCount(scope: Scope, options: { cachedOnly?: boolean } = {}): number | undefined {
+    try {
+      const { file, source } = this.countSource(scope);
       let saved = this.counts.get(scope.sessionId);
       if (saved?.source !== source) {
-        const entries = file ? transcriptEntries(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), true) : [];
-        const ids = new Set(entries.filter(({ message }) => message.role === "user" || message.role === "assistant" ||
-          message.role === "custom" && message.customType === "axiom-append").map(entry => entry.id));
-        saved = { source, ids };
-        this.counts.set(scope.sessionId, saved);
+        if (file && options.cachedOnly) return undefined;
+        const manager = file ? openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }) : null;
+        saved = this.rememberCount(scope, manager, source);
       }
-      let count = saved.ids.size;
-      for (const [id, message] of this.transient.get(scope.sessionId) ?? [])
-        if (!saved.ids.has(id) && (message.role === "user" || message.role === "assistant")) count++;
-      return count;
+      return saved ? this.countWithTransient(scope, saved.ids) : undefined;
     } catch { return undefined; } // Unreadable history is unknown, not an empty conversation.
   }
   original(scope: Scope) {
@@ -210,8 +244,8 @@ export class AgentViews {
     if (saved?.source !== source) {
       saved = { source, projection: historyProjection(openTranscript(file, this.store.workspace(scope.workspaceId).path, { readOnly: true }), source, this.origins(scope), this.transient.get(scope.sessionId)?.values()) };
       this.histories.delete(scope.sessionId);
-      if (saved.projection.bytes <= 32 * 1024 * 1024) {
-        while ([...this.histories.values()].reduce((sum, value) => sum + value.projection.bytes, saved.projection.bytes) > 32 * 1024 * 1024)
+      if (saved.projection.bytes <= HISTORY_CACHE_BYTES) {
+        while ([...this.histories.values()].reduce((sum, value) => sum + value.projection.bytes, saved.projection.bytes) > HISTORY_CACHE_BYTES)
           this.histories.delete(this.histories.keys().next().value!);
         this.histories.set(scope.sessionId, saved);
       }
@@ -272,6 +306,7 @@ export class AgentViews {
         previous?.phase !== message.phase ||
         previous?.runId !== message.runId ||
         previous?.role !== message.role ||
+        previous?.inputContinuation !== message.inputContinuation ||
         JSON.stringify(previous?.selectionChange) !== JSON.stringify(message.selectionChange) ||
         (message.role === "assistant" &&
           !!previous?.calls?.length !== !!message.calls?.length) ||
@@ -348,6 +383,7 @@ export class AgentViews {
   refresh(scope: Scope) {
     this.flush(scope); // Old deltas must precede the compaction/reset snapshot.
     this.contextRevision.set(scope.sessionId, (this.contextRevision.get(scope.sessionId) ?? 0) + 1);
+    this.counts.delete(scope.sessionId);
     this.originals.delete(scope.sessionId);
     this.histories.delete(scope.sessionId);
     this.transient.delete(scope.sessionId);

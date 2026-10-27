@@ -162,7 +162,7 @@ export class ExecutionPool {
         w.done.resolve({ref,source,environment:i.environment,released:done.promise,beforeExecute:r.beforeExecute,validateEnvironment:()=>this.verify(instance),ensureReady:()=>{
           if(ready)return ready;
           const begin=performance.now();
-          ready=(async()=>{if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','执行租约已失效');const child=await this.start(instance);if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','准备期间执行已停止');if(!instance.environment.current(!(r.kind==='agent'&&r.bindingGate))||!instance.environment.snapshotValid())throw new AppError('REVISION_CONFLICT','准备期间配置或模型快照已变化');this.metric(instance,'ready_wait',{durationMs:performance.now()-begin});return child;})();
+          ready=(async()=>{if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','执行租约已失效');const child=await this.start(instance);if(!this.isActive(ref))throw new AppError('AGENT_STOPPED','准备期间执行已停止');if(!instance.environment.current(!(r.kind==='agent'&&r.bindingGate))||!instance.environment.snapshotValid())throw new AppError('REVISION_CONFLICT','准备期间资源已变化或内部执行快照损坏');this.metric(instance,'ready_wait',{durationMs:performance.now()-begin});return child;})();
           void ready.catch(()=>{});return ready;
         }});
       }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getDraft, updateDraft } from "../src/client/drafts.js";
 import { optimisticStart, optimisticState, pendingMessages, pendingMessageStatus, reconcileOptimistic } from "../src/client/chat/optimistic.js";
-import { rejectSubmission, restoreFailedSubmission, submissionError } from "../src/client/chat/submission-feedback.js";
+import { rejectSubmission, restoreFailedSubmission, restoreUncertainSubmission, submissionError } from "../src/client/chat/submission-feedback.js";
 
 test("confirmed failure can be recovered once with newer typing, attachments and skills intact", () => {
   const scope = { workspaceId: "workspace", sessionId: crypto.randomUUID() };
@@ -56,6 +56,47 @@ test("sending, accepted and uncertain messages cannot be recovered for replay", 
   }
   assert.equal(getDraft(scope).text, "");
   assert.equal(pendingMessages(scope).length, 3);
+});
+
+test("explicit unknown-outcome recovery preserves attachments and newer typing without sending", () => {
+  const scope = { workspaceId: "workspace", sessionId: crypto.randomUUID() };
+  const sent = { id: "img1", kind: "image" as const, name: "sent.png", path: "/sent.png", text: "" };
+  const next = { ...sent, name: "next.png", path: "/next.png" };
+  const skill = { id: "b".repeat(64), name: "skill", description: "保留技能" };
+  optimisticStart(scope, "unknown", { text: "原消息 [img1]", attachment: null, attachments: [sent], skills: [skill] }, true);
+  optimisticState(scope, "unknown", "uncertain");
+  updateDraft(scope, { text: "新草稿 [img1]", attachments: [next] });
+  assert.equal(restoreFailedSubmission(scope, "unknown"), false, "unknown does not become a confirmed rejection");
+  assert.equal(restoreUncertainSubmission(scope, "unknown"), true);
+  assert.equal(getDraft(scope).text, "原消息 [img2]\n\n新草稿 [img1]");
+  assert.deepEqual(getDraft(scope).attachments, [next, { ...sent, id: "img2" }]);
+  assert.deepEqual(getDraft(scope).skills, [skill]);
+  assert.equal(pendingMessages(scope).length, 0, "recovery creates no new submission");
+  assert.match(submissionError(scope), /尚未发送.*仍未确认.*避免重复执行/);
+  assert.equal(restoreUncertainSubmission(scope, "unknown"), false, "cannot restore twice");
+  optimisticState(scope, "unknown", "accepted");
+  rejectSubmission(scope, "unknown", "late rejection");
+  assert.equal(pendingMessages(scope).length, 0, "late receipts cannot recreate the recovered row");
+});
+
+test("unknown recovery fails closed for other states, consumed inputs and oversize drafts", () => {
+  const scope = { workspaceId: "workspace", sessionId: crypto.randomUUID() };
+  for (const state of ["sending", "accepted", "failed"] as const) {
+    optimisticStart(scope, state, { text: state, attachment: null }, true);
+    optimisticState(scope, state, state);
+    assert.equal(restoreUncertainSubmission(scope, state), false);
+  }
+  optimisticStart(scope, "consumed", { text: "consumed", attachment: null }, true);
+  optimisticState(scope, "consumed", "uncertain");
+  reconcileOptimistic(scope, [{ id: "native", role: "user", text: "consumed", inputIds: ["consumed"] }]);
+  assert.equal(restoreUncertainSubmission(scope, "consumed"), false);
+  optimisticStart(scope, "large", { text: "original", attachment: null }, true);
+  optimisticState(scope, "large", "uncertain");
+  updateDraft(scope, { text: "a".repeat(200_000) });
+  assert.equal(restoreUncertainSubmission(scope, "large"), false);
+  assert.equal(getDraft(scope).text.length, 200_000);
+  assert.equal(pendingMessages(scope).find(item => item.id === "large")?.state, "uncertain");
+  assert.match(submissionError(scope), /先处理当前草稿.*原消息已保留/);
 });
 
 test("confirmed rejection stays with the submitted message and never changes current drafts or attachments", () => {

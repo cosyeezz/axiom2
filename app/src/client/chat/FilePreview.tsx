@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LocalPath } from "../LocalPath.js";
 import { command } from "../transport.js";
 import { guardFileNavigation, registerFileEditor } from "../file-edit-guard.js";
-import type { FilePreview, FileSaveResult } from "../../shared/file-preview.js";
+import { localFileLink, type FilePreview, type FileSaveResult } from "../../shared/file-preview.js";
+import { markdownSection } from "../../shared/markdown-section.js";
 import type { OpenFileReference } from "./FileLink.js";
 import { FileIcon, type FileIconName } from "./FileIcon.js";
 import { Markdown } from "./Markdown.js";
@@ -18,14 +19,14 @@ const modes: [Mode, string][] = [["source", "Markdown 源码"], ["split", "源�
 function Action({ icon, label, onClick, disabled, pressed }: { icon: FileIconName; label: string; onClick: () => void; disabled?: boolean; pressed?: boolean }) {
   return <button type="button" className="file-action" aria-label={label} data-tooltip={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}><FileIcon name={icon} /></button>;
 }
-function Source({ file, wrap }: { file: FilePreview; wrap: boolean }) {
+function Source({ file, wrap, startLine = 1 }: { file: FilePreview; wrap: boolean; startLine?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const lines = (file.text ?? "").split("\n").length;
   useEffect(() => {
-    if (file.line && ref.current) ref.current.scrollTop = (Math.min(file.line, lines) - 1) * 24;
-  }, [file, lines]);
+    if (file.line && ref.current) ref.current.scrollTop = Math.max(0, Math.min(file.line - startLine, lines - 1)) * 24;
+  }, [file, lines, startLine]);
   return <div className={`file-source-scroll${wrap ? " is-wrapped" : ""}`} ref={ref} tabIndex={0} aria-label="文件源码">
-    <div className="file-source-lines" aria-hidden="true">{Array.from({ length: Math.min(lines, 30000) }, (_, i) => i + 1).join("\n")}</div>
+    <div className="file-source-lines" aria-hidden="true">{Array.from({ length: Math.min(lines, 30000) }, (_, i) => i + startLine).join("\n")}</div>
     <div className="file-source-code"><CodeBlock text={file.text ?? ""} language={file.language ?? (file.kind === "markdown" ? "markdown" : "text")} /></div>
   </div>;
 }
@@ -65,6 +66,7 @@ const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 102
 export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileReference; onClose: () => void }) {
   const [file, setFile] = useState<FilePreview | null>(null), [error, setError] = useState("");
   const [editing, setEditing] = useState(false), [draft, setDraft] = useState(""), [saving, setSaving] = useState(false);
+  const [fullDocument, setFullDocument] = useState(!!reference.edit);
   const dirty = useRef(false);
   dirty.current = saving || editing && draft !== (file?.text ?? "").replace(/\r\n/g, "\n");
   const parameters = () => reference.skillId ? { skillId: reference.skillId } : { messageId: reference.messageId, href: reference.href };
@@ -117,13 +119,17 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     finally { if (alive.current) setSaving(false); }
   };
   const reload = () => guardFileNavigation(() => { setEditing(false); setAttempt(n => n + 1); });
+  const fragment = reference.href ? localFileLink(reference.href)?.fragment : undefined;
+  const section = useMemo(() => file?.kind === "markdown" && fragment && !member ? markdownSection(file.text ?? "", fragment) : null, [file, fragment, member]);
+  const sectionActive = !!section && !fullDocument && !editing;
+  const sourceFile = file && sectionActive ? { ...file, text: section.text, line: undefined } : file;
   const displayFile = file && editing ? { ...file, text: draft } : file;
   const clamp = (value: number) => Math.max(20, Math.min(80, value));
   const move = (clientX: number) => { const box = panes.current?.getBoundingClientRect(); if (box?.width) setRatio(clamp((clientX - box.left) / box.width * 100)); };
   const title = file?.name ?? reference.href?.replace(/\\/g, "/").split("/").at(-1) ?? "技能文件";
   const isText = file && ["markdown", "code", "text"].includes(file.kind);
   const showSource = !rendered || mode !== "reading";
-  const readable = (file?.text?.length ?? 0) <= 200000;
+  const readable = (sectionActive ? section.text.length : file?.text?.length ?? 0) <= 200000;
   let body: ReactNode;
   if (loading) body = <div className="file-empty" role="status"><span className="file-loading" /><strong>正在读取文件</strong><p>内容将在这里展开</p></div>;
   else if (error) body = <div className="file-empty" role="alert"><FileIcon name="file" /><strong>暂时无法预览</strong><p>{error}</p><button type="button" className="btn" onClick={() => setAttempt(n => n + 1)}>重新加载</button></div>;
@@ -132,7 +138,7 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
     <section className="file-source-pane" hidden={!showSource} aria-label="源码视图">
       <div className="file-pane-label"><span>{editing ? "编辑源码" : "源码"}</span><span>{file.encoding}</span></div>{editing ?
         <textarea className="file-editor" aria-label="编辑文件内容" spellCheck={false} value={draft} disabled={saving} onChange={event => setDraft(event.target.value)} wrap={wrap ? "soft" : "off"} /> :
-        (showSource || visited.source) && <Source file={file} wrap={wrap} />}
+        (showSource || visited.source) && <Source key={sectionActive ? section.startLine : "full"} file={sourceFile!} wrap={wrap} startLine={sectionActive ? section.startLine : 1} />}
     </section>
     {rendered && <>
       <div className="file-divider" hidden={mode !== "split"} role="separator" aria-label="调整源码与预览宽度" aria-orientation="vertical" aria-valuemin={20} aria-valuemax={80} aria-valuenow={Math.round(ratio)} tabIndex={0}
@@ -145,8 +151,8 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
         onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}><span /></div>
       <section className="file-reading-pane" hidden={mode === "source"} aria-label="渲染预览">
         <div className="file-pane-label"><span>预览</span><span>{html ? "HTML · 隔离预览" : "MARKDOWN"}</span></div>
-        {html ? (mode !== "source" || visited.reading) && <HtmlFile text={displayFile?.text ?? ""} name={file.name} resources={file.resources} /> : <div className="file-reading-scroll" tabIndex={0}>
-          {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={displayFile?.text ?? ""} pathScope={reference.owner.scope} sourceFile={displayFile?.path} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
+        {html ? (mode !== "source" || visited.reading) && <HtmlFile text={displayFile?.text ?? ""} name={file.name} resources={file.resources} /> : <div className="file-reading-scroll" key={sectionActive ? section.startLine : "full"} tabIndex={0}>
+          {(mode !== "source" || visited.reading) && (readable ? <div className="markdown file-reading"><Markdown text={displayFile?.text ?? ""} blockRange={sectionActive ? section.blocks : undefined} pathScope={reference.owner.scope} sourceFile={displayFile?.path} /></div> : <div className="file-empty"><strong>长文档请使用源码视图</strong><p>超过 200,000 字符的 Markdown 暂不排版，避免影响会话输入。</p><button className="btn" onClick={() => setMode("source")}>查看完整源码</button></div>)}
         </div>}
       </section>
     </>}
@@ -180,12 +186,16 @@ export function FilePreviewPanel({ reference, onClose }: { reference: OpenFileRe
         {file?.editable && !loading && !error && (editing ? <>
           <button type="button" className="file-edit-action" disabled={saving} onClick={() => guardFileNavigation(() => { setEditing(false); setDraft((file.text ?? "").replace(/\r\n/g, "\n")); setNotice(""); })}>取消编辑</button>
           <button type="button" className="file-edit-action" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : "保存"}</button>
-        </> : <button type="button" className="file-edit-action" onClick={() => { setEditing(true); setMode("source"); setNotice(""); }}><Icon name="square-pen" />编辑</button>)}
+        </> : <button type="button" className="file-edit-action" onClick={() => { setFullDocument(true); setEditing(true); setMode("source"); setNotice(""); }}><Icon name="square-pen" />{sectionActive ? "编辑全文" : "编辑"}</button>)}
         {isText && showSource && <Action icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(v => !v)} />}
         {file?.kind === "image" && <><Action icon="minus" label="缩小图片" onClick={() => setZoom(v => Math.max(25, (v ?? 100) - 25))} disabled={zoom === 25} /><span className="file-zoom">{zoom === null ? "适应" : `${zoom}%`}</span><Action icon="plus" label="放大图片" onClick={() => setZoom(v => Math.min(300, (v ?? 100) + 25))} disabled={zoom === 300} /><Action icon="fit" label="图片适应窗口" onClick={() => setZoom(null)} /></>}
         <Action icon="reload" label="重新加载文件" disabled={loading || saving} onClick={reload} />
       </div>
     </div>
+    {!loading && !error && file?.kind === "markdown" && fragment && !member && <div className="file-section-bar" aria-label="章节预览">
+      <span role="status">{section ? <>{sectionActive ? "章节" : "全文"} · <strong>{section.title}</strong>{sectionActive && <small>第 {section.startLine}–{section.endLine} 行</small>}</> : <>未找到章节 #{fragment}，已显示全文。</>}</span>
+      {section && !editing && <button type="button" className="file-edit-action" onClick={() => setFullDocument(value => !value)}>{sectionActive ? "返回全文" : "查看链接章节"}</button>}
+    </div>}
     {editing && notice && <p className="file-editor-notice" role="status">{notice}</p>}
     <div className="file-preview-body" aria-busy={loading}>{body}</div>
     <footer className="file-preview-footer"><span>{file ? `${size(file.size)}${file.text !== undefined ? ` · ${file.text.split("\n").length.toLocaleString()} 行` : ""}` : "本地文件"}</span><span className="file-notice" role="status" data-tooltip={notice || file?.resourceNotice}>{notice || file?.editReason || file?.resourceNotice || (html ? "默认允许脚本与联网 · 模块与项目可单独确认运行" : file?.encoding ?? "只读预览")}</span></footer>

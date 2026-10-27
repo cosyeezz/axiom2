@@ -1,4 +1,6 @@
 import "./pi-settings-storage.js";
+import { executionModelsRaw } from "./execution-model-config.js";
+import { installSessionSafePointHooks, sessionSafePoint, type SafePointSource } from "./session-safe-point.js";
 import { ModelLatency, latencyError } from "./model-latency.js";
 import { configureModelNetwork, defaultModelsPath, toolEnvironment } from "./integrations/model-proxy-env.js";
 import { capabilityExtensions, capabilityRuntime, discoverCapabilities, type CapabilityRuntime } from "./capability-resources.js";
@@ -12,6 +14,7 @@ import type { ResourceSnapshot } from "../shared/reload.js";
 import { performance } from "node:perf_hooks";
 import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSender, sameInstance, sameLease, workerInstance, type LeaseRef } from "./execution-protocol.js";
 import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { ensureTopicSnapshot, injectTopicSnapshot } from "./memory-topics.js";
 import type { MemoryTopicSnapshot } from "../shared/memory-tree.js";
 import { memoryQueryTool } from "./memory-tool.js";
@@ -42,19 +45,25 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AgentInfo, Selection, RetryInfo, RunPhase } from "../shared/agent.js";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage, getSystemMessageText } from "@earendil-works/pi-ai";
+import { getCurrentSystemMessage, getSystemMessageText, type Model, type Api } from "@earendil-works/pi-ai";
 import { executionOutcome } from "./execution-outcome.js";
 import { isResumeControl, omitResumeControls, resumeSession } from "./resume-session.js";
 import { ModelService } from "./model-service.js";
+import { ensureModelProvider, invalidModelDefinition } from "./model-runtime.js";
 import { rtkExtension } from "./integrations/rtk-runtime.js";
 import { openCliResources } from "./integrations/opencli-resources.js";
 import { reaResources } from "./integrations/rea-resources.js";
-import { contextUsage } from "./context-usage.js";
-import { lastRequestUsage } from "./request-usage.js";
+import { agentSessionUsage } from "./agent-session-usage.js";
+import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
+import { installNativeCompactionUsage } from "./native-compaction-usage.js";
+import { disableKiroCacheWarming } from "./kiro-cache-policy.js";
+import { installNativeCompactionPolicy } from "./native-compaction-policy.js";
 import { CompressionMemory } from "./compression-memory.js";
 import { compressionError } from "./compression-error.js";
+import { captureCompressionPrefix, forgetCompressionPrefix, observeCompressionPayload, readCompressionPrefix, saveCompressionPrefix, type CompressionPrefix } from "./compression-request.js";
 import { errorMessage } from "./error-message.js";
 import { chatMessage, openTranscript, toolKey } from "./transcript.js";
+import { continuationInputIds } from "./input-continuation.js";
 import { lastRequestSelection, requestSelection, selectionChange } from "./request-selection.js";
 import { taskTools } from "./task-tools.js";
 import { TaskPhase, TaskBudgetReminder, taskBudgetIntro, taskBudgetUpdate, taskBudgetWarning, taskSummaryInstruction, type TaskBudget } from "./task-budget.js";
@@ -65,7 +74,7 @@ import {
 import { taskToolNames, type TaskTool } from "../shared/tasks.js";
 import { taskDisplayText } from "./task-output.js";
 import { AppError, type ImageAttachment } from "../shared/protocol.js";
-import { imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel } from "./images.js";
+import { contextImages, imagesInput, imageContent, imageMetadata, nativeImages, requireImageModel } from "./images.js";
 
 import { prepareSkillInput } from "./skill-input.js";
 import type { SkillReference } from "../shared/skills.js";
@@ -109,6 +118,7 @@ let session: AgentSession | undefined,
   accepting = false,
   inputClosed = false;
 let sdkStream: AgentSession["agent"]["streamFunction"] | undefined;
+let lastCompressionPrefix: CompressionPrefix | undefined;
 let activeInput: WorkerInput | undefined;
 let activeLease: LeaseRef | undefined;
 let environment: AgentInfo["environment"];
@@ -120,8 +130,107 @@ let capabilityReloadChanged = false;
 let pendingReload: string | undefined;
 let reloading = false;
 let reloadPause: { id: string; settled: Promise<void>; resume: boolean } | undefined;
+let pendingModel: { revision: number; selection: Selection; modelsRaw: string } | undefined;
+let modelRevision = 0;
+let modelChanged = false;
+let switchingModel = false;
+let currentModelsRaw: string | undefined;
+let modelRequestError: Error | undefined;
+const safePointState = () => ({ session, cancelled, inputClosed,
+  transitioning: taskPhase.revision !== handledTaskTransition,
+  requestsBlocked: Boolean(activeInput?.reloadId || reloading || switchingModel) });
+const workerSafePoint = (source: SafePointSource) => sessionSafePoint(source, safePointState());
+// IPC records intent only; admission and native hook ordering live in one module.
+async function applyPendingModel(source: SafePointSource) {
+  while (pendingModel && session && activeInput) {
+    const point = workerSafePoint(source);
+    if (!point.allows("model-switch")) return;
+    const signal = "signal" in source ? source.signal : undefined;
+    const { selection, revision, modelsRaw } = pendingModel;
+    pendingModel = undefined;
+    const previousModel = session.model, previousThinking = session.thinkingLevel;
+    const scopedRaw = executionModelsRaw(modelsRaw, selection.provider);
+    const configChanged = scopedRaw !== currentModelsRaw || previousModel?.provider !== selection.provider || !!modelRequestError;
+    if (!configChanged && previousModel?.provider === selection.provider && previousModel.id === selection.id && previousThinking === selection.thinking) {
+      activeInput.selection = { ...selection };
+      send({ type: "model-applied", revision, selection, changed: modelChanged });
+      continue;
+    }
+    switchingModel = true;
+    // Accept the choice unconditionally. Configuration/transport preparation is
+    // not an availability gate: any error belongs to the next real request.
+    modelChanged = true;
+    modelRequestError = undefined;
+    try {
+      try {
+        if (configChanged) {
+          writeFileSync(activeInput.modelsFile, scopedRaw, { mode: 0o600 });
+          // Validate ONLY this captured provider without credentials/catalogs. Pi
+          // reports schema/composition errors without throwing and otherwise
+          // falls back to builtins; those errors must fail the next request,
+          // unlike advisory availability diagnostics on the live runtime.
+          if (await invalidModelDefinition(activeInput.modelsFile, selection.provider)) throw Error("Invalid selected model definition");
+        }
+        await ensureModelProvider(session.modelRuntime, selection.provider);
+        if (configChanged || previousModel?.provider !== selection.provider) {
+          // Keep the same runtime (extension registrations and copy routing).
+          // Offline refresh may update availability metadata; never use it to
+          // accept/reject the selection or trigger a remote catalog request.
+          await session.modelRuntime.refresh({ providers: [selection.provider], allowNetwork: false, signal });
+        }
+        // Only a successfully loaded version can make a later choice a no-op.
+        // A second choice arriving during failed validation must retry validation,
+        // never revive the previous runtime's endpoint or clear its failure.
+        currentModelsRaw = scopedRaw;
+        // getError() also includes availability diagnostics. They must never
+        // veto a usable model's real request; its auth/transport decide there.
+      } catch {
+        // Do not expose parser/configuration errors that may contain secrets.
+        modelRequestError = Error("所选模型的配置无法加载。");
+      }
+      const configured = modelRequestError ? undefined : session.modelRuntime.getModel(selection.provider, selection.id);
+      if (!configured) modelRequestError ??= Error(`Model not found: ${selection.provider}/${selection.id}`);
+      // A missing definition still has a logical selection. Never borrow the old
+      // model's endpoint or capabilities; fail only if a real request is attempted.
+      const model: Model<Api> = configured ?? { ...selection, name: selection.id, api: "openai-completions", baseUrl: "",
+        reasoning: true, input: ["text", "image"], contextWindow: 0, maxTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+      try { configureModelNetwork(activeInput.root, activeInput.modelsFile, selection.provider, { safePoint: point }); }
+      catch (error) { modelRequestError ??= new Error(errorMessage(error, "所选模型的网络配置无法应用。")); }
+      // AgentSession.setModel checks auth and setThinkingLevel clamps by model
+      // capability. This host action deliberately uses Pi's public state and
+      // transcript APIs instead: model usability is the real request's concern.
+      session.agent.state.model = model;
+      session.agent.state.thinkingLevel = selection.thinking;
+      if (previousModel?.provider !== selection.provider || previousModel.id !== selection.id)
+        session.sessionManager.appendModelChange(selection.provider, selection.id);
+      if (previousThinking !== selection.thinking)
+        session.sessionManager.appendThinkingLevelChange(selection.thinking);
+      activeInput.selection = { ...selection };
+      if (previousModel?.provider !== selection.provider || previousModel.id !== selection.id)
+        await session.extensionRunner.emit({ type: "model_select", model, previousModel, source: "set" });
+      if (previousThinking !== selection.thinking)
+        await session.extensionRunner.emit({ type: "thinking_level_select", level: selection.thinking, previousLevel: previousThinking });
+      // The explicit host choice wins over extension defaults. No extension can
+      // turn this operation into a fallback or an availability rejection.
+      session.agent.state.model = model;
+      session.agent.state.thinkingLevel = selection.thinking;
+      // Extensions may persist their own defaults through the session APIs.
+      // Reconcile the final host choice as well as state so transcript recovery
+      // cannot silently restore a different model or thinking level.
+      const projected = session.sessionManager.buildSessionContext();
+      if (projected.model?.provider !== selection.provider || projected.model.modelId !== selection.id)
+        session.sessionManager.appendModelChange(selection.provider, selection.id);
+      if (projected.thinkingLevel !== selection.thinking)
+        session.sessionManager.appendThinkingLevelChange(selection.thinking);
+      send({ type: "model-applied", revision, selection, changed: true });
+    } finally { switchingModel = false; }
+  }
+}
 async function performReload(id: string, resumed: boolean, cold = false) {
-  if (!session || cancelled) throw Error("会话已停止，未重新加载。");
+  // Cold reload blocks inference, but still admits resource work at owned idle.
+  const point = sessionSafePoint({ phase: "idle" }, { ...safePointState(), requestsBlocked: reloading || switchingModel });
+  if (!point.allows("resource-reload") || !session) throw Error("会话未到达重载安全点，未重新加载。");
   const before = cold ? undefined : loadedResources;
   send({ type: "reload-stage", id, stage: "reloading" });
   reloading = true;
@@ -251,7 +360,8 @@ function acknowledgeCompression(id: string) {
 // Invoked only from actionable extension boundaries or before/after prompt().
 // No summary request is awaited here: IPC receipt merely queues plain data.
 function compressionBoundary(event?: BoundaryState): BoundaryResult | undefined {
-  if (!session || cancelled || compressionClosed) return;
+  const point = workerSafePoint(event ? { phase: "boundary", boundary: event } : { phase: "idle" });
+  if (!session || compressionClosed || !point.allows("snapshot")) return;
   for (const id of [...compressionCommitting.keys()]) acknowledgeCompression(id);
   for (const id of compressionCancels) {
     compressionCancels.delete(id);
@@ -264,24 +374,26 @@ function compressionBoundary(event?: BoundaryState): BoundaryResult | undefined 
           const continuation = compressionMemory.boundary(id, event);
           if (continuation) return continuation;
         }
-        if (!compressionMemory.sent(id) || !event || event.outcome !== "completed") continue;
+        if (!compressionMemory.sent(id) || !point.allows("compression-memory")) continue;
       }
       compressionSnapshots.delete(id);
       compressionMemory.delete(id);
-      send({ type: "compression-snapshot", id, snapshot: captureCompression(session.sessionManager) });
+      const request = lastCompressionPrefix?.sessionId === session.sessionId
+        ? lastCompressionPrefix : readCompressionPrefix(activeInput!.file);
+      send({ type: "compression-snapshot", id, snapshot: captureCompression(session.sessionManager), request });
     } catch (error) {
       compressionSnapshots.delete(id);
       compressionMemory.delete(id);
       send({ type: "compression-snapshot", id, ok: false, error: compressionError(error) });
     }
   }
-  // Multiple compactions or context edits in a single boundary would invalidate
-  // one another. Preserve other extensions' proposals, but refuse our apply.
+  // Let native drafts commit before choosing our retained boundary. Keep the
+  // generated summary queued for the next safe point; never fail it for edits.
   let entries = event?.entries ?? [];
   for (const [id, request] of compressionApplies) {
     // Recovery may still edit context after an unsuccessful turn. Keep the
     // request until a completed boundary or the idle ownership handoff.
-    if (event && event.outcome !== "completed") continue;
+    if (!point.allows("compression-apply") || entries.length) continue;
     compressionApplies.delete(id);
     try {
       if (request.snapshot?.header?.id !== session.sessionManager.getHeader()?.id) throw Error();
@@ -291,7 +403,6 @@ function compressionBoundary(event?: BoundaryState): BoundaryResult | undefined 
         if (ok) send({ type: "usage", usage: usage() });
         continue;
       }
-      if (entries.length) throw Error("此安全边界已有其他扩展的上下文修改。");
       const draft = compressionDraft(session.sessionManager, request.snapshot, request.entry, id);
       if (!event) {
         applyCompression(session.sessionManager, request.snapshot, request.entry, id);
@@ -392,6 +503,13 @@ process.on("message", (value: any) => {
   }
   if (value.type === "start" && !acceptsLease(value.lease)) return;
   if (value.type !== "start" && (value.runId !== activeInput?.runId || workerInstance && !sameLease(value.lease, activeLease))) return;
+  if (value.type === "model" && Number.isSafeInteger(value.revision) && value.revision > modelRevision && value.selection && typeof value.modelsRaw === "string") {
+    if (!cancelled && !inputClosed) {
+      modelRevision = value.revision;
+      pendingModel = { revision: value.revision, selection: value.selection, modelsRaw: value.modelsRaw };
+    }
+    return;
+  }
   if (value.type === "reload" && typeof value.id === "string") {
     if (cancelled || inputClosed || pendingReload || reloadPause) send({ type: "reload-result", id: value.id, ok: false, error: "会话正在结束或已有重载请求，请稍后重试。" });
     else { pendingReload = value.id; pendingReloadCapabilities = activeInput?.task ? undefined : value.capabilities; pendingSkillsOnly = value.kind === "skills"; }
@@ -571,6 +689,11 @@ process.on("message", (value: any) => {
     pendingSkillsOnly = false;
     capabilityReloadChanged = false;
     reloadPause = undefined;
+    pendingModel = undefined;
+    modelRevision = 0;
+    modelChanged = false;
+    switchingModel = false;
+    modelRequestError = undefined;
     compressionClosed = false;
     compressionPreparationOnly = Boolean(activeInput?.compressionPreparation);
     if (activeInput?.compressionPreparation) {
@@ -603,23 +726,7 @@ process.on("message", (value: any) => {
   }
 });
 function usage(): AgentInfo["usage"] {
-  if (!session) return null;
-  const stats = session.getSessionStats(),
-    context = session.getContextUsage();
-  return stats.tokens.total > 0
-    ? {
-        ...stats.tokens,
-        cost: stats.cost > 0 ? stats.cost : null,
-        lastRequest: lastRequestUsage(session.sessionManager),
-        context: contextUsage(session.sessionManager, context
-          ? {
-              tokens: context.tokens,
-              window: context.contextWindow,
-              percent: context.percent,
-            }
-          : null),
-      }
-    : null;
+  return session ? agentSessionUsage(session) : null;
 }
 async function prepareImages(images: ImageAttachment[]) {
   const prepared: ImageAttachment[] = [];
@@ -635,22 +742,26 @@ async function run(input: WorkerInput) {
   const runSend = leaseSender(activeLease, input.runId);
   const latency = new ModelLatency(input.runId, record => runSend({ type: "latency", record }));
   let restoreStream: (() => void) | undefined;
-  let reusable = false;
+  let reusable = false, requestAttempted = false;
   try {
     process.chdir(input.cwd);
-    configureModelNetwork(input.root, input.modelsFile ?? defaultModelsPath(input.root), input.selection.provider);
+    try { configureModelNetwork(input.root, input.modelsFile ?? defaultModelsPath(input.root), input.selection.provider,
+      { safePoint: workerSafePoint({ phase: "idle" }) }); }
+    catch { modelRequestError = Error("所选模型的网络配置无法应用。"); }
     const originalImages = imagesInput(input.images);
     const images = await prepareImages(originalImages);
     if (!session) {
+    currentModelsRaw = readFileSync(input.modelsFile, "utf8");
     const runtime = await new ModelService(input.root).runtime(
-      input.modelsFile,
+      input.modelsFile, false, input.selection.provider,
     );
-    const model = runtime.getModel(
-      input.selection.provider,
-      input.selection.id,
-    );
-    if (!model || runtime.getError()) throw Error();
-    requireImageModel(model, originalImages);
+    const configured = runtime.getModel(input.selection.provider, input.selection.id);
+    if (await invalidModelDefinition(input.modelsFile, input.selection.provider)) modelRequestError ??= Error("所选模型的配置无法加载。");
+    if (!configured) modelRequestError ??= Error(`Model not found: ${input.selection.provider}/${input.selection.id}`);
+    const model: Model<Api> = configured && !modelRequestError ? configured : { ...input.selection, name: input.selection.id,
+      api: "openai-completions", baseUrl: "", reasoning: true, input: ["text", "image"], contextWindow: 0, maxTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    if (!modelRequestError) requireImageModel(model, originalImages);
     const projectSettings = SettingsManager.create(
       input.cwd,
       join(input.root, "pi"),
@@ -664,7 +775,12 @@ async function run(input: WorkerInput) {
           read(JSON.stringify({ ...values, packages: [], cacheWarming: "off" }));
         } }, { projectTrusted: true })
       : projectSettings;
-    // No speculative cache requests after a user stops or a worker finishes.
+    // Keep the existing merged override for other settings consumers. Pi's
+    // actual warmer uses a global-only getter; disable that path only for Kiro.
+    // Read the effective session model so safe-point switches and reuse cannot
+    // retain the initial selection's policy, and do not persist this host policy.
+    disableKiroCacheWarming(settingsManager, () => session?.model ?? model);
+    installNativeCompactionPolicy(settingsManager, () => session?.model ?? model);
     settingsManager.applyOverrides({ cacheWarming: "off" });
     const openCliBaseEnvironment = { ...process.env };
     let opencli = input.task ? undefined : openCliResources(input.root, input.cwd, openCliBaseEnvironment);
@@ -739,10 +855,10 @@ async function run(input: WorkerInput) {
             messages = compressionMemory.context(session, messages);
           return { messages };
         });
-        // Route main-session compaction through the host's reminder and snapshot flow.
+        // Keep manual requests on the host flow, but leave Pi's independent
+        // threshold/overflow safety net available even when host compression fails.
         pi.on("session_before_compact", (event) => {
-          if (event.reason === "threshold") return { cancel: true };
-          if (input.memoryPath) {
+          if (event.reason === "manual" && input.memoryPath) {
             send({ type: "warning", text: "原生压缩未执行：请使用会话压缩入口。" });
             return { cancel: true };
           }
@@ -790,31 +906,25 @@ async function run(input: WorkerInput) {
     });
     session = result.session;
     installAxiomPrompt(session);
+    installKiroCompactionUsage(session);
+    installNativeCompactionUsage(session);
     sdkStream = session.agent.streamFunction;
     if (!input.task && input.memoryTopics) ensureTopicSnapshot(session.sessionManager, input.memoryTopics);
-    const nativePrompt = session.agent.prompt, nativeContinue = session.agent.continue;
-    session.agent.prompt = (async (...args: Parameters<typeof nativePrompt>) => {
-      if (activeInput?.reloadId || reloading) throw Error("重载期间不允许扩展发起模型请求。");
-      await nativePrompt.apply(session!.agent, args);
-    }) as typeof nativePrompt;
-    session.agent.continue = async () => {
-      if (activeInput?.reloadId || reloading) throw Error("重载期间不允许扩展发起模型请求。");
-      await nativeContinue.call(session!.agent);
-    };
-    const previousFinishTurn = session.agent.finishTurn;
-    session.agent.finishTurn = async (turn, signal) => {
-      const decision = await previousFinishTurn?.(turn, signal);
-      if (!pendingReload || cancelled || inputClosed || taskPhase.revision !== handledTaskTransition) return decision || undefined;
-      const id = pendingReload; pendingReload = undefined;
-      accepting = false;
-      // All tools and extension boundary drafts have finished. Session.abort's
-      // synchronous flag suppresses automatic continuation; await only outside
-      // this hook, after the native lifecycle has settled.
-      reloadPause = { id, settled: session!.abort(), resume: decision?.action !== "end" &&
-        (decision?.action === "continue" || turn.message.role === "assistant" && turn.message.stopReason === "toolUse" || session!.pendingMessageCount > 0) };
-      void reloadPause.settled.catch(() => {});
-      return { action: "end" };
-    };
+    installSessionSafePointHooks(session, {
+      state: safePointState,
+      applyModel: applyPendingModel,
+      pauseReload: async (turn, _signal, decision) => {
+        if (!pendingReload) return;
+        const id = pendingReload; pendingReload = undefined;
+        accepting = false;
+        // The shared hook is after all tools and native draft commits. Await
+        // abort only outside this hook, after the native lifecycle settles.
+        reloadPause = { id, settled: session!.abort(), resume: decision?.action !== "end" &&
+          (decision?.action === "continue" || turn.message.role === "assistant" && turn.message.stopReason === "toolUse" || session!.pendingMessageCount > 0) };
+        void reloadPause.settled.catch(() => {});
+        return { action: "end" };
+      },
+    });
     await session.bindExtensions({
       mode: "rpc",
       onError: () =>
@@ -827,18 +937,24 @@ async function run(input: WorkerInput) {
       session.setActiveToolsByName([
         ...new Set([...session.getActiveToolNames(), ...taskToolNames, "memory_query"]),
       ]);
-    await session.setModel(model);
-    session.setThinkingLevel(input.selection.thinking);
-    if (session.thinkingLevel !== input.selection.thinking) throw Error();
+    // Binding resources is not a model/auth probe. Keep the explicit choice;
+    // invalid definitions fail only if this session actually requests a model.
+    session.agent.state.model = model;
+    session.agent.state.thinkingLevel = input.selection.thinking;
     environment = runtimeEnvironment(session, input);
     loadedResources = resourceSnapshot(session, input.capabilities);
     send({ type: "resources-loaded", resources: loadedResources });
     } else {
       // Extensions may have changed the effective model or thinking level during the previous run.
       const model = session.modelRuntime.getModel(input.selection.provider, input.selection.id);
-      if (!model) throw Error();
-      await session.setModel(model);
-      session.setThinkingLevel(input.selection.thinking);
+      if (model) session.agent.state.model = model;
+      else {
+        modelRequestError ??= Error(`Model not found: ${input.selection.provider}/${input.selection.id}`);
+        session.agent.state.model = { ...input.selection, name: input.selection.id, api: "openai-completions", baseUrl: "",
+          reasoning: true, input: ["text", "image"], contextWindow: 0, maxTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+      }
+      session.agent.state.thinkingLevel = input.selection.thinking;
       session.refreshContext();
       environment = runtimeEnvironment(session, input);
       requireImageModel(session.model, originalImages);
@@ -862,7 +978,30 @@ async function run(input: WorkerInput) {
     }
     send({ type: "execution_phase", stage: "history", durationMs: performance.now() - historyStarted });
     const baseStream = session.agent.streamFunction;
-    const observedStream = latency.wrap(baseStream, {
+    const observedStream = latency.wrap((model, context, options) => {
+      if (modelRequestError) throw modelRequestError;
+      if (options?.sessionId === session!.sessionManager.getSessionId()) {
+        // Report application only when a real session request is about to start.
+        // Routed models retain their logical selection; revoke by actual provider too.
+        const selection = { provider: session!.model!.provider, id: session!.model!.id, thinking: session!.thinkingLevel };
+        runSend({ type: "model-request", selection, provider: model.provider });
+        try {
+          const prefix = captureCompressionPrefix(session!.sessionManager, selection, model, context, options);
+          if (session!.resourceLoader.getExtensions().extensions.some((extension) => extension.handlers.has("before_provider_headers")))
+            prefix.unavailableReason = "请求头钩子可能改变缓存租户，无法安全复用缓存前缀";
+          lastCompressionPrefix = prefix;
+          options = { ...options, onPayload: observeCompressionPayload(prefix, options?.onPayload, () => {
+            try { saveCompressionPrefix(input.file, prefix); } catch { /* The in-process prefix is still marked unavailable. */ }
+          }) };
+          saveCompressionPrefix(input.file, prefix);
+        } catch {
+          lastCompressionPrefix = undefined;
+          try { forgetCompressionPrefix(input.file); } catch { /* A stale sidecar still has to pass frozen projection/model checks. */ }
+          runSend({ type: "warning", text: "本次请求的缓存前缀未能完整保存；聊天继续，压缩时将明确检查前缀是否可用。" });
+        }
+      }
+      return baseStream(model, context, options);
+    }, {
       sessionId: session.sessionManager.getSessionId(),
       defaultFetch: model => baseStream === sdkStream &&
         !session!.modelRuntime.getRegisteredProviderConfig(model.provider)?.streamSimple &&
@@ -943,8 +1082,12 @@ async function run(input: WorkerInput) {
               : event.message.role === "user" && firstUser
                 ? input.runId
                 : randomUUID();
-        if (event.message.role === "user" && firstUser)
-          (event.message as any).axiomInputIds = input.task?.inputIds ?? (input.requestId ? [input.requestId] : []);
+        if (event.message.role === "user" && firstUser) {
+          const ids = input.task?.inputIds ?? (input.requestId ? [input.requestId] : []);
+          (event.message as any).axiomInputIds = ids;
+          const continuations = continuationInputIds(session!.sessionManager);
+          if (ids.some(id => continuations.has(id))) (event.message as any).axiomContinuation = true;
+        }
         if (event.message.role === "user") firstUser = false;
         (event.message as any).axiomId = currentId;
         if (event.message.role === "user" && currentId === input.runId && images.length)
@@ -1048,8 +1191,15 @@ async function run(input: WorkerInput) {
         phase(event.success ? "generating" : "settling");
         publishRetry();
       }
-      if (event.type === "compaction_start" && event.reason !== "threshold") phase("compacting");
-      if (event.type === "compaction_end" && event.reason !== "threshold") phase(event.willRetry ? "requesting" : "settling");
+      if (event.type === "compaction_start") phase("compacting");
+      if (event.type === "compaction_end") {
+        phase(event.willRetry ? "requesting" : "settling");
+        if (event.result) {
+          send({ type: "context-rebuilt" });
+          send({ type: "usage", usage: usage() });
+        }
+        if (event.errorMessage) send({ type: "warning", text: errorMessage(event.errorMessage, "Pi 原生压缩失败。") });
+      }
     });
     compressionBoundary();
     if (input.task) session.setActiveToolsByName(taskPhase.stage === "summary" ? [] : subagentTools);
@@ -1057,6 +1207,7 @@ async function run(input: WorkerInput) {
     let phaseMessageStart = 0;
     if (!cancelled) {
       send({ type: "usage", usage: usage(), autoCheck: true });
+      requestAttempted = true;
       if (input.resume) {
         await resumeSession(session, input.task?.inputIds[0] ?? input.requestId, async () => {
           if (input.task?.budget) {
@@ -1224,7 +1375,8 @@ async function run(input: WorkerInput) {
       status: wasCancelled ? "cancelled" : "failed",
       reasonCode: wasCancelled ? "USER_STOPPED" : error instanceof ExecutionPermitDeniedError ? "BINDING_REJECTED"
         : error instanceof AppError ? error.code : "EXECUTION_ERROR",
-      error: errorMessage(error, "pi 初始化或执行失败，未收到具体错误原因。"),
+      error: errorMessage(requestAttempted && modelRequestError && !(error instanceof AppError) ? modelRequestError : error,
+        "pi 初始化或执行失败，未收到具体错误原因。"),
     });
   } finally {
     restoreStream?.();
@@ -1232,7 +1384,7 @@ async function run(input: WorkerInput) {
     closeCompressionRequests();
     unsubscribeRun?.();
     unsubscribeRun = undefined;
-    if (reusable && !capabilityReloadChanged && process.connected) {
+    if (reusable && !capabilityReloadChanged && !modelChanged && process.connected) {
       started = false;
       send({ type: "idle" });
     } else {

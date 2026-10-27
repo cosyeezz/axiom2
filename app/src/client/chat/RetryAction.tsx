@@ -1,5 +1,5 @@
 import { useConnectionState, useScope } from "../transport.js";
-import type { Configuration, Scope } from "../../shared/protocol.js";
+import type { Scope } from "../../shared/protocol.js";
 import { agentScope, emptyAgent, running } from "../../shared/agent.js";
 import { emptyTasks, taskActive, tasksScope } from "../../shared/tasks.js";
 import { canContinue } from "../../shared/session-state.js";
@@ -7,17 +7,15 @@ import { useOptimistic } from "./optimistic.js";
 import { useSubmission } from "./useSubmission.js";
 import { useResumeAttempt } from "./resume-state.js";
 
-const noConfig: Configuration = { revision: "", providerCount: 0, modelCount: 0, available: [], dataRoot: "" };
 export function RetryAction({ scope, nested }: { scope: Scope; nested: boolean }) {
   const info = useScope(agentScope(scope), emptyAgent);
   const tasks = useScope(nested ? null : tasksScope(scope), emptyTasks);
-  const config = useScope("configuration", noConfig);
   const { connected } = useConnectionState();
   const pending = useOptimistic(scope);
   const attempt = useResumeAttempt(scope);
   const active = nested ? info.task ? taskActive(info.task.status) : running(info.run)
     : running(info.run) || tasks.tasks.some((task) => taskActive(task.status));
-  const selected = config.available.some((model) => model.provider === info.selection?.provider && model.id === info.selection.id);
+  const selected = !!info.selection;
   const { busy, submit } = useSubmission(scope, { active, nested, selected, connected, runId: info.run?.id, task: info.task });
   const submitting = pending.some((item) => item.state !== "failed");
   if (active || !canContinue(info.run) || submitting || attempt &&

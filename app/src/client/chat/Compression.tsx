@@ -10,12 +10,9 @@ import {
   emptyAgent,
   threadScope,
   emptyThread,
-  type Selection,
 } from "../../shared/agent.js";
 import {
   compressionScope,
-  compressionPreferencesScope,
-  type CompressionPreferences,
   type Compression as Job,
 } from "../../shared/compression.js";
 import { command, useConnection, useScope } from "../transport.js";
@@ -37,8 +34,7 @@ export function Compression({ scope }: { scope?: Scope }) {
     scope ? scopeKey(scope) : null,
     null,
   );
-  const preferences = useScope<CompressionPreferences | null>(compressionPreferencesScope, null);
-  const selection = preferences?.selection ?? info.selection;
+  const selection = info.selection;
   const connection = useConnection();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -62,16 +58,8 @@ export function Compression({ scope }: { scope?: Scope }) {
   const state = job?.state ?? "idle";
   const startUnavailable = connection !== "已连接本地服务"
     ? "尚未连接本地服务，请连接后操作。"
-    : !preferences ? "正在读取全局压缩模型设置…"
     : !thread.ids.length ? "此会话尚无消息可压缩。"
-    : !selection ? "请先选择压缩模型。" : "";
-  const saveModel = async (selection: Selection) => {
-    setBusy(true);
-    try {
-      await command("compression.preferences.save", { selection });
-      setError("");
-    } finally { setBusy(false); }
-  };
+    : !selection ? "请先为当前会话选择模型。" : "";
   const id = `compression-${scope?.sessionId ?? "empty"}`;
   const run = async (op: "compression.start" | "compression.cancel") => {
     if (!scope || busy || pending ||
@@ -90,7 +78,7 @@ export function Compression({ scope }: { scope?: Scope }) {
     try {
       await command(
         op,
-        op === "compression.cancel" ? { id: job?.id } : { selection },
+        op === "compression.cancel" ? { id: job?.id } : {},
         scope,
         requestId,
       );
@@ -164,8 +152,6 @@ export function Compression({ scope }: { scope?: Scope }) {
           title={session?.title ?? "当前会话"}
           selection={selection}
           contextWindow={info.usage?.context?.window}
-          inherited={!preferences?.selection}
-          onSelect={saveModel}
           startUnavailable={startUnavailable}
           busy={busy || connection !== "已连接本地服务"}
           error={error}

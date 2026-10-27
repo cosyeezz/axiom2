@@ -85,6 +85,7 @@ test("model tool schemas keep required fields and prose limits; runtime validati
     assert.match(delegate.properties.tasks.items.properties.title.description, /30 characters/);
     assert.ok(append.required.includes("summary"));
     assert.equal(append.properties.summary.maxLength, undefined);
+    assert.match(append.properties.summary.description, /30 characters/);
     for (const tool of tools) assert.doesNotMatch(JSON.stringify(tool.parameters), /"(?:minLength|maxLength|minItems|maxItems|pattern|minimum|maximum)"/);
     assert.deepEqual(Object.keys(append.properties), ["taskId", "summary", "text"]);
     const read = tools.find(t => t.name === "read_result")!.parameters as any;
@@ -96,7 +97,7 @@ test("model tool schemas keep required fields and prose limits; runtime validati
       const params = { context: "background", tasks: [{ title: "核验任务", task: "full instructions", systemPrompt }] };
       await assert.rejects(f.commands.tool(f.scope, f.run, "delegate", randomUUID(), params), { code: "INVALID_INPUT", message: "子任务定义包含未支持的参数" });
     }
-    for (const value of [undefined, "", "   ", "字".repeat(31), "a".repeat(31), "😀".repeat(31), "a\nb", "a\rb", "a\0b", "\0", "a\n", "a\r\n"]) {
+    for (const value of [undefined, "", "   ", "字".repeat(41), "a".repeat(41), "😀".repeat(41), "a\nb", "a\rb", "a\0b", "\0", "a\n", "a\r\n"]) {
       const taskArgs: Record<string, string> = { task: "full instructions" };
       const appendArgs: Record<string, string> = { taskId, text: "complete extra instructions" };
       if (value !== undefined) { taskArgs.title = value; appendArgs.summary = value; }
@@ -107,6 +108,12 @@ test("model tool schemas keep required fields and prose limits; runtime validati
       await assert.rejects(f.commands.tool(f.scope, f.run, "delegate", randomUUID(), { context: "background", tasks: [{ title: value, task: "full instructions" }] }), { code: "INVALID_INPUT" });
       await assert.rejects(f.commands.tool(f.scope, f.run, "append", randomUUID(), { taskId, summary: value, text: "complete extra instructions" }), { code: "INVALID_INPUT" });
     }
+    for (const title of ["字".repeat(31), "a".repeat(31), "😀".repeat(31)]) {
+      await assert.rejects(f.commands.tool(f.scope, f.run, "delegate", randomUUID(), { context: "background", tasks: [{ title, task: "full instructions" }] }), { code: "INVALID_INPUT", message: "任务标题 须为1–30字符的单行描述" });
+    }
+    for (const summary of ["字".repeat(41), "a".repeat(41), "😀".repeat(41)]) {
+      await assert.rejects(f.commands.tool(f.scope, f.run, "append", randomUUID(), { taskId, summary, text: "instructions" }), { code: "INVALID_INPUT", message: "追加简述 须为1–40字符的单行描述" });
+    }
     assert.equal(f.records.list(f.scope).tasks.length, 1);
     assert.equal(f.appended.length, 0, "invalid summaries never reach queue or budget mutation");
     await assert.rejects(f.commands.tool(f.scope, f.run, "append", randomUUID(), { taskId, summary: "追加", text: "instructions", mode: "steer" }), { code: "INVALID_INPUT" });
@@ -115,6 +122,12 @@ test("model tool schemas keep required fields and prose limits; runtime validati
       const params = { taskId, summary, text: "完整追加正文\n" + "验证细节。".repeat(100) };
       assert.deepEqual(validateToolArguments(appendTool, { type: "toolCall", id: "valid", name: "append", arguments: params }), params);
       assert.doesNotThrow(() => validateToolArguments(delegateTool, { type: "toolCall", id: "valid", name: "delegate", arguments: { context: "background", tasks: [{ title: summary, task: "full instructions" }] } }));
+      await f.commands.tool(f.scope, f.run, "append", randomUUID(), params);
+      assert.deepEqual(f.appended.at(-1), params);
+    }
+    for (const summary of ["Isolate concurrent build errors", ...[31, 40].flatMap(length => ["字".repeat(length), "a".repeat(length), "😀".repeat(length)])]) {
+      const params = { taskId, summary, text: "完整追加正文\n验证细节。" };
+      assert.deepEqual(validateToolArguments(appendTool, { type: "toolCall", id: "valid-long", name: "append", arguments: params }), params);
       await f.commands.tool(f.scope, f.run, "append", randomUUID(), params);
       assert.deepEqual(f.appended.at(-1), params);
     }

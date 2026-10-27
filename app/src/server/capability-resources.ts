@@ -2,7 +2,7 @@ import "./pi-settings-storage.js";
 import { modelToolTransport } from "./integrations/model-proxy-tools.js";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   DefaultPackageManager, SettingsManager, loadSkills, createMcpExtension,
   createCodemodeExtension, createToolSearchExtension,
@@ -13,6 +13,7 @@ import { openCliResources } from "./integrations/opencli-resources.js";
 import { addReaServer, reaResources } from "./integrations/rea-resources.js";
 import { builtinCapability, resolveBuiltinSkills } from "./builtin-capabilities.js";
 import { reaConfigPath } from "./integrations/rea-runtime.js";
+import { createReaToolPolicy } from "./integrations/rea-tool-policy.js";
 import { piDevelopmentSkillPath } from "./axiom-prompt.js";
 
 type McpConfig = ReturnType<NonNullable<McpExtensionOptions["loadConfig"]>>;
@@ -143,8 +144,23 @@ export function capabilityExtensions(runtime: CapabilityRuntime, root: string): 
     if (!runtime.mcp.servers.length) return;
     await createCodemodeExtension({ mode: "on" })(pi);
     await createToolSearchExtension()(pi);
-    const mcp = createMcpExtension({ createTransport: modelToolTransport, loadConfig: () => structuredClone(runtime.mcp), logPath: join(root, "pi", "mcp.log"),
+    const builtinRea = runtime.mcp.servers.find(entry => entry.name === "rea" && entry.scope === "extension" && resolve(entry.source) === resolve(reaConfigPath(root)));
+    let version: string | undefined;
+    if (builtinRea && "command" in builtinRea.config && builtinRea.config.args?.[0]) {
+      try {
+        // Bind audited recovery to this connection's installed package, not the
+        // mutable current config (an older session may still use its old path).
+        const pkg = JSON.parse(readFileSync(join(dirname(dirname(builtinRea.config.args[0])), "package.json"), "utf8"));
+        if (pkg.name === "rea-agents") version = pkg.version;
+      } catch { /* Initial budgets remain available; unknown versions never replay. */ }
+    }
+    const reaPolicy = createReaToolPolicy(root, { version });
+    const mcp = createMcpExtension({ createTransport: (entry, cwd, auth) => {
+      const transport = modelToolTransport(entry, cwd, auth);
+      if (builtinRea && entry.name === "rea" && "pid" in transport) reaPolicy.attachTransport(transport as Parameters<typeof reaPolicy.attachTransport>[0]);
+      return transport;
+    }, loadConfig: () => structuredClone(runtime.mcp), logPath: join(root, "pi", "mcp.log"),
       updateConfig: () => { throw Error("请在技能与 MCP 面板修改选择，再重新加载会话。"); } });
-    await mcp({ ...pi, getMcpServers: () => [], registerCommand: () => {} });
+    await mcp({ ...pi, getMcpServers: () => [], registerCommand: () => {}, registerTool: definition => pi.registerTool(builtinRea ? reaPolicy.wrap(definition) : definition) });
   }];
 }

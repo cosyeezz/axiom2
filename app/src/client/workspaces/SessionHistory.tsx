@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { command, scopeOrder, useScope } from "../transport.js";
+import { command, isVisuallyRemoved, scopeOrder, useScope } from "../transport.js";
 import { Icon } from "../components.js";
 import { SessionStatusIcon } from "../StatusIcons.js";
 import { DeleteButton } from "../DeleteButton.js";
@@ -13,12 +13,16 @@ export function History({
   workspace,
   workspaces,
   selected,
+  preparing = false,
   select,
+  recover = select,
   onError,
 }: {
   workspace?: Workspace;
   workspaces: Workspace[];
   selected: Scope | null;
+  preparing?: boolean;
+  recover?: (scope: Scope) => void;
   select: (scope: Scope) => void;
   onError: (error: string) => void;
 }) {
@@ -44,12 +48,12 @@ export function History({
     });
   }, []);
   useEffect(() => {
-    if (!workspace || !snapshot) return;
+    if (preparing || !workspace || !snapshot) return;
     // A foreign pinned session is valid independently of the sidebar's list.
     if (selected?.sessionId && (!viewedSessions || viewedSessions.some((s) => s.id === selected.sessionId))) return;
     if (selected?.sessionId || sessions[0])
-      select({ workspaceId: workspace.id, sessionId: sessions[0]?.id ?? "" });
-  }, [snapshot, viewedSessions, selected?.sessionId]);
+      recover({ workspaceId: workspace.id, sessionId: sessions[0]?.id ?? "" });
+  }, [snapshot, viewedSessions, selected?.sessionId, preparing]);
   // The global top subscription overlaps the current workspace; render each ID once.
   const workspaceOrder = scopeOrder(workspace ? `sessions:${workspace.id}` : ""), pinnedOrder = scopeOrder("pinned-sessions");
   const filtered = useMemo(() => {
@@ -57,7 +61,7 @@ export function History({
     return [...new Map([
       ...Object.values(heldRows).map(({ session }) => session), ...overlapping,
     ].map((s) => [s.id, s])).values()]
-      .filter((s) => s.title.toLowerCase().includes(query.toLowerCase())).sort(compareSessions);
+      .filter((s) => !isVisuallyRemoved(s) && s.title.toLowerCase().includes(query.toLowerCase())).sort(compareSessions);
   }, [sessions, pinnedSessions, heldRows, query, workspaceOrder, pinnedOrder]);
   const groups = useMemo(() => {
     const result: [Session[], Session[]] = [[], []];
@@ -97,6 +101,7 @@ export function History({
         />
       </div>
       <div className="history" id="history">
+        {preparing && <div className="history-row" aria-busy="true"><div className="history-item" aria-current="true"><span><strong>新对话</strong><small role="status">正在后台准备…</small></span></div></div>}
         {[true, false].map((pinned) => {
           const rows = groups[pinned ? 0 : 1];
           return (
@@ -158,26 +163,23 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
   const blurredDuringComposition = useRef(false);
   const button = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const navigation = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const cancelSelection = () => {
-    if (navigation.current !== undefined) { clearTimeout(navigation.current); navigation.current = undefined; hold(false); }
+  const pointerNavigation = useRef(false);
+  const navigate = (pointer: boolean) => {
+    if (pointer) { pointerNavigation.current = true; hold(true); }
+    select({ workspaceId: s.workspaceId, sessionId: s.id });
   };
-  useEffect(() => () => clearTimeout(navigation.current), []);
-  const navigate = (keyboard: boolean) => {
-    cancelSelection();
-    const apply = () => { navigation.current = undefined; hold(false); select({ workspaceId: s.workspaceId, sessionId: s.id }); };
-    if (keyboard) apply();
-    else { hold(true); navigation.current = setTimeout(apply, 300); }
+  // Select immediately, but keep the row in its group under the pointer so a
+  // read acknowledgement cannot replace the target before double-click rename.
+  const leaveRow = () => {
+    pointerNavigation.current = false;
+    hold(editingRef.current || !!deleting || deletePending || removingRef.current);
   };
-  // Hold across the click window, confirmation, and command so live grouping
-  // cannot replace the trigger between clicks or leave a deleted row behind.
   useEffect(() => {
-    hold(editingRef.current || !!deleting || deletePending || removing);
+    hold(pointerNavigation.current || editingRef.current || !!deleting || deletePending || removing);
   }, [deleting, deletePending, removing]);
   useEffect(() => () => hold(false), []);
   const rename = () => {
-    cancelSelection();
-    if (removingRef.current) return;
+    if (removingRef.current || savingRef.current) return;
     hold(true);
     setTitle(s.title);
     composing.current = false;
@@ -188,7 +190,7 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
   const finish = (restoreFocus: boolean) => {
     editingRef.current = false;
     setEditing(false);
-    hold(false);
+    hold(pointerNavigation.current);
     if (restoreFocus) requestAnimationFrame(() => {
       const target = button.current ?? document.querySelector<HTMLButtonElement>(
         `[data-session-id="${CSS.escape(s.id)}"] button.history-item`,
@@ -209,22 +211,26 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
     }
     savingRef.current = true;
     setSaving(true);
-    const saved = await run("session.rename", { title: nextTitle }, s);
+    // Commit the visible title and leave editing immediately. The shared intent
+    // overlay rolls back only this field if the background save is rejected.
+    const result = run("session.rename", { title: nextTitle }, s);
+    finish(restoreFocus);
+    await result;
     savingRef.current = false;
     setSaving(false);
-    // A delayed acknowledgement must not steal focus from the composer or another row.
-    const stillFocused = document.activeElement === input.current;
-    if (saved) finish(restoreFocus && stillFocused);
-    // On failure keep the draft in place for correction or retry.
-    else if (restoreFocus && stillFocused) input.current?.focus();
   };
-  const remove = () => { if (!removingRef.current) setDeleting(s); };
+  const remove = () => {
+    if (removingRef.current) return;
+    pointerNavigation.current = false;
+    setDeleting(s);
+  };
   const removeNow = async () => {
     if (removingRef.current) return;
     removingRef.current = true;
     setRemoving(true);
     try {
-      await run("session.delete", { confirmed: true }, s);
+      const removed = await run("session.delete", { confirmed: true }, s);
+      if (removed) pointerNavigation.current = false;
     } finally {
       removingRef.current = false;
       setRemoving(false);
@@ -294,13 +300,11 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
     </span>
   );
   return (
-    <div className="history-row" data-editing={editing} data-session-id={s.id}>
+    <div className="history-row" data-editing={editing} data-session-id={s.id} onPointerLeave={leaveRow}>
       {deleting && <ConfirmDialog title="删除会话" subject={deleting.title}
         description="停止所属任务并从列表移除；保留对话、记忆与附件，不删除项目文件。" confirmLabel="删除会话" danger
         onClose={() => setDeleting(null)}
-        onConfirm={() => command("session.delete", { confirmed: true }, {
-          workspaceId: deleting.workspaceId, sessionId: deleting.id,
-        })} />}
+        onConfirm={() => { setDeleting(null); void removeNow(); }} />}
       {editing ? (
         <div className="history-item" aria-current={selected}>{content}</div>
       ) : (
@@ -311,8 +315,7 @@ const HistoryRow = memo(function HistoryRow({ session: s, selected, workspacePat
           data-view-navigation
           aria-current={selected}
           data-tooltip={`${s.title}${workspacePath ? ` · ${workspacePath}` : ""} · 双击重命名（F2），Delete 删除`}
-          onClick={(event) => navigate(event.detail === 0)}
-          onBlur={cancelSelection}
+          onClick={(event) => { if (event.detail < 2) navigate(event.detail > 0); }}
           onDoubleClick={rename}
           onKeyDown={(e) => {
             if (e.key === "F2") { e.preventDefault(); rename(); }

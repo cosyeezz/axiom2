@@ -19,7 +19,7 @@ import { AnnotationTray } from "./ReplyAnnotations.js";
 import { clearSentAnnotations } from "./reply-annotations.js";
 import { messageLengthError, messageTextLimit } from "./message-limit.js";
 import { SteeringQueue } from "./SteeringQueue.js";
-import { ComposerQuestion } from "./ComposerQuestion.js";
+import { SubmissionFeedback } from "./SubmissionFeedback.js";
 const noConfig: Configuration = {
   revision: "",
   providerCount: 0,
@@ -46,16 +46,12 @@ export function Composer({
         : running(info.run)
       : running(info.run) || tasks.tasks.some((t) => taskActive(t.status)),
     promptId = nested ? `prompt-${scope.sessionId}` : "prompt",
-    selected = config.available.some(
-      (m) =>
-        m.provider === info.selection?.provider && m.id === info.selection.id,
-    );
+    selected = !!info.selection;
   usePersistentDraft(scope);
   const editing = useComposerEdit(scope);
   const draft = useDraft(scope),
     input = useRef<HTMLTextAreaElement>(null);
   const [reading, setReading] = useState(false);
-  const [questionAnchor, setQuestionAnchor] = useState<HTMLFormElement | null>(null);
   const lastEscape = useRef<number | null>(null);
   useEffect(() => { lastEscape.current = null; }, [scope.workspaceId, scope.sessionId]);
   const completion = useFileCompletion(scope, draft.text, input);
@@ -92,6 +88,7 @@ export function Composer({
     <section className="composer-area">
       <div className="container">
         <SteeringQueue scope={scope} nested={nested} />
+        <SubmissionFeedback scope={scope} nested={nested} />
         <AnnotationTray scope={scope} disabled={busy || !connected || (!active && !selected)}
           send={(items, text, supplement) => void submit(active ? "append" : "prompt", {
             draft: { text, attachment: null }, onStart: () => clearSentAnnotations(scope, items, supplement),
@@ -105,9 +102,7 @@ export function Composer({
           <SkillCards skills={draft.skills} scope={scope} onRemove={id => updateDraft(scope, { skills: getDraft(scope).skills?.filter(skill => skill.id !== id) })} />
           <AttachmentList scope={scope} draft={draft} reading={reading} />
         </div>
-        <ComposerQuestion scope={scope} anchor={questionAnchor} editing={!!editing} />
         <form
-          ref={setQuestionAnchor}
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
@@ -217,7 +212,8 @@ export function Composer({
     </section>
   );
 }
-export function EmptyComposer({ onSelect, openWorkspace, picking = false, tools }: {
+export function EmptyComposer({ onSelect, openWorkspace, picking = false, tools, preparing }: {
+  preparing?: { text: string; onChange: (text: string) => void; uncertain: boolean; verify: () => void };
   tools?: UsageTools;
   picking?: boolean;
   onSelect?: (selection: Selection) => Promise<void>;
@@ -234,12 +230,16 @@ export function EmptyComposer({ onSelect, openWorkspace, picking = false, tools 
             placeholder="Ask axiom…"
             lang="en"
             data-od-id="message-input"
-            disabled
+            disabled={!preparing}
+            autoFocus={!!preparing}
+            maxLength={messageTextLimit}
+            value={preparing?.text ?? ""}
+            onChange={event => preparing?.onChange(event.target.value)}
           />
           <div className="composer-tools">
             <div className="row">
               <FilePickerButton className="icon-btn" id="attach" label="添加附件" icon="plus" iconOnly disabled />
-              {onSelect ? <ModelPicker onSelect={onSelect} /> : (
+              {preparing ? <span className="meta" role="status">{preparing.uncertain ? "新建结果待确认，输入已保留" : "新对话已打开，可以先输入…"}</span> : onSelect ? <ModelPicker onSelect={onSelect} /> : (
                 <FilePickerButton className="btn btn-ghost" label="打开工作空间以选择模型" picking={picking} onClick={openWorkspace} />
               )}
             </div>
@@ -253,7 +253,8 @@ export function EmptyComposer({ onSelect, openWorkspace, picking = false, tools 
           </div>
         </form>
         <Usage tools={tools} />
-        <Connection />
+        {preparing?.uncertain && <button type="button" className="btn" onClick={preparing.verify}>核实新建结果</button>}
+        <Connection extra={preparing && !preparing.uncertain ? "后台正在准备会话，准备完成后即可发送。" : ""} />
       </div>
     </section>
   );

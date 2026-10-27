@@ -89,11 +89,11 @@ test("Qoder invalid context is omitted and explicit budget/none changes final re
   assert.equal(noExplicit.parameters.context_length, undefined); assert.equal(noExplicit.business.feature_switches, undefined);
 });
 test("Qoder vision sends user and tool images as image_url arrays and retains tool errors", async () => {
-  const { models, model } = await fixture(), image = { type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" };
+  const { models, model } = await fixture(), image = { type: "image" as const, mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" };
   const vision: Context = { messages: [{ role: "user", content: [{ type: "text", text: "look" }, image], timestamp: 1 }, { role: "toolResult", toolCallId: "one", toolName: "read", isError: true, timestamp: 2, content: [image] }] };
   const result = await models.completeSimple(model, vision, { apiKey: "pt-MOCK", fetch: async (_url, init) => {
     const body = JSON.parse(decodeQoderBody(String(init?.body)));
-    assert.equal(body.messages[0].content[1].image_url.url, "data:image/png;base64,aGVsbG8="); assert.deepEqual(body.messages[0].content, body.messages[0].contents);
+    assert.equal(body.messages[0].content[1].image_url.url, `data:image/png;base64,${image.data}`); assert.deepEqual(body.messages[0].content, body.messages[0].contents);
     assert.equal(body.messages[1].tool_call_id, "one"); assert.equal(body.messages[1].is_error, true); assert.equal(body.messages[1].content[0].type, "image_url"); return response();
   } }); assert.equal(result.stopReason, "stop", result.errorMessage);
   const nonVision = normalizeQoderConfig({ ...config, is_vl: false })!;

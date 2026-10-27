@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { startServer } from "../src/server/index.js";
 import { memoryDirectory } from "../src/server/memory-files.js";
 import { compressionMemoryPrompt } from "../src/server/compression-memory.js";
-import { compressionMemoryRead } from "./compression-memory-fixture.js";
+import { compressionMemoryRead, isCompressionRequest } from "./compression-memory-fixture.js";
 import { until } from "./rewrite-fixture.js";
 import type { Session, Workspace, Scope } from "../src/shared/protocol.js";
 
@@ -44,7 +44,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       return;
     }
     response.writeHead(200, { "Content-Type": "text/event-stream" }); response.flushHeaders();
-    if (!body.tools?.length) {
+    if (isCompressionRequest(body)) {
       summaries++;
       stream(response, { role: "assistant", content: "## Goal\nPREPARED_MEMORY_SUMMARY" });
       return;
@@ -99,7 +99,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
   });
   const workspace = app.store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: project, authorized: true } }) as Workspace;
   for (const scenario of ["write", "edit", "handoff", "ignore", "failedWrite", "cancel", "cancelRejected", "overflow"] as const) {
-    mode = scenario; held = undefined; requests.length = 0; compressionEvents.length = 0;
+    mode = scenario; held = undefined; requests.length = 0; compressionEvents.length = 0; warnings.length = 0;
     const previousSummaries = summaries;
     const session = app.store.execute({ op: "session.create", workspaceId: workspace.id, requestId: randomUUID() }) as Session;
     const scope = { workspaceId: workspace.id, sessionId: session.id };
@@ -156,9 +156,19 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       }
     } else {
       assert.equal(job.state, scenario === "cancel" || scenario === "cancelRejected" ? "cancelled" : "failed", job.error ?? "");
-      assert.equal(summaries, previousSummaries, "cancelled or interrupted requests never start the summary model");
+      assert.equal(summaries, previousSummaries, "cancelled or interrupted preparation never starts the Axiom background summary");
       assert.equal(readFileSync(memoryPath, "utf8"), before);
-      if (scenario === "overflow") assert.ok(warnings.some(warning => warning.includes("原生压缩未执行")), "native overflow cannot bypass preparation");
+      if (scenario === "overflow") {
+        // Pi's independent overflow safety net is allowed to compact and retry.
+        // This fixture rejects that retry too; it must not revive the failed
+        // Axiom preparation or report that native compression was suppressed.
+        const file = String(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(session.id)!.file);
+        const compactions = readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line)).filter(entry => entry.type === "compaction");
+        assert.equal(compactions.length, 1, "native overflow compacted once before its retry failed");
+        assert.ok(compactions.every(entry => !entry.details?.axiomCompressionId), "failed preparation never publishes an Axiom summary");
+        assert.ok(warnings.some(warning => warning.includes("Context overflow recovery failed")), warnings.join("\n"));
+        assert.ok(!warnings.some(warning => warning.includes("原生压缩未执行")), "the native safety net is not disabled by preparation");
+      }
     }
   }
 });

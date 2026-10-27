@@ -14,22 +14,28 @@ export interface FilePreview {
   revision?: string; editable?: boolean; editReason?: string;
 }
 /** A local link, never a remote, device, anchor-only or executable URL. */
-export function localFileLink(href: string): { path: string; line?: number } | null {
-  if (!href || href.length > 4096 || /[\x00-\x1f\x7f]/.test(href) || href.startsWith("#")) return null;
-  let path = href;
+export function localFileLink(href: string): { path: string; line?: number; fragment?: string } | null {
+  if (!href || href.length > 4096 || /[\x00-\x1f\x7f]/.test(href) || /^[\u200b\ufeff]*#/.test(href)) return null;
+  // Generated links can carry an invisible separator before an absolute path.
+  // Strip only that prefix; relative names and characters inside filenames stay literal.
+  let path = href.replace(/^[\u200b\ufeff]+(?=[\\/]|[a-z]:[\\/]|file:\/\/)/i, "");
   if (/^file:\/\//i.test(path)) {
     try { const url = new URL(path); if ((url.hostname && url.hostname !== "localhost") || url.search) return null; path = url.pathname + url.hash; } catch { return null; }
     if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
-  } else if (/^[a-z][a-z\d+.-]*:/i.test(path) && !/^[a-z]:[\\/]/i.test(path) && !/^[^:/\\]+\.[a-z\d]+:\d+(?::\d+)?$/i.test(path)) return null;
+  } else if (/^[a-z][a-z\d+.-]*:/i.test(path) && !/^[a-z]:[\\/]/i.test(path) && !/^[^:/\\]+\.[a-z\d]+:\d+(?::\d+)?$/i.test(path.split("#")[0])) return null;
   path = path.replace(/\\/g, "/");
-  const suffix = path.match(/(?::(\d+)(?::\d+)?|#L(\d+)(?:C\d+)?)$/i);
-  const line = suffix ? Number(suffix[1] ?? suffix[2]) : undefined;
-  if (suffix) path = path.slice(0, -suffix[0].length);
   // Split URL syntax before decoding: %23 belongs to the filename, not a fragment.
-  if (/[?#]/.test(path)) return null;
-  try { path = decodeURIComponent(path).replace(/\\/g, "/"); } catch { return null; }
-  if (!path || path.startsWith("//") || /[\x00-\x1f\x7f]/.test(path) || /:/.test(path.replace(/^[a-z]:/i, ""))) return null;
-  return { path, ...(line && Number.isSafeInteger(line) ? { line } : {}) };
+  const hash = path.indexOf("#");
+  let fragment = hash < 0 ? "" : path.slice(hash + 1);
+  if (hash >= 0) path = path.slice(0, hash);
+  if (path.includes("?")) return null;
+  const suffix = path.match(/:(\d+)(?::\d+)?$/);
+  if (suffix) path = path.slice(0, -suffix[0].length);
+  try { path = decodeURIComponent(path).replace(/\\/g, "/"); fragment = decodeURIComponent(fragment); } catch { return null; }
+  if (!path || path.startsWith("//") || /[\x00-\x1f\x7f]/.test(path + fragment) || /:/.test(path.replace(/^[a-z]:/i, ""))) return null;
+  const selector = fragment.match(/^L(\d+)(?:C\d+)?$/i);
+  const line = selector ? Number(selector[1]) : suffix ? Number(suffix[1]) : undefined;
+  return { path, ...(line && Number.isSafeInteger(line) ? { line } : {}), ...(fragment && !selector ? { fragment } : {}) };
 }
 export function hasFileLink(text: string, href: string): boolean {
   let found = false;

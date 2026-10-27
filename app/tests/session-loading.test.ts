@@ -75,7 +75,7 @@ test("transcript ownership accepts Windows short names in either cwd position wi
 test("six background sessions never cold-read display history and retain terminal deltas until persistence", (t) => {
   const f = fixture(); t.after(f.close);
   const sessions = Array.from({ length: 6 }, f.create);
-  const spy = t.mock.method(SessionManager.prototype, "setSessionFile");
+  const spy = t.mock.method(SessionManager, "inMemory");
   const published: string[] = [];
   const views = new AgentViews(f.store, scope => published.push(scope), () => false);
   for (let i = 0; i < 60; i++) {
@@ -101,7 +101,7 @@ test("archive-only edits advance context revision, full reads share a same-sourc
   manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "current" }], stopReason: "stop", timestamp: 4 } as any);
   const views = new AgentViews(f.store, () => {}, () => false);
   const first = views.thread(scope);
-  const spy = t.mock.method(SessionManager.prototype, "setSessionFile");
+  const spy = t.mock.method(SessionManager, "inMemory");
   assert.equal(views.message(scope, archive, true)?.text, "archive");
   assert.equal(views.message(scope, archive, true)?.text, "archive"); assert.equal(spy.mock.callCount(), 1);
   manager.appendContextEdit(archive, { content: "replacement" }); views.refresh(scope);

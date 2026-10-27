@@ -1,6 +1,7 @@
 import type { RewriteTarget } from "../../shared/rewrite.js";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { paintFeedback } from "../paint-feedback.js";
 import { command } from "../transport.js";
 import {
   clearSubmittedDraft,
@@ -74,12 +75,13 @@ export function useSubmission(
     try {
       if (!stopping && !continuing) {
         if (!provided) stamp = prepareDraftSubmission(scope, captured, requestId);
-        flushSync(() => {
-          optimisticStart(scope, requestId, captured, state.active, provided?.rewrite);
-          started = true;
-          if (provided) provided.onStart();
-          else clearSubmittedDraft(scope, captured, false);
-        });
+        optimisticStart(scope, requestId, captured, state.active, provided?.rewrite);
+        started = true;
+        if (provided) provided.onStart();
+        else clearSubmittedDraft(scope, captured, false);
+        // Local feedback is independent of admission/authentication/worker startup.
+        // Yield naturally instead of forcing a synchronous render of the thread.
+        await paintFeedback();
       }
       const task = stopping && state.nested ? state.task : undefined;
       const receipt = await command<{ runId?: string; inputId?: string }>(

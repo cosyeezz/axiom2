@@ -30,6 +30,7 @@ test("REA installs privately, checks an actual MCP session, discovers bundled sk
   const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
   try {
     const before = resourceIdentity(root, join(root, "pi"));
+    await call(service, "rea.check"); await settle(service); // Explicitly confirm the legacy fixture version.
     const receipt = await call(service, "rea.install", { version: "6.7.0" });
     assert.equal(receipt.job?.running, true);
     const state = await settle(service);
@@ -62,6 +63,7 @@ test("REA installs privately, checks an actual MCP session, discovers bundled sk
 test("REA built-in MCP takes precedence over complete and partial project definitions", async () => {
   const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
     mkdirSync(join(root, ".pi"));
     writeFileSync(join(root, ".pi", "mcp.json"), JSON.stringify({ mcpServers: { rea: { enabled: false, exposure: "deferred" } } }));
@@ -81,6 +83,7 @@ test("REA failed update and failed MCP verification keep current version and cle
   for (const failure of ["fail", "mismatch", "invalidSkill"] as const) {
     const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
     try {
+      await call(service, "rea.check"); await settle(service);
       await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
       const original = readFileSync(reaConfigPath(root), "utf8");
       f.setLatest("6.8.0"); await call(service, "rea.check"); await settle(service); f[failure]();
@@ -96,6 +99,7 @@ test("REA cancellation, revision conflict, restart and broken configuration neve
   const root = temporary(), f = reaFixture();
   let service = new ReaService(root, () => {}, f.dependencies);
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     const original = readFileSync(reaConfigPath(root), "utf8");
     let release!: () => void; f.hold(new Promise<void>(resolve => { release = resolve; }));
@@ -127,6 +131,7 @@ test("REA managed skill survives deletion of the external copy; resource manager
   try {
     const legacy = join(root, "pi", "skills", reaSkillName); mkdirSync(legacy, { recursive: true });
     writeFileSync(join(legacy, "SKILL.md"), `---\nname: ${reaSkillName}\ndescription: External copy\n---\n`);
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); await settle(service);
     const catalog = await discoverCapabilities(root, root), id = catalog.skills.find(s => s.name === reaSkillName)!.id;
     rmSync(legacy, { recursive: true });
@@ -152,6 +157,7 @@ test("locked sessions keep the same managed REA selection across reinstall and u
   const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies), store = new Store(root);
   const capabilities = new Capabilities(store, () => {});
   try {
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" });
     assert.equal((await settle(service)).job?.error, undefined);
     const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
@@ -212,6 +218,7 @@ test("historical path selections resolve by saved name and built-ins fall back t
         .run(JSON.stringify({ skills: selected ? [oldId] : [], mcp: [] }), JSON.stringify({ skills: [{ ...skill, id: oldId }], mcp: [] }), session.id);
       scopes.push({ scope, selected, initial: capabilities.state(scope), oldId });
     }
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" });
     assert.equal((await settle(service)).job?.error, undefined);
     // An explicit session selection survives even when the managed default is off.
@@ -266,6 +273,7 @@ test("built-in name preferences preserve historical defaults and remain separate
     const oldMcpKey = createHash("sha256").update(JSON.stringify([resolve(generalServer.source), "rea"])).digest("hex");
     store.db.prepare("INSERT INTO capability_preferences(id,revision,body) VALUES(1,1,?)")
       .run(JSON.stringify({ skills: { [skillId(realpathSync(general))]: false, rea: true }, mcp: { [oldMcpKey]: false, [reaSkillName]: true } }));
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
     const workspace = store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: root, authorized: true } }) as Workspace;
     const session = store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
@@ -283,6 +291,7 @@ test("built-in Skill and MCP fall back independently, with one effective entry p
     mkdirSync(join(root, "pi", "skills", reaSkillName), { recursive: true });
     writeFileSync(general, `---\nname: ${reaSkillName}\ndescription: General fallback\n---\nGENERAL`);
     writeFileSync(join(root, "pi", "mcp.json"), JSON.stringify({ mcpServers: { rea: { command: "general-rea", enabled: false } } }));
+    await call(service, "rea.check"); await settle(service);
     await call(service, "rea.install", { version: "6.7.0" }); assert.equal((await settle(service)).job?.error, undefined);
     await call(service, "rea.save", { enabled: false, revision: service.snapshot().revision });
     let catalog = await discoverCapabilities(root, root);

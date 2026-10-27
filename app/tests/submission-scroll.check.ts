@@ -38,6 +38,11 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [], sends: Command[] = [];
+  async function dispatched(count: number) {
+    const deadline = Date.now() + 3000;
+    while (sends.length < count && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(sends.length, count, "prompt dispatch follows local UI feedback asynchronously");
+  }
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/@vite/client", async route => {
     const response = await route.fetch();
@@ -97,7 +102,7 @@ try {
           await page.locator("button.send").click();
         } else await page.locator("#prompt").press("Enter");
         await page.waitForFunction(() => !(document.querySelector("#prompt") as HTMLTextAreaElement).value);
-        assert.equal(sends.length, count + 1);
+        await dispatched(count + 1);
         await bottom(page, `real send queued=${queued} multiline=${multiline}`);
         if (multiline && !queued) assert.equal(await page.evaluate(() => getSelection()!.toString()), "", "sending ends selection-based reading");
         const command = sends.at(-1)!;
@@ -153,6 +158,21 @@ try {
   })`);
   assert.ok(firstNavigationGap > 2, `bottom navigation preserves intermediate animation frames: ${JSON.stringify({ gap: firstNavigationGap, reducedMotion: await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches) })}`);
   await bottom(page, "smooth navigation returns to tail");
+  // A scrollbar grab must own the viewport just like wheel/touch/keyboard input,
+  // including before an explicit smooth edge jump has delivered its first frame.
+  const scrollbarReading = await page.evaluate(() => {
+    const thread = document.querySelector<HTMLElement>("#thread")!, bounds = thread.getBoundingClientRect();
+    const reading = thread.scrollTop - 120;
+    document.querySelector<HTMLButtonElement>('.thread-navigation [data-scroll="top"]')!.click();
+    thread.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "mouse", pointerId: 101,
+      clientX: bounds.right - 2, clientY: bounds.top + 100, bubbles: true }));
+    thread.scrollTo({ top: reading, behavior: "instant" });
+    return thread.scrollTop;
+  });
+  await page.waitForTimeout(250);
+  await thread.dispatchEvent("pointerup", { pointerId: 101, bubbles: true });
+  assert.ok(Math.abs(await thread.evaluate(node => node.scrollTop) - scrollbarReading) < 2,
+    "scrollbar reading cancels an unfinished edge jump");
   // A new submission wins even when a delivery reveal still has positioning
   // frames/observers pending. Both actions intentionally happen in one event turn.
   // The preceding loop ends with an active run, where form submission means
@@ -167,7 +187,7 @@ try {
     document.querySelector<HTMLFormElement>("form.composer")!.requestSubmit();
   });
   await page.waitForFunction(() => !(document.querySelector("#prompt") as HTMLTextAreaElement).value);
-  assert.equal(sends.length, beforeRaceSend + 1);
+  await dispatched(beforeRaceSend + 1);
   await page.waitForTimeout(300); await bottom(page, "submission cancels unfinished delivery positioning");
   const raceCommand = sends.at(-1)!;
   views.messageChanged(scopes[1], { id: `input-${raceCommand.requestId}`, role: "user", text: raceText, inputIds: [raceCommand.requestId] }); views.flush(scopes[1]);

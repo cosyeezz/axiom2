@@ -8,7 +8,7 @@ import { costAmount, costTokens, costCategories, costLabels, costPartLabels, cos
 import type { Scope } from "../../shared/protocol.js";
 import "../styles/costs.css";
 const number = (value: number) => value.toLocaleString("zh-CN");
-function Breakdown({ row, title, description }: { row: CostRow; title?: ReactNode; description?: ReactNode }) {
+export function Breakdown({ row, title, description }: { row: Pick<CostRow, "provider" | "model"> & CostTotals; title?: ReactNode; description?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const display = useModelDisplay()({ provider: row.provider, id: row.model });
   return <details className="cost-line" onToggle={(event) => setOpen(event.currentTarget.open)}>
@@ -21,7 +21,8 @@ function Breakdown({ row, title, description }: { row: CostRow; title?: ReactNod
           <td>{row.unknownParts && !row.parts[part] ? "—" : `$${row.parts[part].toFixed(6)}`}</td></tr>)}</tbody></table></div>
       {!!row.unknownTokens && <p>部分记录未提供完整 Token 明细，表内仅列已知数量。</p>}
       {!!row.unknownParts && <p>部分记录缺少分项价格；已知总额仍计入汇总，不能据此推算各项单价。</p>}
-      <p>折算单价 = 已记录分项费用 ÷ 对应 Token × 1,000,000；多次请求或阶梯价格会形成加权均价。</p>
+      {!!row.estimatedRecords && <p className="cost-caution">{row.estimatedRecords} 条记录按公开价估算，估算部分 ${row.estimatedCost?.toFixed(6)}；不是渠道实际扣款，历史请求仅作参考，不代表当时价格。来源：{row.estimateSources?.join("；")}</p>}
+      <p>折算单价 = 已记录或估算分项费用 ÷ 对应 Token × 1,000,000；多次请求或阶梯价格会形成加权均价。</p>
     </div>}
   </details>;
 }
@@ -42,6 +43,7 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
           {costParts.map((part) => <div key={part}><dt>{costPartLabels[part]}</dt><dd>{report.total.records ? `${number(report.total.tokens[part])}${report.total.unknownTokens ? " + 未知" : ""}` : "—"}</dd></div>)}
         </dl>
         {!!report.total.unknownTokens && <p>部分记录缺少 Token 明细，仅汇总已知用量。</p>}
+        {!!report.total.estimatedRecords && <p className="cost-caution">其中 {report.total.estimatedRecords} 条为公开价估算，合计 ${report.total.estimatedCost?.toFixed(4)}（已包含在总额内），实际渠道、峰谷、服务档位及订阅扣费可能不同。展开模型可查看价格来源与核实日期。</p>}
         {!!report.total.unknownCost && <p className="cost-caution">{report.total.unknownCost} 条记录的价格或用量未知，当前金额不代表完整费用。可在<a href="/model-config.html">模型配置</a>中编辑模型的计费单价；补充价格后从下一次执行生效。</p>}
       </div>
       <div className="cost-equation">{costCategories.filter((category) => category !== "other" || totals.other.records).map((category) =>
@@ -84,9 +86,9 @@ const Report = memo(function Report({ report }: { report: CostReport }) {
     <details className="cost-method"><summary id="cost-method-title">计算口径<Icon name="chevron-right" className="cost-chevron" /></summary>
       <p>总费用 = 主 Agent + 全部子 Agent + 压缩 + 工具内部调用 + 其他模型调用。各分类互不重复。</p>
       <p>累计调用 Token = 输入 + 输出 + 缓存读取 + 缓存写入，包含全部分类的已记录用量；每次调用分别累计，不代表当前上下文占用。</p>
-      <p>单次费用 = 输入、输出、缓存读取、缓存写入各自的 Token × 对应每百万 Token 单价 ÷ 1,000,000。使用请求时记录的费用，不以当前模型价格重算历史；阶梯价和缓存策略以模型记录为准。</p>
+      <p>单次费用 = 输入、输出、缓存读取、缓存写入各自的 Token × 对应每百万 Token 单价 ÷ 1,000,000。已有费用保留请求时记录的值，不以当前配置重算；缺价且 Token 明细完整、模型精确匹配时，按公开参考价估算并标记。估算可能用于历史缺价请求，不代表当时价格；未匹配或资料不足仍为未知。阶梯价和缓存策略以模型记录为准。</p>
       <p>保留压缩前、重试及历史分支的已记录消费。失败、取消或未应用摘要不等于未消费；没有返回的用量无法推断。压缩任务的“用量记录”可能合并多次摘要请求。</p>
-      <p>当前会话费用仅包含当前查看会话的用量；累计预计费用与分类汇总包含整个主会话及所属子任务。金额保留四位小数，分项保留六位；未知价格显示未知，实际扣款以供应商账单为准。</p>
+      <p>当前会话费用仅包含当前查看会话的用量；累计预计费用与分类汇总包含整个主会话及所属子任务。金额保留四位小数，分项保留六位；公开价估算显示“含估算”，其余未知价格显示未知，实际扣款以供应商账单为准。</p>
     </details>
   </>;
 });

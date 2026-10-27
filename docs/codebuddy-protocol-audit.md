@@ -35,7 +35,7 @@
 
 官方 `29526.resolveModelBaseURL` 绑定产品 endpoint 加 `/v2`，SDK 调用 `/chat/completions`，支持 Bearer、system messages、tools、tool results、`max_tokens`、流式 `stream_options.include_usage`。这些与 Axiom 的 pi 适配基本一致。Axiom 保留自身完整系统提示和工具约束。
 
-官方 `injectReasoningSummaryIfNeeded` 会在启用思考或存在字符串 effort 时补 `reasoning_summary: auto`。但显式 `none/off` 的最终 CN 出站行为未闭环：`configureThinkingSettings` 会改写入口参数，产品网关又跳过通用兼容转换。不能从标题生成传入 `none` 或第三方模型转换器推断 CN 要求。本轮保持原有省略 none/off 的行为，关闭选项不保证上游默认关闭思考。
+官方 `injectReasoningSummaryIfNeeded` 会在启用思考或存在字符串 effort 时补 `reasoning_summary: auto`。但显式 `none/off` 的最终 CN 出站行为未闭环：`configureThinkingSettings` 会改写入口参数，产品网关又跳过通用兼容转换。不能从标题生成传入 `none` 或第三方模型转换器推断 CN 要求。本静态核验阶段保持原有省略 none/off 的行为，关闭选项不保证上游默认关闭思考。此处保留当时决策；后续真实第 31 轮暴露 off 非空 thinking，接入已改为保留显式 none，不能继续用上述静态证据推断省略可靠，详见下方联调章节。
 
 官方还发送请求/会话标识、客户端遥测及有条件的用户、企业和部门信息；未证实这些均是个人 CN 请求的必需字段，本次未捏造这些数据。官方源码中的域名故障切换常量包含 workbuddy.cn、copilot.tencent.com 和备站，但国内产品默认 endpoint 仍是 copilot.tencent.com，本次不切换域名，不宣称 WorkBuddy 账号互通。
 
@@ -56,6 +56,12 @@
 
 在隔离修复前，旧测试因工作区登录流程改为 worker 而失去进程内替身，曾意外请求官方授权 state 接口；未打开授权页、未完成登录、未请求模型。这不作为真实账号验证证据。
 
-最终验证：三个 CodeBuddy 测试文件共 15 项全部通过；全量 `tsc --noEmit` 与服务端 `tsc -p tsconfig.server.json --noEmit` 均退出 0。核验期间工作区模型模板合并出现只读数组／可选 methods 的类型错误，已保持其现有行为做类型修正，随后重跑 runtime 集成测试通过。没有使用真实账号调用模型。
+本静态核验阶段验证：三个 CodeBuddy 测试文件共 15 项全部通过；全量 `tsc --noEmit` 与服务端 `tsc -p tsconfig.server.json --noEmit` 均退出 0。核验期间工作区模型模板合并出现只读数组／可选 methods 的类型错误，已保持其现有行为做类型修正，随后重跑 runtime 集成测试通过。上述静态核验阶段没有使用真实账号调用模型。
 
 真实授权、账号权限、最终服务端提示处理、计费、动态模型目录以及未来接口兼容仍需实际联调。此次核验能消除已知差异，不能提供永久有效保证。
+
+## 后续真实联调与错误边界修复
+
+2026-10-26 另行通过 AXIOM、现有 OAuth 和同一条长会话，对 GLM-5.3、DeepSeek-V4.1-Flash 完成 21 轮修复前验收，并继续真实回归：两张独立新图、停止恢复、刷新回忆均通过。第 29 轮违反输出/禁止工具契约，第 31 轮虽然全文复制正确但 off 返回 13 个非空 thinking 字符；两次失败均保留，不用后续新场景覆盖。第 32–35 轮显式关闭及重新开启的新场景一次通过；第 36 轮补证 DeepSeek 独立 worker 的运行版本成功、原生 thinking 为 0，但完整正文违反纯 JSON 契约，整轮仍失败。最终 36 轮 33 pass（含 1 预设取消）、3 fail，未重放失败请求。此结果不追溯改变以上静态证据性质，也不代表已验全部目录模型、计费或官方客户端动态出站。
+
+接入修复包括 HTTP 溢出机器码保留、SDK 解析前 HTTP/SSE 错误脱敏、认证/权限/额度正确分类，以及保留 Pi 生成的显式 none 关闭信号而非省略。正常内容继续交给 pi，不删除系统/工具/历史、不隐藏上游 thinking。CodeBuddy 专项现为 22/22，生产构建 exit0，受影响 38 文件 217/217；全量另保留 2 个 FIFO 断言失败。完整真实结果、版本与流式证据、工作树并发变化限制、WorkBuddy/CodeBuddy 静态对照和未测项，见[真实长会话验证报告](codebuddy-e2e-validation.md)。

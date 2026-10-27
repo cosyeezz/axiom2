@@ -16,7 +16,7 @@ Axiom 内置 `codebuddy-cn` 供应商，直接调用 `https://copilot.tencent.co
 
 目录按模型声明可用的思考等级，例如 GLM-5.2 使用 high/xhigh，DeepSeek-V4-Pro 使用 low/high/xhigh，DeepSeek-V4.1-Flash 使用 low/high/max。
 
-调用复用 pi 的 OpenAI Completions 流解析，支持文本、思考内容、工具调用、工具结果和 usage。请求强制流式；只有明确请求思考时才附加 `reasoning_summary`。关闭思考时不发送 `reasoning_effort`，实际是否关闭取决于上游模型默认行为；目录标注不能关闭的模型不提供关闭选项。
+调用复用 pi 的 OpenAI Completions 流解析，支持文本、思考内容、工具调用、工具结果和 usage。请求强制流式；开启思考时附加 `reasoning_summary: auto`。可关闭模型的 off 经 pi 映射为显式 `reasoning_effort: "none"` 并省略 summary，不再删除关闭信号；若上游仍返回 thinking，会如实保留而不是隐藏。此修复源于真实 GLM/off 仍出现 thinking 的反例，已验范围与失败记录见[真实长会话验证报告](codebuddy-e2e-validation.md)，不保证所有模型或后续所有请求一致。目录标注不能关闭的模型不提供关闭选项。
 
 Axiom 完整保留系统提示和工具约束。参考实现有替换 agent 系统提示的兼容策略，本实现未采用。若上游拒绝某类提示，会报告错误，不会悄悄删改提示重试。提前撤销的令牌导致 401/403 时会提示重新登录；自动刷新以令牌到期时间为依据。
 
@@ -27,7 +27,7 @@ Axiom 完整保留系统提示和工具约束。参考实现有替换 agent 系�
 - `app/src/server/model-runtime.ts` 按配置中的供应商 ID、已保存凭据或明确的添加/登录操作加载供应商实现；未配置且未登录时不会注册 CodeBuddy。添加菜单使用独立静态模板，不为显示选项初始化供应商。注册时抑制 SDK 隐式后台刷新，调用方按原有流程显式刷新。
 - 已配置的 CodeBuddy 模型可能依赖内置 URL、API 和模型能力，读取这些配置时仍需恢复本地供应商定义；本地注册不等于认证或请求远端服务。
 - `app/src/server/providers/codebuddy-auth.ts` 负责授权状态、token 轮询和刷新协议。
-- `app/src/server/providers/codebuddy-cn.ts` 负责流式协议适配与错误处理。
+- `app/src/server/providers/codebuddy-cn.ts` 负责请求适配；`codebuddy-response.ts` 在 SDK 解析前归一化 HTTP/SSE 错误，脱敏上游回显、保留上下文溢出机器语义，并区分认证、模型权限和额度错误。正常流仍交给 pi 解析。
 - `app/src/server/providers/codebuddy-models.ts` 保存模型快照与能力。
 - `app/tests/codebuddy-*.test.ts` 使用模拟网络验证登录、取消、刷新、流式工具调用和持久化集成，不使用真实凭据。
 
@@ -35,4 +35,4 @@ Axiom 完整保留系统提示和工具约束。参考实现有替换 agent 系�
 
 凭据的到期时间优先读取上游毫秒级 `expiresAt`，否则由秒级 `expiresIn` 换算；两者都缺失时使用一小时的本地刷新计划，这不是上游有效期承诺。登录与刷新协议已对照官方 CLI 2.173.0 发布产物，证据、修复与未验证项见 [协议核验报告](codebuddy-protocol-audit.md)。
 
-真实账号登录、上游模型权限、计费以及长会话工具调用仍需账号联调确认。
+2026-10-26 已使用现有 OAuth，在 AXIOM 同一真实会话中对 GLM-5.3 与 DeepSeek-V4.1-Flash 验收文本、思考、工具副作用、两张独立新图、较长上下文、流式停止及刷新恢复。第 29 轮输出契约失败、第 31 轮 off 返回非空 thinking 均保留；修复后新场景不覆盖旧失败。设置名称可自定义，本次“Workbuddy”的实际 ID 为 `codebuddy-cn`，不代表验证了另一套 WorkBuddy 接口。准确轮次、运行版本证据、22 项专项/构建、完整自动测试的两处 FIFO 失败及未覆盖项，见[真实长会话验证报告](codebuddy-e2e-validation.md)。新登录交互、全部账号权限、计费、极限上下文及真实异常恢复仍不能据此视为已验证。

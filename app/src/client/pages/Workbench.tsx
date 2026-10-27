@@ -3,7 +3,8 @@ import { FilePreviewHost } from "../chat/FilePreviewHost.js";
 import { guardFileNavigation } from "../file-edit-guard.js";
 import { MemoryToolbar } from "../memory/MemoryToolbar.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { command, useConnectionState } from "../transport.js";
+import { command, observeVisualActions, useConnectionState, useVisualActions, verifyVisualActions } from "../transport.js";
+import { useSessionCreation } from "../workspaces/useSessionCreation.js";
 import { Icon, PanelIcon } from "../components.js";
 import {
   scopeKey,
@@ -26,7 +27,12 @@ const androidClient = /^#axiom-native=\d+$/.test(location.hash);
 export default function Workbench() {
   const [error, setError] = useState("");
   const connection = useConnectionState();
-  const [reading, setReading] = useState(() => androidClient || localStorage.getItem("axiom.mobile.reading") === "true");
+  // The Android entry still opens in reading mode; an explicit choice from the
+  // reader wins afterwards, so a refresh restores whichever state they left.
+  const [reading, setReading] = useState(() => {
+    const stored = localStorage.getItem("axiom.mobile.reading");
+    return stored === null ? androidClient : stored === "true";
+  });
   const restoreReadingFocus = useRef(false);
   const navigationGuard = useRef<(action: () => void) => void>((action) => action());
   const navigate = (action: () => void) => guardFileNavigation(() => navigationGuard.current(action));
@@ -40,9 +46,19 @@ export default function Workbench() {
       document.querySelector<HTMLButtonElement>(reading ? ".mobile-expand" : ".mobile-reading-toggle")?.focus({ preventScroll: true });
     }
   }, [reading]);
-  const { workspaces, workspaceId, view, select: selectView, selectSession, navigation } = useWorkspaceView(setError);
-  const [collapsed, setCollapsed] = useState(false),
+  const { ready: viewReady, workspaces, workspaceId, view: selectedView, select: selectView, selectSession, recoverSession, navigation } = useWorkspaceView(setError);
+  const visualActions = useVisualActions();
+  const uncertainActions = visualActions.filter(action => action.state === "uncertain");
+  useEffect(() => observeVisualActions(event => {
+    if (event.phase === "failed" || event.phase === "uncertain") setError(event.error?.message ?? "操作未完成，已恢复显示。");
+  }), []);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("axiom.sidebar.collapsed") === "true"),
     [mobileOpen, setMobileOpen] = useState(false);
+  // The sidebar's collapse button keeps working across refreshes.
+  const setSidebarCollapsed = (next: boolean) => {
+    localStorage.setItem("axiom.sidebar.collapsed", String(next));
+    setCollapsed(next);
+  };
   const [pickingFolder, setPickingFolder] = useState(false);
   const folderRequest = useRef<AbortController | null>(null);
   useEffect(() => () => folderRequest.current?.abort(), []);
@@ -92,6 +108,8 @@ export default function Workbench() {
     }
   }, [isMobile, mobileOpen]);
   const workspace = workspaces.find((w) => w.id === workspaceId);
+  const creation = useSessionCreation({ view: selectedView, navigation, select: (next) => select(next), onError: setError });
+  const view = creation.preparing ? { workspaceId: creation.preparing.workspaceId, sessionId: "" } : selectedView;
   const viewedWorkspace = workspaces.find((w) => w.id === view?.workspaceId);
   const select = (next: Scope) => {
     navigate(() => { selectView(next); closeMobileHistory(); });
@@ -108,28 +126,10 @@ export default function Workbench() {
     } catch (cause) { setError((cause as Error).message); throw cause; }
     finally { forking.current = false; setForkBusy(false); }
   };
-  const creatingSessions = useRef(new Set<string>());
   const create = async (id = workspace?.id) => {
-    if (!id) {
-      void chooseFolder();
-      return;
-    }
-    if (creatingSessions.current.has(id)) return;
-    creatingSessions.current.add(id);
-    const startedAt = navigation.current;
-    try {
-      const session = await command<Session>(
-        "session.create",
-        { reuseEmpty: true },
-        { workspaceId: id },
-      );
-      if (navigation.current === startedAt)
-        select({ workspaceId: id, sessionId: session.id });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      creatingSessions.current.delete(id);
-    }
+    if (!viewReady) { setError("正在读取工作空间，请稍候…"); return; }
+    if (!id) { void chooseFolder(); return; }
+    await creation.create(id);
   };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -169,18 +169,19 @@ export default function Workbench() {
           <button
             className="new-chat"
             id="new-chat"
+            disabled={!viewReady}
             data-view-navigation
             onClick={() => navigate(() => { void create(); })}
           >
             <Icon name="new-chat" />
-            <span>新建会话</span>
+            <span>{!viewReady ? "正在读取工作空间…" : creation.pending ? "正在准备新会话…" : "新建会话"}</span>
           </button>
           <button
             className="icon-btn"
             id="collapse-history"
             aria-label="收起侧栏"
             onClick={() => {
-              isMobile ? closeMobileHistory() : setCollapsed(true);
+              isMobile ? closeMobileHistory() : setSidebarCollapsed(true);
               requestAnimationFrame(() =>
                 document.getElementById("toggle-history")?.focus(),
               );
@@ -202,6 +203,8 @@ export default function Workbench() {
           workspace={workspace}
           workspaces={workspaces}
           selected={view}
+          preparing={!!creation.preparing}
+          recover={(next) => navigate(() => recoverSession(next))}
           select={(next) => navigate(() => { selectSession(next); closeMobileHistory(); })}
           onError={setError}
         />
@@ -247,7 +250,7 @@ export default function Workbench() {
                 onClick={() => {
                   if (isMobile) setMobileOpen(true);
                   else {
-                    setCollapsed(false);
+                    setSidebarCollapsed(false);
                     requestAnimationFrame(() =>
                       document.getElementById("collapse-history")?.focus({ preventScroll: true }),
                     );
@@ -256,7 +259,7 @@ export default function Workbench() {
               >
                 <PanelIcon />
               </button>
-              <Title workspace={viewedWorkspace} scope={view} onError={setError} />
+              {creation.preparing ? <strong role="status">新对话</strong> : <Title workspace={viewedWorkspace} scope={view} onError={setError} />}
             </div>
             <button className="mobile-reading-toggle icon-btn" aria-label="收起工作台，只看对话" onClick={toggleReading}><Icon name="scan" /></button>
           </header>
@@ -272,27 +275,28 @@ export default function Workbench() {
           ) : (
             <EmptyComposer
               tools={tools}
+              preparing={creation.preparing ? { text: creation.preparing.text, onChange: creation.changeText, uncertain: creation.preparing.state === "uncertain", verify: () => void creation.verify() } : undefined}
               openWorkspace={() => void chooseFolder()}
               picking={pickingFolder}
-              onSelect={workspace ? async (selection) => {
-                const startedAt = navigation.current;
-                const session = await command<Session>(
-                  "session.create", { reuseEmpty: true }, { workspaceId: workspace.id },
-                );
+              onSelect={workspace && !creation.preparing ? async (selection) => {
+                const session = await creation.create(workspace.id);
+                if (!session) return;
                 const scope = { workspaceId: workspace.id, sessionId: session.id };
                 try {
                   await command("agent.model", { selection }, scope);
                 } catch (e) {
                   setError((e as Error).message);
                   throw e;
-                } finally {
-                  if (navigation.current === startedAt) select(scope);
                 }
               } : undefined}
             />
           )}</MemoryToolbar>
           </OriginalConversationProvider>
           </FilePreviewHost>
+          {uncertainActions.length > 0 && <p className="execution-alert" role="status">
+            {uncertainActions.length} 项操作结果待确认；界面保留你的操作，不会自动重发。
+            <button type="button" className="btn" onClick={() => void verifyVisualActions().catch(e => setError((e as Error).message))}>核实结果</button>
+          </p>}
           {error && (
             <p className="execution-alert" role="alert">
               {error}

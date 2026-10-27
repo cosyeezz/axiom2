@@ -20,8 +20,7 @@ import {
 } from "./records.js";
 import { TaskDelivery } from "./delivery.js";
 import { TaskAdmission, type TaskAdmissionTurn } from "./admission.js";
-import { configuration } from "../models.js";
-import { imagesInput, requireImageModel } from "../images.js";
+import { imagesInput } from "../images.js";
 import { taskSummaryMs, type TaskBudget } from "../task-budget.js";
 // Owns launch capacity, live input handoff, budgets and cancellation.
 export class TaskScheduler {
@@ -189,13 +188,6 @@ export class TaskScheduler {
     const images = imagesInput(p.images);
     const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
     const skills = skillsInput(p.skills);
-    if (images.length) {
-      const config = await configuration(this.store.root);
-      const info = this.agents.info(target(row));
-      const selection = running(info.run) ? info.run!.selection : info.selection;
-      requireImageModel(config.available.find((m) => m.provider === selection?.provider && m.id === selection?.id), images);
-      row = this.records.rows("WHERE id=?", row.id)[0];
-    }
     const body = attachmentPrompt(
         text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "追问", 12000), attachments),
       mode = p.mode ?? "steer";

@@ -7,7 +7,7 @@ import { startServer } from "../src/server/index.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-pins-"));
-const app = await startServer({ root: join(root, "data"), port: 0 });
+const app = await startServer({ root: join(root, "data"), port: 0, dev: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
   const run = (op: string, params = {}, workspaceId?: string, sessionId?: string) =>
@@ -56,7 +56,15 @@ try {
   const waitTitle = async (title: string) => {
     await page.waitForFunction((expected) =>
       document.querySelector('[aria-label="置顶会话"] strong')?.textContent === expected, title);
+    // The projected title is deliberately earlier than durable acknowledgment.
+    const deadline = Date.now() + 3000;
+    while (app.store.session(a.workspace.id, a.session.id).title !== title && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(app.store.session(a.workspace.id, a.session.id).title, title);
+  };
+  const waitPin = async (pinned: boolean) => {
+    const deadline = Date.now() + 3000;
+    while (app.store.session(a.workspace.id, a.session.id).pinned !== pinned && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(app.store.session(a.workspace.id, a.session.id).pinned, pinned);
   };
   const switchWorkspace = async (name: string) => {
     const target = name === "Local B" ? b : a;
@@ -236,14 +244,17 @@ try {
   await input.press("Enter");
   await waitTitle("中文标题 A");
   assert.equal(mutations.length, 3);
+  const selectionsBeforeRename = workspaceSelections.length;
   await item.dblclick();
   await input.waitFor();
+  await page.waitForFunction(() => JSON.parse(sessionStorage.getItem("view") || "null")?.sessionId === document.querySelector('[data-editing="true"]')?.getAttribute("data-session-id"));
+  assert.equal(workspaceSelections.length, selectionsBeforeRename + 1, "double-click selects on its first click without navigating twice");
   assert.equal(await page.getByRole("dialog").count(), 0, "double-click rename must not open a dialog");
   await input.fill("Renamed A");
   await input.press("Enter");
   await waitTitle("Renamed A");
-  assert.equal(await page.locator("#chat-title").textContent(), "Local B", "double-click rename keeps the viewed session");
-  assert.equal(await pins.locator(".session-state").getAttribute("aria-label"), "未读", "renaming an unread session does not mark its content read");
+  await page.waitForFunction(() => document.querySelector("#chat-title")?.textContent === "Renamed A");
+  assert.equal(await pins.locator(".session-state").count(), 0, "double-click immediately views the session before renaming; F2 remains the non-navigating rename");
   assert.equal(mutations.length, 4);
   // Enter restores keyboard focus on the next animation frame after saving.
   // Wait for that handoff before moving focus away so it cannot steal focus back.
@@ -268,7 +279,19 @@ try {
   await waitPreference(b.workspace.id, b.session.id);
   const selectionsBefore = workspaceSelections.length;
   await search.fill("Renamed");
+  await item.evaluate(button => {
+    // Observe after React's root-delegated click handler and its commit microtask,
+    // but before the old 300ms navigation timer could run.
+    document.addEventListener("click", event => {
+      if (!(event.target instanceof Node) || !button.contains(event.target)) return;
+      setTimeout(() => {
+        (button as HTMLElement).dataset.selectedAfterClick = String(event.detail > 0 && button.getAttribute("aria-current") === "true");
+      }, 0);
+    }, { once: true });
+  });
   await item.click();
+  await page.waitForFunction(() => document.querySelector('[data-selected-after-click]') !== null);
+  assert.equal(await item.getAttribute("data-selected-after-click"), "true", "real pointer click selects by the next task, with no double-click arbitration delay");
   await page.waitForFunction(() => document.querySelector("#chat-title")?.textContent === "Renamed A");
   assert.equal(await selectedWorkspace(), "Local B");
   assert.equal(await search.inputValue(), "Renamed", "opening a pin preserves sidebar search");
@@ -291,6 +314,7 @@ try {
   await row.hover();
   await pins.getByRole("button", { name: "取消置顶：Renamed A", exact: true }).click();
   await pins.getByRole("button", { name: "置顶会话：Renamed A", exact: true }).waitFor();
+  await waitPin(false);
   assert.equal(await pins.locator(".history-row").count(), 1, "removing the manual flag preserves the viewed automatic pin");
   // Leaving the foreground starts cooling without navigating away from the foreign session.
   app.store.db.prepare("UPDATE sessions SET autoPinUntil=? WHERE id=?").run(Date.now() - 1, a.session.id);
@@ -312,7 +336,7 @@ try {
   await page.locator(".history-row").hover();
   await page.getByRole("button", { name: "置顶会话：Renamed A", exact: true }).click();
   await pins.waitFor();
-  assert.equal(app.store.session(a.workspace.id, a.session.id).pinned, true);
+  await waitPin(true);
   await switchWorkspace("Local B");
   await prompt.fill("B draft stays");
 
@@ -361,6 +385,9 @@ try {
       assert.equal(await remove.evaluate((el) => el === document.activeElement), true, "cancel restores focus to delete trigger");
     } else {
       await pins.waitFor({ state: "hidden" });
+      // Immediate removal is visual feedback, not proof of durable deletion.
+      const deadline = Date.now() + 3000;
+      while (app.store.sessions(a.workspace.id).length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
       assert.equal(app.store.sessions(a.workspace.id).length, 0);
       assert.equal(mutations.length, before + 1);
       await page.waitForFunction(() => document.querySelector("#chat-title")?.textContent === "Local B");

@@ -34,6 +34,9 @@ async function atBottom(page: Page, label: string) {
     const geometry = await page.locator("#thread").evaluate(el => ({ top: el.scrollTop, height: el.clientHeight, total: el.scrollHeight }));
     assert.fail(`${label}: ${JSON.stringify(geometry)}`);
   });
+  // Reaching the last pixel can precede native smooth-scroll completion. Let
+  // its settling frames finish before starting the next exact-distance wheel.
+  await settled(page);
 }
 try {
   const workspace = app.store.execute({ requestId: crypto.randomUUID(), op: "workspace.open", params: { path: join(root, "project"), authorized: true } }) as Workspace;

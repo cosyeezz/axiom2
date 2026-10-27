@@ -1,5 +1,5 @@
 import { ForkButton } from "./ForkButton.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { command } from "../transport.js";
 import type { Scope } from "../../shared/protocol.js";
 import type { EditableMessage } from "../../shared/rewrite.js";
@@ -9,13 +9,14 @@ import { Markdown } from "./Markdown.js";
 import { SkillCards } from "./SkillCards.js";
 import { MessageImages } from "./MessageImages.js";
 import { beginComposerEditLoad, finishComposerEditLoad, getComposerEdit, revealComposerEdit, useComposerEdit } from "./composer-edit.js";
+import { setSubmissionError } from "./submission-feedback.js";
 import "../styles/message-edit.css";
 
-export function EditableUserMessage({ message, scope }: { message: ChatMessage; scope: Scope }) {
+export function EditableUserMessage({ message, scope, children }: { message: ChatMessage; scope: Scope; children?: ReactNode }) {
   const source = useComposerEdit(scope);
   const selected = source?.target.messageId === message.id;
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const setError = (error: string) => setSubmissionError(scope, error);
   const [focused, setFocused] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -47,7 +48,7 @@ export function EditableUserMessage({ message, scope }: { message: ChatMessage; 
     } catch (cause) { if (request === generation.current) setError((cause as Error).message); }
     finally { if (request === generation.current) setLoading(false); }
   };
-  return <><div ref={container} tabIndex={0} data-edit-message-id={message.id}
+  return <div ref={container} tabIndex={0} data-edit-message-id={message.id}
     onFocus={event => { if (event.currentTarget.contains(event.target)) setFocused(true); }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
     onClick={event => {
@@ -66,5 +67,6 @@ export function EditableUserMessage({ message, scope }: { message: ChatMessage; 
     <SkillCards skills={message.skills} scope={scope} />
     <MessageImages images={message.images} scope={scope} messageId={message.id} />
     {loading && <small className="meta" role="status">正在读取原消息…</small>}
-  </div>{error && <p className="execution-alert" role="alert">{error}</p>}</>;
+    {children}
+  </div>;
 }

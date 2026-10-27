@@ -36,7 +36,7 @@ async function scene(options: { recovery?: boolean; interrupted?: boolean; insta
         if (args.action === "acknowledge-interruption") { if (args.confirmed !== true) throw Error("缺少人工确认"); state.setupJob = { ...state.setupJob, phase: "error", task: task("node", "failed") }; return { job: state.setupJob }; }
       }
       if (name === "axiom_update") {
-        if (["status", "pi-refresh", "pi-check"].includes(args.action)) return snapshot();
+        if (["status", "check", "pi-refresh", "pi-check"].includes(args.action)) return snapshot();
         if (["service", "recover", "installer"].includes(args.action)) { state.job = { kind: args.action, running: false, phase: "complete", message: "合成提交完成", task: task(args.action) }; return snapshot(); }
         if (args.action === "pi-remove-preview") {
           state.removal = { installed: true, token: "removal-token", version: "1.1.0", packageRoot: "C:/fixture/npm/pi", items: [{ label: "程序目录", path: "C:/fixture/npm/pi", state: "remove" }, { label: "个人设置", path: "C:/fixture/settings", state: "retain" }] };
@@ -51,7 +51,7 @@ async function scene(options: { recovery?: boolean; interrupted?: boolean; insta
     } };
   }, options);
   await page.clock.install(); await page.goto(server.resolvedUrls!.local[0]);
-  await page.getByRole("button", { name: "关闭后台服务", exact: true }).waitFor();
+  await page.getByRole("button", { name: "关闭", exact: true }).waitFor();
   return page;
 }
 async function count(page: Page, name: string, action: string) { return page.evaluate(({ name, action }) => (window as any).desktopConfirmFixture.calls.filter((call: any) => call.name === name && call.action === action).length, { name, action }); }
@@ -60,10 +60,15 @@ async function updates(page: Page) {
   const region = page.getByRole("region", { name: "版本与更新", exact: true });
   await region.waitFor();
   assert.equal(await region.locator(".update-component").count(), 3, "all three update components remain visible without opening technical details");
+  assert.equal(await region.locator(".update-details").getAttribute("open"), null);
+  const sdk = region.getByRole("region", { name: "后台服务更新", exact: true }).locator(".update-runtime-version");
+  assert.ok(await sdk.getByText("v1.1.0", { exact: true }).isVisible());
+  assert.match(await sdk.innerText(), /后台安装版本.*随后台服务更新/);
+  assert.ok(await region.getByRole("region", { name: "终端 Pi", exact: true }).getByText(/此处仅管理终端 Pi/).isVisible());
 }
 try {
   {
-    const page = await scene(), trigger = page.getByRole("button", { name: "关闭后台服务", exact: true });
+    const page = await scene(), trigger = page.getByRole("button", { name: "关闭", exact: true });
     await trigger.click(); const dialog = page.getByRole("dialog", { name: "关闭后台服务？", exact: true });
     assert.match(await dialog.innerText(), /2 个会话/); assert.match(await dialog.innerText(), /设计会话/);
     assert.equal(await dialog.getByRole("button", { name: "继续运行", exact: true }).evaluate(el => document.activeElement === el), true);

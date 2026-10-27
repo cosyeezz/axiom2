@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../theme.js";
 import { Icon } from "../Icon.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
-import DesktopUpdates from "./DesktopUpdates.js";
+import DesktopUpdates, { type DesktopUpdateControls } from "./DesktopUpdates.js";
+import SystemNotifications, { type SystemNotice } from "./SystemNotification.js";
+import { useBackendUpdateNotification } from "./backend-update-notification.js";
 import DesktopEnvironment from "./DesktopEnvironment.js";
 import { BrandMark } from "../BrandMark.js";
 import type { ConnectionHealth } from "../transport.js";
@@ -58,6 +60,7 @@ export default function Connect() {
   const navigation = useRef<Promise<void> | null>(Promise.resolve());
   const selectionEpoch = useRef(0);
   const setup = useRef<SetupControls>(null), connector = useRef<ConnectionControls>(null);
+  const updates = useRef<DesktopUpdateControls>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState<Action | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -101,7 +104,8 @@ export default function Connect() {
       await desktopInvoke("axiom_controls");
       revision.current++;
       setView("control"); setNotice(false); setUpdateSeen(true);
-    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+      return true;
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); return false; }
     finally { setReturning(false); }
   }
   useEffect(() => {
@@ -207,19 +211,26 @@ export default function Connect() {
     // Wait for this barrier before allowing another target to open.
     void invalidateNavigation();
   }
+  const updateNotice = useBackendUpdateNotification({ active: view === "workbench", connection, target: `${device}:${connectionPort}:${remoteUrl}`,
+    canUpdate: mode === "local" && !customPort && !blocked && !serviceUncertain && service?.state === "running",
+    onError: setError, onUpdate: async (version, runningVersion) => {
+      if (mode !== "local" || customPort) throw Error("请在后台所在设备更新，未提交本机安装。");
+      if (await showControls()) await updates.current?.checkAndUpdate(version, runningVersion);
+    } });
+  const connectionLabel = connection === "connected" ? "后台服务已连接" : connection === "disconnected" ? "后台服务已断开" : "后台服务确认中";
+  const notifications: SystemNotice[] = updateNotice ? [updateNotice] : [];
   const installJob = detection.job;
   const transfer = installJob?.task?.transfer;
   const installProgress = installJob?.running ? installJob.progress ?? (transfer && { name: "服务安装包", downloaded: transfer.received, total: transfer.total, speed: transfer.bytesPerSecond || 0, startedAt: installJob.task?.startedAt || installJob.task?.createdAt || transfer.updatedAt, updatedAt: transfer.updatedAt, lastByteAt: transfer.updatedAt }) : null;
   const installFailed = !detection.uncertain && !installJob?.running && installJob?.task?.status !== "cancelled" && installJob?.task?.status !== "unknown" && installJob?.task?.status !== "interrupted" && installJob?.phase === "error";
-  const connectionLabel = connection === "connected" ? "后台服务已连接" : connection === "disconnected" ? "后台服务已断开" : "后台服务确认中";
   return (
     <>
     <nav className="desktop-workbench-bar" aria-label="桌面导航" hidden={view !== "workbench"}>
       <div className="desktop-workbench-left">
-        <span className="desktop-workbench-status" data-state={connection} role="status" aria-live="polite" aria-label={connectionLabel}>
+        <SystemNotifications items={notifications} leading={{ id: "connection", content: <span className="desktop-workbench-status" data-state={connection} role="status" aria-live="polite" aria-label={connectionLabel}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.52" d="M1.88 12.21q2.32.02 4.62-.36q1.21-3.49 2.99-6.73q2.26 7.09 5.12 13.96q1.44-3.57 2.8-7.17q2.22.15 4.44.31" /></svg>
           <span>{connectionLabel}</span>
-        </span>
+        </span> }} />
       </div>
       {error && <span role="alert" className="desktop-workbench-error" title={error}>{error}</span>}
       <div className="desktop-workbench-actions">
@@ -244,7 +255,7 @@ export default function Connect() {
           {mode === "remote" && installing && <p className="connect-message" role="status">{detection.foreground ? "本机安装在可见终端继续，切换设备不会中断。" : "本机安装仍在后台进行，切换设备不会中断。"}</p>}
         </div>
         <section className="startup-maintenance startup-update-section" hidden={mode !== "local"}>
-          <DesktopUpdates service={service} serviceBusy={!!busy || installing || localConnecting} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} onInstallService={primaryAction} onMaintainService={version => setup.current?.maintainService(version)} />
+          <DesktopUpdates controls={updates} service={service} serviceBusy={!!busy || installing || localConnecting} onBusyChange={setUpdating} onAvailableChange={setUpdateAvailable} onServiceChange={() => void act("status")} onInstallService={primaryAction} onMaintainService={(version, requireLatest) => setup.current?.maintainService(version, requireLatest)} />
         </section>
         <aside className="startup-tools" aria-label="本机维护">
         <div className="startup-tools-heading"><h2>维护工具</h2><p>环境准备与组件管理</p></div>

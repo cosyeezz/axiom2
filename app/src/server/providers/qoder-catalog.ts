@@ -98,7 +98,7 @@ export function normalizeQoderConfig(value: unknown): QoderConfig | undefined {
   const key = config.key ?? config.model_key;
   if (typeof key !== "string" || !key.trim()) return;
   const reasoning = qoderReasoning(config), context = qoderContext(config);
-  return { ...config, key, display_name: typeof config.display_name === "string" && config.display_name ? config.display_name : typeof config.name === "string" && config.name ? config.name : key,
+  return { ...config, key, is_vl: config.is_vl === true, display_name: typeof config.display_name === "string" && config.display_name ? config.display_name : typeof config.name === "string" && config.name ? config.name : key,
     ...(reasoning.efforts ? { efforts: reasoning.efforts } : {}), ...(reasoning.supportsDisabled ? { supports_disabled: true } : {}),
     ...(reasoning.defaultEffort ? { default_effort: reasoning.defaultEffort } : {}),
     ...(context.windows.length ? { available_context_windows: context.windows } : {}), ...(context.defaultWindow ? { default_context_window: context.defaultWindow } : {}),

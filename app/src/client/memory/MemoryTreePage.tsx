@@ -16,7 +16,7 @@ function NumberSetting({ label, value, min = 1, max = 1000000, save }: { label: 
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   return <label>{label}<input type="number" min={min} max={max} step={1} required value={draft} onChange={(e) => setDraft(e.target.value)}
-    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={(e) => { if (e.currentTarget.reportValidity() && Number(draft) !== value) void save(Number(draft)).catch(() => {}); }} /></label>;
+    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={(e) => { if (e.currentTarget.reportValidity() && Number(draft) !== value) void save(Number(draft)).catch(() => setDraft(String(value))); }} /></label>;
 }
 export function MemoryTreePage({ workspaceId, workspaces, select, open, openRecords, fullscreen, toggleFullscreen, visible = true }: { workspaceId: string; workspaces: Workspace[]; select: (id: string) => void; open: (scope: Scope, path: string) => void; openRecords: (initial: ProcessingOpening) => void; fullscreen?: boolean; toggleFullscreen?: () => void; visible?: boolean }) {
   const tree = useScope<(MemoryTree & { unavailable?: boolean }) | null>(memoryTreeScope(workspaceId), null);
@@ -52,6 +52,7 @@ export function MemoryTreePage({ workspaceId, workspaces, select, open, openReco
     </div>
     <div className="memory-tree-status"><span>{tree?.roots.length ?? 0} 个一级分类 · {tree?.purposes.length ?? 0} 个目的 · 语义目录 {tree?.nameChars ?? 0}/{memoryOrganizationWatermarks.maximum} 码点{pending ? ` · 待整理 ${pending} 个目的` : ""}</span></div>
     {visible && <OrganizationFeedback workspaceId={workspaceId} tree={tree} openRecords={openRecords} />}
+    {busy && <p role="status">正在保存记忆设置…</p>}
     {error && <p role="alert">{error}</p>}
     {!!failures.length && <details className="memory-tree-errors"><summary>整理出错 {failures.length}</summary>{failures.map((entry) => <p key={entry.id}>{entry.sourceTitle ?? entry.title}：{publicMemoryError(entry.organizationError!)} <button className="btn" onClick={() => openRecords({ kind: "memory.organize", sessionId: entry.sessionId, id: entry.processingId, legacyError: publicMemoryError(entry.organizationError!) })}>查看详情</button></p>)}</details>}
     {settings && <div className="memory-tree-settings"><h3>全局记忆设置</h3>{prefs ? <fieldset disabled={busy}>

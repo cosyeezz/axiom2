@@ -30,58 +30,30 @@ import {
 } from "@earendil-works/pi-ai";
 import { codeBuddyOAuth } from "./codebuddy-auth.js";
 import { codeBuddyBaseUrl, codeBuddyHeaders, codeBuddyId, codeBuddyModels } from "./codebuddy-models.js";
+import { codeBuddyFetch } from "./codebuddy-response.js";
 
 const completions = lazyApi(() => import("@earendil-works/pi-ai/api/openai-completions"));
-
-function businessCode(value: unknown): number | undefined {
-  if (value && typeof value === "object" && "code" in value && typeof value.code === "number" && value.code !== 0)
-    return value.code;
-  return undefined;
-}
-function errorMessage(status: number, code?: number) {
-  if (status === 429 || code === 6004) return "CodeBuddy 请求过于频繁或额度不足，请稍后重试并检查账号额度（code 6004 / HTTP 429）。";
-  if (status === 401 || status === 403) return `CodeBuddy 认证失败（HTTP ${status}），请重新登录。`;
-  if (code === 11102) return "CodeBuddy 当前账号无法使用此模型（code 11102），请选择其他模型。";
-  return `CodeBuddy 请求失败（HTTP ${status}${code === undefined ? "" : `，code ${code}`}）。`;
-}
-
-// Normalize HTTP-200 business errors before the OpenAI SDK tries to read SSE.
-// Never include raw auth responses or echoed request bodies in user-visible errors.
-function chatFetch(transport: typeof fetch): typeof fetch {
-  return async (input, init) => {
-    const response = await transport(input, init);
-    if (response.ok && response.headers.get("content-type")?.includes("text/event-stream")) return response;
-    let code: number | undefined;
-    try { code = businessCode(await response.json()); } catch { /* HTTP status is still useful. */ }
-    const status = code === 6004 ? 429 : response.ok ? 502 : response.status;
-    const headers = new Headers({ "content-type": "application/json" });
-    const retryAfter = response.headers.get("retry-after");
-    if (retryAfter) headers.set("retry-after", retryAfter);
-    return new Response(JSON.stringify({ error: { message: errorMessage(status, code), type: "codebuddy_error" } }), { status, headers });
-  };
-}
 
 function streamOptions<T extends StreamOptions>(options?: T): T & StreamOptions {
   return {
     ...options,
-    fetch: chatFetch(options?.fetch ?? globalThis.fetch),
+    fetch: codeBuddyFetch(options?.fetch ?? globalThis.fetch),
     async onPayload(payload, model) {
       const transformed = await options?.onPayload?.(payload, model);
       const body: Record<string, unknown> = { ...((transformed ?? payload) as Record<string, unknown>), stream: true };
       if (typeof body.reasoning_effort === "string" && !["none", "off"].includes(body.reasoning_effort)) {
         body.reasoning_summary = "auto";
       } else {
-        delete body.reasoning_effort;
+        // Pi maps UI off to "none". Omitting that signal is not equivalent:
+        // a live GLM off request still returned thinking. Keep the explicit
+        // disable value, without summary; never hide received thinking instead.
+        if (body.reasoning_effort === "none" || body.reasoning_effort === "off") body.reasoning_effort = "none";
+        else delete body.reasoning_effort;
         delete body.reasoning_summary;
       }
       // Preserve all system messages, tools and tool results. The upstream may
       // reject agent prompts; replacing them silently would discard user constraints.
       return body;
-    },
-    async onProviderStreamEvent(event, model) {
-      await options?.onProviderStreamEvent?.(event, model);
-      const code = businessCode(event);
-      if (code !== undefined) throw new Error(errorMessage(200, code));
     },
   } as T & StreamOptions;
 }

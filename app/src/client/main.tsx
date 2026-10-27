@@ -27,6 +27,8 @@ const Page = (
       ? import("./pages/BuiltinTools.js")
     : location.pathname === "/costs.html"
       ? import("./pages/Costs.js")
+    : location.pathname === "/model-usage.html"
+      ? import("./pages/ModelUsage.js")
     : location.pathname === "/model-config.html"
       ? import("./pages/Models.js")
       : import("./pages/Workbench.js"))

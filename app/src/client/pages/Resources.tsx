@@ -187,6 +187,7 @@ export default function Resources() {
           <div className="detail-heading row-between"><div><h2>{creating ? addLabel : item?.name ?? (view === "skill" ? "技能" : "MCP 配置")}{!creating && item?.builtin && <BuiltinMark kind={item.builtin} />}</h2><p className="meta">{creating ? `安装到${scopeId === "global" ? "全局" : `项目「${scopeName(scopeId)}」`}` : item?.description ?? "选择左侧资源查看内容，或添加新资源。"}</p></div><span className="tag">{scopeId === "global" ? "全局" : "项目"}</span></div>
           <div className="tools-content">
             <div className="tools-feedback" aria-live="polite">
+              {sending.length > 0 && <p role="status">正在提交资源操作，编辑内容已保留…</p>}
               {error && <p className="tools-error" role="alert">{error}</p>}
               {failedJob && failedJobKey !== dismissedJob && <details key={failedJobKey} className="resources-job-history">
                 <summary>上次资源操作未完成（查看记录）</summary>

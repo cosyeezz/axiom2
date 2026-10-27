@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { QoderCredentials, packQoderCredential, qoderExpiry, qoderOAuth } from "../src/server/providers/qoder-auth.js";
-import { decodeQoderBody, encodeQoderBody, qoderHeaders, qoderInference, qoderJson, qoderSites, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
+import { assertQoderBodyBudget, decodeQoderBody, encodeQoderBody, qoderBodyLimit, qoderHeaders, qoderInference, qoderJson, qoderSites, type QoderRegion } from "../src/server/providers/qoder-protocol.js";
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 test("Qoder regional PKCE login handles pending responses, validates expiry and never fakes refresh", async () => {
@@ -18,7 +18,7 @@ test("Qoder regional PKCE login handles pending responses, validates expiry and 
       if (++polls < 3) return new Response(null, { status: polls === 1 ? 202 : 404 });
       return json({ token: "dt-FIXTURE", user_id: "user-fixture", expires_at: new Date(Date.now() + 3600000).toISOString() });
     } });
-    const result = await oauth.login({ signal: new AbortController().signal, prompt: async () => "", notify: event => { if (event.type === "auth_url") url = new URL(event.url); } });
+    const result = await oauth.login({ signal: new AbortController().signal, prompt: async () => "", notify: event => { if (event.type === "auth_url") { url = new URL(event.url); assert.doesNotMatch(event.instructions ?? "", /实验/); } } });
     assert.equal(url!.origin, new URL(qoderSites[region].login).origin);
     assert.equal(url!.searchParams.get("client_id"), "e883ade2-e6e3-4d6d-adf7-f92ceff5fdcb");
     assert.equal(result.region, region); assert.equal(result.machineId, url!.searchParams.get("machine_id"));
@@ -78,6 +78,25 @@ test("Qoder JSON response limit cancels before buffering an unbounded body", asy
   assert.ok(reads <= 6); assert.equal(cancelled, true);
   await assert.rejects(qoderJson(async () => { throw Error("Qoder SECRET-token"); }, "https://fixture.invalid", {}), error => error instanceof Error && !error.message.includes("SECRET"));
 });
+test("Qoder HTTP failures and OAuth polls do not wait for uncooperative body cancellation", { timeout: 1500 }, async () => {
+  let cancelled = 0;
+  const response = (status: number) => new Response(new ReadableStream({ cancel() { cancelled++; return new Promise<void>(() => {}); } }), { status });
+  await assert.rejects(qoderJson(async () => response(403), "https://fixture.invalid", {}), /HTTP 403/);
+  assert.equal(cancelled, 1);
+  const controller = new AbortController();
+  await assert.rejects(qoderJson(async () => { controller.abort(); return response(403); }, "https://fixture.invalid", { signal: controller.signal }), { name: "AbortError" });
+  assert.equal(cancelled, 2);
+  const interaction = { signal: new AbortController().signal, prompt: async () => "", notify() {} };
+  let polls = 0;
+  const credential = await qoderOAuth("cn", { pollIntervalMs: 1, fetch: async () => ++polls <= 2 ? response(polls === 1 ? 202 : 404)
+    : json({ token: "dt-FIXTURE", user_id: "fixture-user", expires_at: new Date(Date.now() + 3600000).toISOString() }) }).login(interaction);
+  assert.equal(credential.access, "dt-FIXTURE"); assert.equal(polls, 3); assert.equal(cancelled, 4);
+  await assert.rejects(qoderOAuth("cn", { pollIntervalMs: 1, fetch: async () => response(403) }).login(interaction), /HTTP 403/);
+  const loginAbort = new AbortController();
+  await assert.rejects(qoderOAuth("cn", { pollIntervalMs: 1, fetch: async () => { loginAbort.abort(); return response(202); } })
+    .login({ ...interaction, signal: loginAbort.signal }), { name: "AbortError" });
+  assert.equal(cancelled, 6);
+});
 test("Qoder decoding is strict and election never carries credentials across region boundaries", async () => {
   for (const bad of ["abc", "中文", "!!!!$", "$$$$", "abc "]) assert.throws(() => decodeQoderBody(bad));
   const payload = { chat: [{ key: "auto" }] };
@@ -98,6 +117,56 @@ test("Qoder decoding is strict and election never carries credentials across reg
     await assert.rejects(qoderInference(region, identity, async () => { calls++; return new Response("SECRET", { status: 403 }); }), /权限/);
     assert.equal(calls, 1, "unverified anonymous V3 fallback must not run");
   }
+});
+test("Qoder bounded encoder stays byte-identical to official thirds/custom-base64 projection", () => {
+  const standard = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=", alphabet = "_doRTgHZBKcGVjlvpC,@aFSx#DPuNJme&i*MzLOEn)sUrthbf%Y^w.(kIQyXqWA!$";
+  const reference = (text: string) => {
+    const base = Buffer.from(text, "utf8").toString("base64"), third = Math.floor(base.length / 3);
+    return (base.slice(base.length - third) + base.slice(third, base.length - third) + base.slice(0, third)).split("").map(char => alphabet[standard.indexOf(char)]).join("");
+  };
+  for (const text of ["", "a", "ab", "abc", "abcd", "中文🙂", "\ud800", "\udc00", ...Array.from({ length: 129 }, (_, length) =>
+    Array.from({ length }, (_, i) => String.fromCharCode((i * 997 + length * 31) % 65536)).join(""))]) {
+    const encoded = encodeQoderBody(text);
+    assert.equal(encoded, reference(text));
+    assert.equal(decodeQoderBody(encoded), Buffer.from(text, "utf8").toString("utf8"));
+  }
+});
+test("Qoder JSON budget matches UTF8/escapes, counts duplicate references, rejects depth/cycles and caps before encoding", () => {
+  const shared = { text: "中文🙂\ud800\udc00\ud800\udc00\ud800", image: "base64" };
+  const sparse = Array(3); sparse[2] = "last";
+  for (const value of [{ content: shared, contents: shared }, [undefined, null, true, false, -0, Infinity, 1e100], sparse,
+    { omitted: undefined, fn: () => {}, symbol: Symbol("ignored"), [Symbol("key")]: "ignored" },
+    ...Array.from({ length: 256 }, (_, i) => ({ [String.fromCharCode(i)]: String.fromCharCode(i) + "\ud800\udc00\ud800\udc00\udc00" }))]) {
+    assert.equal(assertQoderBodyBudget(value), Buffer.byteLength(JSON.stringify(value), "utf8"));
+  }
+  const cycle: { self?: unknown } = {}; cycle.self = cycle;
+  assert.throws(() => assertQoderBodyBudget(cycle), /无循环/);
+  let deep: unknown = null; for (let i = 0; i < 130; i++) deep = [deep];
+  assert.throws(() => assertQoderBodyBudget(deep), /128/);
+  assert.throws(() => assertQoderBodyBudget(new Date()), /普通 JSON/);
+  let hookCalls = 0;
+  const callable = { toJSON() { hookCalls++; return "x".repeat(1000); } };
+  const nonenumerable = Object.defineProperty({}, "toJSON", { value() { hookCalls++; return "x"; } });
+  const getter = { get toJSON() { hookCalls++; return () => "x"; } };
+  const accessor = Object.defineProperty({}, "text", { enumerable: true, get() { hookCalls++; return "x"; } });
+  const array = Object.assign([1], { toJSON() { hookCalls++; return "x"; } });
+  const inherited = Object.setPrototypeOf([1], { toJSON() { hookCalls++; return "x"; } });
+  const indexGetter = Object.defineProperty([1], "0", { enumerable: true, get() { hookCalls++; return "x"; } });
+  for (const value of [callable, nonenumerable, getter, accessor, array, inherited, indexGetter]) assert.throws(() => assertQoderBodyBudget(value), /序列化钩子|访问器/);
+  const functionHook = Object.assign(function () {}, { toJSON() { hookCalls++; return "expanded"; } });
+  const inheritedFunctionHook = Object.setPrototypeOf(function () {}, { toJSON() { hookCalls++; return "expanded"; } });
+  const functionGetter = Object.defineProperty(function () {}, "toJSON", { get() { hookCalls++; return () => "expanded"; } });
+  for (const fn of [functionHook, inheritedFunctionHook, functionGetter])
+    for (const value of [fn, { hidden: fn }, [fn]]) assert.throws(() => assertQoderBodyBudget(value), /序列化钩子|访问器/);
+  assert.equal(hookCalls, 0, "budget validation must not execute serialization hooks or getters");
+  const ordinary = { toJSON: "ordinary data", nested: { toJSON: null } };
+  assert.equal(assertQoderBodyBudget(ordinary), Buffer.byteLength(JSON.stringify(ordinary)));
+  const jsonLimit = qoderBodyLimit / 4 * 3;
+  assert.equal(assertQoderBodyBudget("x".repeat(jsonLimit - 2)), jsonLimit);
+  assert.throws(() => assertQoderBodyBudget("x".repeat(jsonLimit - 1)), /6 MiB/);
+  assert.throws(() => assertQoderBodyBudget("\u0000".repeat(800000)), /6 MiB/);
+  assert.equal(encodeQoderBody("x".repeat(jsonLimit)).length, qoderBodyLimit);
+  assert.throws(() => encodeQoderBody("x".repeat(jsonLimit + 1)), /6 MiB/);
 });
 test("Qoder encoding and COSY signatures cover exact UTF8 wire bytes without exposing the token", () => {
   assert.equal(encodeQoderBody(""), "");

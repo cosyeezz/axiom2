@@ -35,7 +35,7 @@ try {
   await button.waitFor();
   assert.equal(await page.locator("#table .inline-code").count(), 3);
   assert.equal(await page.locator("#compact button, #compact a, #nested a button, #nested button button").count(), 0);
-  assert.equal(await page.locator("#nested .path-actions").count(), 1, "paths retain their existing actions without a duplicate copy button");
+  assert.equal(await page.locator("#nested .path-actions").count(), 0, "Markdown paths have no copy/open actions or duplicate code copy buttons");
   const before = await page.locator("main").textContent();
   const geometry = await page.locator("#table").boundingBox();
   await page.keyboard.press("Tab");

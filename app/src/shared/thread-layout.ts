@@ -178,10 +178,10 @@ function foldArchivedProcesses(groups: NonNullable<ThreadIndex["groups"]>, messa
   return result;
 }
 
-/** A resumed delivery can have a new run ID. Settle earlier fragments in the
- * same user turn without borrowing across users, compactions or prior answers.
- * Reuse archive wrapping only after explicit delivery: it preserves notices,
- * selection boundaries and isolated unmarked prose, while enclosing task slices.
+/** A resumed delivery can have a new run ID. Settle earlier fragments of the
+ * same task, including before host-proven appended/re-written inputs. Ordinary
+ * user requests, compactions and prior answers remain boundaries. Wrapping keeps
+ * every input outside the cards, preserving order, notices and isolated prose.
  */
 function foldDeliveredFragments(groups: NonNullable<ThreadIndex["groups"]>, messages: ChatMessage[]) {
   const byId = new Map(messages.map(message => [message.id, message]));
@@ -193,7 +193,7 @@ function foldDeliveredFragments(groups: NonNullable<ThreadIndex["groups"]>, mess
   };
   for (const group of groups) {
     const message = byId.get(group.ids[0])!;
-    if (message.role === "user" || message.compression) {
+    if (message.role === "user" && !message.inputContinuation || message.compression) {
       flush(); result.push(group);
     } else if (!group.activity && threadDelivery(message)) {
       flush(true); result.push(group);

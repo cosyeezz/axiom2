@@ -1,7 +1,7 @@
-import { closeSync, fstatSync, openSync, readSync, statSync, realpathSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { extname, resolve } from "node:path";
-import { SessionManager, buildSessionProjection } from "@earendil-works/pi-coding-agent";
+import { SessionManager, buildSessionProjection, parseSessionEntries } from "@earendil-works/pi-coding-agent";
 import { AppError, attachmentDisplay, type ImageAttachment } from "../shared/protocol.js";
 import { persistedSkillInput } from "../shared/skills.js";
 import { imageDisplayText, imagesInput } from "./images.js";
@@ -14,6 +14,8 @@ import { thinkingDisplay } from "./thinking-display.js";
 import { outputTruncated } from "./execution-outcome.js";
 import { modelRequestError } from "./error-message.js";
 import { taskDisplayText } from "./task-output.js";
+import { projectKiroFailure } from "./kiro-failure-display.js";
+import { continuationInputIds } from "./input-continuation.js";
 
 function displayPhase(message: any, content: any[], streaming: boolean): ChatMessage["phase"] {
   if (message.role !== "assistant" || content.some(c => c.type === "toolCall") ||
@@ -38,6 +40,7 @@ export const toolKey = (runId: string, callId: string) =>
 
 // Only display fields cross IPC/WS. Error messages are bounded and credential-redacted;
 // provider signatures and arbitrary diagnostic objects are not forwarded.
+// Kiro failures have a separate six-field allowlist, never a diagnostics passthrough.
 export function chatMessage(
   message: any,
   id: string,
@@ -97,7 +100,9 @@ export function chatMessage(
   const thinkingActive = message.role === "assistant" && streaming &&
     (assistantDisplay.active || content.at(-1)?.type === "thinking");
   const phase = displayPhase(message, content, streaming);
+  const kiroFailure = !streaming ? projectKiroFailure(message) : undefined;
   return {
+    ...(kiroFailure ? { kiroFailure } : {}),
     id,
     ...(typeof message.axiomRunId === "string" ? { runId: message.axiomRunId } : {}),
     ...(message.role === "assistant" && message.axiomSelectionChange
@@ -117,6 +122,7 @@ export function chatMessage(
     streaming,
     ...(message.compression ? { compression: message.compression } : {}),
     inputIds: message.axiomInputIds ?? (message.details?.axiomInput ? [message.details.axiomInput] : undefined),
+    ...(isInput && (message.customType === "axiom-append" || message.axiomContinuation === true) ? { inputContinuation: true } : {}),
     ...(message.role === "assistant"
       ? {
           calls: content
@@ -210,13 +216,16 @@ export function openTranscript(file: string, cwd: string, options: { readOnly?: 
   try {
     // Validate ownership, then let pi handle its native JSONL recovery (including a partial tail).
     const { header, identity } = transcriptHeader(file);
-    if (header?.type !== "session" || typeof header.cwd !== "string") throw Error();
+    if (header?.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") throw Error();
     // Resolve OS aliases natively: Windows short names and macOS /var aliases
     // must identify the same real workspace, without case-folding path strings.
     if (resolve(header.cwd) !== resolve(cwd) && realpathSync.native(header.cwd) !== realpathSync.native(cwd)) throw Error();
-    const manager = options.readOnly ? SessionManager.inMemory(cwd) : SessionManager.open(file);
-    // Keep native recovery/migration in memory for statistics-only readers.
-    if (options.readOnly) manager.setSessionFile(file);
+    // setSessionFile/loadEntriesFromFile repair a missing final newline even on
+    // an in-memory manager. Parse through Pi's public API and hydrate entries
+    // directly so read-only views cannot rewrite recovery/migration to disk.
+    const manager = options.readOnly
+      ? SessionManager.inMemory(cwd, undefined, parseSessionEntries(readFileSync(file, "utf8")))
+      : SessionManager.open(file);
     const current = statSync(file);
     if (current.dev !== identity.dev || current.ino !== identity.ino || current.birthtimeMs !== identity.birthtimeMs) throw Error("Session replaced during read");
     return manager;
@@ -229,6 +238,7 @@ export function openTranscript(file: string, cwd: string, options: { readOnly?: 
 }
 // One identity adapter for both metadata views and on-demand native image lookup.
 export function transcriptEntries(manager: SessionManager, original = false): { message: any; id: string; entryId: string }[] {
+  const continuations = continuationInputIds(manager);
   // Ignore compaction boundaries for reading, while retaining native retry/context edits.
   // Only the active branch is eligible; abandoned branches and system records stay private.
   const projection = original
@@ -247,7 +257,9 @@ export function transcriptEntries(manager: SessionManager, original = false): { 
       }];
     }
     if (entry.type !== "message") return [];
-    const m = messages[0] as any;
+    const native = messages[0] as any;
+    const m = native.role === "user" && native.axiomInputIds?.some((id: string) => continuations.has(id))
+      ? { ...native, axiomContinuation: true } : native;
     return [{ message: m, id: m.axiomId ?? (m.role === "toolResult" ? `tool-${m.toolCallId}` : entry.id), entryId: entry.id }];
   });
 }

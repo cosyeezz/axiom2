@@ -51,6 +51,10 @@ export default function Settings() {
               </span>
               <Icon name="chevron-right" />
             </a>
+            <a className="log-row module-row" href="/model-usage.html">
+              <div><h3>模型用量与统计</h3><p>本地调用用量、预计费用与独立账号的上游额度查询</p></div>
+              <span className="meta">统计与用量授权</span><Icon name="chevron-right" />
+            </a>
             <a className="log-row module-row" href="/resources.html">
               <div><h3>技能与 MCP</h3><p>按全局或项目管理技能内容、MCP 配置与安装来源</p></div>
               <span className="meta">资源与连接</span><Icon name="chevron-right" />

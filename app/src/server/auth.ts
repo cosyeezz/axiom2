@@ -43,6 +43,7 @@ export class Logins {
     private changed: () => Promise<void>,
     private openBrowser = openAuthBrowser,
     private network = modelNetwork,
+    private admit?: () => void,
   ) {}
   get(owner: object, id: string) {
     const flow = this.flows.get(id);
@@ -65,6 +66,8 @@ export class Logins {
     const providerId = text(provider, "供应商 ID", 160);
     if (type !== "api_key" && type !== "oauth")
       throw new AppError("INVALID_INPUT", "认证方式无效");
+    // A separate usage account shares native callback ports, never its credential store.
+    this.admit?.();
     // Set before awaiting so concurrent starts/saves cannot cross the login boundary.
     this.models.authActive = true;
     try {

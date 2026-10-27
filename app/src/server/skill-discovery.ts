@@ -1,5 +1,6 @@
 import { loadSkills, type AgentSession } from "@earendil-works/pi-coding-agent";
 import type { CapabilityRuntime } from "./capability-resources.js";
+import { sessionSafePoint } from "./session-safe-point.js";
 
 /** Refresh only the native skill resources at an already settled run boundary.
  * Pi copies skills into prompt options. Rebuild the base through its public tool
@@ -7,7 +8,7 @@ import type { CapabilityRuntime } from "./capability-resources.js";
  * Do not reload extensions, MCP, settings, or project instructions here.
  */
 export function applySkillDiscovery(session: AgentSession, cwd: string, agentDir: string, next: CapabilityRuntime) {
-  if (!session.isIdle || next.skillPaths === null || next.selection.skills === null)
+  if (!sessionSafePoint({ phase: "idle" }, { session }).allows("resource-reload") || next.skillPaths === null || next.selection.skills === null)
     throw Error("技能自动发现只能在会话安全点应用。");
   const current = session.resourceLoader.getSkills();
   // Pi 1.1.0 exposes its resource arrays. Fail closed if a future SDK returns copies.

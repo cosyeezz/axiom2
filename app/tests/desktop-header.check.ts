@@ -5,10 +5,10 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 
-const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), server: { host: "127.0.0.1", port: 0 } });
+const output = resolve(process.env.AXIOM_TEST_ARTIFACTS || "test-results/desktop-header");
+const server = await createServer({ configFile: resolve("desktop/vite.config.ts"), cacheDir: resolve(output, ".vite"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null } });
 await server.listen();
-const browser = await chromium.launch({ channel: "msedge", headless: true });
-const output = "test-results/desktop-header";
+const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER, channel: process.env.AXIOM_TEST_BROWSER ? undefined : "msedge", headless: true });
 await mkdir(output, { recursive: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 48 }, deviceScaleFactor: 2 });

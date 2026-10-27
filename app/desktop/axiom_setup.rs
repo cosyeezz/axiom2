@@ -485,6 +485,7 @@ fn install_foreground(dir: &std::path::Path) -> Result<(), String> {
     let job = read_json(&dir.join("job.json")).ok_or("安装任务记录缺失")?;
     command.env("AXIOM_SETUP_REPAIR", if job["repair"] == true { "1" } else { "0" });
     command.env("AXIOM_SETUP_VERSION", job["targetVersion"].as_str().unwrap_or(""));
+    command.env("AXIOM_SETUP_REQUIRE_LATEST", if job["requireLatest"] == true { "1" } else { "0" });
     let mut child = command.spawn().map_err(|e| format!("无法打开前台安装终端：{e}"))?;
     let status = wait_installer(&mut child, dir, false)?;
     fs::write(dir.join("foreground-exit.json"), serde_json::to_vec(&json!({"code":status.code(),"success":status.success()})).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
@@ -598,6 +599,8 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         Ok(version.to_string())
     }).transpose()?;
     if target_version.is_some() && (action != "service" || confirmed != Some(true)) { return Err("指定版本安装需要明确确认。".into()); }
+    let require_latest = maintenance.as_ref().and_then(|value| value.get("latest")).and_then(Value::as_bool).unwrap_or(false);
+    if require_latest && target_version.is_none() { return Err("更新需要明确的确认版本。".into()); }
     tauri::async_runtime::spawn_blocking(move || {
     let id = format!("{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos());
     let lease = {
@@ -612,7 +615,7 @@ pub async fn axiom_setup(webview: Webview, action: String, confirmed: Option<boo
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis() as u64;
         let task = json!({"id":id,"attemptId":id,"endpoint":"desktop","scope":"当前电脑 · 系统安装","resource":action,"label":match action.as_str() {"node"=>"Node.js 与 npm","tailscale"=>"Tailscale",_=>"后台服务"},"action":"install","status":"running","phase":"checking","steps":["checking","downloading","verifying","installing","validating"],"completedSteps":0,"createdAt":now,"startedAt":now,"updatedAt":now,"budgets":read_budgets(&dir),"capabilities":{"cancel":false,"extend":false}});
         fs::write(dir.join(&id).join("task.json"), serde_json::to_vec(&task).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let job = json!({"id":id,"action":action,"targetVersion":target_version,"repair":action == "service" && confirmed == Some(true),"foreground":cfg!(windows) && action == "service","task":task,"startedAt":now,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","lines":[]});
+        let job = json!({"id":id,"action":action,"targetVersion":target_version,"requireLatest":require_latest,"repair":action == "service" && confirmed == Some(true),"foreground":cfg!(windows) && action == "service","task":task,"startedAt":now,"running":true,"phase":"running","message":"正在准备安装；请保持客户端打开。","lines":[]});
         fs::write(dir.join(&id).join("job.json"), serde_json::to_vec(&job).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         // Readers hold registry.lock, so they cannot observe a partial publication.
         fs::write(dir.join("job.next"), serde_json::to_vec(&job).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;

@@ -22,7 +22,7 @@ export class ExecutionPermitDeniedError extends Error {
   readonly rejection: Readonly<ExecutionRejection>;
   constructor(rejection?: unknown) {
     const safe = safeExecutionRejection(rejection);
-    super(`绑定期间配置或资源已变化，未发起模型请求（${safe.check}）`);
+    super(`绑定期间资源已变化或内部执行快照损坏，未发起模型请求（${safe.check}）`);
     this.name = 'ExecutionPermitDeniedError';
     this.rejection = safe;
   }

@@ -4,15 +4,16 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { isCompressionRequest } from "./compression-memory-fixture.js";
 import { chromium, type Browser } from "playwright";
 import { startServer } from "../src/server/index.js";
 import type { Selection } from "../src/shared/agent.js";
+import type { HistoryIndex } from "../src/shared/history.js";
 import { defaultAutoCompression } from "../src/shared/compression.js";
 import type { Command, Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 // Real server, persisted pi JSONL, WebSocket subscriptions and native compact().
-// Only the provider is loopback-controlled; no main prompt or external API is used.
+// Only the provider is loopback-controlled; chat and native compaction use no external API.
 const root = mkdtempSync(join(tmpdir(), "axiom-compression-page-"));
 const previousPi = process.env.AXIOM_PI_DIR;
 process.env.AXIOM_PI_DIR = join(root, "pi");
@@ -25,7 +26,13 @@ const fixture = createServer(async (req, res) => {
   try {
     let raw = "";
     for await (const chunk of req) raw += chunk;
-    requests.push(JSON.parse(raw));
+    const body = JSON.parse(raw);
+    if (!isCompressionRequest(body)) {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      reply(res, "已保存的真实会话回复");
+      return;
+    }
+    requests.push(body);
     responses.push(res);
     if (failSummaries) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -40,10 +47,10 @@ const fixture = createServer(async (req, res) => {
     res.writeHead(500).end();
   }
 });
-const reply = (res: ServerResponse) => {
+const reply = (res: ServerResponse, content = "## Goal\n浏览器真实压缩摘要 <script>window.__compressionInjected=true</script>\n\n- **保留上下文**\n\n```ts\nconst compact = true;\n```") => {
   const chunk = (delta: unknown, finish_reason: string | null = null) =>
     res.write(`data: ${JSON.stringify({ id: randomUUID(), object: "chat.completion.chunk", created: 1, model: "summary-model", choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
-  chunk({ role: "assistant", content: "<axiom-summary>浏览器压缩验证</axiom-summary>\n## Goal\n浏览器真实压缩摘要 <script>window.__compressionInjected=true</script>\n\n- **保留上下文**\n\n```ts\nconst compact = true;\n```" });
+  chunk({ role: "assistant", content });
   chunk({}, "stop");
   res.end("data: [DONE]\n\n");
 };
@@ -77,7 +84,7 @@ try {
   const server = app;
   const workspace = server.store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path: project, authorized: true } }) as Workspace;
   const chat: Selection = { provider: "compression-page-fixture", id: "chat-model", thinking: "off" };
-  const summary: Selection = { provider: "compression-page-fixture", id: "summary-model", thinking: "low" };
+  server.agents.memories.runner!.execute = async input => ({ answer: input.kind === "organize" ? "[]" : "压缩验证", incomplete: false });
   const create = async (title: string, history: boolean) => {
     const session = server.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: workspace.id }) as Session;
     const scope: Scope = { workspaceId: workspace.id, sessionId: session.id };
@@ -85,17 +92,10 @@ try {
     await server.agents.command({ ...scope, requestId: randomUUID(), op: "agent.model", params: { selection: chat } });
     let file: string | undefined;
     if (history) {
-      const manager = SessionManager.create(project, join(root, "sessions", workspace.id));
-      // One turn produces one native summary call (multi-turn split compaction can use two).
-      for (let i = 0; i < 1; i++) {
-        manager.appendMessage({ role: "user", content: `${title} 已保存消息 ${i}`, timestamp: Date.now() });
-        manager.appendMessage({ role: "assistant", content: [{ type: "text", text: `已保存回复 ${i}` }],
-          api: "openai-completions", provider: chat.provider, model: chat.id, stopReason: "stop", timestamp: Date.now(),
-          usage: { input: 20, output: 10, cacheRead: 0, cacheWrite: 0, totalTokens: 30,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
-      }
-      file = manager.getSessionFile()!;
-      server.store.db.prepare("UPDATE agent_sessions SET file=? WHERE sessionId=?").run(file, session.id);
+      await server.agents.command({ ...scope, requestId: randomUUID(), op: "prompt", params: { text: `${title} 已保存消息` } });
+      await wait(() => !server.agents.active(scope), "seed chat did not settle");
+      await server.agents.releaseIdle(scope);
+      file = String(server.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(session.id)!.file);
       server.agents.refresh(scope);
       assert.equal(server.agents.thread(scope).ids.length, 2);
     }
@@ -104,7 +104,7 @@ try {
   const empty = await create("压缩空会话", false);
   const a = await create("压缩会话 A", true);
   const b = await create("压缩会话 B", true);
-  assert.deepEqual(server.store.compressionPreferences(), { selection: null, auto: defaultAutoCompression });
+  assert.deepEqual(server.store.compressionPreferences(), { auto: defaultAutoCompression });
   browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   const errors: string[] = [], nativeDialogs: string[] = [], commands: Command[] = [];
@@ -142,8 +142,7 @@ try {
     }, variable);
     assert.equal(colors.actual, colors.expected, `compression icon uses ${variable}`);
   };
-  const picker = dialog.locator("details.model-picker");
-  const pickerTrigger = picker.locator("summary");
+  const modelDisplay = dialog.getByRole("region", { name: "会话压缩模型" });
   const state = (value: string) => dialog.locator(`.compression-status[data-state="${value}"]`).waitFor();
   const expectEnabled = async (name: string) => {
     await page.waitForFunction((label) => [...document.querySelectorAll<HTMLButtonElement>("dialog.compression-page button")]
@@ -194,26 +193,10 @@ try {
   await select(a);
   await open();
   await expectEnabled("开始压缩");
-  await dialog.getByText(/尚未设置全局压缩模型/).waitFor();
-  assert.match(await pickerTrigger.innerText(), /Chat fixture/);
+  await dialog.getByRole("heading", { name: "使用会话模型", exact: true }).waitFor();
+  assert.match(await modelDisplay.innerText(), /Chat fixture/);
+  assert.equal(await dialog.locator("details.model-picker").count(), 0);
   assert.equal(server.agents.compressions.info(a), null);
-  noRequests();
-
-  // Shared ModelPicker, with the same search, favorites and thinking controls as chat.
-  await pickerTrigger.click();
-  await picker.getByRole("searchbox", { name: "搜索模型或供应商" }).fill("Summary");
-  await picker.getByRole("button", { name: /^Summary fixture\s*compression-page-fixture$/ }).click();
-  await picker.getByRole("radio", { name: "low", exact: true }).check();
-  await picker.getByRole("button", { name: "确认模型设置" }).click();
-  await dialog.getByText(/已全局记忆/).waitFor();
-  await page.waitForFunction(() => !document.querySelector("dialog.compression-page details.model-picker")?.hasAttribute("open"));
-  assert.match(await pickerTrigger.innerText(), /Summary fixture · low/);
-  assert.deepEqual(server.store.compressionPreferences(), { selection: summary, auto: defaultAutoCompression });
-  await wait(() => preferenceSnapshots.some((data) => JSON.stringify(data) === JSON.stringify({ selection: summary, auto: defaultAutoCompression })), "global preference subscription was not published");
-  const saved = commands.filter((c) => c.op === "compression.preferences.save");
-  assert.equal(saved.length, 1);
-  assert.deepEqual(saved[0].params, { selection: summary });
-  assert.equal(saved[0].sessionId, undefined, "compression preference is global, not session-scoped");
   noRequests();
 
   // Automatic settings save individual fields, synchronize and preserve local edits.
@@ -250,43 +233,36 @@ try {
   await percent.press("Enter");
   await wait(() => server.store.compressionPreferences().auto.percent === 70, "local draft did not save");
   await observer.close();
-  assert.deepEqual(server.store.compressionPreferences(), { selection: summary, auto: { enabled: false, tokens: 90000, percent: 70 } });
+  assert.deepEqual(server.store.compressionPreferences(), { auto: { enabled: false, tokens: 90000, percent: 70 } });
+  await wait(() => preferenceSnapshots.some((data: any) => data?.auto?.tokens === 90000 && !Object.hasOwn(data, "selection")), "auto-only subscription was not published");
   noRequests();
 
   for (const [width, height] of [[390, 844], [1440, 900]]) {
     await page.setViewportSize({ width, height });
-    await pickerTrigger.click();
     const box = await dialog.boundingBox();
     assert.ok(box && box.x >= -1 && box.x + box.width <= width + 1, `dialog fits ${width}px viewport`);
     assert.ok(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `dialog does not overflow at ${width}px`);
-    assert.ok(await picker.locator(".model-popover").evaluate((el) => {
-      const box = el.getBoundingClientRect();
-      return box.left >= -1 && box.right <= innerWidth + 1 && el.scrollWidth <= el.clientWidth + 1;
-    }), `picker does not overflow at ${width}px`);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     mkdirSync("test-results", { recursive: true });
     await page.screenshot({ path: `test-results/compression-page-${width}.png` });
-    await picker.getByRole("searchbox", { name: "搜索模型或供应商" }).press("Escape");
-    assert.equal(await picker.getAttribute("open"), null, "first Escape closes only picker");
-    assert.equal(await dialog.isVisible(), true);
-    assert.ok(await pickerTrigger.evaluate((el) => el === document.activeElement), "picker restores summary focus");
     await tokens.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/auto-compression-page-${width}.png` });
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "detached" });
-    assert.ok(await trigger.evaluate((el) => el === document.activeElement), "second Escape restores trigger focus");
+    assert.ok(await trigger.evaluate((el) => el === document.activeElement), "one Escape closes the detail and restores trigger focus");
     await open();
   }
   await close();
   await select(b);
   await open();
-  assert.match(await pickerTrigger.innerText(), /Summary fixture · low/);
+  assert.match(await modelDisplay.innerText(), /Chat fixture/);
   await expectEnabled("开始压缩");
   await close();
   await page.reload();
   await page.waitForFunction((title) => document.querySelector("#chat-title")?.textContent === title, b.title);
   await open();
-  assert.match(await pickerTrigger.innerText(), /Summary fixture · low/);
+  assert.match(await modelDisplay.innerText(), /Chat fixture/);
+  await page.waitForFunction(() => (document.querySelector('.auto-compression-field input') as HTMLInputElement | null)?.value === "90000");
   assert.equal(await automatic.isChecked(), false);
   assert.equal(await tokens.inputValue(), "90000");
   assert.equal(await percent.inputValue(), "70");
@@ -297,7 +273,8 @@ try {
   const original = readFileSync(a.file!, "utf8");
   await open();
 
-  const start = async (name: string, count: number) => {
+  const start = async (name: string) => {
+    const count = requests.length + 1;
     await expectEnabled(name);
     await dialog.getByRole("button", { name, exact: true }).click();
     await state("running");
@@ -305,15 +282,16 @@ try {
     await expectEnabled("取消压缩");
     await wait(() => responses.length >= count, `native compact request ${count} did not reach loopback provider: ${JSON.stringify(server.agents.compressions.info(a))}`);
     assert.equal(requests.length, count, "one provider request per explicit start");
-    assert.equal(requests[count - 1].model, summary.id);
-    assert.ok(!requests[count - 1].tools?.length, "compression exposes no coding tools");
-    assert.match(JSON.stringify(requests[count - 1].messages.at(-1)?.content), /<axiom-summary>.*100.*<\/axiom-summary>/, "the actual provider request must include short-summary instructions, including split turns");
-    assert.deepEqual(server.agents.compressions.info(a)!.selection, summary);
+    assert.equal(requests[count - 1].model, chat.id);
+    assert.ok(requests[count - 1].tools?.length, "summary retains tool declarations for prefix matching, without an executor");
+    assert.match(JSON.stringify(requests[count - 1].messages.at(-1)?.content), /无需额外生成卡片标题或短摘要/);
+    assert.deepEqual(server.agents.compressions.info(a)!.selection, chat);
+    await wait(() => !server.agents.active(a), "memory preparation did not settle");
     assert.deepEqual(server.agents.info(a).selection, chat);
     return server.agents.compressions.info(a)!.id;
   };
-  const first = await start("开始压缩", 1);
-  assert.match(JSON.stringify(requests[0].messages), /## Original Request/, "fixture exercises pi's split-turn summary path");
+  const first = await start("开始压缩");
+  assert.match(JSON.stringify(requests[0].messages.at(-1)), /## Goal|## Original Request/);
   const currentStep = dialog.locator('.compression-steps li[data-phase="current"]');
   await currentStep.waitFor();
   assert.equal(await currentStep.count(), 1);
@@ -342,15 +320,23 @@ try {
   assert.equal(commands.filter((c) => c.op === "compression.cancel").length, 0);
   await page.locator("#prompt").focus();
   await page.locator("#prompt").evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(2, 5));
+  completeSummaries = true;
   reply(responses[0]);
   await wait(() => server.agents.compressions.info(a)?.state !== "running", "first compression did not settle").catch((error) => {
     console.error("compression diagnostic", server.agents.compressions.info(a), requests);
     throw error;
   });
   assert.equal(server.agents.compressions.info(a)?.state, "completed", JSON.stringify(server.agents.compressions.info(a)));
+  completeSummaries = false;
+  const afterFirstCount = requests.length;
+  assert.ok(requests.some(request => JSON.stringify(request.messages.at(-1)).includes("## Original Request")), "native split-turn format is preserved");
   await page.waitForSelector('[data-od-id="background-compression-trigger"][data-state="completed"]');
-  assert.equal(await page.locator(".compaction-title").innerText(), "浏览器压缩验证", "split-turn topic reaches the collapsed card");
-  assert.equal(await page.locator(".compaction-icon .fold-icon path").count(), 6);
+  // Recent archived ranges now stay expanded: a new compaction is transparent
+  // in the timeline instead of forcing an old numbered card into the view.
+  const archive = await server.agents.command({ ...a, requestId: randomUUID(), op: "agent.history.index", params: {} }) as HistoryIndex;
+  assert.equal(archive.segments.at(-1)?.compression.number, 1);
+  await page.getByText("压缩会话 A 已保存消息", { exact: true }).waitFor();
+  assert.equal(await page.locator(".compaction-title").count(), 0, "native summary needs no generated short title");
   assert.equal(await trigger.locator("animate").count(), 0, "compression completion removes loading bubbles");
   assert.equal(await trigger.locator('use[href="#i-fold"]').count(), 1, "completion restores the idle fold glyph");
   await page.mouse.move(0, 0);
@@ -365,11 +351,12 @@ try {
   await expectTriggerColor("--action-icon-fg");
   assert.equal(await currentStep.count(), 0, "terminal stages stop animation");
   assert.equal(await dialog.locator('.compression-steps li[data-phase="done"]').count(), 3);
-  await dialog.getByText(/浏览器真实压缩摘要/).waitFor();
-  await dialog.getByRole("heading", { name: "Goal", exact: true }).waitFor();
-  assert.equal(await dialog.locator(".compression-summary li strong").innerText(), "保留上下文");
-  assert.equal(await dialog.locator(".compression-summary pre code").innerText(), "const compact = true;");
+  await dialog.locator(".compression-summary").getByText(/浏览器真实压缩摘要/).first().waitFor();
+  await dialog.getByRole("heading", { name: "Goal", exact: true }).first().waitFor();
+  assert.equal(await dialog.locator(".compression-summary li strong").first().innerText(), "保留上下文");
+  assert.equal(await dialog.locator(".compression-summary pre code").first().innerText(), "const compact = true;");
   assert.doesNotMatch(await dialog.locator(".compression-summary").innerText(), /axiom-summary/);
+  await dialog.locator(".compression-summary").scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/compression-page-summary.png" });
   assert.equal(await dialog.locator("script").count(), 0);
   assert.equal(await page.evaluate(() => (window as unknown as { __compressionInjected?: boolean }).__compressionInjected), undefined);
@@ -377,16 +364,14 @@ try {
   await dialog.getByRole("button", { name: "再次压缩", exact: true }).click();
   await dialog.getByText("当前上下文已压缩，尚无新增消息可再次压缩。", { exact: true }).waitFor();
   await expectEnabled("再次压缩");
-  assert.equal(requests.length, 1, "already compacted context must not call provider again");
-  // Pi refuses a second compaction until new context exists. Add a real saved turn.
-  const manager = SessionManager.open(a.file!);
-  const previousAssistant = manager.getBranch().find((entry) => entry.type === "message" && entry.message.role === "assistant");
-  assert.ok(previousAssistant?.type === "message" && previousAssistant.message.role === "assistant");
-  manager.appendMessage({ role: "user", content: "压缩后的新增请求", timestamp: Date.now() });
-  manager.appendMessage({ ...previousAssistant.message, timestamp: Date.now() });
+  assert.equal(requests.length, afterFirstCount, "already compacted context must not call provider again");
+  // A real new chat request also refreshes the reusable provider prefix.
+  await server.agents.command({ ...a, requestId: randomUUID(), op: "prompt", params: { text: "压缩后的新增请求" } });
+  await wait(() => !server.agents.active(a), "new chat did not settle");
+  await server.agents.releaseIdle(a);
   server.agents.refresh(a);
+  const second = await start("再次压缩");
   const beforeCancel = readFileSync(a.file!, "utf8");
-  const second = await start("再次压缩", 2);
   assert.notEqual(second, first);
   await dialog.getByRole("button", { name: "取消压缩", exact: true }).click();
   await state("cancelled");
@@ -395,10 +380,11 @@ try {
   await open();
   await state("cancelled");
   assert.equal(readFileSync(a.file!, "utf8"), beforeCancel, "cancel does not append a compaction");
-  const third = await start("再次压缩", 3);
+  const thirdResponse = responses.length;
+  const third = await start("再次压缩");
   assert.notEqual(third, second);
   completeSummaries = true; // Repeated/split-turn compaction may issue another native summary call.
-  reply(responses[2]);
+  reply(responses[thirdResponse]);
   await state("completed");
   await expectEnabled("再次压缩");
   const completedRequestCount = requests.length;
@@ -409,7 +395,7 @@ try {
   await expectEnabled("再次压缩");
   assert.equal(server.agents.compressions.info(a)!.id, third, "reload never resubmits");
   assert.equal(requests.length, completedRequestCount);
-  assert.match(await pickerTrigger.innerText(), /Summary fixture · low/);
+  assert.match(await modelDisplay.innerText(), /Chat fixture/);
   for (const scope of [empty, a, b]) assert.deepEqual(server.agents.info(scope).selection, chat, "compression selection never changes chat model");
   assert.equal(commands.filter((c) => c.op === "compression.start").length, 4);
 
@@ -432,7 +418,8 @@ try {
   assert.equal(await dialog.locator('.compression-steps li[data-phase="done"]').count(), 1);
   assert.equal(await dialog.locator('.compression-steps li[data-phase="failed"]').count(), 1);
   assert.equal(await dialog.locator('.compression-steps li[data-phase="pending"]').count(), 1);
-  assert.equal(readFileSync(b.file!, "utf8"), beforeFailure, "failed compression never applies a summary");
+  assert.ok(readFileSync(b.file!, "utf8").startsWith(beforeFailure), "memory preparation is append-only");
+  assert.ok(!readFileSync(b.file!, "utf8").split("\n").some(line => line && JSON.parse(line).type === "compaction"), "failed compression never applies a summary");
   await expectEnabled("再次压缩");
   const failed = server.agents.compressions.info(b)!;
   assert.match(failed.error!, /quota_exhausted/);
@@ -448,7 +435,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(nativeDialogs, []);
   assert.deepEqual(fixtureErrors, []);
-  console.log("PASS: automatic compression toggle, token/percent validation and autosave, cross-window synchronization with draft preservation, reload persistence; empty/open-only compression page; shared independent global ModelPicker across sessions/reload; start → complete → restart → cancel → restart; real pi application; chat/draft isolation; 390/1440 layout; nested Escape and focus restoration; stage animation/reduced motion; provider failure cause, redaction and reload persistence");
+  console.log("PASS: automatic compression toggle, token/percent validation and autosave, cross-window synchronization with draft preservation, reload persistence; empty/open-only compression page; read-only session model across sessions/reload; start → complete → restart → cancel → restart; real pi application; chat/draft isolation; 390/1440 layout; single Escape and focus restoration; stage animation/reduced motion; provider failure cause, redaction and reload persistence");
 } finally {
   await browser?.close();
   await app?.close();

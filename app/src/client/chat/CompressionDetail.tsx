@@ -8,7 +8,6 @@ import { Icon } from "../components.js";
 import { CompressionProgressIcon } from "../DataIcons.js";
 import { BubbleLoadingIcon } from "../StatusIcons.js";
 import type { Selection } from "../../shared/agent.js";
-import { ModelPicker } from "./ModelPicker.js";
 import { CompressionSummary } from "./CompressionSummary.js";
 import { AutoCompressionSettings } from "./AutoCompressionSettings.js";
 import { ProcessingPage } from "../pages/ProcessingPage.js";
@@ -57,8 +56,6 @@ export function CompressionDetail({
   onStart,
   onCancel,
   selection,
-  inherited,
-  onSelect,
   startUnavailable,
   contextWindow,
   scope,
@@ -69,8 +66,6 @@ export function CompressionDetail({
   trigger: HTMLButtonElement;
   job: Compression | null;
   selection: Selection | null;
-  inherited: boolean;
-  onSelect: (selection: Selection) => Promise<void>;
   startUnavailable: string;
   title: string;
   busy: boolean;
@@ -100,10 +95,10 @@ export function CompressionDetail({
         ? "等待会话安全边界，保存完整上下文快照；不打断当前请求"
         : `快照包含 ${job.messageCount} 条上下文消息；快照后的新增消息单独保留`,
     ],
-    ["后台生成原生摘要", "使用所选模型与 pi 原生压缩；不调用编码工具"],
+    ["后台生成原生摘要", "使用当前会话模型生成 pi 原生摘要；不执行编码工具"],
     [
       "等待新的安全点应用",
-      "校验快照仍兼容后自动应用；原始历史与新增消息保留，冲突不应用",
+      "摘要在安全点直接应用，不校验快照兼容性；原始历史与新增消息保留",
     ],
   ];
   return createPortal(
@@ -141,11 +136,10 @@ export function CompressionDetail({
       {records && scope && <div className="compression-body"><ProcessingPage key={scope.workspaceId + scope.sessionId} workspaceId={scope.workspaceId} initial={{ kind: "compression", sessionId: scope.sessionId, id: job?.id }} onBack={() => setRecords(false)} /></div>}
       <div className="compression-body" hidden={records}>
         {scope && <button className="btn" onClick={() => setRecords(true)}>处理记录</button>}
-        <section className="compression-settings" aria-label="压缩模型设置">
-          <h3>压缩模型</h3>
-          <ModelPicker nested value={selection} disabled={busy || pending} onSelect={onSelect} />
-          <p>{inherited ? "尚未设置全局压缩模型，默认使用当前会话模型。" : "已全局记忆，主／子会话共用，刷新和重启后保留。"}选择仅用于压缩，不改变聊天模型。</p>
-          {active && <p>本次任务：{display(job!.selection).label}；修改模型仅影响下一次压缩。</p>}
+        <section className="compression-settings" aria-label="会话压缩模型">
+          <h3>使用会话模型</h3>
+          <p>{selection ? display(selection).label : "尚未选择会话模型"}；压缩与会话使用相同模型和思考等级，无需单独配置。</p>
+          {active && <p>本次任务：{display(job!.selection).label}；切换会话模型仅影响下一次压缩。</p>}
         </section>
         <AutoCompressionSettings contextWindow={contextWindow} />
         <section>
@@ -159,13 +153,13 @@ export function CompressionDetail({
             <span>{job ? compressionStatusLabel(job) : "准备压缩"}{job?.trigger === "auto" ? " · 自动触发" : ""}</span>
           </div>
           <p>
-            {!job ? "选择模型后点击开始压缩。摘要将在后台生成，并在安全点应用。" :
+            {!job ? "点击开始压缩，使用当前会话模型在后台生成摘要，并在安全点应用。" :
               (active
                 ? job.phase === "snapshot"
                   ? "正在等待会话安全边界以保存快照，你可以返回会话继续操作。"
                   : job.phase === "summarizing"
                     ? "正在后台生成 pi 原生摘要，完成后将等待新的安全点自动应用。"
-                    : "摘要已生成，正在等待安全边界校验并应用；尚未完成应用。"
+                    : "摘要已生成，正在等待安全点直接应用；尚未完成应用。"
                 : done
                   ? "压缩摘要已应用到当前会话上下文，原始历史与快照后的新增消息均已保留。"
                   : uncertain ? "应用状态待核实，请以后台确认结果为准；原始历史保留。"
@@ -277,7 +271,7 @@ export function CompressionDetail({
         <section>
           <h3>上下文保留</h3>
           <p style={{ marginTop: 8 }}>
-            本次任务基于安全点保存的上下文快照。应用后保留原始历史与快照后的新增消息；失败、取消或冲突时不应用摘要。
+            本次任务基于安全点保存的上下文快照。应用后保留原始历史与快照后的新增消息；生成失败或取消时不应用摘要。
           </p>
           <p id={`${id}-note`} style={{ marginTop: 8 }}>
             摘要在后台生成，并在新的安全点自动应用。快照估算不包含后续新增消息，当前占用以会话上下文窗口图形为准。

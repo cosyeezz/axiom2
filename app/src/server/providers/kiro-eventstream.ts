@@ -1,3 +1,4 @@
+import { setImmediate } from "node:timers/promises";
 import { KiroChatError, kiroObject, type KiroJson } from "./kiro-chat-protocol.js";
 
 // AWS event-stream framing, independently implemented from the published wire format.
@@ -53,6 +54,13 @@ export async function* readKiroEvents(body: ReadableStream<Uint8Array>, signal: 
   const abort = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener("abort", abort, { once: true });
   let frame = Buffer.alloc(12), offset = 0, total = 0, frames = 0;
+  let budgetReads = 0, budgetFrames = 0, budgetBytes = 0, lastYield = performance.now();
+  const budgetExceeded = () => budgetReads >= 256 || budgetFrames >= 256 || budgetBytes >= 64 * 1024 || performance.now() - lastYield >= 8;
+  const yieldBudget = async () => {
+    await setImmediate(undefined, { signal });
+    signal.throwIfAborted();
+    budgetReads = 0; budgetFrames = 0; budgetBytes = 0; lastYield = performance.now();
+  };
   try {
     signal.throwIfAborted();
     for (;;) {
@@ -60,10 +68,16 @@ export async function* readKiroEvents(body: ReadableStream<Uint8Array>, signal: 
       if (item.done) break;
       total += item.value.byteLength;
       if (total > 64 * 1024 * 1024) throw new KiroChatError("Kiro 流式响应超过本地 64 MiB 限制。");
+      // Include reads and incomplete-frame copies: immediately resolved one-byte
+      // reads can starve timers just as a single buffered chunk of full frames can.
+      budgetReads++;
+      if (budgetExceeded()) await yieldBudget();
       let cursor = 0;
       while (cursor < item.value.length) {
         const count = Math.min(frame.length - offset, item.value.length - cursor);
         frame.set(item.value.subarray(cursor, cursor + count), offset); offset += count; cursor += count;
+        budgetBytes += count;
+        if (budgetExceeded()) await yieldBudget();
         if (offset < frame.length) continue;
         if (frame.length === 12) {
           const size = frame.readUInt32BE(0), headerSize = frame.readUInt32BE(4);
@@ -72,6 +86,9 @@ export async function* readKiroEvents(body: ReadableStream<Uint8Array>, signal: 
           const full = Buffer.allocUnsafe(size); full.set(frame); frame = full;
         } else {
           if (++frames > 100000) throw new KiroChatError("Kiro 流式事件数量超过本地限制。");
+          budgetFrames++;
+          if (budgetExceeded()) await yieldBudget();
+          signal.throwIfAborted();
           yield decode(frame);
           frame = Buffer.alloc(12); offset = 0;
         }

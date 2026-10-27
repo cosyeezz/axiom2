@@ -119,6 +119,8 @@ export interface AgentInfo {
     cost: number | null;
     /** Native input usage of the latest model response on this branch; never cumulative. */
     lastRequest?: { input: number; cacheRead: number; cacheWrite: number } | null;
+    /** Latest actual Kiro attempt only, not cumulative measurement or a service bill. */
+    lastMeasurement?: import("./kiro-usage.js").KiroUsageInfo;
     context: {
       tokens: number | null;
       window: number;
@@ -129,6 +131,8 @@ export interface AgentInfo {
   } | null;
 }
 export interface ChatMessage {
+  /** Allowlisted terminal Kiro failure metadata; never raw provider diagnostics. */
+  kiroFailure?: import("./kiro-failure.js").KiroFailureDisplay;
   /** Ephemeral worker-to-view timing; never written into native model history. */
   deliveryTiming?: import("./latency.js").DeliveryTiming;
   skills?: import("./skills.js").SkillReference[];
@@ -167,6 +171,8 @@ export interface ChatMessage {
   truncated?: boolean;
   compression?: { number: number; title: string; before: number; after: number | null };
   inputIds?: string[];
+  /** Host-proven appended input (including edit/resend); visible, not a new task boundary. */
+  inputContinuation?: boolean;
   /** Display metadata from an actual model request, never the menu draft. */
   selectionChange?: SelectionChange;
   runId?: string;

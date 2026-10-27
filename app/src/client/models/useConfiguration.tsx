@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Icon } from "../components.js";
-import { command, useConnection, useScope } from "../transport.js";
+import { command, useConnection, useConnectionState, useScope } from "../transport.js";
 import type { Configuration } from "../../shared/protocol.js";
 import type {
   ModelDraft as Model,
@@ -11,7 +11,7 @@ import type {
 import { assignModelConfigIds, validModelPricing } from "../../shared/models.js";
 // Optional false flags mean the same thing as omitted flags in server drafts.
 const draftSnapshot = (value: unknown) => JSON.stringify(value, (key, item) =>
-  ["clearKey", "keepUrl", "keep"].includes(key) && item === false ? undefined : item,
+  item === false && ["clearKey", "keepUrl", "keep"].includes(key) ? undefined : item,
 );
 const empty: Configuration = {
   revision: "",
@@ -32,6 +32,7 @@ export type ConfigurationDecision = {
 export function useConfiguration() {
   const config = useScope("configuration", empty),
     connection = useConnection();
+  const connectionState = useConnectionState();
   const [revision, setRevision] = useState("");
   const [storage, setStorage] = useState<ModelConfiguration["storage"]>();
   const [saved, setSaved] = useState(false);
@@ -40,7 +41,7 @@ export function useConfiguration() {
   );
   const [busy, setBusy] = useState(false);
   const [savedProviders, setSavedProviders] = useState<Provider[]>([]);
-  const initialized = useRef(false);
+  const initializedGeneration = useRef(0);
   const logoutInFlight = useRef(false);
   const [needsReconcile, setNeedsReconcile] = useState(false);
   const [login, setLogin] = useState<{
@@ -57,25 +58,31 @@ export function useConfiguration() {
     [showKey, setShowKey] = useState(false);
   const [notice, setNotice] = useState({ message: "", error: false });
   const feedback = notice.message, feedbackError = notice.error;
-  const setFeedback = (message: string, error = false) => setNotice({ message, error });
+  const setFeedback = useCallback((message: string, error = false) => setNotice({ message, error }), []);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [decision, setDecision] = useState<ConfigurationDecision | null>(null);
-  const p = providers.find((p) => p.id === selected);
-  const dirty = draftSnapshot(providers) !== draftSnapshot(savedProviders);
-  const editorDirty =
-    !!editor &&
-    draftSnapshot(editor) !==
-      draftSnapshot(
-        p?.models.find((m) => m.key === editor.key) ?? {
-          key: editor.key,
-          id: "",
-          name: "",
-          levels: ["none"],
-          input: ["text"],
-          headers: [],
-          body: [],
-        },
-      );
+  const p = useMemo(() => providers.find((p) => p.id === selected), [providers, selected]);
+  // Draft updates replace arrays/objects; unrelated UI state must not serialize
+  // every supplier and model again. Keep the same false-flag normalization.
+  const savedProvidersSnapshot = useMemo(() => draftSnapshot(savedProviders), [savedProviders]);
+  const providersSnapshot = useMemo(() => providers === savedProviders
+    ? savedProvidersSnapshot
+    : draftSnapshot(providers), [providers, savedProviders, savedProvidersSnapshot]);
+  const dirty = providersSnapshot !== savedProvidersSnapshot;
+  const editorKey = editor?.key;
+  const editorSnapshot = useMemo(() => editor ? draftSnapshot(editor) : "", [editor]);
+  const editorBaselineSnapshot = useMemo(() => editorKey === undefined ? "" : draftSnapshot(
+    p?.models.find((m) => m.key === editorKey) ?? {
+      key: editorKey,
+      id: "",
+      name: "",
+      levels: ["none"],
+      input: ["text"],
+      headers: [],
+      body: [],
+    },
+  ), [p?.models, editorKey]);
+  const editorDirty = !!editor && editorSnapshot !== editorBaselineSnapshot;
   // One staging path for Finish, unified Save (including a hidden editor), and supplier switches.
   const stageEditor = (): Provider[] | null => {
     if (!editor || !p) return providers;
@@ -112,6 +119,7 @@ export function useConfiguration() {
     return next;
   };
   const load = async (preferredProvider?: string) => {
+    setFeedback("正在读取本地配置…");
     setBusy(true);
     try {
       const data = await command<ModelConfiguration>("configuration.get");
@@ -145,11 +153,13 @@ export function useConfiguration() {
     return load(providerId);
   };
   useEffect(() => {
-    if (connection === "已连接本地服务" && !initialized.current) {
-      initialized.current = true;
+    // A socket can close between its open event and the first read. Retry only
+    // the initial read on a new generation; never replay writes or replace drafts.
+    if (connectionState.connected && !revision && initializedGeneration.current !== connectionState.generation) {
+      initializedGeneration.current = connectionState.generation;
       void load();
     }
-  }, [connection]);
+  }, [connectionState.connected, connectionState.generation, revision]);
   const save = async (
     confirmLogout = false,
     allowCommands = false,
@@ -213,14 +223,14 @@ export function useConfiguration() {
       setBusy(false);
     }
   };
-  const patch = (change: Partial<Provider>) => {
+  const patch = useCallback((change: Partial<Provider>) => {
     setSaved(false);
     setFeedback("");
     setProviders((all) =>
       all.map((item) => (item.id === selected ? { ...item, ...change } : item)),
     );
-  };
-  const discardEditor = (proceed: () => void) => {
+  }, [selected, setFeedback]);
+  const discardEditor = useCallback((proceed: () => void) => {
     if (!editorDirty) {
       proceed();
       return;
@@ -232,7 +242,7 @@ export function useConfiguration() {
       text: "当前行内编辑尚未完成。确认将丢弃这部分输入，其他供应商和模型草稿仍保留。取消可继续编辑。",
       proceed,
     });
-  };
+  }, [editorDirty]);
   const add = () =>
     discardEditor(() => {
       const id = crypto.randomUUID();
@@ -367,15 +377,15 @@ export function useConfiguration() {
     setTab(next);
     document.getElementById(next + "-tab")?.focus();
   };
-  const copy = async (value: string, kind: string) => {
+  const copy = useCallback(async (value: string, kind: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopyFeedback(`已复制${kind}：${value}`);
     } catch {
       setCopyFeedback(`复制失败，请手动选择并复制${kind}：${value}`);
     }
-  };
-  const copyButton = (value: string, kind: string) => (
+  }, []);
+  const copyButton = useCallback((value: string, kind: string) => (
     <button
       className="icon-btn copy-model-value"
       type="button"
@@ -384,11 +394,12 @@ export function useConfiguration() {
     >
       <Icon name="copy" />
     </button>
-  );
-  const rows =
-    p?.models.filter((m) =>
-      `${m.name} ${m.id}`.toLowerCase().includes(filter.toLowerCase()),
-    ) || [];
+  ), [copy]);
+  const rows = useMemo(() => {
+    if (filter === "") return p?.models || [];
+    const needle = filter.toLowerCase();
+    return p?.models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(needle)) || [];
+  }, [p?.models, filter]);
 
   return {
     config,

@@ -219,6 +219,9 @@ try {
   await phone.screenshot({ path: join(artifacts, "mobile-idle-hidden.png") });
   assert.ok(legacyFrames > 0, "mobile fallback was exercised with group.delivery removed from wire snapshots");
   const native = await mobile.newPage(); await prepare(native);
+  // A fresh Android entry has no stored reader choice and therefore opens in reading mode;
+  // once the reader picks a state it survives refresh (see tests/mobile-reading.check.ts).
+  await native.addInitScript(() => localStorage.removeItem("axiom.mobile.reading"));
   await native.goto(app.origin + "/#axiom-native=1"); await native.locator(".app.reading-mode").waitFor();
   await native.locator('[data-delivery-start="new-arrival"]').waitFor();
   for (const [width, height] of [[390, 844], [844, 390], [800, 1280]]) {

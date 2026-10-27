@@ -8,7 +8,6 @@ import { previewEnvironment, runtimeEnvironment } from "../src/server/session-en
 import { environmentResourceOptions } from "../src/server/environment-resources.js";
 import { installAxiomPrompt } from "../src/server/axiom-prompt.js";
 import { memoryInstruction } from "../src/shared/memory.js";
-import { modelQuestionInstruction } from "../src/shared/model-question.js";
 import { createInstalledResourceLoader } from "../src/server/installed-resource-loader.js";
 import { discoverCapabilities, capabilityRuntime } from "../src/server/capability-resources.js";
 import { taskTools } from "../src/server/task-tools.js";
@@ -36,15 +35,16 @@ test("memory instruction is replaced as a whole without altering other appended 
   const withoutMemory = append({}), path = "/tmp/fixture/memory/MEMORY.md";
   const withMemory = append({ memoryPath: path }), instruction = memoryInstruction(path);
   assert.equal(withMemory.filter(text => text === instruction).length, 1);
-  assert.deepEqual(withMemory.filter(text => text !== instruction), withoutMemory.filter(text => text !== modelQuestionInstruction));
-  assert.equal(withMemory.join("\n").split(modelQuestionInstruction).length, 2);
-  assert.equal(withoutMemory.filter(text => text === modelQuestionInstruction).length, 1);
+  assert.deepEqual(withMemory.filter(text => text !== instruction), withoutMemory);
+  for (const extra of [{}, { memoryPath: path }, { task: {} }, { task: {}, memoryPath: path }]) {
+    assert.doesNotMatch(append(extra).join("\n"), /<Question\b|wrap each question|numbered options|two spaces/);
+  }
   assert.equal(withMemory[0], base[0]);
   const linkInstruction = "When referencing files, use Markdown links: [filename](path)";
   assert.ok(withMemory.includes(linkInstruction));
   assert.doesNotMatch(withMemory.join("\n"), /When referencing local files/);
   assert.ok(withMemory.some(text => text.startsWith("Split work suitable for delegation")));
-  assert.deepEqual(append({ task: {}, memoryPath: path }), [...base, linkInstruction, "CHILD_POLICY", modelQuestionInstruction]);
+  assert.deepEqual(append({ task: {}, memoryPath: path }), [...base, linkInstruction, "CHILD_POLICY"]);
   assert.doesNotMatch(withMemory.join("\n"), /\p{Script=Han}/u);
 });
 

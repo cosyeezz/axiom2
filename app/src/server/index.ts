@@ -1,7 +1,10 @@
+import { BackendUpdates, runningBackendVersion, type BackendUpdateOptions } from "./backend-updates.js";
+import { backendUpdatesScope } from "../shared/backend-updates.js";
 import { latencyFor } from "./latency.js";
 import { assetCacheControl } from "./asset-cache.js";
 import type { DeliveryTiming } from "../shared/latency.js";
 import { PathActions } from "./path-actions.js";
+import { WorkspaceGit } from "./workspace-git.js";
 import { MaintenanceService } from "./maintenance.js";
 import { IntegrationMaintenanceQueue } from "./integration-maintenance.js";
 import { stopMaintenanceProcesses } from "./maintenance-process.js";
@@ -37,6 +40,11 @@ import { Logins } from "./auth.js";
 import { Agents } from "./agents.js";
 import type { OpenMemoryFile } from "./memory-open.js";
 import { Costs } from "./costs.js";
+import { ModelUsageStatistics } from "./model-usage-statistics.js";
+import { ModelUsageLedger } from "./model-usage-ledger.js";
+import { usageModelNames, usageModelPricing } from "./model-metadata.js";
+import { UsageAccounts } from "./usage-accounts.js";
+import { usageAuthScope, usageProviderId, usageProvidersScope } from "../shared/model-usage.js";
 import { Tasks } from "./tasks.js";
 import { ServiceRecoveryCoordinator } from "./service-recovery.js";
 import { Preferences } from "./preferences.js";
@@ -58,13 +66,15 @@ import {
 } from "../shared/protocol.js";
 
 export async function startServer(
-  options: { rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
+  options: { backendUpdates?: BackendUpdateOptions; rea?: ReaDependencies; rtk?: RtkDependencies; root?: string; port?: number; dev?: boolean; openMemoryFile?: OpenMemoryFile; pickFolder?: PickFolder; pickPaths?: PickPaths; pickResources?: PickPaths; pickAttachments?: PickAttachments; openCli?: { execute?: OpenCliExecute; locateNpm?: () => string; openExtension?: (target: "store" | "download") => Promise<void>; runtime?: import("./integrations/managed-node.js").ManagedNodeProvider } } = {},
 ) {
   let remoteAccess: RemoteAccess | undefined;
   const store = new Store(options.root ?? dataRoot());
   const latency = latencyFor(store);
   const deliverySamples = new Map<string, number>();
+  const updates = new BackendUpdates(store.db, options.backendUpdates?.version !== undefined ? options.backendUpdates.version : await runningBackendVersion(), () => publish(backendUpdatesScope), options.backendUpdates);
   const costs = new Costs(store);
+  const usageStatistics = new ModelUsageStatistics(store, costs);
   const drafts = new SessionDrafts(store);
   const files = new Files(store, (scope, id) => agents.message(scope, id, true),
     (path, directory, signal) => fileManager.open(directory ? path : dirname(path), signal, directory ? undefined : path),
@@ -84,12 +94,14 @@ export async function startServer(
   const openDialog = new OpenDialog();
   const fileManager = new FileManager();
   const pathActions = new PathActions(store, fileManager);
+  const workspaceGit = new WorkspaceGit(store);
   const folderPicker = new FolderPicker(options.pickFolder, undefined, openDialog);
   const attachmentPicker = new AttachmentPicker(options.pickAttachments, undefined, openDialog);
   const streamId = randomUUID();
   let seq = 0,
     origin = "";
   const models = new ModelService(store.root);
+  const usageLedger = new ModelUsageLedger(store, models.dir);
   const preferences = new Preferences(store);
   let config: Configuration = { revision: "", providerCount: 0, modelCount: 0, available: [], dataRoot: store.root };
   let configurationRead = 0,
@@ -104,6 +116,7 @@ export async function startServer(
       config = next;
       if (editable) preferences.prune(editable);
       publish("configuration");
+      publish(usageProvidersScope);
       publish("favorites");
     }
   };
@@ -115,9 +128,10 @@ export async function startServer(
   const subscriptions = new Map<WebSocket, Set<string>>();
   const subscriptionLifetimes = new WeakMap<WebSocket, Map<string, object>>();
   const sessionCounts = (sessions: import("../shared/protocol.js").Session[]) => sessions.map(session => ({
-    ...session, messageCount: agents.messageCount({ workspaceId: session.workspaceId, sessionId: session.id }),
+    ...session, messageCount: agents.messageCount({ workspaceId: session.workspaceId, sessionId: session.id }, { cachedOnly: true }),
   }));
   const snapshots = (scope: string): unknown => {
+    if (scope === backendUpdatesScope) return updates.snapshot();
     if (scope === "workspaces") return store.workspaces();
     if (scope === "workspace-preferences") return { ...store.workspacePreferences(), view: store.lastSession() };
     if (scope === "session-preferences") return { view: store.lastSession() };
@@ -135,7 +149,8 @@ export async function startServer(
     if (scope === "builtin-tools:rtk") return rtk.snapshot();
     if (scope === "builtin-tools:model-proxy") return modelProxy.snapshot();
     if (scope === "capability-preferences") return { revision: agents.capabilities.preferences().revision };
-    if (scope === "authentication") return null;
+    if (scope === "authentication" || scope === usageAuthScope) return null;
+    if (scope === "usage:account" || scope === usageProvidersScope) return { revision: seq };
     const parts = scope.split(":");
     if (parts.length === 2 && parts[0] === "processing") return agents.memories.records.invalidation(parts[1]);
     if (parts.length === 2 && parts[0] === "memory-tree") return agents.memories.tree(parts[1]);
@@ -343,6 +358,9 @@ export async function startServer(
     await agents.memories.runner?.stopProviders?.(providers, confirmed);
     await tasks.stopProviders(providers, confirmed);
   };
+  const usageAccounts = new UsageAccounts(store.root, models,
+    (owner, state) => send(owner as WebSocket, { type: "snapshot", scope: usageAuthScope, streamId, seq: ++seq, data: state }),
+    async () => { publish("usage:account"); });
   const logins = new Logins(
     models,
     (owner, state) =>
@@ -354,6 +372,9 @@ export async function startServer(
         data: state,
       }),
     refreshConfiguration,
+    undefined,
+    undefined,
+    () => { if (usageAccounts.authActive) throw new AppError("AUTH_BUSY", "已有用量账号授权流程，请先完成或取消，再登录模型服务。"); },
   );
   sockets.on("connection", (ws) => {
     subscriptions.set(ws, new Set());
@@ -369,6 +390,7 @@ export async function startServer(
       subscriptions.delete(ws);
       attention?.disconnect(ws);
       logins.disconnect(ws);
+      usageAccounts.disconnect(ws);
     });
     ws.on("error", () => ws.close());
     const handle = async (raw: RawData) => {
@@ -396,6 +418,11 @@ export async function startServer(
         if (c.op === "ping") {
           // A read-only round trip on this exact socket; no stored receipt or model work.
           send(ws, { type: "receipt", requestId, ok: true, data: { streamId } });
+          return;
+        }
+        if (c.op.startsWith("backendUpdates.")) {
+          const data = await updates.command(c.op.slice("backendUpdates.".length), c.params!.version);
+          send(ws, { type: "receipt", requestId, ok: true, data });
           return;
         }
         if (c.op === "read.cancel") {
@@ -492,6 +519,11 @@ export async function startServer(
           ws.once("close", abort);
           try { data = await agents.memories.command(c, controller.signal); }
           finally { ws.off("close", abort); }
+        } else if (c.op === "git.branch") {
+          const controller = new AbortController(), abort = () => controller.abort();
+          reads.set(requestId, controller); ws.once("close", abort);
+          try { data = await workspaceGit.command(c, controller.signal); }
+          finally { reads.delete(requestId); ws.off("close", abort); }
         } else if (c.op === "costs.get") {
           data = costs.get({ workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") });
         } else if (c.op.startsWith("paths.")) {
@@ -510,9 +542,50 @@ export async function startServer(
           ws.once("close", abort);
           try { data = await files.command(c, controller.signal); }
           finally { ws.off("close", abort); }
+        } else if (c.op.startsWith("usage.")) {
+          if (c.workspaceId || c.sessionId) throw new AppError("INVALID_INPUT", "模型用量与统计使用应用级范围。");
+          if (c.op === "usage.statistics") {
+            const report = await usageStatistics.read(c.params!.workspaceId === undefined ? undefined : text(c.params!.workspaceId, "工作空间"));
+            data = { ...report, models: usageModelNames(models.dir, report.models) };
+          } else if (c.op === "usage.ledger") data = await usageLedger.read(c.params);
+          else if (c.op === "usage.workspaces") data = usageLedger.workspaces();
+          else if (c.op === "usage.sessions") data = await usageLedger.sessions(c.params);
+          else if (c.op === "usage.pricing") data = usageModelPricing(models.dir, text(c.params!.providerId, "供应商 ID"));
+          else if (c.op === "usage.providers") {
+            const providers = await models.usageProviders();
+            if (!providers.some(provider => provider.id === "openai" || provider.id === usageProviderId))
+              providers.push({ id: usageProviderId, name: "Codex", configured: false, query: "codex", revision: "independent" });
+            data = providers;
+          } else if (c.op === "usage.account.get") data = await usageAccounts.state();
+          else if (c.op === "usage.account.proxy") {
+            try { data = await store.external(c, () => usageAccounts.configureProxy(c.params!.proxy, c.params!.revision)); }
+            finally { publish("usage:account"); }
+          } else if (c.op === "usage.auth.start") data = await store.external(c, () =>
+            usageAccounts.start(ws, c.params!.providerId, c.params!.type, c.params!.revision, c.params!.proxy));
+          else if (c.op === "usage.auth.open") data = await usageAccounts.logins.open(ws, text(c.params!.id, "认证流程"));
+          else if (c.op === "usage.auth.answer") data = usageAccounts.logins.answer(ws, text(c.params!.id, "认证流程"), c.params!.promptId, c.params!.answer);
+          else if (c.op === "usage.auth.cancel") data = await usageAccounts.logins.cancel(ws, text(c.params!.id, "认证流程"));
+          else if (c.op === "usage.provider" || c.op === "usage.account.logout") {
+            const providerId = c.params!.providerId === undefined ? usageProviderId : text(c.params!.providerId, "供应商 ID");
+            if (c.op === "usage.account.logout" && providerId !== usageProviderId)
+              throw new AppError("AUTH_UNSUPPORTED", "仅可退出独立的 Codex 用量授权。");
+            const controller = new AbortController(), abort = () => controller.abort();
+            ws.once("close", abort);
+            try {
+              data = c.op === "usage.provider"
+                ? providerId === usageProviderId
+                  ? await usageAccounts.query(c.params!.refresh === true, controller.signal)
+                  : await models.usage(providerId, c.params!.refresh === true, controller.signal)
+                : await store.external(c, () => usageAccounts.logout(c.params!.revision, c.params!.generation, controller.signal));
+            } finally {
+              ws.off("close", abort);
+              if (c.op === "usage.account.logout") publish("usage:account");
+            }
+          } else throw new AppError("UNKNOWN_OPERATION", "未知的用量统计操作。");
         } else if (c.op === "configuration.get") {
+          // The editor needs local configuration, not a second global availability
+          // pass. Save/login already publish their own configuration invalidations.
           data = await models.read();
-          await refreshConfiguration();
         } else if (c.op === "configuration.catalog") {
           const controller = new AbortController(), abort = () => controller.abort();
           ws.once("close", abort);
@@ -567,7 +640,7 @@ export async function startServer(
         } else if (c.op === "deleted-sessions.list")
           data = store.deletedSessions(object(c.params ?? {}));
         else if (c.op === "session.delete")
-          data = await models.serial(() => tasks.remove(c));
+          data = await tasks.remove(c);
         else if (c.op === "request.get")
           data = store.receipt(c.params!.requestId, c);
         else data = store.execute(c);
@@ -972,6 +1045,7 @@ export async function startServer(
   remoteAccess = new RemoteAccess(origin);
   await remoteAccess.initialize();
   recovery.start();
+  updates.start();
   return {
     origin,
     accessUrl: `${origin}/`,
@@ -979,8 +1053,12 @@ export async function startServer(
     refreshConfiguration,
     agents,
     tasks,
+    usageAccounts,
+    usageStatistics,
+    usageLedger,
     close: async () => {
       shuttingDown = true;
+      updates.close();
       integrationMaintenance.close();
       recovery.pause();
       clearTimeout(proxyRefreshTimer);
@@ -995,11 +1073,12 @@ export async function startServer(
       await Promise.all([openDialog.close(), fileManager.close()]);
       for (const ws of sockets.clients) {
         logins.disconnect(ws);
+        usageAccounts.disconnect(ws);
         ws.terminate();
       }
       sockets.close();
       await Promise.allSettled(inFlight);
-      await logins.close();
+      await Promise.all([logins.close(), usageAccounts.close()]);
       store.db.exec("BEGIN IMMEDIATE");
       try { store.recoveries.capture(); store.db.exec("COMMIT"); }
       catch (error) { store.db.exec("ROLLBACK"); throw error; }
@@ -1016,6 +1095,7 @@ export async function startServer(
         // must not keep the service and its storage lock alive indefinitely.
         server.closeAllConnections();
       });
+      await usageLedger.close();
       store.close();
     },
   };

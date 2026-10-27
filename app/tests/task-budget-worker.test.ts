@@ -140,7 +140,12 @@ test("real worker warns, summarizes without tools, and refreshes/resumes appende
     await barrier(thirdRun); // Leave both the update and its immediate warning unconsumed.
     const summary = { type: "summarize", runId: thirdRun, workMs: 1000, elapsedMs: 0,
       deadlineAt: Date.now(), summaryDeadlineAt: Date.now() + 180000, revision: 2 };
-    const summarizing = await next(() => send(summary), "tool abort did not enter summary");
+    const reloadId = randomUUID();
+    send({ type: "reload", runId: thirdRun, id: reloadId });
+    await barrier(thirdRun); // Reload is queued while the tool owns the Session.
+    const summarizing = await next(() => send(summary), "tool abort with queued reload did not enter summary");
+    await wait(() => events.some(event => event.type === "reload-result" && event.id === reloadId), "queued reload lost its result during phase handoff");
+    assert.equal(events.find(event => event.type === "reload-result" && event.id === reloadId).ok, true, stderr);
     assert.deepEqual(summarizing.tools ?? [], []);
     assert.match(JSON.stringify(summarizing.messages.at(-1)), /工作预算已到/);
     assert.match(JSON.stringify(summarizing.messages.at(-2)), /截至本条提醒生成时/);

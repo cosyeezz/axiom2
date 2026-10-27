@@ -58,7 +58,10 @@ export function compareEngineVersions(left: string, right: string): number | und
 }
 export function engineRecommendationSatisfied(engine: ReaEngineState) {
   const recommended = engine.available?.version ?? engine.recommendedVersion;
-  return !!engine.version && !!recommended && compareEngineVersions(engine.version, recommended) === 0 && !["missing", "error", "incompatible", "unsupported"].includes(engine.status);
+  // Hopper's official trial reports e.g. 6.6.0-demo in Info.plist, while
+  // its public release feed reports 6.6.0. This is not a general prerelease rule.
+  const installed = engine.id === "hopper" && /^\d+\.\d+\.\d+-demo$/.test(engine.version ?? "") ? engine.version!.slice(0, -5) : engine.version;
+  return !!installed && !!recommended && compareEngineVersions(installed, recommended) === 0 && !["missing", "error", "incompatible", "unsupported"].includes(engine.status);
 }
 export function engineDownloadSatisfied(engine: ReaEngineState) {
   const recommended = engine.available?.version ?? engine.recommendedVersion;

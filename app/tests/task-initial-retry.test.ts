@@ -41,23 +41,15 @@ test("real first binding denial retains the original delegation; explicit retry 
   const store = new Store(root), models = new ModelService(root), agents = new Agents(store, models, () => {});
   const records = new TaskRecords(store), delivery = new TaskDelivery(agents, records), scheduler = new TaskScheduler(agents, records, delivery);
   delivery.pause();
-  let prepared = 0, captured = 0, borrowed = 0;
-  // Native OAuth rotation is exercised separately with a fake public Pi provider.
-  // Here prove the production command orders completion before snapshot capture.
-  models.prepareAuth = async () => { prepared++; if (prepared === 1) auth("prepared"); };
-  const prepare = agents.profiles.prepareAsync.bind(agents.profiles);
-  agents.profiles.prepareAsync = async (...args) => {
-    assert.ok(prepared > captured, "auth preparation finishes before each profile");
-    assert.equal(JSON.parse(readFileSync(join(pi, "auth.json"), "utf8")).fixture.key, "prepared");
-    captured++; return prepare(...args);
-  };
+  let borrowed = 0;
+  models.prepareAuth = async () => assert.fail("resource admission must not preflight model authentication");
   const acquire = agents.pool.acquire.bind(agents.pool);
   agents.pool.acquire = async request => {
     const lease = await acquire(request); borrowed++;
     if (borrowed === 1) {
       const child = await lease.ensureReady();
       child.prependListener("message", (event: any) => {
-        if (event.type === "binding_ready") auth("changed-during-binding");
+        if (event.type === "binding_ready") writeFileSync(lease.environment.modelsFile, "corrupted internal snapshot");
       });
     }
     return lease;
@@ -76,7 +68,7 @@ test("real first binding denial retains the original delegation; explicit retry 
     await wait(() => row().status === "failed" && !agents.active(target(row())), "first gate rejection must settle");
     const failed = agents.info(target(row())).run!;
     assert.equal(failed.reasonCode, "BINDING_REJECTED");
-    assert.equal(store.bindingRejection(failed.id)?.check, "auth");
+    assert.equal(store.bindingRejection(failed.id)?.check, "snapshot");
     assert.equal(requests.length, 0);
     assert.ok(records.initialRetry(row(), failed.id));
     assert.equal(records.inputs(row(), "queued").length, 0, "no automatic replay after denial");

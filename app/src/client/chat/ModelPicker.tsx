@@ -316,8 +316,10 @@ export function ModelPicker({
         </div>
         {running(info.run) && (
           <details className="model-run-note">
-            <summary><span>下次执行生效，本次追加不变。</span><Icon name="chevron" /></summary>
-            <p>当前执行：{modelDisplay(config.available, info.run!.selection).label} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}</p>
+            <summary><span>{selection && (selection.provider !== info.run!.selection.provider || selection.id !== info.run!.selection.id || selection.thinking !== info.run!.selection.thinking)
+              ? "已选择新模型，等待安全点生效。" : "模型变更将在安全点生效。"}</span><Icon name="chevron" /></summary>
+            <p>当前请求：{modelDisplay(config.available, info.run!.selection).label} · {info.run!.selection.thinking === "off" ? "none" : info.run!.selection.thinking}</p>
+            <p>当前响应和整批工具完成后，后续请求使用新选择；不会中断执行或额外发起请求。</p>
           </details>
         )}
         {error && <p className="execution-alert" role="alert">{error}</p>}

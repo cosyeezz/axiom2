@@ -1,4 +1,5 @@
 import { Icon } from "../Icon.js";
+import { operationFeedback } from "../operation-feedback.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { ReaTool } from "./ReaTool.js";
 import { BuiltinRecovery } from "./BuiltinRecovery.js";
@@ -39,6 +40,7 @@ export default function BuiltinTools() {
   const focusAfterReconcile = useRef(false);
   const [uninstall, setUninstall] = useState<{ revision: string; cleanupRevision?: string }>();
   const [sending, setSending] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState("");
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; revision?: string }>();
   const settings = draft?.settings ?? state.settings;
   const busy = sending || !!state.job?.running || !connection.connected;
@@ -61,7 +63,7 @@ export default function BuiltinTools() {
     setFeedback(undefined);
   };
   async function action(op: string, params: Record<string, unknown> = {}) {
-    setSending(true); setFeedback(undefined);
+    setPendingOperation(op); setSending(true); setFeedback(undefined);
     try {
       const result = await command(op, params) as OpenCliState;
       if (op === "opencli.reconcile") {
@@ -76,7 +78,7 @@ export default function BuiltinTools() {
     } catch (error) { setFeedback({ text: (error as Error).message, error: true }); }
     finally { setSending(false); }
   }
-  const error = notice ? (notice.error ? notice.text : undefined) : state.error || state.job?.error || state.installationError;
+  const error = sending ? undefined : notice ? (notice.error ? notice.text : undefined) : state.error || state.job?.error || state.installationError;
   return (
     <div className="settings-app builtin-tools-app">
       <SettingsSidebar page="tools" />
@@ -96,7 +98,7 @@ export default function BuiltinTools() {
             <div className="detail-heading row-between"><div><h2 id="opencli-heading">OpenCLI</h2><p className="meta">连接 Chrome，让 Agent 操作网页和已登录的网站。</p></div><span className="tag">{state.configured ? "已配置" : "待接入"}</span></div>
             <div className="tools-content">
             <div className="tools-feedback" aria-live="polite">
-              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{notice?.text || state.job?.message || (connection.connected ? connectionText : `${connectionText}；重连后读取当前操作进度。`)}</p>}
+              {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{sending ? operationFeedback(pendingOperation) : notice?.text || state.job?.message || (connection.connected ? connectionText : `${connectionText}；重连后读取当前操作进度。`)}</p>}
               {!connection.connected && (error || notice?.text || state.job?.message) && <p>{connectionText}；重连后读取当前操作进度。</p>}
             </div>
             <BackendMaintenance resource="opencli" label="OpenCLI" showError={!error} location={`所连接后台 · 应用级 · ${state.managed ? "Axiom 独立安装" : state.version ? "外部安装接入" : "独立安装目录"}`}>

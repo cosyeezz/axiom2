@@ -16,11 +16,10 @@ import { ColdMemoryRunner } from "./memory-runner.js";
 import { memoryDirectory } from "./memory-files.js";
 import { mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Store, type SessionRestorePosition } from "./storage.js";
 import { ModelService } from "./model-service.js";
-import { configuration } from "./models.js";
 import { boundedMessage, openTranscript, toolKey } from "./transcript.js";
 import { messagePart } from "./message-part.js";
 import {
@@ -36,6 +35,7 @@ import {
 import {
   threadScope,
   running,
+  thinkingLevels,
   type Run,
   type Selection,
 } from "../shared/agent.js";
@@ -46,7 +46,7 @@ import { AgentRuns } from "./agents/runs.js";
 import { PersistedInputCursor } from "./agents/persisted-inputs.js";
 import { Compressions } from "./compressions.js";
 import { skillsInput } from "../shared/skills.js";
-import { imagesInput, imagePrompt, requireImageModel } from "./images.js";
+import { imagesInput, imagePrompt } from "./images.js";
 import { canContinue } from "../shared/session-state.js";
 import { errorMessage } from "./error-message.js";
 type PendingStart = { scope: Scope; automatic?: boolean; controller: AbortController; done: Promise<void>; finish: () => void; provider?: string; lease?: ExecutionLease };
@@ -56,7 +56,6 @@ export class Agents {
   readonly pool: ExecutionPool;
   readonly profiles: ExecutionProfiles;
   private starts = new Map<string, PendingStart>();
-  private readonly unwatchConfiguration: () => void;
   readonly memories: Memories;
   readonly titles: SessionTitles;
   readonly continuations: MemoryContinuations;
@@ -94,8 +93,8 @@ export class Agents {
   thread(scope: Scope) {
     return this.views.thread(scope);
   }
-  messageCount(scope: Scope) {
-    return this.views.messageCount(scope);
+  messageCount(scope: Scope, options: { cachedOnly?: boolean } = {}) {
+    return this.views.messageCount(scope, options);
   }
   messages(scope: Scope) {
     return [...this.views.transcript(scope).values()].map(boundedMessage);
@@ -193,7 +192,6 @@ export class Agents {
     await Promise.all([this.runs.stopProviders(providers, confirmed), ...starts.map(start => start.done)]);
   }
   async close() {
-    this.unwatchConfiguration();
     const starts = [...this.starts.values()];
     for (const start of starts) start.controller.abort();
     await Promise.all([this.titles.close(), this.reloads.close(), this.runs.close(), this.compressions.close(), this.memories.close(), this.continuations.close()]);
@@ -210,7 +208,6 @@ export class Agents {
     this.capabilities = new Capabilities(store, publish, models.dir);
     this.pool = new ExecutionPool();
     this.profiles = new ExecutionProfiles(store.root);
-    this.unwatchConfiguration = models.watchConfiguration(() => { void this.pool.invalidate().catch(() => {}); });
     this.memories = new Memories(store, publish, openMemoryFile, undefined, undefined, observed);
     this.memories.runner = new ColdMemoryRunner(this.memories, models, this.pool, this.profiles);
     this.titles = new SessionTitles(this.memories, scope => this.changed(scope), (scope, runId) => {
@@ -462,15 +459,13 @@ export class Agents {
         validate();
       }
       for (let attempt = 0; ; attempt++) {
-      const prepared = await this.models.serial(async () => {
+      const prepared = await (async () => {
         validate();
-        // A cold command may become an append while waiting for configuration.
+        // A cold command may become an append while preparing resources.
         if (c.op === "prompt" && this.runs.active(scope)) {
           if (internal.compressionPreparation) throw new AppError("AGENT_BUSY", "会话已开始执行，由活动会话维护记忆。");
           return { completion: enqueue() };
         }
-        const config = await configuration(this.store.root);
-        if (config.error) throw new AppError("INVALID_CONFIG", config.error);
         const selection =
           c.op === "agent.model"
             ? (object(p.selection) as unknown as Selection)
@@ -481,20 +476,12 @@ export class Agents {
             (k) => !["provider", "id", "thinking"].includes(k),
           ) ||
             typeof selection.provider !== "string" ||
-            typeof selection.id !== "string")
+            typeof selection.id !== "string" ||
+            !thinkingLevels.includes(selection.thinking))
         )
           throw new AppError("INVALID_INPUT", "模型选择无效");
-        const model =
-          selection &&
-          config.available.find(
-            (m) => m.provider === selection.provider && m.id === selection.id,
-          );
-        if (!model || !model.levels.includes(selection!.thinking))
-          throw new AppError(
-            "MODEL_UNAVAILABLE",
-            "请先选择已配置、已认证的模型及其支持的思考等级；不会自动替换模型。",
-          );
         if (c.op === "agent.model") {
+          const modelsRaw = await this.models.raw();
           const saved = JSON.stringify(selection);
           this.store.db.exec("BEGIN IMMEDIATE");
           try {
@@ -519,9 +506,14 @@ export class Agents {
             this.store.db.exec("ROLLBACK");
             throw error;
           }
+          // Selection is intent, not a model availability probe. The live worker
+          // consumes the current definition at its next native safe point.
+          this.runs.setModel(scope, selection!, modelsRaw);
           this.changed(scope);
           return { completion: Promise.resolve(this.info(scope)) };
         }
+        if (!selection)
+          throw new AppError("MODEL_UNAVAILABLE", "请先选择模型；不会自动替换模型。");
         if (c.op !== "prompt" && !resuming)
           throw new AppError("UNKNOWN_OPERATION", "不支持的 Agent 操作");
         if (this.runs.active(scope) || running(this.info(scope).run))
@@ -531,7 +523,6 @@ export class Agents {
           );
         const images = imagesInput(p.images);
         const attachments = attachmentsInput(p.attachments, p.attachment, images.length);
-        requireImageModel(model, images);
         const skills = skillsInput(p.skills);
         const prompt = resuming || internal.memoryContinuation || internal.compressionPreparation ? "" : text(p.text || (attachments.length || images.length ? "请检查附件。" : skills.length ? "请使用所选技能。" : ""), "消息", 12000);
         const content = imagePrompt(
@@ -568,11 +559,6 @@ export class Agents {
           // Memory is optional and updates independently; prompt admission must not
           // wait for a scan or depend on the source being readable.
           const raw = await this.models.raw();
-          if (createHash("sha256").update(raw).digest("hex") !== config.revision)
-            throw new AppError(
-              "REVISION_CONFLICT",
-              "模型配置在发送前改变；未执行，请重新确认。",
-            );
           validate();
           writeFileSync(modelsFile, raw, { flag: "wx", mode: 0o600 });
         } catch (error) {
@@ -718,20 +704,14 @@ export class Agents {
         void completion.catch(() => {});
         return { completion };
         } } };
-      }, ownStart?.controller.signal);
+      })();
       if (prepared.completion) return prepared.completion;
       const start = prepared.start!;
       let environment: ReturnType<ExecutionProfiles["prepare"]> | undefined;
       let lease: ExecutionLease | undefined;
       let commitAttempted = false;
       try {
-        // getAuth (unlike checkAuth) may persist a refreshed OAuth credential.
-        // Finish that write before capturing the immutable binding revision.
-        await this.models.serial(async () => {
-          validate();
-          await this.models.prepareAuth(start.selection, start.modelsFile, ownStart!.controller.signal);
-          validate();
-        }, ownStart!.controller.signal);
+        // Authentication belongs to the real model request, not resource admission.
         validate();
         environment = await this.profiles.prepareAsync({ entry: "agent", cwd: start.cwd, modelDir: this.models.dir,
           modelsRaw: readFileSync(start.modelsFile, "utf8"), selection: start.selection, capabilities: start.capabilities?.runtime,
@@ -751,23 +731,19 @@ export class Agents {
         lease = await acquiring;
         ownStart!.lease = lease;
         // Full resource checks guard binding dispatch and execution_permit. Intermediate
-        // admission still rechecks configuration and the JSONL owner outside the writer queue.
+        // admission still rechecks resources and the JSONL owner.
         if (!environment.current(false) || fileRevision(start.file) !== revision) {
           await this.pool.retire(lease.ref, "changed_during_admission"); ownStart!.lease = undefined;
-          if (attempt >= 2) throw new AppError("REVISION_CONFLICT", "执行准备期间配置或会话持续变化；消息未发送。");
-          // A rejected snapshot needs a new admission, not a bypass of later tickets.
+          if (attempt >= 2) throw new AppError("REVISION_CONFLICT", "执行准备期间资源或会话持续变化；消息未发送。");
+          // Changed resources/session ownership need a new admission, not a bypass of later tickets.
           admission = internal.admission?.reserve();
           continue;
         }
-        const launched = await this.models.serial(async () => {
-          validate();
-          const raw = await this.models.raw();
-          validate();
-          if (fileRevision(start.file) !== revision || createHash("sha256").update(raw).digest("hex") !== createHash("sha256").update(readFileSync(start.modelsFile)).digest("hex"))
-            throw new AppError("REVISION_CONFLICT", "最终提交前配置或会话已变化；消息未发送。");
-          commitAttempted = true;
-          return start.commit(lease!);
-        }, ownStart?.controller.signal);
+        validate();
+        if (fileRevision(start.file) !== revision)
+          throw new AppError("REVISION_CONFLICT", "最终提交前会话已变化；消息未发送。");
+        commitAttempted = true;
+        const launched = start.commit(lease!);
         return await launched.completion;
       } catch (error) {
         if (commitAttempted || error instanceof AppError) throw error;

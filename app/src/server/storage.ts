@@ -205,13 +205,13 @@ export class Store {
     return row ? { workspaceId: String(row.workspaceId), sessionId: String(row.sessionId) } : null;
   }
   compressionPreferences(): CompressionPreferences {
-    const row = this.db.prepare("SELECT selection,auto FROM compression_preferences WHERE id=1").get();
-    return { selection: row?.selection ? JSON.parse(String(row.selection)) : null,
-      auto: row?.auto ? JSON.parse(String(row.auto)) : { ...defaultAutoCompression } };
+    // Legacy model preferences are ignored, even if malformed or unavailable.
+    const row = this.db.prepare("SELECT auto FROM compression_preferences WHERE id=1").get();
+    return { auto: row?.auto ? JSON.parse(String(row.auto)) : { ...defaultAutoCompression } };
   }
   saveCompressionPreferences(value: CompressionPreferences): CompressionPreferences {
-    this.db.prepare("INSERT INTO compression_preferences(id,selection,auto) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET selection=excluded.selection,auto=excluded.auto")
-      .run(value.selection === null ? null : JSON.stringify(value.selection), JSON.stringify(value.auto));
+    this.db.prepare("INSERT INTO compression_preferences(id,selection,auto) VALUES(1,NULL,?) ON CONFLICT(id) DO UPDATE SET selection=NULL,auto=excluded.auto")
+      .run(JSON.stringify(value.auto));
     return this.compressionPreferences();
   }
   workspace(id: unknown): Workspace {

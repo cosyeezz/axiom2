@@ -14,11 +14,11 @@ import { randomUUID } from 'node:crypto';
 import type { Workspace, Session } from '../src/shared/protocol.js';
 
 for (const failure of ['configuration', 'snapshot', 'cancel'] as const) {
-  test(`real memory binding gate rejects ${failure} before the first provider request`, { timeout: 20000 }, async () => {
+  test(`real memory binding gate isolates configuration and protects ${failure}`, { timeout: 20000 }, async () => {
     const root=mkdtempSync(join(tmpdir(),'axiom-binding-gate-')),pi=join(root,'pi'),cwd=join(root,'project');
     mkdirSync(pi);mkdirSync(cwd);
     let requests=0;
-    const http=createServer((_req,res)=>{requests++;res.writeHead(500);res.end('inference must not happen');});
+    const http=createServer(async(req,res)=>{for await(const _ of req){}requests++;res.writeHead(200,{'Content-Type':'text/event-stream'});res.end(`data: ${JSON.stringify({id:'fixture',object:'chat.completion.chunk',model:'fixture',choices:[{index:0,delta:{role:'assistant',content:'Independent configuration.'},finish_reason:'stop'}]})}\n\ndata: [DONE]\n\n`);});
     await new Promise<void>(r=>http.listen(0,'127.0.0.1',r));
     const raw=JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${(http.address() as any).port}/v1`,models:[{id:'fixture',contextWindow:32000,maxTokens:256}]}}});
     writeFileSync(join(pi,'models.json'),raw);writeFileSync(join(pi,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'loopback-only'}}));
@@ -33,16 +33,17 @@ for (const failure of ['configuration', 'snapshot', 'cancel'] as const) {
       child.prependListener('message',(event:any)=>{
         if(event.type!=='binding_ready')return;
         bound=true;
-        if(failure==='configuration')writeFileSync(join(pi,'auth.json'),'{}');
+        if(failure==='configuration')writeFileSync(join(pi,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'loopback-only'},other:{type:'api_key',key:'changed'}}));
         else if(failure==='snapshot')writeFileSync(environment.modelsFile,'{"providers":{}}');
         else controller.abort();
       });
+      child.on('message',(event:any)=>{if(event.type==='cleaned')void pool.release(lease.ref,{clean:true,keepSession:false});});
       child.send({type:'start',lease:lease.ref,input:{executionGate:true,root,cwd,modelsFile:environment.modelsFile,selection:{provider:'fixture',id:'fixture',thinking:'off'},prompt:'Must not infer.',readChars:100}});
       await lease.released;
       assert.equal(bound,true,'fault is injected after actual runtime and session preparation');
-      assert.equal(requests,0);
-      assert.deepEqual(retirement,[failure==='cancel'?'cancelled':'binding_changed'],'coordinator actively rejects this lease');
-      assert.equal(pool.stats().total,0,'real close drains the failed lease');
+      assert.equal(requests,failure==='configuration'?1:0);
+      assert.deepEqual(retirement,failure==='configuration'?[]:[failure==='cancel'?'cancelled':'binding_changed']);
+      assert.equal(pool.stats().total,failure==='configuration'?1:0);
     } finally {
       await pool.close();environment.release();http.closeAllConnections();await new Promise<void>(r=>http.close(()=>r()));rmSync(root,{recursive:true,force:true});
     }
@@ -50,7 +51,7 @@ for (const failure of ['configuration', 'snapshot', 'cancel'] as const) {
 }
 
 for (const failure of ['configuration', 'resource', 'snapshot', 'snapshot-batched'] as const) {
-  test(`real affinity binding gate rejects ${failure} before a second provider request`, { timeout: 20000 }, async () => {
+  test(`real affinity binding gate isolates configuration and protects ${failure}`, { timeout: 20000 }, async () => {
     const root=mkdtempSync(join(tmpdir(),'axiom-affinity-gate-')),pi=join(root,'pi'),cwd=join(root,'project');
     mkdirSync(pi);mkdirSync(cwd);
     const previousDir=process.env.AXIOM_PI_DIR,previousMode=process.env.AXIOM_EXECUTION_MODE;
@@ -90,7 +91,7 @@ for (const failure of ['configuration', 'resource', 'snapshot', 'snapshot-batche
         child.prependListener('message',(event:any)=>{
           if(event.type!=='binding_ready')return;
           injected=true;
-          if(failure==='configuration')writeFileSync(join(pi,'auth.json'),'{}');
+          if(failure==='configuration')writeFileSync(join(pi,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'loopback-only'},other:{type:'api_key',key:'changed'}}));
           else if(failure==='resource')writeFileSync(join(cwd,'AGENTS.md'),'Changed after actual session binding.');
           else writeFileSync(lease.environment.modelsFile,'{"providers":{}}');
         });
@@ -106,12 +107,18 @@ for (const failure of ['configuration', 'resource', 'snapshot', 'snapshot-batche
       await agents.command({requestId:randomUUID(),op:'prompt',...scope,params:{text:'First request.'}});
       await wait(()=>!agents.active(scope));assert.equal(agents.info(scope).run?.status,'completed');assert.equal(requests,1);
       await agents.command({requestId:randomUUID(),op:'prompt',...scope,params:{text:'Must not infer after changed binding.'}});
-      await wait(()=>!agents.active(scope)&&agents.pool.stats().total===0);
+      await wait(()=>!agents.active(scope)&&(failure==='configuration'||agents.pool.stats().total===0));
+      if(failure==='configuration') {
+        assert.equal(injected,true);assert.equal(retired,false);assert.equal(requests,2);
+        assert.equal(agents.info(scope).run?.status,'completed');
+        assert.equal(store.bindingRejection(agents.info(scope).run!.id),undefined);
+        return;
+      }
       assert.equal(injected,true);assert.equal(retired,true);assert.equal(requests,1);assert.equal(agents.info(scope).run?.status,'failed');
       assert.deepEqual(terminal.map(event=>event.type),['done','closed'],'failure must be reported once before a single close handshake');
       assert.equal(terminal[0].reasonCode,'BINDING_REJECTED');
       const rejection=store.bindingRejection(agents.info(scope).run!.id);
-      assert.equal(rejection?.check,failure==='configuration'?'auth':failure==='resource'?'resource_digest':'snapshot');
+      assert.equal(rejection?.check,failure==='resource'?'resource_digest':'snapshot');
       assert.equal(JSON.stringify(rejection).includes(root),false);
     }finally{
       await agents.close();store.close();http.closeAllConnections();await new Promise<void>(r=>http.close(()=>r()));
@@ -149,7 +156,7 @@ test('resource changes after ready reject cold binding before extension startup'
     const session=store.execute({requestId:randomUUID(),op:'session.create',workspaceId:workspace.id}) as Session;
     const scope={workspaceId:workspace.id,sessionId:session.id};
     store.db.prepare('INSERT INTO agent_sessions(sessionId,selection) VALUES(?,?)').run(session.id,JSON.stringify({provider:'fixture',id:'fixture',thinking:'off'}));
-    await assert.rejects(agents.command({requestId:randomUUID(),op:'prompt',...scope,params:{text:'Must reject before binding.'}}),{code:'WORKER_START_FAILED',message:/配置或资源已变化/});
+    await assert.rejects(agents.command({requestId:randomUUID(),op:'prompt',...scope,params:{text:'Must reject before binding.'}}),{code:'WORKER_START_FAILED',message:/资源已变化/});
     assert.equal(injected,true);assert.equal(existsSync(marker),false);assert.equal(requests,0);assert.equal(agents.pool.stats().total,0);
   }finally{
     await agents.close();store.close();http.closeAllConnections();await new Promise<void>(r=>http.close(()=>r()));

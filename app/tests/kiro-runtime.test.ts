@@ -90,7 +90,7 @@ test("Kiro login and live catalog survive worker/reopen without changing other O
       }
       await delay(10);
     }
-    assert.equal(logins.get(owner, flow.id).state.status, "completed");
+    assert.equal(logins.get(owner, flow.id).state.status, "completed", logins.get(owner, flow.id).state.message);
     const stored = JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"));
     assert.equal(stored.kiro.authMethod, "builder-id"); assert.equal(stored.kiro.clientSecret, "FIXTURE-CLIENT-SECRET");
     const requests = readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line));

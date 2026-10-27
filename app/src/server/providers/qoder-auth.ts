@@ -39,7 +39,7 @@ export function qoderOAuth(region: QoderRegion, options: { fetch?: typeof fetch;
       const verifier = randomBytes(32).toString("base64url"), nonce = randomUUID(), machineId = machineIds[region];
       const params = new URLSearchParams({ challenge: createHash("sha256").update(verifier).digest("base64url"), challenge_method: "S256", machine_id: machineId, nonce, client_id: clientId });
       signal.throwIfAborted();
-      interaction.notify({ type: "auth_url", url: `${site.login}?${params}`, instructions: `请在浏览器完成 ${site.name} 授权。此接入为实验性，尚未完成真实账号联调。` });
+      interaction.notify({ type: "auth_url", url: `${site.login}?${params}`, instructions: `请在浏览器完成 ${site.name} 授权，核对账号地区后返回 Axiom。` });
       const query = new URLSearchParams({ nonce, verifier, challenge_method: "S256" });
       try {
         while (true) {
@@ -60,18 +60,18 @@ export function qoderOAuth(region: QoderRegion, options: { fetch?: typeof fetch;
         }
       } catch (error) {
         interaction.signal.throwIfAborted();
-        if (signal.aborted) throw Error("Qoder 登录超时，请重新开始。");
+        if (signal.aborted) throw new QoderError("Qoder 登录超时，请重新开始。");
         if (error instanceof QoderError) throw error;
-        throw Error("Qoder 登录请求失败，请检查连接后重试。");
+        throw new QoderError("Qoder 登录请求失败，请检查连接后重试。");
       }
     },
     async refresh(credential, signal) {
       signal.throwIfAborted(); packQoderCredential(credential, region);
-      if (!credential.refresh || typeof credential.refreshExpires === "number" && credential.refreshExpires <= Date.now()) throw Error("Qoder 刷新令牌缺失或已过期，请重新登录。");
+      if (!credential.refresh || typeof credential.refreshExpires === "number" && credential.refreshExpires <= Date.now()) throw new QoderError("Qoder 刷新令牌缺失或已过期，请重新登录。");
       const data = await qoderJson(options.fetch ?? globalThis.fetch, `${site.open}/api/v1/deviceToken/refresh`, {
         method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qoder/1.1.78" }, body: JSON.stringify({ refresh_token: credential.refresh, machine_id: credential.machineId }),
       });
-      if (!nonempty(data.device_token) || !data.device_token.startsWith("dt-") || !nonempty(data.refresh_token)) throw Error("Qoder 刷新响应不完整，请重新登录。");
+      if (!nonempty(data.device_token) || !data.device_token.startsWith("dt-") || !nonempty(data.refresh_token)) throw new QoderError("Qoder 刷新响应不完整，请重新登录。");
       return { ...credential, access: data.device_token, refresh: data.refresh_token, expires: qoderExpiry(data, "absolute"), refreshExpires: refreshExpiry(data, "absolute") };
     },
     async toAuth(credential) { return { apiKey: packQoderCredential(credential, region) }; },
@@ -93,11 +93,11 @@ export class QoderCredentials {
   constructor(private region: QoderRegion) {}
   async resolve(key: string | undefined, transport: typeof fetch, signal?: AbortSignal): Promise<QoderIdentity> {
     signal?.throwIfAborted();
-    if (!key) throw Error("Qoder 缺少认证，请登录或配置 Personal Access Token。");
+    if (!key) throw new QoderError("Qoder 缺少认证，请登录或配置 Personal Access Token。");
     if (!key.startsWith("pt-")) {
       let data: Record<string, unknown>;
-      try { data = object(JSON.parse(key)); } catch { throw Error("Qoder API key 仅支持 Personal Access Token（pt-），设备令牌请使用浏览器登录。"); }
-      if (data.region !== this.region || !nonempty(data.token) || !data.token.startsWith("dt-") || !nonempty(data.userId) || !nonempty(data.machineId)) throw Error("Qoder 凭据地区或格式错误，请重新登录。");
+      try { data = object(JSON.parse(key)); } catch { throw new QoderError("Qoder API key 仅支持 Personal Access Token（pt-），设备令牌请使用浏览器登录。"); }
+      if (data.region !== this.region || !nonempty(data.token) || !data.token.startsWith("dt-") || !nonempty(data.userId) || !nonempty(data.machineId)) throw new QoderError("Qoder 凭据地区或格式错误，请重新登录。");
       return { token: data.token, userId: data.userId, machineId: data.machineId };
     }
     const digest = createHash("sha256").update(key).digest("hex"), cached = this.cache.get(digest);
@@ -119,12 +119,13 @@ export class QoderCredentials {
       method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "qodercli/1.1.78", "Cosy-Version": "1.1.78", "Cosy-ClientType": "5" }, body: JSON.stringify({ personal_token: key, machine_id: machineId }),
     });
     const token = firstString(data, ["token", "device_token", "access_token"]);
-    if (!token || !/^(?:jt|dt)-/.test(token)) throw Error("Qoder PAT 交换未返回有效任务令牌。");
+    if (!token || !/^(?:jt|dt)-/.test(token)) throw new QoderError("Qoder PAT 交换未返回有效任务令牌。");
     const expires = qoderExpiry(data, "pat");
     const info = await qoderJson(transport, `${site.open}/api/v1/userinfo`, { signal, headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "qodercli/1.1.78" } });
-    const userId = firstString(info, ["id", "user_id", "uid"]);
-    if (!userId) throw Error("Qoder 未返回签名所需的用户 ID。");
+    const userId = firstString(info, ["id", "userId", "user_id", "uid"]);
+    if (!userId) throw new QoderError("Qoder 未返回签名所需的用户 ID。");
     const identity = { token, userId, machineId, expires };
+    signal.throwIfAborted();
     if (this.cache.size >= 16) this.cache.delete(this.cache.keys().next().value!);
     this.cache.set(digest, identity); return identity;
   }

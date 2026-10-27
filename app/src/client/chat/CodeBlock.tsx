@@ -13,7 +13,8 @@ import bash from "highlight.js/lib/languages/bash.js";
 import sql from "highlight.js/lib/languages/sql.js";
 import { canTransformCode, codeLanguage, sqlDialect, transformCode, type CodeTransform } from "./code-transform.js";
 import { MermaidDiagram } from "./MermaidDiagram.js";
-import { hasAsciiDiagramLayout, parseAsciiDiagram } from "../../shared/ascii-diagram.js";
+import { hasAsciiDiagramLayout, type AsciiDiagram } from "../../shared/ascii-diagram.js";
+import { cachedAsciiDiagram } from "./ascii-diagram-cache.js";
 import { AsciiDiagramPreview, DiagramRenderingContext } from "./AsciiDiagram.js";
 import "../styles/code-block.css";
 for (const [name, grammar] of Object.entries({
@@ -38,7 +39,7 @@ function nodes(tokens: HighlightToken[]): ReactNode {
   return tokens.map((token, index) => typeof token === "string" ? token : <span key={index} className={token.classes}>{nodes(token.children)}</span>);
 }
 export const CodeBlock = memo(
-  ({ text, language }: { text: string; language: string }) => {
+  ({ text, language, parsedDiagram }: { text: string; language: string; parsedDiagram?: AsciiDiagram }) => {
     const [copied, setCopied] = useState("");
     const [converted, setConverted] = useState<{ source: string; language: string; text: string }>();
     const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -47,14 +48,12 @@ export const CodeBlock = memo(
     const displayed = converted?.source === text && converted.language === language ? converted.text : text;
     const isMermaid = codeLanguage(language) === "mermaid";
     const diagramsEnabled = useContext(DiagramRenderingContext);
+    const cache = useContext(DerivedContext);
     const diagramLanguage = ["", "text", "txt", "plaintext", "plain", "ascii"].includes(codeLanguage(language));
     const literalDiagram = useMemo(() => diagramsEnabled && diagramLanguage && hasAsciiDiagramLayout(text), [text, diagramLanguage, diagramsEnabled]);
-    const diagram = useMemo(() => {
-      if (!diagramsEnabled || !diagramLanguage) return;
-      try { return parseAsciiDiagram(text); } catch { return; }
-    }, [text, diagramLanguage, diagramsEnabled]);
+    const diagram = useMemo(() => diagramsEnabled && diagramLanguage
+      ? parsedDiagram ?? cachedAsciiDiagram(cache, text) : undefined, [text, diagramLanguage, diagramsEnabled, parsedDiagram, cache]);
     const transformable = canTransformCode(language);
-    const cache = useContext(DerivedContext);
     useEffect(() => {
       revision.current++;
       setConverted(undefined); setBusy(false); setError(""); setCopied("");

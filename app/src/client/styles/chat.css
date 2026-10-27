@@ -39,13 +39,18 @@
 @media (hover: none), (pointer: coarse) { .reply-actions > button { width: 44px; height: 44px; } .message-actions.reply-actions { margin-left: -15px; } }
 .title-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
+  min-width: 0;
 }
-.title-heading > h1 { min-width: 0; overflow-wrap: anywhere; }
+.title-heading > h1 { min-width: 0; max-width: calc(100% - 32px); overflow-wrap: anywhere; }
 .title-heading > .title-copy { flex-shrink: 0; width: 24px; min-width: 24px; height: 24px; padding: 0; color: var(--muted); }
 .title-heading > .title-copy svg { width: 13px; height: 13px; }
-@media (hover: none), (pointer: coarse) { .title-heading > .title-copy { width: 44px; min-width: 44px; height: 44px; } }
+.git-branch-badge { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: min(240px,100%); padding: 1px 6px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); color: var(--fg-2); font-size: 11px; line-height: 18px; }
+.git-branch-badge > svg { flex-shrink: 0; width: 13px; height: 13px; }
+.git-branch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: none), (pointer: coarse) { .title-heading > h1 { max-width: calc(100% - 52px); } .title-heading > .title-copy { width: 44px; min-width: 44px; height: 44px; } }
 .compression-feedback {
   flex-basis: 100%;
   white-space: normal;

@@ -119,7 +119,7 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await otherRow.locator("button.history-item").click();
-  // Pointer navigation waits for double-click rename arbitration.
+  // Pointer navigation selects immediately; wait for the rendered selection.
   await otherRow.locator("button.history-item[aria-current=true]").waitFor();
   assert.equal(await targetRow.locator(".session-state.unread").count(), 0, "switching away cannot resurrect the dot");
   await page.reload();

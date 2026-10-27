@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Scope } from "../../shared/protocol.js";
 import { messageScope, type ChatMessage, type ThreadIndex } from "../../shared/agent.js";
 import { threadDelivery } from "../../shared/thread-layout.js";
@@ -26,8 +26,16 @@ function ArchiveBody({ scope, segmentId, group, store, initialTaskInputId, enabl
   scope: Scope; segmentId: string; group: HistoryGroup; store: HistoryStore; initialTaskInputId?: string | null; enabled?: boolean; readGroupId?: string;
 }) {
   const range = useHistoryRange(store, segmentId, readGroupId ?? group.id, enabled);
-  return <>{!range.ready && <ReadStatus loading={!range.error} error={range.error} retry={range.retry} />}
-    {range.ready && (group.activity ? <ProcessFlow scope={scope} group={group} settled
+  // Preserve an already displayed live body during live → archive hand-off.
+  // This does not mark the range ready or skip its validating lazy read.
+  const subscribe = useCallback((notify: () => void) => {
+    const off = group.ids.map(id => store.subscribeMessage(id, notify));
+    return () => off.forEach(fn => fn());
+  }, [store, group.ids]);
+  const remembered = useSyncExternalStore(subscribe, () => group.ids.every(id => !!store.get(id)));
+  const displayed = range.ready || remembered;
+  return <>{!displayed && <ReadStatus loading={!range.error} error={range.error} retry={range.retry} />}
+    {displayed && (group.activity ? <ProcessFlow scope={scope} group={group} settled
       archiveExpanded={!!group.process && !group.folded && !group.process.hasTasks} contentsOnly={!!group.process} />
       : <Message scope={scope} id={group.id} hideThinking={group.hideThinking} initialTaskInputId={initialTaskInputId} />)}</>;
 }
@@ -99,7 +107,14 @@ export function useHistoryRows({ scope, index, history, renderLive, initialTaskI
   }, [reveal?.revision, revealSegment]);
   const archived = new Set(segments.flatMap(segment => [segment.id, ...segment.messageIds]));
   const sourceGroups: ThreadGroup[] = index.groups ?? index.ids.map(id => ({ id, ids: [id], activity: false }));
-  const groups = unarchivedGroups(sourceGroups, archived);
+  const previousGroups = useRef(sourceGroups);
+  // The live collection and archive catalogue arrive on separate turns. Keep
+  // the outgoing prefix in place until this context's catalogue can own it;
+  // otherwise a one-frame disappearance can clamp and overwrite its anchor.
+  const currentIds = new Set(sourceGroups.flatMap(group => group.ids));
+  const retained = history.updating ? unarchivedGroups(previousGroups.current, currentIds) : [];
+  const groups = unarchivedGroups([...retained, ...sourceGroups], archived);
+  useLayoutEffect(() => { if (!history.updating) previousGroups.current = sourceGroups; }, [sourceGroups, history.updating]);
   const rows: TimelineRow[] = [];
   // The live collection already holds bounded message snapshots, including rows
   // outside the virtual window. Do not depend on a freshly restarted backend to
@@ -132,7 +147,11 @@ export function useHistoryRows({ scope, index, history, renderLive, initialTaskI
     const { group, sources } = entry;
     const archiveSources = sources.filter(source => source.kind === "archive");
     const segment = archiveSources[0]?.segment;
-    rows.push({ key: entry.key, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group),
+    rows.push({ key: group.activity ? entry.key : `message:${group.id}`, messageIds: group.ids, delivery: !group.activity && group.delivery, isDelivery: cachedDelivery(group),
+      isPending: !archiveSources.length || group.activity && group.folded ? undefined : () => archiveSources.some(source => {
+        const range = history.store.range(history.store.key(source.segment.id, source.readGroupId ?? source.group.id));
+        return !range.ready && !range.error;
+      }),
       estimate: group.activity ? 84 : archiveSources[0]?.group.estimatedHeight ?? 180,
       segmentId: segment?.id,
       revision: sources.map(source => source.kind === "archive" ? source.group.revision ?? source.segment.revision ?? "" : source.group.ids.join(",")).join("/"),

@@ -163,6 +163,27 @@ test("download journal paths never become engine removal paths", () => {
   try { assert.deepEqual(reaRemovalPlan(f.root, f.config, [f.paths.ghidra], "ghidra").paths, []); }
   finally { f.close(); }
 });
+test("Hopper download cleanup preserves the external app and never authorizes engine uninstall", async () => {
+  const f = fixture(), launcher = join(f.root, "external/Hopper Disassembler.app/Contents/MacOS/hopper");
+  fs.mkdirSync(join(launcher, ".."), { recursive: true }); fs.writeFileSync(launcher, "external application");
+  atomicReaJson(reaConfigPath(f.root), { ...f.config, engines: { ...f.config.engines, hopper: launcher } });
+  const service = new ReaService(f.root, () => {});
+  try {
+    const before = service.snapshot();
+    await assert.rejects(service.command({ op: "rea.engine-uninstall", requestId: randomUUID(), params: { engine: "hopper", revision: before.revision, confirm: true } }), { code: "EXTERNAL_INSTALLATION" });
+    const accepted = await service.command({ op: "rea.clearDownloads", requestId: randomUUID(), params: { engine: "hopper", revision: before.revision, cleanupRevision: before.downloadCleanup!.hopper!.revision, confirm: true } });
+    const jobId = accepted.jobs!.find(job => job.engine === "hopper")!.id;
+    const deadline = Date.now() + 5000;
+    while (service.snapshot().jobs?.some(job => job.running)) { assert.ok(Date.now() < deadline); await new Promise(resolve => setImmediate(resolve)); }
+    const after = service.snapshot();
+    assert.equal(after.jobs!.find(job => job.id === jobId)!.error, undefined);
+    assert.equal(fs.existsSync(f.paths.hopper), false);
+    assert.equal(fs.readFileSync(launcher, "utf8"), "external application");
+    assert.equal(readReaConfig(f.root).engines!.hopper, launcher);
+    assert.equal(after.engines!.find(engine => engine.id === "hopper")!.path, launcher);
+    assert.deepEqual(after.downloadCleanup!.hopper!.paths, []);
+  } finally { await service.close(); f.close(); }
+});
 test("download command requires scope confirmation and verifies its own async job", async () => {
   const f = fixture(); let barriers = 0;
   const service = new ReaService(f.root, () => {}, { removal: async work => { barriers++; return work(); } });

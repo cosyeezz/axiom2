@@ -1,3 +1,4 @@
+import { operationFeedback } from "../operation-feedback.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { useEffect, useState } from "react";
 import { command, useConnectionState, useScope } from "../transport.js";
@@ -11,6 +12,7 @@ export function RtkTool({ active }: { active: boolean }) {
   const [draft, setDraft] = useState<{ revision: string; settings: RtkSettings; baseSettings: RtkSettings }>();
   const [sending, setSending] = useState(false), [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
   const [days, setDays] = useState(7), [stats, setStats] = useState<RtkStats>(emptyRtkStats), [refresh, setRefresh] = useState(0);
+  const [pendingOperation, setPendingOperation] = useState("");
   const [uninstall, setUninstall] = useState<string>();
   const [clear, setClear] = useState<"Stats" | "Originals">();
   const settings = draft?.settings ?? state.settings, conflict = !!draft && draft.revision !== state.revision && !sameSettings(draft.baseSettings, state.settings);
@@ -32,7 +34,7 @@ export function RtkTool({ active }: { active: boolean }) {
   }, [active, connection.connected, connection.generation, days, refresh]);
   const change = (patch: Partial<RtkSettings>) => { setDraft({ revision: draft?.revision ?? state.revision, baseSettings: draft?.baseSettings ?? { ...state.settings }, settings: { ...settings, ...patch } }); setFeedback(undefined); };
   async function action(op: string, params: Record<string, unknown> = {}) {
-    setSending(true); setFeedback(undefined);
+    setPendingOperation(op); setSending(true); setFeedback(undefined);
     try {
       await command(op, params);
       if (op === "rtk.save") { setDraft(undefined); setFeedback({ text: "设置已保存，将用于后续工具结果，包括已打开的会话。" }); }
@@ -41,7 +43,7 @@ export function RtkTool({ active }: { active: boolean }) {
     finally { setSending(false); }
   }
   const saving = Math.max(0, stats.inputBytes - stats.outputBytes), percent = stats.inputBytes ? saving / stats.inputBytes * 100 : 0;
-  const error = feedback?.error ? feedback.text : state.error || state.job?.error;
+  const error = sending ? undefined : feedback?.error ? feedback.text : state.error || state.job?.error;
   const exportStats = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ ...stats, exportedAt: new Date().toISOString(), measurement: "UTF-8 tool text bytes including recall hint; not billed tokens; rolling 5000 events / 30 days" }, null, 2)], { type: "application/json" }));
     const a = document.createElement("a"); a.href = url; a.download = "axiom-rtk-effects.json"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -49,7 +51,7 @@ export function RtkTool({ active }: { active: boolean }) {
   return <article className="supplier-detail tools-detail" id="rtk" aria-labelledby="rtk-heading" style={active ? undefined : { display: "none" }}>
     <div className="detail-heading row-between"><div><h2 id="rtk-heading">RTK</h2><p className="meta">缩减 shell 工具返回给模型的文本，保留原文回查。</p></div><span className="tag">{state.settings.enabled && state.executable ? "已启用" : state.settings.enabled ? "已设置启用 · 等待安装" : "未启用"}</span></div>
     <div className="tools-content">
-      <div className="tools-feedback" aria-live="polite">{error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || state.job?.message || "默认关闭；安装后可选择等级并启用。"}</p>}{!connection.connected && <p>连接已断开；重连后读取当前进度。</p>}</div>
+      <div className="tools-feedback" aria-live="polite">{error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{sending ? operationFeedback(pendingOperation) : feedback?.text || state.job?.message || "默认关闭；安装后可选择等级并启用。"}</p>}{!connection.connected && <p>连接已断开；重连后读取当前进度。</p>}</div>
       <BackendMaintenance resource="rtk" label="RTK" location="所连接后台 · 应用级 · Axiom 独立管理">
         <dl className="tools-facts"><div><dt>当前平台</dt><dd>{state.platform || "读取中"}{state.platform && !state.supported && (state.supportError ? " · 托管维护暂不可用" : " · 暂无官方发布包")}</dd></div><div><dt>当前版本</dt><dd>{state.version ? `v${state.version}` : "未安装"}</dd></div><div><dt>最新版本</dt><dd>{state.latest ? `v${state.latest}` : "尚未检查"}</dd></div></dl>
         {state.supportError && <p className="field-help">{state.supportError}</p>}

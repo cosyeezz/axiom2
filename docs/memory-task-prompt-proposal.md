@@ -1,6 +1,6 @@
 # 任务管理与记忆维护
 
-> 此为旧英文定稿来源，保留历史记录。当前运行时依据是[标题路径详情定稿](memory-title-details-system-prompt.md)，仅局部替换详情机制，保留任务树、六态与接续条款；下列旧编号工具协议不再使用。
+> 此为旧英文定稿来源，保留历史记录。当前运行时依据是[标题路径详情定稿](memory-title-details-system-prompt.md)的最新通用英文规则，保留任务树、六态与接续边界，后台信息压缩前保存，详情就地更新、完成后收敛，长交付安全保存后摘要引用，不设统一步骤长度；下列旧正文及编号工具协议不再使用。
 >
 > [旧运行时定稿](memory-task-prompt-concise.md) · [系统提示词接入](memory-refactor/00-system-prompt.md)。
 

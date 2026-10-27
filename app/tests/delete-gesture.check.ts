@@ -167,6 +167,10 @@ try {
   await page.getByRole("alert").filter({ hasText: "双击删除失败，请重试" }).waitFor();
   await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>(".session-delete:disabled"));
   assert.equal(app.store.session(a.w.id, a.s.id).id, a.s.id);
+  // Navigation holds the group under the pointer. A successful direct delete
+  // must release that hold without requiring a mouse move out of the row.
+  await row.locator("button.history-item").click();
+  await row.locator("button.history-item[aria-current=true]").waitFor();
   await trigger.dblclick();
   await row.waitFor({ state: "detached" });
   assert.equal(requests.length, 2);

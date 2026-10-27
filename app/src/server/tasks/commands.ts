@@ -3,7 +3,6 @@ import { assertServiceRecovery } from "../service-recovery.js";
 import { createHash } from "node:crypto";
 import type { Agents } from "../agents.js";
 import { toolKey } from "../transcript.js";
-import { configuration } from "../models.js";
 import {
   AppError,
   object,
@@ -12,7 +11,7 @@ import {
   type Scope,
   type Command,
 } from "../../shared/protocol.js";
-import type { Run, Selection } from "../../shared/agent.js";
+import { thinkingLevels, type Run, type Selection } from "../../shared/agent.js";
 import { tasksScope, taskPreferencesScope, taskActive, type TaskTool } from "../../shared/tasks.js";
 import { TaskRecords, parent } from "./records.js";
 import { TaskDelivery } from "./delivery.js";
@@ -20,9 +19,9 @@ import { TaskScheduler } from "./scheduler.js";
 import { skillsInput } from "../../shared/skills.js";
 import { imagesInput } from "../images.js";
 // Short display copy is separate from the complete instructions sent to the child.
-function brief(value: unknown, name: string): string {
-  if (typeof value !== "string" || !value.trim() || Array.from(value).length > 30 || /[\r\n\0]/.test(value))
-    throw new AppError("INVALID_INPUT", `${name} 须为1–30字符的单行描述`);
+function brief(value: unknown, name: string, maxLength: number): string {
+  if (typeof value !== "string" || !value.trim() || Array.from(value).length > maxLength || /[\r\n\0]/.test(value))
+    throw new AppError("INVALID_INPUT", `${name} 须为1–${maxLength}字符的单行描述`);
   return value.trim();
 }
 // User commands and model tools share validation, receipts and per-task serialization.
@@ -97,7 +96,7 @@ export class TaskCommands {
           return this.delegate(scope, run, callId, c.params!);
         const row = this.records.own(scope, this.records.modelId("task", c.params!.taskId));
         if (name === "append") {
-          brief(c.params!.summary, "追加简述");
+          brief(c.params!.summary, "追加简述", 40);
           return this.scheduler.append(row, c.params!);
         }
         if (name === "cancel_task")
@@ -130,23 +129,14 @@ export class TaskCommands {
       if (Object.keys(t).some((k) => !["title", "task"].includes(k)))
         throw new AppError("INVALID_INPUT", "子任务定义包含未支持的参数");
       return {
-        title: brief(t.title, "任务标题"),
+        title: brief(t.title, "任务标题", 30),
         task: text(t.task, "任务", 12000),
       };
     });
-    const config = await configuration(this.store.root);
     const selection =
       this.records.settings().selection ??
       this.agents.info(scope).selection;
-    if (
-      !selection ||
-      !config.available.some(
-        (m) =>
-          m.provider === selection.provider &&
-          m.id === selection.id &&
-          m.levels.includes(selection.thinking),
-      )
-    )
+    if (!selection)
       throw new AppError(
         "MODEL_UNAVAILABLE",
         "默认子模型不可用；请明确选择，不自动替换。",
@@ -203,9 +193,8 @@ export class TaskCommands {
           if (selection && Object.keys(selection).some((key) => !["provider", "id", "thinking"].includes(key)))
             throw new AppError("INVALID_INPUT", "子模型参数无效");
           if (selection) {
-            const config = await configuration(this.store.root);
-            if (!config.available.some((m) => m.provider === selection!.provider && m.id === selection!.id && m.levels.includes(selection!.thinking)))
-              throw new AppError("MODEL_UNAVAILABLE", "子模型不可用");
+            if (typeof selection.provider !== "string" || !selection.provider || typeof selection.id !== "string" || !selection.id || !thinkingLevels.includes(selection.thinking))
+              throw new AppError("INVALID_INPUT", "子模型选择无效");
             selection = { provider: selection.provider, id: selection.id, thinking: selection.thinking };
           }
         }

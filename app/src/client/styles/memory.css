@@ -129,6 +129,8 @@
 .memory-dialog h3{font-size:13px;margin:16px 0 8px}
 .memory-dialog-body p{line-height:1.7}
 dialog.memory-dialog.toolbar-detail-drawer>.memory-dialog-body{flex:1}
+/* Document navigation follows short content; long documents still scroll above it. */
+dialog.memory-dialog.memory-content-view.toolbar-detail-drawer>.memory-dialog-body{flex:0 1 auto;display:block}
 .memory-dialog>.memory-navigation{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;background:var(--bg)}
 .memory-dialog .btn.memory-return{justify-self:start;justify-content:flex-start;min-height:44px;white-space:nowrap;margin:0}
 .memory-return svg{width:16px;height:16px}

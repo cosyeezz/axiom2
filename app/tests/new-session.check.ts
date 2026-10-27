@@ -29,6 +29,7 @@ try {
     await page.addInitScript(scope => sessionStorage.setItem("view", JSON.stringify(scope)), { workspaceId: workspace.id, sessionId: old.id });
     await page.goto(app.origin);
     await page.locator("#prompt").waitFor();
+    await page.waitForFunction(() => !!document.querySelector("#workspace-picker summary strong")?.textContent?.trim() && document.querySelector("#workspace-picker summary strong")?.textContent !== "选择工作空间");
   }
   // Actual simultaneous clients and synchronous click bursts, before receipts render.
   await Promise.all(pages.map(page => page.evaluate(() => {

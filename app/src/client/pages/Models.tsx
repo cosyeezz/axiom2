@@ -1,15 +1,15 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { AddProvider, ProviderAddMenu } from "../models/AddProvider.js";
 import { Icon, SettingsSidebar } from "../components.js";
 import { ConfirmDialog } from "../ConfirmDialog.js";
-import { ModelLogin } from "./ModelLogin.js";
 import { ProviderConnection } from "../models/ProviderConnection.js";
-import { ModelRegistry } from "../models/ModelRegistry.js";
 import { MountOnVisit } from "../MountOnVisit.js";
 import { useConfiguration } from "../models/useConfiguration.js";
 import { SettingsHeader } from "../settings/SettingsHeader.js";
 import "../styles/settings.css";
 import "../styles/model-interactions.css";
+const ModelLogin = lazy(() => import("./ModelLogin.js").then(module => ({ default: module.ModelLogin })));
+const ModelRegistry = lazy(() => import("../models/ModelRegistry.js").then(module => ({ default: module.ModelRegistry })));
 export default function Models() {
   const [adding, setAdding] = useState(false);
   const supplierSearch = useRef<HTMLInputElement>(null);
@@ -58,9 +58,14 @@ export default function Models() {
     rows,
   } = useConfiguration();
   const hasError = feedback ? feedbackError : !!config.error;
-  const filteredProviders = providers.filter((provider) =>
-    `${provider.name} ${provider.providerId}`.toLowerCase().includes(query.toLowerCase()),
-  );
+  const loading = !revision && !hasError;
+  const filteredProviders = useMemo(() => {
+    if (query === "") return providers;
+    const needle = query.toLowerCase();
+    return providers.filter((provider) =>
+      `${provider.name} ${provider.providerId}`.toLowerCase().includes(needle),
+    );
+  }, [providers, query]);
   return (
     <div className="settings-app models-workspace" data-feedback-error={hasError}>
       <SettingsSidebar page="models" />
@@ -89,7 +94,7 @@ export default function Models() {
             >
               <div className="supplier-toolbar">
                 <h2 id="supplier-heading">
-                  供应商 <span className="meta num">{providers.length}</span>
+                  供应商 <span className="meta num">{loading ? "…" : providers.length}</span>
                 </h2>
                 <ProviderAddMenu
                   disabled={!revision || needsReconcile || busy || !!login}
@@ -133,11 +138,12 @@ export default function Models() {
                       </span>
                     </button>
                   ))}
-                {!providers.length ? <p className="list-empty">暂无供应商</p> : !filteredProviders.length && <div className="list-empty">未找到供应商<button type="button" className="btn btn-ghost" onClick={() => { setQuery(""); supplierSearch.current?.focus(); }}>清除搜索</button></div>}
+                {!providers.length ? <p className="list-empty">{loading ? "正在读取本地配置…" : "暂无供应商"}</p> : !filteredProviders.length && <div className="list-empty">未找到供应商<button type="button" className="btn btn-ghost" onClick={() => { setQuery(""); supplierSearch.current?.focus(); }}>清除搜索</button></div>}
               </div>
             </section>
             <div className="supplier-detail">
               {login?.type === "oauth" ? (
+                <Suspense fallback={<p role="status">正在加载登录界面…</p>}>
                 <ModelLogin
                   {...login}
                   inline
@@ -148,6 +154,7 @@ export default function Models() {
                     void refreshAuthentication(login.providerId).then(() => document.getElementById("add-supplier")?.focus());
                   }}
                 />
+                </Suspense>
               ) : adding ? (
                 <AddProvider
                   templates={templates}
@@ -158,9 +165,9 @@ export default function Models() {
                 />
               ) : !p ? (
                 <div className="empty-details">
-                  <h2>连接你的模型</h2>
-                  <p>点击供应商旁的「+」，选择账号授权或自定义接口。</p>
-                  <div className="empty-connection-types"><span>OAuth 账号登录</span><span>API Key / 本地接口</span></div>
+                  <h2>{loading ? "正在读取本地配置…" : "连接你的模型"}</h2>
+                  <p>{loading ? "仅读取配置和已保存的认证记录，不验证登录状态。" : "点击供应商旁的「+」，选择账号授权或自定义接口。"}</p>
+                  {!loading && <div className="empty-connection-types"><span>OAuth 账号登录</span><span>API Key / 本地接口</span></div>}
                 </div>
               ) : (
                 <>
@@ -216,6 +223,7 @@ export default function Models() {
                     ))}
                   </nav>
                   {p.auth?.error && !p.key.trim() && <p className="auth-error" role="alert">配置错误 · {p.auth.error}</p>}
+                  {p.notices?.map(notice => <p className="field-help" key={notice}>{notice}</p>)}
                   <ProviderConnection
                     {...{
                       p,
@@ -236,6 +244,7 @@ export default function Models() {
                     }}
                   />
                   <MountOnVisit key={p.id} active={tab === "models"}>
+                  <Suspense fallback={<p role="status">正在加载模型编辑器…</p>}>
                   <ModelRegistry
                     {...{
                       p,
@@ -259,6 +268,7 @@ export default function Models() {
                       setDecision,
                     }}
                   />
+                  </Suspense>
                   </MountOnVisit>
                 </>
               )}
@@ -319,7 +329,7 @@ export default function Models() {
                   <Icon name="rotate-cw" />
                 </button>
                 <span className="save-state" data-dirty={dirty} role="status">
-                  {busy ? "处理中…" : dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}
+                  {loading ? "读取本地配置…" : busy ? "处理中…" : dirty ? "有未保存修改" : saved ? "已保存到本地" : "无未保存修改"}
                 </span>
               </footer>
             </div>

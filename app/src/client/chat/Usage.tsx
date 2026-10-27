@@ -41,7 +41,7 @@ export function Usage({ scope, tools }: { scope?: Scope; tools?: UsageTools }) {
   const completeCost = !!sessionCosts?.records && !sessionCosts.unknownCost && !costs.error && costs.connected;
   // An incomplete price ledger can prove a warning, never a low-cost/green state.
   const level = !completeCost && measuredLevel === 0 ? null : measuredLevel;
-  const costLabel = `${label}累计预计费用（pi 定价）：${sessionCosts ? costAmount(sessionCosts) : costs.loading && costs.connected ? "读取中…" : "未知"}；${durationTooltip(info)}：${formatDuration(elapsed)}；${level == null ? "等级待统计" : `${completeCost ? "" : "至少"}${costLevelLabels[level]}`}（费用美元或运行分钟先达阈值）${!completeCost ? "；费用数据不完整，仅按已知下限分档" : ""}${costs.error ? "；费用读取失败，已显示金额可能尚未更新" : !costs.connected ? "；连接已断开，费用可能尚未更新" : ""}`;
+  const costLabel = `${label}累计预计费用（已记录价格／公开价估算）：${sessionCosts ? costAmount(sessionCosts) : costs.loading && costs.connected ? "读取中…" : "未知"}；${durationTooltip(info)}：${formatDuration(elapsed)}；${level == null ? "等级待统计" : `${completeCost ? "" : "至少"}${costLevelLabels[level]}`}（费用美元或运行分钟先达阈值）${!completeCost ? "；费用数据不完整，仅按已知下限分档" : ""}${costs.error ? "；费用读取失败，已显示金额可能尚未更新" : !costs.connected ? "；连接已断开，费用可能尚未更新" : ""}`;
   const percent = validRatio(context?.tokens, context?.window), cache = cacheRatio(request);
   const estimate = context?.estimated ? "压缩后按当前消息估算，待模型用量校准" : "pi 估算";
   const contextLabel = percent == null ? "上下文占用率未知" : `上下文占用率 ${Math.round(percent)}%（${estimate}）`;

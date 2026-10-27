@@ -41,7 +41,8 @@ test("Kiro native chat sends selected model and full system prompt, uses fixed A
     onPayload: p => { payload = true; return { ...p as object, fixture: "replacement" }; },
     onResponse: r => { response = true; assert.equal(r.status, 200); }, onProviderStreamEvent: () => { observed++; } });
   assert.equal(result.stopReason, "stop"); assert.deepEqual(result.content, [{ type: "text", text: "你好🌏" }]); assert.equal(result.responseId, "message-1");
-  assert.deepEqual(result.usage, { ...zero, input: 12, output: 4, cacheRead: 3, cacheWrite: 2, totalTokens: 21 });
+  assert.deepEqual(result.usage, { ...zero, input: 12, output: 4, cacheRead: 3, cacheWrite: 2, totalTokens: 21,
+    axiomKiro: { version: 1, scope: "request", state: "complete", pricing: { kind: "unknown", rates: model().cost } } });
   assert.ok(payload && response); assert.equal(observed, 2); assert.deepEqual(events.map(e => e.type), ["start", "text_start", "text_delta", "text_end", "done"]);
   assert.equal(kiroCrc32(Buffer.from("123456789")), 0xcbf43926); assert.equal(fixtureCrc(Buffer.from("123456789")), 0xcbf43926);
 });
@@ -112,19 +113,24 @@ test("Kiro preserves native reasoning, separate credits and usage absence, rejec
     kiroFrame("contextUsageEvent", { contextUsagePercentage: 25 }), kiroFrame("meteringEvent", { usage: 0.5, unit: "credit" }),
   ]));
   assert.equal(ok.result.stopReason, "stop"); assert.deepEqual(ok.result.content[0], { type: "thinking", thinking: "consider", thinkingSignature: "signature" });
-  assert.deepEqual(ok.result.usage, zero); assert.equal(ok.result.diagnostics?.length, 3);
+  assert.deepEqual(ok.result.usage, { ...zero,
+    axiomKiro: { version: 1, scope: "request", state: "unknown", pricing: { kind: "unknown", rates: model().cost } } });
+  assert.equal(ok.result.diagnostics?.length, 4);
+  assert.equal(ok.result.diagnostics?.find(item => item.type === "kiro-completion-inferred")?.details?.policy, "local-eof-policy");
   const filtered = await run(user(), async () => kiroResponse([kiroFrame("metadataEvent", { stopReason: "CONTENT_FILTERED", stopDetails: { refusal: { explanation: "PRIVATE-SERVICE" } } })]));
   assert.equal(filtered.result.stopReason, "error"); assert.match(filtered.result.errorMessage!, /拦截/); assert.ok(!filtered.result.errorMessage?.includes("PRIVATE"));
 });
 
-test("Kiro sanitizes HTTP, exception and transport failures, never retries partial output", async () => {
+test("Kiro sanitizes failures and publishes no replay hint after partial output", async () => {
   for (const status of [400, 401, 403, 429, 503]) {
     let calls = 0;
     const result = await run(user(), async () => { calls++; return new Response("PRIVATE-SERVICE", { status }); });
     assert.equal(result.result.stopReason, "error"); assert.equal(calls, 1); assert.ok(!result.result.errorMessage?.includes("PRIVATE"));
   }
   const partial = await run(user(), async () => kiroResponse([kiroFrame("assistantResponseEvent", { content: "partial" }), kiroFrame("", { message: "PRIVATE" }, { ":message-type": "exception", ":exception-type": "ThrottlingException" })]));
-  assert.equal(partial.result.stopReason, "error"); assert.match(partial.result.errorMessage!, /429/);
+  assert.equal(partial.result.stopReason, "error"); assert.doesNotMatch(partial.result.errorMessage!, /429|500|rate.?limit|context.length.exceeded/i);
+  const failure = partial.result.diagnostics?.find(item => item.type === "kiro-failure");
+  assert.equal(failure?.details?.category, "throttle"); assert.equal(failure?.details?.status, 200); assert.equal(failure?.details?.partial, true);
   const transport = await run(user(), async () => { throw Error("PRIVATE-ACCESS PRIVATE-URL"); });
   assert.ok(!transport.result.errorMessage?.includes("PRIVATE"));
 });

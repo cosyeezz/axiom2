@@ -136,9 +136,10 @@ async function registeredCli(root) {
   return cli;
 }
 
-export async function installForeground({ root = process.env.AXIOM_DATA_DIR, taskDir = process.env.AXIOM_SETUP_TASK_DIR, npm = process.env.AXIOM_SETUP_NPM, repair = process.env.AXIOM_SETUP_REPAIR === '1', targetVersion = process.env.AXIOM_SETUP_VERSION || undefined, fetcher = fetch, command = foregroundCommand, remove = rm, log = console.log } = {}) {
+export async function installForeground({ root = process.env.AXIOM_DATA_DIR, taskDir = process.env.AXIOM_SETUP_TASK_DIR, npm = process.env.AXIOM_SETUP_NPM, repair = process.env.AXIOM_SETUP_REPAIR === '1', targetVersion = process.env.AXIOM_SETUP_VERSION || undefined, requireLatest = process.env.AXIOM_SETUP_REQUIRE_LATEST === '1', fetcher = fetch, command = foregroundCommand, remove = rm, log = console.log } = {}) {
   if (!root || !isAbsolute(root) || !taskDir || !isAbsolute(taskDir) || !npm || !isAbsolute(npm)) throw Error('前台安装参数不完整。');
   if (targetVersion && !/^\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(targetVersion)) throw Error('安装版本无效。');
+  if (requireLatest && !targetVersion) throw Error('更新需要明确的确认版本。');
   root = await realpath(root);
   if (!below(root, taskDir)) throw Error('安装任务目录不属于当前数据目录。');
   const task = await jsonFile(join(taskDir, 'task.json')) || desktopTask('service', 'install');
@@ -155,6 +156,18 @@ export async function installForeground({ root = process.env.AXIOM_DATA_DIR, tas
       await atomicJson(join(taskDir, 'foreground-result.json'), { root, ...existing, readyToStart: false, message: '程序已安装，请点击启动。' });
       await phase('validating', '程序已安装，请点击启动。', false);
     } else {
+    let latestRelease;
+    if (requireLatest) {
+      // Updates revalidate latest BEFORE executing any old program or stopping it.
+      // Explicit reinstall keeps its separately confirmed historical version.
+      await phase('checking', '正在重新核实最新后台版本…');
+      latestRelease = JSON.parse(await boundedText(execution, 'https://api.github.com/repos/cosyeezz/axiom2/releases/latest', 2000000, fetcher));
+      if (latestRelease.tag_name !== `v${targetVersion}` || latestRelease.draft || latestRelease.prerelease || !Array.isArray(latestRelease.assets)) throw Error('最新版本已变化或不可用，请重新检查并确认；未停止旧服务。');
+      for (const name of ['axiom2.tgz', 'SHA256SUMS']) {
+        const assets = latestRelease.assets.filter(asset => asset?.name === name), asset = assets[0];
+        if (assets.length !== 1 || asset.browser_download_url !== `https://github.com/cosyeezz/axiom2/releases/download/v${targetVersion}/${name}` || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 128 * 1024 * 1024 || name === 'axiom2.tgz' && !/^sha256:[a-f0-9]{64}$/.test(asset.digest)) throw Error('最新发布附件信息无效；未停止旧服务。');
+      }
+    }
     let stopped = false, oldCli;
     try {
       const old = await registeredCli(root); oldCli = old;
@@ -191,13 +204,13 @@ export async function installForeground({ root = process.env.AXIOM_DATA_DIR, tas
     try { cached = await inspectDownload(root); }
     catch (error) { log(`已有下载未通过校验，将重新下载：${error.message}`); }
     let download, version;
-    if (cached?.state === 'verified' && (targetVersion ? cached.version === targetVersion : !repair)) {
+    if (!requireLatest && cached?.state === 'verified' && (targetVersion ? cached.version === targetVersion : !repair)) {
       download = cached.file; version = cached.version;
       await phase('verifying', '已有安装包通过大小与 SHA-256 校验，直接安装。');
     } else {
     await phase('checking', '正在读取正式发布版本…');
     const releaseUrl = targetVersion ? `https://api.github.com/repos/cosyeezz/axiom2/releases/tags/v${targetVersion}` : 'https://api.github.com/repos/cosyeezz/axiom2/releases/latest';
-    const releaseInfo = JSON.parse(await boundedText(execution, releaseUrl, 2000000, fetcher));
+    const releaseInfo = latestRelease || JSON.parse(await boundedText(execution, releaseUrl, 2000000, fetcher));
     if (releaseInfo.draft || releaseInfo.prerelease || !/^v?\d+\.\d+\.\d+$/.test(releaseInfo.tag_name) || !Array.isArray(releaseInfo.assets)) throw Error('正式发布版本无效。');
     if (targetVersion && releaseInfo.tag_name !== `v${targetVersion}`) throw Error('发布版本与已确认的安装版本不匹配。');
     const baseUrl = `https://github.com/cosyeezz/axiom2/releases/download/${releaseInfo.tag_name}/`;
@@ -211,6 +224,7 @@ export async function installForeground({ root = process.env.AXIOM_DATA_DIR, tas
     const sums = await boundedText(execution, baseUrl + 'SHA256SUMS', 1000000, fetcher);
     const matches = sums.replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim().match(/^([a-f\d]{64})\s+\*?axiom2\.tgz$/i)).filter(Boolean);
     if (matches.length !== 1) throw Error('安装包必须有唯一 SHA-256 校验条目。');
+    if (requireLatest && bundle.digest !== `sha256:${matches[0][1].toLowerCase()}`) throw Error('最新发布摘要与校验文件不一致，已拒绝安装。');
     download = join(taskDir, 'axiom2.tgz');
     await phase('downloading', '正在前台下载并校验安装包…');
     await archive(execution, bundle, matches[0][1].toLowerCase(), download, fetcher);

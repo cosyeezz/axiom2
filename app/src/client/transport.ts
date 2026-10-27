@@ -1,8 +1,12 @@
+import { relayBackendUpdates } from "./backend-update-bridge.js";
+import { paintFeedback } from "./paint-feedback.js";
 import { browserLatency, receiveDelivery } from "./latency.js";
 import { useCallback, useSyncExternalStore } from "react";
 import { emptyMemoryView } from "../shared/memory.js";
 import { proxySourceLimit } from "../shared/model-proxy.js";
 import { clearOptimistic, reconcileOptimistic } from "./chat/optimistic.js";
+import { VisualActions, projectVisualAction, type VisualAction } from "./optimistic-actions.js";
+import type { Session } from "../shared/protocol.js";
 import type { ChatMessage } from "../shared/agent.js";
 import {
   AppError,
@@ -28,15 +32,29 @@ function sessionKey(scope: string) {
   return ["agent", "thread", "message", "messages", "session", "compression", "tasks", "costs", "memory", "reload"].includes(parts[0]) && parts.length >= 3
     ? `${parts[1]}:${parts[2]}` : null;
 }
+// Returning to a recently viewed session must not wait on a busy backend; 2.6 MB of
+// wire JSON was measured for one large session, so the count also has a size budget.
+export const SESSION_CACHE_ENTRIES = 20, SESSION_CACHE_BYTES = 64 * 1024 * 1024;
+const scopeBytes = new Map<string, number>(), sessionBytes = new Map<string, number>();
+function sizeScope(scope: string, bytes: number) {
+  const key = sessionKey(scope);
+  if (!key) return;
+  const delta = bytes - (scopeBytes.get(scope) ?? 0);
+  if (bytes) scopeBytes.set(scope, bytes); else scopeBytes.delete(scope);
+  const total = (sessionBytes.get(key) ?? 0) + delta;
+  if (total > 0) sessionBytes.set(key, total); else sessionBytes.delete(key);
+}
+const cachedBytes = () => [...sessionBytes.values()].reduce((sum, bytes) => sum + bytes, 0);
 function touchSession(scope: string) {
   const key = sessionKey(scope);
   if (!key) return;
   sessionLru.delete(key); sessionLru.set(key, true);
-  while (sessionLru.size > 5) {
+  while (sessionLru.size > SESSION_CACHE_ENTRIES || sessionLru.size > 1 && cachedBytes() > SESSION_CACHE_BYTES) {
     const oldest = [...sessionLru.keys()].find((candidate) => candidate !== key && !pinned(candidate));
     if (!oldest) break;
     sessionLru.delete(oldest);
-    for (const name of cache.keys()) if (sessionKey(name) === oldest) cache.delete(name);
+    for (const name of cache.keys()) if (sessionKey(name) === oldest) { cache.delete(name); scopeBytes.delete(name); }
+    sessionBytes.delete(oldest);
   }
 }
 const pending = new Map<
@@ -80,9 +98,17 @@ if (typeof window !== "undefined") {
     if (!bridge || !Number.isSafeInteger(probe) || (probe as number) < 1) return;
     void bridge.invoke("axiom_connection_report", { probe, state: connectionHealth() }).catch(() => {});
   });
+  window.addEventListener("axiom-backend-updates-request", (event) => {
+    const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (name: string, args: object) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    if (!bridge) return;
+    void relayBackendUpdates((event as CustomEvent).detail, connectionHealth() === "connected", command,
+      (probe, result) => bridge.invoke("axiom_backend_updates_report", { probe, ...result }));
+  });
   const resume = () => {
     if (document.visibilityState !== "visible") return;
-    if (socket?.readyState === WebSocket.OPEN && Date.now() - lastResponse >= 15000) socket.close();
+    // Zero means the new socket has not received hello yet, not a stale reply.
+    // A pageshow/focus during its handshake must not close it before first read.
+    if (socket?.readyState === WebSocket.OPEN && lastResponse > 0 && Date.now() - lastResponse >= 15000) socket.close();
     else if (!socket || socket.readyState === WebSocket.CLOSED) void connect();
     else probeConnection();
   };
@@ -120,7 +146,78 @@ export function useConnection() {
   );
 }
 
+const visualActions = new VisualActions();
+const visualStarted = new Map<string, number>();
+const visualListeners = new Set<() => void>();
+type VisualEvent = { action: VisualAction; phase: "begin" | "completed" | "failed" | "uncertain"; error?: Error };
+const visualObservers = new Set<(event: VisualEvent) => void>();
+export function observeVisualActions(fn: (event: VisualEvent) => void) {
+  visualObservers.add(fn);
+  return () => { visualObservers.delete(fn); };
+}
+function notifyVisual(event: VisualEvent) {
+  visualObservers.forEach(fn => fn(event));
+  visualListeners.forEach(fn => fn());
+  // A row can occur in multiple collections and in the title subscription.
+  for (const [scope, group] of listeners) if (/^(sessions:|session:|workspaces$|pinned-sessions$|favorites$)/.test(scope)) group.forEach(fn => fn());
+}
+export function useVisualActions() {
+  return useSyncExternalStore(fn => { visualListeners.add(fn); return () => { visualListeners.delete(fn); }; }, visualActions.list);
+}
+export const isVisuallyRemoved = (session: Pick<Session, "id" | "workspaceId">) => visualActions.hidden(session);
+function finishVisual(action: VisualAction, error?: Error) {
+  if (!error) {
+    for (const [scope, snapshot] of cache) {
+      // A subscribed scope already received authoritative state before its receipt.
+      // Do not overwrite a newer same-field edit from another window on late ack.
+      if ((snapshot.received ?? 0) > (visualStarted.get(action.id) ?? -1)) continue;
+      const data = projectVisualAction(scope, snapshot.data, action);
+      if (data !== snapshot.data) cache.set(scope, { ...snapshot, data });
+    }
+  }
+  visualStarted.delete(action.id);
+  visualActions.remove(action.id);
+  notifyVisual({ action, phase: error ? "failed" : "completed", error });
+}
+/** Read receipts only: an uncertain write is never automatically repeated. */
+export async function verifyVisualActions() {
+  for (const action of visualActions.list().filter(a => a.state === "uncertain")) {
+    const receipt = await sendCommand<{ status: string; data?: { message?: string } }>("request.get", { requestId: action.id }, action.target);
+    if (receipt.status === "committed") finishVisual(action);
+    else if (receipt.status === "failed") finishVisual(action, new Error(receipt.data?.message ?? "操作失败，已恢复显示。"));
+    // not_found may mean an asynchronous delete is still stopping its tasks.
+  }
+}
+
 export function command<T>(
+  op: string,
+  params: Record<string, unknown> = {},
+  target: { workspaceId?: string; sessionId?: string } = {},
+  requestId: string = crypto.randomUUID(),
+  signal?: AbortSignal,
+): Promise<T> {
+  const session = target.sessionId ? scopeSnapshot<Session>(`session:${target.workspaceId}:${target.sessionId}`) ??
+    scopeSnapshot<Session[]>(`sessions:${target.workspaceId}`)?.find(s => s.id === target.sessionId) ??
+    scopeSnapshot<Session[]>("pinned-sessions")?.find(s => s.id === target.sessionId) : undefined;
+  const action = visualActions.begin(requestId, op, params, target, session);
+  // Retain the original microtask ordering for subscription error fallbacks and
+  // all other commands that do not have a local visual intent.
+  if (!action) return sendCommand<T>(op, params, target, requestId, signal);
+  visualStarted.set(action.id, received);
+  notifyVisual({ action, phase: "begin" });
+  return paintFeedback().then(() => sendCommand<T>(op, params, target, requestId, signal)).then(data => {
+    finishVisual(action);
+    return data;
+  }, error => {
+    if (error instanceof AppError && error.code === "UNCERTAIN") {
+      visualActions.uncertain(action.id);
+      notifyVisual({ action, phase: "uncertain", error });
+    } else finishVisual(action, error);
+    throw error;
+  });
+}
+
+function sendCommand<T>(
   op: string,
   params: Record<string, unknown> = {},
   target: { workspaceId?: string; sessionId?: string } = {},
@@ -148,7 +245,7 @@ export function command<T>(
     );
   const sendingSocket = socket;
   const cancelRead = () => {
-    if (!["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document"].includes(op) ||
+    if (!["agent.history.index", "agent.history.read", "agent.original", "agent.editable", "message.get", "message.part", "message.image", "files.document", "git.branch"].includes(op) ||
       socket !== sendingSocket || sendingSocket?.readyState !== WebSocket.OPEN) return;
     try { sendingSocket.send(JSON.stringify({ op: "read.cancel", requestId: crypto.randomUUID(), params: { requestId } })); } catch { /* Connection already closed. */ }
   };
@@ -193,7 +290,17 @@ export function command<T>(
     }
   });
 }
-export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), parseMs = 0) {
+/** Compare parsed JSON without retaining fingerprints or serializing another copy.
+ * Unexpectedly deep data simply takes the normal fresh-object path. */
+function equalSnapshotData(a: unknown, b: unknown, depth = 0): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || depth >= 32) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((value, i) => equalSnapshotData(value, b[i], depth + 1));
+  if (Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>, right = b as Record<string, unknown>, keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key) && equalSnapshotData(left[key], right[key], depth + 1));
+}
+export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), parseMs = 0, wireLength = 0) {
   if ((sessionKey(event.scope) || /^(memory-tree|memory-catalog):/.test(event.scope)) && !remote.has(wireScope(event.scope))) return;
   if (event.scope.startsWith("message:")) {
     const collection = cache.get(event.scope.split(":").slice(0, 3).join(":").replace(/^message:/, "messages:"));
@@ -202,13 +309,17 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
   const previous = cache.get(event.scope);
   const sameStream = previous?.streamId === event.streamId;
   if (sameStream && (previous.seq > event.seq || previous.seq === event.seq && previous.generation === connection.generation && !previous.synthetic)) return;
+  // UTF-16 strings in the parsed snapshot are roughly twice the wire length.
+  sizeScope(event.scope, 2 * wireLength);
   touchSession(event.scope);
   const changed = new Set<string>();
-  const put = (scope: string, data: unknown) => {
+  const put = (scope: string, data: unknown, share = false) => {
     const old = cache.get(scope);
     if (old?.streamId === event.streamId && old.seq > event.seq) return;
     const duplicate = old?.streamId === event.streamId && old.seq === event.seq && !old.synthetic;
-    cache.set(scope, { streamId: event.streamId, seq: event.seq, data: duplicate ? old.data : data,
+    const unchanged = share && old?.streamId === event.streamId && !old.synthetic && equalSnapshotData(old.data, data);
+    // Only data is shared: accepted delivery still advances freshness and notifies.
+    cache.set(scope, { streamId: event.streamId, seq: event.seq, data: duplicate || unchanged ? old!.data : data,
       generation: connection.generation, received: ++received });
     changed.add(scope);
   };
@@ -219,16 +330,17 @@ export function acceptSnapshot(event: Snapshot, receivedAt = performance.now(), 
     const ids = new Set(messages.map((message) => prefix + message.id));
     for (const [name, old] of cache) if (name.startsWith(prefix) && !ids.has(name) &&
       (old.streamId !== event.streamId || old.seq <= event.seq)) {
-      cache.delete(name); changed.add(name);
+      cache.delete(name); sizeScope(name, 0); changed.add(name);
     }
-    for (const message of messages) put(prefix + message.id, message);
+    for (const message of messages) put(prefix + message.id, message, true);
     put(event.scope, null);
     const thread = `thread:${workspaceId}:${sessionId}`;
-    if (event.thread !== undefined && remote.has(thread)) put(thread, event.thread);
+    if (event.thread !== undefined && remote.has(thread)) put(thread, event.thread, true);
     // Commit the entire collection and its freshness before any observer runs.
     reconcileOptimistic({ workspaceId, sessionId }, messages);
   } else {
-    put(event.scope, event.data);
+    // Single-message deliveries retain their incoming object for latency commits.
+    put(event.scope, event.data, event.scope.startsWith("thread:"));
     if (event.scope.startsWith("message:") && event.data) {
       const [, workspaceId, sessionId] = event.scope.split(":");
       reconcileOptimistic({ workspaceId, sessionId }, [event.data as ChatMessage]);
@@ -313,7 +425,7 @@ export function renderedContextReady(scope: { workspaceId: string; sessionId: st
     return !!message && (!terminal || !message.streaming);
   });
 }
-export function scopeSnapshot<T>(scope: string): T | undefined { return cache.get(scope)?.data as T | undefined; }
+export function scopeSnapshot<T>(scope: string): T | undefined { return visualActions.project(scope, cache.get(scope)?.data) as T | undefined; }
 /** Old cached facts cannot confirm current authorization or state after a reconnect. */
 export function scopeCurrent(scope: string) { return connection.connected && cache.get(scope)?.generation === connection.generation; }
 export function useScope<T>(scope: string | null, fallback: T): T {
@@ -324,7 +436,7 @@ export function useScope<T>(scope: string | null, fallback: T): T {
   return useSyncExternalStore(
     listen,
     () =>
-      (scope ? (cache.get(scope)?.data as T | undefined) : undefined) ??
+      (scope ? scopeSnapshot<T>(scope) : undefined) ??
       fallback,
   );
 }
@@ -348,6 +460,7 @@ export async function connect() {
       phase = "checking";
       connection = { connected: true, generation: connection.generation + 1 };
       setStatus("已连接本地服务");
+      void verifyVisualActions().catch(() => { /* Kept visible for explicit verification. */ });
       // The server's hello (or a valid receipt) confirms actual response evidence.
       for (const scope of remote.keys())
         void command("subscribe", { scope }).catch((error) => {
@@ -373,7 +486,7 @@ export async function connect() {
           value.type === "receipt" && typeof value.requestId === "string" && typeof value.ok === "boolean") {
         lastResponse = Date.now(); phase = "connected";
       } else return;
-      if (value.type === "snapshot") acceptSnapshot(value, receivedAt, performance.now() - receivedAt);
+      if (value.type === "snapshot") acceptSnapshot(value, receivedAt, performance.now() - receivedAt, e.data.length);
       if (value.type === "receipt") {
         const waiting = pending.get(value.requestId);
         if (!waiting) return;

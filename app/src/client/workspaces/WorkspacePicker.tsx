@@ -152,12 +152,9 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
       finish(restoreFocus);
       return;
     }
-    const saved = await run("workspace.rename", { name: nextName });
-    if (!mounted.current) return;
-    // A delayed response must not steal focus from another row or the composer.
-    const stillFocused = document.activeElement === input.current;
-    if (saved) finish(restoreFocus && stillFocused);
-    // Failed saves keep the draft for explicit correction or retry.
+    const result = run("workspace.rename", { name: nextName });
+    finish(restoreFocus);
+    await result;
   };
   const remove = () => {
     cancelSelection();
@@ -202,7 +199,7 @@ function WorkspaceRow({ workspace: w, selected, navigate, cancelSelection, onErr
       {deleting && <ConfirmDialog title="删除工作空间" subject={deleting.name}
         description="仅从列表移出，保留项目文件和会话历史。正在运行的 Agent 或任务需先停止。再次打开同一目录可恢复。"
         confirmLabel="删除工作空间" danger onClose={() => setDeleting(null)}
-        onConfirm={() => command("workspace.delete", { confirmed: true }, { workspaceId: deleting.id })} />}
+        onConfirm={() => { setDeleting(null); void run("workspace.delete", { confirmed: true }); }} />}
       {editing ? <div className="workspace-option" aria-current={selected}>{content}</div> : (
         <button ref={button} type="button" className="workspace-option" data-view-navigation aria-current={selected}
           aria-label={w.name} data-tooltip={`${w.name} · ${w.path} · 双击重命名（F2），Delete 删除`}

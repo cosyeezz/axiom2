@@ -81,7 +81,7 @@ test("first explicit native-provider use loads it once without changing model fi
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
-test("runtime creation without refresh preserves a cold execution profile; explicit refresh still invalidates it", async t => {
+test("cold runtime creation and explicit catalog refresh preserve resource admission and captured model snapshots", async t => {
   const f = fixture(), profiles = new ExecutionProfiles(f.root);
   const environment = profiles.prepare({ entry: "memory", cwd: f.cwd, modelDir: f.modelDir, modelsRaw: f.raw, mode: "D" });
   const refresh = ModelRuntime.prototype.refresh, pending: ReturnType<ModelRuntime["refresh"]>[] = [];
@@ -107,7 +107,13 @@ test("runtime creation without refresh preserves a cold execution profile; expli
     assert.equal(result.aborted, false);
     assert.equal(pending.length, 1, "the normal refresh method is restored");
     assert.equal(existsSync(f.options.modelsStorePath), true);
-    assert.equal(environment.current(), false, "real cache changes still invalidate captured profiles");
+    // Catalog metadata is not a resource-admission or authentication gate.
+    // Execution retains its owned definition; refresh must not silently replace it.
+    assert.equal(environment.current(), true, "catalog refresh does not invalidate resource admission");
+    assert.equal(environment.snapshotValid(), true);
+    assert.equal(readFileSync(environment.modelsFile, "utf8"), f.raw);
+    assert.equal(readFileSync(f.options.modelsPath, "utf8"), f.raw);
+    assert.equal(readFileSync(f.options.authPath, "utf8"), "{}");
   } finally { await Promise.allSettled(pending); environment.release(); rmSync(f.root, { recursive: true, force: true }); }
 });
 

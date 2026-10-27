@@ -24,7 +24,7 @@ function fixture() {
   } };
 }
 
-test("public Pi getAuth completes OAuth persistence before a fresh execution snapshot; later identity changes still reject", async t => {
+test("public Pi getAuth persists OAuth independently of execution resource admission", async t => {
   const f = fixture(); t.after(() => f.close());
   let fetches = 0, refreshes = 0, inference = 0;
   t.mock.method(globalThis, "fetch", async () => { fetches++; throw Error("No network in this test"); });
@@ -50,7 +50,7 @@ test("public Pi getAuth completes OAuth persistence before a fresh execution sna
     await service.prepareAuth(selection, f.modelsPath, new AbortController().signal);
     assert.equal(refreshes, 1);
     assert.equal(JSON.parse(readFileSync(f.authPath, "utf8")).fixture.access, "fake-new");
-    assert.equal(stale.current(false), false);
+    assert.equal(stale.current(false), true, "credential refresh cannot invalidate resource admission");
     fresh.push(await profiles.prepareAsync(input));
     assert.equal(await fresh[0].currentAsync!(), true);
     await service.prepareAuth(selection, f.modelsPath, new AbortController().signal);
@@ -58,8 +58,8 @@ test("public Pi getAuth completes OAuth persistence before a fresh execution sna
     for (const identity of [{ type: "oauth", access: "other-account", refresh: "other-refresh", expires: Date.now() + 3_600_000 }, { type: "api_key", key: "manual-key" }, undefined]) {
       if (identity) f.credential(identity); else writeFileSync(f.authPath, "{}");
       const rejected: any[] = [];
-      assert.equal(fresh[0].current(false, value => rejected.push(value)), false);
-      assert.deepEqual(rejected, [{ check: "auth" }]);
+      assert.equal(fresh[0].current(false, value => rejected.push(value)), true);
+      assert.deepEqual(rejected, []);
     }
     assert.equal(fetches, 0); assert.equal(inference, 0);
   } finally { stale.release(); for (const environment of fresh) environment.release(); }

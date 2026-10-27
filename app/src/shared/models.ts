@@ -98,6 +98,8 @@ export interface ProviderDraft {
   originalId?: string;
   connectionType?: "custom" | "oauth";
   hasConnectionOverrides?: boolean;
+  /** Read-only connection/catalog diagnostics; never persisted as configuration. */
+  notices?: string[];
   providerId: string;
   name: string;
   api: string;

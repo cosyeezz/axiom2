@@ -102,11 +102,12 @@ try {
   assert.equal(await menu.locator(".model-name").first().evaluate(el => parseFloat(getComputedStyle(el).fontSize)), 12);
   assert.ok(await menu.locator(".model-level span").first().evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 11));
   const runNote = menu.locator(".model-run-note");
-  assert.match(await runNote.locator("summary").innerText(), /下次执行生效，本次追加不变/);
+  assert.match(await runNote.locator("summary").innerText(), /模型变更将在安全点生效/);
   if (touch) await runNote.locator("summary").tap();
   else await runNote.locator("summary").click();
-  assert.ok(await runNote.locator("p").isVisible());
-  assert.equal(await runNote.locator("p").innerText(), "当前执行：oa173 / GPT-6 Astra · high");
+  assert.ok(await runNote.locator("p").first().isVisible());
+  assert.equal(await runNote.locator("p").first().innerText(), "当前请求：oa173 / GPT-6 Astra · high");
+  assert.match(await runNote.locator("p").last().innerText(), /整批工具完成后/);
   await runNote.locator("summary").click();
   assert.equal(await runNote.getAttribute("open"), null);
   await search.fill("not-a-model");
@@ -131,6 +132,7 @@ try {
   assert.equal(committed().length, 1);
   assert.equal(selection.thinking, "xhigh");
   await open();
+  assert.match(await runNote.locator("summary").innerText(), /已选择新模型，等待安全点生效/);
   const row = menu.locator(".model-row").filter({ hasText: "GPT-6 Astra" });
   await row.hover();
   await row.getByRole("button", { name: "收藏模型：GPT-6 Astra", exact: true }).click();

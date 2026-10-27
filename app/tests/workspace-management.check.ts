@@ -7,7 +7,7 @@ import { startServer } from "../src/server/index.js";
 import type { Session, Workspace } from "../src/shared/protocol.js";
 
 const root = mkdtempSync(join(tmpdir(), "axiom-workspace-ui-"));
-const app = await startServer({ root: join(root, "data"), port: 0 });
+const app = await startServer({ root: join(root, "data"), port: 0, dev: true });
 const browser = await chromium.launch({ executablePath: process.env.AXIOM_TEST_BROWSER });
 try {
   const run = (op: string, params = {}, workspaceId?: string) => app.store.execute({ requestId: crypto.randomUUID(), op, params, workspaceId });
@@ -76,8 +76,8 @@ try {
   assert.equal(await row.locator(".workspace-option .workspace-actions").count(), 0, "no nested action buttons");
   const input = page.getByRole("textbox", { name: "工作空间名称", exact: true });
   assert.equal(await page.locator(".workspace-rename").count(), 0, "no pencil rename button");
-  assert.equal(await row.locator(".workspace-actions button").count(), 2, "only pin and delete actions");
-  await row.getByRole("button", { name: a.w.name, exact: true }).dblclick();
+  assert.equal(await row.locator(".workspace-pin, .workspace-delete").count(), 2, "pin and delete alongside existing path actions");
+  await row.getByRole("button", { name: a.w.name, exact: true }).locator("strong").dblclick();
   await input.fill("中文重命名");
   await input.dispatchEvent("compositionstart");
   await input.press("Enter");
@@ -85,6 +85,7 @@ try {
   await input.dispatchEvent("compositionend");
   await input.press("Enter");
   await input.waitFor({ state: "detached" });
+  await page.waitForFunction(() => document.querySelector('.workspace-row[aria-busy="true"]') === null);
   assert.equal(app.store.workspace(a.w.id).name, "中文重命名");
   await expectWorkspace(page, b.w.name);
 
@@ -102,7 +103,7 @@ try {
   assert.equal(app.store.workspace(a.w.id).name, "中文重命名");
   assert.equal(await page.locator("#workspace-picker").evaluate((el) => (el as HTMLDetailsElement).open), true, "Escape cancels edit, not menu");
 
-  await option.click();
+  await option.locator("strong").click();
   await expectWorkspace(page, "中文重命名");
   await page.waitForTimeout(100);
   // Entirely new browser storage, like a new Pake webview, restores service preference.
@@ -112,7 +113,7 @@ try {
   await newWindow.goto(app.origin);
   await expectWorkspace(newWindow, "中文重命名");
   await menu(newWindow);
-  await newWindow.getByRole("button", { name: b.w.name, exact: true }).click();
+  await newWindow.getByRole("button", { name: b.w.name, exact: true }).locator("strong").click();
   await expectWorkspace(newWindow, b.w.name);
   await expectWorkspace(page, "中文重命名"); // preference broadcast must not navigate open viewers
   await page.reload();
@@ -132,23 +133,21 @@ try {
     assert.equal(await page.locator("#workspace-picker").evaluate((el) => (el as HTMLDetailsElement).open), true, "cancelling confirmation does not close workspace menu");
     await expectWorkspace(page, "中文重命名");
   }
-  // A rejected command stays in the dialog and can be cancelled or retried.
+  // Confirmed removal closes immediately; rejection restores the workspace and
+  // reports outside the closed dialog. A fresh confirmation is safe to retry.
   const busyRun = crypto.randomUUID();
   app.store.db.prepare("INSERT INTO runs(id,sessionId,status,selection,startedAt) VALUES(?,?,'running','{}',1)").run(busyRun, a.s.id);
   await remove.click();
   const rejected = await checkDeletionDialog(page, "中文重命名");
   await rejected.getByRole("button", { name: "删除工作空间", exact: true }).click();
-  await rejected.getByRole("alert").filter({ hasText: "请先停止再移除" }).waitFor();
-  assert.equal(await rejected.isVisible(), true, "failed deletion keeps confirmation open");
-  assert.equal(app.store.workspaces().length, 2);
-  await rejected.getByRole("button", { name: "取消", exact: true }).click();
   await rejected.waitFor({ state: "hidden" });
-  assert.equal(await remove.evaluate((el) => el === document.activeElement), true, "failed deletion can be cancelled with focus restored");
-  await remove.click();
-  await checkDeletionDialog(page, "中文重命名");
-  await deletionDialog(page).getByRole("button", { name: "删除工作空间", exact: true }).click();
-  await deletionDialog(page).getByRole("alert").filter({ hasText: "请先停止再移除" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "请先停止再移除" }).first().waitFor();
+  assert.equal(app.store.workspaces().length, 2);
+  await expectWorkspace(page, "中文重命名");
+  await page.getByRole("button", { name: "关闭错误提示", exact: true }).click();
   app.store.db.prepare("UPDATE runs SET status='completed',endedAt=2 WHERE id=?").run(busyRun);
+  await menu(page); await renamed.hover(); await remove.click();
+  await checkDeletionDialog(page, "中文重命名");
   await deletionDialog(page).getByRole("button", { name: "删除工作空间", exact: true }).click();
   await deletionDialog(page).waitFor({ state: "hidden" });
   await expectWorkspace(page, b.w.name);
@@ -207,7 +206,7 @@ try {
   await context.close();
   assert.deepEqual(browserDialogs, [], "no browser dialogs in either viewer");
   assert.deepEqual(errors, []);
-  console.log("workspace management UI: rename/IME, pin, in-app Escape/cancel/delete/reopen, default/returned focus, keyboard navigation, busy rejection with dialog-local error/cancel/retry, fresh-window restore, viewer isolation, old-service error and mobile confirmation without browser dialogs passed");
+  console.log("workspace management UI: rename/IME, pin, in-app Escape/cancel/delete/reopen, default/returned focus, keyboard navigation, busy rejection with immediate close/rollback/fresh retry, fresh-window restore, viewer isolation, old-service error and mobile confirmation without browser dialogs passed");
 } finally {
   await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true });
 }

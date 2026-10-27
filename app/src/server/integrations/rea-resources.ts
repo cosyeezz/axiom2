@@ -1,4 +1,4 @@
-import { engineEnvironment, discoverEnginePaths } from "./rea-engines.js";
+import { reaRequestTimeoutSeconds } from "./rea-budget.js";
 import { inspectNodeRuntime } from "./managed-node.js";
 import { loadSkills, type McpExtensionOptions } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
@@ -34,8 +34,8 @@ export function reaResources(root: string, cwd: string): Resources {
         if (config.installation?.runtime) files.push(...inspectNodeRuntime(join(reaDirectory(root), "versions", config.installation.directory), config.installation.runtime).files);
         result.server = { name: "rea", source: reaConfigPath(root), scope: "extension", config: {
           command: reaNode(root, config), args: [installation.entry, "mcp"], cwd: root, enabled: config.enabled,
-          env: Object.fromEntries(Object.entries({ ...reaProcessEnvironment(root, config), ...engineEnvironment(discoverEnginePaths(config.engines)) }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
-          description: "REA · 逆向分析 JavaScript、应用程序与二进制文件", exposure: "codemode",
+          env: Object.fromEntries(Object.entries({ ...reaProcessEnvironment(root, config) }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+          description: "REA · 逆向分析 JavaScript、应用程序与二进制文件 · 自动资源预算", exposure: "codemode", timeout: reaRequestTimeoutSeconds,
         } };
       } catch (error) { result.warning = `内置 REA MCP 未加载：${errorMessage(error, "请重新安装 REA。")}`; }
     }

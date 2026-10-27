@@ -19,7 +19,8 @@ export class MemoryPipeline {
   constructor(private memories: Memories) {
     this.tree = new MemoryTreeStore(memories.store, (_workspaceId, purposes) => {
       const { organizerModel, timeoutMs, readChars } = memories.preferences();
-      const pending = purposes.find(purpose => memories.store.db.prepare("SELECT 1 FROM memory_purposes WHERE id=? AND processedAt IS NULL").get(purpose.id));
+      const unprocessed = memories.store.db.prepare("SELECT 1 FROM memory_purposes WHERE id=? AND processedAt IS NULL");
+      const pending = purposes.find(purpose => unprocessed.get(purpose.id));
       const row = pending && memories.store.db.prepare("SELECT selection FROM agent_sessions WHERE sessionId=?").get(pending.source.sessionId);
       const selection: Selection | undefined = organizerModel ?? (row?.selection ? JSON.parse(String(row.selection)) : undefined);
       return organizationJSON([selection, timeoutMs, readChars, memories.runner?.configurationKey?.(selection) ?? ""]);

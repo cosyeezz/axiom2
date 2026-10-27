@@ -87,6 +87,21 @@ test("AgentViews: cache reload must compare the previous stream before applying 
   assert.equal(events.filter(e => e.scope === threadScope(scope)).length, 1, "a new streaming message publishes its ID after cache eviction");
 });
 
+test("AgentViews: appended input ownership changes invalidate the cached layout", t => {
+  const process = message("earlier", "assistant", true);
+  const input = message("append", "user");
+  const final: ChatMessage = { ...message("final"), phase: "final_answer", status: "completed" };
+  const { views, scope, events } = fixture(t, [process, input, final]);
+  assert.ok(!views.thread(scope).groups?.find(g => g.ids.includes(process.id))?.folded);
+  for (const inputContinuation of [true, undefined]) {
+    events.length = 0;
+    views.messageChanged(scope, { ...input, inputContinuation });
+    assert.equal(events.some(e => e.scope === threadScope(scope)), true);
+    assert.equal(!!views.thread(scope).groups?.find(g => g.ids.includes(process.id))?.folded, !!inputContinuation);
+    views.flush(scope);
+  }
+});
+
 test("threadGroups: invisible assistant placeholders do not split a process", () => {
   for (const text of ["", " ", "\n\t"]) {
     const empty: ChatMessage = { id: "empty", role: "assistant", text, streaming: true };

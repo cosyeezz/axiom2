@@ -1,0 +1,24 @@
+.desktop-workbench-left { flex: 1; min-width: 0; }
+.system-notifications { display: flex; align-items: center; flex: 1; gap: 20px; min-width: 0; }
+.system-notifications-following { display: flex; align-items: center; flex: 1; gap: 20px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.system-notifications-following::-webkit-scrollbar { display: none; }
+.system-notifications-following:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.system-notification { display: flex; align-items: center; flex: none; gap: 10px; min-width: 0; color: var(--fg-2); }
+.system-notification-icon { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.system-notification-message { min-width: 0; white-space: nowrap; line-height: 20px; }
+.system-notification-message strong { font-weight: 500; color: var(--fg); font-variant-numeric: tabular-nums; }
+.desktop-workbench-bar .system-notification button { margin: 0; min-height: 32px; padding: 0 8px; gap: 4px; }
+.desktop-workbench-bar .system-notification .system-notification-action { border: 1px solid var(--border); border-radius: 6px; color: var(--accent); white-space: nowrap; }
+.desktop-workbench-bar .system-notification .system-notification-close { width: 30px; padding: 0; color: var(--muted); }
+.desktop-workbench-bar .system-notification-close svg { width: 14px; height: 14px; }
+.system-notifications-following > .system-notification { animation: system-notification-enter 180ms ease-out both; }
+@keyframes system-notification-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (max-width: 600px) {
+  .system-notifications, .system-notifications-following { gap: 8px; }
+  .system-notification { gap: 6px; }
+  .system-notification-context { display: none; }
+  .system-notification-icon { width: 16px; height: 16px; }
+  .desktop-workbench-bar .system-notification button { padding: 0 5px; }
+  .desktop-workbench-bar .system-notification .system-notification-close { width: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .system-notifications-following > .system-notification { animation: none; } }

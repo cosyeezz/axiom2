@@ -3,7 +3,9 @@ import semver from "semver";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compareEngineVersions, isReaEngineId, type ReaEngineDownload, type ReaEngineId, type ReaEnginePaths } from "../../shared/rea-engines.js";
-import { validEnginePaths } from "./rea-engines.js";
+import { validEnginePaths, discoverEnginePaths, engineEnvironment } from "./rea-engines.js";
+import { discoverReaDependencies, reaDependencyEnvironment } from "./rea-auto-environment.js";
+import { reaAutoBudget, reaBudgetEnvironment } from "./rea-budget.js";
 import { inspectNodeRuntime, validNodeBinding, type NodeRuntimeBinding } from "./managed-node.js";
 import { componentEnvironment } from "./component-environment.js";
 
@@ -85,7 +87,16 @@ export function reaNode(root: string, config = readReaConfig(root)) {
 }
 export function reaProcessEnvironment(root: string, config = readReaConfig(root), source = process.env) {
   const prefix = config.installation ? join(reaDirectory(root), "versions", config.installation.directory) : reaDirectory(root);
-  return componentEnvironment(join(prefix, "environment"), source, dirname(reaNode(root, config)));
+  const env = componentEnvironment(join(prefix, "environment"), source, dirname(reaNode(root, config)));
+  const budget = reaAutoBudget();
+  // Preserve explicit operator choices within the host budget; never register
+  // these variables in the backend/system environment.
+  const automatic = reaBudgetEnvironment(budget);
+  for (const key of Object.keys(automatic)) {
+    const value = Number(env[key]);
+    if (Number.isSafeInteger(value) && value > 0) automatic[key] = String(Math.max(1, Math.min(value, key === "REA_JADX_HEAP_MIB" ? Math.min(4096, budget.heapMaximumMiB) : budget.cpus)));
+  }
+  return { ...env, ...reaDependencyEnvironment(discoverReaDependencies(source)), ...engineEnvironment(discoverEnginePaths(config.engines, source)), ...automatic };
 }
 export function inspectReaProgram(packageRoot: string, version: string) {
   const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));

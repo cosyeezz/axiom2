@@ -31,10 +31,17 @@ export function historyProjection(manager: SessionManager, _source: string, orig
     messages.set(message.id, message);
     if (bucket < buckets.length) buckets[bucket].push(message);
   }
+  // Group digests and the archive revision hash the same messages; serialize each once per build.
+  const json = new Map<string, string>();
+  const encoded = (id: string) => {
+    let value = json.get(id);
+    if (value === undefined) json.set(id, value = JSON.stringify(messages.get(id) ?? null));
+    return value;
+  };
   const digest = (ids: string[]) => {
     const hash = createHash("sha256"), related = new Set(ids);
     for (const id of ids) for (const call of messages.get(id)?.calls ?? []) related.add(`tool-${call.id}`);
-    for (const id of related) hash.update(JSON.stringify(messages.get(id) ?? null));
+    for (const id of related) hash.update(encoded(id));
     return hash.digest("hex").slice(0, 24);
   };
   // Delivery belongs to the complete user turn, not to a physical storage bucket.
@@ -81,6 +88,6 @@ export function historyProjection(manager: SessionManager, _source: string, orig
   const revision = createHash("sha256").update(JSON.stringify(segments));
   const archived = new Set(segments.flatMap(segment => [segment.id, ...segment.messageIds]));
   for (const id of [...archived]) for (const call of messages.get(id)?.calls ?? []) archived.add(`tool-${call.id}`);
-  for (const id of archived) revision.update(JSON.stringify(messages.get(id) ?? null));
+  for (const id of archived) revision.update(encoded(id));
   return { index: { revision: revision.digest("hex"), segments }, messages, bytes };
 }

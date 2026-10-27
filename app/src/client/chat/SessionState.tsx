@@ -64,12 +64,13 @@ function EnvironmentContent({ scope }: { scope: Scope }) {
   useEffect(() => {
     if (hasRuntime || child || !connection.connected) return;
     const controller = new AbortController();
-    setPreview(null);
+    // Keep the previous preview of this session visible while it refreshes; the
+    // component is keyed by session, so it can never show another session's data.
     setError("");
     // Preload on mount, NOT on opening a disclosure or sending the first message.
     void command<SessionEnvironment | null>("agent.environment", {}, scope, crypto.randomUUID(), controller.signal)
       .then(value => { if (!controller.signal.aborted) setPreview(value); })
-      .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "环境预加载失败"); });
+      .catch(reason => { if (!controller.signal.aborted) { setPreview(null); setError(reason instanceof Error ? reason.message : "环境预加载失败"); } });
     return () => controller.abort();
   }, [scope.workspaceId, scope.sessionId, hasRuntime, child, capabilities.revision, preferences.revision,
     connection.connected, connection.generation, attempt]);

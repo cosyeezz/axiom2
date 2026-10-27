@@ -14,9 +14,9 @@ export function kiroText(value: unknown, limit = 512): value is string {
 }
 export function assertKiroChatModel(model: Model<Api>) {
   if (model.provider !== "kiro" || model.api !== "kiro-chat")
-    throw new KiroChatError("Kiro 必须使用原生 kiro-chat 协议；请重新拉取并添加模型，不支持 OpenAI 或旧认证占位协议。");
+    throw new KiroChatError("Kiro 必须使用原生 kiro-chat 协议；请保留原 modelId、账号和代理，手动改为 kiro-chat 后重新拉取目录。登录不会自动迁移，不支持 OpenAI 或旧认证占位协议。");
   if (model.baseUrl && !["https://q.us-east-1.amazonaws.com", "https://q.eu-central-1.amazonaws.com", "https://q.us-east-1.amazonaws.com/", "https://q.eu-central-1.amazonaws.com/"].includes(model.baseUrl))
-    throw new KiroChatError("Kiro 原生推理使用固定 AWS 服务端点，不支持自定义 Base URL。");
+    throw new KiroChatError("Kiro 原生推理使用固定 AWS 服务端点，不支持自定义 Base URL；请保留原 modelId、账号和代理，手动清除地址覆盖，代理应通过供应商代理设置配置。不会向该地址发送令牌。");
   if (!kiroText(model.id)) throw new KiroChatError("Kiro 模型 ID 无效。");
 }
 const alias = (name: string) => /^[a-zA-Z0-9_-]{1,64}$/.test(name) ? name
@@ -99,10 +99,11 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
       } else if (content || toolUses.length) wire.push({ assistantResponseMessage: { content, ...(toolUses.length ? { toolUses } : {}) } });
     } else if (message.role === "user") {
       if (pending.size) {
-        // Cancelling a running tool can leave its completed assistant call in the
-        // native transcript without a result. A new user turn closes that flow.
-        // Omit only outstanding wire calls, never fabricate a result or edit local
-        // history. Paired calls/results and ordinary assistant prose stay intact.
+        // A normalized user boundary is not proof of human cancellation or of
+        // whether a tool ran: custom/summary input can also become a user message.
+        // Omit only outstanding wire calls for protocol continuity, preserving
+        // paired results and the local transcript. Add an explicit safety policy
+        // below; the outcome stays unknown, never fabricated as not executed.
         const index = wire.findLastIndex(item => "assistantResponseMessage" in item), prior = wire[index];
         if (!prior || !("assistantResponseMessage" in prior)) throw new KiroChatError("Kiro 未完成的工具调用缺少助手消息。");
         const assistant = prior.assistantResponseMessage;
@@ -145,7 +146,9 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
   // The CLI protocol has no system role. Preserve the full prompt in the first user message,
   // without inventing an assistant acknowledgement or replacing Axiom's identity/policies.
   const first = [...wire, current].find(item => "userInputMessage" in item) as { userInputMessage: User };
-  if (system) first.userInputMessage.content = `<axiom_system>\n${system}\n</axiom_system>\n\n${first.userInputMessage.content}`;
+  const recoveryPolicy = interruptionNotice.omittedToolCalls ? "[Axiom recovery safety]\nEarlier tool calls have no recorded result. Their execution outcome is unknown, not confirmed as unexecuted. Do not blindly repeat operations with side effects; verify the current state or ask the user before retrying them. A normalized user message does not prove that the earlier operations did not run." : "";
+  const policy = [system, recoveryPolicy].filter(Boolean).join("\n\n");
+  if (policy) first.userInputMessage.content = `<axiom_system>\n${policy}\n</axiom_system>\n\n${first.userInputMessage.content}`;
   current.userInputMessage.modelId = model.id;
   if (tools.length) (current.userInputMessage.userInputMessageContext ??= {}).tools = tools;
   const conversationId = sessionId ? createHash("sha256").update("axiom-kiro-conversation\0" + sessionId).digest("hex").slice(0, 32).replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5") : randomUUID();
@@ -154,16 +157,3 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
 }
 
 export function kiroChatEndpoint(account: KiroCredential) { return `https://runtime.${kiroServiceRegion(account)}.kiro.dev/`; }
-export function kiroChatFailure(status: number): KiroChatError {
-  if (status === 401) return new KiroChatError("Kiro 认证已失效，请重新登录。");
-  if (status === 403) return new KiroChatError("Kiro 账号无权使用所选模型，请检查订阅、组织权限及 profile。");
-  if (status === 429) return new KiroChatError("Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。");
-  return new KiroChatError(`Kiro 聊天请求失败（HTTP ${status}）。`);
-}
-export function kiroStreamFailure(code: string | undefined): KiroChatError {
-  if (code === "ValidationException") return new KiroChatError("Kiro 请求验证失败，请检查消息、所选模型及 profile。");
-  if (code === "ThrottlingException" || code === "ServiceQuotaExceededException") return new KiroChatError("Kiro 请求被限流或额度不足（HTTP 429），请稍后重试。");
-  if (code === "AccessDeniedException") return kiroChatFailure(403);
-  if (code === "InternalServerException") return new KiroChatError("Kiro 服务暂时不可用（HTTP 500），请稍后重试。");
-  return new KiroChatError("Kiro 返回了流式服务错误；未回显原始响应。");
-}

@@ -82,6 +82,45 @@ function metadata(credential: OAuthCredential): Omit<KiroCredential, "type" | "a
   return result;
 }
 
+// Bound both transport and body consumption, including injected transports that
+// ignore AbortSignal. This 2 MiB cap is local hardening, not a service limit.
+function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    pending.then(value => {
+      signal.removeEventListener("abort", abort); resolve(value);
+    }, error => {
+      signal.removeEventListener("abort", abort); reject(error);
+    });
+  });
+}
+async function authResponse(response: Response, signal: AbortSignal): Promise<Json> {
+  const reader = response.body?.getReader();
+  if (!reader) throw Error("Kiro 认证响应为空。");
+  try {
+    const maxBytes = 2 * 1024 * 1024;
+    if (Number(response.headers.get("content-length")) > maxBytes) throw Error("Kiro 认证响应过大。");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      signal.throwIfAborted();
+      const { done, value } = await abortable(reader.read(), signal);
+      signal.throwIfAborted();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw Error("Kiro 认证响应过大。");
+      chunks.push(value);
+    }
+    return object(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))));
+  } finally {
+    // Never await an uncooperative stream's cancel promise after the deadline.
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 export function kiroOAuth(options: {
   fetch?: typeof fetch;
   loginTimeoutMs?: number;
@@ -96,17 +135,21 @@ export function kiroOAuth(options: {
     bounded.throwIfAborted();
     let response: Response;
     try {
-      response = await (options.fetch ?? globalThis.fetch)(url, {
+      const pending = (options.fetch ?? globalThis.fetch)(url, {
         method: "POST", redirect: "error", signal: bounded,
         headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body),
       });
+      void pending.then(late => {
+        if (bounded.aborted) void late.body?.cancel().catch(() => {});
+      }).catch(() => {});
+      response = await abortable(pending, bounded);
     } catch {
       signal.throwIfAborted();
       throw new Error("Kiro 认证网络请求失败或超时，请检查网络后重试。");
     }
     bounded.throwIfAborted();
     let data: Json;
-    try { data = object(await response.json()); }
+    try { data = await authResponse(response, bounded); }
     catch {
       bounded.throwIfAborted();
       throw new Error(`Kiro 认证响应无效（HTTP ${response.status}）。`);

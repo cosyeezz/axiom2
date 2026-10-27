@@ -1,0 +1,14 @@
+.provider-heading-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;min-width:0}
+.provider-heading-title>h2{min-width:0;max-width:100%}
+.provider-usage{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%;font-size:11px;color:var(--fg-2)}
+.provider-usage-metrics{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-width:0}
+.provider-usage-metric{display:inline-flex;align-items:baseline;gap:4px;max-width:100%;overflow-wrap:anywhere}
+.provider-usage-metric>span{color:var(--muted)}
+.provider-usage-metric>strong{font-weight:500;overflow-wrap:anywhere;min-width:0}
+.provider-usage-note{color:var(--muted);font-size:11px;min-width:0;max-width:44ch;overflow-wrap:anywhere;white-space:normal}
+.provider-usage-link{max-width:100%;overflow-wrap:anywhere;color:var(--accent);text-underline-offset:2px}
+.provider-usage[data-stale=true] .provider-usage-metric{opacity:.65}
+.provider-usage-refresh{flex-shrink:0;width:28px;height:28px;min-height:28px;color:var(--muted)}
+.provider-usage-refresh .ui-glyph{width:13px;height:13px}
+.models-workspace .provider-heading-copy{flex:1}
+@container (max-width:520px){.provider-heading-title{gap:4px 10px}.provider-usage{flex-basis:100%}.provider-usage-metrics{gap:4px 8px}}

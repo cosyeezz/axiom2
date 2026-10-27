@@ -17,7 +17,7 @@ import { TaskRecords } from "../src/server/tasks/records.js";
 import { startServer } from "../src/server/index.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 import { running } from "../src/shared/agent.js";
-import { parseMemory, memoryComplete } from "../src/shared/memory.js";
+import { parseMemory, memoryComplete, memoryInstruction } from "../src/shared/memory.js";
 const waitFor = async (check: () => boolean, message: string, timeout = 20000, signal?: AbortSignal) => {
   const end = Date.now() + timeout;
   while (!check()) {
@@ -61,6 +61,15 @@ test(
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw);
+      const system = (body.messages ?? []).filter((message: any) => ["system", "developer"].includes(message.role))
+        .map((message: any) => typeof message.content === "string" ? message.content : JSON.stringify(message.content)).join("\n");
+      if (system.includes("为会话生成简明标题")) {
+        // Optional title generation shares this endpoint but is not a main
+        // execution request. Never let its timing shift tool/cancel barriers.
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end(`data: ${JSON.stringify({ id: "title", object: "chat.completion.chunk", model: "fixture", choices: [{ index: 0, delta: { role: "assistant", content: "工具验证" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       requests.push(body);
       count++;
       if (count === 3 || count === 4) {
@@ -265,16 +274,22 @@ test(
       await assert.rejects(call("prompt", { text: "no model" }), {
         code: "MODEL_UNAVAILABLE",
       });
-      await assert.rejects(
-        call("agent.model", {
-          selection: {
-            provider: "unconfigured",
-            id: "fixture",
-            thinking: "off",
-          },
-        }),
-        { code: "MODEL_UNAVAILABLE" },
-      );
+      // Selection is intent, and prompt acceptance is not model success. Check the
+      // failed run on a separate new fixture session, without polluting main history.
+      const unavailableSelection = { provider: "unconfigured", id: "fixture", thinking: "off" };
+      const unavailableSession = app.store.execute({ requestId: randomUUID(), op: "session.create", workspaceId: w.id }) as Session;
+      const unavailableScope: Scope = { workspaceId: w.id, sessionId: unavailableSession.id };
+      await call("agent.model", { selection: unavailableSelection }, unavailableScope);
+      assert.deepEqual(app.agents.info(unavailableScope).selection, unavailableSelection);
+      await call("prompt", { text: "unavailable model must not execute" }, unavailableScope);
+      await wait(() => app.agents.info(unavailableScope).run?.status === "failed", "unavailable intent must settle as a failed run");
+      const unavailableRun = app.agents.info(unavailableScope).run!;
+      // A local initialization/stream throw is EXECUTION_ERROR, not a native
+      // assistant error event. Either way it must preserve intent and make no HTTP request.
+      assert.equal(unavailableRun.reasonCode, "EXECUTION_ERROR");
+      assert.deepEqual(unavailableRun.selection, unavailableSelection);
+      assert.ok(unavailableRun.error, "failed unavailable intent must report a reason");
+      assert.equal(requests.length, 0, "unavailable intent must not send a request to another model");
       await call("agent.model", {
         selection: {
           provider: "axiom-product-fixture",
@@ -336,13 +351,10 @@ test(
       assert.equal(memoryComplete(app.agents.memories.view(scope).progress), true);
       const assertMemoryPrompt = (request: any, path: string) => {
         const system = request.messages.filter((message: any) => message.role === "system").map((message: any) => JSON.stringify(message.content)).join("\n");
-        assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), "actual provider payload includes the bound memory path");
-        assert.match(system, /Actively maintain this session's memory/);
-        assert.match(system, /Before a final response, compaction, or handoff, check that statuses and details match reality/);
-        assert.match(system, /Each task tree consists only of nested headings with statuses/);
-        assert.match(system, /Failed: this task or independent attempt has ended/);
+        assert.ok(system.includes(JSON.stringify(path).slice(1, -1)), `actual provider payload includes the bound memory path: expected ${path}; observed ${system.match(/Session memory file:[^\\n]+/)?.[0] ?? system.slice(0, 180)}`);
+        assert.ok(system.includes(JSON.stringify(memoryInstruction(path)).slice(1, -1)),
+          "actual provider payload includes the complete current memory instruction");
         assert.doesNotMatch(system, /memory_detail/);
-        assert.match(system, /Detail files follow the task hierarchy/);
         assert.doesNotMatch(system, /RULES\.md/);
       };
       assertMemoryPrompt(requests[0], memoryPath);
@@ -538,11 +550,10 @@ test(
       });
       assert.equal(app.agents.info(otherScope).run!.status, "cancelled");
       assert.ok(!("cleanup" in app.agents.info(otherScope).run!));
-      await assert.rejects(
-        call("prompt", { text: "deleted model cannot execute" }, otherScope),
-        { code: "MODEL_UNAVAILABLE" },
-      );
-      assert.equal(count, 9);
+      await call("prompt", { text: "deleted model cannot execute" }, otherScope);
+      await wait(() => !app.agents.active(otherScope), "deleted model request did not settle");
+      assert.equal(app.agents.info(otherScope).run?.status, "failed");
+      assert.equal(count, 9, "a deleted model cannot silently use another endpoint");
       // Crash recovery marks the record interrupted, without a cleanup confirmation gate.
       app.store.db
         .prepare(

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Select } from "../Select.js";
 import { Dialog } from "../components.js";
-import { command, useConnection, useScope } from "../transport.js";
+import { command, useConnectionState, useScope } from "../transport.js";
 import type { AuthState, ProviderProxy } from "../../shared/models.js";
+import { usageAuthScope } from "../../shared/model-usage.js";
 
 export function ModelLogin({
   providerId,
@@ -10,6 +11,7 @@ export function ModelLogin({
   revision,
   proxy,
   inline = false,
+  context = "models",
   onComplete,
   close,
 }: {
@@ -18,13 +20,16 @@ export function ModelLogin({
   revision: string;
   proxy?: ProviderProxy;
   inline?: boolean;
+  context?: "models" | "usage";
   onComplete: () => void;
   close: () => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (inline) heading.current?.focus(); }, [inline]);
-  const event = useScope<AuthState | null>("authentication", null),
-    connection = useConnection();
+  const prefix = context === "usage" ? "usage.auth" : "auth";
+  const event = useScope<AuthState | null>(context === "usage" ? usageAuthScope : "authentication", null),
+    connection = useConnectionState();
+  const initialGeneration = useRef(connection.generation);
   const [id, setId] = useState(""),
     [answer, setAnswer] = useState(""),
     [error, setError] = useState("");
@@ -37,8 +42,8 @@ export function ModelLogin({
   completion.current = onComplete;
   const [lostConnection, setLostConnection] = useState(false);
   useEffect(() => {
-    if (connection !== "已连接本地服务") setLostConnection(true);
-  }, [connection]);
+    if (!connection.connected || connection.generation !== initialGeneration.current) setLostConnection(true);
+  }, [connection.connected, connection.generation]);
   const active = useRef(true);
   const started = useRef<Promise<{ id: string }> | null>(null);
   const startRequest = useRef(crypto.randomUUID());
@@ -48,7 +53,7 @@ export function ModelLogin({
     active.current = true;
     let flow = "";
     started.current = command<{ id: string }>(
-      "auth.start",
+      `${prefix}.start`,
       { providerId, type, revision, ...(proxy ? { proxy } : {}) },
       {},
       startRequest.current,
@@ -57,26 +62,26 @@ export function ModelLogin({
       .then((result) => {
         flow = result.id;
         if (active.current) setId(flow);
-        else void command("auth.cancel", { id: flow }).catch(() => {});
+        else void command(`${prefix}.cancel`, { id: flow }).catch(() => {});
       })
       .catch((e) => {
         if (active.current) setError(e.message);
       });
     return () => {
       active.current = false;
-      if (flow) void command("auth.cancel", { id: flow }).catch(() => {});
+      if (flow) void command(`${prefix}.cancel`, { id: flow }).catch(() => {});
     };
   }, []);
   useEffect(() => {
     setAnswer("");
     setBusy(false);
   }, [state?.prompt?.id]);
-  const disconnected = lostConnection || connection !== "已连接本地服务";
+  const disconnected = lostConnection || !connection.connected || connection.generation !== initialGeneration.current;
   const openBrowser = async () => {
     setOpening(true);
     setError("");
     try {
-      await command("auth.open", { id });
+      await command(`${prefix}.open`, { id });
       if (active.current && !completed.current) setBrowserMessage("已请求系统浏览器打开登录页；完成授权后返回此处。");
     } catch (e) {
       if (active.current && !completed.current) setError((e as Error).message);
@@ -113,7 +118,7 @@ export function ModelLogin({
           if (["not_found", "failed"].includes(receipt.status)) return null;
           throw Error("登录受理状态待核实；请稍后再次取消，不会重新登录。");
         });
-        if (flow) await command("auth.cancel", { id: flow.id });
+        if (flow) await command(`${prefix}.cancel`, { id: flow.id });
       }
       close();
     } catch (e) {
@@ -125,7 +130,7 @@ export function ModelLogin({
   };
   const authFailed = !!error || disconnected || state?.status === "failed";
   const canInteract = state?.status === "running" && !disconnected && !closing;
-  const title = `${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerId}`;
+  const title = context === "usage" ? "独立用量授权 · Codex" : `${type === "oauth" ? "OAuth" : "API Key"} 登录 · ${providerId}`;
   const content = (
     <>
       <p role={authFailed ? "alert" : "status"} className={`auth-status${authFailed ? " auth-error" : ""}`} data-state={authFailed ? "failed" : state?.status || "starting"}>
@@ -166,7 +171,7 @@ export function ModelLogin({
             setBusy(true);
             setError("");
             try {
-              await command("auth.answer", {
+              await command(`${prefix}.answer`, {
                 id,
                 promptId: state.prompt!.id,
                 answer,

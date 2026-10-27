@@ -3,10 +3,12 @@ import { Lru } from "../shared/lru.js";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { Scope } from "../shared/protocol.js";
 import type { Compression } from "../shared/compression.js";
-import { sumCosts, type CostCategory, type CostReport, type CostRow, type CostTotals } from "../shared/costs.js";
+import { nativeCompactionAttemptKind, sumCosts, type CostCategory, type CostReport, type CostRow, type CostTotals } from "../shared/costs.js";
 import type { Store } from "./storage.js";
 import { openTranscript } from "./transcript.js";
 import { usageCost } from "./usage-cost.js";
+import { nativeCompactionCost } from "./native-compaction-usage.js";
+import { kiroCompactionAttemptKind } from "../shared/kiro-usage.js";
 
 /** Read-only accounting over native history; independent from current context projection. */
 export class Costs {
@@ -35,6 +37,8 @@ export class Costs {
     });
     return JSON.stringify([root.title, children, sources]);
   }
+  /** Non-consuming cache fingerprint; independent from live per-session invalidations. */
+  version(requested: Scope): string { return this.sourceVersion(this.owner(requested)); }
   changed(requested: Scope): boolean {
     const scope = this.owner(requested), key = JSON.stringify(scope);
     const version = this.sourceVersion(scope), previous = this.versions.get(key);
@@ -72,7 +76,7 @@ export class Costs {
       const applied = new Set<string>();
       let entries: SessionEntry[] = [];
       if (stored?.file) {
-        try { entries = openTranscript(String(stored.file), this.store.workspace(scope.workspaceId).path).getEntries(); }
+        try { entries = openTranscript(String(stored.file), this.store.workspace(scope.workspaceId).path, { readOnly: true }).getEntries(); }
         catch {
           warnings.push(`${session.title}：原始用量记录不可读取，费用不完整。`);
           add(session.taskId ? "subagent" : "main", "unavailable", "记录不可读取", usageCost(null));
@@ -86,7 +90,7 @@ export class Costs {
         if (entry.type === "message") {
           const message = entry.message;
           if (message.role === "assistant") {
-            add(session.taskId ? "subagent" : "main", "agent", session.title, usageCost(message.usage), message.provider ?? null, message.responseModel ?? message.model ?? null);
+            add(session.taskId ? "subagent" : "main", "agent", session.title, usageCost(message.usage, message.responseModel ?? message.model), message.provider ?? null, message.responseModel ?? message.model ?? null);
           } else if (message.role === "toolResult" && message.usage) {
             // Tool usage is independent from the parent assistant request. Never infer
             // a tool's model from the main agent's selected model.
@@ -97,19 +101,22 @@ export class Costs {
           const jobId = typeof details?.axiomCompressionId === "string" ? details.axiomCompressionId : null;
           if (jobId && applied.has(jobId)) continue;
           if (jobId) applied.add(jobId);
-          const job = jobId ? jobs.get(jobId) : undefined;
-          const totals = job?.billing ?? (entry.usage ? usageCost(entry.usage) : job ? this.jobUsage(job) : usageCost(null));
+          const job = jobId ? jobs.get(jobId) : undefined, native = entry.type === "compaction" ? nativeCompactionCost(entry.usage, details) : undefined;
+          const model = job?.selection.id ?? native?.model, provider = job?.selection.provider ?? native?.provider;
+          const totals = job?.billing ?? (entry.usage ? job ? usageCost(entry.usage, model) : native?.totals ?? usageCost(entry.usage) : job ? this.jobUsage(job) : usageCost(null));
           add("compression", jobId ?? entry.id, job ? this.jobLabel(job) : entry.type === "branch_summary" ? "分支摘要" : "原生压缩",
-            totals, job?.selection.provider ?? null, job?.selection.id ?? null, "已应用", job?.startedAt ?? Date.parse(entry.timestamp));
+            totals, provider ?? null, model ?? null, "已应用", job?.startedAt ?? Date.parse(entry.timestamp));
         } else if (entry.type === "usage") {
           const tool = entry.kind.startsWith("tool:") ? entry.kind.slice(5) : null;
-          add(tool ? "tool" : "other", entry.kind, tool || entry.kind, usageCost(entry.usage), entry.provider, entry.model);
+          const summaryAttempt = entry.kind === kiroCompactionAttemptKind || entry.kind === nativeCompactionAttemptKind;
+          add(summaryAttempt ? "compression" : tool ? "tool" : "other", entry.kind,
+            summaryAttempt ? "原生压缩未合并请求" : tool || entry.kind, usageCost(entry.usage, entry.model), entry.provider, entry.model);
         }
       }
       if (this.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_usage'").get()) {
         for (const row of this.store.db.prepare("SELECT * FROM memory_usage WHERE sessionId=?").all(session.id)) {
           const query = row.kind === "query";
-          add(query ? "tool" : "other", row.kind === "title" ? "session_title" : query ? "memory_query" : "memory_organize", row.kind === "title" ? "会话标题" : query ? "记忆查询" : "后台记忆整理", usageCost(row.usage ? JSON.parse(String(row.usage)) : null), row.provider ? String(row.provider) : null, row.model ? String(row.model) : null);
+          add(query ? "tool" : "other", row.kind === "title" ? "session_title" : query ? "memory_query" : "memory_organize", row.kind === "title" ? "会话标题" : query ? "记忆查询" : "后台记忆整理", usageCost(row.usage ? JSON.parse(String(row.usage)) : null, row.model), row.provider ? String(row.provider) : null, row.model ? String(row.model) : null);
         }
       }
       for (const [id, job] of jobs) {
@@ -128,10 +135,17 @@ export class Costs {
   private jobLabel(job: Compression) {
     return job.trigger === "auto" ? "自动压缩" : "后台压缩";
   }
-  private jobUsage(job: Compression): CostTotals {
+  private jobUsage(job: Compression): CostTotals { return compressionCost(job); }
+}
+/** Shared by session accounting and the per-entry usage ledger; never reprice history. */
+export function compressionCost(job: Compression): CostTotals {
     if (job.billing) return job.billing;
     if (!job.usage) return usageCost(null);
+    // New Kiro projections retain measurement provenance even for zero/unknown.
+    // Never infer missing cache parts on old jobs or reprice historical requests.
+    if (job.selection.provider === "kiro" && job.usage.axiomKiro)
+      return usageCost({ input: job.usage.input, output: job.usage.output, cacheRead: job.usage.cacheRead,
+        cacheWrite: job.usage.cacheWrite, axiomKiro: job.usage.axiomKiro, cost: job.usage.costParts ?? { total: job.usage.cost } });
     // Old jobs retained input/output and total cost, but not cache components.
     return usageCost({ input: job.usage.input, output: job.usage.output, cost: { total: job.usage.cost } });
-  }
 }

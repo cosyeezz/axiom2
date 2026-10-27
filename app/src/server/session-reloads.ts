@@ -7,7 +7,6 @@ import type { Agents } from "./agents.js";
 import type { WorkerInput } from "./agent-worker.js";
 import { sameLease } from "./execution-protocol.js";
 import { fileRevision } from "./execution-profile.js";
-import { configuration } from "./models.js";
 import { memoryDirectory } from "./memory-files.js";
 import { errorMessage } from "./error-message.js";
 import { AppError, object, type Command, type Scope } from "../shared/protocol.js";
@@ -188,12 +187,10 @@ export class SessionReloads {
       if (controller.signal.aborted || !agents.store.workspace(scope.workspaceId).authorized) throw Error("重载已停止。");
       if (agents.executing(scope)) throw Error("会话已开始其他执行，未重载。");
     };
-    const prepared = await agents.models.serial(async () => {
+    const prepared = await (async () => {
       check();
-      const config = await configuration(agents.store.root), selection = agents.info(scope).selection;
-      if (config.error) throw Error(config.error);
-      if (!selection || !config.available.some(model => model.provider === selection.provider && model.id === selection.id && model.levels.includes(selection.thinking)))
-        throw Error("请先选择已配置、已认证的模型；重载不会发起模型请求。");
+      const selection = agents.info(scope).selection;
+      if (!selection) throw Error("请先选择模型；重载不会发起模型请求。");
       const child = agents.store.db.prepare("SELECT id FROM tasks WHERE sessionId=?").get(scope.sessionId);
       const task = child ? { id: String(child.id), inputIds: [] } : undefined;
       const capabilities = task ? undefined : await agents.capabilities.prepare(scope, true, undefined, job.selection);
@@ -208,7 +205,7 @@ export class SessionReloads {
       }
       const raw = await agents.models.raw(); check();
       return { selection, task, capabilities, file, raw };
-    }, controller.signal);
+    })();
     check();
     const environment = await agents.profiles.prepareAsync({ entry: "agent", cwd, modelDir: agents.models.dir, modelsRaw: prepared.raw,
       selection: prepared.selection, capabilities: prepared.capabilities?.runtime, mode: agents.pool.mode }, controller.signal);

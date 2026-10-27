@@ -1,7 +1,7 @@
 import "./pi-settings-storage.js";
 import { getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { AppError } from "../shared/protocol.js";
-import { modelProxyRevision, providerProxyUrl, parseProviderProxy } from "./integrations/model-proxy-env.js";
+import { executionModelsRaw } from "./execution-model-config.js";
 import { capabilityFileDigest, type CapabilityRuntime } from "./capability-resources.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -70,7 +70,7 @@ export class ExecutionProfiles {
     this.directory = join(root, "execution-models");
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     // Store's service lock protects this data root. Never clean the shared pi directory.
-    for (const name of readdirSync(this.directory)) if (/^[a-f0-9]{64}(?:\.[a-f0-9-]{36})?\.json$/.test(name)) rmSync(join(this.directory, name), { force: true });
+    for (const name of readdirSync(this.directory)) if (/^(?:[a-f0-9]{64}(?:\.[a-f0-9-]{36})?|[a-f0-9-]{36}\.live)\.json$/.test(name)) rmSync(join(this.directory, name), { force: true });
   }
   private initializeAgent(input: EnvironmentInput): boolean {
     if (input.entry !== "agent") return true;
@@ -103,10 +103,12 @@ export class ExecutionProfiles {
   private prepareWithResources(input: EnvironmentInput, captured?: { version: string; verifiable: boolean }, ready = true): PreparedEnvironment {
     const source = import.meta.url.endsWith(".ts");
     const workerPath = fileURLToPath(new URL(`./${input.entry === "agent" ? "agent" : input.entry === "memory" ? "memory" : "compression"}-worker.${source ? "ts" : "js"}`, import.meta.url));
-    const modelDigest = digest(stable(JSON.parse(input.modelsRaw)));
-    const modelFiles = ["models.json", "auth.json", "models-store.json"].map(name => join(input.modelDir, name));
-    const modelRevisions = modelFiles.map(jsonRevision);
-    const configRevision = digest(stable(modelRevisions));
+    input = { ...input, modelsRaw: executionModelsRaw(input.modelsRaw, input.selection?.provider) };
+    const modelRevision = (raw: string) => { try { return digest(stable(JSON.parse(raw))); } catch { return digest(raw); } };
+    const modelDigest = modelRevision(input.modelsRaw);
+    // A captured model definition is a reuse key, never proof that live config,
+    // credentials or catalogs have remained unchanged.
+    const configRevision = modelDigest;
     const settingsFiles = [join(this.root, "pi", "settings.json"), join(input.cwd, ".pi", "settings.json")];
     const settings = input.entry === "agent" ? settingsFiles.map(jsonRevision) : [];
     const localResources = () => {
@@ -125,19 +127,16 @@ export class ExecutionProfiles {
     try { localResources(); resourceVersion = captured?.version ?? resources(); verifiable = captured?.verifiable ?? true; }
     catch { resourceVersion = randomUUID(); verifiable = false; }
     const provider = input.selection?.provider;
-    // Resolve before admission so a stopped built-in entry fails without sending a model request.
-    if (provider) providerProxyUrl(this.root, parseProviderProxy(JSON.parse(input.modelsRaw).providers?.[provider]?.axiomProxy));
-    const proxyRevision = digest(modelProxyRevision(this.root));
     const env = { ...process.env, AXIOM_PI_DIR: input.modelDir, AXIOM_MODEL_PROVIDER: provider ?? "" };
     const execArgv = source ? ["--import", import.meta.resolve("tsx")] : [];
     const reuse: ReuseMode = input.entry === "agent" ? (verifiable && ready ? "same-session" : "single-use") : input.entry === "memory" && input.mode === "D" ? "cross-binding" : "single-use";
     const profileHash = digest(stable({ schema: 1, adapter: 1, build: contentRevision(workerPath), sdk: sdkVersions, node: process.version,
       entry: input.entry, reuse, cwd: canonicalPath(input.cwd), agentDir: resolve(this.root, "pi"),
       modelDir: canonicalPath(input.modelDir), env, execArgv, modelDigest, configRevision, settings, resourceVersion,
-      selection: input.entry === "agent" ? input.selection : null, provider, proxyRevision, capabilities: input.capabilities ?? null }));
+      selection: input.entry === "agent" ? input.selection : null, provider, capabilities: input.capabilities ?? null }));
     let snapshot = this.snapshots.get(modelDigest);
     if (snapshot) {
-      try { snapshot.valid = snapshot.valid && jsonRevision(snapshot.path) === modelDigest; }
+      try { snapshot.valid = snapshot.valid && modelRevision(readFileSync(snapshot.path, 'utf8')) === modelDigest; }
       catch { snapshot.valid = false; }
       if (!snapshot.valid) snapshot = undefined;
     }
@@ -148,25 +147,15 @@ export class ExecutionProfiles {
     }
     snapshot.refs++;
     const owned = snapshot;
-    const modelChecks = ['models', 'auth', 'models_store'] as const;
     const current = (checkResources = true, onReject?: RejectionObserver) => {
-      let check: ExecutionRejection['check'] = 'model_config', resource: ExecutionRejection['resource'];
+      let check: ExecutionRejection['check'] = 'capability_file', resource: ExecutionRejection['resource'];
       let scanRejection: Readonly<ExecutionRejection> = { check: 'resource_scan', cause: 'other' };
       try {
-        // Keep the original eager model reads and subsequent short-circuit order.
-        const revisions = modelFiles.map((file, index) => { check = modelChecks[index]; return jsonRevision(file); }), currentModels = revisions[0];
-        check = 'capability_file';
         if (!(input.capabilities?.files.every(file => {
           const name = basename(file.path);
           resource = name === 'settings.json' ? 'settings' : name === 'mcp.json' ? 'mcp' : name === 'SKILL.md' ? 'skills' : 'other';
           return capabilityFileDigest(file.path) === file.digest;
         }) ?? true)) return rejectExecution(onReject, { check, resource });
-        check = 'models';
-        if ((currentModels === 'missing' ? digest(stable({providers:{}})) : currentModels) !== modelDigest) return rejectExecution(onReject, { check });
-        check = 'model_config';
-        if (configRevision !== digest(stable(revisions))) return rejectExecution(onReject, { check: modelChecks[revisions.findIndex((value, index) => value !== modelRevisions[index])] ?? check });
-        check = 'proxy';
-        if (proxyRevision !== digest(modelProxyRevision(this.root))) return rejectExecution(onReject, { check });
         if (input.entry === 'agent') {
           check = 'settings';
           if (stable(settingsFiles.map(jsonRevision)) !== stable(settings)) return rejectExecution(onReject, { check });
@@ -195,7 +184,7 @@ export class ExecutionProfiles {
         } catch { return rejectExecution(onReject, signal?.aborted ? { check: 'aborted', stage: 'post_io' } : scanRejection); }
       },
       snapshotValid: (onReject?: RejectionObserver) => {
-        try { return owned.valid && jsonRevision(owned.path) === modelDigest || rejectExecution(onReject, { check: 'snapshot' }); }
+        try { return owned.valid && modelRevision(readFileSync(owned.path, 'utf8')) === modelDigest || rejectExecution(onReject, { check: 'snapshot' }); }
         catch { return rejectExecution(onReject, { check: 'snapshot' }); }
       },
       retain: () => { if (owned.refs <= 0) throw Error("Execution snapshot already released"); owned.refs++; },

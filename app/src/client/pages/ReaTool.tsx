@@ -1,3 +1,4 @@
+import { operationFeedback } from "../operation-feedback.js";
 import { Icon } from "../Icon.js";
 import { BackendMaintenance } from "../maintenance/BackendMaintenance.js";
 import { BuiltinRecovery } from "./BuiltinRecovery.js";
@@ -12,7 +13,7 @@ export function ReaTool({ active }: { active: boolean }) {
   const state = useScope("builtin-tools:rea", emptyReaState);
   const connection = useConnectionState();
   const maintenance = useScope("maintenance", emptyMaintenanceState);
-  const [requests, setRequests] = useState<{ id: number; resource: string }[]>([]);
+  const [requests, setRequests] = useState<{ id: number; resource: string; op: string }[]>([]);
   const requestIds = useRef(0), latestRequest = useRef(new Map<string, number>());
   const [feedbacks, setFeedbacks] = useState<Record<string, ReaFeedback>>({});
   const jobs = state.jobs ?? (state.job ? [state.job] : []);
@@ -39,7 +40,7 @@ export function ReaTool({ active }: { active: boolean }) {
     const resource = typeof params.engine === "string" ? `rea:${params.engine}` : "rea";
     const id = ++requestIds.current;
     latestRequest.current.set(resource, id);
-    setRequests(previous => [...previous, { id, resource }]);
+    setRequests(previous => [...previous, { id, resource, op }]);
     setFeedbacks(previous => { const next = { ...previous }; delete next[resource]; return next; });
     let jobId = jobs.find(job => (job.engine ? `rea:${job.engine}` : "rea") === resource)?.id;
     const report = (value: Omit<ReaFeedback, "jobId">) => {
@@ -67,7 +68,7 @@ export function ReaTool({ active }: { active: boolean }) {
     <div className="detail-heading row-between"><div><h2 id="rea-heading">REA</h2><p className="meta">Reverse Engineer Anything · 分析 JavaScript、应用程序和二进制文件。</p></div><span className="tag">{state.version ? "已安装" : "待安装"}</span></div>
     <div className="tools-content">
       <div className="tools-feedback" aria-live="polite">
-        {error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || coreJob?.message || "安装官方 REA 后，技能与 MCP 会一起加入能力列表。"}</p>}
+        {requests.length > 0 ? <p role="status">{operationFeedback(requests.at(-1)!.op)}</p> : error ? <p className="tools-error" role="alert">{error}</p> : <p role="status">{feedback?.text || coreJob?.message || "安装官方 REA 后，技能与 MCP 会一起加入能力列表。"}</p>}
         {!connection.connected && <p>连接已断开；重连后读取当前操作进度。</p>}
       </div>
       <BackendMaintenance resource="rea" label="REA" showError={!reportedErrorResources.includes("rea")} location="所连接后台 · 应用级 · Axiom 独立管理">
@@ -116,6 +117,21 @@ export function ReaTool({ active }: { active: boolean }) {
         <div className="section-heading"><h3 id="rea-config-heading">默认使用</h3></div>
         <label className="tools-toggle"><input type="checkbox" checked={choice?.revision === state.revision ? choice.enabled : state.enabled} disabled={busy || !state.version} onChange={e => { setChoice({ revision: state.revision, enabled: e.target.checked }); void action("rea.save", { enabled: e.target.checked, revision: state.revision }); }} /><span><strong>默认启用 REA</strong><small>新会话默认选用已安装的 Skill 与 MCP；会话及全局能力选择优先。</small></span></label>
         <p className="field-help tools-help">更新或重装 REA 会保留两个组件的安装选择。已有会话请在「技能与 MCP」面板调整选择后重新加载；无同名回退资源时，请取消失效的选择。卸载不会中断正在执行的任务。</p>
+      </section>
+      <section className="section tools-section" aria-labelledby="rea-auto-heading">
+        <div className="section-heading row-between"><div><h3 id="rea-auto-heading">环境与资源</h3><p>自动发现已安装依赖，按可用资源分配分析预算。</p></div><span className="tag">自动</span></div>
+        <p className="field-help">无需手动登记环境变量。仅注入 REA 专用进程，不修改系统环境；不会自动安装软件、提供许可证或执行目标程序。</p>
+        {state.autoEnvironment && state.autoEnvironment.budget.heapMaximumMiB < 128 && <p className="tools-error" role="alert">当前可用内存不足以安全启动 REA。请等待其他任务完成后重新加载能力。</p>}
+        {state.autoEnvironment && <details className="tools-diagnostic"><summary>资源详情</summary>
+          <dl className="tools-facts">
+            <div><dt>当前参考预算</dt><dd>堆 {state.autoEnvironment.budget.heapMiB} MiB · 上限 {state.autoEnvironment.budget.heapMaximumMiB} MiB · JADX 最多 {state.autoEnvironment.budget.cpus} 个处理器</dd></div>
+            <div><dt>分析时限</dt><dd>按目标规模分配，单步最多 {state.autoEnvironment.budget.operationMaximumMs / 60_000} 分钟；排队、调整与重试合计最多 {state.autoEnvironment.budget.totalDeadlineMs / 60_000} 分钟</dd></div>
+            <div><dt>并发与重试</dt><dd>同一后台跨会话串行；仅已审计版本的正则查询可安全升档，最多重试一次</dd></div>
+          </dl>
+          <p className="field-help">以上为当前机器的通用参考值，实际调用时重新计算，不代表已启动 JADX 的 JVM 配置。工具调用记录显示生效预算及调整原因；预算不是整个引擎的操作系统级内存硬限制。</p>
+          {state.autoEnvironment.dependencies.length ? <ul>{state.autoEnvironment.dependencies.map(item => <li key={item.variable}><code>{item.variable}</code> · {item.source === "environment" ? "已有环境配置" : "自动发现"} · <LocalPath path={item.path} /></li>)}</ul> : <p className="field-help">未发现额外可选工具；托管引擎见下方配套组件。路径发现不代表版本、许可或实际分析已验证。</p>}
+        </details>}
+        <p className="field-help tools-help">新策略随会话启动或能力重载生效，不打断已有分析。超时、取消或清理未完成时不会盲目重复任务。</p>
       </section>
       <ReaEngines state={state} busy={busy} blocked={blocked} sending={requests.map(item => item.resource)} feedback={feedbackByResource} action={action} reportedErrorResources={reportedErrorResources} />
       <section className="section tools-section" aria-labelledby="rea-doctor-heading">

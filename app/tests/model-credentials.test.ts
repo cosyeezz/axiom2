@@ -25,7 +25,7 @@ const definition = (apiKey?: string) => ({ api: "openai-completions", baseUrl: "
 const config = (service: ModelService, providers: object) => writeFileSync(join(service.dir, "models.json"), JSON.stringify({ providers, preserved: "metadata" }));
 const auth = (service: ModelService) => JSON.parse(readFileSync(join(service.dir, "auth.json"), "utf8"));
 
-test("configuration reads migrate legacy expressions, prefer stored credentials, preserve OAuth and are idempotent", async () => {
+test("explicit migration reads migrate legacy expressions, prefer stored credentials, preserve OAuth and are idempotent", async () => {
   await fixture(async service => {
     config(service, { legacy: definition("$AXIOM_MIGRATION_TEST_KEY"), both: definition("OLD"), oauth: definition("OLD-OAUTH-KEY") });
     const oauth = { type: "oauth", access: "OAUTH-ACCESS", refresh: "OAUTH-REFRESH", expires: Date.now() + 3_600_000 };
@@ -33,7 +33,7 @@ test("configuration reads migrate legacy expressions, prefer stored credentials,
     const previous = process.env.AXIOM_MIGRATION_TEST_KEY;
     process.env.AXIOM_MIGRATION_TEST_KEY = "RESOLVED";
     try {
-      const [first, second] = await Promise.all([service.read(), service.read()]);
+      const [first, second] = await Promise.all([service.read({ normalizeCredentials: true }), service.read({ normalizeCredentials: true })]);
       assert.equal(first.revision, second.revision);
       assert.equal(auth(service).legacy.key, "$AXIOM_MIGRATION_TEST_KEY");
       assert.deepEqual(auth(service).both, { type: "api_key", key: "AUTH-WINS", env: { FIXTURE: "kept" } });
@@ -64,7 +64,7 @@ test("failed credential persistence or a concurrent models edit never removes th
       runtime.login = async () => ({ type: "api_key", key: "KEEP-ON-FAILURE" });
       return runtime;
     };
-    await assert.rejects(service.read(), { code: "CREDENTIAL_NOT_PERSISTED" });
+    await assert.rejects(service.read({ normalizeCredentials: true }), { code: "CREDENTIAL_NOT_PERSISTED" });
     assert.equal(await service.raw(), original);
     service.runtime = async path => {
       const runtime = await createRuntime(path), login = runtime.login.bind(runtime);
@@ -75,11 +75,11 @@ test("failed credential persistence or a concurrent models edit never removes th
       };
       return runtime;
     };
-    await assert.rejects(service.read(), { code: "REVISION_CONFLICT" });
+    await assert.rejects(service.read({ normalizeCredentials: true }), { code: "REVISION_CONFLICT" });
     assert.equal(await service.raw(), original + " ");
     assert.equal(auth(service).legacy.key, "KEEP-ON-FAILURE");
     service.runtime = createRuntime;
-    await service.read();
+    await service.read({ normalizeCredentials: true });
     assert.equal(JSON.parse(await service.raw()).providers.legacy.apiKey, undefined);
   }, true);
 });
@@ -113,7 +113,9 @@ test("discovery uses auth.json after migration and preserves an explicit Bearer 
     try {
       config(service, { fixture: { ...definition("OLD"), api: "anthropic-messages", authHeader: true, baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}` } });
       writeFileSync(join(service.dir, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "AUTH-WINS" } }));
-      const draft = await service.read();
+      // Ordinary page reads are read-only; this test explicitly starts after migration.
+      const draft = await service.read({ normalizeCredentials: true });
+      assert.equal(JSON.parse(await service.raw()).providers.fixture.apiKey, undefined);
       assert.equal((await service.catalog("fixture", draft.revision)).models.length, 1);
       assert.deepEqual(received, [{ authorization: "Bearer AUTH-WINS", apiKey: "AUTH-WINS" }]);
     } finally {

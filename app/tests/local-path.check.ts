@@ -40,7 +40,8 @@ try {
     server.onMessage(raw => socket.send(raw));
   });
   const page = await context.newPage(); page.on("pageerror", e => errors.push(e.message));
-  await page.goto(app.origin); await page.locator("#title-path").waitFor();
+  await page.goto(app.origin);
+  await page.waitForFunction(expected => document.querySelector("#title-path")?.textContent === expected, project);
   assert.equal(await page.locator("#title-path").textContent(), project);
   assert.equal(await page.locator(".history-row .path-actions").count(), 0, "sidebar session titles have no path action buttons");
   const title = page.locator(".title-meta .local-path");
@@ -107,7 +108,8 @@ try {
   }
   const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await touch.addInitScript(value => sessionStorage.setItem("view", JSON.stringify(value)), scope);
-  const mobile = await touch.newPage(); await mobile.goto(app.origin); await mobile.locator("#title-path").waitFor();
+  const mobile = await touch.newPage(); await mobile.goto(app.origin);
+  await mobile.waitForFunction(expected => document.querySelector("#title-path")?.textContent === expected, project);
   assert.equal(await mobile.locator("#title-path").textContent(), project);
   assert.equal(await mobile.locator(".history-row .path-actions").count(), 0, "mobile sidebar session titles have no path action buttons");
   assert.equal(await mobile.locator(".title-meta button").count(), 2, "mobile header keeps both path actions");

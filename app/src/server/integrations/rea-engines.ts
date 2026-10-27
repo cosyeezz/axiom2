@@ -32,14 +32,14 @@ export function engineInstallable(id: ReaEngineId, host = engineHost()) {
   return ["darwin", "linux"].includes(host.platform) && ["x64", "arm64"].includes(host.arch) || host.platform === "win32" && host.arch === "x64";
 }
 function found(path: string | undefined) { return path && existsSync(path) ? path : ""; }
-export function discoverEnginePaths(config: ReaEnginePaths = {}): ReaEnginePaths {
+export function discoverEnginePaths(config: ReaEnginePaths = {}, source: NodeJS.ProcessEnv = process.env): ReaEnginePaths {
   const paths: ReaEnginePaths = {};
   for (const id of reaEngineIds) {
-    const value = config[id] || process.env[variables[id]];
+    const value = config[id] || source[variables[id]];
     if (value && validEnginePath(value)) paths[id] = value;
   }
   if (!paths.java) {
-    const path = Object.entries(process.env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+    const path = Object.entries(source).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
     for (const directory of path.split(delimiter).filter(isAbsolute)) {
       try {
         const binary = realpathSync(join(directory, process.platform === "win32" ? "java.exe" : "java"));
@@ -55,7 +55,7 @@ export function discoverEnginePaths(config: ReaEnginePaths = {}): ReaEnginePaths
   if (!paths.hopper && process.platform === "darwin") paths.hopper = found("/Applications/Hopper Disassembler.app/Contents/MacOS/hopper") || found(join(homedir(), "Applications/Hopper Disassembler.app/Contents/MacOS/hopper"));
   if (!paths.hopper && process.platform === "linux") paths.hopper = found("/opt/hopper/bin/Hopper");
   if (!paths.wabt) {
-    const path = Object.entries(process.env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+    const path = Object.entries(source).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
     paths.wabt = path.split(delimiter).filter(isAbsolute).find(directory => existsSync(join(directory, process.platform === "win32" ? "wasm2wat.exe" : "wasm2wat")));
   }
   return paths;

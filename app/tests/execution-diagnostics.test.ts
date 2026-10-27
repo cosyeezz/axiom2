@@ -58,24 +58,25 @@ for (const domain of ['models', 'auth', 'models_store', 'settings', 'proxy', 'ca
       else if (domain === 'capability_file') writeFileSync(settings, '{\n}'); // Canonically equal, but the capability byte digest changes.
       else if (domain === 'proxy') { const file = proxyRuntimePath(f.root); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, canary); }
       else writeFileSync(join(f.cwd, '.pi', 'skills', `${canary}.md`), canary);
-      assert.equal(domain === 'snapshot' ? environment.snapshotValid(rejection => rejections.push(rejection)) : await environment.currentAsync!(undefined, rejection => rejections.push(rejection)), false);
-      assert.equal(rejections.length, 1);
-      assert.equal(rejections[0].check, domain);
+      const independent = ['models', 'auth', 'models_store', 'proxy'].includes(domain);
+      assert.equal(domain === 'snapshot' ? environment.snapshotValid(rejection => rejections.push(rejection)) : await environment.currentAsync!(undefined, rejection => rejections.push(rejection)), independent);
+      assert.equal(rejections.length, independent ? 0 : 1);
+      if (!independent) assert.equal(rejections[0].check, domain);
       if (domain === 'capability_file') assert.equal(rejections[0].resource, 'settings');
       assert.equal(JSON.stringify(rejections).includes(canary), false);
       assert.equal(JSON.stringify(rejections).includes(f.root), false);
-      assert.equal(domain === 'snapshot' ? environment.snapshotValid(() => { throw Error(canary); }) : await environment.currentAsync!(undefined, () => { throw Error(canary); }), false);
+      assert.equal(domain === 'snapshot' ? environment.snapshotValid(() => { throw Error(canary); }) : await environment.currentAsync!(undefined, () => { throw Error(canary); }), independent);
     } finally { environment.release(); f.close(); }
   });
 }
 
-test('asynchronous diagnostics identify post-I/O configuration and cancellation without a second validation', async () => {
+test('asynchronous resource diagnostics ignore credential changes but retain cancellation', async () => {
   const f = fixture(), environment = await f.profiles.prepareAsync(f.input), rejections: Readonly<ExecutionRejection>[] = [];
   try {
     const pending = environment.currentAsync!(undefined, rejection => rejections.push(rejection));
     writeFileSync(join(f.pi, 'auth.json'), JSON.stringify({ [canary]: true }));
-    assert.equal(await pending, false);
-    assert.deepEqual(rejections, [{ check: 'auth', stage: 'post_io' }]);
+    assert.equal(await pending, true);
+    assert.equal(rejections.length, 0);
     const controller = new AbortController(); controller.abort(Error(canary)); rejections.length = 0;
     assert.equal(await environment.currentAsync!(controller.signal, rejection => rejections.push(rejection)), false);
     assert.deepEqual(rejections, [{ check: 'aborted', stage: 'pre_io' }]);

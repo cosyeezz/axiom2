@@ -118,7 +118,8 @@ test("Kiro streaming continuation reports omission diagnostics and only sends va
   const response = await stream.result();
   assert.equal(response.stopReason, "stop", response.errorMessage);
   assert.equal(sent, 1); assert.equal(events.at(-1), "done");
-  assert.ok(response.diagnostics?.some(d => d.type === "kiro-interrupted-tools-omitted" && d.details?.omittedToolCalls === 1));
+  const diagnostic = response.diagnostics?.find(d => d.type === "kiro-interrupted-tools-omitted");
+  assert.deepEqual(diagnostic?.details, { omittedToolCalls: 1, executionState: "unknown", userBoundaryProvenance: "unverified", policy: "verify-before-repeating-side-effects" });
 });
 
 test("Kiro rejects service reuse of an omitted interrupted call ID before any tool-call event", async () => {
@@ -148,6 +149,28 @@ test("Kiro recovery uses a normalized user role, including converted non-display
   const normalized = normalizeContext(context([user("Start"), assistant(["unfinished"])]));
   normalized.messages.push({ role: "custom", customType: "unconverted", content: "Not a normalized user", display: false, timestamp: 4 } as any);
   assert.throws(() => kiroChatRequest(model, normalized, account), /不支持的消息角色/);
+});
+
+test("Kiro unknown tool outcomes constrain side-effect replay even for synthetic input or no original system", () => {
+  const converted = convertToLlm([{ role: "custom", customType: "fixture", content: "Synthetic boundary", display: false, timestamp: 4 }]);
+  for (const boundary of [user("Human asks to continue; no execution receipt"), converted[0]]) {
+    const ctx = context([user("Start"), assistant(["unknown-call"]), boundary]);
+    delete ctx.systemPrompt;
+    const normalized = normalizeContext(ctx), before = structuredClone(normalized);
+    const first = kiroChatRequest(model, normalized, account, "unknown-state");
+    const second = kiroChatRequest(model, normalized, account, "unknown-state");
+    const wire = JSON.stringify(first.payload);
+    assert.match(wire, /execution outcome is unknown, not confirmed as unexecuted/);
+    assert.match(wire, /Do not blindly repeat operations with side effects/);
+    assert.match(wire, /verify the current state or ask the user/);
+    assert.match(wire, /normalized user message does not prove/);
+    assert.equal(wire.match(/Axiom recovery safety/g)?.length, 1);
+    assert.doesNotMatch(wire, /unknown-call|toolResults/);
+    assert.equal(first.seenCalls.has("unknown-call"), true);
+    assert.deepEqual(first.payload, second.payload); assert.deepEqual(normalized, before);
+  }
+  const paired = request([user("Start"), assistant(["done"]), result("done")]);
+  assert.doesNotMatch(JSON.stringify(paired.payload), /Axiom recovery safety/);
 });
 
 test("Kiro system updates do not close pending calls and remain part of the full policy", () => {

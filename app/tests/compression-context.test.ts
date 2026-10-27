@@ -78,29 +78,92 @@ test("compression preserves a native retained range and later custom input", () 
   assert.doesNotMatch(context, /old history/);
 });
 
-test("compression snapshots are detached and reject different sessions or changed prefixes", () => {
+test("compression snapshots stay detached; changed bytes are accepted but different sessions are not", () => {
   const manager = seeded(), snapshot = captureCompression(manager);
   const original = JSON.stringify(manager.getBranch());
   snapshot.entries[0].timestamp = "changed";
+  snapshot.header.timestamp = "changed header metadata";
   assert.equal(JSON.stringify(manager.getBranch()), original, "snapshot must not alias live entries");
-  assert.throws(() => compressionDraft(manager, snapshot, native(), "job"));
+  assert.doesNotThrow(() => compressionDraft(manager, snapshot, native(), "job"));
   assert.throws(() => applyCompression(seeded(), captureCompression(manager), native(), "job"));
   assert.equal(JSON.stringify(manager.getBranch()), original);
 });
 
-test("compression rejects branch changes, intervening compactions and context edits without writes", () => {
-  for (const conflict of ["branch", "compaction", "context_edit", "branch_summary"] as const) {
+test("compression directly applies after branch changes, host compactions and context edits", () => {
+  for (const change of ["branch", "compaction", "context_edit", "branch_summary"] as const) {
     const manager = seeded(), snapshot = captureCompression(manager);
-    if (conflict === "branch") {
-      manager.branch(snapshot.entries[0].id);
-      user(manager, "different branch");
-    } else if (conflict === "compaction") manager.appendCompaction("other summary", null, 10);
-    else if (conflict === "context_edit") manager.appendContextEdit(snapshot.entries[0].id, { content: "edited context" });
+    if (change === "branch") manager.branch(snapshot.entries[0].id);
+    else if (change === "compaction") manager.appendCompaction("other summary", null, 10, { axiomCompressionId: "other-job" });
+    else if (change === "context_edit") manager.appendContextEdit(snapshot.entries[0].id, { content: "edited context" });
     else manager.branchWithSummary(manager.getLeafId(), "branch summary");
+    user(manager, `new input after ${change}`);
     const before = JSON.stringify(manager.getEntries());
-    assert.throws(() => applyCompression(manager, snapshot, native(), "job"), conflict);
-    assert.equal(JSON.stringify(manager.getEntries()), before, conflict);
+    assert.equal(applyCompression(manager, snapshot, native(), "job"), true, change);
+    assert.equal(JSON.stringify(manager.getEntries().slice(0, -1)), before, "only a native compaction is appended");
+    const context = JSON.stringify(manager.buildSessionProjection().messages);
+    assert.match(context, /native summary/);
+    assert.ok(context.includes(`new input after ${change}`), change);
   }
+});
+
+test("a late host summary cannot replace a newer Pi native safety compaction", () => {
+  const manager = seeded(), snapshot = captureCompression(manager);
+  const kept = user(manager, "old retained input");
+  manager.appendCompaction("PI_SAFETY_SUMMARY", null, 10);
+  user(manager, "new input after native fallback");
+  const before = JSON.stringify(manager.getEntries());
+  assert.throws(() => applyCompression(manager, snapshot, native(), "late-job"), /Pi 原生压缩已更新上下文/);
+  assert.equal(JSON.stringify(manager.getEntries()), before);
+  assert.match(JSON.stringify(manager.buildSessionProjection().messages), /PI_SAFETY_SUMMARY/);
+  assert.doesNotMatch(JSON.stringify(manager.buildSessionProjection().messages), /old retained input/);
+  assert.ok(manager.getEntry(kept), "raw history is not deleted");
+  // A fresh host snapshot taken after the safety compaction remains valid.
+  applyCompression(manager, captureCompression(manager), native(), "fresh-job");
+  assert.match(JSON.stringify(manager.buildSessionProjection().messages), /native summary/);
+});
+
+test("compression preserves recovery edits and does not revive a failed response in the new tail", () => {
+  const manager = seeded(), snapshot = captureCompression(manager);
+  assistant(manager);
+  const failed = manager.getLeafEntry()!;
+  if (failed.type !== "message" || failed.message.role !== "assistant") throw Error();
+  const id = manager.appendMessage({ ...failed.message, stopReason: "error",
+    content: [{ type: "text", text: "OMITTED_FAILED_RESPONSE" }] });
+  manager.appendContextEdit(id, null);
+  const retry = user(manager, "successful retry input");
+  assistant(manager);
+  applyCompression(manager, snapshot, native(), "job");
+  const context = JSON.stringify(manager.buildSessionProjection().messages);
+  assert.match(context, /successful retry input/);
+  assert.doesNotMatch(context, /OMITTED_FAILED_RESPONSE/);
+  assert.ok(manager.getEntry(retry), "original tail entry is retained without copying");
+});
+
+test("compression uses entry identities when a branch becomes shorter or loses the native retained start", () => {
+  for (const retainNone of [true, false]) {
+    const manager = seeded(), root = manager.getBranch()[0].id;
+    const kept = user(manager, "no longer on current branch");
+    assistant(manager); user(manager, "more old history"); assistant(manager);
+    const snapshot = captureCompression(manager);
+    manager.branch(root);
+    const next = user(manager, "short branch new input");
+    assert.ok(manager.getBranch().length < snapshot.entries.length);
+    assert.equal(compressionDraft(manager, snapshot, native(retainNone ? undefined : kept), "job").firstKeptEntryId, next);
+    applyCompression(manager, snapshot, native(retainNone ? undefined : kept), "job");
+    const context = JSON.stringify(manager.buildSessionProjection().messages);
+    assert.match(context, /short branch new input/);
+    assert.doesNotMatch(context, /no longer on current branch|more old history|old history/);
+  }
+});
+
+test("compression accepts a branch with no snapshot IDs and retains its entire new history", () => {
+  const manager = seeded(), snapshot = captureCompression(manager);
+  manager.resetLeaf();
+  const next = user(manager, "unrelated new branch");
+  assistant(manager);
+  assert.equal(compressionDraft(manager, snapshot, native(), "job").firstKeptEntryId, next);
+  applyCompression(manager, snapshot, native(), "job");
+  assert.match(JSON.stringify(manager.buildSessionProjection().messages), /unrelated new branch/);
 });
 
 test("compression rejects unknown retained ids and tool-result cut points", () => {

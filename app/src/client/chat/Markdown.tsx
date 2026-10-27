@@ -6,9 +6,10 @@ import { DerivedContext } from "./derived-cache.js";
 import type { Token } from "marked";
 import { FileLink } from "./FileLink.js";
 import { localFileLink } from "../../shared/file-preview.js";
+import type { MarkdownBlockRange } from "../../shared/markdown-section.js";
 import { CodeBlock } from "./CodeBlock.js";
 import { InlineCode } from "./InlineCode.js";
-import { asciiDiagramBlocks } from "../../shared/ascii-diagram.js";
+import { cachedAsciiDiagramBlocks } from "./ascii-diagram-cache.js";
 import { DiagramRenderingContext } from "./AsciiDiagram.js";
 import { markdown, markdownTokens, markdownImagePath, type FootnoteDefinition } from "../../shared/markdown.js";
 import { AttachmentReference, type AttachmentReferenceInfo } from "./AttachmentSymbol.js";
@@ -60,16 +61,14 @@ function DiagramParagraph({ raw, images, children, plain }: { raw: string; image
   // Never split across inline code, emphasis, links, HTML, or references. Their
   // original AST can span multiple lines or depend on global definitions.
   const enabled = useContext(DiagramRenderingContext) && plain;
-  const blocks = useMemo(() => {
-    if (!enabled) return [];
-    try { return asciiDiagramBlocks(raw); } catch { return []; }
-  }, [raw, enabled]);
+  const cache = useContext(DerivedContext);
+  const blocks = useMemo(() => enabled ? cachedAsciiDiagramBlocks(cache, raw) : [], [raw, enabled, cache]);
   if (!blocks.length) return <p>{children}</p>;
   const parts: ReactNode[] = [];
   let end = 0;
   for (const block of blocks) {
     if (block.start > end) parts.push(<Fragment key={`text-${end}`}>{tokens(markdown.lexer(raw.slice(end, block.start)), images)}</Fragment>);
-    parts.push(<CodeBlock key={`diagram-${block.start}`} text={block.text} language="text" />);
+    parts.push(<CodeBlock key={`diagram-${block.start}`} text={block.text} language="text" parsedDiagram={block.diagram} />);
     end = block.end;
   }
   if (end < raw.length && raw.slice(end).trim()) parts.push(<Fragment key={`text-${end}`}>{tokens(markdown.lexer(raw.slice(end)), images)}</Fragment>);
@@ -151,7 +150,7 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
           if (token.type === "image") linkedImage = true;
         });
         if (linkedImage) return <span key={i}>{inner()}</span>;
-        if (localFileLink(t.href.split("#")[0])) return <LocalMarkdownLink key={i} href={t.href} images={images}>{inner()}</LocalMarkdownLink>;
+        if (localFileLink(t.href)) return <LocalMarkdownLink key={i} href={t.href} images={images}>{inner()}</LocalMarkdownLink>;
         let safe = false;
         try {
           safe = /^(?:https?:\/\/|mailto:)/i.test(t.href) && ["http:", "https:", "mailto:"].includes(
@@ -206,24 +205,31 @@ function tokens(items: Token[], images?: MarkdownImageOwner, renderBlock?: Block
     return renderBlock && node && t.type !== "hr" ? renderBlock(node, i, t.raw) : node;
   });
 }
-export const Markdown = memo(({ text, images, renderBlock, compact = false, streaming = false, onLocalLink, pathScope, pathBase, sourceFile, attachments, abandonedLines }: { abandonedLines?: boolean[]; text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; streaming?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
+export const Markdown = memo(({ text, images, renderBlock, compact = false, streaming = false, onLocalLink, pathScope, pathBase, sourceFile, attachments, abandonedLines, blockRange }: { abandonedLines?: boolean[]; blockRange?: MarkdownBlockRange; text: string; images?: MarkdownImageOwner; renderBlock?: BlockRenderer; compact?: boolean; streaming?: boolean; onLocalLink?: (href: string) => void } & MarkdownPaths) => {
   const cache = useContext(DerivedContext), prefix = useId(), returns = useRef(new Map<string, string>());
   const ast = useMemo(() => cache ? cache.get(`markdown:footnotes-v2:breaks:${text}`, () => markdownTokens(text)) : markdownTokens(text), [cache, text]);
+  const visible = useMemo(() => blockRange ? ast.slice(blockRange.start, blockRange.end) : ast, [ast, blockRange]);
   const notes = useMemo(() => {
     const definitions = new Map<string, FootnoteDefinition>(), order = new Set<string>();
     markdown.walkTokens(ast, (token) => {
       if (token.type === "footnote_definition" && !definitions.has(token.id)) definitions.set(token.id, token as FootnoteDefinition);
-      if (token.type === "footnote_reference") order.add(token.id);
     });
+    markdown.walkTokens(visible, (token) => { if (token.type === "footnote_reference") order.add(token.id); });
+    // Section notes can refer to definitions outside the section, including each other.
+    // Set iteration visits newly discovered dependencies once, even for cycles.
+    if (blockRange) for (const id of order) {
+      const note = definitions.get(id);
+      if (note) markdown.walkTokens(note.tokens, (token) => { if (token.type === "footnote_reference") order.add(token.id); });
+    }
     const result = new Map<string, Note>();
-    for (const id of [...order, ...definitions.keys()]) {
+    for (const id of [...order, ...(blockRange ? [] : definitions.keys())]) {
       const note = definitions.get(id);
       if (note && !result.has(id)) result.set(id, { ...note, number: result.size + 1 });
     }
     return result;
-  }, [ast]);
+  }, [ast, visible, blockRange]);
   return <DiagramRenderingContext.Provider value={!streaming && !compact}><MarkdownContext.Provider value={{ prefix, notes, returns: returns.current, onLocalLink, pathScope, pathBase, sourceFile, attachments }}>
-    {tokens(ast, images, renderBlock, compact, abandonedLines ? { line: 0, abandoned: abandonedLines } : undefined)}
+    {tokens(visible, images, renderBlock, compact, abandonedLines ? { line: 0, abandoned: abandonedLines } : undefined)}
     {!compact && notes.size > 0 && <section aria-label="引用"><hr /><ol>{[...notes.values()].map((note) => {
       const target = `${prefix}-note-${note.number}`;
       return <li key={note.id} id={target} tabIndex={-1}>{tokens(note.tokens, images)} <a href={`#${target}`} aria-label={`返回引用 ${note.number}`} onClick={(event) => {

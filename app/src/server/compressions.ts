@@ -3,20 +3,21 @@ import { type ChildProcess } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import type { ExecutionLease } from "./execution-pool.js";
 import { sameLease } from "./execution-protocol.js";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { estimateTokens, type CompactionEntry } from "@earendil-works/pi-coding-agent";
-import { AppError, object, text, type Command, type Configuration, type Scope } from "../shared/protocol.js";
-import { agentScope, type Selection } from "../shared/agent.js";
+import { AppError, object, text, type Command, type Scope } from "../shared/protocol.js";
+import { agentScope, thinkingLevels, type Selection } from "../shared/agent.js";
 import { autoCompressionThreshold, compressionScope, compressionPreferencesScope, type Compression } from "../shared/compression.js";
 import type { Agents } from "./agents.js";
-import { configuration } from "./models.js";
 import { openTranscript } from "./transcript.js";
 import { contextUsage } from "./context-usage.js";
 import type { CompressionInput } from "./compression-worker.js";
 import { compressionError } from "./compression-error.js";
+import { assertCompressionPrefix, readCompressionPrefix, type CompressionPrefix } from "./compression-request.js";
 import { captureCompression, applyCompression, type CompressionSnapshot } from "./compression-context.js";
+import { sessionSafePoint } from "./session-safe-point.js";
 
 type Live = {
   scope: Scope;
@@ -102,22 +103,19 @@ export class Compressions {
     if (live.job.state !== "running" || live.job.stage === stage) return;
     live.job.stage = stage; this.save(live);
   }
-  private selection(value: unknown, config: Configuration): Selection {
+  private selection(value: unknown): Selection {
     const selection = object(value);
     if (Object.keys(selection).some((key) => !["provider", "id", "thinking"].includes(key)) ||
-      typeof selection.provider !== "string" || typeof selection.id !== "string")
+      typeof selection.provider !== "string" || typeof selection.id !== "string" || !thinkingLevels.includes(selection.thinking as Selection["thinking"]))
       throw new AppError("INVALID_INPUT", "模型选择无效");
-    const model = !config.error && config.available.find((m) => m.provider === selection.provider && m.id === selection.id);
-    if (!model || !model.levels.includes(selection.thinking as Selection["thinking"]))
-      throw new AppError("MODEL_UNAVAILABLE", "请选择已配置、已认证的压缩模型及其支持的思考等级；不会自动替换模型。");
     return { provider: selection.provider, id: selection.id, thinking: selection.thinking as Selection["thinking"] };
   }
   command(c: Command): Promise<unknown> {
     if (c.op === "compression.preferences.get") return Promise.resolve(this.store.compressionPreferences());
-    if (c.op === "compression.preferences.save") return this.store.external(c, () => this.agents.models.serial(async () => {
+    if (c.op === "compression.preferences.save") return this.store.external(c, async () => {
       if (this.closing) throw new AppError("SHUTTING_DOWN", "服务正在退出，未接受新操作");
       const params = object(c.params);
-      if (!Object.keys(params).length || Object.keys(params).some((key) => !["selection", "auto"].includes(key)))
+      if (!Object.keys(params).length || Object.keys(params).some((key) => key !== "auto"))
         throw new AppError("INVALID_INPUT", "压缩偏好无效");
       const current = this.store.compressionPreferences();
       const auto = { ...current.auto };
@@ -137,12 +135,10 @@ export class Compressions {
           auto[key] = value;
         }
       }
-      const selection = !Object.hasOwn(params, "selection") ? current.selection
-        : params.selection === null ? null : this.selection(params.selection, await configuration(this.store.root));
-      const preferences = this.store.saveCompressionPreferences({ selection, auto });
+      const preferences = this.store.saveCompressionPreferences({ auto });
       this.agents.publish(compressionPreferencesScope, preferences);
       return preferences;
-    }));
+    });
     const scope = { workspaceId: text(c.workspaceId, "工作空间"), sessionId: text(c.sessionId, "会话") };
     this.store.session(scope.workspaceId, scope.sessionId);
     if (c.op === "compression.get") return Promise.resolve(this.info(scope));
@@ -157,7 +153,7 @@ export class Compressions {
   }
   private start(c: Command, scope: Scope, autoRunId?: string, processingId?: string): Promise<unknown> {
     const epoch = this.epochs.get(scope.sessionId) ?? 0;
-    return this.store.external(c, () => this.agents.models.serial(async () => {
+    return this.store.external(c, async () => {
       this.store.session(scope.workspaceId, scope.sessionId);
       const id = this.records.start(scope, "compression", autoRunId ? "自动压缩" : "手动压缩", processingId);
       try {
@@ -179,22 +175,18 @@ export class Compressions {
       check();
       if (this.live.has(scope.sessionId)) throw new AppError("COMPRESSION_BUSY", "此会话已有压缩任务，请查看详情");
       if (this.live.size >= 4) throw new AppError("COMPRESSION_LIMIT", "最多同时运行 4 个压缩任务");
-      const config = await configuration(this.store.root);
-      // An explicit per-run override never changes the global preference or chat model.
-      // Only an unset preference falls back; stale saved selections must be rejected.
-      const requested = c.params?.selection !== undefined ? c.params.selection
-        : this.store.compressionPreferences().selection ?? this.agents.info(scope).selection;
-      if (requested === null && c.params?.selection === undefined)
-        throw new AppError("MODEL_UNAVAILABLE", "请先选择已配置、已认证的压缩模型；不会自动替换模型。");
-      const selection = this.selection(requested, config);
+      if (Object.keys(object(c.params ?? {})).length)
+        throw new AppError("INVALID_INPUT", "压缩固定使用当前会话模型，不支持独立模型配置。");
+      const requested = this.agents.info(scope).selection;
+      if (!requested)
+        throw new AppError("MODEL_UNAVAILABLE", "请先为当前会话选择已配置、已认证的模型。");
+      const selection = this.selection(requested);
       const manager = this.manager(scope);
       if (!this.agents.active(scope) && manager.getLeafEntry()?.type === "compaction")
         throw new AppError("COMPRESSION_EMPTY", "当前上下文已压缩，尚无新增消息可再次压缩。");
       if (!this.agents.active(scope) && !manager.buildSessionProjection().messages.some((m) => ["user", "assistant", "custom", "toolResult"].includes(m.role)))
         throw new AppError("COMPRESSION_EMPTY", "此会话尚无已保存消息可压缩");
       const raw = await this.agents.models.raw();
-      if (createHash("sha256").update(raw).digest("hex") !== config.revision)
-        throw new AppError("REVISION_CONFLICT", "模型配置已变化；请重新确认");
       check();
       const input: CompressionInput = {
         root: this.store.root, cwd: this.store.workspace(scope.workspaceId).path,
@@ -219,7 +211,7 @@ export class Compressions {
       }
       return { id, status: "accepted" };
       } catch (error) { this.records.failure(id, error); throw error; }
-    }));
+    });
   }
   // Only fresh worker measurements trigger work; reads/reconnects/restarts never do.
   private checkAutomatic(scope: Scope, runId: string, trigger = true) {
@@ -252,7 +244,7 @@ export class Compressions {
       }
       try {
         if (this.info(scope)?.id !== previousId) return;
-        const selection = this.store.compressionPreferences().selection ?? info.selection;
+        const selection = info.selection;
         if (!selection) return;
         const job: Compression = { id: processingId, requestId, trigger: "auto", state: "failed", phase: "snapshot",
           startedAt: Date.now(), endedAt: Date.now(), messageCount: 0, before: context.tokens,
@@ -293,7 +285,7 @@ export class Compressions {
       if (event.type === "compression-snapshot" && !live.snapshot) {
         if (event.ok === false || !event.snapshot)
           this.finish(live, "failed", `会话快照保存失败：${compressionError(event.error)}；未开始生成摘要。`);
-        else this.snapshot(live, event.snapshot);
+        else this.snapshot(live, event.snapshot, event.request);
       }
       if (event.type === "compression-queued") { live.job.phase = "applying"; this.stage(live, "等待新的会话安全点校验并应用"); }
       if (event.type === "compression-applied") {
@@ -352,17 +344,27 @@ export class Compressions {
           if (!live.cancel && this.live.get(scope.sessionId) === live)
             this.finish(live, "failed", "无法释放保活会话；未保存快照或应用摘要。");
         });
-      } else if (live.entry && live.snapshot) {
-        this.stage(live, "校验快照兼容性并应用摘要");
-        applyCompression(this.manager(scope), live.snapshot, live.entry, job.id);
-        if (!this.applied(scope, job.id)) throw Error("Not persisted");
-        this.updateUsage(live);
-        this.finish(live, "completed");
-      } else this.snapshot(live, captureCompression(this.manager(scope)));
+      } else {
+        // No await between centralized sole-writer admission and the append.
+        const point = sessionSafePoint({ phase: "released", active: this.agents.active(scope), owned: this.agents.hasIdle(scope) });
+        if (!point.allows(live.entry ? "compression-apply" : "snapshot")) return;
+        if (live.entry && live.snapshot) {
+          this.stage(live, "在安全点直接应用摘要并确认持久化");
+          applyCompression(this.manager(scope), live.snapshot, live.entry, job.id);
+          if (!this.applied(scope, job.id)) throw Error("Not persisted");
+          this.updateUsage(live);
+          this.finish(live, "completed");
+        } else this.snapshot(live, captureCompression(this.manager(scope)));
+      }
     } catch (error) { this.finish(live, "failed", `快照保存或摘要应用失败：${compressionError(error)}；未应用此摘要。`); }
   }
-  private snapshot(live: Live, snapshot: CompressionSnapshot) {
+  private snapshot(live: Live, snapshot: CompressionSnapshot, request?: CompressionPrefix) {
     if (live.snapshot || live.cancel) return;
+    const file = this.manager(live.scope).getSessionFile();
+    if (!request && file) request = readCompressionPrefix(file);
+    if (!request) throw Error("没有可复用的真实会话请求前缀，未生成摘要。");
+    assertCompressionPrefix(request, snapshot.header.id, live.input.selection);
+    live.input.request = request;
     live.snapshot = snapshot;
     writeFileSync(live.input.file, [snapshot.header, ...snapshot.entries].map((e) => JSON.stringify(e)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
     const messages = openTranscript(live.input.file, live.input.cwd).buildSessionProjection().messages;
@@ -389,7 +391,7 @@ export class Compressions {
       live.lease = lease;
       this.stage(live, "启动摘要执行环境");
       const child = await lease.ensureReady();
-      if (live.cancel || !environment.current()) throw Error("摘要执行已取消或配置已变化");
+      if (live.cancel) throw Error("摘要执行已取消");
       this.stage(live, "准备生成原生摘要");
       await this.observe(live, child, lease);
     } catch (error) {

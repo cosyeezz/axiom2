@@ -131,7 +131,7 @@ try {
   assert.equal(await windowSelect.innerText(), "后台运行");
   await page.getByRole("button", { name: "检测连接", exact: true }).click();
   await page.getByText("[OK] Daemon: running", { exact: false }).waitFor();
-  assert.ok((await page.locator(".tools-diagnostic").innerText()).includes("[MISSING]"));
+  assert.ok((await page.locator("#opencli .tools-diagnostic").innerText()).includes("[MISSING]"));
   assert.ok(!(await page.locator("#opencli .tools-feedback").innerText()).includes("连接成功"));
   const other = await browser.newPage();
   await other.goto(app.origin + "/tools.html");
@@ -147,13 +147,13 @@ try {
   doctorFails = true;
   await other.getByRole("button", { name: "检测连接", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "fixture browser diagnostic timeout" }).waitFor();
-  assert.equal(await page.locator(".tools-diagnostic").count(), 0, "failed retry must not show an old report");
+  assert.equal(await page.locator("#opencli .tools-diagnostic").count(), 0, "failed retry must not show an old report");
   await page.reload();
   await page.getByRole("alert").filter({ hasText: "fixture browser diagnostic timeout" }).waitFor();
   await other.close();
   doctorFails = false;
   await page.getByRole("button", { name: "检测连接", exact: true }).click();
-  await page.locator(".tools-diagnostic").waitFor();
+  await page.locator("#opencli .tools-diagnostic").waitFor();
   const managedConfig = readFileSync(openCliConfigPath(root), "utf8"), legacy = JSON.parse(managedConfig);
   delete legacy.runtime;
   writeFileSync(openCliConfigPath(root), JSON.stringify(legacy));

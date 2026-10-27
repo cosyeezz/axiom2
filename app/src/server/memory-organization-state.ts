@@ -22,19 +22,44 @@ export class MemoryOrganizationState {
       WHERE processedAt IS NULL AND id IN (SELECT j.value FROM memory_organization_attempts a,json_each(a.batch_ids) j WHERE a.state='unknown')`).run();
   }
   fingerprint(workspaceId: string, version: number, purposes: readonly MemoryPurpose[]) {
-    const sources = purposes.map(purpose => {
-      const row = this.store.db.prepare("SELECT body,processedAt,blocked FROM memory_purposes WHERE workspaceId=? AND id=?").get(workspaceId, purpose.id);
-      const documents = this.store.db.prepare("SELECT body FROM memory_purpose_documents WHERE purpose_id=?").get(purpose.id);
-      return [purpose.id, row ?? null, documents?.body ?? null];
-    }).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    return createHash("sha256").update(JSON.stringify([workspaceId, version, sources, this.configuration(workspaceId, purposes)])).digest("hex");
+    return this.identity(workspaceId, version, purposes, new Map());
+  }
+  /** Paused claims share most purposes and are re-checked on every scan/publish.
+   * Reuse each purpose's exact source text within one check, and the final hash
+   * across checks when every input digest is unchanged. The value stays identical to
+   * hashing JSON.stringify([workspaceId, version, sortedSources, configuration]). */
+  private identities = new Map<string, string>();
+  private identity(workspaceId: string, version: number, purposes: readonly MemoryPurpose[], sources: Map<string, { text: string; digest: string }>) {
+    let row: ReturnType<Store["db"]["prepare"]> | undefined, documents: ReturnType<Store["db"]["prepare"]> | undefined;
+    const source = (id: string) => {
+      let value = sources.get(id);
+      if (!value) {
+        row ??= this.store.db.prepare("SELECT body,processedAt,blocked FROM memory_purposes WHERE workspaceId=? AND id=?");
+        documents ??= this.store.db.prepare("SELECT body FROM memory_purpose_documents WHERE purpose_id=?");
+        const text = JSON.stringify([id, row.get(workspaceId, id) ?? null, documents.get(id)?.body ?? null]);
+        value = { text, digest: createHash("sha256").update(text).digest("hex") };
+        sources.set(id, value);
+      }
+      return value;
+    };
+    const ordered = purposes.map(purpose => ({ id: purpose.id, ...source(purpose.id) })).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const head = `[${JSON.stringify(workspaceId)},${JSON.stringify(version)},`, tail = `,${JSON.stringify(this.configuration(workspaceId, purposes))}]`;
+    const key = createHash("sha256").update(head).update(tail).update(ordered.map(item => item.digest).join(",")).digest("hex");
+    const cached = this.identities.get(key);
+    if (cached) { this.identities.delete(key); this.identities.set(key, cached); return cached; }
+    const hash = createHash("sha256").update(head).update("[");
+    ordered.forEach((item, index) => hash.update(index ? `,${item.text}` : item.text));
+    const value = hash.update("]").update(tail).digest("hex");
+    this.identities.set(key, value);
+    if (this.identities.size > 256) this.identities.delete(this.identities.keys().next().value!);
+    return value;
   }
   excluded(workspaceId: string, version: number, purposes: readonly MemoryPurpose[]) {
-    const excluded = new Set<string>(), live = new Map(purposes.map(purpose => [purpose.id, purpose]));
+    const excluded = new Set<string>(), live = new Map(purposes.map(purpose => [purpose.id, purpose])), sources = new Map<string, { text: string; digest: string }>();
     for (const row of this.store.db.prepare("SELECT * FROM memory_organization_attempts WHERE workspace_id=? AND state IN ('paused','running','unknown')").all(workspaceId)) {
       const ids = JSON.parse(String(row.purpose_ids)) as string[];
       const frozen = ids.map(id => live.get(id)).filter((purpose): purpose is MemoryPurpose => !!purpose);
-      if (row.state === "running" || row.state === "unknown" || frozen.length === ids.length && this.fingerprint(workspaceId, version, frozen) === row.fingerprint)
+      if (row.state === "running" || row.state === "unknown" || frozen.length === ids.length && this.identity(workspaceId, version, frozen, sources) === row.fingerprint)
         for (const id of JSON.parse(String(row.batch_ids)) as string[]) excluded.add(id);
     }
     return excluded;

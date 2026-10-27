@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { command, useScope } from "../transport.js";
-import type { Scope, Workspace } from "../../shared/protocol.js";
+import { command, observeVisualActions, scopeSnapshot, useScope } from "../transport.js";
+import { compareSessions } from "./session-order.js";
+import type { Scope, Session, Workspace } from "../../shared/protocol.js";
 
 type WorkspaceView = { workspaceId: string | null; view: Scope | null };
 
@@ -26,9 +27,12 @@ export function useWorkspaceView(onError: (message: string) => void) {
   const [ready, setReady] = useState(false);
   const initialized = useRef(false);
   const navigation = useRef(0);
-  const select = (next: Scope | null, changeWorkspace = true, restoredWorkspace?: string) => {
+  const rollback = useRef(new Map<string, { previous: WorkspaceView; navigation: number }>());
+  const select = (next: Scope | null, changeWorkspace = true, restoredWorkspace?: string, automatic = false) => {
     const workspaceId = restoredWorkspace ?? (changeWorkspace ? next?.workspaceId ?? null : current.current.workspaceId);
-    navigation.current++;
+    // Loading a fallback workspace's first session is not a user navigation.
+    // It must not disown an in-flight delete's guarded rollback.
+    if (!automatic) navigation.current++;
     current.current = { workspaceId, view: next };
     setState(current.current);
     try {
@@ -43,6 +47,26 @@ export function useWorkspaceView(onError: (message: string) => void) {
       void command("workspace.select", { view: next?.sessionId ? next : null }, { workspaceId })
         .catch(() => { /* Best-effort navigation preference; failure must not interrupt the current view. */ });
   };
+  useEffect(() => observeVisualActions(({ action, phase }) => {
+    if (phase === "begin") {
+      const previous = current.current;
+      if (action.op === "session.delete" && previous.view?.sessionId === action.target.sessionId && previous.view?.workspaceId === action.target.workspaceId) {
+        const next = [...(scopeSnapshot<Session[]>(`sessions:${action.target.workspaceId}`) ?? [])].sort(compareSessions)[0];
+        select({ workspaceId: action.target.workspaceId!, sessionId: next?.id ?? "" }, false);
+      } else if (action.op === "workspace.delete" && (previous.workspaceId === action.target.workspaceId || previous.view?.workspaceId === action.target.workspaceId)) {
+        const nextWorkspace = scopeSnapshot<Workspace[]>("workspaces")?.[0];
+        const next = nextWorkspace ? [...(scopeSnapshot<Session[]>(`sessions:${nextWorkspace.id}`) ?? [])].sort(compareSessions)[0] : undefined;
+        select(nextWorkspace ? { workspaceId: nextWorkspace.id, sessionId: next?.id ?? "" } : null);
+      } else return;
+      rollback.current.set(action.id, { previous, navigation: navigation.current });
+    } else if (phase === "failed" || phase === "completed") {
+      const saved = rollback.current.get(action.id);
+      rollback.current.delete(action.id);
+      // Restore navigation only if the reader has not made another choice.
+      if (phase === "failed" && saved && navigation.current === saved.navigation)
+        select(saved.previous.view, true, saved.previous.workspaceId ?? undefined);
+    }
+  }), []);
   useEffect(() => {
     if (!workspaces || !preferences) return;
     const existing = current.current;
@@ -69,11 +93,13 @@ export function useWorkspaceView(onError: (message: string) => void) {
     else if (existing.view || existing.workspaceId) select(null);
   }, [workspaces, preferences]);
   return {
+    ready,
     workspaces: workspaces ?? [],
     workspaceId: ready ? state.workspaceId : null,
     view: ready ? state.view : null,
     select,
     selectSession: (next: Scope) => select(next, false),
+    recoverSession: (next: Scope) => select(next, false, undefined, true),
     navigation,
   };
 }

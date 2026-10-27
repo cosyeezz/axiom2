@@ -1,5 +1,7 @@
 .local-path{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;vertical-align:middle;font:inherit;color:inherit}
 .local-path>.local-path-text{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:text}
+/* Prose references share the surrounding text baseline, not a control's center. */
+.markdown .local-path{vertical-align:baseline}
 .path-actions{display:inline-flex;align-items:center;flex-shrink:0;gap:4px;position:relative;vertical-align:middle}
 .local-path>.path-actions{opacity:0;pointer-events:none}
 .local-path:hover>.path-actions,.local-path:focus-within>.path-actions{opacity:1;pointer-events:auto}

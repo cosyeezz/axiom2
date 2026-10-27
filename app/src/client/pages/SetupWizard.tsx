@@ -10,7 +10,7 @@ import InstallProgress from "./InstallProgress.js";
 import { CommandLine, IconButton, ResourceLink } from "./StartupControls.js";
 type Environment = { nodeReady: boolean; nodeVersion: string; writable: boolean; tailscale: boolean; platform: string };
 export type PreparationDetection = { environment: Environment | null; checking: boolean; failed: boolean; attention?: boolean; job?: Job | null; foreground?: boolean; uncertain?: boolean; feedback?: { message: string; neutral: boolean } };
-export type SetupControls = { installService: () => void; maintainService: (version?: string) => void; showRuntime: () => void };
+export type SetupControls = { installService: () => void; maintainService: (version?: string, requireLatest?: boolean) => void; showRuntime: () => void };
 const repairable = (job: Job | null | undefined) => job?.repairable === true && job.action === "service" && !job.running;
 type Job = { foreground?: boolean; repairable?: boolean; recovery?: { state: string; message?: string }; task?: MaintenanceTask; id?: string; action: string; running: boolean; phase: string; message: string; lines: string[]; progress?: unknown; startedAt?: number; logUpdatedAt?: number; exitCode?: number };
 function readJob(value: unknown): Job | null {
@@ -90,7 +90,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   }, []);
   const running = !!job?.running;
   useEffect(() => { callbacks.current.onBusy(running || submitting || uncertain || autoInstalling); }, [running, submitting, uncertain, autoInstalling]);
-  async function action(name: string, targetId?: string, reinstall = false, targetVersion?: string) {
+  async function action(name: string, targetId?: string, reinstall = false, targetVersion?: string, requireLatest = false) {
     if (pending.current || unconfirmed.current) return;
     let acceptedJob: Job | null | undefined;
     const request = ++submission.current;
@@ -105,7 +105,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
       if (name === "reconcile-service") { void check(); callbacks.current.onComplete(); }
     };
     try {
-      const result = await desktopInvoke<{ job?: unknown }>("axiom_setup", { action: name, confirmed: name === "acknowledge-interruption" || name === "service" && reinstall, ...(name === "reconcile-service" ? { maintenance: { id: targetId || job?.id } } : name === "service" && targetVersion ? { maintenance: { version: targetVersion } } : {}) });
+      const result = await desktopInvoke<{ job?: unknown }>("axiom_setup", { action: name, confirmed: name === "acknowledge-interruption" || name === "service" && reinstall, ...(name === "reconcile-service" ? { maintenance: { id: targetId || job?.id } } : name === "service" && targetVersion ? { maintenance: { version: targetVersion, latest: requireLatest } } : {}) });
       accept(result);
     } catch (cause) {
       if (alive.current) {
@@ -132,7 +132,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
     } finally { ++jobEpoch.current; pending.current = false; if (alive.current) setSubmitting(false); }
     return acceptedJob;
   }
-  async function installService(reinstall = false, targetVersion?: string) {
+  async function installService(reinstall = false, targetVersion?: string, requireLatest = false) {
     if (installFlow.current || pending.current || unconfirmed.current || blocked || running) return;
     installFlow.current = true; setAutoInstalling(true); setError("");
     const pause = () => new Promise<void>(resolve => window.setTimeout(resolve, 1500));
@@ -173,7 +173,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
         if (!runtime) return;
         if (!runtime.nodeReady) throw Error("Node.js 安装后尚未就绪，请重新打开客户端再安装。");
       }
-      if (alive.current) await action("service", undefined, reinstall, targetVersion);
+      if (alive.current) await action("service", undefined, reinstall, targetVersion, requireLatest);
     } catch (cause) { if (alive.current) { setReadWarning(false); setError(cause instanceof Error ? cause.message : String(cause)); } }
     finally { installFlow.current = false; if (alive.current) setAutoInstalling(false); }
   }
@@ -188,7 +188,7 @@ export default function SetupWizard({ remote, service, blocked, onBusy, onComple
   const disabled = running || interrupted || uncertain || statusUnknown || submitting || autoInstalling || blocked;
   useImperativeHandle(controls, () => ({
     installService: () => { if (service?.state === "missing") void installService(); },
-    maintainService: version => { void installService(true, version); },
+    maintainService: (version, requireLatest) => { void installService(true, version, requireLatest); },
     showRuntime: () => { if (checkFailed || !environment) void check(); requestAnimationFrame(() => workflow.current?.focus()); },
   }));
   const recovering = job?.recovery?.state === "checking";

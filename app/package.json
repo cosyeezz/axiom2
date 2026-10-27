@@ -27,6 +27,7 @@
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@earendil-works/pi-mcp": "1.1.0",
     "@earendil-works/pi-tui": "1.1.0",
+    "entities": "6.0.1",
     "highlight.js": "10.7.3",
     "jsqr": "1.4.0",
     "koffi": "3.3.3",

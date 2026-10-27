@@ -16,7 +16,7 @@ export interface CompressionSnapshot {
 }
 const bytes = (value: unknown) => JSON.stringify(value);
 const copy = <T>(value: T): T => JSON.parse(bytes(value));
-const conflict = () => new Error("压缩快照与当前会话冲突；未替换上下文。");
+const conflict = () => new Error("压缩结果或所属会话无效；未替换上下文。");
 
 // Safety comes from the caller's pi/idle boundary, not from requiring every
 // historical tool call to have succeeded. Failed streams and stopped processes
@@ -69,23 +69,24 @@ export function compressionDraft(
 ): CompactionEntryDraft {
   const header = manager.getHeader(), branch = manager.getBranch();
   if (!id || !header || !snapshot?.header || header.id !== snapshot.header.id ||
-      bytes(header) !== bytes(snapshot.header) || !Array.isArray(snapshot.entries) ||
-      snapshot.entries.length === 0 || branch.length < snapshot.entries.length ||
-      bytes(branch.slice(0, snapshot.entries.length)) !== bytes(snapshot.entries) ||
-      !entry || entry.type !== "compaction" || !entry.id ||
+      !Array.isArray(snapshot.entries) || !entry || entry.type !== "compaction" || !entry.id ||
       typeof entry.summary !== "string" || !entry.summary.trim() ||
       typeof entry.firstKeptEntryId !== "string") throw conflict();
-  const tail = branch.slice(snapshot.entries.length);
-  // New projection edits, summaries, or unknown entry kinds cannot safely be
-  // reconciled with an already-generated summary. Ordinary appended input stays.
-  const allowed = new Set(["message", "custom_message", "custom", "usage", "model_change",
-    "thinking_level_change", "label", "session_info"]);
-  if (tail.some((item) => !allowed.has(item.type))) throw conflict();
+  const capturedIds = new Set(snapshot.entries.map((item) => item.id));
+  // Pi's independent safety net may commit while the host summary is in flight.
+  // A late snapshot must not replace that newer summary or revive its old tail.
+  if (branch.some((item) => item.type === "compaction" && !capturedIds.has(item.id) &&
+      !(item.details as { axiomCompressionId?: string } | undefined)?.axiomCompressionId))
+    throw new Error("Pi 原生压缩已更新上下文，此前的后台摘要已作废；未覆盖原生压缩结果。");
+  // The caller owns the native safe point. Other historical edits retain the
+  // host's existing semantics. Locate the tail by identity, not old length.
   const retainNone = entry.firstKeptEntryId === entry.id;
-  const kept = snapshot.entries.find((item) => item.id === entry.firstKeptEntryId);
+  const keptIndex = snapshot.entries.findIndex((item) => item.id === entry.firstKeptEntryId);
+  const kept = snapshot.entries[keptIndex];
   if (!retainNone && (!kept || (kept.type === "message" && kept.message.role === "toolResult")))
     throw conflict();
-  const firstKeptEntryId = retainNone ? tail[0]?.id ?? null : entry.firstKeptEntryId;
+  const retainedIds = new Set(retainNone ? [] : snapshot.entries.slice(keptIndex).map((item) => item.id));
+  const firstKeptEntryId = branch.find((item) => !capturedIds.has(item.id) || retainedIds.has(item.id))?.id ?? null;
   // Validate the retained range too: no standalone tool result may be retained
   // after its corresponding assistant call has disappeared into the summary.
   if (firstKeptEntryId) assertRetainedTools(branch, firstKeptEntryId);

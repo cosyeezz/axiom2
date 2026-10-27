@@ -1,3 +1,5 @@
+import { reaAutoBudget } from "./rea-budget.js";
+import { discoverReaDependencies } from "./rea-auto-environment.js";
 import { clearReaDownloads, reaDownloadPlan, type DownloadId } from "./rea-download-cleanup.js";
 import { toolProcessSupported, toolProcessSupportError } from "./tool-process.js";
 import { loadReaSkill } from "./rea-resources.js";
@@ -118,6 +120,7 @@ export class ReaService {
   }
   snapshot() {
     const value = structuredClone(this.state);
+    value.autoEnvironment = { budget: reaAutoBudget(), dependencies: discoverReaDependencies() };
     // Legacy clients receive one representative job; current clients use jobs.
     value.job = value.jobs?.findLast(job => job.running) ?? value.jobs?.at(-1);
     if (!toolProcessSupported()) { value.supported = false; value.supportError = toolProcessSupportError; }

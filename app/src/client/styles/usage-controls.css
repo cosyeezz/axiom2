@@ -1,0 +1,59 @@
+.usage-popup { position: fixed; inset: auto; margin: 0; padding: 14px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--fg); box-shadow: 0 14px 48px #0003; overflow: auto; overscroll-behavior: contain; font-family: var(--font-body); font-size: 12px; }
+.usage-popup *, .usage-popup *::before, .usage-popup *::after { box-sizing: border-box; }
+.usage-popup-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+.usage-popup-heading strong { font-size: 13px; font-weight: 600; }
+.usage-icon-button { display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 6px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; }
+.usage-icon-button:hover { background: var(--bg); color: var(--fg); }
+.usage-icon-button:disabled { opacity: .4; cursor: default; }
+.usage-popup button:focus-visible, .usage-date-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.usage-date-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; font-size: 12px; text-align: left; cursor: pointer; }
+.usage-date-trigger > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-date-trigger > svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+.usage-date-trigger > svg:last-child { width: 12px; height: 12px; }
+.usage-date-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
+.usage-date-presets button { min-width: 0; min-height: 32px; padding: 5px 2px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg-2); background: var(--bg); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
+.usage-date-presets button:hover { border-color: var(--accent); color: var(--accent-hover); }
+.usage-date-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.usage-date-inputs label { display: flex; flex-direction: column; min-width: 0; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.usage-date-inputs label[data-active] { border-color: var(--accent); }
+.usage-date-inputs label > span { font-size: 10px; color: var(--muted); }
+.usage-date-inputs input { width: 100%; min-width: 0; padding: 2px 0; border: 0; outline: 0; color: var(--fg); background: transparent; font: 12px/1.5 var(--font-mono); }
+.usage-date-inputs label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.usage-calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 4px; }
+.usage-calendar-heading strong { font-size: 12px; font-weight: 500; }
+.usage-calendar-prev svg { transform: rotate(180deg); }
+.usage-calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.usage-calendar [role=columnheader] { padding-block: 7px; color: var(--muted); font-size: 10px; text-align: center; }
+.usage-calendar [role=gridcell] { display: flex; align-items: center; justify-content: center; height: 36px; margin-block: 1px; }
+.usage-calendar [role=gridcell].is-in-range { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.usage-calendar button { width: 100%; max-width: 36px; height: 36px; padding: 0; border: 1px solid transparent; border-radius: 7px; color: var(--fg-2); background: transparent; font: 11px var(--font-mono); cursor: pointer; }
+.usage-calendar button[data-outside] { color: var(--muted); opacity: .5; }
+.usage-calendar button[aria-current=date] { border-color: var(--border); font-weight: 700; }
+.usage-calendar button:hover { background: var(--bg); color: var(--fg); }
+.usage-calendar button[data-selected] { color: var(--bg); background: var(--accent); opacity: 1; font-weight: 600; }
+.usage-date-hint { min-height: 18px; margin: 10px 0; color: var(--muted); font-size: 10px; line-height: 1.8; overflow-wrap: anywhere; }
+.usage-date-hint[role=alert] { color: var(--fg); }
+.usage-date-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.usage-date-footer .btn { min-height: 36px; font-size: 11px; }
+.usage-columns-trigger { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: 11px; }
+.usage-columns-trigger small { font: 10px var(--font-mono); color: var(--muted); }
+.usage-columns-trigger svg { width: 14px; height: 14px; }
+.usage-density { display: flex; align-items: center; gap: 16px; margin: 0 0 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.usage-density legend, .usage-column-group legend { padding-inline: 3px; color: var(--muted); font-size: 11px; }
+.usage-density label { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; cursor: pointer; }
+.usage-column-group { min-width: 0; padding: 0; margin: 12px 0; border: 0; }
+.usage-column-group > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; margin-top: 4px; }
+.usage-column-group label { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 30px; padding: 4px; border-radius: 5px; cursor: pointer; }
+.usage-column-group label:hover { background: var(--bg); }
+.usage-column-group label span { min-width: 0; overflow-wrap: anywhere; font-size: 11px; }
+.usage-column-group input, .usage-density input { flex-shrink: 0; width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.usage-columns-hint { margin: 12px 0; color: var(--muted); font-size: 10px; line-height: 1.8; }
+.usage-columns-footer { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.usage-columns-footer .btn { min-height: 36px; font-size: 11px; }
+@media (max-width: 650px) {
+  .usage-column-group label, .usage-density label, .usage-columns-trigger, .usage-columns-footer .btn { min-height: 44px; }
+  .usage-popup { padding: 12px; }
+  .usage-date-trigger, .usage-date-footer .btn, .usage-date-presets button, .usage-popup-heading .usage-icon-button { min-height: 44px; }
+  .usage-date-inputs input { min-height: 28px; }
+  .usage-popup-heading .usage-icon-button { width: 44px; }
+}

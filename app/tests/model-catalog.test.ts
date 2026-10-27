@@ -48,7 +48,8 @@ test("catalog fetches the configured baseUrl with pi auth and imports only upstr
       modelOverrides: { [known.id]: { name: "Local override", contextWindow: 1234 } },
     } } });
     writeFileSync(join(service.dir, "models.json"), raw);
-    let draft = await service.read();
+    // Page reads are read-only; this fixture explicitly exercises migration.
+    let draft = await service.read({ normalizeCredentials: true });
     const migratedRaw = await service.raw();
     assert.equal(JSON.parse(migratedRaw).providers.openai.apiKey, undefined);
     body = JSON.stringify({ data: [{ id: known.id, name: "Upstream name" }, { id: "upstream-only" }] });

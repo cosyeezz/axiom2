@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { memoryOrganizationOutputChars } from "../shared/memory-tree.js";
 import { performance } from "node:perf_hooks";
@@ -21,6 +21,36 @@ type RevisionAwareExecution = MemoryExecution & {
   read: (sessionId: string, path: string, offset?: number, limit?: number, options?: MemoryReadOptions) => ReturnType<MemoryExecution["read"]>;
   revision?: (sessionId: string, path: string) => string;
 };
+/** Paused-claim checks ask for this repeatedly; reparsing the provider catalog
+ * each time dominated the service thread. File identity and timestamps gate reuse. */
+const configurationKeys = new Map<string, string>();
+export function organizerConfigurationKey(dir: string, selection?: Selection) {
+  if (!selection) return createHash("sha256").update("no-organizer-selection").digest("hex");
+  const files = ["models.json", "auth.json", "models-store.json"].map(file => {
+    try { const s = statSync(join(dir, file), { bigint: true }); return `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`; }
+    catch { return "missing"; }
+  });
+  const key = JSON.stringify([dir, selection, files]), cached = configurationKeys.get(key);
+  if (cached) return cached;
+  const value = computeConfigurationKey(dir, selection);
+  configurationKeys.set(key, value);
+  if (configurationKeys.size > 64) configurationKeys.delete(configurationKeys.keys().next().value!);
+  return value;
+}
+function computeConfigurationKey(dir: string, selection: Selection) {
+  const hash = createHash("sha256");
+  for (const file of ["models.json", "auth.json", "models-store.json"]) {
+    try {
+      const data = JSON.parse(readFileSync(join(dir, file), "utf8").replace(/^\uFEFF/, ""));
+      const provider = file === "models.json" ? data.providers?.[selection.provider] : data[selection.provider];
+      // Catalog check timestamps and other providers/models cannot unlock a paused request.
+      const selected = file === "models-store.json" ? provider?.models?.find((model: { id: string }) => model.id === selection.id)
+        : file === "models.json" && provider ? { ...provider, models: provider.models?.filter((model: { id: string }) => model.id === selection.id), modelOverrides: provider.modelOverrides?.[selection.id] ?? null } : provider;
+      hash.update(organizationJSON([file, selected ?? null]));
+    } catch { hash.update(`unreadable:${file}`); }
+  }
+  return hash.digest("hex");
+}
 export class PooledMemoryRunner implements MemoryRunner {
   private jobs = new Set<Job>();
   private stopped = false;
@@ -31,19 +61,7 @@ export class PooledMemoryRunner implements MemoryRunner {
     this.ownsPool=!pool;this.pool=pool??new ExecutionPool();this.profiles=profiles??new ExecutionProfiles(memories.store.root);
   }
   configurationKey(selection?: Selection) {
-    const hash = createHash("sha256");
-    if (!selection) return hash.update("no-organizer-selection").digest("hex");
-    for (const file of ["models.json", "auth.json", "models-store.json"]) {
-      try {
-        const data = JSON.parse(readFileSync(join(this.models.dir, file), "utf8").replace(/^\uFEFF/, ""));
-        const provider = file === "models.json" ? data.providers?.[selection.provider] : data[selection.provider];
-        // Catalog check timestamps and other providers/models cannot unlock a paused request.
-        const selected = file === "models-store.json" ? provider?.models?.find((model: { id: string }) => model.id === selection.id)
-          : file === "models.json" && provider ? { ...provider, models: provider.models?.filter((model: { id: string }) => model.id === selection.id), modelOverrides: provider.modelOverrides?.[selection.id] ?? null } : provider;
-        hash.update(organizationJSON([file, selected ?? null]));
-      } catch { hash.update(`unreadable:${file}`); }
-    }
-    return hash.digest("hex");
+    return organizerConfigurationKey(this.models.dir, selection);
   }
   execute(input: MemoryExecution) {
     const started=performance.now();
@@ -71,11 +89,9 @@ export class PooledMemoryRunner implements MemoryRunner {
     try {
       stage("等待执行资源");
       lease=await this.pool.acquire({environment,kind:input.kind==='title'?'session-title':input.kind==='query'?'memory-query':'memory-organize',requestStartedAtMonoMs,signal,deadlineAt,parentLease:input.parentLease,memory:{concurrency:preferences.concurrency,queue:preferences.queue},beforeExecute:()=>this.memories.owner(input.scope)});
-      if(!environment.current())throw Error('记忆模型配置已变化，请重试');
       stage("准备执行环境");
       const child=await lease.ensureReady();
       signal.throwIfAborted();
-      if(!environment.current())throw Error('记忆模型配置在准备期间变化，请重试');
       this.memories.owner(input.scope);
       stage("准备发送模型请求");
       const revisionAware = input as RevisionAwareExecution;

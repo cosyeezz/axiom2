@@ -3,7 +3,8 @@ import { createServer, type ServerResponse } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { randomUUID } from "node:crypto";
+import { isCompressionRequest } from "./compression-memory-fixture.js";
 import type { startServer } from "../src/server/index.js";
 
 export async function checkCompressionUI(
@@ -16,12 +17,12 @@ export async function checkCompressionUI(
   const requests: any[] = [],
     responses: ServerResponse[] = [];
   let complete = false;
-  const reply = (res: ServerResponse) => {
+  const reply = (res: ServerResponse, content = "## Goal\n真实压缩摘要 <script>window.pwned=true</script>") => {
     for (const [delta, finish_reason] of [
       [
         {
           role: "assistant",
-          content: "## Goal\n真实压缩摘要 <script>window.pwned=true</script>",
+          content,
         },
         null,
       ],
@@ -35,7 +36,13 @@ export async function checkCompressionUI(
   const fixture = createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
-    requests.push(JSON.parse(raw));
+    const body = JSON.parse(raw);
+    if (!isCompressionRequest(body)) {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      reply(res, "真实会话回复");
+      return;
+    }
+    requests.push(body);
     responses.push(res);
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.flushHeaders();
@@ -56,6 +63,17 @@ export async function checkCompressionUI(
       `http://127.0.0.1:${(fixture.address() as any).port}/v1`;
     writeFileSync(path, JSON.stringify(config));
     await app.refreshConfiguration();
+    const chat = async (text: string) => {
+      await app.agents.command({ ...scope, requestId: randomUUID(), op: "prompt", params: { text } });
+      const end = Date.now() + 20000;
+      while (app.agents.active(scope)) {
+        assert.ok(Date.now() < end, "chat prefix fixture did not settle");
+        await page.waitForTimeout(25);
+      }
+      await app.agents.releaseIdle(scope);
+    };
+    // The changed endpoint needs a fresh real request, not an old cached identity.
+    await chat("压缩前刷新当前会话请求前缀");
     // Seed measured boundary values only in the test, then restore actual worker statistics.
     const usage = app.agents.info(scope).usage!;
     const ring = page.locator(
@@ -88,10 +106,15 @@ export async function checkCompressionUI(
             ?.getAttribute("data-value") === value,
         expected == null ? "unknown" : String(expected),
       );
-      assert.equal(await ring.locator('.data-unknown').count(), expected == null ? 1 : 0);
-      const filled = await ring.locator('.data-filled').evaluateAll(paths => paths.reduce((sum, path) => sum + Number(path.getAttribute('stroke-dasharray')!.split(' ')[0]) * 10, 0));
-      assert.equal(filled, Math.min(100, expected ?? 0));
-      assert.equal(await ring.locator('use').getAttribute('href'), '#i-list-checks');
+      // The combined context/memory icon now draws a measured arc and three
+      // progress rows, rather than ten dashed sectors plus a <use> glyph.
+      const filled = await ring.evaluate(svg => {
+        const track = svg.querySelector<SVGPathElement>('path.data-track')!;
+        const fill = svg.querySelector<SVGPathElement>('path.data-filled');
+        return fill ? fill.getTotalLength() / track.getTotalLength() * 100 : 0;
+      });
+      assert.ok(Math.abs(filled - Math.min(100, expected ?? 0)) < 0.5);
+      assert.equal(await ring.locator('.memory-progress-bars > path').count(), 3);
     }
     app.store.db
       .prepare("UPDATE agent_sessions SET usage=? WHERE sessionId=?")
@@ -120,8 +143,8 @@ export async function checkCompressionUI(
       await page.waitForTimeout(25);
     assert.equal(responses.length, 1);
     assert.ok(
-      !requests[0].tools?.length,
-      "native summary cannot expose coding tools",
+      requests[0].tools?.length,
+      "native summary keeps tool schemas for cache parity, without an executor",
     );
     assert.deepEqual(
       await page
@@ -157,7 +180,8 @@ export async function checkCompressionUI(
       const actual = await dialog.boundingBox(),
         expected = await design.locator(".compression-page").boundingBox();
       assert.ok(actual && expected);
-      // Width, alignment and typography still follow the prototype; the toolbar must remain exposed.
+      // Width/alignment follow the prototype; typography uses the newer shared
+      // toolbar drawer, and the session launcher must remain exposed.
       for (const key of ["x", "y", "width"] as const)
         assert.ok(
           Math.abs(actual[key] - expected[key]) <= 1,
@@ -165,27 +189,21 @@ export async function checkCompressionUI(
         );
       const launcher = (await trigger.boundingBox())!;
       assert.ok(Math.abs(actual.y + actual.height + 8 - launcher.y) <= 1, `compression sheet clears its launcher at ${width}`);
-      for (const selector of [
-        ".compression-page > header",
-        ".compression-page > footer",
-        ".compression-body",
-      ]) {
-        const css = (el: Element) => {
-          const s = getComputedStyle(el);
-          return [
-            s.paddingLeft,
-            s.paddingRight,
-            s.fontFamily,
-            s.color,
-            s.backgroundColor,
-          ];
-        };
-        assert.deepEqual(
-          await page.locator(selector).evaluate(css),
-          await design.locator(selector).evaluate(css),
-          `compression style ${width} ${selector}`,
-        );
-      }
+      const panelStyle = await dialog.evaluate(el => {
+        const sections = [];
+        for (const selector of [':scope > header', ':scope > footer', '.compression-body']) {
+          const css = getComputedStyle(el.querySelector(selector)!);
+          sections.push({ left: css.paddingLeft, right: css.paddingRight, font: css.fontFamily, background: css.backgroundColor });
+        }
+        return { shared: el.classList.contains('toolbar-detail-panel'), bodyFont: getComputedStyle(document.body).fontFamily,
+          header: sections[0], footer: sections[1], body: sections[2] };
+      });
+      assert.equal(panelStyle.shared, true);
+      assert.deepEqual([panelStyle.header.left, panelStyle.header.right], ['20px', '12px']);
+      for (const section of [panelStyle.footer, panelStyle.body]) assert.deepEqual([section.left, section.right], ['20px', '20px']);
+      for (const section of [panelStyle.header, panelStyle.footer, panelStyle.body]) assert.equal(section.font, panelStyle.bodyFont);
+      assert.equal(panelStyle.header.background, panelStyle.footer.background);
+      assert.notEqual(panelStyle.header.background, 'rgba(0, 0, 0, 0)', 'shared drawer chrome uses the surface color');
       assert.ok(
         await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
       );
@@ -202,13 +220,13 @@ export async function checkCompressionUI(
         const svg = node as SVGSVGElement;
         svg.pauseAnimations();
         svg.setCurrentTime(0.2);
-        const first = [...svg.querySelectorAll("circle")].map(circle => getComputedStyle(circle).opacity);
+        const first = [...svg.querySelectorAll("circle")].map(circle => [circle.r.animVal.value, getComputedStyle(circle).opacity]);
         svg.setCurrentTime(0.7);
-        const second = [...svg.querySelectorAll("circle")].map(circle => getComputedStyle(circle).opacity);
+        const second = [...svg.querySelectorAll("circle")].map(circle => [circle.r.animVal.value, getComputedStyle(circle).opacity]);
         svg.unpauseAnimations();
         return { first, second };
       });
-      assert.equal(frames.first.length, 3);
+      assert.ok([3, 8].includes(frames.first.length));
       assert.notDeepEqual(frames.first, frames.second, `compression bubbles animate in ${reducedMotion}`);
     }
     await close();
@@ -239,13 +257,11 @@ export async function checkCompressionUI(
       [true, 2, 7],
     );
     await trigger.click();
-    await dialog.getByText(/真实压缩摘要/).waitFor();
+    await dialog.getByText(/真实压缩摘要/).first().waitFor();
     assert.equal(await dialog.locator("script").count(), 0);
     assert.equal(await page.evaluate(() => (window as any).pwned), undefined);
     complete = false;
-    const file = app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file;
-    const manager = SessionManager.open(String(file));
-    manager.appendMessage({ role: "user", content: "压缩后的新增上下文，用于再次压缩取消测试", timestamp: Date.now() });
+    await chat("压缩后的新增上下文，用于再次压缩取消测试");
     app.agents.refresh(scope);
     await dialog.getByRole("button", { name: "再次压缩", exact: true }).click();
     await dialog.locator('.compression-status[data-state="running"]').waitFor();

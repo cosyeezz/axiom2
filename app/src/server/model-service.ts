@@ -1,4 +1,7 @@
 import { inModelNetworkWorker, modelNetwork } from "./model-network.js";
+import { ProviderUsageService, queryProviderUsage, supportsProviderUsage } from "./provider-usage.js";
+import { credentialMetadata } from "./model-metadata.js";
+import type { UsageProvider } from "../shared/model-usage.js";
 import { parseProviderProxy, providerProxyUrl, providerProxyView, readProviderProxy } from "./integrations/model-proxy-env.js";
 import { mkdirSync, readFileSync, realpathSync, watch } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -23,7 +26,7 @@ import {
 import { createModelRuntime, ensureModelProvider, nativeProviderTemplates } from "./model-runtime.js";
 import { discoverModels } from "./model-discovery.js";
 import { kiroCatalogInput, kiroCatalogScope } from "./providers/kiro-catalog.js";
-import type { KiroProvider } from "./providers/kiro.js";
+import { kiroConnectionNotices, type KiroProvider } from "./providers/kiro.js";
 import { AppError, object, text } from "../shared/protocol.js";
 import {
   editableBodyOverride,
@@ -71,13 +74,43 @@ export class ModelService {
   readonly dir: string;
   private tail: Promise<unknown> = Promise.resolve();
   authActive = false;
+  private readonly providerUsage: ProviderUsageService;
   beforeLogout?: (providers: string[], confirmed: boolean) => Promise<void>;
-  constructor(readonly root: string, private readonly network: typeof modelNetwork | null = inModelNetworkWorker ? null : modelNetwork) {
-    const configured = process.env.AXIOM_PI_DIR || join(root, "pi");
+  constructor(readonly root: string, private readonly network: typeof modelNetwork | null = inModelNetworkWorker ? null : modelNetwork, dirOverride?: string) {
+    const configured = dirOverride ?? (process.env.AXIOM_PI_DIR || join(root, "pi"));
     const homeRelative = configured.startsWith("~/") || (process.platform === "win32" && configured.startsWith("~\\"));
     this.dir = resolve(configured === "~" ? homedir() : homeRelative ? join(homedir(), configured.slice(2)) : configured);
+    this.providerUsage = new ProviderUsageService(root, this.dir, (providerId, signal) => this.network
+      ? this.network(this.root, this.dir, providerId, join(this.dir, "models.json"), "usage", {}, { signal })
+      : queryProviderUsage(providerId, readStoredCredential(providerId, join(this.dir, "auth.json")), signal));
   }
-  // Watchers only invalidate; admission still verifies content, including missed events and partial saves.
+  // Independent, read-only information: never joins the config writer or auth preparation path.
+  usage(provider: unknown, refresh = false, cancellation?: AbortSignal) {
+    return this.providerUsage.read(id(provider, "供应商 ID"), refresh, cancellation);
+  }
+  /** A small, read-only directory; never initialize SDK catalogs, resolve keys or refresh authentication. */
+  async usageProviders(): Promise<UsageProvider[]> {
+    const read = async (name: string) => {
+      try { return await readFile(join(this.dir, name), "utf8"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return "{}"; throw new AppError("CONFIG_READ_FAILED", "本地模型或认证记录无法读取；原文件未修改。"); }
+    };
+    const [raw, auth] = await Promise.all([read("models.json"), read("auth.json")]);
+    let config: Json;
+    try {
+      config = JSON.parse(raw.replace(/^\uFEFF/, ""));
+      if (!config || typeof config !== "object" || Array.isArray(config) || config.providers && (typeof config.providers !== "object" || Array.isArray(config.providers))) throw Error();
+    } catch { throw new AppError("CONFIG_READ_FAILED", "本地模型配置无法读取；原文件未修改。"); }
+    const credentials = new Map((await credentialMetadata(join(this.dir, "auth.json")).list()).map(item => [item.providerId, item.type]));
+    const names = new Map([["openai", "OpenAI"], ["openai-codex", "Codex"], ["anthropic", "Anthropic"], ["google", "Google"], ...nativeProviderTemplates().map(item => [item.id, item.name] as [string, string])]);
+    const revision = digest(raw + "\0" + auth), providers = config.providers ?? {};
+    return [...new Set([...Object.keys(providers), ...credentials.keys()])].map(providerId => {
+      const entry = providers[providerId], type = credentials.get(providerId);
+      return { id: providerId, name: typeof entry?.name === "string" && entry.name.trim() ? entry.name : names.get(providerId) ?? providerId,
+        configured: !!type || typeof entry?.apiKey === "string" && !!entry.apiKey.trim(), revision,
+        query: providerId === "openai-codex" ? "codex" : type === "oauth" && supportsProviderUsage(providerId) ? "shared" : "unsupported" } satisfies UsageProvider;
+    });
+  }
+  // Optional model-metadata invalidation only. Execution never depends on this watcher.
   watchConfiguration(changed: () => void): () => void {
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     const revision = () => ["models.json", "auth.json", "models-store.json"].map(name => {
@@ -126,20 +159,22 @@ export class ModelService {
       throw new AppError("CONFIG_READ_FAILED", "配置无法读取；未覆盖原文件。");
     }
   }
-  async runtime(path = join(this.dir, "models.json")) {
+  async runtime(path = join(this.dir, "models.json"), metadataOnly = false, providerScope?: string) {
     let providerIds: string[] = [];
     try { providerIds = Object.keys(JSON.parse((await readFile(path, "utf8")).replace(/^\uFEFF/, "")).providers ?? {}); }
     catch { /* The SDK below retains configuration read/validation diagnostics. */ }
     return createModelRuntime({
       providerIds,
+      providerScope,
       modelsPath: path,
       authPath: join(this.dir, "auth.json"),
       modelsStorePath: join(this.dir, "models-store.json"),
       allowModelNetwork: false,
       refreshOnCreate: false,
+      metadataOnly,
     });
   }
-  /** Complete expiring OAuth rotation before an execution environment snapshots auth.json. */
+  /** Explicit credential preparation for model operations; never a resource-admission gate. */
   async prepareAuth(selection: { provider: string; id: string }, modelsPath: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const credential = readStoredCredential(selection.provider, join(this.dir, "auth.json"));
@@ -159,7 +194,7 @@ export class ModelService {
     signal.throwIfAborted();
     if (!ready) throw new AppError("MODEL_UNAVAILABLE", "模型认证已失效；未发送请求，请重新登录。");
   }
-  async load() {
+  async load(metadataOnly = false) {
     const raw = await this.raw();
     let config: Json;
     try {
@@ -185,7 +220,7 @@ export class ModelService {
         "配置不是可编辑的有效 JSON 或存在重复 ID；原文件未覆盖。",
       );
     }
-    const runtime = await this.runtime();
+    const runtime = await this.runtime(undefined, metadataOnly);
     if (runtime.getError())
       throw new AppError(
         "CONFIG_READ_FAILED",
@@ -196,7 +231,8 @@ export class ModelService {
       config.providers[credential.providerId] ??= {};
     // Restore pi's cached metadata after validating the file. Auth failures remain
     // separate from configuration validity and are reported by auth/save operations.
-    await runtime.refresh({ providers: Object.keys(config.providers), allowNetwork: false, signal: AbortSignal.timeout(5000) });
+    if (!metadataOnly)
+      await runtime.refresh({ providers: Object.keys(config.providers), allowNetwork: false, signal: AbortSignal.timeout(5000) });
     if (digest(await this.raw()) !== digest(raw))
       throw new AppError(
         "REVISION_CONFLICT",
@@ -284,34 +320,32 @@ export class ModelService {
     return this.load();
   }
   read(options: { normalizeCredentials?: boolean } = {}): Promise<ModelConfiguration> {
-    return this.serial(() => this.readConfiguration(options.normalizeCredentials !== false));
+    // A page read is not a writer: never wait behind a login/catalog request or
+    // migrate keys just to display settings. Explicit migration remains serialized.
+    return options.normalizeCredentials === true
+      ? this.serial(() => this.readConfiguration(true))
+      : this.readConfiguration(false);
   }
   private async readConfiguration(normalize: boolean): Promise<ModelConfiguration> {
-    const state = await this.load();
+    const state = await this.load(!normalize);
     const { config, runtime, revision } = normalize ? await this.normalizeCredentials(state) : state;
-    const credentials = await runtime.listCredentials();
+    const credentials = new Map((await runtime.listCredentials()).map(item => [item.providerId, item]));
     const providerEntries = Object.entries(config.providers) as [string, Json][];
-    // Credential checks are independent; one failing provider must not delay or
-    // hide the status of the others.
-    const checks = await Promise.all(providerEntries.map(async ([providerId]) => {
-      try { return [providerId, await this.checkAuth(runtime, providerId)] as const; }
-      catch (error) { return [providerId, undefined, error instanceof AppError ? error.message : "无法检查认证，请检查供应商代理设置。"] as const; }
-    }));
-    const auth = new Map(checks.map(([providerId, check, error]) => [providerId, { check, error }]));
     const providers: ProviderDraft[] = [];
+    const emptyPricing = emptyModelPricing();
     for (const [providerId, p] of providerEntries) {
       const provider = runtime.getProvider(providerId);
-      const { check, error: connectionError } = auth.get(providerId)!;
-      const credential = credentials.find((item) => item.providerId === providerId);
+      const credential = credentials.get(providerId);
+      const status = runtime.getProviderAuthStatus(providerId);
+      const configured = !!credential || status.configured && !(typeof p.apiKey === "string" && !p.apiKey.trim());
       const oauth = credential?.type === "oauth" || (!credential && provider?.auth.oauth && !p.baseUrl && !p.api && !p.apiKey);
       providers.push({
         id: providerId,
         originalId: providerId,
         providerId,
-        connectionType: credentials.find((c) => c.providerId === providerId)?.type === "oauth" ||
-          (!credentials.some((c) => c.providerId === providerId) && provider?.auth.oauth && !p.baseUrl && !p.api && !p.apiKey)
-          ? "oauth" : "custom",
+        connectionType: oauth ? "oauth" : "custom",
         hasConnectionOverrides: !!(p.baseUrl || p.api || p.apiKey),
+        ...(providerId === "kiro" ? { notices: kiroConnectionNotices(p, (runtime.getRegisteredNativeProvider("kiro") as KiroProvider | undefined)?.catalogState()) } : {}),
         name: p.name ?? provider?.name ?? providerId,
         api: p.api ?? provider?.getModels()[0]?.api ?? (providerId === "kiro" ? "kiro-chat" : "openai-completions"),
         ...urlView(
@@ -325,37 +359,36 @@ export class ModelService {
         headers: headersView(p.headers),
         body: [],
         auth: {
-          configured: !!credential && (!!check || !!connectionError),
-          error: connectionError ?? (!oauth && (!credential || !check)
-            ? "未配置有效 API 密钥：请填写密钥并保存到 auth.json 后重试。"
-            : undefined),
-          source: credentials.some((c) => c.providerId === providerId)
-            ? "stored"
-            : (runtime.getProviderAuthStatus(providerId).source ??
-              (check ? "environment" : undefined)),
-          type:
-            credentials.find((c) => c.providerId === providerId)?.type ??
-            check?.type,
+          configured,
+          error: !oauth && !configured
+            ? "未配置 API 密钥：请填写密钥并保存到 auth.json 后重试。"
+            : undefined,
+          source: credential ? "stored" : status.source,
+          type: credential?.type ?? (configured ? "api_key" : undefined),
           methods: [
             ...(provider?.auth.apiKey?.login ? ["api_key" as const] : []),
             ...(provider?.auth.oauth ? ["oauth" as const] : []),
           ],
         },
-        models: [...entries(p)].map(([modelId, m]) => ({
-          key: modelId,
-          originalId: modelId,
-          id: m.axiomRequestModelId ?? modelId,
-          ...(m.axiomRequestModelId ? { configId: modelId } : {}),
-          name:
-            m.name ?? runtime.getModel(providerId, modelId)?.name ?? modelId,
-          levels: levelsOf(runtime.getModel(providerId, modelId)),
-          input: [...(runtime.getModel(providerId, modelId)?.input ?? m.input ?? ["text"])],
-          cost: Object.fromEntries(modelCostKeys.map(key => [key, runtime.getModel(providerId, modelId)?.cost[key] ?? m.cost?.[key] ?? emptyModelPricing()[key]])) as ModelPricing,
-          costTiered: !!runtime.getModel(providerId, modelId)?.cost.tiers?.length,
-          headers: headersView(m.headers),
-          body: bodyView(m.samplingParams),
-          bodyVersion: 2,
-        })),
+        models: [...entries(p)].map(([modelId, m]) => {
+          // getModel composes the provider catalog; reuse its metadata within
+          // this row only, without retaining stale models across reads.
+          const model = runtime.getModel(providerId, modelId);
+          return {
+            key: modelId,
+            originalId: modelId,
+            id: m.axiomRequestModelId ?? modelId,
+            ...(m.axiomRequestModelId ? { configId: modelId } : {}),
+            name: m.name ?? model?.name ?? modelId,
+            levels: levelsOf(model),
+            input: [...(model?.input ?? m.input ?? ["text"])],
+            cost: Object.fromEntries(modelCostKeys.map(key => [key, model?.cost[key] ?? m.cost?.[key] ?? emptyPricing[key]])) as ModelPricing,
+            costTiered: !!model?.cost.tiers?.length,
+            headers: headersView(m.headers),
+            body: bodyView(m.samplingParams),
+            bodyVersion: 2,
+          };
+        }),
       });
     }
     return {
@@ -366,7 +399,7 @@ export class ModelService {
         authPath: join(this.dir, "auth.json"),
       },
       templates: [...new Map<string, ModelConfiguration["templates"][number]>([
-        ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, { ...p, methods: [...(p.methods ?? [])] }]),
+        ...nativeProviderTemplates().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, p]),
         ...runtime.getProviders().map((p): [string, ModelConfiguration["templates"][number]] => [p.id, {
         id: p.id,
         name: p.name,
@@ -438,7 +471,7 @@ export class ModelService {
         const qoderCatalog = (providerId === "qoder" || providerId === "qoder-cn") && !!native.refreshModels;
         const kiroCatalog = providerId === "kiro" && !!native.refreshModels;
         if (kiroCatalog && connection.baseUrl)
-          throw new AppError("MODEL_DISCOVERY_FAILED", "Kiro 原生目录使用固定 AWS 服务端点，不支持自定义 Base URL；不会向该地址发送账号令牌。");
+          throw new AppError("MODEL_DISCOVERY_FAILED", "Kiro 原生目录使用固定 AWS 服务端点，不接受显式 Base URL。请保留 modelId、账号和代理，手动清除地址覆盖后重新拉取；不会向该地址发送账号令牌，登录不会自动迁移配置。");
         if (qoderCatalog && connection.baseUrl && connection.baseUrl !== native.baseUrl)
           throw new AppError("MODEL_DISCOVERY_FAILED", "Qoder 原生接入使用固定地区接口，不支持自定义 Base URL。请使用其他供应商 ID 配置代理。");
         const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
@@ -494,9 +527,9 @@ export class ModelService {
             }
             source = "native";
             message = providerId === "kiro"
-              ? "已通过 Kiro CLI 原生接口实时拉取当前账号模型目录。添加后可使用原生文本聊天与工具调用；图片能力按目录 IMAGE 声明展示，缺字段不代表模型不支持。思考等级按 kiro.rs 兼容配置展示并发送，不代表上游能力声明；未识别模型需确认后手动配置。账号权限以服务端为准，零值单价不代表免费。"
+              ? "已通过 Kiro 原生接口实时拉取当前账号模型目录；尚未验证文本聊天或工具调用权限，需分别通过实际请求验收。图片能力按目录 IMAGE 声明展示，缺字段不代表模型不支持。思考等级按兼容配置展示并发送，不代表上游能力声明；未识别模型需确认后手动配置。实际服务能力及账号权限以服务端为准，零值单价不代表免费。"
               : qoderCatalog
-              ? "已通过 Qoder 签名接口刷新账号模型目录；文本、图片和思考能力以账号目录为准，不代表已验证真实推理权限。单价未核验，零值不代表免费。"
+              ? "已通过 Qoder 签名接口刷新账号模型目录；文本和思考能力以账号目录为准，图片能力以 is_vl 为准，不代表已验证真实推理权限。单价未核验，零值不代表免费。"
               : native.refreshModels
               ? "此 OAuth 连接使用 pi 原生目录，可能包含内置或缓存项；不是 Base URL 接口返回的模型列表。"
               : "此 OAuth 连接使用应用内置模型目录；未向供应商查询实时列表，实际可用性以账号权限为准。";

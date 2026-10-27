@@ -40,6 +40,28 @@ function fixture() {
   return { directory, cwd, store, tasks, costs, scope, create, transcript, job, close: () => { store.close(); rmSync(directory, { recursive: true, force: true }); } };
 }
 
+test("public estimates cover attributed missing prices and native retries, without rewriting recorded charges", () => {
+  const f = fixture();
+  try {
+    const manager = f.transcript(f.scope.sessionId);
+    const missing = { input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheWrite: 0 };
+    manager.appendMessage({ ...reply(0, "glm-5.3"), usage: { ...missing, totalTokens: 3_100_000, cost: usage(0).cost } });
+    manager.appendUsage("native_compaction_attempt", "fixture", "deepseek-v4.1-flash", { ...missing, totalTokens: 3_100_000, cost: usage(0).cost });
+    manager.appendMessage({ ...reply(.9, "glm-5.3"), usage: { ...missing, totalTokens: 3_100_000, cost: usage(.9).cost } });
+    const unpriced = { ...missing, totalTokens: 3_100_000, cost: usage(0).cost }, recorded = { ...unpriced, cost: usage(.7).cost };
+    const checkpointUsage = { input: 2_000_000, output: 200_000, cacheRead: 4_000_000, cacheWrite: 0, totalTokens: 6_200_000, cost: recorded.cost };
+    manager.appendCompaction("SUMMARY", null, 100, { axiomNativeCompaction: { version: 1, calls: [recorded, unpriced].map(usage => ({ provider: "fixture", model: "glm-5.3", usage })) } }, false, checkpointUsage);
+    const before = readFileSync(manager.getSessionFile()!, "utf8"), report = f.costs.get(f.scope);
+    assert.equal(report.total.estimatedRecords, 3);
+    assert.ok(Math.abs(report.total.estimatedCost! - 5.152) < 1e-10);
+    assert.ok(Math.abs(report.total.knownCost - 6.852) < 1e-10);
+    assert.equal(report.total.unknownCost, 0);
+    assert.equal(report.rows.filter(row => row.category === "compression").reduce((n, row) => n + (row.estimatedRecords ?? 0), 0), 2);
+    assert.match(costAmount(report.total), /含估算/);
+    assert.equal(readFileSync(manager.getSessionFile()!, "utf8"), before, "estimates never rewrite history");
+  } finally { f.close(); }
+});
+
 test("costs include full main history, distinct children, compactions and tool models exactly once", () => {
   const f = fixture();
   try {

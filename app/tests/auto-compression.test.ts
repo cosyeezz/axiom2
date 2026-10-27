@@ -1,4 +1,4 @@
-import { compressionMemoryRead } from "./compression-memory-fixture.js";
+import { compressionMemoryRead, isCompressionRequest } from "./compression-memory-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -72,7 +72,7 @@ test("automatic compression rearms only after a successful below-threshold readi
   assert.equal(attempts, 3);
 });
 
-test("legacy compression preference migration retains model and persists explicit automatic settings", () => {
+test("legacy compression preference migration ignores obsolete models and persists automatic settings", () => {
   const root = mkdtempSync(join(tmpdir(), "axiom-auto-migrate-"));
   const selection = { provider: "fixture", id: "summary", thinking: "off" as const };
   const legacy = new DatabaseSync(join(root, "axiom.sqlite"));
@@ -81,11 +81,12 @@ test("legacy compression preference migration retains model and persists explici
   legacy.close();
   let store = new Store(root);
   try {
-    assert.deepEqual(store.compressionPreferences(), { selection, auto: defaultAutoCompression });
+    assert.deepEqual(store.compressionPreferences(), { auto: defaultAutoCompression });
     const auto = { enabled: false, tokens: 45000, percent: 65 };
-    store.saveCompressionPreferences({ selection, auto });
+    store.saveCompressionPreferences({ auto });
     store.close(); store = new Store(root);
-    assert.deepEqual(store.compressionPreferences(), { selection, auto });
+    assert.deepEqual(store.compressionPreferences(), { auto });
+    assert.equal(store.db.prepare("SELECT selection FROM compression_preferences WHERE id=1").get()!.selection, null);
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -94,7 +95,9 @@ test("automatic compression uses real pi usage and the chat window, shares persi
   const previousPi = process.env.AXIOM_PI_DIR;
   process.env.AXIOM_PI_DIR = join(root, "pi");
   mkdirSync(project); mkdirSync(join(root, "pi"));
-  let tokens = 119, holdSummaries = false, summaryRequests = 0, holdChat = false;
+  let tokens = 119, holdSummaries = false, summaryRequests = 0, holdChat = false, failSummaries = false;
+  let nativeRequests = 0;
+  const chatBodies: any[] = [];
   const summaries: ServerResponse[] = [], chats: ServerResponse[] = [];
   const reply = (res: ServerResponse, content: string | object) => {
     for (const [delta, finish_reason] of [[typeof content === "string" ? { role: "assistant", content } : content, null], [{}, typeof content === "string" ? "stop" : "tool_calls"]])
@@ -108,10 +111,23 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     let raw = "";
     for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
-    res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders();
-    if (!body.tools?.length) {
+    if (JSON.stringify(body.messages?.[0]?.content).includes("You are a context summarization assistant")) {
+      nativeRequests++;
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      reply(res, "## Goal\nPI_NATIVE_SAFETY_SUMMARY");
+      return;
+    }
+    if (!isCompressionRequest(body)) chatBodies.push(body);
+    if (isCompressionRequest(body) && failSummaries) {
       summaryRequests++;
-      assert.equal(body.model, "summary", "automatic jobs use the saved independent summary model");
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "fixture summary failure", type: "invalid_request_error" } }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders();
+    if (isCompressionRequest(body)) {
+      summaryRequests++;
+      assert.equal(body.model, "chat", "automatic jobs use the current session model");
       if (holdSummaries) summaries.push(res);
       else reply(res, "<axiom-summary>自动压缩验证</axiom-summary>\n## Goal\nAUTO_SUMMARY");
     } else if (holdChat) chats.push(res);
@@ -123,8 +139,8 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     models: [{ id: "chat", contextWindow: 32000, maxTokens: 1000 }, { id: "summary", contextWindow: 1000000, maxTokens: 1000 }],
   } } }));
   writeFileSync(join(root, "pi/auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "loopback-only" } }));
-  // Native proactive compression would fire near zero: Axiom must own this threshold.
-  writeFileSync(join(root, "pi/settings.json"), JSON.stringify({ compaction: { enabled: true, reserveTokens: 31999 }, retry: { enabled: false } }));
+  // A stale fixed reserve must not override the host's model-relative 70% native safety net.
+  writeFileSync(join(root, "pi/settings.json"), JSON.stringify({ compaction: { enabled: true, reserveTokens: 31999, keepRecentTokens: 100 }, retry: { enabled: false } }));
   let app = await startServer({ root, port: 0 });
   const phases: string[] = [];
   const compressionEvent = app.agents.compressions.event.bind(app.agents.compressions);
@@ -142,20 +158,20 @@ test("automatic compression uses real pi usage and the chat window, shares persi
         params: { selection: { provider: "fixture", id: "chat", thinking: "off" } } });
       return scope;
     };
-    const prompt = (scope: Scope) => app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text: "自动压缩测试" } });
+    const prompt = (scope: Scope, text = "自动压缩测试") => app.agents.command({ op: "prompt", requestId: randomUUID(), ...scope, params: { text } });
     const idle = (scope: Scope) => wait(() => !app.agents.active(scope), "agent did not settle");
     const done = (scope: Scope) => wait(() => app.agents.compressions.info(scope)?.state === "completed",
       `automatic summary did not apply for ${scope.sessionId}`);
     const count = (scope: Scope) => Number(app.store.db.prepare("SELECT COUNT(*) AS n FROM compressions WHERE sessionId=?").get(scope.sessionId)!.n);
-    const selection = { provider: "fixture", id: "summary", thinking: "off" as const };
-    await preferences({ selection, auto: { tokens: 120, percent: 80 } });
+    const selection = { provider: "fixture", id: "chat", thinking: "off" as const };
+    await preferences({ auto: { tokens: 120, percent: 80 } });
     for (const auto of [{ tokens: 0 }, { tokens: 1.5 }, { tokens: "120" }, { tokens: Number.MAX_SAFE_INTEGER + 1 },
       { percent: 0 }, { percent: 101 }, { percent: 80.5 }, { enabled: "true" }, { extra: 1 }, {}, null])
       await assert.rejects(preferences({ auto }), { code: "INVALID_INPUT" });
-    assert.deepEqual(app.store.compressionPreferences(), { selection, auto: { enabled: true, tokens: 120, percent: 80 } });
+    assert.deepEqual(app.store.compressionPreferences(), { auto: { enabled: true, tokens: 120, percent: 80 } });
     await preferences({ auto: { percent: 75 } });
-    await preferences({ selection });
-    assert.deepEqual(app.store.compressionPreferences().auto, { enabled: true, tokens: 120, percent: 75 }, "model patches preserve thresholds");
+    await assert.rejects(preferences({ selection }), { code: "INVALID_INPUT" });
+    assert.deepEqual(app.store.compressionPreferences().auto, { enabled: true, tokens: 120, percent: 75 }, "rejected model overrides preserve thresholds");
 
     const scope = await create();
     await prompt(scope); await idle(scope);
@@ -186,8 +202,9 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     await preferences({ auto: { enabled: false, tokens: 1 } });
     const disabledScope = await create();
     await prompt(disabledScope); await idle(disabledScope);
-    assert.equal(count(disabledScope), 0, "disabled proactive policy does not invoke either compressor");
-    assert.ok(!phases.includes("compacting"), "intercepted native threshold checks must not advertise active compaction");
+    assert.equal(count(disabledScope), 0, "disabled host policy does not invoke Axiom compression");
+    assert.ok(!phases.includes("compacting"), "below 70% there is no native compaction");
+    assert.equal(nativeRequests, 0);
 
     await preferences({ auto: { enabled: true, tokens: 120, percent: 80 } });
     holdSummaries = true;
@@ -201,42 +218,95 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(count(cancelScope), 1, "cancel suppresses repeated events from the same run");
 
-    // A broken saved summary model produces a visible failure without retrying
-    // every subsequent usage event; repairing the model does not replay the run.
+    // Provider failure stays visible and does not retry in the same run, even
+    // after provider recovery; a new user execution may try again.
     holdSummaries = false;
     const failedScope = await create();
-    app.store.saveCompressionPreferences({ ...app.store.compressionPreferences(), selection: { ...selection, id: "missing" } });
+    failSummaries = true;
     const beforeFailure = summaryRequests;
     await prompt(failedScope); await idle(failedScope);
-    await wait(() => app.agents.compressions.info(failedScope)?.state === "failed", "missing model failure was not visible");
-    assert.match(app.agents.compressions.info(failedScope)!.error!, /压缩模型/);
-    await preferences({ selection });
+    await wait(() => app.agents.compressions.info(failedScope)?.state === "failed", "provider summary failure was not visible");
+    assert.match(app.agents.compressions.info(failedScope)!.error!, /fixture summary failure/);
+    failSummaries = false;
     for (let i = 0; i < 5; i++) app.agents.compressions.event(failedScope, app.agents.info(failedScope).run!.id, { type: "usage", autoCheck: true });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(count(failedScope), 1);
-    assert.equal(summaryRequests, beforeFailure, "failure is not silently retried after a configuration edit");
+    assert.equal(summaryRequests, beforeFailure + 1, "failure is not silently retried after provider recovery");
     await prompt(failedScope); await idle(failedScope); await done(failedScope);
     assert.equal(count(failedScope), 2, "a new user execution can try the repaired configuration");
 
-    // A queued start must not cross an explicit stop while waiting for model serialization.
+    // Fail only the host's asynchronous summary, then cross Pi's independent 70% threshold.
+    const fallbackScope = await create();
+    const nativeEntries = (scope: Scope) => {
+      const file = String(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file);
+      return SessionManager.open(file).getBranch().filter((entry) => entry.type === "compaction");
+    };
+    tokens = 200;
+    failSummaries = true;
+    await prompt(fallbackScope, "FALLBACK_OLD_HISTORY ".repeat(100)); await idle(fallbackScope);
+    await wait(() => app.agents.compressions.info(fallbackScope)?.state === "failed", "host failure before fallback was not visible");
+    assert.equal(nativeEntries(fallbackScope).length, 0, "Pi must not trigger below 70%");
+    const nativeBefore = nativeRequests;
+    tokens = 22401; // Pi is strict > 70% of the 32k window.
+    await prompt(fallbackScope); await idle(fallbackScope);
+    await wait(() => app.agents.compressions.info(fallbackScope)?.state === "failed", "host failure must remain visible after native recovery");
+    assert.ok(nativeRequests > nativeBefore, "Pi issued its own standalone summary request");
+    const checkpoints = nativeEntries(fallbackScope);
+    assert.equal(checkpoints.length, 1);
+    assert.match(checkpoints[0].summary, /PI_NATIVE_SAFETY_SUMMARY/);
+    assert.ok(!(checkpoints[0].details as any)?.axiomCompressionId, "native success is not reported as host success");
+    assert.ok(phases.includes("compacting"), "actual native compaction publishes its real phase");
+    failSummaries = false;
+    await preferences({ auto: { enabled: false } });
+    tokens = 100;
+    await prompt(fallbackScope); await idle(fallbackScope);
+    const rebuilt = JSON.stringify(chatBodies.at(-1).messages);
+    assert.match(rebuilt, /PI_NATIVE_SAFETY_SUMMARY/);
+    assert.doesNotMatch(rebuilt, /FALLBACK_OLD_HISTORY/);
+    assert.match(rebuilt, /上下文压缩已实际应用/, "native compaction also asks the session to recover memory");
+
+    // Turning off Axiom does not turn off Pi; memory-enabled main sessions also allow overflow.
+    for (const measured of [22401, 33000]) {
+      const independentScope = await create();
+      tokens = 100;
+      await prompt(independentScope, "INDEPENDENT_HISTORY ".repeat(100)); await idle(independentScope);
+      tokens = measured;
+      // Give Pi a genuine older span to summarize while retaining this new span.
+      // Inflated provider usage alone cannot make a tiny transcript compressible.
+      await prompt(independentScope, "INDEPENDENT_CURRENT_INPUT ".repeat(100)); await idle(independentScope);
+      assert.equal(count(independentScope), 0);
+      assert.equal(nativeEntries(independentScope).length, 1, `native recovery at ${measured} must remain enabled`);
+    }
+    await preferences({ auto: { enabled: true, tokens: 120, percent: 80 } });
+    tokens = 120;
+
+    // A pending start must not cross an explicit stop during its configuration read.
     holdChat = true;
     const stoppedScope = await create();
     await prompt(stoppedScope);
     await wait(() => chats.length > 0, "chat did not reach provider");
-    let release!: () => void;
-    const lock = app.agents.models.serial(() => new Promise<void>((resolve) => { release = resolve; }));
-    await new Promise((resolve) => setImmediate(resolve));
-    reply(chats[0], "stop boundary");
-    await idle(stoppedScope);
-    await app.agents.stop(stoppedScope);
-    release(); await lock;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.equal(count(stoppedScope), 0, "stopped pending automatic work cannot launch");
+    const originalRaw = app.agents.models.raw.bind(app.agents.models);
+    let release!: () => void, reading = false;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const pendingRead = t.mock.method(app.agents.models, "raw", async () => {
+      reading = true;
+      await gate;
+      return originalRaw();
+    });
+    try {
+      reply(chats[0], "stop boundary");
+      await wait(() => reading, "automatic start never reached configuration read");
+      await app.agents.stop(stoppedScope);
+      release();
+      await idle(stoppedScope);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(count(stoppedScope), 0, "stopped pending automatic work cannot launch");
+    } finally { release(); pendingRead.mock.restore(); }
 
     const requestCount = summaryRequests;
     await app.close(); app = await startServer({ root, port: 0 });
     assert.equal(summaryRequests, requestCount, "restart does not replay automatic jobs");
-    assert.deepEqual(app.store.compressionPreferences(), { selection, auto: { enabled: true, tokens: 120, percent: 80 } });
+    assert.deepEqual(app.store.compressionPreferences(), { auto: { enabled: true, tokens: 120, percent: 80 } });
     assert.equal(app.agents.compressions.info(scope)!.id, job.id);
   } finally {
     await app.close();

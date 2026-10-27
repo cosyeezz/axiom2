@@ -179,7 +179,8 @@ test("Kiro never restores a different login, profile, or unscoped legacy cache",
   await credentials.modify("kiro", async () => credential({ refresh: "OTHER-ACCOUNT" }));
   assert.deepEqual(await models.getAvailable("kiro"), [], "availability rejects changed credentials even before refresh");
   await models.refresh({ allowNetwork: false }); assert.deepEqual(models.getModels("kiro"), []);
-  await credentials.modify("kiro", async () => undefined);
+  await credentials.delete("kiro");
+  assert.equal(await credentials.read("kiro"), undefined, "modify(undefined) would keep the old credential; logout must really delete it");
   await models.refresh({ allowNetwork: false }); assert.deepEqual(models.getModels("kiro"), []);
   assert.deepEqual(await modelsStore.read("kiro"), stored, "offline initialization never rewrites storage");
   assert.notEqual(kiroCatalogScope(credential()), kiroCatalogScope(credential({ profileArn: "arn:aws:codewhisperer:us-east-1:123456789012:profile/other" })));

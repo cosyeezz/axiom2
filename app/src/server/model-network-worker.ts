@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CredentialSynchronizationError } from "@earendil-works/pi-coding-agent";
+import { CredentialSynchronizationError, readStoredCredential } from "@earendil-works/pi-coding-agent";
+import { queryProviderUsage } from "./provider-usage.js";
 import { ensureModelProvider } from "./model-runtime.js";
 import { ModelService } from "./model-service.js";
 import { AppError } from "../shared/protocol.js";
@@ -27,6 +28,7 @@ async function run(message: any, signal: AbortSignal) {
   configureModelNetwork(root, modelsPath, provider);
   const models = new ModelService(root);
   if (op === "catalog") return models.catalog(provider, payload.revision, signal);
+  if (op === "usage") return queryProviderUsage(provider, readStoredCredential(provider, join(models.dir, "auth.json")), signal);
   const runtime = await models.runtime(modelsPath);
   await ensureModelProvider(runtime, provider);
   if (runtime.getError()) throw new AppError("CONFIG_READ_FAILED", "模型配置未通过校验。");

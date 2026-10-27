@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon.js";
 import { LocalPath } from "../LocalPath.js";
+import { GitBranchBadge } from "./GitBranchBadge.js";
 import { useConnection, useConnectionState, useScope } from "../transport.js";
 import { openFileDialog } from "../OpenFileDialog.js";
 import {
@@ -58,6 +59,7 @@ export function Title({
       <div className="title-heading">
         <h1 id="chat-title">{title}</h1>
         <CopyTitle key={`${scope?.sessionId ?? ""}:${title}`} title={title} />
+        <GitBranchBadge key={`${workspace?.id ?? ""}:${workspace?.path ?? ""}`} workspace={workspace} />
         <ConnectionStatus />
       </div>
       <div className="title-meta">

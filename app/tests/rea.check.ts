@@ -23,6 +23,9 @@ try {
   assert.equal(await page.getByRole("button", { name: "安装 Skill", exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole("button", { name: "安装 MCP", exact: true }).isDisabled(), true);
   await page.waitForFunction(() => !(document.querySelector("#rea .btn-primary") as HTMLButtonElement)?.disabled);
+  // Deliberately retain coverage of a confirmed older installation.
+  await page.locator("#rea").getByRole("button", { name: "检查更新", exact: true }).click();
+  await page.locator("#rea").getByText("v6.7.0", { exact: true }).waitFor();
   await install.click();
   await page.getByRole("button", { name: "取消操作", exact: true }).waitFor();
   await page.reload();
@@ -34,8 +37,14 @@ try {
   await page.getByText("REA 与技能已接入；已有会话请重新加载技能与 MCP。", { exact: true }).waitFor();
   assert.equal(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.version, "6.7.0");
   assert.ok(JSON.parse(readFileSync(reaConfigPath(root), "utf8")).installation.runtime);
-  assert.match(await page.locator("#rea .tools-facts").innerText(), /组件专用/);
-  assert.match(await page.locator("#rea .tools-diagnostic").innerText(), /1 个工具/);
+  assert.match(await page.locator("#rea .tools-facts").first().innerText(), /组件专用/);
+  assert.match(await page.locator('#rea [aria-labelledby="rea-doctor-heading"] .tools-diagnostic').innerText(), /1 个工具/);
+  const automatic = page.locator('#rea [aria-labelledby="rea-auto-heading"]');
+  await automatic.getByText("自动", { exact: true }).waitFor();
+  assert.equal(await automatic.locator("details").getAttribute("open"), null, "advanced details default to collapsed");
+  await automatic.getByText("资源详情", { exact: true }).click();
+  assert.match(await automatic.innerText(), /当前参考预算/);
+  assert.match(await automatic.innerText(), /操作系统级内存硬限制/);
   const enabled = page.locator("#rea input[type=checkbox]");
   await enabled.uncheck();
   await page.getByText("默认设置已保存；已有会话请在技能与 MCP 面板重新加载。", { exact: true }).waitFor();
@@ -44,7 +53,7 @@ try {
   await page.waitForFunction(() => !(document.querySelector("#rea input") as HTMLInputElement)?.checked);
   await page.getByRole("button", { name: "检测 REA 连接", exact: true }).click();
   await page.getByText("检查完成。", { exact: true }).waitFor();
-  await page.locator("#rea .tools-diagnostic").waitFor();
+  await page.locator('#rea [aria-labelledby="rea-doctor-heading"] .tools-diagnostic').waitFor();
   const installSkill = page.getByRole("button", { name: "安装 Skill", exact: true });
   const installMcp = page.getByRole("button", { name: "安装 MCP", exact: true });
   await page.getByRole("button", { name: "卸载 Skill", exact: true }).click();

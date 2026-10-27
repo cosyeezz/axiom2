@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import { createAssistantMessageEventStream, parseStreamingJson, getCurrentTools, validateToolArguments, type Api, type AssistantMessage, type Model, type OAuthAuth, type StreamOptions, type ToolCall, type TranscriptContext } from "@earendil-works/pi-ai";
 import { validateKiroCredential } from "./kiro-catalog.js";
 import type { KiroCredential } from "./kiro-auth.js";
-import { assertKiroChatModel, KiroChatError, kiroChatEndpoint, kiroChatFailure, kiroChatRequest, kiroObject, kiroStreamFailure, kiroText } from "./kiro-chat-protocol.js";
+import { assertKiroChatModel, KiroChatError, kiroChatEndpoint, kiroChatRequest, kiroObject, kiroText } from "./kiro-chat-protocol.js";
+import { classifyKiroFailure, KiroServiceFailure, kiroFailureMessage, kiroLocalFailure, kiroPartialFailure, readKiroErrorBody } from "./kiro-failure.js";
 import { readKiroEvents } from "./kiro-eventstream.js";
 import { KiroThinkingError, kiroThinkingRequest } from "./kiro-thinking.js";
 import { KiroThinkingStream } from "./kiro-thinking-stream.js";
+import { KiroToolInput } from "./kiro-tool-input.js";
+import { kiroRequestUsage } from "./kiro-usage.js";
 
 // Hooks and injected transports may ignore signals. Bound our waiting independently;
 // a late response is cancelled without allowing it to publish events or retain a body.
@@ -41,16 +44,16 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
     return { apiKey: ticket };
   } };
   function stream(model: Model<Api>, context: TranscriptContext, options: StreamOptions = {}) {
-    const output = createAssistantMessageEventStream();
+    const output = createAssistantMessageEventStream(), measurement = kiroRequestUsage(model);
     const message: AssistantMessage = { role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
-      stopReason: "pending", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+      stopReason: "pending", timestamp: Date.now(), usage: measurement.usage };
     void (async () => {
-      let response: Response | undefined, usageSeen = false, usageIncomplete = false;
+      let response: Response | undefined, usageSeen = false, usageIncomplete = false, partial = false;
+      let stage: "request" | "transport" | "response" | "http" | "stream" = "request", unknownEvents = 0, unknownStops = 0;
       const timeout = options.timeoutMs ?? 600_000;
       const bounded = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(Number.isSafeInteger(timeout) && timeout > 0 ? Math.min(timeout, 3_600_000) : 600_000)]);
       let textIndex: number | undefined, thinkingIndex: number | undefined;
-      const tools = new Map<string, { index: number; input: string; ended: boolean }>();
+      const tools = new Map<string, { index: number; input: KiroToolInput; ended: boolean }>();
       const endText = () => {
         if (textIndex === undefined) return;
         const block = message.content[textIndex];
@@ -116,7 +119,7 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
           }
         };
         if (Object.values(historyNotice).some(Boolean)) (message.diagnostics ??= []).push({ type: "kiro-reasoning-history-omitted", timestamp: Date.now(), details: historyNotice });
-        if (interruptionNotice.omittedToolCalls) (message.diagnostics ??= []).push({ type: "kiro-interrupted-tools-omitted", timestamp: Date.now(), details: interruptionNotice });
+        if (interruptionNotice.omittedToolCalls) (message.diagnostics ??= []).push({ type: "kiro-interrupted-tools-omitted", timestamp: Date.now(), details: { ...interruptionNotice, executionState: "unknown", userBoundaryProvenance: "unverified", policy: "verify-before-repeating-side-effects" } });
         const replacement = await waitForKiro(options.onPayload?.(payload, model), bounded), request = replacement === undefined ? payload : kiroObject(replacement);
         const state = kiroObject(request.conversationState), current = kiroObject(kiroObject(state.currentMessage).userInputMessage);
         if (request.profileArn !== account.profileArn || current.modelId !== model.id || current.origin !== "KIRO_CLI")
@@ -133,18 +136,28 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
         headers.set("x-amz-target", "AmazonCodeWhispererStreamingService.GenerateAssistantResponse");
         headers.set("x-amzn-codewhisperer-optout", "true");
         headers.set("User-Agent", "Axiom KiroChat/1.0"); headers.set("amz-sdk-invocation-id", randomUUID()); headers.set("amz-sdk-request", "attempt=1; max=1");
+        stage = "transport";
         response = await waitForKiro((options.fetch ?? transport ?? globalThis.fetch)(kiroChatEndpoint(account), { method: "POST", redirect: "error", headers, body, signal: bounded }), bounded, cancelBody);
-        bounded.throwIfAborted();
+        bounded.throwIfAborted(); stage = "response";
         await waitForKiro(options.onResponse?.({ status: response.status, headers: Object.fromEntries(response.headers.entries()) }, model), bounded);
         bounded.throwIfAborted();
-        if (!response.ok) throw kiroChatFailure(response.status);
+        if (!response.ok) {
+          stage = "http";
+          const failureBody = await readKiroErrorBody(response, bounded); bounded.throwIfAborted();
+          throw new KiroServiceFailure(classifyKiroFailure({ stage: "http", status: response.status, body: failureBody,
+            codes: [response.headers.get("x-amzn-errortype")], requestId: response.headers.get("x-amzn-requestid") ?? response.headers.get("x-amz-request-id") }));
+        }
+        stage = "stream";
         if (!response.body || !response.headers.get("content-type")?.toLowerCase().startsWith("application/vnd.amazon.eventstream"))
           throw new KiroChatError("Kiro 未返回有效的 AWS event-stream 响应。");
         output.push({ type: "start", partial: message });
         for await (const event of readKiroEvents(response.body, bounded)) {
-          await waitForKiro(options.onProviderStreamEvent?.(event, model), bounded); bounded.throwIfAborted();
           const { headers, data } = event, kind = headers[":event-type"];
-          if (headers[":message-type"] !== "event") throw kiroStreamFailure(headers[":exception-type"] ?? headers[":error-code"]);
+          // Count upstream progress before hooks/tag buffering, including empty starts.
+          if (kind === "assistantResponseEvent" || kind === "reasoningContentEvent" || kind === "toolUseEvent") partial = true;
+          await waitForKiro(options.onProviderStreamEvent?.(event, model), bounded); bounded.throwIfAborted();
+          if (headers[":message-type"] !== "event") throw new KiroServiceFailure(classifyKiroFailure({ stage: "stream", status: response.status,
+            codes: [headers[":exception-type"], headers[":error-code"]], body: { state: "json", data }, requestId: data.requestId }));
           if (kind === "assistantResponseEvent") {
             if (typeof data.content !== "string") throw new KiroChatError("Kiro 文本事件格式无效。");
             if (tagged) emitParts(tagged.push(data.content)); else appendText(data.content);
@@ -167,20 +180,21 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
             if (!tool) {
               if (seenCalls.has(data.toolUseId)) throw new KiroChatError("Kiro 工具调用 ID 与既有历史重复；未执行该工具。");
               if (!kiroText(data.name, 64) || !names.has(data.name) || tools.size >= 1024) throw new KiroChatError("Kiro 返回了未声明、无效或过多的工具调用。");
-              tool = { index: message.content.length, input: "", ended: false }; tools.set(data.toolUseId, tool);
+              tool = { index: message.content.length, input: new KiroToolInput(), ended: false }; tools.set(data.toolUseId, tool);
               message.content.push({ type: "toolCall", id: data.toolUseId, name: names.get(data.name)!, arguments: {} });
               output.push({ type: "toolcall_start", contentIndex: tool.index, partial: message });
             }
             const block = message.content[tool.index] as ToolCall;
             if (tool.ended || data.name !== undefined && names.get(String(data.name)) !== block.name) throw new KiroChatError("Kiro 工具调用重复结束或名称发生变化。");
             if (typeof data.input === "string") {
-              tool.input += data.input;
-              if (Buffer.byteLength(tool.input) > 1024 * 1024) throw new KiroChatError("Kiro 工具参数超过本地 1 MiB 限制。");
-              block.arguments = parseStreamingJson<ToolCall["arguments"]>(tool.input);
+              tool.input.append(data.input);
+              const preview = data.stop === true ? undefined : tool.input.preview();
+              if (preview !== undefined) block.arguments = parseStreamingJson<ToolCall["arguments"]>(preview);
               output.push({ type: "toolcall_delta", contentIndex: tool.index, delta: data.input, partial: message });
             }
             if (data.stop === true) {
-              try { block.arguments = kiroObject(JSON.parse(tool.input || "{}")) as ToolCall["arguments"]; }
+              bounded.throwIfAborted();
+              try { block.arguments = kiroObject(JSON.parse(tool.input.complete() || "{}")) as ToolCall["arguments"]; }
               catch { throw new KiroChatError("Kiro 工具参数 JSON 无效或被截断；未执行该工具。"); }
               try {
                 const definition = getCurrentTools(context.messages).find(item => item.name === block.name);
@@ -190,24 +204,15 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
                 // exactly the JSON supplied by this stream, not a silently repaired value.
                 if (JSON.stringify(validated) !== JSON.stringify(block.arguments)) throw Error();
               } catch { throw new KiroChatError("Kiro 工具参数不符合声明的 JSON Schema；未执行该工具。"); }
+              bounded.throwIfAborted();
               tool.ended = true; output.push({ type: "toolcall_end", contentIndex: tool.index, toolCall: block, partial: message });
             }
           } else if (kind === "metadataEvent") {
             if (data.stopReason === "CONTENT_FILTERED") throw new KiroChatError("Kiro 服务拦截了当前内容，未将拒答伪装为空回复。");
-            if (data.tokenUsage != null) {
-              const usage = kiroObject(data.tokenUsage);
-              const count = (key: string) => { const value = usage[key] ?? 0; if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000) throw new KiroChatError("Kiro token 用量格式无效。"); return value; };
-              // Validate every present field, but do not replace a valid snapshot with
-              // an empty/partial one or pretend absent primary counters are precise zero.
-              for (const key of ["uncachedInputTokens", "outputTokens", "cacheReadInputTokens", "cacheWriteInputTokens", "totalTokens"]) if (usage[key] != null) count(key);
-              usageIncomplete = ["uncachedInputTokens", "outputTokens", "cacheReadInputTokens", "cacheWriteInputTokens"].some(key => usage[key] == null);
-              if (!usageIncomplete) {
-                message.usage.input = count("uncachedInputTokens"); message.usage.output = count("outputTokens");
-                message.usage.cacheRead = count("cacheReadInputTokens"); message.usage.cacheWrite = count("cacheWriteInputTokens");
-                const total = message.usage.input + message.usage.output + message.usage.cacheRead + message.usage.cacheWrite;
-                if (usage.totalTokens != null && count("totalTokens") !== total) throw new KiroChatError("Kiro token 用量总计与分项不一致。");
-                message.usage.totalTokens = total; usageSeen = true;
-              }
+            if (Object.hasOwn(data, "stopReason")) unknownStops++;
+            if (Object.hasOwn(data, "tokenUsage")) {
+              usageIncomplete = !measurement.accept(data.tokenUsage);
+              if (!usageIncomplete) usageSeen = true;
             }
           } else if (kind === "meteringEvent" || kind === "contextUsageEvent") {
             // Credits/percentages are not token counts or dollar prices. Preserve only bounded scalars.
@@ -216,18 +221,26 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
               const value = data[key]; if (typeof value === "number" && Number.isFinite(value) || typeof value === "string" && value.length <= 64) details[key] = value;
             }
             (message.diagnostics ??= []).push({ type: `kiro-${kind}`, timestamp: Date.now(), details });
-          }
+          } else unknownEvents++;
         }
         bounded.throwIfAborted(); flushTags(); endText(); endThinking();
         if ([...tools.values()].some(tool => !tool.ended)) throw new KiroChatError("Kiro 工具调用流被截断，未执行不完整的工具请求。");
         if (!tools.size && !message.content.some(block => block.type === "text" && !!block.text.trim())) throw new KiroChatError("Kiro 未返回有效文本或工具调用，不能将空回复或未知事件视为成功。");
         if (usageIncomplete) (message.diagnostics ??= []).push({ type: "kiro-usage-incomplete", timestamp: Date.now(), details: { note: "服务用量快照不完整；保留已知计数，缺失项零值不表示精确计量。" } });
         if (!usageSeen) (message.diagnostics ??= []).push({ type: "kiro-usage-unavailable", timestamp: Date.now(), details: { note: "服务未报告精确 token 用量；零值不是实际用量或免费保证。" } });
+        (message.diagnostics ??= []).push({ type: "kiro-completion-inferred", timestamp: Date.now(),
+          details: { policy: "local-eof-policy", terminalContract: "unverified", unknownEvents, unrecognizedStopReasons: unknownStops } });
         message.stopReason = tools.size ? "toolUse" : "stop";
         output.push({ type: "done", reason: message.stopReason, message });
       } catch (error) {
         message.stopReason = options.signal?.aborted ? "aborted" : "error";
-        message.errorMessage = options.signal?.aborted ? "Kiro 聊天请求已取消。" : bounded.aborted ? "Kiro 聊天请求超时，请重试。" : error instanceof KiroChatError || error instanceof KiroThinkingError ? error.message : "Kiro 聊天网络、响应或请求钩子异常；未回显敏感数据。";
+        const failure = error instanceof KiroServiceFailure ? error.info : undefined;
+        const local = error instanceof KiroChatError || error instanceof KiroThinkingError ? kiroLocalFailure(error.message) : undefined;
+        (message.diagnostics ??= []).push({ type: "kiro-failure", timestamp: Date.now(), details: failure ? { ...failure, partial }
+          : { stage, partial, category: bounded.aborted ? "timeout-or-cancel" : "local-or-transport", ...(local ? { localCode: local.code } : {}), ...(response ? { status: response.status } : {}) } });
+        message.errorMessage = options.signal?.aborted ? "Kiro 聊天请求已取消。" : partial ? kiroPartialFailure + (local ? " " + local.note : "")
+          : bounded.aborted ? "Kiro 聊天请求超时，请重试。" : failure ? kiroFailureMessage(failure, false)
+          : error instanceof KiroChatError || error instanceof KiroThinkingError ? error.message : "Kiro 聊天网络、响应或请求钩子异常；未回显敏感数据。";
         output.push({ type: "error", reason: message.stopReason, error: message });
       } finally {
         if (response) cancelBody(response);

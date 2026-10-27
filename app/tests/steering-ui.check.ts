@@ -33,7 +33,7 @@ const initialQueue = (scope: Scope): QueueItem[] => [
   { id: `steer-${scope.sessionId}`, text: `queued-steer-${scope.sessionId}`, mode: "steer" },
   { id: `follow-${scope.sessionId}`, text: `queued-followUp-${scope.sessionId}`, mode: "followUp" },
 ];
-const blank = (): Draft => ({ text: "", attachment: null, attachments: [], images: [] });
+const blank = (): Draft => ({ text: "", attachment: null, attachments: [], images: [], skills: [] });
 const stops = (commands: Command[]) => commands.filter((c) => ["agent.stop", "task.cancel"].includes(c.op));
 const sends = (commands: Command[]) => commands.filter((c) => /^(prompt|agent\.(prompt|continue)|task\.(append|followup))$/.test(c.op));
 const recalls = (commands: Command[]) => commands.filter((c) => c.op === "agent.recall");
@@ -73,20 +73,21 @@ async function fixture(nested: boolean) {
   page.on("pageerror", (e) => errors.push(e.message));
   const scope = nested ? child : owner;
   const queues = new Map([owner, other, child].map((s) => [s.sessionId, initialQueue(s)]));
+  const stopped = new Set<string>();
   let socket: WebSocketRoute | undefined, seq = 0;
   let holdPrompt = false, holdRecall = false, recalledDrafts: Draft[] = [];
   const pendingPrompt: (() => void)[] = [], pendingRecall: (() => void)[] = [];
   const info = (s: Scope) => ({
     ...emptyAgent, selection,
-    run: { id: `run-${s.sessionId}`, sessionId: s.sessionId, status: "running", selection,
+    run: { id: `run-${s.sessionId}`, sessionId: s.sessionId, status: stopped.has(s.sessionId) ? "cancelled" : "running", selection,
       startedAt: Date.now(), endedAt: null, error: null },
-    ...(s.sessionId === child.sessionId ? { task: { id: task.id, parentSessionId: owner.sessionId, status: "running" } } : {}),
+    ...(s.sessionId === child.sessionId ? { task: { id: task.id, parentSessionId: owner.sessionId, status: stopped.has(s.sessionId) ? "cancelled" : "running" } } : {}),
     queue: queues.get(s.sessionId) ?? [],
   });
   const mocked = new Map<string, () => unknown>();
   for (const s of [owner, other, child]) {
     mocked.set(agentScope(s), () => info(s));
-    mocked.set(tasksScope(s), () => ({ ...emptyTasks, tasks: s.sessionId === owner.sessionId ? [task] : [] }));
+    mocked.set(tasksScope(s), () => ({ ...emptyTasks, tasks: s.sessionId === owner.sessionId ? [{ ...task, status: stopped.size ? "cancelled" : "running" }] : [] }));
     mocked.set(threadScope(s), () => ({ ids: s.sessionId === owner.sessionId ? ["delegation"] : [], before: null }));
   }
   const delegation = { id: "delegation", role: "assistant", text: "运行中的委派测试",
@@ -122,7 +123,16 @@ async function fixture(nested: boolean) {
         };
         if (holdRecall) pendingRecall.push(respond); else respond();
       } else if (stops([command]).length) {
+        const target = command.op === "task.cancel" ? child : { workspaceId: command.workspaceId!, sessionId: command.sessionId! };
+        stopped.add(target.sessionId);
+        queues.set(target.sessionId, []);
+        snapshot(agentScope(target));
+        snapshot(tasksScope(owner));
         receipt(command);
+      } else if (command.op === "agent.inputs") {
+        receipt(command, (command.params!.ids as string[]).map(id => ({ id, consumed: false,
+          active: !stopped.has(command.sessionId!), queued: false,
+          receipt: { status: "committed", data: { inputId: id } } })));
       } else if (command.op === "files.complete") {
         receipt(command, { prefix: "@", items: [{ value: "@README.md", label: "README.md" }] });
       } else server.send(raw);
@@ -195,7 +205,7 @@ try {
   }
   owner = seed("Steering A"); other = seed("Steering B"); child = seed("Steering child fixture");
   task = { id: "steering-task", workspaceId: workspace.id, parentSessionId: owner.sessionId,
-    sessionId: child.sessionId, anchor: "delegate-call", description: "Steering 子会话",
+    sessionId: child.sessionId, anchor: "delegate-call", title: "Steering 子会话", description: "Steering 子会话",
     status: "running", runId: `run-${child.sessionId}`, createdAt: Date.now(), budgets: defaultBudgets, results: [], error: null };
   browser = await chromium.launch({ headless: true, executablePath: process.env.AXIOM_TEST_BROWSER });
 
@@ -217,6 +227,38 @@ try {
       f.consumeLastPrompt();
       await eventually(async () => await f.page.locator(".user-text").filter({ hasText: `${label} steering message` }).count() === 1, "consumed steering enters chat exactly once");
       assert.ok(!(await f.composer.innerText()).includes(`${label} steering message`), "consumed input leaves queue");
+    });
+    await check(`${label}: stopped unknown steering can recover after explicit confirmation without resending`, nested, async (f) => {
+      const attachment = { id: "img1", kind: "image" as const, name: "original.png", path: "/original.png", text: "" };
+      await setDraft(f.page, f.scope, { text: "queued original [img1]", attachment: null, attachments: [attachment] });
+      await f.input.press("Enter");
+      await eventually(() => sends(f.commands).length === 1, "initial steering sent once");
+      await eventually(async () => await f.input.inputValue() === "", "submitted draft cleared");
+      await f.input.fill("new typing");
+      await f.composer.getByRole("button", { name: "停止执行", exact: true }).click({ force: true });
+      await eventually(() => stops(f.commands).length === 1, "stop command issued once");
+      await f.page.evaluate(async target => {
+        const path = "/chat/reconcile-inputs.ts";
+        await (await import(/* @vite-ignore */ path)).reconcileInputs(target);
+      }, f.scope);
+      await f.composer.getByText(/发送结果未确认，原文已保留/).waitFor();
+      const recovery = f.composer.getByRole("button", { name: "恢复编辑", exact: true });
+      await recovery.click();
+      const dialog = f.page.getByRole("dialog", { name: "恢复未确认的消息？", exact: true });
+      await dialog.getByText(/再次发送可能造成重复执行/).waitFor();
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      assert.equal(await f.input.inputValue(), "new typing", "cancel preserves new typing");
+      assert.equal(await recovery.count(), 1, "cancel preserves the queued original");
+      await recovery.click();
+      await dialog.getByRole("button", { name: "确认恢复编辑", exact: true }).click();
+      await eventually(async () => await f.input.inputValue() === "queued original [img1]\n\nnew typing", "both drafts restored");
+      assert.deepEqual((await getDraft(f.page, f.scope)).attachments, [attachment]);
+      await eventually(async () => await f.input.evaluate(input => document.activeElement === input), "restored composer gets focus");
+      assert.equal(await recovery.count(), 0, "recovered row removed exactly once");
+      await f.composer.getByText(/原消息已恢复编辑，尚未发送/).waitFor();
+      assert.equal(sends(f.commands).length, 1, "recovery never resends");
+      assert.equal(recalls(f.commands).length, 0, "recovery does not pretend to recall unknown input");
+      assert.equal(stops(f.commands).length, 1);
     });
     await check(`${label}: Shift+Enter, IME Enter and empty Enter do not submit`, nested, async (f) => {
       await f.input.fill("line"); await f.input.press("Shift+Enter");
