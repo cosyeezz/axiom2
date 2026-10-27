@@ -3,6 +3,10 @@ export interface SourceFileRecord {
   size: number;
   sha256: string;
 }
+export interface SourceGitlinkRecord {
+  path: string;
+  commit: string;
+}
 export interface DmgRecord {
   size: number;
   sha256: string;
@@ -12,8 +16,10 @@ export interface SourceProofInputs {
   productSha: string;
   probeSha: string;
   productFiles: SourceFileRecord[];
+  gitlinks: SourceGitlinkRecord[];
   webFiles: SourceFileRecord[];
   productInputsSha256: string;
+  gitlinksSha256: string;
   webInputsSha256: string;
 }
 export interface CapturedSourceProof extends SourceProofInputs {

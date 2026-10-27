@@ -130,7 +130,7 @@ test('non-audit gitlinks and materialized or redirected audit directories fail c
 });
 
 test('audit gitlink injection and changed proof commit fail between production and probe', async () => {
-  for (const action of ['seal-production', 'verify']) {
+  for (const action of ['seal-production', 'verify'] as const) {
     await fixture(async context => {
       await sourceProofAction('capture', context.root, context.expected.probeSha);
       if (action === 'verify') { await sourceProofAction('seal-production', context.root, context.expected.probeSha); await context.override(); }

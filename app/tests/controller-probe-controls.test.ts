@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../desktop/test-controller-probe.js', import.meta.url), 'utf8');
 const controls = source.slice(source.indexOf('  const heading = '), source.indexOf('  const observation = '));
-function fixture({ state = 'stopped', uiState = state, label = state === 'running' ? '运行中' : '已停止', visible = true, disabled = false, primary = state === 'running' ? '关闭' : '启动' } = {}) {
+function fixture({ state = 'stopped', uiState = state, label = state === 'running' ? '运行中' : '已停止', visible = true, disabled = false, primary = state === 'running' ? '关闭' : '启动' }: { state?: string; uiState?: string; label?: string; visible?: boolean; disabled?: boolean; primary?: string } = {}) {
   const status = { dataset: { state: uiState }, textContent: label, getClientRects: () => visible ? [{}] : [] };
   const action = { textContent: primary, disabled, getClientRects: () => visible ? [{}] : [] };
   const ports: number[] = [];

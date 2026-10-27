@@ -7,6 +7,8 @@ export function verifyBinary(bytes: Buffer, kind: "exe" | "msi" | "deb" | "x64" 
 export function verifyAndroid(proof: unknown, files: ReadonlyMap<string, Buffer>, tag: string, source: string): void;
 export function verifyRun(run: unknown, workflow: string): void;
 export function verifySourceLogs(logs: string, source: string, expected: number | readonly string[]): void;
+export function sourceJobLogArgs(jobId: unknown, apiHelp: string): string[];
+export function verifySourceJobLog(logs: string, source: string, job: unknown): void;
 export function selectArtifact<T extends { name: string }>(artifacts: readonly T[], name: string): T;
 export interface PublishClientsOptions {
   tag: string;
