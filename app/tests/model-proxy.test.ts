@@ -107,8 +107,10 @@ test("stopped routes preserve the editor and configured models while requests re
   try {
     const draft = await service.read();
     assert.equal(draft.providers[0].proxy?.mode, "builtin");
-    assert.match(draft.providers[0].auth?.error ?? "", /尚未运行/);
-    assert.equal(readFileSync(file, "utf8"), raw, "failed migration preserves the source credential");
+    assert.equal(draft.providers[0].auth?.error, undefined, "a metadata-only page read does not probe the route");
+    assert.throws(() => providerProxyUrl(root, draft.providers[0].proxy), error =>
+      (error as any).code === "PROXY_UNAVAILABLE" && /尚未运行/.test(String(error)));
+    assert.equal(readFileSync(file, "utf8"), raw, "a page read preserves the source credential without migration");
     assert.equal(JSON.stringify(draft).includes("TEST-LEGACY"), false);
     writeFileSync(join(service.dir, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "TEST-STORED" } }));
     const state = await configuration(root);

@@ -1,7 +1,7 @@
 // Runs in its own clean-env process so ExecutionProfiles never inherits user auth.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,10 +17,17 @@ let entry = source;
 if (variant === "baseline") {
   const mirror = join(root, "baseline"), server = join(mirror, "src/server");
   mkdirSync(server, { recursive: true });
-  for (const item of readdirSync(join(app, "src/server"))) if (item !== "agent-worker.ts")
-    symlinkSync(join(app, "src/server", item), join(server, item));
-  symlinkSync(join(app, "src/shared"), join(mirror, "src/shared"));
-  symlinkSync(join(app, "node_modules"), join(mirror, "node_modules"));
+  for (const item of readdirSync(join(app, "src/server"))) if (item !== "agent-worker.ts") {
+    const target = join(app, "src/server", item);
+    symlinkSync(target, join(server, item), statSync(target).isDirectory() ? "junction" : "file");
+  }
+  symlinkSync(join(app, "src/shared"), join(mirror, "src/shared"), "junction");
+  // CI installs at the repository root, not app/; the external mirror loses
+  // normal parent-directory resolution, so link the actual installed modules.
+  const modules = [join(app, "node_modules"), join(app, "../node_modules")]
+    .find(path => existsSync(join(path, "@earendil-works/pi-coding-agent")));
+  assert.ok(modules, "fixture requires installed SDK dependencies");
+  symlinkSync(modules, join(mirror, "node_modules"), "junction");
   symlinkSync(join(app, "package.json"), join(mirror, "package.json"));
   entry = join(server, "agent-worker.ts");
   writeFileSync(entry, text.replace(call, ""));
@@ -51,7 +58,7 @@ const profiles = new ExecutionProfiles(root), pool = new ExecutionPool({ targetR
 const prepared = profiles.prepare({ entry: "agent", cwd, modelDir: pi, modelsRaw, selection, mode: "managed" });
 assert.equal(prepared.reuse, "same-session");
 const environment = { ...prepared, workerPath: fileURLToPath(new URL("./kiro-worker-warming.ts", import.meta.url)),
-  execArgv: ["--import", import.meta.resolve("tsx"), "--import", fileURLToPath(new URL("../vite-assets.mjs", import.meta.url))] };
+  execArgv: ["--import", import.meta.resolve("tsx"), "--import", new URL("../vite-assets.mjs", import.meta.url).href] };
 let requests = 0;
 const children = new Set<import("node:child_process").ChildProcess>(), closed = new Set<import("node:child_process").ChildProcess>();
 const warmCount = () => readFileSync(file, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line))

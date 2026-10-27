@@ -94,7 +94,7 @@ test("private prefix survives restart losslessly, omits credentials and preserve
     saveCompressionPrefix(file, f.prefix);
     const restored = readCompressionPrefix(file);
     assert.deepEqual(restored, f.prefix);
-    assert.equal(statSync(`${file}.request-prefix.json`).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(`${file}.request-prefix.json`).mode & 0o777, 0o600);
     assert.doesNotMatch(JSON.stringify(restored), /DO_NOT_PERSIST|apiKey|authorization|SECRET/);
     assert.deepEqual(restored.options, { sessionId: f.manager.getSessionId(), cacheRetention: "long", reasoning: "low", transport: "sse" });
     assertCompressionPrefix(restored, f.manager.getSessionId(), selection);

@@ -67,19 +67,32 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     setTimeout(() => controller.abort(), 50);
     await assert.rejects(pending);
     assert.equal(transport!.pid, undefined, "cancellation closes actual MCP process before releasing admission");
+    const ownership = join(root, "integrations/rea/budget/active.json");
+    const retained = process.platform === "win32";
+    assert.equal(existsSync(ownership), retained, "Windows cannot prove that the whole process tree was reaped");
+    const owner = retained ? readFileSync(ownership, "utf8") : undefined;
     await assert.rejects(tool.execute("after-cancel", {}, undefined, undefined, ctx), /已隔离|未连接/);
-    assert.equal(existsSync(join(root, "integrations/rea/budget/active.json")), false, "a repeated call cannot manufacture an unknown owner record");
+    assert.equal(existsSync(ownership), retained, "a repeated call neither deletes nor manufactures ownership");
+    if (retained) assert.equal(readFileSync(ownership, "utf8"), owner);
     const replacement = new StdioTransport({ command: process.execPath, args: [script] });
     assert.throws(() => policy.attachTransport(replacement), /连接已更换/);
     assert.equal(replacement.pid, undefined, "replacement is refused before spawning");
-    // A deliberate capability reload uses a fresh policy, not implicit replay.
+    // A fresh policy cannot bypass uncertain Windows ownership. On POSIX a
+    // confirmed-reaped tree permits deliberate capability reload, never replay.
     await emit("session_shutdown"); hooks.clear(); tools.clear(); policy = newPolicy();
+    const beforeReload = readFileSync(log, "utf8");
     await start();
-    const secondController = new AbortController();
-    const secondPending = tools.get("mcp__rea__search_strings").execute("second-cancel", { hang: true }, secondController.signal, undefined, ctx);
-    setTimeout(() => secondController.abort(), 50);
-    await assert.rejects(secondPending);
-    assert.equal(transport!.pid, undefined);
-    assert.equal(existsSync(join(root, "integrations/rea/budget/active.json")), false);
+    if (retained) {
+      await assert.rejects(tools.get("mcp__rea__search_strings").execute("reload", {}, undefined, undefined, ctx), /尚未确认退出/);
+      assert.equal(readFileSync(ownership, "utf8"), owner);
+      assert.equal(readFileSync(log, "utf8"), beforeReload, "refused admission dispatches no analysis or settings call");
+    } else {
+      const secondController = new AbortController();
+      const secondPending = tools.get("mcp__rea__search_strings").execute("second-cancel", { hang: true }, secondController.signal, undefined, ctx);
+      setTimeout(() => secondController.abort(), 50);
+      await assert.rejects(secondPending);
+      assert.equal(transport!.pid, undefined);
+      assert.equal(existsSync(ownership), false);
+    }
   } finally { await emit("session_shutdown"); await transport?.close(); rmSync(root, { recursive: true, force: true }); }
 });

@@ -15,6 +15,11 @@ import type { SessionListCursor, SessionListGroup, SessionListItem } from "../sr
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "axiom-session-list-"));
   const store = new Store(join(root, "data"));
+  const connections: DatabaseSync[] = [];
+  t.after(() => {
+    try { for (const connection of connections) connection.close(); }
+    finally { try { store.close(); } finally { rmSync(root, { recursive: true, force: true }); } }
+  });
   const workspaces = ["main", "other", "archived"].map(name => {
     const path = join(root, name); mkdirSync(path);
     return store.execute({ requestId: randomUUID(), op: "workspace.open", params: { path, authorized: true } }) as { id: string };
@@ -32,8 +37,12 @@ function fixture(t: TestContext) {
       row.updatedAt ?? time++, row.forkParentSessionId ?? null, row.autoPinUntil ?? null, row.unread ? 1 : 0);
     return id;
   };
-  t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
-  return { store, lists, workspace, foreign, archived, add };
+  const openConnection = () => {
+    const connection = new DatabaseSync(join(store.root, "axiom.sqlite"));
+    connections.push(connection);
+    return connection;
+  };
+  return { store, lists, workspace, foreign, archived, add, openConnection };
 }
 type Fixture = ReturnType<typeof fixture>;
 
@@ -180,8 +189,7 @@ test("selected and first are authoritative outside loaded pages; run, task and w
 test("locator and summary hydration stay bounded and share a read snapshot across an external commit", t => {
   const f = fixture(t);
   for (let i = 0; i < 180; i++) f.add({ title: "before", updatedAt: 1000 - i });
-  const writer = new DatabaseSync(join(f.store.root, "axiom.sqlite"));
-  t.after(() => writer.close());
+  const writer = f.openConnection();
   const prepare = f.store.db.prepare.bind(f.store.db);
   const observed = { locators: [] as number[], summaries: [] as number[] };
   let committed = false;

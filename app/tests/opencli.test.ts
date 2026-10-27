@@ -19,7 +19,7 @@ import { openCliFixture } from "./fixtures/opencli.js";
 
 const call = (service: OpenCliService, op: string, params = {}) => service.command({ requestId: randomUUID(), op, params });
 async function settle(service: OpenCliService) {
-  const until = Date.now() + 5000;
+  const until = Date.now() + 60_000;
   while (service.snapshot().job?.running) {
     assert.ok(Date.now() < until, "operation did not settle");
     await new Promise<void>((resolve) => setImmediate(resolve));

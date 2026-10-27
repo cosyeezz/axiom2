@@ -10,7 +10,7 @@ import type { Run } from "../src/shared/agent.js";
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "axiom-start-delivery-"));
-  mkdirSync(join(root, "pi"));
+  mkdirSync(join(root, "pi")); mkdirSync(join(root, "execution-models"));
   const scope = { workspaceId: "workspace", sessionId: "session" };
   const selection = { provider: "fixture", id: "fixture", thinking: "off" as const };
   const cached = { root, cwd: root, file: join(root, "session.jsonl"), modelsFile: join(root, "cached.json"), selection };
@@ -19,7 +19,7 @@ function fixture(t: TestContext) {
   writeFileSync(cached.modelsFile, "{}"); writeFileSync(input.modelsFile, "{}");
   const saved: unknown[][] = [], settlements: Run[] = [], sent: string[] = [], receipts: unknown[][] = [];
   let killed = 0;
-  const runs = new AgentRuns({ session() {}, bindingRejection() { return undefined; }, finishRun: (...args: unknown[]) => saved.push(args), db: { prepare: (sql: string) => ({ run(...args: unknown[]) { if (sql.startsWith("UPDATE external_requests")) receipts.push([sql, ...args]); } }) } } as any,
+  const runs = new AgentRuns({ root, session() {}, bindingRejection() { return undefined; }, finishRun: (...args: unknown[]) => saved.push(args), db: { prepare: (sql: string) => ({ run(...args: unknown[]) { if (sql.startsWith("UPDATE external_requests")) receipts.push([sql, ...args]); } }) } } as any,
     { changed() {}, refresh() {}, flush() {}, settled() {}, recoverRequestUsage() {}, thread() { return {}; }, publishMessages() {}, info() { return {}; }, messages: new Map(), queues: new Map() } as any, () => {}) as any;
   const child = Object.assign(new EventEmitter(), {
     connected: true, exitCode: null as number | null, signalCode: null,
