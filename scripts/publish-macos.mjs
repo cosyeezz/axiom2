@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { verifySourceProof } from "./native-source-proof.mjs";
+import { verifySourceJobLog } from "./publish-clients.mjs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
@@ -22,10 +23,12 @@ assert.equal(run.event, "workflow_dispatch");
 assert.equal(run.status, "completed");
 assert.equal(run.conclusion, "success");
 const source = api(`commits/${tag}`).sha;
-const logs = gh("run", "view", runId, "--repo", repo, "--log");
-assert.ok(logs.split("\n").some(line => line.includes("\tRecord source revision\t") && line.trimEnd().endsWith(` ${source}`)), "Build source does not match release tag");
-const jobs = api(`actions/runs/${runId}/jobs`).jobs;
-const job = jobs.find(job => job.name === "desktop (macos-latest)");
+const jobs = api(`actions/runs/${runId}/jobs?per_page=100`).jobs;
+const macJobs = jobs.filter(job => job.name === "desktop (macos-latest)");
+assert.equal(macJobs.length, 1, "Expected one macOS build job");
+const job = macJobs[0];
+assert.ok(Number.isSafeInteger(job.id) && job.id > 0);
+verifySourceJobLog(gh("api", `repos/${repo}/actions/jobs/${job.id}/logs`), source, job);
 for (const name of ["Verify macOS disk image and universal application", "Smoke test macOS controller window", "Check macOS single-window WebViews and service lifecycle"]) {
   assert.equal(job?.steps.find(step => step.name === name)?.conclusion, "success", name);
 }
