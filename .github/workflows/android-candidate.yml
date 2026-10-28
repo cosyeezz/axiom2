@@ -1,0 +1,145 @@
+name: Build Axiom2 Android Candidate
+
+on:
+  push:
+    branches: ['build/android-*']
+  workflow_dispatch:
+    inputs:
+      client_version:
+        description: APK version to build without publishing a release
+        type: string
+        required: true
+        default: '0.4.25'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: axiom-android-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/android-tailnet.yml
+  android:
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      CLIENT_VERSION: ${{ inputs.client_version || '0.4.25' }}
+      EXPECTED_SIGNER: ae00055c6143ea3739613150527aed2f91135daab0ab9c8ef0dd2e74872993a2
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install pinned compile tools
+        shell: pwsh
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed' }
+      - name: Check source and upgrade version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $source -ne $env:GITHUB_SHA) { throw 'Source revision mismatch' }
+          if ($env:CLIENT_VERSION -notmatch '^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$') { throw 'Invalid Android candidate version' }
+          $code = [long]$Matches[1] * 1000000 + [long]$Matches[2] * 1000 + [long]$Matches[3]
+          if ($code -gt 2100000000) { throw 'Android versionCode exceeds platform limit' }
+          $json = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to check published Android versions' }
+          $latestCode = 4012
+          foreach ($page in ($json | ConvertFrom-Json)) {
+            foreach ($release in $page) {
+              if (!$release.draft -and !$release.prerelease -and 'Axiom2-Android.apk' -in $release.assets.name) {
+                if ($release.tag_name -notmatch '^(?:android-)?v([0-9]+)\.([0-9]+)\.([0-9]+)$') { throw 'Unrecognized published Android version' }
+                $previous = [long]$Matches[1] * 1000000 + [long]$Matches[2] * 1000 + [long]$Matches[3]
+                $latestCode = [Math]::Max($latestCode, $previous)
+              }
+            }
+          }
+          if ($code -le $latestCode) { throw "Candidate must upgrade published versionCode $latestCode" }
+          "ANDROID_VERSION_CODE=$code" >> $env:GITHUB_ENV
+          "MINIMUM_VERSION_CODE=$latestCode" >> $env:GITHUB_ENV
+      - name: Build with the original Android signing identity
+        shell: pwsh
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.AXIOM_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          AXIOM_ANDROID_STOREPASS: ${{ secrets.AXIOM_ANDROID_RELEASE_STOREPASS }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (!$env:RELEASE_KEYSTORE_BASE64 -or !$env:AXIOM_ANDROID_STOREPASS) { throw 'Original signing secrets are required; a replacement key will not be generated' }
+          $keystore = Join-Path $env:RUNNER_TEMP 'axiom-android-candidate.p12'
+          $certificate = Join-Path $env:RUNNER_TEMP 'axiom-android-candidate.der'
+          $out = Join-Path $env:RUNNER_TEMP 'axiom-android-candidate'
+          try {
+            $bytes = [Convert]::FromBase64String($env:RELEASE_KEYSTORE_BASE64)
+            if ($bytes.Length -lt 1024 -or $bytes.Length -gt 16384) { throw 'Unexpected production keystore size' }
+            [IO.File]::WriteAllBytes($keystore, $bytes)
+            [Array]::Clear($bytes, 0, $bytes.Length)
+            Remove-Item Env:RELEASE_KEYSTORE_BASE64
+            & "$env:JAVA_HOME/bin/keytool.exe" -exportcert -alias axiom2 -keystore $keystore -storetype PKCS12 -storepass:env AXIOM_ANDROID_STOREPASS -file $certificate
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot read original release certificate' }
+            if ((Get-FileHash $certificate -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:EXPECTED_SIGNER) { throw 'Original signing identity mismatch' }
+            ./scripts/build-android.ps1 -JavaHome $env:JAVA_HOME -AndroidPlatform "$env:ANDROID_HOME/platforms/android-35" -BuildTools "$env:ANDROID_HOME/build-tools/35.0.0" -ClientVersion $env:CLIENT_VERSION -MinimumVersionCode ([long]$env:MINIMUM_VERSION_CODE) -ExpectedCertificateSha256 $env:EXPECTED_SIGNER -SigningStore $keystore -OutputDirectory $out
+          } finally {
+            Remove-Item -LiteralPath $keystore,$certificate -Force -ErrorAction SilentlyContinue
+            Remove-Item Env:AXIOM_ANDROID_STOREPASS,Env:RELEASE_KEYSTORE_BASE64 -ErrorAction SilentlyContinue
+          }
+      - name: Verify APK and candidate provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP 'axiom-android-candidate'
+          $apk = Join-Path $out 'Axiom2-Android.apk'
+          $tools = "$env:ANDROID_HOME/build-tools/35.0.0"
+          $signature = & "$env:JAVA_HOME/bin/java.exe" -jar "$tools/lib/apksigner.jar" verify --verbose --print-certs $apk
+          if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed' }
+          $signature | Tee-Object -FilePath (Join-Path $out 'signature.txt')
+          $signers = @($signature | Select-String '^Signer #[0-9]+ certificate SHA-256 digest: ')
+          if ($signers.Count -ne 1 -or !$signers[0].Line.EndsWith($env:EXPECTED_SIGNER)) { throw 'Unexpected APK signer' }
+          foreach ($scheme in @('v2','v3')) {
+            if (!(($signature -join "`n") -match "Verified using $scheme scheme[^`n]+: true")) { throw "Missing $scheme signature" }
+          }
+          & "$tools/zipalign.exe" -c -p 4 $apk
+          if ($LASTEXITCODE -ne 0) { throw 'APK alignment verification failed' }
+          $badging = & "$tools/aapt2.exe" dump badging $apk
+          if ($LASTEXITCODE -ne 0) { throw 'APK manifest verification failed' }
+          $badging | Set-Content (Join-Path $out 'badging.txt')
+          $proof = Get-Content (Join-Path $out 'android-release.json') -Raw | ConvertFrom-Json
+          if ($proof.source -ne $env:GITHUB_SHA -or $proof.versionCode -ne [long]$env:ANDROID_VERSION_CODE -or $proof.version -ne $env:CLIENT_VERSION -or $proof.packageName -ne 'com.axiom2.android' -or $proof.debuggable -ne $false) { throw 'Build proof mismatch' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($apk)
+          try {
+            $entry = $zip.GetEntry('assets/connection-swipe.js')
+            if (!$entry) { throw 'APK is missing the connection gesture asset' }
+            $stream = $entry.Open()
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $assetHash = [Convert]::ToHexString($sha.ComputeHash($stream)).ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() }
+            if ($assetHash -ne (Get-FileHash app/android/app/src/main/assets/connection-swipe.js -Algorithm SHA256).Hash.ToLowerInvariant()) { throw 'Packaged gesture asset differs from verified source' }
+          } finally { $zip.Dispose() }
+          @{ source_commit = $env:GITHUB_SHA; version = $env:CLIENT_VERSION; version_code = [long]$env:ANDROID_VERSION_CODE; signer_sha256 = $env:EXPECTED_SIGNER; workflow_run = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"; native_checks = 'API 35 isolated emulator passed'; physical_device_tested = $false; published = $false } | ConvertTo-Json | Set-Content (Join-Path $out 'android-candidate.json')
+          Get-FileHash (Join-Path $out 'Axiom2-Android.apk'),(Join-Path $out 'axiom2-android-sdk.aar'),(Join-Path $out 'android-release.json'),(Join-Path $out 'android-candidate.json') -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content (Join-Path $out 'SHA256SUMS.txt')
+          "Candidate APK built and verified from $env:GITHUB_SHA. No release or tag was created." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Axiom2-Android-${{ env.CLIENT_VERSION }}-candidate
+          path: |
+            ${{ runner.temp }}/axiom-android-candidate/Axiom2-Android.apk
+            ${{ runner.temp }}/axiom-android-candidate/axiom2-android-sdk.aar
+            ${{ runner.temp }}/axiom-android-candidate/android-release.json
+            ${{ runner.temp }}/axiom-android-candidate/android-candidate.json
+            ${{ runner.temp }}/axiom-android-candidate/SHA256SUMS.txt
+            ${{ runner.temp }}/axiom-android-candidate/signature.txt
+            ${{ runner.temp }}/axiom-android-candidate/badging.txt
+          if-no-files-found: error
+          retention-days: 30

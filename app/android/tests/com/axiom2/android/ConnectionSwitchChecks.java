@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.axiom2.android.QrInstrumentationChecks.*;
 
-/** Exercises the existing Back entry point; never connects to a real Tailnet computer. */
+/** Exercises Back and independent touch switching; never connects to a real Tailnet computer. */
 final class ConnectionSwitchChecks {
     private static final String A = "http://100.64.0.1:4317", B = "http://100.64.0.2:4317", C = "http://100.64.0.3:4317";
     private static final class FakeWeb extends AxiomWebView {
@@ -44,6 +44,10 @@ final class ConnectionSwitchChecks {
         prefs(activity).edit().putString("history", history).putString("last", current).commit();
         set(activity, "connectingAddress", current); set(activity, "loaded", true); set(activity, "connecting", false);
         ((View) get(activity, "status")).setVisibility(View.GONE);
+    }
+    private static void swipeCommand(MainActivity activity, int direction) throws Exception {
+        java.lang.reflect.Method method = MainActivity.class.getDeclaredMethod("swipeConnection", int.class);
+        method.setAccessible(true); method.invoke(activity, direction);
     }
     static void racesAndFailures(Instrumentation test) throws Exception {
         MainActivity activity = start(test);
@@ -87,6 +91,20 @@ final class ConnectionSwitchChecks {
                     seed(activity, "", A); count = web.connections.size(); activity.onBackPressed();
                     check(web.connections.size() == count && ((View) get(activity, "status")).getVisibility() == View.VISIBLE, "Empty history did not return to address entry");
                     check(web.cleared == 8, "A new connection retained old WebView history");
+                    seed(activity, saved, A); web.deferred = false;
+                    swipeCommand(activity, -1); swipeCommand(activity, -1); swipeCommand(activity, 1);
+                    check(web.connections.subList(web.connections.size() - 3, web.connections.size()).equals(Arrays.asList(C, B, C)), "Rapid swipes did not advance from the pending target in both directions");
+                    check(prefs(activity).getString("last", "").equals(A), "Pending swipe saved an unready endpoint");
+                    listener.onError("fixture swipe failure"); swipeCommand(activity, -1); listener.onReady();
+                    check(prefs(activity).getString("last", "").equals(B) && prefs(activity).getString("history", "").equals(saved), "Failed swipe could not recover without reordering history");
+                    swipeCommand(activity, 1); activity.onBackPressed(); listener.onReady();
+                    check(!activity.isFinishing() && ((View) get(activity, "status")).getVisibility() == View.VISIBLE && prefs(activity).getString("last", "").equals(B), "Back during cyclic loading left the foreground or saved a cancelled endpoint");
+                    swipeCommand(activity, -1); listener.onReady();
+                    check(prefs(activity).getString("last", "").equals(B), "Cancelled cycle could not be swiped again");
+                    seed(activity, saved, A); web.deferred = true; activity.onBackPressed(); delayed = web.pendingBack; count = web.connections.size();
+                    test.callActivityOnPause(activity); delayed.onReceiveValue("false");
+                    check(web.connections.size() == count && !(Boolean) get(activity, "backPending"), "Delayed Back navigated after pause");
+                    test.callActivityOnResume(activity); web.deferred = false;
                 } catch (Exception e) { throw new AssertionError(e); }
             });
         } finally {
@@ -219,13 +237,151 @@ final class ConnectionSwitchChecks {
             } finally { test.runOnMainSync(activity::finish); test.waitForIdleSync(); }
         }
     }
-    /** Three independent HTTP origins, real WebView load/readiness, no model or external networking. */
+    private static void swipeTouch(Instrumentation test, View view, boolean left, float yFraction) throws Exception {
+        float[] points = new float[5];
+        test.runOnMainSync(() -> {
+            int[] location = new int[2]; view.getLocationOnScreen(location);
+            points[0] = location[0] + view.getWidth() * (left ? .78f : .22f);
+            points[1] = location[1] + view.getHeight() * yFraction;
+            points[2] = view.getWidth() * (left ? -.56f : .56f);
+        });
+        long start = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent event = android.view.MotionEvent.obtain(start, start, android.view.MotionEvent.ACTION_DOWN, points[0], points[1], 0);
+        try { test.sendPointerSync(event); } finally { event.recycle(); }
+        for (int step = 1; step <= 12; step++) {
+            android.os.SystemClock.sleep(16);
+            event = android.view.MotionEvent.obtain(start, android.os.SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_MOVE, points[0] + points[2] * step / 12, points[1], 0);
+            try { test.sendPointerSync(event); } finally { event.recycle(); }
+        }
+        event = android.view.MotionEvent.obtain(start, android.os.SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, points[0] + points[2], points[1], 0);
+        try { test.sendPointerSync(event); } finally { event.recycle(); }
+        test.waitForIdleSync();
+    }
+    private static void contentSwipe(Instrumentation test, AxiomWebView web, boolean left) throws Exception {
+        waitFor(() -> "true".equals(javascript(test, web, "Boolean(window.__axiomConnectionSwipeCleanup && window.fixtureSwipePort)")), "Swipe port was not installed");
+        org.json.JSONArray point = new org.json.JSONArray(javascript(test, web, "(()=>{const s=document.querySelector('#swipe-surface'),r=s.getBoundingClientRect(),y=r.top+r.height/2;return [y/innerHeight,[.22,.5,.78].every(x=>document.elementFromPoint(innerWidth*x,y)===s)]})()"));
+        check(point.getBoolean(1), "Fixture swipe surface was obscured");
+        swipeTouch(test, web, left, (float) point.getDouble(0));
+    }
+    private static void statusSwipe(Instrumentation test, MainActivity activity, boolean left) throws Exception {
+        View root = (View) get(activity, "root"); float[] fraction = new float[1];
+        test.runOnMainSync(() -> { try {
+            android.graphics.Rect addressBounds = new android.graphics.Rect();
+            ((View) get(activity, "address")).getGlobalVisibleRect(addressBounds);
+            int[] location = new int[2]; root.getLocationOnScreen(location);
+            for (float candidate : new float[]{.12f, .5f, .88f}) {
+                int x = location[0] + Math.round(root.getWidth() * (left ? .78f : .22f));
+                int y = location[1] + Math.round(root.getHeight() * candidate);
+                if (!addressBounds.contains(x, y)) { fraction[0] = candidate; return; }
+            }
+            throw new AssertionError("No status swipe surface outside address editing");
+        } catch (Exception error) { throw new AssertionError(error); } });
+        swipeTouch(test, root, left, fraction[0]);
+    }
+    private static void recoverableFailure(Instrumentation test, MainActivity activity, String last) throws Exception {
+        waitFor(() -> { AtomicReference<Boolean> failed = new AtomicReference<>(false); test.runOnMainSync(() -> { try { failed.set(!(Boolean) get(activity, "connecting") && ((View) get(activity, "status")).getVisibility() == View.VISIBLE); } catch (Exception error) { throw new AssertionError(error); } }); return failed.get(); }, "Failed swipe did not show recoverable status");
+        check(!activity.isFinishing() && prefs(activity).getString("last", "").equals(last), "Failed swipe exited or saved an unready endpoint");
+    }
+    private static void stableOrigin(Instrumentation test, MainActivity activity, AxiomWebView web, String endpoint) throws Exception {
+        for (int i = 0; i < 10; i++) {
+            android.os.SystemClock.sleep(50);
+            check("true".equals(javascript(test, web, "location.origin === '" + endpoint + "'")) && prefs(activity).getString("last", "").equals(endpoint), "Late swipe response replaced the final workstation");
+        }
+    }
+    static void realSwipe(Instrumentation test) throws Exception {
+        try (Workstation first = new Workstation(); Workstation second = new Workstation(); Workstation third = new Workstation(); Workstation delayed = new Workstation(); Workstation reverseDelayed = new Workstation(); Workstation failing = new Workstation()) {
+            MainActivity activity = start(test); AxiomWebView web = (AxiomWebView) get(activity, "web");
+            String a = first.endpoint(), b = second.endpoint(), c = third.endpoint(), saved = String.join("\n", a, b, c);
+            try {
+                test.runOnMainSync(() -> { try {
+                    prefs(activity).edit().putString("history", saved).putString("last", a).commit();
+                    ((TextView) get(activity, "address")).setText(a); ((View) get(activity, "retry")).performClick();
+                } catch (Exception error) { throw new AssertionError(error); } });
+                rootReady(test, activity, web, a);
+                test.runOnMainSync(() -> {
+                    web.requestFocus();
+                    ((android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(), 0);
+                });
+                test.waitForIdleSync();
+                for (boolean left : new boolean[]{true, false}) for (String expected : left ? new String[]{b, c, a, b, c, a} : new String[]{c, b, a, c, b, a}) {
+                    contentSwipe(test, web, left); rootReady(test, activity, web, expected);
+                    check(!activity.isFinishing() && prefs(activity).getString("history", "").equals(saved), "Touch cycle left the app or reordered the ring");
+                }
+                // A connection gesture bypasses page Back, rather than consuming it.
+                tapPageButton(test, web);
+                waitFor(() -> nativeHistory(test, web, a, "/secondary", 1, 2), "Swipe fixture did not acquire page history");
+                contentSwipe(test, web, true); rootReady(test, activity, web, b);
+                // Same-origin full-document navigation must install a new working port.
+                test.runOnMainSync(() -> web.loadUrl(b + "/nested"));
+                waitFor(() -> nativeHistory(test, web, b, "/nested", 1, 2), "Nested swipe document did not load");
+                contentSwipe(test, web, false); rootReady(test, activity, web, a);
+                contentSwipe(test, web, true); rootReady(test, activity, web, b);
+                // The DOM-aware recognizer must leave code/table horizontal scrolling alone.
+                float scrollY = Float.parseFloat(javascript(test, web, "(()=>{const r=document.querySelector('#horizontal-scroll').getBoundingClientRect();return (r.top+r.height/2)/innerHeight})()"));
+                swipeTouch(test, web, true, scrollY);
+                waitFor(() -> "true".equals(javascript(test, web, "document.querySelector('#horizontal-scroll').scrollLeft > 0")), "Horizontal content did not scroll");
+                check(prefs(activity).getString("last", "").equals(b), "Horizontal code scroll switched connections");
+                // Rapid touch on the native loading page supersedes the blocked target.
+                delayed.blockStatus();
+                test.runOnMainSync(() -> prefs(activity).edit().putString("history", String.join("\n", b, delayed.endpoint(), c)).commit());
+                contentSwipe(test, web, true);
+                check(delayed.requested.await(5, TimeUnit.SECONDS), "Swipe did not start the delayed workstation");
+                javascript(test, web, "window.fixtureSwipePort.postMessage('previous')");
+                android.os.SystemClock.sleep(200); test.waitForIdleSync();
+                test.runOnMainSync(() -> { try { check((Boolean) get(activity, "connecting") && get(activity, "connectingAddress").equals(delayed.endpoint()) && prefs(activity).getString("last", "").equals(b), "Retired document port advanced a pending connection"); } catch (Exception error) { throw new AssertionError(error); } });
+                statusSwipe(test, activity, true); rootReady(test, activity, web, c);
+                delayed.release.countDown(); check(delayed.replied.await(5, TimeUnit.SECONDS), "Cancelled swipe response never completed");
+                stableOrigin(test, activity, web, c);
+                // The native loading page must also preserve reverse direction.
+                reverseDelayed.blockStatus();
+                test.runOnMainSync(() -> prefs(activity).edit().putString("history", String.join("\n", b, reverseDelayed.endpoint(), c)).commit());
+                contentSwipe(test, web, false);
+                check(reverseDelayed.requested.await(5, TimeUnit.SECONDS), "Reverse swipe did not start the delayed workstation");
+                statusSwipe(test, activity, false); rootReady(test, activity, web, b);
+                reverseDelayed.release.countDown(); check(reverseDelayed.replied.await(5, TimeUnit.SECONDS), "Cancelled reverse swipe response never completed");
+                stableOrigin(test, activity, web, b);
+                // Failed probing leaves both directions available, without saving it.
+                failing.failStatus(); String failedRing = String.join("\n", b, failing.endpoint(), a);
+                test.runOnMainSync(() -> prefs(activity).edit().putString("history", failedRing).commit());
+                contentSwipe(test, web, true); recoverableFailure(test, activity, b);
+                View address = (View) get(activity, "address");
+                test.runOnMainSync(() -> address.requestRectangleOnScreen(new android.graphics.Rect(0, 0, address.getWidth(), address.getHeight()), true));
+                test.waitForIdleSync(); swipeTouch(test, address, true, .5f);
+                recoverableFailure(test, activity, b);
+                check(get(activity, "connectingAddress").equals(failing.endpoint()), "Address editing drag switched connections");
+                test.runOnMainSync(() -> {
+                    ((android.widget.AutoCompleteTextView) address).dismissDropDown(); address.clearFocus();
+                    ((android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(), 0);
+                });
+                test.waitForIdleSync(); statusSwipe(test, activity, false); rootReady(test, activity, web, b);
+                contentSwipe(test, web, true); recoverableFailure(test, activity, b);
+                statusSwipe(test, activity, true); rootReady(test, activity, web, a);
+                check(prefs(activity).getString("history", "").equals(failedRing), "Recovery swipe reordered the history");
+                // A ready status probe followed by a failed main document, and a
+                // refused TCP connection, exercise different real SDK error paths.
+                failing.failDocument();
+                String refused;
+                try (ServerSocket unused = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { refused = "http://127.0.0.1:" + unused.getLocalPort(); }
+                for (String unavailable : new String[]{failing.endpoint(), refused}) {
+                    String errorRing = String.join("\n", a, unavailable, c);
+                    test.runOnMainSync(() -> prefs(activity).edit().putString("history", errorRing).commit());
+                    contentSwipe(test, web, true); recoverableFailure(test, activity, a);
+                    statusSwipe(test, activity, false); rootReady(test, activity, web, a);
+                    check(prefs(activity).getString("history", "").equals(errorRing), "Network error recovery reordered the history");
+                }
+            } finally { test.runOnMainSync(activity::finish); test.waitForIdleSync(); }
+        }
+    }
+    /** Independent HTTP origins, real WebView load/readiness, no model or external networking. */
     private static final class Workstation implements AutoCloseable {
         private final ServerSocket server;
         private final ExecutorService worker = Executors.newSingleThreadExecutor();
         final CountDownLatch requested = new CountDownLatch(1), replied = new CountDownLatch(1), release = new CountDownLatch(1);
         private volatile boolean blocked;
+        private volatile int statusCode = 200, documentCode = 200;
         void blockStatus() { blocked = true; }
+        void failStatus() { statusCode = 503; }
+        void failDocument() { statusCode = 200; documentCode = 503; }
         Workstation() throws IOException {
             server = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"));
             worker.submit(() -> {
@@ -239,10 +395,10 @@ final class ConnectionSwitchChecks {
                         requested.countDown();
                         try { release.await(15, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     }
-                    String html = "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><div id='app'><span class='connection-status' data-connected='true'>Fixture ready</span></div><div id='popover' popover>Menu</div><dialog>Details</dialog><button id='collapse-history' onclick=\"document.body.classList.remove('history-open')\">Close history</button><button id='page-next' style='position:fixed;left:16px;top:100px;width:200px;height:52px' onclick=\"history.pushState(null, '', '/secondary')\">Open secondary page</button>";
+                    String html = "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><script>addEventListener('message',e=>{if(e.ports.length===1)window.fixtureSwipePort=e.ports[0]})</script><div id='app'><span class='connection-status' data-connected='true'>Fixture ready</span></div><div id='horizontal-scroll' style='position:fixed;left:16px;top:35%;width:calc(100% - 32px);height:20%;overflow-x:auto;user-select:none'><div style='width:4000px;height:40px'>Horizontal code content</div></div><div id='popover' popover>Menu</div><dialog>Details</dialog><button id='collapse-history' onclick=\"document.body.classList.remove('history-open')\">Close history</button><button id='page-next' style='position:fixed;left:16px;top:10%;width:200px;height:52px' onclick=\"history.pushState(null, '', '/secondary')\">Open secondary page</button><div id='swipe-surface' style='position:fixed;left:0;top:65%;width:100%;height:30%'></div>";
                     byte[] body = (status ? "{\"connected\":true}" : html).getBytes(StandardCharsets.UTF_8);
                     OutputStream out = socket.getOutputStream();
-                    out.write(("HTTP/1.1 200 OK\r\nContent-Type: " + (status ? "application/json" : "text/html; charset=utf-8") + "\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    out.write(("HTTP/1.1 " + (status ? statusCode : documentCode) + " Fixture\r\nContent-Type: " + (status ? "application/json" : "text/html; charset=utf-8") + "\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                     out.write(body); out.flush();
                 } catch (IOException ignored) { /* Closing the fixture or a cancelled request is expected. */ }
                 finally { if (blocked) replied.countDown(); }
