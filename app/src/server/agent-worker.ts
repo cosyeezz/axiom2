@@ -549,6 +549,8 @@ process.on("message", (value: any) => {
       else {
         compressionSnapshots.add(value.id);
         if (activeInput?.memoryPath) compressionMemory.request(value.id);
+        // Acknowledge queueing, not completion: the provider may still be active.
+        send({ type: "compression-requested", id: value.id });
       }
       return;
     }

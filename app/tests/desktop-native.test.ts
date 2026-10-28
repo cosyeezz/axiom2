@@ -7,6 +7,17 @@ import { join } from 'node:path';
 // @ts-expect-error bundled desktop module
 import { stageBundledLinuxHelper, prepareLinuxHelper } from '../desktop/desktop-native.mjs';
 
+test('workbench allows only exact srcdoc beyond its origin without relaxing preview isolation', async () => {
+  const views = await readFile(new URL('../desktop/axiom_views.rs', import.meta.url), 'utf8');
+  assert.match(views, /fn allow_workbench_navigation\(same_origin: bool, url: &str\) -> bool \{\s*same_origin \|\| url == "about:srcdoc"\s*\}/);
+  assert.match(views, /\.on_navigation\(move \|url\| allow_workbench_navigation\(url\.origin\(\) == origin, url\.as_str\(\)\)\)/);
+  const preview = await readFile(new URL('../src/client/chat/HtmlFile.tsx', import.meta.url), 'utf8');
+  assert.match(preview, /const sandbox = scripts \? "allow-scripts" : ""/);
+  assert.match(preview, /sandbox="\$\{sandbox\}"/);
+  assert.match(preview, /sandbox=\{sandbox\}/);
+  assert.match(preview, /frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'/);
+});
+
 async function fixture(t: any, arch = 'x64') {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'axiom-native-fixture-')));
   t.after(() => rm(root, { recursive: true, force: true }));

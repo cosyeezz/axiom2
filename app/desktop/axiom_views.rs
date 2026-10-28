@@ -14,6 +14,12 @@ static OPENING: AtomicU64 = AtomicU64::new(0);
 // Low bit is light/dark; upper bits order replies across document loads.
 static THEME: AtomicU64 = AtomicU64::new(0);
 const THEME_SCRIPT: &str = include_str!("axiom_theme.js");
+// Wry also calls the navigation filter for WKWebView subframes. Sandboxed HTML
+// previews use about:srcdoc, whose opaque URL origin cannot match the workbench.
+// Allow that exact inline-document URL, not arbitrary about/data/file URLs.
+fn allow_workbench_navigation(same_origin: bool, url: &str) -> bool {
+    same_origin || url == "about:srcdoc"
+}
 fn theme_state() -> serde_json::Value {
     let state = THEME.load(Ordering::Acquire);
     serde_json::json!({ "theme": if state & 1 == 1 { "light" } else { "dark" }, "revision": state >> 1 })
@@ -272,7 +278,7 @@ pub async fn open(app: &AppHandle, target: tauri::Url, observed: u64, managed: b
             .initialization_script(&format!("{}; window.__TAURI_INTERNALS__.invoke('axiom_theme').then(window.__axiomApplyTheme).catch(() => {{}});", THEME_SCRIPT))
             .focused(false)
             .background_color(theme_color())
-            .on_navigation(move |url| url.origin() == origin)
+            .on_navigation(move |url| allow_workbench_navigation(url.origin() == origin, url.as_str()))
             .on_new_window(move |url, _| {
                 if ["https", "http"].contains(&url.scheme()) && url.username().is_empty() && url.password().is_none() {
                     let _ = external.opener().open_url(url.as_str(), None::<&str>);
