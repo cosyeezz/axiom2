@@ -87,7 +87,7 @@ Axiom2 更适合需要反复研究同一代码库、执行多步骤任务的开�
 
 ### 1. 下载客户端，用安装管理完成准备（推荐）
 
-下载并打开 **[Windows 安装版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.msi)** 或 **[macOS 通用版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.dmg)**，在客户端内完成安装，不必先到终端逐项配置。
+下载并打开 **[Windows 安装版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.msi)** 或 **[macOS 通用版](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.dmg)**，在客户端内完成安装，不必先到终端逐项配置。
 
 1. 展开 **「安装与准备」**，按提示检查并安装运行环境；缺少 Node.js 时，可点击 **「安装 Node.js」**。
 2. 在 **「后台服务」** 中点击 **「安装并启动服务」**，等待安装和校验完成。
@@ -105,7 +105,7 @@ Axiom2 更适合需要反复研究同一代码库、执行多步骤任务的开�
 
 ### 3. 电脑启动，手机接着做
 
-安装 **[Android 客户端](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12)**，让手机与电脑登录同一 Tailscale 网络，连接电脑后台，即可在手机上查看进度、发送任务。手机浏览器也可访问同一工作台地址。[手机连接指南 →](app/android/README.md)
+安装 **[Android 客户端](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Android.apk)**，让手机与电脑登录同一 Tailscale 网络，连接电脑后台，即可在手机上查看进度、发送任务。手机浏览器也可访问同一工作台地址。[手机连接指南 →](app/android/README.md)
 
 下次使用，在桌面客户端启动后台并连接即可；工作台内的 **「服务与更新」** 可返回服务管理。关闭浏览器或客户端**不会停止电脑上的后台任务**，但电脑和后台必须保持运行，服务不会自动注册开机启动。停止任务或后台不等于撤销已发生的文件修改。
 
@@ -135,6 +135,8 @@ axiom2 start
 
 日常管理：`axiom2 start` 启动、`axiom2 status` 查看状态、`axiom2 stop` 停止后台（会中断活动执行）。安装路径由 npm 全局配置决定；无写权限时使用用户级 Node.js 安装或 npm prefix。校验文件和版本说明见 [Releases](https://github.com/cosyeezz/axiom2/releases)。
 
+若提示后台“未托管”（如自行从源码启动的 4317 服务），表示该进程不归 CLI 管理；请按原启动方式维护、停止或重启，不要强制接管或为接管而重启已有后台。
+
 </details>
 
 ## 客户端
@@ -143,22 +145,22 @@ axiom2 start
 
 | 平台 | 入口 | 使用条件 |
 | --- | --- | --- |
-| Windows x64 | [安装版 MSI](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.msi) · [便携版 EXE](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.exe) | 客户端 v0.4.16；需要 WebView2，当前未签名 |
-| macOS Apple 芯片 / Intel | [通用版 DMG](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2.dmg) | 客户端 v0.4.16；ad-hoc 签名，未获 Apple 公证 |
-| Linux x64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-x64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-x64) | 客户端 v0.4.16；基于 Ubuntu 22.04 构建，需图形桌面及系统依赖 |
-| Linux ARM64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-arm64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/Axiom2-Linux-arm64) | 客户端 v0.4.16；基于 Ubuntu 24.04 构建，需图形桌面及系统依赖 |
-| Android 8.0+ | [APK 下载与发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.12) | 客户端 v0.4.12；连接电脑后台，不在手机本地执行任务 |
+| Windows x64 | [安装版 MSI](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.msi) · [便携版 EXE](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.exe) | 客户端 v0.4.22；需要 WebView2，当前未签名 |
+| macOS Apple 芯片 / Intel | [通用版 DMG](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.dmg) | 客户端 v0.4.22；ad-hoc 签名，未获 Apple 公证 |
+| Linux x64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Linux-x64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Linux-x64) | 客户端 v0.4.22；基于 Ubuntu 22.04 构建，需图形桌面及系统依赖 |
+| Linux ARM64 | [DEB 安装包](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Linux-arm64.deb) · [可执行文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Linux-arm64) | 客户端 v0.4.22；基于 Ubuntu 24.04 构建，需图形桌面及系统依赖 |
+| Android 8.0+ | [APK 下载](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2-Android.apk) · [发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.22) · [SDK AAR](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/axiom2-android-sdk.aar) | 客户端 v0.4.22；连接电脑后台，不在手机本地执行任务 |
 | 电脑 / 手机浏览器 | 后台运行后，打开本机地址或可达的 Tailscale 地址 | 后台所在电脑需要 Node.js；Linux 原生目录选择另需图形桌面与 GTK 依赖 |
 
 Windows 安装包当前未签名。macOS 安装包为 ad-hoc 签名、未获 Apple 公证，首次打开如被阻止，可在「系统设置 → 隐私与安全性」中确认「仍要打开」；仅对确认来源可信的安装包操作。
 
-**后台与客户端独立发布。** 客户端安装管理与命令行安装均获取后台最新 Release；桌面和 Android 链接指向各自已有安装包的版本，最新后台发布页不一定包含客户端。
+**后台与客户端独立发布。** 客户端安装管理与命令行安装均获取后台最新 Release；桌面和 Android 链接固定指向客户端 v0.4.22；后台版本不要求与客户端相同，最新后台发布页不一定包含客户端。
 
 手机与电脑加入同一 **Tailscale** 网络后，可在 Android 客户端连接电脑上的工作台：发送任务、查看主／子会话、选择模型，任务仍由电脑执行。连接方式、扫码和原生功能以所装 APK 版本为准。[Android 与内网连接指南 →](app/android/README.md)
 
 Linux 推荐通过系统包管理器安装 DEB，由它解析 GTK 3、WebKitGTK 4.1 等依赖；单独的可执行文件仍需相同系统依赖，并需手动赋予执行权限。Linux 安装包已通过架构、版本和无显示器后台维护入口检查，不代表已在所有发行版或图形桌面完成交互验收。
 
-Windows 安装包当前未签名；macOS 采用 ad-hoc 签名、未获 Apple 公证，首次打开可能出现系统安全提示。安装前请核对 [SHA256 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.16/SHA256SUMS) 与 [v0.4.16 发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.16)。Android 继续独立交付 v0.4.12，不重新签发。当前没有已发布的 iOS 原生客户端。
+Windows 安装包当前未签名；macOS 采用 ad-hoc 签名、未获 Apple 公证，首次打开可能出现系统安全提示。安装前请核对 [SHA256 校验文件](https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/SHA256SUMS) 与 [v0.4.22 发布说明](https://github.com/cosyeezz/axiom2/releases/tag/v0.4.22)。Android v0.4.22 沿用原签名证书，可兼容更新原证书签名的已安装版本。当前没有已发布的 iOS 原生客户端。
 
 ## 安全与当前边界
 
