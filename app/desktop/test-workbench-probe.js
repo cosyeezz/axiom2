@@ -18,7 +18,11 @@
     const content = document.createElement("div"); content.style.height = "2400px";
     document.getElementById("messages").append(content);
     await new Promise((done) => setTimeout(done, 150));
-    const thread = document.getElementById("thread"); thread.scrollTop = 237;
+    const thread = document.getElementById("thread");
+    // A programmatic scroll alone does not express reading intent: the real UI
+    // correctly keeps following the tail across scroll/layout events otherwise.
+    thread.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+    thread.scrollTop = 237;
     const token = crypto.randomUUID(); let sample = 0;
     const denied = [];
     for (const [name, args] of [["axiom_service", { action: "stop" }], ["axiom_update", { action: "status" }], ["axiom_controls", {}], ["axiom_connection", {}], ["axiom_local", { port: 0 }], ["axiom_remote", { address: "127.0.0.1", port: 0 }]]) {
@@ -27,6 +31,10 @@
     }
     window.__axiomProbeSample = (sampleId) => invoke("record", { token, sample: ++sample, sampleId, draft: input.value,
       selection: [input.selectionStart, input.selectionEnd], scroll: thread.scrollTop,
+      scrollHeight: thread.scrollHeight, clientHeight: thread.clientHeight,
+      inputConnected: input.isConnected, threadConnected: thread.isConnected,
+      documentFocused: document.hasFocus(), inputActive: document.activeElement === input,
+      visibilityState: document.visibilityState,
       focused: document.hasFocus() && document.activeElement === input, denied,
       titleIconCount: document.querySelectorAll('.title-heading .connection-status svg').length,
       titleCopyIconCount: document.querySelectorAll('.title-heading .title-copy svg').length,
