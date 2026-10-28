@@ -71,7 +71,8 @@ test(
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.flushHeaders();
       if (isCompressionRequest(body)) { summaries.push(res); cachedSummaryResponses.add(res); }
-      else reply(res, compressionMemoryRead(body) ?? "<title>压缩测试</title>\n真实会话回复");
+      else if (!JSON.stringify(body.messages).includes("STOPPED_BEFORE_COMPRESSION"))
+        reply(res, compressionMemoryRead(body) ?? "<title>压缩测试</title>\n真实会话回复");
     });
     await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
     writeFileSync(
@@ -214,6 +215,8 @@ test(
         assert.equal(summaries.length, 0, "a frozen model mismatch never dispatches a summary");
         assert.equal(mismatched.billing?.records ?? 0, 0);
       } finally { changedRevision.mock.restore(); }
+      const requestsBeforeIdleCompression = requests.length;
+      const stoppedRun = app.agents.info(scope).run;
       const accepted = await call("compression.start", {}, scope, requestId);
       await wait(
         () => summaries.length === 1,
@@ -249,10 +252,13 @@ test(
         app.agents.compressions.info({ ...scope, workspaceId: "foreign" }),
       );
       assert.equal(app.agents.compressions.info(other), null);
-      assert.ok(readFileSync(file, "utf8").startsWith(original), "memory preparation appends without rewriting history");
-      const preparedHistory = readFileSync(file, "utf8");
-      assert.match(preparedHistory.slice(original.length), /axiom-compression-memory/);
-      assert.match(preparedHistory.slice(original.length), /check-compression-memory/);
+      assert.equal(readFileSync(file, "utf8"), original, "stopped-session compression does not append a reminder or run the main model");
+      assert.deepEqual(app.agents.info(scope).run, stoppedRun, "compression does not restart the stopped session");
+      assert.ok(requests.slice(requestsBeforeIdleCompression).every(isCompressionRequest), "only summary requests are dispatched");
+      const snapshotFile = join(root, "compression-snapshots", `${app.agents.compressions.info(scope)!.id}.jsonl`);
+      const frozenBranch = SessionManager.open(snapshotFile).getBranch();
+      assert.deepEqual(frozenBranch, SessionManager.open(file).getBranch(),
+        "the frozen snapshot includes all saved history, including the final failed tool call");
       await agent("prompt", { text: "快照之后的新消息" });
       await idle();
       const afterNewPrompt = readFileSync(file, "utf8"),
@@ -301,6 +307,10 @@ test(
       const appended = afterCompression.slice(afterNewPrompt.length).trim().split("\n").map((line) => JSON.parse(line));
       assert.equal(appended.filter((entry) => entry.type === "compaction").length, 1);
       assert.match(appended.find((entry) => entry.type === "compaction").summary, /真实 pi 快照摘要/);
+      const appliedCheckpoint = SessionManager.open(file).getBranch().findLast((entry) => entry.type === "compaction");
+      assert.ok(appliedCheckpoint?.type === "compaction");
+      assert.ok(!frozenBranch.some((entry) => entry.id === appliedCheckpoint.firstKeptEntryId),
+        "a stopped-session summary retains no uncompressed messages from its frozen snapshot");
       assert.match(JSON.stringify(SessionManager.open(file).buildSessionContext().messages), /快照之后的新消息/);
       const compactedIds = app.agents.thread(scope).ids;
       assert.notDeepEqual(compactedIds, ids, "visible transcript follows the native compaction boundary");
@@ -363,6 +373,8 @@ test(
         'import { writeFileSync } from "node:fs"; export default (pi) => { pi.on("session_before_compact", () => { writeFileSync("unwanted.txt", "ran"); }); };',
       );
       await agent("agent.model", { selection: summarySelection });
+      await agent("prompt", { text: "切换模型后的真实请求" });
+      await idle();
       await call("compression.start");
       await wait(() => summaries.length === initialSummaryCount + 1, "cancel target did not start");
       await idle();
@@ -380,6 +392,8 @@ test(
       assert.equal(existsSync(join(project, "unwanted.txt")), false);
       assert.equal(readFileSync(file, "utf8"), beforeCancelled, "cancel cannot apply a compaction");
       await agent("agent.model", { selection: mainSelection });
+      await agent("prompt", { text: "切回模型后的真实请求" });
+      await idle();
       await call("compression.start");
       await wait(() => summaries.length === initialSummaryCount + 2, "stop target did not start");
       await idle();
@@ -411,12 +425,22 @@ test(
       } finally { release(); pendingRead.mock.restore(); }
       assert.equal(summaries.length, initialSummaryCount + 2);
 
+      await agent("prompt", { text: "STOPPED_BEFORE_COMPRESSION 停止前的最后一条消息" });
+      await wait(() => requests.some(request => !isCompressionRequest(request) && JSON.stringify(request.messages).includes("STOPPED_BEFORE_COMPRESSION")), "stop target did not dispatch");
+      await app.agents.stop(scope);
+      await idle();
+      const cancelledRun = app.agents.info(scope).run;
+      assert.equal(cancelledRun?.status, "cancelled");
+      const beforeStoppedCompression = requests.length;
       await call("compression.start");
       await wait(
         () => summaries.length === initialSummaryCount + 3,
         "revocation target did not start",
       );
       await idle();
+      assert.deepEqual(app.agents.info(scope).run, cancelledRun, "manual compression never resumes the cancelled main session");
+      assert.ok(requests.slice(beforeStoppedCompression).every(isCompressionRequest));
+      assert.match(JSON.stringify(requests.filter(isCompressionRequest).at(-1)), /STOPPED_BEFORE_COMPRESSION/);
       beforeCancelled = readFileSync(file, "utf8");
       const draft = await app.agents.models.read();
       await assert.rejects(

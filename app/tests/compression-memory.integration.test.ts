@@ -18,7 +18,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
   mkdirSync(project); mkdirSync(join(root, "pi"));
   const previousPi = process.env.AXIOM_PI_DIR; process.env.AXIOM_PI_DIR = join(root, "pi");
   let mode: "write" | "edit" | "handoff" | "ignore" | "failedWrite" | "cancel" | "cancelRejected" | "overflow" = "write", memoryPath = "", held: ServerResponse | undefined;
-  let settled: ServerResponse | undefined, releaseSettled = false;
+  let settled: ServerResponse | undefined, releaseSettled = false, seedHeld: ServerResponse | undefined;
   const requests: any[] = [];
   let summaries = 0;
   const stream = (response: ServerResponse, delta: unknown, finish = "stop") => {
@@ -66,6 +66,10 @@ test("precompression reminder: optional memory work, safe points and cancellatio
           content: "# [已完成] 压缩前保存的关键决定\n" }) } }] }, "tool_calls");
       return;
     }
+    if (mode !== "handoff" && !seedHeld && !body.messages.some((message: any) => JSON.stringify(message).includes(compressionMemoryPrompt))) {
+      seedHeld = response;
+      return;
+    }
     stream(response, { role: "assistant", content: "done" });
   });
   await new Promise<void>(resolve => provider.listen(0, "127.0.0.1", resolve));
@@ -99,7 +103,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
   });
   const workspace = app.store.execute({ op: "workspace.open", requestId: randomUUID(), params: { path: project, authorized: true } }) as Workspace;
   for (const scenario of ["write", "edit", "handoff", "ignore", "failedWrite", "cancel", "cancelRejected", "overflow"] as const) {
-    mode = scenario; held = undefined; requests.length = 0; compressionEvents.length = 0; warnings.length = 0;
+    mode = scenario; held = undefined; seedHeld = undefined; requests.length = 0; compressionEvents.length = 0; warnings.length = 0;
     const previousSummaries = summaries;
     const session = app.store.execute({ op: "session.create", workspaceId: workspace.id, requestId: randomUUID() }) as Session;
     const scope = { workspaceId: workspace.id, sessionId: session.id };
@@ -113,13 +117,18 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     }
     await agent("prompt", { text: "保留这个关键决定" });
     if (scenario === "handoff") await until(() => !!settled, "seed did not enter its settlement window");
-    else await until(() => !app.agents.active(scope), "seed run did not settle");
+    else await until(() => !!seedHeld, "seed run did not enter the held active request");
     const seedRequest = requests[0], before = readFileSync(memoryPath, "utf8");
     await compress("compression.start");
     if (scenario === "handoff") {
       // The asynchronous extension gives IPC time to arrive after actionable boundaries.
       await new Promise(resolve => setTimeout(resolve, 100));
       releaseSettled = true; settled!.end("ok");
+    } else {
+      // Request compression while the main session is active; only active runs
+      // must receive the reminder before their next completed boundary.
+      await new Promise(resolve => setTimeout(resolve, 100)); // let queued snapshot IPC reach the active worker
+      stream(seedHeld!, { role: "assistant", content: "done" });
     }
     if (scenario === "cancel" || scenario === "cancelRejected") {
       await until(() => !!held, "maintenance did not reach held request");
@@ -127,12 +136,22 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       if (scenario === "cancelRejected") await assert.rejects(agent("prompt", { text: "追加要求",
         skills: [{ id: "0".repeat(64), name: "removed-skill", description: "" }] }), { code: "INPUT_REJECTED" });
       await compress("compression.cancel", { id: app.agents.compressions.info(scope)!.id });
+      // Job cancellation must not abort this user-started main run. Let its
+      // held provider request settle independently before waiting for idle.
+      stream(held!, { role: "assistant", content: "memory request finished after compression cancellation" });
     }
     await until(() => app.agents.compressions.info(scope)?.state !== "running", `compression did not settle: ${scenario}`);
     await until(() => !app.agents.active(scope), "maintenance run did not settle");
     const job = app.agents.compressions.info(scope)!;
     if (scenario !== "cancel" && scenario !== "cancelRejected" && scenario !== "overflow") {
-      if (scenario === "handoff") assert.ok(compressionEvents.includes("compression-deferred"), "unsent reminder is handed off after settlement");
+      if (scenario === "handoff") {
+        assert.ok(compressionEvents.includes("compression-deferred"), "unsent reminder is handed off after settlement");
+        assert.equal(job.state, "completed", job.error ?? "");
+        assert.equal(readFileSync(memoryPath, "utf8"), before, "settlement handoff does not restart the session for memory work");
+        assert.ok(summaries > previousSummaries);
+        assert.ok(!requests.some(request => JSON.stringify(request.messages.at(-1)).includes(compressionMemoryPrompt)), "released transcript is compressed directly");
+        continue;
+      }
       assert.equal(job.state, "completed", job.error ?? "");
       if (scenario === "ignore" || scenario === "failedWrite") assert.equal(readFileSync(memoryPath, "utf8"), before);
       else assert.match(readFileSync(memoryPath, "utf8"), scenario === "edit" ? /核对关键决定/ : /压缩前保存的关键决定/);
@@ -143,7 +162,7 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       const file = String(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(session.id)!.file);
       const entries = readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line));
       assert.equal(entries.filter(entry => entry.type === "custom_message" && entry.customType === "axiom-compression-memory").length, 1);
-      assert.equal(entries.filter(entry => entry.type === "message" && entry.message.role === "user").length, 1, "idle maintenance creates no user turn");
+      assert.equal(entries.filter(entry => entry.type === "message" && entry.message.role === "user").length, 1, "active maintenance creates no user turn");
       const writeIndex = entries.findIndex(entry => entry.message?.role === "toolResult" && entry.message.toolCallId === "save-compression-memory");
       const compactIndex = entries.findIndex(entry => entry.type === "compaction");
       if (scenario === "ignore") {

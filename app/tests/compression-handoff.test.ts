@@ -6,7 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 function fixture() {
   const scope = { workspaceId: "workspace", sessionId: "session" };
   const coordinator: any = Object.create(Compressions.prototype);
-  const live: any = { scope, job: { id: "new-job", state: "running", phase: "snapshot" }, cancel: false, controller: new AbortController() };
+  const live: any = { scope, job: { id: "new-job", state: "running", phase: "snapshot" }, input: {}, cancel: false, controller: new AbortController() };
   coordinator.live = new Map([[scope.sessionId, live]]);
   coordinator.automatic = new Map();
   coordinator.applied = () => false;
@@ -60,7 +60,7 @@ test("fresh compression ignores receipts from previous failed/cancelled jobs and
   assert.doesNotMatch(live.job.error, /可能已停止|正在退出/);
 });
 
-test("idle child snapshot waits for shutdown hooks and rechecks ownership after release", async () => {
+test("idle main snapshot waits for shutdown hooks and rechecks ownership after release", async () => {
   const { scope, coordinator, live } = fixture();
   const manager = SessionManager.inMemory();
   manager.appendMessage({ role: "user", content: "original", timestamp: Date.now() });
@@ -74,7 +74,7 @@ test("idle child snapshot waits for shutdown hooks and rechecks ownership after 
     active: () => active,
     hasIdle: () => idle,
     releaseIdle: () => released,
-    info: () => ({ run: { id: "successor" }, task: { id: "child-without-memory" } }),
+    info: () => ({ run: { id: "successor" } }),
     signal: (...args: unknown[]) => { signals.push(args); return true; },
   };
   coordinator.advance(live);
@@ -104,37 +104,33 @@ test("cancelling during idle release cannot revive snapshot work", async () => {
   assert.equal(live.entry, undefined);
 });
 
-test("idle main preparation launches once through normal admission and hands off to its worker", async () => {
-  const { coordinator, live } = fixture();
-  let launches = 0, active = false;
-  const signals: unknown[] = [];
-  coordinator.agents = {
-    active: () => active, info: () => ({ run: { id: "maintenance" } }),
-    command: async (_command: unknown, internal: any) => {
-      launches++;
-      assert.equal(internal.compressionPreparation.signal, live.controller.signal);
-      internal.compressionPreparation.validate();
-      active = true;
-      internal.onStart({ id: "maintenance" });
-    },
-    signal: (...args: unknown[]) => { signals.push(args); return true; },
-  };
-  coordinator.snapshot = () => assert.fail("idle main must not capture before maintenance");
-  coordinator.advance(live); coordinator.advance(live);
-  await live.preparing;
-  assert.equal(launches, 1);
-  assert.equal(signals.length, 1);
-  active = false;
-  coordinator.settled(live.scope, "maintenance");
-  assert.equal(live.job.state, "failed", "missing maintenance snapshot is not retried");
-  assert.equal(launches, 1);
+test("settled main sessions capture all saved history without launching a reminder run", () => {
+  for (const status of ["completed", "cancelled", "failed", "interrupted"]) {
+    const { coordinator, live } = fixture();
+    const manager = SessionManager.inMemory();
+    manager.appendMessage({ role: "user", content: "saved request", timestamp: Date.now() });
+    manager.appendCustomMessageEntry("tail", "last saved content", true);
+    coordinator.manager = () => manager;
+    coordinator.agents = {
+      active: () => false, hasIdle: () => false, info: () => ({ run: { id: "settled", status } }),
+      command: () => assert.fail("compression must not restart the stopped main session"),
+      signal: () => assert.fail("there is no future safe point to wait for"),
+    };
+    let captured: any;
+    coordinator.snapshot = (_live: unknown, snapshot: unknown) => { captured = snapshot; live.snapshot = snapshot; };
+    coordinator.advance(live);
+    coordinator.advance(live);
+    assert.equal(live.job.state, "running");
+    assert.deepEqual(captured.entries, JSON.parse(JSON.stringify(manager.getBranch())));
+    assert.equal(live.input.summarizeAll, true, "the final saved reply is a summary target, not a retained tail");
+    assert.match(JSON.stringify(captured), /last saved content/);
+  }
 });
 
-test("cancel before idle preparation dispatch cannot start a model run", async () => {
+test("cancel before stopped-session capture cannot start summary work", () => {
   const { coordinator, live } = fixture();
-  coordinator.agents = { active: () => false, info: () => ({}), command: () => assert.fail("cancelled preparation must not launch") };
-  coordinator.advance(live);
+  coordinator.agents = { active: () => assert.fail("cancelled work must not advance") };
+  coordinator.snapshot = () => assert.fail("cancelled work must not capture");
   live.cancel = true; live.controller.abort();
-  await live.preparing;
-  assert.equal(live.preparationRun, undefined);
+  coordinator.advance(live);
 });

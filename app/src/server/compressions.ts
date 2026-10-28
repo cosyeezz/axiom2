@@ -33,8 +33,6 @@ type Live = {
   snapshot?: CompressionSnapshot;
   entry?: CompactionEntry;
   applyRun?: string;
-  preparing?: Promise<unknown>;
-  preparationRun?: string;
   cancelAck?: () => void;
   cancelConfirmedRun?: string;
 };
@@ -315,28 +313,6 @@ export class Compressions {
           this.agents.signal(scope, run.id, { type: "compression-snapshot", id: job.id });
         }
         // If already finishing, close/settled will retry against the idle manager.
-      } else if (!live.entry && !this.agents.info(scope).task) {
-        if (live.preparing) return;
-        if (live.preparationRun) throw Error("压缩提醒请求已结束，但未取得安全快照。");
-        const validate = () => {
-          if (live.cancel || this.live.get(scope.sessionId) !== live)
-            throw new AppError("COMPRESSION_STOPPED", "压缩已取消，未启动记忆维护。");
-        };
-        this.stage(live, "主会话正在整理记忆，等待安全快照");
-        live.preparing = Promise.resolve().then(() => {
-          validate();
-          return this.agents.command({ op: "prompt", requestId: `compression-memory-${job.id}`, ...scope }, {
-            compressionPreparation: { id: job.id, validate, signal: live.controller.signal },
-            onStart: (run) => {
-              live.preparationRun = run.id;
-              this.automatic.set(scope.sessionId, { runId: run.id, attempted: true, stopped: false });
-            },
-          });
-        }).catch((error) => {
-          if (live.cancel || this.live.get(scope.sessionId) !== live) return;
-          if (error?.code === "AGENT_BUSY" && this.agents.active(scope)) this.advance(live);
-          else this.finish(live, "failed", `压缩提醒请求未启动：${compressionError(error)}；未生成摘要。`);
-        }).finally(() => { live.preparing = undefined; this.advance(live); });
       } else if (this.agents.hasIdle(scope)) {
         // Shutdown hooks can still append entries. Wait for the sole writer to
         // release ownership before either capturing or applying a snapshot.
@@ -354,7 +330,13 @@ export class Compressions {
           if (!this.applied(scope, job.id)) throw Error("Not persisted");
           this.updateUsage(live);
           this.finish(live, "completed");
-        } else this.snapshot(live, captureCompression(this.manager(scope)));
+        } else {
+          // A settled session already has a safe transcript. Do not restart the
+          // main agent just to deliver a reminder or wait for a future turn.
+          this.stage(live, "会话已停止，直接保存历史快照");
+          live.input.summarizeAll = true;
+          this.snapshot(live, captureCompression(this.manager(scope)));
+        }
       }
     } catch (error) { this.finish(live, "failed", `快照保存或摘要应用失败：${compressionError(error)}；未应用此摘要。`); }
   }

@@ -248,7 +248,9 @@ test("automatic compression uses real pi usage and the chat window, shares persi
     assert.equal(nativeEntries(fallbackScope).length, 0, "Pi must not trigger below 70%");
     const nativeBefore = nativeRequests;
     tokens = 22401; // Pi is strict > 70% of the 32k window.
-    await prompt(fallbackScope); await idle(fallbackScope);
+    // Give Pi a recent turn larger than its keepRecentTokens budget: without
+    // an implicit idle reminder, a tiny tail can leave no native summary range.
+    await prompt(fallbackScope, "FALLBACK_RECENT_HISTORY ".repeat(100)); await idle(fallbackScope);
     await wait(() => app.agents.compressions.info(fallbackScope)?.state === "failed", "host failure must remain visible after native recovery");
     assert.ok(nativeRequests > nativeBefore, "Pi issued its own standalone summary request");
     const checkpoints = nativeEntries(fallbackScope);

@@ -6,6 +6,8 @@ import {
   createAgentSession,
   DefaultResourceLoader,
   SettingsManager,
+  buildSessionProjection,
+  estimateTokens,
   type AgentSession,
   type SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
@@ -21,6 +23,7 @@ import { usageCost } from "./usage-cost.js";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { kiroCompressionProjection, kiroSummaryUsage } from "./providers/kiro-usage.js";
 import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
+import { includeAllCompressionMessages } from "./compression-context.js";
 
 export interface CompressionInput {
   executionGate?: boolean;
@@ -30,6 +33,7 @@ export interface CompressionInput {
   modelsFile: string;
   selection: Selection;
   request?: CompressionPrefix;
+  summarizeAll?: boolean;
 }
 let session: AgentSession | undefined,
   cancelled = false,
@@ -73,8 +77,10 @@ async function run(input: CompressionInput) {
       throw Error("当前会话的实际请求模型配置已变化；无法复用其缓存前缀，请重试压缩。");
     const thinking = input.request.options.reasoning ?? "off";
     let preparation: SessionBeforeCompactEvent["preparation"] | undefined;
+    let fullSummaryPrepared = false;
     // No project resources, external extensions or executable coding tools.
-    // One host-only hook observes native preparation without replacing its result.
+    // One host-only hook widens the stopped-session range; the native summary
+    // generator, format, retries and accounting remain unchanged.
     const settingsManager = SettingsManager.inMemory({
       cacheWarming: "off",
       compaction: { enabled: false, keepRecentTokens: 0 },
@@ -84,7 +90,13 @@ async function run(input: CompressionInput) {
       agentDir: join(input.root, "pi"),
       settingsManager,
       noExtensions: true,
-      extensionFactories: [(pi) => { pi.on("session_before_compact", (event) => { preparation = event.preparation; }); }],
+      extensionFactories: [(pi) => { pi.on("session_before_compact", (event) => {
+        preparation = event.preparation;
+        if (input.summarizeAll) {
+          includeAllCompressionMessages(preparation, event.branchEntries);
+          fullSummaryPrepared = true;
+        }
+      }); }],
       noSkills: true,
       noPromptTemplates: true,
       noThemes: true,
@@ -124,7 +136,7 @@ async function run(input: CompressionInput) {
       // A split-prefix dispatch after cancellation never reaches native HTTP.
       // Keep nonKiro accounting unchanged; do not add a fictitious Kiro charge.
       if (model.api === "kiro-chat" && (options?.signal?.aborted || compactionUsage.isCancelled())) return stream(model, context, options);
-      if (!preparation) throw Error("没有原生摘要范围，未发送摘要请求。");
+      if (!preparation || input.summarizeAll && !fullSummaryPrepared) throw Error("没有原生摘要范围，未发送摘要请求。");
       const request = compressionPrefixRequest(input.request!, session!.sessionManager.getBranch(), preparation, context);
       const requestOptions = compressionRequestOptions(input.request!, options);
       assertCompressionBudget(model, request, requestOptions);
@@ -153,12 +165,17 @@ async function run(input: CompressionInput) {
     // SDK combineUsage drops custom fields and has already appended its snapshot
     // entry. Enrich only the outgoing copy, which the owning writer applies once.
     const kiroUsage = model.provider === "kiro" ? kiroSummaryUsage(result.usage, physical) : undefined;
+    // Self-reference is the coordinator's retain-none marker. Only use it after
+    // the entire snapshot was actually included in the native summary target.
+    const output = { ...entry, ...(fullSummaryPrepared ? { firstKeptEntryId: entry.id } : {}), ...(kiroUsage ? { usage: kiroUsage } : {}) };
+    const after = fullSummaryPrepared ? buildSessionProjection([...transcript.getBranch().filter((item) => item.id !== entry.id), output])
+      .messages.reduce((total, message) => total + estimateTokens(message), 0) : result.estimatedTokensAfter ?? null;
     send({
       type: "completed",
-      entry: kiroUsage ? { ...entry, usage: kiroUsage } : entry,
+      entry: output,
       summary: result.summary,
       before: result.tokensBefore,
-      after: result.estimatedTokensAfter ?? null,
+      after,
       usage: kiroUsage ? kiroCompressionProjection(kiroUsage) :
         result.usage && result.usage.totalTokens > 0
           ? {

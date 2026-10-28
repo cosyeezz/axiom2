@@ -7,6 +7,7 @@ import {
   type SessionEntry,
   type SessionHeader,
   type SessionManager,
+  type SessionBeforeCompactEvent,
 } from "@earendil-works/pi-coding-agent";
 
 type Reader = Pick<SessionManager, "getHeader" | "getBranch">;
@@ -43,6 +44,35 @@ export function captureCompression(manager: Reader): CompressionSnapshot {
   if (!header || header.type !== "session" || !header.id) throw conflict();
   const entries = manager.getBranch();
   return copy({ header, entries });
+}
+
+/** Pi's zero recent-token budget still retains its final cut point. For a
+ * stopped-session checkpoint, include that tail in the native full summary too.
+ * This runs only inside the scratch session's session_before_compact hook.
+ */
+export function includeAllCompressionMessages(preparation: SessionBeforeCompactEvent["preparation"], entries: SessionEntry[]) {
+  const messages = buildSessionProjection(entries).entries
+    .filter((entry) => entry.sourceEntry.type !== "compaction")
+    .flatMap((entry) => entry.messages.filter((message) => message.role !== "system"));
+  if (!messages.length) throw new Error("没有可摘要的会话消息。");
+  preparation.messagesToSummarize = messages;
+  preparation.turnPrefixMessages = [];
+  preparation.isSplitTurn = false;
+  // Keep native file-list metadata complete when the formerly retained tail
+  // contains direct or nested read/write/edit calls.
+  const add = (name: string, args: Record<string, unknown>) => {
+    if (typeof args?.path !== "string") return;
+    if (name === "read") preparation.fileOps.read.add(args.path);
+    if (name === "write") preparation.fileOps.written.add(args.path);
+    if (name === "edit") preparation.fileOps.edited.add(args.path);
+  };
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      for (const block of message.content) if (block.type === "toolCall") add(block.name, block.arguments);
+    } else if (message.role === "toolResult") {
+      for (const call of message.nestedCalls?.calls ?? []) if (call.arguments) add(call.name, call.arguments);
+    }
+  }
 }
 
 export function hasCompression(manager: Reader, id: string): boolean {

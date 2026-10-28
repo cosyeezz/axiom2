@@ -10,6 +10,7 @@ import {
   readCompressionPrefix, saveCompressionPrefix, observeCompressionPayload,
 } from "../src/server/compression-request.js";
 import { compactionInstructions } from "../src/server/compaction-display.js";
+import { includeAllCompressionMessages } from "../src/server/compression-context.js";
 
 const model: Model<"openai-completions"> = { provider: "fixture", id: "chat", name: "Chat", api: "openai-completions",
   baseUrl: "http://127.0.0.1:1/v1", reasoning: true, input: ["text", "image"], contextWindow: 32000, maxTokens: 2048,
@@ -86,6 +87,64 @@ test("native update references the existing summary in the prefix without serial
   assert.match(directive, /Existing structured summary to update/);
   assert.doesNotMatch(directive, /UNIQUE_PREVIOUS_SUMMARY|<previous-summary>/);
   assert.match(directive, /PRESERVE all existing information/);
+});
+
+test("stopped-session native summary targets the final reply and includes tail file operations", async () => {
+  const f = fixture();
+  f.manager.appendMessage({ ...assistant(""), content: [{ type: "toolCall", id: "last-write", name: "write", arguments: { path: "/tail/file", content: "saved" } }] });
+  f.manager.appendMessage({ role: "toolResult", toolCallId: "last-write", toolName: "write", content: [{ type: "text", text: "saved" }],
+    isError: false, timestamp: 2 });
+  f.manager.appendMessage(assistant("FINAL_SAVED_REPLY"));
+  const preparation = prepare(f.manager.buildSessionProjection().messages.slice(0, 1));
+  preparation.isSplitTurn = true;
+  includeAllCompressionMessages(preparation, f.manager.getBranch());
+  assert.equal(preparation.isSplitTurn, false);
+  assert.deepEqual(preparation.turnPrefixMessages, []);
+  assert.equal(preparation.messagesToSummarize.length, 5);
+  const { requests, result } = await runNative(f, preparation);
+  assert.equal(requests.length, 1, "the complete stopped context uses one full native summary");
+  const directive = JSON.stringify(requests[0].messages.at(-1));
+  assert.match(directive, /indices .*: 2, 3, 4, 5, 6/);
+  assert.match(JSON.stringify(requests[0].messages.at(-2)), /FINAL_SAVED_REPLY/);
+  assert.deepEqual(result.details, { readFiles: ["/fixture/read"], modifiedFiles: ["/tail/file"] });
+});
+
+test("stopped-session updates inherit the previous summary without reviving archived messages", async () => {
+  const f = fixture();
+  f.manager.appendCompaction("EXISTING_FULL_SUMMARY", null, 100);
+  f.manager.appendMessage({ role: "user", content: "AFTER_CHECKPOINT", timestamp: 2 });
+  f.manager.appendMessage(assistant("FINAL_AFTER_CHECKPOINT"));
+  f.context = normalizeContext({ systemPrompt: "ORIGINAL_SYSTEM", messages: convertToLlm(f.manager.buildSessionProjection().messages) });
+  f.prefix = captureCompressionPrefix(f.manager, selection, model, f.context, { sessionId: f.manager.getSessionId() });
+  const preparation = prepare([], [], "EXISTING_FULL_SUMMARY");
+  includeAllCompressionMessages(preparation, f.manager.getBranch());
+  assert.equal(preparation.messagesToSummarize.length, 2);
+  const { requests } = await runNative(f, preparation);
+  assert.doesNotMatch(JSON.stringify(requests), /UNIQUE_HISTORY|ORIGINAL_ANSWER/);
+  assert.match(JSON.stringify(requests[0].messages.at(-1)), /Existing structured summary to update/);
+});
+
+test("stopped-session tail metadata preserves previous files and nested read, write and edit calls", () => {
+  const f = fixture();
+  f.manager.appendCompaction("PREVIOUS", null, 100, { readFiles: ["/previous/read"], modifiedFiles: ["/previous/write"] });
+  f.manager.appendMessage({ role: "user", content: "continue", timestamp: 2 });
+  f.manager.appendMessage({ ...assistant(""), content: [{ type: "toolCall", id: "nested-parent", name: "bash", arguments: { command: "nested" } }] });
+  f.manager.appendMessage({ role: "toolResult", toolCallId: "nested-parent", toolName: "bash", content: [{ type: "text", text: "done" }],
+    nestedCalls: { complete: false, calls: [
+      { id: "read", name: "read", arguments: { path: "/tail/read" }, status: "ok" },
+      { id: "write", name: "write", arguments: { path: "/tail/write" }, status: "ok" },
+      { id: "edit", name: "edit", arguments: { path: "/tail/edit" }, status: "ok" },
+      { id: "omitted", name: "read", argumentsBytes: 100000, status: "error" },
+    ] }, isError: false, timestamp: 3 });
+  f.manager.appendMessage(assistant("final"));
+  const preparation = prepare([], [], "PREVIOUS");
+  preparation.fileOps.read = new Set(["/previous/read"]);
+  preparation.fileOps.written.add("/previous/write");
+  includeAllCompressionMessages(preparation, f.manager.getBranch());
+  assert.equal(preparation.previousSummary, "PREVIOUS");
+  assert.deepEqual([...preparation.fileOps.read].sort(), ["/previous/read", "/tail/read"]);
+  assert.deepEqual([...preparation.fileOps.written].sort(), ["/previous/write", "/tail/write"]);
+  assert.deepEqual([...preparation.fileOps.edited], ["/tail/edit"]);
 });
 
 test("private prefix survives restart losslessly, omits credentials and preserves cache routing/options", () => {
