@@ -90,7 +90,8 @@ test("REA failed update and failed MCP verification keep current version and cle
       await call(service, "rea.install", { version: "6.8.0" }); const failed = await settle(service);
       assert.ok(failed.job?.error); assert.ok(!failed.job.error.includes("secret-value"));
       assert.equal(failed.version, "6.7.0"); assert.equal(readFileSync(reaConfigPath(root), "utf8"), original);
-      assert.equal(readdirSync(join(reaDirectory(root), "versions")).length, 1);
+      const versions = readdirSync(join(reaDirectory(root), "versions"));
+      assert.equal(versions.length, 1, JSON.stringify({ failure, error: failed.job?.error, versions }));
     } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
   }
 });
