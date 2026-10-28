@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, realpathSync } from "node:fs";
-import { open, stat } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -292,10 +292,16 @@ export class ModelUsageLedger {
           if (stored?.file) {
             db.exec("DELETE FROM staging"); staging = true;
             try {
+              // O_NOFOLLOW alone does not reject links on every platform. Check
+              // the path without following it, then bind it to the open handle.
+              const pathBefore = await lstat(String(stored.file));
+              if (!pathBefore.isFile() || pathBefore.nlink !== 1) throw Error();
               const handle = await open(String(stored.file), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
               try {
                 const before = await handle.stat();
-                if (!before.isFile() || before.nlink !== 1 || before.size > limits.fileBytes) throw Error();
+                if (!before.isFile() || before.nlink !== 1 || before.size > limits.fileBytes ||
+                  pathBefore.dev !== before.dev || pathBefore.ino !== before.ino || pathBefore.birthtimeMs !== before.birthtimeMs ||
+                  pathBefore.size !== before.size || pathBefore.mtimeMs !== before.mtimeMs) throw Error();
                 let position = 0, carry = Buffer.alloc(0), dropping = false, line = 0, headerValid = false;
                 const consume = (buffer: Buffer) => {
                   line++; if (!buffer.length || exhausted()) return;
@@ -346,8 +352,10 @@ export class ModelUsageLedger {
                 if (dropping) warn("部分历史记录单行过大，未计入。");
                 if (!headerValid) throw Error("header");
                 if (position < before.size || exhausted()) familyComplete = false;
-                const after = await handle.stat(), current = await stat(String(stored.file));
-                if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.nlink !== 1 || current.dev !== before.dev || current.ino !== before.ino || current.birthtimeMs !== before.birthtimeMs) throw Error("changed");
+                const after = await handle.stat(), current = await lstat(String(stored.file));
+                if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.nlink !== 1 ||
+                  !current.isFile() || current.nlink !== 1 || current.size !== before.size || current.mtimeMs !== before.mtimeMs ||
+                  current.dev !== before.dev || current.ino !== before.ino || current.birthtimeMs !== before.birthtimeMs) throw Error("changed");
               } finally { await handle.close(); }
               db.exec("INSERT OR IGNORE INTO records SELECT * FROM staging; DELETE FROM staging"); staging = false;
               count = Number(db.prepare("SELECT count(*) AS count FROM records").get()!.count);

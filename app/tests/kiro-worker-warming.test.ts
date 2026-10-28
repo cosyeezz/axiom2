@@ -15,11 +15,11 @@ for (const variant of ["baseline", "guard"] as const) test(`real pooled Kiro wor
     // Do not spread the parent environment: profiles and every real child see
     // only this owned fixture home, SDK/account namespace and explicit settings.
     const { stdout, stderr } = await execute(process.execPath, ["--import", import.meta.resolve("tsx"),
-      "--import", fileURLToPath(new URL("./vite-assets.mjs", import.meta.url)),
+      "--import", new URL("./vite-assets.mjs", import.meta.url).href,
       fileURLToPath(new URL("./fixtures/kiro-warming-harness.ts", import.meta.url)), root, variant], {
       timeout: 40_000, maxBuffer: 1024 * 1024, env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: join(root, "home"), USERPROFILE: join(root, "home"),
-        TMPDIR: join(root, "tmp"), XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"),
+        TMPDIR: join(root, "tmp"), TEMP: join(root, "tmp"), TMP: join(root, "tmp"), XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"),
         PI_CODING_AGENT_DIR: join(root, "sdk"), AXIOM_PI_DIR: join(root, "pi"), AXIOM_EXECUTION_MODE: "managed",
         PI_OFFLINE: "1", NODE_ENV: "test",
       },

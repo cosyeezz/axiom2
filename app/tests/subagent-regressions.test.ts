@@ -271,15 +271,15 @@ for (const action of ["capacity", "cancel", "parent-stop", "recall"] as const)
   });
 
 test("final capacity gate preserves FIFO through 4→1→4 without failed pseudo-runs or spinning", async () => {
-  const f = fixture(true, 4), barrier = gate();
+  const f = fixture(true, 4), barrier = gate(), entered = gate();
   let reads = 0;
   const raw = f.models.raw.bind(f.models);
-  f.models.raw = async () => { reads++; if (reads === 1) await barrier.promise; return raw(); };
+  f.models.raw = async () => { reads++; entered.release(); await barrier.promise; return raw(); };
   const launches: string[] = [];
   (f.agents as any).runs.launchWorker = async (_scope: unknown, run: Run) => { launches.push(run.sessionId); };
   const settings = (concurrency: number) => f.store.db.prepare("INSERT OR REPLACE INTO task_settings VALUES(1,?)").run(JSON.stringify({ concurrency, workMs: 600000 }));
   try {
-    f.scheduler.kick(); await until(() => reads === 1);
+    f.scheduler.kick(); await entered.promise;
     settings(1); f.scheduler.preferencesChanged(); barrier.release();
     await until(() => (f.scheduler as any).launching.size === 0);
     assert.deepEqual(launches, [f.row(f.ids[0]).sessionId]);
@@ -432,45 +432,84 @@ for (const stop of ["stop", "shutdown", "provider"] as const)
   });
 
 test("provider stop cancels queued preparation without waiting for the configuration writer", async () => {
-  const f = fixture(true), barrier = gate(), scope = target(f.row());
-  let writerEntered = false;
-  const writer = f.models.serial(async () => { writerEntered = true; await barrier.promise; });
-  let rejected: Promise<void> | undefined;
+  const f = fixture(true), barrier = gate(), scope = target(f.row()), pool = f.agents.pool;
+  let writerEntered = false, writerReleased = false;
+  let writer: Promise<void> | undefined, rejected: Promise<void> | undefined, stopping: Promise<void> | undefined;
+  let environment: ReturnType<typeof f.agents.profiles.prepare> | undefined;
+  let blocker: Awaited<ReturnType<typeof pool.acquire>> | undefined;
   try {
+    pool.limits.maxLiveProcesses = 2; pool.limits.nestedLeafReserve = 1; pool.limits.targetReadyTotal = 0;
+    environment = f.agents.profiles.prepare({ entry: "agent", cwd: f.root, modelDir: join(f.root, "pi"),
+      modelsRaw: readFileSync(join(f.root, "pi", "models.json"), "utf8"), selection: f.selection, mode: pool.mode });
+    blocker = await pool.acquire({ environment, kind: "agent", signal: new AbortController().signal, requestStartedAtMonoMs: performance.now() });
+    writer = f.models.serial(async () => { writerEntered = true; await barrier.promise; writerReleased = true; });
+    void writer.catch(() => {});
     await until(() => writerEntered);
-    const command = { op: "prompt", requestId: randomUUID(), ...scope, params: { text: "queued behind logout writer" } };
+    const command = { op: "prompt", requestId: randomUUID(), ...scope, params: { text: "queued during logout writer" } };
     rejected = assert.rejects(f.agents.command(command, { task: { id: f.ids[0], inputIds: [] } }), { code: "AGENT_STOPPED" });
-    await until(() => (f.agents as any).starts.has(scope.sessionId));
+    void rejected.catch(() => {});
+    await until(() => pool.stats().queued === 1);
+    assert.equal((f.agents as any).starts.get(scope.sessionId).provider, f.selection.provider);
+    assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
     let stopped = false;
-    const stopping = f.agents.stopProviders([f.selection.provider], true).then(() => { stopped = true; });
+    stopping = f.agents.stopProviders([f.selection.provider], true).then(() => { stopped = true; });
+    void stopping.catch(() => {});
     await until(() => stopped);
     await stopping; await rejected;
-    assert.equal((f.agents as any).starts.size, 0);
-    assert.equal(f.agents.pool.stats().total, 0);
+    assert.equal(writerReleased, false, "unrelated writer and resource blocker are both still held");
+    assert.equal((f.agents as any).starts.size, 0); assert.equal((f.agents as any).runs.pending.size, 0);
+    assert.equal(pool.stats().queued, 0); assert.equal(pool.stats().total, 1, "only the unrelated blocker remains leased");
     assert.equal(f.store.receipt(command.requestId, scope).status, "failed");
     assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0);
     barrier.release(); await writer;
     await f.models.serial(async () => {});
     assert.equal(f.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n, 0, "cancelled callback cannot later activate a Run");
-  } finally { barrier.release(); await writer; await rejected; await f.close(); }
+    assert.equal(f.store.receipt(command.requestId, scope).status, "failed");
+    await pool.retire(blocker.ref, "fixture_complete"); blocker = undefined;
+    assert.equal(pool.stats().total, 0);
+  } finally {
+    barrier.release();
+    try { await f.agents.stop(scope); }
+    finally {
+      try {
+        await Promise.allSettled([writer, rejected, stopping]);
+        if (blocker) await pool.retire(blocker.ref, "fixture_cleanup");
+      } finally { environment?.release(); await f.close(); }
+    }
+  }
 });
 
-test("configuration changes during snapshot preparation reject without a run or retained snapshot", async () => {
-  const f = fixture(true), barrier = gate(); let entered = false, launches = 0;
-  const raw = f.models.raw.bind(f.models);
-  f.models.raw = async () => { entered = true; await barrier.promise; return raw(); };
+test("persistent session revision changes reject commit and release prepared resources", async () => {
+  const f = fixture(true), pool = f.agents.pool;
+  pool.limits.targetReadyTotal = 0;
+  let acquired = 0, launches = 0;
+  const acquire = pool.acquire.bind(pool);
+  pool.acquire = async request => {
+    const lease = await acquire(request);
+    try {
+      assert.equal(request.kind, "agent");
+      assert.equal(request.affinity?.sessionId, f.row().sessionId);
+      const row = f.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(request.affinity!.sessionId);
+      assert.equal(typeof row?.file, "string");
+      const path = String(row!.file), before = readFileSync(path, "utf8"), after = before.replace("\n", " \n");
+      assert.equal(Buffer.byteLength(after), Buffer.byteLength(before) + 1);
+      for (const line of after.trim().split("\n")) JSON.parse(line);
+      writeFileSync(path, after); acquired++;
+      return lease;
+    } catch (error) { await pool.retire(lease.ref, "fixture_failure"); throw error; }
+  };
   (f.agents as any).runs.launchWorker = async () => { launches++; };
   try {
-    const pending = f.agents.command({ op: "prompt", requestId: randomUUID(), ...target(f.row()), params: { text: "configuration consistency" } }, { task: { id: f.ids[0], inputIds: [] } });
-    const rejected = assert.rejects(pending, { code: "REVISION_CONFLICT" });
-    await until(() => entered);
-    const path = join(f.root, "pi", "models.json"), config = JSON.parse(readFileSync(path, "utf8"));
-    config.providers[f.selection.provider].models[0].name = "changed behind preparation";
-    writeFileSync(path, JSON.stringify(config)); barrier.release(); await rejected;
-    assert.equal(launches, 0); assert.equal((f.agents as any).runs.pending.size, 0);
+    await assert.rejects(f.agents.command({ op: "prompt", requestId: randomUUID(), ...target(f.row()), params: { text: "session ownership consistency" } },
+      { task: { id: f.ids[0], inputIds: [] } }), { code: "REVISION_CONFLICT" });
+    assert.equal(acquired, 3); assert.equal(launches, 0);
+    assert.equal((f.agents as any).runs.pending.size, 0); assert.equal((f.agents as any).starts.size, 0);
     assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM runs").get()!.n, 0);
     assert.equal(readdirSync(join(f.root, "run-models")).length, 0);
-  } finally { barrier.release(); await f.close(); }
+    assert.equal(pool.stats().total, 0); assert.equal(pool.stats().queued, 0);
+    await pool.trim();
+    assert.equal(f.agents.profiles.size, 0); assert.equal(readdirSync(join(f.root, "execution-models")).length, 0);
+  } finally { pool.acquire = acquire; await f.close(); }
 });
 
 test("child input queries expose unknown and confirmed delivery using persisted task ownership", async () => {

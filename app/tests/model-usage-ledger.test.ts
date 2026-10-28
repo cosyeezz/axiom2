@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appendFileSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Store } from "../src/server/storage.js";
@@ -360,6 +360,21 @@ test("a source changed between scan slices rolls back its entire staged transcri
     const report = await finish(ledger); assert.equal(report.building, false); assert.equal(report.partial, true);
     assert.equal(report.total.tokens.input, 0); assert.equal(report.scannedRoots, 0); assert.equal(report.processedRoots, 1);
     assert.equal(report.rows[0]?.kind, "unavailable"); assert.deepEqual(readFileSync(file), bytes);
+  } finally { await f.close(); }
+});
+test("a paused source replaced by a symlink to the same inode rolls back all staged calls", async () => {
+  const f = fixture(); try {
+    const file = f.history(f.session(), Array.from({ length: 12 }, (_, i) => entry(String(i))));
+    const ledger = f.ledger({ bytes: 700 }), first = await ledger.read();
+    assert.equal(first.building, true); assert.equal(first.count, 0);
+    const held = `${file}.held`, bytes = readFileSync(file);
+    renameSync(file, held); symlinkSync(held, file, "file");
+    // Following stat still sees the original inode, size and timestamps. The
+    // final path check must nevertheless reject the newly installed symlink.
+    const report = await finish(ledger);
+    assert.equal(report.building, false); assert.equal(report.partial, true);
+    assert.equal(report.total.tokens.input, 0); assert.equal(report.scannedRoots, 0); assert.equal(report.processedRoots, 1);
+    assert.equal(report.rows[0]?.kind, "unavailable"); assert.deepEqual(readFileSync(held), bytes);
   } finally { await f.close(); }
 });
 test("a single-source row cap cannot prevent following families from being verified", async () => {

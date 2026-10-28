@@ -73,7 +73,7 @@ const profiles = new ExecutionProfiles(root), pool = new ExecutionPool({ targetR
 const prepared = profiles.prepare({ entry: "compression", cwd, modelDir: pi, modelsRaw, selection, mode: "managed" });
 assert.equal(prepared.reuse, "single-use");
 const environment = { ...prepared, workerPath: fileURLToPath(new URL("./kiro-compression-worker.ts", import.meta.url)),
-  execArgv: ["--import", import.meta.resolve("tsx"), "--import", fileURLToPath(new URL("../vite-assets.mjs", import.meta.url))] };
+  execArgv: ["--import", import.meta.resolve("tsx"), "--import", new URL("../vite-assets.mjs", import.meta.url).href] };
 let permits = 0, requests = 0, closed = false, terminal: any, completed: any, outcome = "";
 const physical: any[] = [], billing: any[] = [];
 try {

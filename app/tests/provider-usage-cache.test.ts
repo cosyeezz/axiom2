@@ -105,14 +105,20 @@ test("persistent cache is private, whitelisted, bounded and rejects identity, ti
   const value = { ...ready(), updatedAt: now, access: "PRIVATE_TOKEN", accountId: "PRIVATE_ACCOUNT", metrics: [{ id: "balance", label: "剩余点数", kind: "balance" as const, balance: "1.2500", headers: "PRIVATE_HEADERS" }] };
   const entry = { key, value, checkedAt: now, nextRefreshAt: now + usageRefreshMinimum };
   disk.write("openai", entry); const path = cachedFile(f.root), original = readFileSync(path, "utf8"), auth = readFileSync(f.auth, "utf8");
-  assert.equal(lstatSync(path).mode & 0o077, 0); assert.equal(lstatSync(dirname(path)).mode & 0o077, 0); assert.doesNotMatch(original, /PRIVATE/);
+  if (process.platform !== "win32") {
+    assert.equal(lstatSync(path).mode & 0o077, 0); assert.equal(lstatSync(dirname(path)).mode & 0o077, 0);
+  }
+  assert.doesNotMatch(original, /PRIVATE/);
   assert.equal(disk.read("openai", key, now)?.value.metrics.length, 1); assert.equal(disk.read("openai", "b".repeat(64), now), undefined);
   assert.equal(new ProviderUsageCache(f.root, join(f.root, "other-pi")).read("openai", key, now), undefined);
   for (const edit of [ { version: 2 }, { checkedAt: now + 1 }, { nextRefreshAt: now + usageRefreshMinimum - 1 }, { nextRefreshAt: now + usageRefreshMinimum + usageRefreshJitter + 1 }, { value: { ...ready(), metrics: [null] } } ]) {
     writeFileSync(path, JSON.stringify({ ...JSON.parse(original), ...edit })); assert.equal(disk.read("openai", key, now), undefined);
   }
   writeFileSync(path, " ".repeat(256 * 1024 + 1)); assert.equal(disk.read("openai", key, now), undefined);
-  writeFileSync(path, original); chmodSync(path, 0o644); assert.equal(disk.read("openai", key, now), undefined); chmodSync(path, 0o600);
+  writeFileSync(path, original);
+  if (process.platform !== "win32") {
+    chmodSync(path, 0o644); assert.equal(disk.read("openai", key, now), undefined); chmodSync(path, 0o600);
+  }
   for (const link of [symlinkSync, linkSync]) {
     unlinkSync(path); link(f.auth, path);
     assert.equal(disk.read("openai", key, now), undefined); disk.write("openai", entry); disk.delete("openai");

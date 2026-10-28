@@ -1,6 +1,7 @@
 // Local selection/persistence regression tests; no model requests or remote credentials.
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
+import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,7 +11,7 @@ import { ModelService } from "../src/server/model-service.js";
 import { Agents } from "../src/server/agents.js";
 import { kiroThinkingModel } from "../src/server/providers/kiro-thinking.js";
 import { kiroCatalogScope } from "../src/server/providers/kiro-catalog.js";
-import type { Selection } from "../src/shared/agent.js";
+import { running, type Selection } from "../src/shared/agent.js";
 import type { Scope, Session, Workspace } from "../src/shared/protocol.js";
 
 const first: Selection = {
@@ -127,6 +128,44 @@ function fixture(t: TestContext) {
   };
 }
 
+async function modelHttpRequests(t: TestContext, f: ReturnType<typeof fixture>) {
+  let requests = 0;
+  const server = createServer((request, response) => {
+    requests++;
+    request.resume();
+    response.writeHead(400, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: { message: "Unavailable selections must not request the fixture", type: "invalid_request_error" } }));
+  });
+  // Registered after fixture cleanup so workers stop before their endpoint closes.
+  t.after(async () => {
+    server.closeAllConnections();
+    if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const config = JSON.parse(readFileSync(f.modelsPath, "utf8"));
+  for (const provider of Object.values(config.providers) as { baseUrl: string }[])
+    provider.baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  writeFileSync(f.modelsPath, JSON.stringify(config));
+  return () => requests;
+}
+
+async function failedRun(f: ReturnType<typeof fixture>, scope: Scope) {
+  const id = f.agents.info(scope).run!.id, deadline = Date.now() + 30_000;
+  while (running(f.agents.info(scope).run)) {
+    assert.ok(Date.now() < deadline, "unavailable selection did not settle");
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  const run = f.agents.info(scope).run!;
+  assert.equal(run.id, id);
+  assert.equal(run.status, "failed");
+  return run;
+}
+
 test("model default: no confirmed selection leaves new sessions unset", async (t) => {
   const f = fixture(t);
   const original = f.create();
@@ -225,31 +264,42 @@ test("model default: Kiro thinking-only selections and edited capability survive
   assert.deepEqual(f.selection(f.create()), high);
   await f.restart();
   assert.deepEqual(f.selection(main), high); assert.deepEqual(f.selection(f.create()), high);
-  await assert.rejects(f.select(main, { ...high, thinking: "medium" }), { code: "MODEL_UNAVAILABLE" });
+  const medium = { ...high, thinking: "medium" } satisfies Selection;
+  // Selection persists user intent, even when the current catalog omits a level.
+  await f.select(main, medium);
+  assert.deepEqual(f.selection(main), medium); assert.deepEqual(f.selection(f.create()), medium);
+  await f.restart(); assert.deepEqual(f.selection(main), medium);
   await f.select(main, { ...high, thinking: "low" });
   assert.deepEqual(f.selection(f.create()), { ...high, thinking: "low" });
 });
 
-test("model default: invalid model, thinking and malformed selection cannot overwrite the default", async (t) => {
+test("model default: unavailable intent is retained without substitution; malformed selections cannot overwrite it", async (t) => {
   const f = fixture(t);
+  const requests = await modelHttpRequests(t, f);
+  const http = t.mock.method(globalThis, "fetch", async () => { throw Error("unavailable selection must not dispatch HTTP"); });
   const main = f.create();
   await f.select(main, first);
   for (const selection of [
     { ...second, provider: "unconfigured-provider" },
     { ...second, id: "missing-model" },
-    { ...second, thinking: "not-a-thinking-level" },
   ]) {
-    await assert.rejects(f.select(main, selection), {
-      code: "MODEL_UNAVAILABLE",
-    });
-    assert.deepEqual(f.selection(main), first);
-    assert.deepEqual(f.selection(f.create()), first);
+    await f.select(main, selection);
+    assert.deepEqual(f.selection(main), selection);
+    assert.deepEqual(f.selection(f.create()), selection);
+    await f.agents.command({ requestId: randomUUID(), op: "prompt", ...main, params: { text: "Unavailable intent must not dispatch" } });
+    const run = await failedRun(f, main);
+    assert.deepEqual(run.selection, selection);
+    assert.match(run.error!, /Model not found/);
+    assert.deepEqual(f.selection(main), selection);
+    assert.equal(http.mock.callCount(), 0, "parent metadata remains offline");
+    assert.equal(requests(), 0, "worker must not call either fixture provider or substitute an available model");
   }
-  await assert.rejects(f.select(main, { ...second, extra: true }), {
-    code: "INVALID_INPUT",
-  });
-  assert.deepEqual(f.selection(main), first);
-  assert.deepEqual(f.selection(f.create()), first);
+  const retained = f.selection(main);
+  for (const selection of [{ ...second, thinking: "not-a-thinking-level" }, { ...second, extra: true }]) {
+    await assert.rejects(f.select(main, selection), { code: "INVALID_INPUT" });
+    assert.deepEqual(f.selection(main), retained);
+    assert.deepEqual(f.selection(f.create()), retained);
+  }
 });
 
 test("model default: survives restart and is application-wide across workspaces", async (t) => {
@@ -359,8 +409,10 @@ test("model default: preference write failures roll back the session selection a
   assert.deepEqual(f.selection(f.create()), second);
 });
 
-test("model default: unavailable saved default is retained, never substituted, and rejected on send", async (t) => {
+test("model default: unavailable saved default is retained, never substituted, and fails its accepted run", async (t) => {
   const f = fixture(t);
+  const requests = await modelHttpRequests(t, f);
+  const http = t.mock.method(globalThis, "fetch", async () => { throw Error("unavailable default must not dispatch HTTP"); });
   const main = f.create();
   await f.select(main, first);
   writeFileSync(f.modelsPath, JSON.stringify({ providers: {} }));
@@ -368,15 +420,16 @@ test("model default: unavailable saved default is retained, never substituted, a
   const inherited = f.create();
   assert.deepEqual(f.selection(main), first);
   assert.deepEqual(f.selection(inherited), first);
-  await assert.rejects(
-    f.agents.command({
-      requestId: randomUUID(),
-      op: "prompt",
-      ...inherited,
-      params: { text: "Unavailable default must not launch a worker" },
-    }),
-    { code: "MODEL_UNAVAILABLE" },
-  );
-  assert.equal(f.agents.info(inherited).run, null);
+  await f.agents.command({
+    requestId: randomUUID(), op: "prompt", ...inherited,
+    params: { text: "Unavailable default must not dispatch HTTP" },
+  });
+  const run = await failedRun(f, inherited);
+  assert.deepEqual(run.selection, first);
+  assert.match(run.error!, /Model not found/);
+  assert.equal(http.mock.callCount(), 0, "parent metadata remains offline");
+  assert.equal(requests(), 0, "worker must not reuse the removed provider configuration");
+  assert.deepEqual(f.selection(main), first);
+  assert.deepEqual(f.selection(inherited), first);
   assert.deepEqual(f.selection(f.create()), first);
 });

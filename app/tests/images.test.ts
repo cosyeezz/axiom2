@@ -1,5 +1,6 @@
 // Real pi SDK/worker transport against a loopback fixture; no remote-provider claim.
 import { projectionFixture } from "./projection-fixture.js";
+import { replyToFixtureTitle } from "./model-request-fixture.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type ServerResponse } from "node:http";
@@ -93,7 +94,9 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
   };
   const fixture = createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
-    requests.push(JSON.parse(raw));
+    const body = JSON.parse(raw);
+    if (replyToFixtureTitle(body, res)) return;
+    requests.push(body);
     res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders();
     if (holdNext) { holdNext = false; held = res; return; }
     finish(res);
@@ -116,7 +119,12 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
     const call = (op: string, params: Record<string, unknown> = {}, to = scope, requestId = randomUUID()) => app.tasks.command({ op, params, ...to, requestId });
     const choose = (id: string, to = scope) => call("agent.model", { selection: { provider: "images-fixture", id, thinking: "off" } }, to);
     await choose("text");
-    await assert.rejects(call("prompt", { text: "reject", images: [image()] }), { code: "MODEL_IMAGE_UNSUPPORTED" });
+    await call("prompt", { text: "reject", images: [image()] });
+    const rejectedRun = app.agents.info(scope).run!.id;
+    await wait(() => !running(app.agents.info(scope).run), "text-only image rejection unfinished");
+    assert.equal(app.agents.info(scope).run!.id, rejectedRun);
+    assert.equal(app.agents.info(scope).run!.status, "failed");
+    assert.equal(app.agents.info(scope).run!.reasonCode, "MODEL_IMAGE_UNSUPPORTED");
     assert.equal(requests.length, 0);
     await choose("vision");
     ws = new WebSocket(app.origin.replace("http", "ws") + "/ws", { origin: app.origin });
@@ -206,7 +214,26 @@ test("images: no WS drafts, native prompt/history, text-only rejection, child li
       assert.match(JSON.stringify(message.content), /第 1 张图片对应 \[imag1\]/);
     }
     await choose("text", to);
-    await assert.rejects(call("task.append", { taskId, images: [image()] }), { code: "MODEL_IMAGE_UNSUPPORTED" });
+    const beforeRejectedAppend = requests.length, previousChildRun = app.agents.info(to).run!.id;
+    const rejectedAppend = await call("task.append", { taskId, images: [image()] }) as any;
+    await wait(() => {
+      const receipt = app.store.db.prepare("SELECT runId FROM task_input_receipts WHERE inputId=?").get(rejectedAppend.inputId);
+      const run = app.agents.info(to).run;
+      return !!receipt?.runId && !!run && run.id !== previousChildRun && run.id === receipt.runId && !running(run);
+    }, "text-only child append rejection unfinished");
+    const failedChildRun = app.agents.info(to).run!;
+    assert.equal(failedChildRun.status, "failed");
+    assert.equal(failedChildRun.reasonCode, "MODEL_IMAGE_UNSUPPORTED");
+    assert.equal(failedChildRun.selection.id, "text");
+    assert.equal(requests.length, beforeRejectedAppend, "unsupported child images never reach the provider");
+    const rejectedReceipt = app.store.db.prepare("SELECT runId,state,error FROM task_input_receipts WHERE inputId=?").get(rejectedAppend.inputId)!;
+    assert.equal(rejectedReceipt.runId, failedChildRun.id);
+    // Queue admission is not a worker delivery ACK; preserve the conservative receipt.
+    assert.equal(rejectedReceipt.state, "unknown");
+    assert.match(String(rejectedReceipt.error), /未自动重发/);
+    assert.equal(records.rows("WHERE id=?", taskId)[0].status, "failed");
+    assert.equal(app.store.db.prepare("SELECT state FROM task_inputs WHERE id=?").get(rejectedAppend.inputId), undefined);
+    assert.equal(app.store.db.prepare("SELECT inputId FROM task_input_images WHERE inputId=?").get(rejectedAppend.inputId), undefined);
     await choose("vision", to);
     // A corrupt payload with a valid signature must fail decoding without poisoning later inputs.
     holdNext = true;

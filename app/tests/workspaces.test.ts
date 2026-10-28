@@ -113,7 +113,7 @@ test("archive guards include child runs/tasks, compression and pending async adm
   } finally { store.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("HTTP/WS workspace broadcasts, view-only preference, removed preview commands and restart", async () => {
+test("HTTP/WS workspace broadcasts, view-only preference, removed preview commands and restart", async t => {
   const root = temporary();
   let app = await startServer({ root, port: 0 });
   const clients: WebSocket[] = [];
@@ -167,16 +167,28 @@ test("HTTP/WS workspace broadcasts, view-only preference, removed preview comman
     const disposable = (await a.call(command("session.create", w.id))).data as Session;
     const deletion = { ...command("session.delete", w.id, { confirmed: true }), sessionId: disposable.id };
     assert.equal((await a.call({ ...deletion, requestId: randomUUID(), params: {} })).error.code, "CONFIRMATION_REQUIRED");
-    let release!: () => void;
-    const lock = app.agents.models.serial(() => new Promise<void>((resolve) => { release = resolve; }));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    let release!: () => void, entered!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const stopping = new Promise<void>(resolve => { entered = resolve; });
+    const stop = app.agents.stop.bind(app.agents);
+    const blockedStop = t.mock.method(app.agents, "stop", async (...args: Parameters<typeof app.agents.stop>) => {
+      if (args[0].workspaceId === w.id && args[0].sessionId === disposable.id) {
+        entered();
+        await blocked;
+      }
+      return stop(...args);
+    });
     const pendingDeletion = a.call(deletion);
     try {
-      // A same-socket read proves deletion has reached the model lock.
+      await Promise.race([stopping, pendingDeletion.then(() => { throw Error("Deletion bypassed the stop gate"); })]);
+      // Deletion is suspended at its real stop boundary, not an unrelated model lock.
       await a.call({ op: "subscribe", params: { scope: "workspaces" } });
       assert.equal(app.store.session(w.id, disposable.id).id, disposable.id);
       assert.equal((await a.call(command("workspace.delete", w.id, { confirmed: true }))).error.code, "WORKSPACE_BUSY");
-    } finally { release(); await lock; }
+    } finally {
+      release(); blockedStop.mock.restore();
+      await pendingDeletion;
+    }
     assert.equal((await pendingDeletion).ok, true);
     assert.equal((await a.call(deletion)).ok, true, "session deletion remains idempotent through the task service");
     assert.equal((await a.call(command("workspace.delete", w.id, { confirmed: true }))).ok, true);

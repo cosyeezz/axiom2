@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as turn } from "node:timers/promises";
+import { performance } from "node:perf_hooks";
 import { InMemoryCredentialStore, InMemoryModelsStore, type AssistantMessage, type ModelsStoreEntry } from "@earendil-works/pi-ai";
 import { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager, type AgentSession } from "@earendil-works/pi-coding-agent";
 import { createModelRuntime } from "../src/server/model-runtime.js";
@@ -94,6 +95,17 @@ async function fixture(t: TestContext, options: { mode?: Mode; profile?: Profile
   });
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
   const advance = async () => { t.mock.timers.tick(50_000); await turn(); await turn(); };
+  const warms = () => manager.getBranch().filter(entry => entry.type === "usage" && entry.kind === "cache_warm");
+  const waitForWarm = async (count: number) => {
+    // The SDK timer starts an asynchronous refresh; mocked time must stay at the
+    // trigger while auth, lazy API imports, HTTP and usage persistence settle.
+    const deadline = performance.now() + 30_000;
+    while (warms().length < count) {
+      assert.ok(performance.now() < deadline, JSON.stringify({ status: live.cacheWarmingStatus, decisions, requests,
+        assistant: live.messages.filter(message => message.role === "assistant").at(-1) }));
+      await turn();
+    }
+  };
   const holdNext = () => {
     let entered!: () => void;
     const started = new Promise<void>(resolve => { entered = resolve; });
@@ -106,7 +118,7 @@ async function fixture(t: TestContext, options: { mode?: Mode; profile?: Profile
     return { run, release: block.release };
   };
   return { session: live, runtime, manager, settings, path, kiro, control, requests, advance, blocked, holdNext,
-    decisions: () => decisions, warms: () => manager.getBranch().filter(entry => entry.type === "usage" && entry.kind === "cache_warm") };
+    decisions: () => decisions, warms, waitForWarm };
 }
 
 test("positive SDK baselines really warm with valid TTL, price and usage despite applyOverrides(off)", async t => {
@@ -119,6 +131,7 @@ test("positive SDK baselines really warm with valid TTL, price and usage despite
       assert.equal(f.session.cacheWarmingStatus?.decision?.economicsAvailable, true);
     }
     await f.advance();
+    if (mode !== "off") await f.waitForWarm(1);
     assert.deepEqual(f.requests, mode === "off" ? ["kiro"] : ["kiro", "kiro"]);
     assert.equal(f.warms().length, mode === "off" ? 0 : 1);
     assert.equal(f.decisions(), mode === "off" ? 0 : 1, "the forcing extension is actually bound in the positive baseline");
@@ -154,7 +167,7 @@ test("gate follows effective setModel through both directions, same-model reuse 
   denied.mock.restore();
   await f.session.setModel(f.control);
   assert.equal(f.settings.getCacheWarmingMode(), "idle");
-  await f.session.prompt("CONTROL_BUSINESS"); await f.advance();
+  await f.session.prompt("CONTROL_BUSINESS"); await f.advance(); await f.waitForWarm(1);
   assert.deepEqual(f.requests, ["kiro", "control", "control"]);
   assert.equal(f.warms().length, 1);
   await f.session.setModel(f.kiro);
@@ -168,7 +181,7 @@ test("gate follows effective setModel through both directions, same-model reuse 
 
 test("non-Kiro SDK baseline is unchanged, and reload/save preserve global policy", async t => {
   const f = await fixture(t, { mode: "idle", provider: "control" });
-  await f.session.prompt("CONTROL"); await f.advance();
+  await f.session.prompt("CONTROL"); await f.advance(); await f.waitForWarm(1);
   assert.deepEqual(f.requests, ["control", "control"]); assert.equal(f.warms().length, 1);
   f.settings.setTheme("fixture-theme"); await f.settings.flush();
   assert.equal(JSON.parse(readFileSync(f.path, "utf8")).cacheWarming, "idle");
@@ -178,7 +191,7 @@ test("non-Kiro SDK baseline is unchanged, and reload/save preserve global policy
   assert.equal(f.settings.getGlobalSettings().cacheWarming, "idle"); assert.equal(f.settings.getCacheWarmingMode(), "off");
   await f.session.setModel(f.control);
   assert.equal(f.settings.getCacheWarmingMode(), "idle");
-  await f.session.prompt("CONTROL_AFTER_RELOAD"); await f.advance();
+  await f.session.prompt("CONTROL_AFTER_RELOAD"); await f.advance(); await f.waitForWarm(2);
   assert.deepEqual(f.requests, ["control", "control", "control", "control"]);
   assert.equal(f.warms().length, 2);
 });
@@ -187,6 +200,7 @@ test("non-Kiro default streaming and off keep their real SDK warming behavior", 
   for (const mode of [undefined, "off"] as const) await t.test(mode ?? "default streaming", async st => {
     const f = await fixture(st, { mode, provider: "control", forceWarm: true });
     const business = await f.blocked(); await f.advance();
+    if (mode !== "off") await f.waitForWarm(1);
     assert.deepEqual(f.requests, mode === "off" ? ["control"] : ["control", "control"]);
     assert.equal(f.warms().length, mode === "off" ? 0 : 1);
     business.release(); await business.run; await f.advance();

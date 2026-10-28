@@ -42,6 +42,7 @@ test("OpenCLI clears private runtime labels when returning to legacy or unreadab
 test("REA clears stale runtime labels, reports legacy patch incompatibility and still permits private installation", async () => {
   const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
   try {
+    await service.command(command("rea.check")); await settle(service);
     await service.command(command("rea.install", { version: "6.7.0" })); await settle(service);
     assert.equal(service.snapshot().runtimeManaged, true); assert.ok(service.snapshot().npmVersion);
     writeFileSync(reaConfigPath(root), "broken"); await service.command(command("rea.refresh"));
@@ -61,6 +62,7 @@ test("REA clears stale runtime labels, reports legacy patch incompatibility and 
 test("REA rejects unreviewed tool/dependency contracts before runtime preparation or npm installation", async () => {
   const root = temporary(), f = reaFixture(), service = new ReaService(root, () => {}, f.dependencies);
   try {
+    await service.command(command("rea.check")); await settle(service);
     await service.command(command("rea.install", { version: "6.7.0" })); await settle(service);
     const original = readFileSync(reaConfigPath(root), "utf8"), calls = f.calls.length;
     f.setLatest("6.9.0"); await service.command(command("rea.check")); await settle(service);
@@ -75,6 +77,7 @@ test("REA updates retain dependency paths and downloads but invalidate checks ti
   f.dependencies.checkEngines = async (_root, config) => { checks++; return listEngines(config).map(item => item.id === "java" ? { ...item, status: "ready", checkedAt: Date.now() } : item); };
   const service = new ReaService(root, () => {}, f.dependencies);
   try {
+    await service.command(command("rea.check")); await settle(service);
     await service.command(command("rea.install", { version: "6.7.0" })); await settle(service);
     const java = join(root, "external jdk"), directory = `ghidra-${randomUUID()}`, cache = join(root, "integrations", "rea", "downloads", directory), data = Buffer.from("fixture cached release");
     fs.mkdirSync(java); fs.mkdirSync(cache, { recursive: true });
@@ -108,7 +111,7 @@ for (const tool of ["rea", "opencli"] as const) test(`${tool} retains a publishe
     return sync(fd);
   }) as typeof fs.fsyncSync); syncBuiltinESMExports();
   try {
-    if (tool === "opencli") { await service.command(command("opencli.check")); await settle(service); }
+    await service.command(command(`${tool}.check`)); await settle(service);
     await service.command(command(`${tool}.install`, { version: tool === "rea" ? "6.7.0" : "1.8.8" })); await settle(service);
     assert.ok(injected); assert.match(service.snapshot().job!.error!, /已切换至/);
     assert.match(service.snapshot().job!.message, /新版本已生效/);

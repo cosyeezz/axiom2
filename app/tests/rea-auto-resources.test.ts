@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -38,7 +38,7 @@ test("REA budgets reserve resources, bound target sizes, JVM CPU and heap, and f
   finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("dependency discovery uses executable absolute paths, preserves explicit choices and never mutates the source", () => {
+test("POSIX dependency discovery uses executable absolute paths, preserves explicit choices and never mutates the source", { skip: process.platform === "win32" }, () => {
   const root = temporary(), bin = join(root, "bin"); mkdirSync(bin);
   try {
     for (const name of ["rizin", "adb", "apktool", "tshark", "capinfos", "mitmdump", "prlimit", "chromium"]) { writeFileSync(join(bin, name), "fixture"); chmodSync(join(bin, name), 0o700); }
@@ -51,6 +51,23 @@ test("dependency discovery uses executable absolute paths, preserves explicit ch
     assert.equal(discoverReaDependencies(source, "darwin", root).some(item => item.variable === "REA_MITMDUMP_COMMAND"), false);
     chmodSync(join(bin, "rizin"), 0o600);
     assert.notEqual(reaDependencyEnvironment(discoverReaDependencies({ PATH: bin }, "linux", root)).REA_RIZIN_COMMAND, join(bin, "rizin"));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Windows discovery finds native exe and Chrome paths without overriding explicit choices", { skip: process.platform !== "win32" }, () => {
+  const root = temporary(), bin = join(root, "bin"), programs = join(root, "Program Files"), chromeDir = join(programs, "Google", "Chrome", "Application");
+  mkdirSync(bin); mkdirSync(chromeDir, { recursive: true });
+  try {
+    for (const name of ["rizin", "adb", "apktool", "tshark", "capinfos"]) writeFileSync(join(bin, `${name}.exe`), "fixture");
+    const chrome = join(chromeDir, "chrome.exe"); writeFileSync(chrome, "fixture");
+    const source = { Path: bin, PROGRAMFILES: programs, REA_ADB_PATH: "C:\\explicit\\missing-adb.exe" }, before = { ...source };
+    const items = discoverReaDependencies(source, "win32", root), env = reaDependencyEnvironment(items);
+    assert.deepEqual(source, before); assert.equal(env.REA_ADB_PATH, source.REA_ADB_PATH);
+    assert.equal(items.find(item => item.variable === "REA_ADB_PATH")?.source, "environment");
+    assert.equal(env.REA_RIZIN_COMMAND, realpathSync(join(bin, "rizin.exe")));
+    assert.equal(env.REA_TSHARK_COMMAND, realpathSync(join(bin, "tshark.exe")));
+    assert.equal(env.REA_BROWSER_EXECUTABLE, realpathSync(chrome));
+    assert.equal(env.REA_MITMDUMP_COMMAND, undefined); assert.equal(env.REA_TSHARK_PRLIMIT_COMMAND, undefined);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -77,7 +94,7 @@ test("structured REA recovery requires a known editable safe resource error, nev
 function harness(root: string, execute: (args: any) => Promise<any>, hostBudget = budget, operation = "analyze_javascript_application", version = "6.8.0") {
   const policy = createReaToolPolicy(root, { budget: () => hostBudget, version });
   let closed = 0;
-  // An impossible PID models a test transport whose process is known to be gone.
+  // An impossible PID proves a gone POSIX group, not a reaped Windows tree.
   policy.attachTransport({ pid: 2147483646, close: async () => { closed++; } });
   const settings: any[] = [
     { setting: "javascript.analysis_timeout_ms", value: 300000, source: "default", minimum: 1, maximum: 2147483647, parameter: "analysis_timeout_ms" },
@@ -174,31 +191,42 @@ test("missing or unsafe server hints never authorize replay", async () => {
 test("wrapped cleanup errors and refused restoration quarantine the runtime", async () => {
   const root = temporary();
   try {
-    const cleanup = harness(root, async () => result({ code: "cleanup_incomplete", details: { cleanup: "incomplete" } }, true));
+    const cleanupRoot = join(root, "cleanup"), restoreRoot = join(root, "restore"), unknownRoot = join(root, "unknown");
+    const cleanup = harness(cleanupRoot, async () => result({ code: "cleanup_incomplete", details: { cleanup: "incomplete" } }, true));
     await cleanup.run(); assert.equal(cleanup.closed(), 1, "real REA {error:...} envelope triggers teardown");
-    const restore = harness(root, async () => result({}));
+    const restore = harness(restoreRoot, async () => result({}));
     const execute = restore.ctx.executeTool;
     restore.ctx.executeTool = (name: string, args: any, options: any) => {
       if (args.changes?.some((change: any) => change.action === "reset")) return Promise.resolve({ isError: true, result: result({ code: "permission_denied" }, true) });
       return execute(name, args, options);
     };
     await assert.rejects(restore.run(), /未绕过工具权限/); assert.equal(restore.closed(), 1);
-    const unknown = createReaToolPolicy(root);
+    const unknown = createReaToolPolicy(unknownRoot);
     unknown.attachTransport({ close: async () => {} });
     const tool = unknown.wrap({ name: "mcp__rea__binary_session", parameters: {}, execute: async () => result({}) } as any);
     await assert.rejects(tool.execute("unknown", {}, undefined, undefined, { cwd: root } as any), /未连接或已隔离/);
-    assert.equal(existsSync(join(root, "integrations/rea/budget/active.json")), false, "unknown PID is refused before admission");
+    assert.equal(existsSync(join(unknownRoot, "integrations/rea/budget/active.json")), false, "unknown PID is refused before admission");
+    for (const ownedRoot of [cleanupRoot, restoreRoot]) {
+      assert.equal(existsSync(join(ownedRoot, "integrations/rea/budget/active.json")), process.platform === "win32");
+      if (process.platform === "win32") await assert.rejects(harness(ownedRoot, async () => result({})).run(), /尚未确认退出/);
+    }
+    await assert.rejects(cleanup.run(), /已隔离/); await assert.rejects(restore.run(), /已隔离/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("low memory refuses analysis; exceptions close owned runtime before releasing admission", async () => {
   const root = temporary(); let calls = 0;
   try {
-    const h = harness(root, async () => { calls++; return result({}); }, reaAutoBudget({ totalMiB: 512, availableMiB: 200, cpus: 1 }));
+    const lowRoot = join(root, "low"), failedRoot = join(root, "failed");
+    const h = harness(lowRoot, async () => { calls++; return result({}); }, reaAutoBudget({ totalMiB: 512, availableMiB: 200, cpus: 1 }));
     await assert.rejects(h.run(), /内存不足/); assert.equal(calls, 0); assert.equal(h.closed(), 1);
-    const failed = harness(root, async () => { throw Error("transport uncertain"); });
+    const failed = harness(failedRoot, async () => { throw Error("transport uncertain"); });
     await assert.rejects(failed.run(), /transport uncertain/); assert.equal(failed.closed(), 1);
-    assert.equal(existsSync(join(root, "integrations/rea/budget/active.json")), false);
+    for (const ownedRoot of [lowRoot, failedRoot]) assert.equal(existsSync(join(ownedRoot, "integrations/rea/budget/active.json")), process.platform === "win32");
+    await assert.rejects(failed.run(), /已隔离/);
+    const fresh = harness(failedRoot, async () => result({ recovered: true }));
+    if (process.platform === "win32") await assert.rejects(fresh.run(), /尚未确认退出/);
+    else assert.equal(reaResultData(await fresh.run())?.recovered, true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -210,10 +238,25 @@ test("connection replacement is refused pre-spawn and queued calls cannot reuse 
     const h = harness(root, async () => { calls++; start(); await gate; throw Error("transport closed"); });
     const first = assert.rejects(h.run(), /transport closed/);
     await started;
-    const queued = assert.rejects(h.run(), /排队期间/);
+    const ownerPath = join(root, "integrations/rea/budget/active.json");
+    const originalOwner = readFileSync(ownerPath, "utf8");
+    // Windows retains uncertain ownership, so admission fails before the
+    // queued call can reach the retired-policy check used on POSIX.
+    const queued = assert.rejects(h.run(), process.platform === "win32" ? /尚未确认退出/ : /排队期间/);
     assert.throws(() => h.policy.attachTransport({ pid: 2147483645, close: async () => {} }), /连接已更换/);
     finish(); await first; await queued;
     assert.equal(calls, 1);
+    // POSIX admits the queued call before retiring it, then closes/releases
+    // its admission too. Windows refuses that second admission entirely.
+    assert.equal(h.closed(), process.platform === "win32" ? 1 : 2);
+    assert.equal(existsSync(ownerPath), process.platform === "win32");
+    if (process.platform === "win32") {
+      assert.equal(readFileSync(ownerPath, "utf8"), originalOwner);
+      const fresh = harness(root, async () => { calls++; return result({}); });
+      await assert.rejects(fresh.run(), /尚未确认退出/);
+      assert.equal(readFileSync(ownerPath, "utf8"), originalOwner);
+      assert.equal(calls, 1, "a fresh policy cannot bypass uncertain same-root ownership");
+    }
     await assert.rejects(h.run(), /已隔离/);
   } finally { finish(); rmSync(root, { recursive: true, force: true }); }
 });

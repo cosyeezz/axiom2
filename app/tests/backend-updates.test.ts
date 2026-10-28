@@ -39,20 +39,26 @@ test("fresh metadata advertises the actual running backend, not a desktop/global
 });
 
 test("one atomic receipt per version survives dismiss, reconnect and backend process recreation", async t => {
-  const root = await mkdtemp(join(tmpdir(), "axiom-notices-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), "axiom-notices-"));
+  const owned: { db?: DatabaseSync; updates?: BackendUpdates } = {};
+  t.after(async () => {
+    try { owned.updates?.close(); }
+    finally { try { owned.db?.close(); } finally { await rm(root, { recursive: true, force: true }); } }
+  });
   let latest = "0.4.19", clock = 100;
   const options = { fetcher: async () => response(latest), now: () => clock };
-  let db = new DatabaseSync(join(root, "notices.sqlite"));
-  let updates = new BackendUpdates(db, "0.4.10", () => {}, options);
+  let db = owned.db = new DatabaseSync(join(root, "notices.sqlite"));
+  let updates = owned.updates = new BackendUpdates(db, "0.4.10", () => {}, options);
   await updates.check();
   const claims = await Promise.all(Array.from({ length: 8 }, () => updates.command("present", latest)));
   assert.equal(claims.filter(state => state.notice === latest).length, 1);
   assert.equal(updates.snapshot().pending, false);
   await updates.command("dismiss", latest);
   assert.equal((await updates.command("present", latest)).notice, null);
-  updates.close(); db.close();
-  db = new DatabaseSync(join(root, "notices.sqlite")); updates = new BackendUpdates(db, "0.4.10", () => {}, options);
-  t.after(() => { updates.close(); db.close(); });
+  updates.close(); owned.updates = undefined;
+  db.close(); owned.db = undefined;
+  db = owned.db = new DatabaseSync(join(root, "notices.sqlite"));
+  updates = owned.updates = new BackendUpdates(db, "0.4.10", () => {}, options);
   assert.equal(updates.snapshot().pending, false, "shown/dismissed receipt is not per-window memory");
   latest = "0.4.20"; clock++;
   assert.equal((await updates.check()).pending, true);
