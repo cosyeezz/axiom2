@@ -89,7 +89,7 @@ export function cleanupProgress(row: CleanupRow, state: CleanupStates[CleanupFam
   }
   if (job?.running) return { state: 'running', message: job.message };
   // A family-wide warning (or another task's failure) cannot settle this request.
-  if (!synchronous && !job) return { state: 'unknown', message: '未找到此次受理的任务记录，无法确认完成；请核实维护历史。' };
+  if (!synchronous && !job) return { state: 'unknown', message: '未找到此次受理的操作状态，无法确认完成；请在本卡片重新读取并核实。' };
   if (job?.error || synchronous && error) return { state: 'failed', message: job?.error || error! };
   if (pending || !removed) return { state: 'failed', message: '仍发现程序、配置引用或待清理文件；本项清理尚未完成。' };
   return { state: 'verified', message: '已复读当前状态并核实选定范围；保留项与外部来源仍需分别检查。' };

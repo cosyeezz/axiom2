@@ -9,9 +9,10 @@ function bytes(value: number) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
   return `${(value / 1024 / 1024).toFixed(1)} MiB`;
 }
-export default function InstallProgress({ value, running }: { value: unknown; running: boolean }) {
+export default function InstallProgress({ value, running, phase }: { value: unknown; running: boolean; phase: string | undefined }) {
   const p = readProgress(value);
-  if (!p) return null;
+  // A retained download snapshot is not evidence that installation is downloading.
+  if (!p || !running || phase !== "downloading") return null;
   const percent = p.total ? Math.min(100, p.downloaded / p.total * 100) : null;
   const waiting = running && Date.now() - p.lastByteAt >= 5000;
   const stale = Date.now() - p.updatedAt >= 5000;

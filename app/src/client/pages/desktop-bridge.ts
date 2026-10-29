@@ -1,3 +1,5 @@
+export const DESKTOP_RESPONSE_TIMEOUT_MESSAGE = "客户端响应超时，结果尚未确认。请重新读取状态；安装或启动可能仍在进行。";
+
 // A response deadline ends only the UI wait, never the native operation.
 export class DesktopResponsePendingError extends Error {
   readonly code = "response-unconfirmed";
@@ -15,7 +17,7 @@ export async function desktopInvoke<T>(command: string, args: object = {}, timeo
   const response = Promise.resolve().then(() => bridge.invoke(command, args));
   try {
     return await Promise.race([response, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new DesktopResponsePendingError("客户端响应超时，结果尚未确认。请重新读取状态；安装或启动可能仍在进行。", response)), limit);
+      timer = setTimeout(() => reject(new DesktopResponsePendingError(DESKTOP_RESPONSE_TIMEOUT_MESSAGE, response)), limit);
     })]);
   } catch (cause) {
     // Tauri rejects Rust Result::Err(String) as a string. Consumers such as

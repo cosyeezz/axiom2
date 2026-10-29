@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MaintenanceTaskView } from '../maintenance/MaintenanceView.js';
+import { ComponentAction, ComponentCard, ComponentConfirmation } from '../maintenance/ComponentCard.js';
 import type { MaintenanceTask } from '../../shared/maintenance.js';
 import { desktopInvoke, DesktopResponsePendingError, isDesktopResponsePending } from './desktop-bridge.js';
 import { observesSubmission, isSubmissionRefused, validOperationJob, type OperationWitness } from './desktop-operation.js';
@@ -75,13 +76,18 @@ export default function DesktopArchiveCleanup({ onRescan }: { onRescan: () => Pr
     await act('archive-remove', { token: selected.token, id: selected.item.id, confirm: true });
   }
   const items = job?.kind === 'archive-remove' ? job.cleanup?.items : ready ? state?.archiveCleanup?.items : undefined;
-  return <section className="environment-item" aria-label="下载归档清理" hidden={/Win/i.test(navigator.platform)}>
-    <div className="environment-cleanup-row"><div><strong>后台下载包</strong><p className="connect-update-detail">清理后，再次更新时需要重新下载</p></div><button className="connect-secondary" disabled={busy || running || uncertain || needsReconciliation || !!confirmation} onClick={() => void act('archive-preview')}>{busy || running ? '正在核对…' : uncertain ? '正在核实…' : '清理'}</button></div>
+  if (/Win/i.test(navigator.platform)) return null;
+  return <ComponentCard className="environment-component" regionLabel="下载归档清理" label="后台下载包" description="清理后，再次更新时需要重新下载" busy={busy || running || uncertain}
+    actions={<ComponentAction icon="trash-2" label="清理" danger disabled={busy || running || uncertain || needsReconciliation || !!confirmation} disabledReason="维护正在进行或结果待核实，请先完成当前操作。" onClick={() => void act('archive-preview')} />}>
     {error && <p className={neutral || running ? 'connect-message' : 'connect-error'} role={neutral || running ? 'status' : 'alert'}>{error}</p>}
     {own && job.task && <MaintenanceTaskView task={job.task} compact connected onCancel={() => act('cancel', { id: job.task!.id })} onExtend={budgets => act('extend', { id: job.task!.id, budgets })} onReconcile={() => act('reconcile', { id: job.task!.id })} />}
-    {items && <ul className="environment-locations">{items.map((item, index) => <li key={item.id ?? index}><div className="environment-location-title"><span>{item.label}</span><span>{labels[item.state]}</span></div>{item.size != null && <span>{(item.size / 1024 / 1024).toFixed(2)} MiB</span>}{ready && item.id && item.state === 'remove' && <button className="connect-secondary" disabled={busy || !!confirmation} onClick={() => setConfirmation({ token: state!.archiveCleanup!.token!, item })}>清理</button>}</li>)}</ul>}
+    {items && <ul className="environment-locations">{items.map((item, index) => <li key={item.id ?? index}><div className="environment-location-title"><span>{item.label}</span><span>{labels[item.state]}</span></div>{item.size != null && <span>{(item.size / 1024 / 1024).toFixed(2)} MiB</span>}{ready && item.id && item.state === 'remove' && <ComponentAction icon="trash-2" label={`清理 ${item.label}`} danger disabled={busy || !!confirmation} onClick={() => setConfirmation({ token: state!.archiveCleanup!.token!, item })} />}</li>)}</ul>}
     {ready && !items?.some(item => item.state === 'remove') && <p className="connect-update-detail">本次未发现可直接清理的下载归档；这不代表其他安装空间没有残留。</p>}
-    {confirmation && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认归档清理"><p>确认删除这个下载包：</p><strong>{confirmation.item.label}</strong>{confirmation.item.note && <p>{confirmation.item.note}</p>}<details><summary>查看清理位置</summary><p className="connect-log">{confirmation.item.path}</p></details><p>程序、用户数据和维护记录保留。</p><div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setConfirmation(undefined)}>取消</button><button className="connect-secondary confirm-danger" disabled={busy} onClick={() => void remove()}>确认清理</button></div></div>}
+    {confirmation && <ComponentConfirmation title="确认归档清理" danger confirmLabel="确认清理" confirmDisabled={busy || running || uncertain || needsReconciliation}
+      description={<><p>确认删除下载包：{confirmation.item.label}</p><p>程序、用户数据和维护记录保留。</p></>} onClose={() => setConfirmation(undefined)} onConfirm={remove}>
+      {confirmation.item.note && <p>{confirmation.item.note}</p>}
+      <details><summary>查看清理位置</summary><p className="connect-log">{confirmation.item.path}</p></details>
+    </ComponentConfirmation>}
     {job?.kind === 'archive-remove' && job.cleanup && <p className="connect-update-detail">{job.cleanup.complete ? '所选下载归档路径已移除。' : '归档清理结果仍需核实。'}</p>}
-  </section>;
+  </ComponentCard>;
 }

@@ -5,6 +5,7 @@ import DesktopServiceRemoval from "./DesktopServiceRemoval.js";
 import DesktopPiRemoval from "./DesktopPiRemoval.js";
 import DesktopToolCleanup from "./DesktopToolCleanup.js";
 import { desktopInvoke } from "./desktop-bridge.js";
+import { ComponentAction, ComponentCard } from "../maintenance/ComponentCard.js";
 import "../styles/environment-inventory.css";
 
 export default function DesktopEnvironment({ environment, serviceState }: { environment?: { tailscale: boolean; platform: string } | null; serviceState?: string }) {
@@ -34,11 +35,11 @@ export default function DesktopEnvironment({ environment, serviceState }: { envi
   return <section className="environment-inventory environment-components" aria-label="已安装组件">
     <p className="connect-update-detail">选择需要卸载的组件。项目、会话和个人设置默认保留。</p>
     <DesktopPiRemoval onRescan={refresh} />
-    {environment?.tailscale && <section className="environment-item" aria-label="Tailscale 卸载">
-      <div className="environment-cleanup-row"><div><strong>Tailscale</strong><p className="connect-update-detail">在系统应用列表中卸载</p></div><button className="connect-secondary" disabled={opening || environment.platform !== "windows"} onClick={() => void uninstallSettings()}>{opening ? "正在打开…" : "卸载"}</button></div>
-      {environment.platform !== "windows" && <p className="connect-update-detail">请使用系统或原安装方式卸载。</p>}
+    {environment?.tailscale && <ComponentCard className="environment-component" label="Tailscale" regionLabel="Tailscale 卸载" kind="environment" busy={opening}
+      description={environment.platform === "windows" ? "在系统应用列表中卸载" : "请使用系统或原安装方式卸载。"}
+      actions={<ComponentAction icon="external-link" label="打开系统卸载列表" disabled={opening || environment.platform !== "windows"} disabledReason={opening ? "正在打开系统应用列表。" : "当前平台请使用系统或原安装方式卸载。"} onClick={() => void uninstallSettings()} />}>
       {notice && <p className="connect-update-detail" role="status">{notice}</p>}
-    </section>}
+    </ComponentCard>}
     <DesktopToolCleanup onRescan={refresh} />
     <DesktopServiceRemoval onRescan={refresh} installed={serviceState ? ['running', 'starting', 'stopping', 'stopped'].includes(serviceState) : false} />
     <DesktopArchiveCleanup onRescan={refresh} />

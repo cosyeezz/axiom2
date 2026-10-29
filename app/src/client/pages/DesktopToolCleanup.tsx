@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { ComponentAction, ComponentCard, ComponentConfirmation } from '../maintenance/ComponentCard.js';
 import { desktopInvoke, DesktopResponsePendingError } from './desktop-bridge.js';
 import { acceptedCleanupJob, cleanupFamilies, cleanupProgress, cleanupRows, type CleanupFamily, type CleanupRow, type CleanupStates, type CleanupProgress } from './desktop-cleanup.js';
-type Pending = { row: CleanupRow; requestId: string; jobId?: string; accepted: boolean; result?: CleanupProgress; rescanned?: boolean };
+type Pending = { row: CleanupRow; requestId: string; jobId?: string; accepted: boolean; refused?: boolean; result?: CleanupProgress; rescanned?: boolean };
+// This exact native refusal precedes helper launch (axiom_service.rs). Other errors,
+// transport failures and timeouts do not prove that a destructive request was refused.
+const offlineSubmissionRefusal = '后台未运行；RTK 仅可读取范围，缺少历史工作进程退出证明时不可离线卸载。其他工具与资源请先启动后台；终端 Pi 与安装归档使用各自维护入口。';
+function isSubmissionRefused(cause: unknown) {
+  return (cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '') === offlineSubmissionRefusal;
+}
 const storageKey = 'axiom.desktop.cleanup.pending';
 function saved(): Pending | undefined {
   try { const value = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); if (value && cleanupFamilies.includes(value.row?.family) && typeof value.requestId === 'string' && typeof value.accepted === 'boolean') return value; } catch {}
@@ -35,10 +42,10 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
     if (mounted.current) { setStates(previous => ({ ...previous, [family]: data })); setErrors(previous => ({ ...previous, [family]: undefined })); }
     return data;
   }
-  async function run(work: () => Promise<void>) {
+  async function run(work: () => Promise<void>, propagate = false) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
-    try { await work(); } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
+    try { await work(); } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); if (propagate) throw cause; }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   async function refresh() {
@@ -56,7 +63,7 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
     setPreview(current);
   }
   async function verify() {
-    const current = pendingRef.current; if (!current) return;
+    const current = pendingRef.current; if (!current || current.refused && !current.accepted) return;
     const data = await read(current.row.family);
     if (pendingRef.current !== current) return;
     let result: CleanupProgress;
@@ -91,17 +98,20 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
       save({ row, requestId, accepted: true, jobId: acceptedCleanupJob(row, response.data, requestId), result: { state: 'running', message: '清理请求已受理，正在核实结果…' } });
       await verify();
     };
+    const reject = (cause: unknown, late = false) => {
+      const current = pendingRef.current;
+      if (!mounted.current || current?.requestId !== requestId || ['verified', 'failed'].includes(current.result?.state ?? '')) return;
+      // A failure while verifying an accepted job is never a submission refusal.
+      const refused = !current.accepted && isSubmissionRefused(cause);
+      save({ ...current, refused, result: { state: refused ? 'failed' : 'unknown', message: late && !refused ? '原清理请求结果尚未确认，请核实状态，不要重复提交。' : cause instanceof Error ? cause.message : String(cause) } });
+    };
     try {
       const response = await request<CleanupStates[CleanupFamily]>(row.op, { ...row.params, revision: row.revision, confirm: true, ...(row.credentials && credentials ? { clearCredentials: true } : {}) }, requestId);
       await accept(response);
     } catch (cause) {
-      const current = pendingRef.current;
-      if (current?.requestId === requestId) save({ ...current, result: { state: 'unknown', message: cause instanceof Error ? cause.message : String(cause) } });
+      reject(cause);
       if (cause instanceof DesktopResponsePendingError && cause.response) {
-        void cause.response.then(value => accept(value as { requestId: string; data: CleanupStates[CleanupFamily] })).catch(failure => {
-          const latest = pendingRef.current;
-          if (mounted.current && latest?.requestId === requestId && latest.result?.state !== 'verified' && latest.result?.state !== 'failed') save({ ...latest, result: { state: 'unknown', message: '原清理请求结果尚未确认，请核实状态，不要重复提交。' } });
-        });
+        void cause.response.then(value => accept(value as { requestId: string; data: CleanupStates[CleanupFamily] })).catch(failure => reject(failure, true));
       }
     }
   }
@@ -114,33 +124,35 @@ export default function DesktopToolCleanup({ onRescan }: { onRescan: () => Promi
   useEffect(() => { void run(refresh); }, []);
   const rows = cleanupRows(states).filter(row => !['rea:Skill', 'rea:Mcp', 'rtk:stats', 'rtk:originals'].includes(row.id) && (row.available || row.readOnly && !!(states.rtk?.version || states.rtk?.executable || states.rtk?.cleanupPaths?.length)));
   const incomplete = Object.values(errors).some(Boolean);
-  return <section className="environment-item" aria-label="工具与资源卸载">
-    <div className="connect-updates-heading"><h3>内置工具与资源</h3><button className="connection-text-button" aria-label="刷新组件列表" disabled={busy || !!watching} onClick={() => void run(refresh)}>{busy ? '正在读取…' : '刷新'}</button></div>
+  const confirmation = preview && <ComponentConfirmation title="确认工具清理范围" danger
+    description={<><p>{preview.op === 'rea.clearDownloads' ? '清理' : '卸载'} {preview.label}？</p><p>{preview.op === 'rea.clearDownloads' ? '删除该组件已下载的安装包，再次安装时需要重新下载。' : '移除此组件的托管程序或接入，保留项目、会话和个人设置。'}外部安装与共享缓存不会删除。</p></>}
+    confirmLabel={preview.op === 'rea.clearDownloads' ? '确认清理' : '确认卸载'} confirmDisabled={busy || !!pending || preview.readOnly || !preview.available}
+    onClose={() => { setPreview(undefined); setCredentials(false); }} onConfirm={() => run(remove, true)}>
+    {preview.scope.filter(item => !/^(托管版本目录|数据路径|登记下载目录|只读路径)：/.test(item)).map((item, index) => <p key={index}>{item}</p>)}
+    {preview.family === 'rea' && preview.op !== 'rea.clearDownloads' && <p>请先退出正在使用此组件的分析任务。</p>}
+    <details><summary>查看范围与保留项</summary><ul>{preview.scope.map((item, index) => <li key={index}>{item}</li>)}</ul><ul>{preview.retained.map((item, index) => <li key={index}>保留：{item}</li>)}</ul>{preview.warning && <p>{preview.warning}</p>}</details>
+    {preview.credentials && <label><input type="checkbox" checked={credentials} onChange={event => setCredentials(event.target.checked)} /><span>同时清除此 MCP 的专属凭据（仍被共享引用的凭据保留）</span></label>}
+  </ComponentConfirmation>;
+  const progress = pending && <div className="component-cleanup-feedback" aria-live="polite">
+    <strong>{pending.row.label} · {pending.result?.state === 'verified' ? '选定范围已核实' : pending.refused ? '请求未受理' : pending.result?.state === 'running' ? '处理中' : '尚未完成核实'}</strong>
+    <p className={pending.result?.state === 'failed' ? 'connect-error' : 'connect-update-detail'} role={pending.result?.state === 'failed' ? 'alert' : 'status'}>{pending.result?.message}</p>
+    <div className="connect-actions"><ComponentAction icon="refresh-cw" label="刷新状态" disabled={busy} onClick={() => void run(verify)} />
+    {!watching && (pending.accepted || pending.refused) && ['verified', 'failed'].includes(pending.result?.state ?? '') && <ComponentAction icon="x" label="关闭" disabled={busy} onClick={() => { save(undefined); setPreview(undefined); }} />}</div>
+  </div>;
+  return <section className="environment-tool-group" aria-label="工具与资源卸载">
+    <div className="connect-updates-heading"><h3>内置工具与资源</h3><ComponentAction icon="refresh-cw" label="刷新组件列表" disabled={busy || watching} onClick={() => void run(refresh)} /></div>
     {incomplete && <p className="connect-update-detail" role="status">部分组件状态暂未读到，启动本机后台后可刷新列表。</p>}
     {!busy && !incomplete && !rows.length && <p className="connect-update-detail">暂无已登记的可卸载工具或资源。</p>}
     {error && <p className="connect-message" role="status">{error}</p>}
-
     {states.rtk?.dataCleanupError && <p className="connect-error">RTK 保留数据：{states.rtk.dataCleanupError}</p>}
     {(['stats', 'originals'] as const).map(kind => states.rtk?.dataCleanupErrors?.[kind] && <p className="connect-error" key={kind}>RTK {kind === 'stats' ? '效果记录' : '保留原文'}：{states.rtk.dataCleanupErrors[kind]}</p>)}
-    {rows.map(row => <div className="environment-cleanup-row" key={row.id}>
-      <div><strong>{row.label}</strong>{row.readOnly && <p className="connect-update-detail">启动本机后台后可卸载</p>}</div>
-      <button className="connect-secondary" disabled={busy || !!pending || !row.available || row.readOnly} onClick={() => void run(() => inspect(row))}>{row.op === 'rea.clearDownloads' ? '清理' : '卸载'}</button>
-    </div>)}
-    {preview && <div className="environment-confirm inline-confirmation" role="group" aria-label="确认工具清理范围">
-      <strong>{preview.op === 'rea.clearDownloads' ? '清理' : '卸载'} {preview.label}？</strong>
-      <p>{preview.op === 'rea.clearDownloads' ? '删除该组件已下载的安装包，再次安装时需要重新下载。' : '移除此组件的托管程序或接入，保留项目、会话和个人设置。'}外部安装与共享缓存不会删除。</p>
-      {preview.scope.filter(item => !/^(托管版本目录|数据路径|登记下载目录|只读路径)：/.test(item)).map((item, index) => <p key={index}>{item}</p>)}
-      {preview.family === 'rea' && preview.op !== 'rea.clearDownloads' && <p>请先退出正在使用此组件的分析任务。</p>}
-      <details><summary>查看范围与保留项</summary><ul>{preview.scope.map((item, index) => <li key={index}>{item}</li>)}</ul><ul>{preview.retained.map((item, index) => <li key={index}>保留：{item}</li>)}</ul>{preview.warning && <p>{preview.warning}</p>}</details>
-      {preview.credentials && <label><input type="checkbox" checked={credentials} onChange={event => setCredentials(event.target.checked)} /><span>同时清除此 MCP 的专属凭据（仍被共享引用的凭据保留）</span></label>}
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => setPreview(undefined)}>取消</button>
-      {!preview.readOnly && preview.available && <button className="connect-secondary confirm-danger" disabled={busy} onClick={() => void run(remove)}>{preview.op === 'rea.clearDownloads' ? '确认清理' : '确认卸载'}</button>}</div>
-    </div>}
-    {pending && <div className="environment-confirm" aria-live="polite">
-      <strong>{pending.row.label} · {pending.result?.state === 'verified' ? '选定范围已核实' : pending.result?.state === 'running' ? '处理中' : '尚未完成核实'}</strong>
-      <p className={pending.result?.state === 'failed' ? 'connect-error' : 'connect-update-detail'} role={pending.result?.state === 'failed' ? 'alert' : 'status'}>{pending.result?.message}</p>
-      <div className="connect-actions"><button className="connect-secondary" disabled={busy} onClick={() => void run(verify)}>刷新状态</button>
-      {!watching && pending.accepted && ['verified', 'failed'].includes(pending.result?.state ?? '') && <button className="connect-secondary" disabled={busy} onClick={() => { save(undefined); setPreview(undefined); }}>关闭</button>}</div>
-    </div>}
+    {rows.map(row => <ComponentCard key={row.id} className="environment-component" label={row.label} regionLabel={`${row.label}卸载`} busy={busy && preview?.id === row.id || pending?.row.id === row.id && watching}
+      description={row.readOnly ? '启动本机后台后可卸载' : row.op === 'rea.clearDownloads' ? '清理已登记的安装包，保留程序与个人设置' : '移除托管程序或接入，保留项目、会话和个人设置'}
+      actions={<ComponentAction icon="trash-2" label={row.op === 'rea.clearDownloads' ? '清理' : '卸载'} danger disabled={busy || !!pending || !!preview || !row.available || row.readOnly} disabledReason={row.readOnly ? '此范围仅供查看，请启动本机后台核实卸载能力。' : '请先完成当前维护，或重新读取组件状态。'} onClick={() => void run(() => inspect(row))} />}>
+      {preview?.id === row.id && confirmation}
+      {pending?.row.id === row.id && progress}
+    </ComponentCard>)}
+    {preview && !rows.some(row => row.id === preview.id) && <ComponentCard label={preview.label} className="environment-component">{confirmation}</ComponentCard>}
+    {pending && !rows.some(row => row.id === pending.row.id) && <ComponentCard label={pending.row.label} className="environment-component" busy={watching}>{progress}</ComponentCard>}
   </section>;
 }
