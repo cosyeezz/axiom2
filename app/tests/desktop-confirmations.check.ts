@@ -18,17 +18,18 @@ async function scene(options: { recovery?: boolean; interrupted?: boolean; insta
     const state = {
       calls: [] as { name: string; action?: string; version?: string | null; confirmed?: boolean }[], unexpected: [] as string[],
       makeTask: task,
+      updateOverrides: {} as Record<string, unknown>, serviceState: "running",
       stopped: false, clientVersion: "0.4.1", recovery: !!options.recovery, job: null as any,
       setupJob: options.interrupted ? { id: "fixture-node", action: "node", running: false, phase: "interrupted", message: "安装器状态待核实", lines: [], task: task("node", "interrupted") } : null as any,
       removal: null as any,
     };
     (window as any).desktopConfirmFixture = state;
     let theme = "dark", revision = 0;
-    const snapshot = () => ({ clientVersion: state.clientVersion, serviceVersion: "0.4.1", managed: true, clientSupported: true, release: { version: "0.4.2", checkedAt: Date.now(), assets: { "Axiom2.msi": { url: "https://example.invalid/Axiom2.msi" } } }, clientInstaller: { version: "0.4.2", readyAt: 1 }, job: state.job, recovery: state.recovery, log: "C:/fixture/update.log", pi: { runtimeVersion: "1.1.0", cli: { version: "1.1.0", packageRoot: "C:/fixture/npm/pi" }, release: { version: "1.1.1", checkedAt: 1, token: "pi-token" }, removal: state.removal } });
+    const snapshot = () => ({ clientVersion: state.clientVersion, serviceVersion: "0.4.1", managed: true, clientSupported: true, release: { version: "0.4.2", checkedAt: Date.now(), assets: { "Axiom2.msi": { url: "https://example.invalid/Axiom2.msi" } } }, clientInstaller: { version: "0.4.2", readyAt: 1 }, job: state.job, recovery: state.recovery, log: "C:/fixture/update.log", pi: { runtimeVersion: "1.1.0", cli: { version: "1.1.0", packageRoot: "C:/fixture/npm/pi" }, release: { version: "1.1.1", checkedAt: 1, token: "pi-token" }, removal: state.removal }, ...state.updateOverrides });
     (window as any).__TAURI_INTERNALS__ = { invoke: async (name: string, args: any = {}) => {
       state.calls.push({ name, ...args });
       if (name === "axiom_theme" && args.action === undefined) { if (args.theme) { theme = args.theme; revision++; } return { theme, revision }; }
-      if (name === "axiom_service" && ["status", "stop"].includes(args.action)) { if (args.action === "stop") state.stopped = true; return { desktopView: "control", state: state.stopped ? "stopped" : "running", active: ["设计会话", "代码检查"], url: "http://127.0.0.1:4317/" }; }
+      if (name === "axiom_service" && ["status", "stop"].includes(args.action)) { if (args.action === "stop") state.stopped = true; return { desktopView: "control", state: state.stopped ? "stopped" : state.serviceState, active: ["设计会话", "代码检查"], url: "http://127.0.0.1:4317/" }; }
       if (name === "axiom_peers" && args.action === undefined) return { peers: [] };
       if (name === "axiom_setup") {
         if (args.action === "check") return { nodeReady: true, nodeVersion: "v24.13.0", writable: true, tailscale: true, platform: "windows" };
@@ -67,6 +68,39 @@ async function updates(page: Page) {
   assert.ok(await region.getByRole("region", { name: "终端 Pi", exact: true }).getByText(/此处仅管理终端 Pi/).isVisible());
 }
 try {
+  {
+    const page = await scene();
+    await page.evaluate(() => {
+      const state = (window as any).desktopConfirmFixture;
+      state.clientVersion = "0.4.19"; state.serviceState = "unmanaged";
+      state.updateOverrides = { clientSupported: false, foregroundSupported: false, clientPlatform: "darwin", clientAsset: "Axiom2.dmg", clientCheckedAt: 1, clientInstaller: null,
+        release: { version: "0.4.21", checkedAt: 1, assets: {} }, clientRelease: { version: "0.4.19", checkedAt: 1, assets: { "Axiom2.dmg": { url: "https://github.com/cosyeezz/axiom2/releases/download/v0.4.19/Axiom2.dmg" } } } };
+    });
+    await page.clock.runFor(4500);
+    const client = page.getByRole("region", { name: "客户端更新", exact: true });
+    assert.match(await client.innerText(), /macOS 客户端.*v0.4.19.*本平台已是最新版本/s);
+    assert.doesNotMatch(await client.innerText(), /0.4.21/);
+    const backend = page.getByRole("region", { name: "后台服务更新", exact: true });
+    assert.equal(await backend.getByRole("button", { name: "更新后台服务", exact: true }).isDisabled(), true);
+    assert.match(await backend.innerText(), /端口被非托管后台占用/); assert.match(await backend.innerText(), /不会自动停止或覆盖/);
+    assert.equal(await backend.getByRole("link", { name: "查看安装与更新方式" }).count(), 1);
+    for (const theme of ["dark", "light"]) {
+      await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
+      await page.setViewportSize({ width: 390, height: 844 });
+      const colors = await client.locator(".update-component-copy p > span").evaluate(el => ({ own: getComputedStyle(el).color, parent: getComputedStyle(el.parentElement!).color }));
+      assert.equal(colors.own, colors.parent, "update notice uses neutral body color, not yellow accent");
+      await page.screenshot({ path: resolve(output, `platform-mac-${theme}-390.png`), fullPage: true });
+    }
+    await page.evaluate(() => { const state = (window as any).desktopConfirmFixture; state.updateOverrides.clientRelease.version = "0.4.22"; state.updateOverrides.clientRelease.assets["Axiom2.dmg"].url = "https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.dmg"; });
+    await page.clock.runFor(2100);
+    assert.equal(await client.getByRole("link", { name: "下载本平台更新" }).getAttribute("href"), "https://github.com/cosyeezz/axiom2/releases/download/v0.4.22/Axiom2.dmg");
+    await page.evaluate(() => { const state = (window as any).desktopConfirmFixture; state.updateOverrides.clientRelease = null; state.updateOverrides.clientReleaseError = "客户端版本检查失败"; state.updateOverrides.clientCheckedAt = null; });
+    await page.clock.runFor(2100);
+    assert.doesNotMatch(await client.innerText(), /已是最新|可更新至/); assert.match(await client.innerText(), /客户端版本检查失败/);
+    assert.equal(await client.getByRole("link", { name: "下载本平台更新" }).count(), 0);
+    assert.equal(await count(page, "axiom_update", "service"), 0); assert.equal(await count(page, "axiom_service", "stop"), 0);
+    await checkUnexpected(page); await page.close(); passed.push("platform clients: backend-only does not update Mac; matching download; independent failure; neutral colors; unmanaged explanation without unsafe action");
+  }
   {
     const page = await scene(), trigger = page.getByRole("button", { name: "关闭", exact: true });
     await trigger.click(); const dialog = page.getByRole("dialog", { name: "关闭后台服务？", exact: true });

@@ -83,7 +83,8 @@ async function fixture(t: TestContext, options: { source?: boolean; brokenContro
     assert.ok(asset, `Unexpected fixture URL: ${url}`);
     return new Response(new Uint8Array(bytes[asset.name]));
   };
-  const updater = createUpdater({ root, fetcher, command, isAlive: (pid: number) => pid === process.pid });
+  // These installer fixtures model Windows MSI, independent of the test host OS.
+  const updater = createUpdater({ root, fetcher, command, platform: "win32", isAlive: (pid: number) => pid === process.pid });
   const installedVersion = async () => JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")).version;
   return { root, packageRoot, cli, bytes, release, calls, updater, command, fetcher, installedVersion, packageAt, state: () => state,
     refuseStop: () => { refuseStop = true; },
@@ -103,7 +104,9 @@ test("desktop update version ordering is numeric and refuses malformed or equal 
 test("desktop update refuses release assets outside the fixed repository", async (t) => {
   const f = await fixture(t);
   f.release.assets[0].browser_download_url = "https://example.com/untrusted.tgz";
-  await assert.rejects(f.updater.check(), /附件信息无效/);
+  const state = await f.updater.check();
+  assert.equal(state.release, null); assert.match(state.releaseError, /附件信息无效/);
+  assert.equal(state.clientRelease.version, nextVersion, "bad backend metadata does not hide a valid client");
   assert.deepEqual(f.calls, []);
 });
 
@@ -436,4 +439,20 @@ test("client installer is rehashed before handing it to the native launcher", as
   await assert.rejects(f.updater.installer(), /安装包已变化/);
   assert.equal((await f.updater.status()).job.phase, "error");
   assert.deepEqual(f.calls, []);
+});
+
+test("Windows downloads an older independent client tag instead of the newer backend", async t => {
+  const f = await fixture(t), version = "0.2.9";
+  const client = { ...f.release, tag_name: `v${version}`, assets: f.release.assets.filter(item => item.name === "Axiom2.msi").map(item => ({ ...item, browser_download_url: `${base}v${version}/Axiom2.msi` })) };
+  f.release.assets = f.release.assets.filter(item => item.name !== "Axiom2.msi");
+  const urls: string[] = [];
+  const updater = createUpdater({ root: f.root, platform: "win32", command: f.command, fetcher: async (url: string) => {
+    urls.push(url);
+    if (url.includes("?per_page=")) return new Response(JSON.stringify([f.release, client]));
+    if (url === client.assets[0].browser_download_url) return new Response(new Uint8Array(f.bytes["Axiom2.msi"]));
+    return f.fetcher(url);
+  } });
+  const checked = await updater.check(); assert.equal(checked.release.version, nextVersion); assert.equal(checked.clientRelease.version, version);
+  const downloaded = await updater.runJob("client", version); assert.equal(downloaded.job.phase, "ready"); assert.equal(downloaded.clientInstaller.version, version);
+  assert.ok(urls.includes(`${base}v${version}/Axiom2.msi`)); assert.deepEqual(f.calls, []);
 });

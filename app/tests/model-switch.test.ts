@@ -209,12 +209,17 @@ test("real worker switches model/effort at the safe point before active steering
     await finish(8);
     assert.equal(notices().length, 1, "native compaction folds older notices; only the retained retry announces the new selection");
     assert.deepEqual(notices().at(-1)?.selectionChange, { from: first, to: second });
+    // Native overflow just compacted the earlier turns. Add a real turn so a
+    // second compaction has material, without relying on a synthetic memory run.
+    await call("prompt", { text: "retain another real turn before platform compression" });
+    await wait(() => releases.length === 10, "new turn after native compression starts");
+    await finish(9);
+    const summariesBeforeCompression = summaries, requestsBeforeCompression = releases.length;
     await app.agents.compressions.command({ op: "compression.start", ...scope, requestId: randomUUID() });
-    await wait(() => releases.length === 10, "platform compression prepares session memory");
-    releases[9]();
     await wait(() => app.agents.compressions.info(scope)?.state !== "running" && !running(app.agents.info(scope).run), "platform compression settles");
     assert.equal(app.agents.compressions.info(scope)?.state, "completed", app.agents.compressions.info(scope)?.error ?? undefined);
-    assert.ok(summaries > 0, "platform compression sends the summary request");
+    assert.ok(summaries > summariesBeforeCompression, "platform compression sends a new summary request");
+    assert.equal(releases.length, requestsBeforeCompression, "stopped session compression does not restart the main run");
     await call("agent.model", { selection: first });
     await call("prompt", { text: "request after platform compression" });
     await wait(() => releases.length === 11, "request after compression starts");

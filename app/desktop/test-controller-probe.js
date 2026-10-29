@@ -15,10 +15,17 @@
   const fixtureURL = `http://127.0.0.1:${fixturePort}/`;
   const setPort = async (port) => {
     const input = await wait(() => document.querySelector('input[aria-label="本地端口"]:not(:disabled)'));
+    await invoke("progress", { stage: "port-input-found", port });
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, String(port));
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-    await wait(() => input.value === String(port));
+    // Wait for React's actual custom/managed-port UI, not animation frames:
+    // WKWebView can withhold those indefinitely when the test app is occluded.
+    await wait(() => {
+      const meta = document.querySelector('.connection-primary-meta [role="status"]');
+      return input.value === String(port) && meta
+        && (meta.textContent === "连接此端口上已有的服务") === (port !== 4317);
+    });
+    await invoke("progress", { stage: "port-ui-committed", port });
   };
   const connectFixture = async () => {
     await setPort(fixturePort);
@@ -30,18 +37,22 @@
     });
   };
   const preparation = async () => {
+    await invoke("progress", { stage: "preparation-find" });
     const details = await wait(() => document.querySelector(".startup-preparation"));
     if (!details.open) details.querySelector("summary").click();
     await wait(() => details.open && details.querySelector('.setup-simple[aria-label="本地连接准备"]')?.getClientRects().length);
     details.querySelector("summary").click();
     await wait(() => !details.open);
+    await invoke("progress", { stage: "preparation-collapsed" });
   };
   const heading = async (text) => {
     const state = { "服务运行中": "running", "服务已停止": "stopped" }[text];
     const label = { running: "运行中", stopped: "已停止" }[state];
     check(state, `Unknown service state: ${text}`);
     // A custom port is navigation-only. Restore the managed controls explicitly.
+    await invoke("progress", { stage: "service-heading-port", expectedState: state });
     await setPort(4317);
+    await invoke("progress", { stage: "service-heading-state", expectedState: state });
     return wait(async () => {
       const visible = [...document.querySelectorAll('.connection-service-heading .connection-status-tag')].some((item) => item.dataset.state === state && item.textContent.trim() === label && item.getClientRects().length);
       const service = await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "status" });
@@ -84,6 +95,7 @@
     } catch (error) { throw Error(`${error}; last native layout assertion: ${lastError}`); }
   };
   const controllerLayouts = [];
+  const retention = {};
   const viewport = () => ({ width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio,
     clientWidth: document.documentElement.clientWidth, clientHeight: document.documentElement.clientHeight,
     visualWidth: visualViewport?.width, visualHeight: visualViewport?.height, visualScale: visualViewport?.scale });
@@ -148,7 +160,8 @@
     await heading("服务运行中");
     await connectFixture();
     stage = "workbench-initial-observation";
-    const before = await observation((value) => value.sample === 1);
+    let before = await observation((value) => value.sample === 1);
+    retention.initial = before;
     check(before.denied.length === 6 && before.denied.every(Boolean), "Remote management or local connection query was not rejected");
     check(before.titleIconCount === 0, "The old title connection icon must be removed");
     check(before.titleCopyIconCount === 1, "The title copy button must retain its icon");
@@ -172,6 +185,13 @@
     bounds(await invoke("snapshot"));
     await invoke("checkpoint", { controllerLayouts });
     await wait(async () => (await invoke("snapshot")).acknowledged);
+    // The window/second-instance checks may change layout or focus. Capture the
+    // actual retained state immediately before leaving, not the old load sample.
+    before = await freshSample((value) => value.sample > before.sample);
+    retention.before = before;
+    check(before.token === retention.initial.token && before.draft === "Mac 单窗口切换保留草稿"
+      && before.scroll === 237 && JSON.stringify(before.selection) === "[3,8]"
+      && before.inputConnected && before.threadConnected && before.focused, "Reading fixture was not stable before switching");
     (await button("服务与更新")).click();
     await heading("服务运行中");
     const hidden = await invoke("snapshot");
@@ -180,6 +200,7 @@
     await connectFixture();
     await button("服务与更新");
     const after = await freshSample((value) => value.sample > before.sample);
+    retention.after = after;
     check(after.token === before.token && after.draft === before.draft && after.scroll === before.scroll, "Switching reloaded the view or lost its state");
     check(JSON.stringify(after.selection) === JSON.stringify(before.selection) && after.focused, "Switching lost selection or keyboard focus");
     if (/Mac/.test(navigator.platform)) {
@@ -193,7 +214,9 @@
       await invoke("dock-hidden");
       await wait(async () => (await invoke("snapshot")).visible);
       const dock = await freshSample((value) => value.sample > after.sample);
-      check(dock.token === before.token && dock.draft === before.draft && dock.scroll === before.scroll && dock.focused, "Native menu or Dock reopen lost the working view");
+      retention.dock = dock;
+      check(dock.token === before.token && dock.draft === before.draft && dock.scroll === before.scroll
+        && JSON.stringify(dock.selection) === JSON.stringify(before.selection) && dock.focused, "Native menu or Dock reopen lost the working view");
     }
     await invoke("resize");
     await wait(async () => {
@@ -217,6 +240,7 @@
     await connectFixture();
     await wait(async () => await window.__TAURI_INTERNALS__.invoke("axiom_connection") === "connected");
     const directRestarted = await freshSample((value) => value.sample > after.sample);
+    retention.directRestarted = directRestarted;
     check(directRestarted.token === before.token && directRestarted.draft === before.draft && directRestarted.scroll === before.scroll, "Restarting the endpoint replaced the direct view or lost its state");
     check(JSON.stringify(directRestarted.selection) === JSON.stringify(before.selection) && directRestarted.focused, "Direct restart lost selection or focus");
     bounds(await invoke("snapshot"));
@@ -238,12 +262,12 @@
     await window.__TAURI_INTERNALS__.invoke("axiom_service", { action: "open" });
     await observation((value) => value.token !== before.token);
     await settledBounds();
-    await invoke("finished", { controllerLayouts, header, checks: ["explicit-isolated-ui-endpoint", "direct-restart-preserves-view", "managed-stop-discards-view", "native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
+    await invoke("finished", { controllerLayouts, retention, header, checks: ["explicit-isolated-ui-endpoint", "direct-restart-preserves-view", "managed-stop-discards-view", "native-connection-bridge", "fixed-status-text-and-waveform-colors", "offline-control", "start-stop-restart", "one-window-two-views", "remote-command-denial", "draft-scroll-selection-focus", "controller-resize-before-connect", "controller-maximize", "controller-fullscreen", "native-resize", "native-close-with-running-service"] });
     void invoke("close");
   })().catch(async (error) => {
     console.error(error);
     await invoke("inspect-workbench").catch(() => {});
     await new Promise((done) => setTimeout(done, 300));
-    await invoke("failed", { error: String(error), stack: error.stack, stage, controllerLayouts, lastControlLayout, viewport: viewport() });
+    await invoke("failed", { error: String(error), stack: error.stack, stage, controllerLayouts, retention, lastControlLayout, viewport: viewport() });
   });
 })();

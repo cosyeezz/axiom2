@@ -100,11 +100,11 @@ html[data-theme="light"] .connect-page.connect-refined {
 .connect-refined .update-component + .update-component { border-color: var(--control-soft-line); }
 .connect-refined .update-component-row { gap: 12px; }
 .connect-refined .update-component-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.connect-refined .update-component-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--control-soft-line); border-radius: 8px; background: var(--control-icon-bg); color: var(--control-accent); }
+.connect-refined .update-component-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--control-soft-line); border-radius: 8px; background: var(--control-icon-bg); color: var(--control-muted); }
 .connect-refined .update-component-icon svg { width: 17px; height: 17px; }
 .connect-refined .update-component-copy h3 { color: var(--control-text); font-size: 12px; }
 .connect-refined .update-component-copy p { color: var(--control-muted); font-size: 11px; line-height: 1.7; }
-.connect-refined .update-component-copy p > span { display: block; margin: 0; color: var(--control-accent); }
+.connect-refined .update-component-copy p > span { display: block; margin: 0; color: var(--control-muted); }
 .connect-refined .update-component-row > .connect-actions { gap: 6px; }
 .connect-refined .update-component-row .connect-secondary { min-height: 40px; padding: 8px 11px; font-size: 11px !important; border-radius: 6px; }
 .connect-refined .update-details { border-color: var(--control-soft-line); }

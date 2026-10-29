@@ -19,6 +19,9 @@ type Update = {
   };
   clientInstaller?: { version: string; readyAt: number } | null;
   clientVersion: string; serviceVersion: string | null; managed: boolean; clientSupported: boolean;
+  clientPlatform?: string; clientAsset?: string | null; clientCheckedAt?: number | null; clientReleaseError?: string | null;
+  clientRelease?: { version: string; checkedAt: number; assets: Record<string, { url: string }> } | null;
+  releaseError?: string | null;
   foregroundSupported?: boolean; serviceInstallation?: "foreground" | "registered" | "absent" | "unknown"; serviceError?: string | null;
   release: { version: string; checkedAt: number; assets: Record<string, { url: string }> } | null;
   budgets?: MaintenanceBudgets;
@@ -59,6 +62,14 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
   const previousRunning = useRef(false);
   const manualError = useRef(false);
   const latest = update?.release?.version;
+  // Older desktop helpers only describe Windows MSI assets. Never infer a Mac
+  // update (or a current-version claim) from the backend release number.
+  const clientRelease = update && Object.hasOwn(update, "clientRelease") ? update.clientRelease : (update?.clientSupported && update?.release?.assets?.["Axiom2.msi"] ? update.release : null);
+  const clientLatest = clientRelease?.version;
+  const clientName = update?.clientPlatform === "darwin" ? "macOS 客户端" : update?.clientPlatform === "win32" ? "Windows 客户端" : update?.clientPlatform === "linux" ? "Linux 客户端" : "桌面客户端";
+  const clientAsset = update?.clientAsset ?? (update?.clientSupported ? "Axiom2.msi" : null);
+  const clientDownload = clientAsset ? clientRelease?.assets?.[clientAsset]?.url : undefined;
+  const trustedClientDownload = clientDownload && clientLatest && clientDownload === `https://github.com/cosyeezz/axiom2/releases/download/v${clientLatest}/${clientAsset}` ? clientDownload : undefined;
   const serviceVersion = update?.serviceVersion;
   const serviceMissing = update?.serviceInstallation === "absent" && !serviceVersion;
   const foregroundMaintenance = !!update?.foregroundSupported && !!onMaintainService;
@@ -82,6 +93,7 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
     installer: ordinaryDisabled || !installerReady,
     pi: ordinaryDisabled || !pi?.release?.token || !piReady || (!!pi.cli?.version && !piNewer && !piRetry),
   };
+  const serviceBlockedReason = !update ? "正在读取更新能力。" : uncertain ? "上次请求结果尚未确认，请先核实。" : needsReconciliation || update.job?.servicePending ? "上次维护尚未核实，请先核实并恢复。" : running || busy || serviceBusy ? "已有维护操作正在进行，请等待完成。" : update.recovery ? "请先恢复之前的服务版本。" : !foregroundMaintenance && !update.managed ? "此后台不是桌面客户端管理的安装，请使用原安装方式更新。" : !foregroundMaintenance && service?.state === "unmanaged" ? "端口被非托管后台占用。请先在原启动位置退出该后台，再启动桌面管理的服务后更新；不会自动停止或覆盖当前后台。" : !foregroundMaintenance && !["running", "stopped"].includes(service?.state || "") ? "尚未确认后台运行状态，请先重新读取服务状态。" : undefined;
   // A poll can invalidate an open confirmation. Keep Pi\'s explicit version/token snapshot,
   // while applying the same current safety gates as the entry button.
   const confirmationDisabled = (action: "service" | "service-reinstall" | "recover" | "installer" | "pi") => action === "pi"
@@ -116,7 +128,7 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
       if (!quiet || !manualError.current || result.job?.running) { manualError.current = false; setError(null); }
     };
     const request = (async () => {
-      try { accept(await invoke(action, action === "pi" ? confirmedPi.current?.token : action === "service" ? confirmedService.current ?? undefined : action === "client" ? latest : undefined)); }
+      try { accept(await invoke(action, action === "pi" ? confirmedPi.current?.token : action === "service" ? confirmedService.current ?? undefined : action === "client" ? clientLatest : undefined)); }
       catch (cause) {
         const waiting = isDesktopResponsePending(cause), neutral = !mutation || waiting;
         if (!quiet) manualError.current = !neutral;
@@ -146,7 +158,7 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => { onBusyChange(backendBusy); }, [backendBusy, onBusyChange]);
-  const available = newer(latest, serviceVersion) || newer(latest, update?.clientVersion) || (piReady && (piNewer || piRetry));
+  const available = newer(latest, serviceVersion) || newer(clientLatest, update?.clientVersion) || (piReady && (piNewer || piRetry));
   useEffect(() => { onAvailableChange(available); }, [available, onAvailableChange]);
   useImperativeHandle(controls, () => ({ checkAndUpdate: (version, runningVersion) => ask("service", { version, runningVersion }) }));
   const ask = async (action: "service" | "service-reinstall" | "recover" | "installer" | "pi", expected?: { version: string; runningVersion: string | null }) => {
@@ -183,13 +195,16 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
           <div className="update-component-identity"><span className="update-component-icon"><Icon name="server" /></span><div className="update-component-copy"><h3>后台服务</h3><p>{serviceVersionLabel}{latest && serviceVersion && <span>{newer(latest, serviceVersion) ? `可更新至 v${latest}` : "已是最新版本"}</span>}</p></div></div>
           <div className="connect-actions">
             <button className="connect-secondary" aria-label="检查更新" disabled={ordinaryDisabled} onClick={() => void act("check")}>{busy === "check" ? "正在检查…" : "检查更新"}</button>
-            {serviceMissing ? <button className="connect-secondary" disabled={ordinaryDisabled || !onInstallService} onClick={onInstallService}>安装</button> : <button className="connect-secondary" aria-label="更新后台服务" disabled={actionDisabled.service} onClick={() => void ask("service")}>检查并更新</button>}
+            {serviceMissing ? <button className="connect-secondary" disabled={ordinaryDisabled || !onInstallService} onClick={onInstallService}>安装</button> : <button className="connect-secondary" aria-label="更新后台服务" title={serviceBlockedReason} disabled={actionDisabled.service} onClick={() => void ask("service")}>检查并更新</button>}
             <button className="connect-secondary" disabled={ordinaryDisabled || !!update?.recovery || !foregroundMaintenance} onClick={() => void ask("service-reinstall")}>重新安装</button>
             {update?.recovery && <button className="connect-secondary" disabled={actionDisabled.recover} onClick={() => ask("recover")}>恢复旧版本</button>}
           </div>
         </div>
         <p className="connect-update-detail update-runtime-version">应用内 Pi 引擎（后台安装版本）：<strong>{installedPiVersionLabel}</strong>。随后台服务更新，用于应用内会话与工具执行。</p>
+        {update?.releaseError && <p className="connect-update-detail" role="status">后台版本检查失败：{update.releaseError}</p>}
         {update?.serviceError && <p className="connect-message">{update.serviceError}</p>}
+        {actionDisabled.service && serviceBlockedReason && <p className="connect-update-detail" role="status">{serviceBlockedReason}</p>}
+        {update && !foregroundMaintenance && (!update.managed || service?.state === "unmanaged") && <a className="connect-update-detail" href="https://github.com/cosyeezz/axiom2#一行安装与客户端下载" target="_blank" rel="noreferrer">查看安装与更新方式</a>}
         {update?.job && !["pi", "client"].includes(update.job.kind) && progress}
         {error && !historyOpen && !piError && error.message !== update?.job?.message && <p className={error.neutral || running ? "connect-message" : "connect-error"} role={error.neutral || running ? "status" : "alert"}>{error.message}</p>}
       </section>
@@ -211,12 +226,15 @@ export default function DesktopUpdates({ controls, service, serviceBusy, onBusyC
       </section>
       <section className="update-component" aria-label="客户端更新">
         <div className="update-component-row">
-          <div className="update-component-identity"><span className="update-component-icon"><Icon name="monitor" /></span><div className="update-component-copy"><h3>桌面客户端</h3><p>{update?.clientVersion ? `v${update.clientVersion}` : "正在读取…"}{newer(latest, update?.clientVersion) && <span>可更新至 v{latest}</span>}</p></div></div>
+          <div className="update-component-identity"><span className="update-component-icon"><Icon name="monitor" /></span><div className="update-component-copy"><h3>{clientName}</h3><p>{update?.clientVersion ? `v${update.clientVersion}` : "正在读取…"}{clientLatest && <span>{newer(clientLatest, update?.clientVersion) ? `可更新至 v${clientLatest}` : "本平台已是最新版本"}</span>}{!clientLatest && update?.clientCheckedAt && <span>本平台暂无可用安装包</span>}</p></div></div>
           <div className="connect-actions">
-            {update?.clientSupported && update.release?.assets?.["Axiom2.msi"] && <button className="connect-secondary" aria-label="下载客户端更新" disabled={ordinaryDisabled || !newer(latest, update.clientVersion)} onClick={() => void act("client")}>下载更新</button>}
+            {update?.clientSupported && clientRelease?.assets?.["Axiom2.msi"] && <button className="connect-secondary" aria-label="下载客户端更新" disabled={ordinaryDisabled || !newer(clientLatest, update.clientVersion)} onClick={() => void act("client")}>下载更新</button>}
+            {!update?.clientSupported && trustedClientDownload && newer(clientLatest, update?.clientVersion) && <a className="connect-secondary" href={trustedClientDownload} target="_blank" rel="noreferrer">下载本平台更新</a>}
             {installerReady && <button className="connect-secondary" disabled={actionDisabled.installer} onClick={() => ask("installer")}>安装更新</button>}
           </div>
         </div>
+        {update?.clientReleaseError && <p className="connect-update-detail" role="status">{update.clientReleaseError} 请重新检查更新；未将后台版本作为客户端版本。</p>}
+        {update && !clientLatest && !update.clientCheckedAt && !update.clientReleaseError && <p className="connect-update-detail">尚未检查本平台客户端版本，请点击“检查更新”。</p>}
         {update?.job?.kind === "client" && progress}
       </section>
       {(needsReconciliation || update?.job?.servicePending) && <div className="update-recovery" role="status"><p>上次更新尚未完成核实，不会重复安装。</p>{needsReconciliation && update?.job?.task && <button className="connect-secondary" disabled={!!busy || running || serviceBusy || uncertain} onClick={() => void control("reconcile", { id: update.job!.task!.id }).catch(cause => setError({ action: "reconcile", message: String(cause), neutral: true }))}>核实并恢复</button>}</div>}

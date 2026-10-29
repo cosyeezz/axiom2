@@ -34,11 +34,12 @@ test("desktop update history retains successive actual tasks across a new reader
   const f = await fixture(t); await f.installRecord();
   const first = await f.updater.runJob("check"); f.fail();
   const second = await f.updater.runJob("check");
+  const requestsBeforeHistory = f.requests();
   const reader = createUpdater({ root: f.root, command: async () => { throw Error("unexpected command"); }, fetcher: async () => { throw Error("unexpected network"); } });
   const history = await reader.history();
   assert.equal(history.error, null);
   assert.deepEqual(history.tasks.map((task: any) => [task.id, task.status]), [[first.job.task.id, "succeeded"], [second.job.task.id, "failed"]]);
-  assert.equal(f.requests(), 2);
+  assert.equal(f.requests(), requestsBeforeHistory, "history does not replay latest or platform-history discovery");
   assert.ok(history.tasks.every((task: any) => !task.capabilities.cancel && !task.capabilities.extend));
   await assert.rejects(reader.maintenanceControl("cancel", { id: first.job.task.id }), /任务已结束|身份已变化/);
 });

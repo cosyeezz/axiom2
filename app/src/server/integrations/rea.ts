@@ -427,7 +427,14 @@ export class ReaService {
           if (!maintenanceCancelled(error, signal)) job.error = errorMessage(error, "REA 操作失败，请重新检查。");
         }
       } finally {
-        try { if (prepared) { assertBuiltinFilesSafe(); rmSync(prepared, { recursive: true, force: true }); forgetBuiltinDirectory(prepared); } }
+        try { if (prepared) {
+          assertBuiltinFilesSafe();
+          // Windows can briefly retain an executable's image/file handle after
+          // its process tree has stopped. Retry only after ownership is safe;
+          // final failure still retains the directory and operation evidence.
+          rmSync(prepared, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+          forgetBuiltinDirectory(prepared);
+        } }
         finally { this.load(); job.running = false; }
       }
     })).catch(error => { job.running = false; if (!maintenanceCancelled(error)) job.error = errorMessage(error, "任务未能启动。"); this.changed(); }).finally(() => {

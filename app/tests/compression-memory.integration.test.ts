@@ -120,14 +120,14 @@ test("precompression reminder: optional memory work, safe points and cancellatio
     else await until(() => !!seedHeld, "seed run did not enter the held active request");
     const seedRequest = requests[0], before = readFileSync(memoryPath, "utf8");
     await compress("compression.start");
+    // child.send() acceptance is not worker receipt. Do not race the active
+    // provider/settlement boundary with a fixed sleep on slower CI machines.
+    await until(() => compressionEvents.includes("compression-requested"), `worker did not queue compression: ${scenario}`);
     if (scenario === "handoff") {
-      // The asynchronous extension gives IPC time to arrive after actionable boundaries.
-      await new Promise(resolve => setTimeout(resolve, 100));
       releaseSettled = true; settled!.end("ok");
     } else {
       // Request compression while the main session is active; only active runs
       // must receive the reminder before their next completed boundary.
-      await new Promise(resolve => setTimeout(resolve, 100)); // let queued snapshot IPC reach the active worker
       stream(seedHeld!, { role: "assistant", content: "done" });
     }
     if (scenario === "cancel" || scenario === "cancelRejected") {
@@ -140,7 +140,12 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       // held provider request settle independently before waiting for idle.
       stream(held!, { role: "assistant", content: "memory request finished after compression cancellation" });
     }
-    await until(() => app.agents.compressions.info(scope)?.state !== "running", `compression did not settle: ${scenario}`);
+    try {
+      await until(() => app.agents.compressions.info(scope)?.state !== "running", `compression did not settle: ${scenario}`);
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : error}\n${JSON.stringify({ job: app.agents.compressions.info(scope), run: app.agents.info(scope).run,
+        events: compressionEvents, requests: requests.length, lastMessage: JSON.stringify(requests.at(-1)?.messages.at(-1)).slice(0, 1500), summaries, warnings })}`, { cause: error });
+    }
     await until(() => !app.agents.active(scope), "maintenance run did not settle");
     const job = app.agents.compressions.info(scope)!;
     if (scenario !== "cancel" && scenario !== "cancelRejected" && scenario !== "overflow") {

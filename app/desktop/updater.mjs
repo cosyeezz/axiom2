@@ -69,11 +69,17 @@ export async function execute(node, args, options = {}) {
   if (failure) throw failure;
   return output;
 }
-export function createUpdater({ root, fetcher = fetch, command = execute, isAlive = alive, api = RELEASE_API, base = RELEASE_BASE, env = process.env, runtimeNode = process.execPath } = {}) {
+export function clientAssetName(platform = process.platform, arch = process.arch) {
+  return platform === "win32" ? "Axiom2.msi" : platform === "darwin" ? "Axiom2.dmg" : platform === "linux" && ["x64", "arm64"].includes(arch) ? `Axiom2-Linux-${arch}.deb` : null;
+}
+export function createUpdater({ root, fetcher = fetch, command = execute, isAlive = alive, api = RELEASE_API, base = RELEASE_BASE, env = process.env, runtimeNode = process.execPath, platform = process.platform, arch = process.arch } = {}) {
   if (!root || !isAbsolute(root)) throw Error("缺少绝对数据目录");
   const directory = join(root, "updates");
   const registration = join(root, "installation.json");
   const releaseFile = join(directory, "release.json");
+  const clientReleaseFile = join(directory, "client-release.json");
+  const releaseErrorFile = join(directory, "release-error.json");
+  const clientAsset = clientAssetName(platform, arch);
   const journalFile = join(directory, "transaction.json");
   const log = join(directory, "update.log");
   const piReleaseFile = join(directory, "pi-release.json");
@@ -180,7 +186,7 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   const environment = { ...env, AXIOM_DATA_DIR: root };
   let owner, execution, supervisor, pendingPiLock;
   const runCommand = (file, args, options) => supervisor ? supervisor.command(file, args, options) : command(file, args, options);
-  const network = (url, init) => execution ? execution.fetch(url, fetcher, init) : fetcher(url, { ...init, signal: AbortSignal.timeout(20000) });
+  const network = (url, init) => execution ? execution.fetch(url, fetcher, init) : fetcher(url, { ...init, signal: AbortSignal.any([AbortSignal.timeout(20000), ...(init?.signal ? [init.signal] : [])]) });
   const inspectionOptions = () => {
     const active = execution, started = Date.now();
     active?.signal.throwIfAborted();
@@ -433,29 +439,88 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
   }
   function validateRelease(value) {
     if (!value || !versionPattern.test(value.version) || !Number.isFinite(value.checkedAt)) throw Error("请先检查更新。");
-    for (const name of ["axiom2.tgz", "Axiom2.msi"]) {
+    for (const name of ["axiom2.tgz"]) {
       const asset = value.assets?.[name];
       if (asset && (asset.url !== `${base}v${value.version}/${name}` || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isInteger(asset.size) || asset.size < 1 || asset.size > 128 * 1024 * 1024)) throw Error("发布附件信息无效。");
     }
     if (!value.assets?.["axiom2.tgz"]) throw Error("此版本缺少后台服务安装包。");
     return value;
   }
-  async function check() {
-    const response = await network(api, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Axiom2-Desktop-Updater" } });
+  function validateClientRelease(value) {
+    if (!value || !versionPattern.test(value.version) || !Number.isFinite(value.checkedAt) || !clientAsset) throw Error("客户端版本信息无效。");
+    const asset = value.assets?.[clientAsset];
+    if (!asset || asset.url !== `${base}v${value.version}/${clientAsset}` || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isInteger(asset.size) || asset.size < 1 || asset.size > 128 * 1024 * 1024) throw Error("客户端发布附件信息无效。");
+    return value;
+  }
+  function platformRelease(data) {
+    if (!clientAsset || data.draft || data.prerelease || !Array.isArray(data.assets)) return null;
+    const version = String(data.tag_name || "").replace(/^v/, "");
+    if (data.tag_name !== `v${version}` || !versionPattern.test(version)) return null;
+    const matches = data.assets.filter(item => item.name === clientAsset);
+    if (!matches.length) return null;
+    if (matches.length !== 1) throw Error("客户端发布附件重复。");
+    const item = matches[0];
+    return validateClientRelease({ version, checkedAt: Date.now(), assets: { [clientAsset]: { url: item.browser_download_url, sha256: String(item.digest || "").replace(/^sha256:/, ""), size: item.size } } });
+  }
+  function backendRelease(data) {
+    if (!data || data.draft || data.prerelease || !Array.isArray(data.assets)) return null;
+    const version = String(data.tag_name || "").replace(/^v/, "");
+    if (data.tag_name !== `v${version}` || !versionPattern.test(version)) return null;
+    const matches = data.assets.filter(item => item.name === "axiom2.tgz");
+    if (!matches.length) return null;
+    if (matches.length !== 1) throw Error("发布附件重复。");
+    const item = matches[0];
+    return validateRelease({ version, checkedAt: Date.now(), assets: { "axiom2.tgz": { url: item.browser_download_url, sha256: String(item.digest || "").replace(/^sha256:/, ""), size: item.size } } });
+  }
+  async function discoverRelease(latest, parse, signal) {
+    let selected = parse(latest);
+    if (selected) return selected;
+    for (let page = 1; page <= 3; page++) {
+      const url = new URL(api.replace(/\/latest$/, ""));
+      url.search = `per_page=30&page=${page}`;
+      const response = await network(url.href, { signal, headers: { Accept: "application/vnd.github+json", "User-Agent": "Axiom2-Desktop-Updater" } });
+      if (!response.ok) { await response.body?.cancel(); throw Error(`发布列表检查失败（HTTP ${response.status}）。`); }
+      const releases = JSON.parse(await bounded(response, 4 * 1024 * 1024));
+      if (!Array.isArray(releases)) throw Error("发布列表无效。");
+      for (const data of releases) {
+        const candidate = parse(data);
+        if (candidate && (!selected || newer(candidate.version, selected.version))) selected = candidate;
+      }
+      if (selected || releases.length < 30) return selected;
+    }
+    throw Error("尚未找到组件安装包，请到发布页核实。");
+  }
+  async function checkClient(latest, signal) {
+    try {
+      const selected = clientAsset ? await discoverRelease(latest, platformRelease, signal) : null;
+      await atomic(clientReleaseFile, { platform, arch, checkedAt: Date.now(), release: selected, error: null });
+    } catch (error) {
+      // Client discovery failures never block a verified backend service update.
+      execution?.signal.throwIfAborted();
+      await atomic(clientReleaseFile, { platform, arch, checkedAt: null, release: null, error: error.message });
+    }
+  }
+  async function check({ clients = true, timeoutMs = 24000 } = {}) {
+    // Bound discovery across both channels instead of multiplying per-request
+    // deadlines. The native host separately bounds the submission/status helper.
+    const signal = AbortSignal.timeout(Math.min(24000, timeoutMs));
+    const response = await network(api, { signal, headers: { Accept: "application/vnd.github+json", "User-Agent": "Axiom2-Desktop-Updater" } });
     if (!response.ok) { await response.body?.cancel(); throw Object.assign(Error(`检查更新失败（HTTP ${response.status}），请稍后重试。`), { code: "http" }); }
     const data = JSON.parse(await bounded(response, 1024 * 1024));
     const version = String(data.tag_name || "").replace(/^v/, "");
     if (data.tag_name !== `v${version}` || !versionPattern.test(version) || data.draft || data.prerelease || !Array.isArray(data.assets)) throw Error("发布版本信息无效。");
-    const assets = {};
-    for (const name of ["axiom2.tgz", "Axiom2.msi"]) {
-      const matches = data.assets.filter((item) => item.name === name);
-      if (matches.length > 1) throw Error("发布附件重复。");
-      const item = matches[0];
-      if (item) assets[name] = { url: item.browser_download_url, sha256: String(item.digest || "").replace(/^sha256:/, ""), size: item.size };
-    }
-    const release = validateRelease({ version, assets, checkedAt: Date.now() });
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await atomic(releaseFile, release);
+    try {
+      const release = await discoverRelease(data, backendRelease, signal);
+      if (!release) throw Error("尚未找到后台服务安装包。");
+      await atomic(releaseFile, release);
+      await atomic(releaseErrorFile, null);
+    } catch (error) {
+      execution?.signal.throwIfAborted();
+      await atomic(releaseErrorFile, { message: error.message });
+      if (!clients) throw error;
+    }
+    if (clients) await checkClient(data, signal);
     return status();
   }
   async function bounded(response, limit) {
@@ -513,7 +578,15 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     const serviceVersion = program.state === 'verified' ? program.version : installed?.version ?? null;
     const serviceInstallation = program.state === 'verified' ? 'foreground' : installed ? 'registered' : program.state;
     const serviceError = serviceVersion ? null : installationError || program.message || null;
-    const release = await json(releaseFile);
+    const releaseError = await json(releaseErrorFile);
+    const release = releaseError ? null : await json(releaseFile);
+    let matchingClient = null;
+    try {
+      const client = await json(clientReleaseFile);
+      if (client?.platform === platform && client?.arch === arch) {
+        matchingClient = { ...client, release: client.release ? validateClientRelease(client.release) : null };
+      }
+    } catch { matchingClient = { release: null, checkedAt: null, error: "客户端版本缓存无效，请重新检查更新。" }; }
     const recovery = !!await json(journalFile);
     if (current?.running && !isAlive(current.pid)) Object.assign(current, { running: false, phase: "interrupted", message: recovery ? "上次更新进程异常退出，请先恢复旧版本。" : "上次更新进程已退出，请检查当前版本后重试。" });
     if (current?.task && current.phase === "interrupted") { if (current.task.status !== "unknown") current.task.status = "interrupted"; current.task.capabilities = { cancel: false, extend: false }; }
@@ -521,7 +594,8 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
     if (current) { current.reconciled = current.reconciliation?.state === "complete" && !updaterOwnerPresent(root); delete current.pid; delete current.token; delete current.installer; delete current.reconciliation; }
     const pi = ['archive-preview', 'archive-remove'].includes(current?.kind) ? null : await piStatus();
     if (current?.kind === "pi" && ["failed", "cancelled", "unknown", "interrupted"].includes(current.task?.status) && pi.release && pi.release.token === current.version) pi.release.token = null;
-    return { installationError, clientInstaller, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion, serviceInstallation, serviceError, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
+    return { clientPlatform: platform, clientAsset, clientCheckedAt: matchingClient?.checkedAt ?? null, clientReleaseError: matchingClient?.error ?? null, clientRelease: matchingClient?.release ?? null,
+      releaseError: releaseError?.message ?? null, installationError, clientInstaller, archiveCleanup: await json(archivePreviewFile), pi, serviceRemoval: await json(serviceRemovalFile), serviceRemovalPending: await serviceRemovalPending(root), serviceVersion, serviceInstallation, serviceError, managed: installed?.managed ?? false, release: release ? validateRelease(release) : null,
       job: current, budgets: await json(join(directory, "budgets.json"), budgetsDefault), recovery, log, execution: current?.kind === "pi" ? await logTail(log) : null };
   }
   async function npmCli(node) {
@@ -799,13 +873,16 @@ export function createUpdater({ root, fetcher = fetch, command = execute, isAliv
       return;
     }
     if (await json(journalFile)) throw Error("上次更新尚未恢复，请先恢复旧版本。");
-    const release = validateRelease(await json(releaseFile));
+    const client = kind === "client" ? await json(clientReleaseFile) : null;
+    if (kind === "client" && (client?.platform !== platform || client?.arch !== arch || !client.release || client.error)) throw Error("请先检查本平台客户端更新。");
+    const release = kind === "client" ? validateClientRelease(client.release) : validateRelease(await json(releaseFile));
+    if (kind === "client" && clientAsset !== "Axiom2.msi") throw Error("本平台请通过发布页下载安装客户端。");
     if (version !== release.version) throw Error("更新版本已变化，请重新检查并确认。");
     if (kind === "service") {
       // A cached release is not authority to install an old "latest". Recheck at
       // the execution boundary, before any download, stop or program replacement.
       await progress("checking", "正在重新核实最新后台版本…");
-      const fresh = validateRelease((await check()).release);
+      const fresh = validateRelease((await check({ clients: false })).release);
       const previous = release.assets["axiom2.tgz"], current = fresh.assets["axiom2.tgz"];
       if (version !== fresh.version || previous.url !== current.url || previous.sha256 !== current.sha256 || previous.size !== current.size) throw Error("最新版本或发布附件已变化，请重新检查并确认；未停止旧服务。");
       await updateService(installed, fresh);
