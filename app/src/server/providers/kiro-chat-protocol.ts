@@ -144,11 +144,11 @@ export function kiroChatRequest(model: Model<Api>, context: TranscriptContext, a
   const current = wire.pop();
   if (!current || !("userInputMessage" in current)) throw new KiroChatError("Kiro 聊天请求必须以用户消息或工具结果结束，不支持助手预填充。");
   // The CLI protocol has no system role. Preserve the full prompt in the first user message,
-  // without inventing an assistant acknowledgement or replacing Axiom's identity/policies.
+  // without inventing an assistant acknowledgement or changing the supplied identity/policies.
   const first = [...wire, current].find(item => "userInputMessage" in item) as { userInputMessage: User };
-  const recoveryPolicy = interruptionNotice.omittedToolCalls ? "[Axiom recovery safety]\nEarlier tool calls have no recorded result. Their execution outcome is unknown, not confirmed as unexecuted. Do not blindly repeat operations with side effects; verify the current state or ask the user before retrying them. A normalized user message does not prove that the earlier operations did not run." : "";
+  const recoveryPolicy = interruptionNotice.omittedToolCalls ? "[Recovery safety]\nEarlier tool calls have no recorded result. Their execution outcome is unknown, not confirmed as unexecuted. Do not blindly repeat operations with side effects; verify the current state or ask the user before retrying them. A normalized user message does not prove that the earlier operations did not run." : "";
   const policy = [system, recoveryPolicy].filter(Boolean).join("\n\n");
-  if (policy) first.userInputMessage.content = `<axiom_system>\n${policy}\n</axiom_system>\n\n${first.userInputMessage.content}`;
+  if (policy) first.userInputMessage.content = `<system_prompt>\n${policy}\n</system_prompt>\n\n${first.userInputMessage.content}`;
   current.userInputMessage.modelId = model.id;
   if (tools.length) (current.userInputMessage.userInputMessageContext ??= {}).tools = tools;
   const conversationId = sessionId ? createHash("sha256").update("axiom-kiro-conversation\0" + sessionId).digest("hex").slice(0, 32).replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5") : randomUUID();

@@ -30,14 +30,14 @@ test("Kiro native chat sends selected model and full system prompt, uses fixed A
     assert.equal(headers.get("Authorization"), "Bearer PRIVATE-ACCESS");
     assert.equal(headers.get("x-amz-target"), "AmazonCodeWhispererStreamingService.GenerateAssistantResponse");
     assert.equal(headers.get("x-amzn-codewhisperer-optout"), "true"); assert.equal(headers.get("x-fixture"), "safe");
-    assert.equal(headers.get("Content-Type"), "application/x-amz-json-1.0"); assert.match(headers.get("User-Agent")!, /^Axiom /);
+    assert.equal(headers.get("Content-Type"), "application/x-amz-json-1.0"); assert.equal(headers.get("User-Agent"), null);
     const body = JSON.parse(String(init?.body));
     assert.equal(body.conversationState.currentMessage.userInputMessage.modelId, model().id);
     assert.equal(body.conversationState.currentMessage.userInputMessage.origin, "KIRO_CLI");
     assert.match(body.conversationState.currentMessage.userInputMessage.content, /You are Axiom[\s\S]*你好/);
     assert.equal(body.fixture, "replacement"); assert.ok(!String(init?.body).includes("PRIVATE-REFRESH"));
     return kiroResponse([kiroFrame("assistantResponseEvent", { content: "你好🌏", messageId: "message-1" }), kiroFrame("metadataEvent", { tokenUsage: { uncachedInputTokens: 12, outputTokens: 4, cacheReadInputTokens: 3, cacheWriteInputTokens: 2, totalTokens: 21 } })], 1);
-  }, { sessionId: "PRIVATE-SESSION", headers: { Authorization: "MALICIOUS", "Content-Type": "wrong", "x-amz-target": "wrong", "x-fixture": "safe" },
+  }, { sessionId: "PRIVATE-SESSION", headers: { Authorization: "MALICIOUS", "Content-Type": "wrong", "x-amz-target": "wrong", "User-Agent": "Axiom injected", "x-fixture": "safe" },
     onPayload: p => { payload = true; return { ...p as object, fixture: "replacement" }; },
     onResponse: r => { response = true; assert.equal(r.status, 200); }, onProviderStreamEvent: () => { observed++; } });
   assert.equal(result.stopReason, "stop"); assert.deepEqual(result.content, [{ type: "text", text: "你好🌏" }]); assert.equal(result.responseId, "message-1");
@@ -45,6 +45,29 @@ test("Kiro native chat sends selected model and full system prompt, uses fixed A
     axiomKiro: { version: 1, scope: "request", state: "complete", pricing: { kind: "unknown", rates: model().cost } } });
   assert.ok(payload && response); assert.equal(observed, 2); assert.deepEqual(events.map(e => e.type), ["start", "text_start", "text_delta", "text_end", "done"]);
   assert.equal(kiroCrc32(Buffer.from("123456789")), 0xcbf43926); assert.equal(fixtureCrc(Buffer.from("123456789")), 0xcbf43926);
+});
+
+test("neutral system framing preserves caller-owned Axiom system, messages, tools and results exactly", () => {
+  const context: Context = { systemPrompt: "User Axiom system policy", tools: [{ ...tool, description: "User Axiom tool description" }],
+    messages: [
+      { role: "user", content: "User Axiom input <axiom_system>literal</axiom_system>", timestamp: 1 },
+      { role: "assistant", api: "kiro-chat", provider: "kiro", model: model().id, stopReason: "toolUse", usage: zero, timestamp: 2,
+        content: [{ type: "text", text: "Assistant Axiom text" },
+          { type: "toolCall", id: "preserved-call", name: tool.name, arguments: { path: "Axiom.txt" } }] },
+      { role: "toolResult", toolCallId: "preserved-call", toolName: tool.name, isError: false, timestamp: 3,
+        content: [{ type: "text", text: "Axiom KiroChat/1.0 is user-owned tool output" }] },
+      { role: "user", content: "Axiom follow-up", timestamp: 4 },
+    ] };
+  const normalized = normalizeContext(context), before = structuredClone(normalized);
+  const { payload } = kiroChatRequest(model(), normalized, account(), "preserved-session");
+  const wire = JSON.stringify(payload);
+  for (const text of ["User Axiom system policy", "User Axiom input <axiom_system>literal</axiom_system>",
+    "Assistant Axiom text", "User Axiom tool description", "Axiom.txt", "Axiom KiroChat/1.0 is user-owned tool output", "Axiom follow-up"])
+    assert.ok(wire.includes(text), text);
+  const first = payload.conversationState.history![0];
+  assert.ok("userInputMessage" in first);
+  assert.ok(first.userInputMessage.content.startsWith("<system_prompt>\n"));
+  assert.deepEqual(normalized, before);
 });
 
 test("Kiro tool JSON chunks map names back, validate schema and round-trip results without history model/tools", async () => {

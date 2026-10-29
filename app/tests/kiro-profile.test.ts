@@ -17,7 +17,7 @@ test("enterprise discovery uses native AWS operation, not OIDC refresh or person
     const h = new Headers(init?.headers);
     assert.equal(h.get("authorization"), "Bearer PRIVATE-ACCESS");
     assert.equal(h.get("x-amz-target"), "AmazonCodeWhispererService.ListAvailableProfiles");
-    assert.equal(h.get("tokentype"), null); assert.match(h.get("user-agent")!, /^Axiom /);
+    assert.equal(h.get("tokentype"), null); assert.equal(h.get("user-agent"), null);
     assert.deepEqual(JSON.parse(String(init?.body)), { maxResults: 10 });
     assert.ok(!String(init?.body).includes("PRIVATE"));
     return Response.json({ profiles: [{ arn }] });

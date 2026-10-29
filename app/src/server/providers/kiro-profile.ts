@@ -22,7 +22,7 @@ export async function resolveKiroProfile(account: KiroCredential, signal: AbortS
         response = await transport(`https://q.${region}.amazonaws.com/`, {
           method: "POST", redirect: "error", signal,
           headers: { Authorization: `Bearer ${account.access}`, "Content-Type": "application/x-amz-json-1.0", Accept: "application/json",
-            "x-amz-target": "AmazonCodeWhispererService.ListAvailableProfiles", "User-Agent": "Axiom KiroProfile/1.0",
+            "x-amz-target": "AmazonCodeWhispererService.ListAvailableProfiles",
             "amz-sdk-invocation-id": randomUUID(), "amz-sdk-request": "attempt=1; max=1" },
           body: JSON.stringify({ maxResults: 10, ...(nextToken ? { nextToken } : {}) }),
         });

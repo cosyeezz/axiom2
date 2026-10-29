@@ -25,6 +25,7 @@ test("Kiro uses the CLI AWS JSON POST, origin, and double-serialized pagination"
     assert.equal(headers.get("content-type"), "application/x-amz-json-1.0");
     assert.equal(headers.get("x-amz-target"), "AmazonCodeWhispererService.ListAvailableModels");
     assert.equal(headers.get("amz-sdk-request"), "attempt=1; max=1");
+    assert.equal(headers.get("user-agent"), null);
     assert.deepEqual(Object.fromEntries(url.searchParams), body);
     assert.equal(body.origin, "KIRO_CLI"); assert.equal(body.profileArn, undefined);
     if (calls.length === 1) return json(page([model("a")], { nextToken: "opaque +/?=& token" }));

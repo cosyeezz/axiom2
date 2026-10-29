@@ -72,6 +72,21 @@ test("native full and split summaries preserve real system/tool/message prefix o
   assert.deepEqual(result.details, { readFiles: ["/fixture/read"], modifiedFiles: [] });
 });
 
+test("Kiro compaction uses a neutral generated marker without editing the original transcript", async () => {
+  const f = fixture(), kiroModel = { ...model, provider: "kiro", api: "kiro-chat" as const };
+  f.context = normalizeContext({ systemPrompt: "Caller Axiom system must remain",
+    messages: convertToLlm(f.manager.buildSessionProjection().messages) });
+  f.prefix = captureCompressionPrefix(f.manager, { ...selection, provider: "kiro" }, kiroModel, f.context,
+    { sessionId: f.manager.getSessionId() });
+  const { requests } = await runNative(f, prepare(f.manager.buildSessionProjection().messages));
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].messages.slice(0, f.context.messages.length), f.context.messages);
+  const directive = requests[0].messages.at(-1)!;
+  assert.equal(directive.role, "user");
+  assert.ok(typeof directive.content === "string" && directive.content.startsWith("[Native compaction request]\n"));
+  assert.match(JSON.stringify(requests[0]), /Caller Axiom system must remain/);
+});
+
 test("native update references the existing summary in the prefix without serializing it again", async () => {
   const f = fixture(), previous = "UNIQUE_PREVIOUS_SUMMARY";
   const entry = f.manager.getBranch()[0];

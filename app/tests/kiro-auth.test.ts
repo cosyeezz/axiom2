@@ -38,35 +38,62 @@ test("Kiro distinguishes personal Builder ID from enterprise OIDC and honors slo
     assert.equal(Number(result.clientSecretExpiresAt) > Date.now(), true);
     assert.equal(result.profileArn, granted.profileArn);
     assert.deepEqual(waits, [2000, 2000, 7000, 12000]);
-    assert.deepEqual(calls[0].body.scopes, ["codewhisperer:completions", "codewhisperer:analysis", "codewhisperer:conversations"]);
-    assert.deepEqual(calls[0].body.grantTypes, ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"]);
-    assert.equal(calls[0].body.issuerUrl, method === "builder-id" ? "https://view.awsapps.com/start" : "https://org.awsapps.com/start");
+    assert.equal(calls[0].url.pathname, "/client/register");
+    assert.deepEqual(calls[0].body, {
+      clientName: "OAuth Client", clientType: "public",
+      scopes: ["codewhisperer:completions", "codewhisperer:analysis", "codewhisperer:conversations"],
+      grantTypes: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+      issuerUrl: method === "builder-id" ? "https://view.awsapps.com/start" : "https://org.awsapps.com/start",
+    }, `${method} device registration must omit redirectUris and entitledApplicationArn`);
+    assert.deepEqual(Object.keys(calls[0].body), ["clientName", "clientType", "grantTypes", "issuerUrl", "scopes"]);
     assert.equal(calls[2].body.deviceCode, "DEVICE");
     assert.equal(calls[1].url.pathname, "/device_authorization");
     assert.deepEqual(events[0], { type: "device_code", userCode: "USER-CODE", verificationUri: device.verificationUriComplete, intervalSeconds: 2, expiresInSeconds: 600 });
   }
 });
 
-test("Kiro OIDC browser PKCE registers the exact redirect and exchanges camelCase fields", async () => {
-  const events: AuthEvent[] = []; let closed = false, registration: any, callbackState = "";
-  const oauth = kiroOAuth({ callback: async (state, _signal, options) => {
-    assert.equal(options?.oidc, true); callbackState = state;
-    return { origin: "http://127.0.0.1:44991", wait: async () => ({ code: "CODE", redirectUri: "http://127.0.0.1:44991/oauth/callback" }), close: async () => { closed = true; } };
-  }, fetch: async (url, init) => {
-    const body = JSON.parse(String(init?.body));
-    if (String(url).endsWith("/client/register")) { registration = body; return json(registered()); }
-    const event = events[0]; assert.equal(event.type, "auth_url"); if (event.type !== "auth_url") throw Error();
-    const authorize = new URL(event.url);
-    assert.equal(authorize.pathname, "/authorize"); assert.equal(authorize.searchParams.get("state"), callbackState);
-    assert.equal(authorize.searchParams.has("scope"), false); assert.equal(authorize.searchParams.get("scopes"), registration.scopes.join(" "));
-    assert.equal(authorize.searchParams.get("code_challenge"), createHash("sha256").update(body.codeVerifier).digest("base64url"));
-    assert.equal(body.code, "CODE"); assert.equal(body.grantType, "authorization_code");
-    assert.equal(body.redirectUri, registration.redirectUris[0]); assert.equal(body.clientSecret, "CLIENT-SECRET");
-    return json(granted);
-  } });
-  const result = await oauth.login(interaction(["identity-center", "https://org.awsapps.com/start", "us-east-1", "pkce"], events));
-  assert.equal(result.authMethod, "identity-center"); assert.ok(closed);
-  assert.deepEqual(registration.grantTypes, ["authorization_code", "refresh_token"]);
+test("Kiro OIDC browser PKCE registers exact bodies for both identities and exchanges camelCase fields", async () => {
+  for (const method of ["builder-id", "identity-center"] as const) {
+    const authRegion = method === "builder-id" ? "us-east-1" : "eu-west-1";
+    const issuerUrl = method === "builder-id" ? "https://view.awsapps.com/start" : "https://org.awsapps.com/start";
+    const origin = `https://oidc.${authRegion}.amazonaws.com`, redirectUri = "http://127.0.0.1:44991/oauth/callback";
+    const events: AuthEvent[] = []; let closed = false, registration: any, callbackState = "", registrations = 0, exchanges = 0;
+    const oauth = kiroOAuth({ callback: async (state, _signal, options) => {
+      assert.equal(options?.oidc, true); callbackState = state;
+      return { origin: "http://127.0.0.1:44991", wait: async () => ({ code: "CODE", redirectUri }), close: async () => { closed = true; } };
+    }, fetch: async (input, init) => {
+      assert.equal(init?.method, "POST"); assert.equal(init?.redirect, "error"); assert.ok(init?.signal);
+      assert.equal(new Headers(init?.headers).get("content-type"), "application/json");
+      const url = new URL(String(input)), body = JSON.parse(String(init?.body));
+      assert.equal(url.origin, origin);
+      if (url.pathname === "/client/register") {
+        registrations++; registration = body;
+        assert.deepEqual(body, {
+          clientName: "OAuth Client", clientType: "public",
+          scopes: ["codewhisperer:completions", "codewhisperer:analysis", "codewhisperer:conversations"],
+          grantTypes: ["authorization_code", "refresh_token"], issuerUrl, redirectUris: [redirectUri],
+        }, `${method} PKCE registration must include the exact redirect and omit entitledApplicationArn`);
+        assert.deepEqual(Object.keys(body), ["clientName", "clientType", "grantTypes", "issuerUrl", "redirectUris", "scopes"]);
+        return json(registered());
+      }
+      assert.equal(url.pathname, "/token"); exchanges++;
+      const event = events[0]; assert.equal(event.type, "auth_url"); if (event.type !== "auth_url") throw Error();
+      const authorize = new URL(event.url);
+      assert.equal(authorize.origin, origin); assert.equal(authorize.pathname, "/authorize");
+      assert.equal(authorize.searchParams.get("state"), callbackState);
+      assert.equal(authorize.searchParams.has("scope"), false); assert.equal(authorize.searchParams.get("scopes"), registration.scopes.join(" "));
+      assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
+      assert.equal(authorize.searchParams.get("code_challenge"), createHash("sha256").update(body.codeVerifier).digest("base64url"));
+      assert.equal(authorize.searchParams.get("redirect_uri"), redirectUri);
+      assert.equal(body.code, "CODE"); assert.equal(body.grantType, "authorization_code");
+      assert.equal(body.redirectUri, registration.redirectUris[0]); assert.equal(body.clientSecret, "CLIENT-SECRET");
+      return json(granted);
+    } });
+    const answers = method === "builder-id" ? [method, "pkce"] : [method, issuerUrl, authRegion, "pkce"];
+    const result = await oauth.login(interaction(answers, events));
+    assert.equal(result.authMethod, method); assert.equal(result.authRegion, authRegion); assert.equal(result.startUrl, issuerUrl);
+    assert.ok(closed); assert.equal(registrations, 1); assert.equal(exchanges, 1);
+  }
 });
 
 test("Kiro social portal PKCE uses CLI redirect marker, snake_case exchange, and distinct refresh", async () => {

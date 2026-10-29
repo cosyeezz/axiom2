@@ -121,6 +121,7 @@ test("error-body buffering copies mutable chunks and counts UTF8 bytes rather th
 });
 
 async function fixture(t: TestContext, options: { auto?: boolean; cancelHook?: boolean; timeout?: number; thinking?: boolean;
+  retry?: { enabled?: boolean; maxRetries?: number; baseDelayMs?: number; maxAgentDelayMs?: number };
   streamHook?: () => void | Promise<void>; payloadHook?: () => unknown; responseHook?: () => void | Promise<void> } = {}) {
   const root = mkdtempSync(join(tmpdir(), "axiom-kiro-recovery-")), agentDir = join(root, "pi"); mkdirSync(agentDir);
   const keepAlive = setInterval(() => {}, 1000); t.after(() => clearInterval(keepAlive));
@@ -137,7 +138,7 @@ async function fixture(t: TestContext, options: { auto?: boolean; cancelHook?: b
     usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
   manager.appendMessage({ role: "user", content: "OWNED_OLD_REQUEST", timestamp: 1 }); manager.appendMessage(old);
   manager.appendMessage({ role: "user", content: "OWNED_CURRENT_REQUEST", timestamp: 1 }); manager.appendMessage({ ...old, content: [{ type: "text", text: "OWNED_PREFIX".repeat(20) }] });
-  const settingsManager = SettingsManager.inMemory({ cacheWarming: "off", compaction: { enabled: options.auto ?? true, reserveTokens: 1024, keepRecentTokens: 1 }, retry: { enabled: true, maxRetries: 1, baseDelayMs: 1, maxAgentDelayMs: 1 } });
+  const settingsManager = SettingsManager.inMemory({ cacheWarming: "off", compaction: { enabled: options.auto ?? true, reserveTokens: 1024, keepRecentTokens: 1 }, retry: { enabled: true, maxRetries: 1, baseDelayMs: 1, maxAgentDelayMs: 1, ...options.retry } });
   let hookCalls = 0, executions = 0; const preparedRequests: number[] = [];
   const loader = new DefaultResourceLoader({ cwd: root, agentDir, settingsManager, noExtensions: true, noSkills: true, noThemes: true, noContextFiles: true, noPromptTemplates: true, systemPrompt: "", appendSystemPrompt: [],
     extensionFactories: [pi => { pi.on("session_before_compact", event => {
@@ -170,6 +171,55 @@ async function fixture(t: TestContext, options: { auto?: boolean; cancelHook?: b
     verifyFresh(invocations = calls) { assert.equal(tickets.length, invocations); assert.equal(new Set(tickets).size, tickets.length); },
     reopened() { return SessionManager.open(manager.getSessionFile()!); } };
 }
+
+test("real AgentSession applies the session retry budget to Kiro without provider multiplication", async t => {
+  const defaults = SettingsManager.inMemory().getRetrySettings();
+  assert.deepEqual(defaults, { enabled: true, maxRetries: 3, baseDelayMs: 2000, maxAgentDelayMs: 60000 });
+  for (const variant of ["disabled", "zero-budget", "default-budget"] as const) await t.test(variant, async t => {
+    const maxRetries = variant === "zero-budget" ? 0 : defaults.maxRetries;
+    // Shorten only the waiting time; exercise the installed SDK's default budget.
+    const f = await fixture(t, { auto: false, retry: { enabled: variant !== "disabled", maxRetries } });
+    const endings: Array<{ success: boolean; attempt: number }> = [];
+    f.session.subscribe(event => { if (event.type === "auto_retry_end") endings.push({ success: event.success, attempt: event.attempt }); });
+    f.install(() => http(503));
+    await f.session.prompt("OWNED_RETRY_BUDGET_QUERY"); f.verifyFresh();
+    const retries = variant === "default-budget" ? defaults.maxRetries : 0;
+    assert.equal(f.calls, 1 + retries, "one provider fetch per session attempt, not nested transport retries");
+    assert.equal(f.results.length, f.calls); assert.ok(f.results.every(result => result.stopReason === "error"));
+    assert.equal(f.executions, 0); assert.equal(f.session.isIdle, true);
+    assert.equal(f.events.filter(type => type === "auto_retry_start").length, retries);
+    assert.deepEqual(endings, retries ? [{ success: false, attempt: retries }] : []);
+    assert.equal(f.events.includes("compaction_start"), false); assert.equal(f.events.at(-1), "agent_settled");
+    assert.equal(f.reopened().getEntries().filter(entry => entry.type === "context_edit").length, retries);
+  });
+});
+
+test("real AgentSession abort prevents Kiro continuation at and after retry scheduling", async t => {
+  for (const timing of ["synchronous-event", "after-sleep-start"] as const) await t.test(timing, async t => {
+    const delayMs = 50;
+    const f = await fixture(t, { auto: false, retry: { baseDelayMs: delayMs, maxAgentDelayMs: delayMs } });
+    const endings: Array<{ success: boolean; attempt: number; finalError?: string }> = [];
+    let cancellation: Promise<void> | undefined;
+    f.session.subscribe(event => {
+      if (event.type === "auto_retry_start") {
+        const cancel = () => { cancellation = f.session.abort(); };
+        // Pi emits retry_start before installing its sleep controller. The full
+        // abort latch must also prevent continuation in that synchronous window.
+        if (timing === "synchronous-event") cancel(); else setImmediate(cancel);
+      }
+      if (event.type === "auto_retry_end") endings.push({ success: event.success, attempt: event.attempt, finalError: event.finalError });
+    });
+    f.install(() => http(503));
+    await f.session.prompt("OWNED_CANCEL_RETRY_QUERY"); assert.ok(cancellation); await cancellation;
+    f.verifyFresh(1); assert.equal(f.calls, 1); assert.equal(f.executions, 0); assert.equal(f.session.isIdle, true);
+    assert.deepEqual(endings, [{ success: false, attempt: 1, finalError: "Retry cancelled" }]);
+    assert.equal(f.events.at(-1), "agent_settled"); assert.equal(f.events.includes("compaction_start"), false);
+    const settledEvents = [...f.events];
+    // Observe past the original deadline too, without explicitly resuming the run.
+    await new Promise(resolve => setTimeout(resolve, delayMs * 2));
+    assert.equal(f.calls, 1); assert.deepEqual(f.events, settledEvents);
+  });
+});
 
 test("real AgentSession retries only confirmed zero-output throttle/transient, never quota or unknown429", async t => {
   for (const variant of ["throttle", "transient", "quota", "unknown429", "quoted", "stream-transient"] as const) await t.test(variant, async t => {

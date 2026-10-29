@@ -184,8 +184,9 @@ export function kiroOAuth(options: {
       try {
         const redirectUri = `${callback.origin}/oauth/callback`;
         const registration = await request(`${origin}/client/register`, {
-          clientName: "Axiom Kiro", clientType: "public", scopes,
+          clientName: "OAuth Client", clientType: "public",
           grantTypes: ["authorization_code", "refresh_token"], issuerUrl: startUrl, redirectUris: [redirectUri],
+          scopes,
         }, signal);
         const clientId = required(registration.clientId, "客户端 ID"), clientSecret = required(registration.clientSecret, "客户端密钥");
         const clientSecretExpiresAt = typeof registration.clientSecretExpiresAt === "number" ? registration.clientSecretExpiresAt * 1000 : NaN;
@@ -202,8 +203,9 @@ export function kiroOAuth(options: {
     }
     if (flow !== "device") throw new Error("Kiro 授权流程无效。");
     const registration = await request(`${origin}/client/register`, {
-      clientName: "Axiom Kiro", clientType: "public", scopes,
+      clientName: "OAuth Client", clientType: "public",
       grantTypes: [deviceGrant, "refresh_token"], issuerUrl: startUrl,
+      scopes,
     }, signal);
     const clientId = required(registration.clientId, "客户端 ID"), clientSecret = required(registration.clientSecret, "客户端密钥");
     const clientSecretExpiresAt = typeof registration.clientSecretExpiresAt === "number" ? registration.clientSecretExpiresAt * 1000 : NaN;

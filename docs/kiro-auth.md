@@ -47,9 +47,15 @@ Builder ID 也是 AWS OIDC 协议，但它是**个人身份**，不能把 `idc` 
 3. 设备流程：`POST /device_authorization`，展示验证码，按服务端 interval 轮询 `/token` 的 device grant。缺失 interval 默认 5 秒，每次 `slow_down` 对后续间隔累计增加 5 秒。
 4. 刷新：`POST /token`，发送 `clientId/clientSecret/refreshToken/grantType=refresh_token`。
 
+注册 JSON 现有字段按旧 Windows 分析快照的原生 writer（`140e8ede0`）顺序排列：`clientName → clientType → entitledApplicationArn → grantTypes → issuerUrl → redirectUris → scopes`，仅写流程实际使用的字段。两种 OIDC 身份的未来设备/PKCE 注册均使用中性 `clientName: "OAuth Client"`，不新增 `entitledApplicationArn`；设备流程省略 `redirectUris`，PKCE 保留精确 loopback 地址。scope/grant/issuer、权限和刷新语义不因此改变；名称变更不回溯修改旧 OAuth 注册，也不证明 CLI 实际注册值、最终 wire 或服务端不可区分。两种身份 × 两种流程的完整 body、键缺席和顺序由[离线认证测试](../app/tests/kiro-auth.test.ts)固定。
+
+版本限定：旧 Windows 快照 SHA256 为 `0ff1d24eea11aa2e244524d635e1cfc8f9820522f4c5bc192fb99590d909320a`；现存一手证据只直接确认 chat/ACP v2 组件自报 **2.12.0**，不能把它当独立复核的 launcher 版本。旧地址不属于后来 Windows 2.35.1 或待建立的 Mac 原生基线，见[版本与证据边界](../.agents/skills/kiro-native-parity-evidence/references/windows-evidence.md)。
+
 `clientSecretExpiresAt` 是 Unix 秒级绝对时间，转换为毫秒保存；到期后要求重新注册登录，不将旧 refresh token 绑定到新客户端。`expiresIn` 为秒；刷新未返回新的 refresh token 时保留旧值。
 
-本次请求三个 scopes：`codewhisperer:completions`、`codewhisperer:analysis`、`codewhisperer:conversations`。REA 已从 Kiro CLI 2.33.1 的 `get_scopes`、映射函数及常量表核验这三项默认值；这不是所有配置下的完整运行契约或账号授权保证。参考 kiro.rs 的五项 scopes 中额外的 transformations/taskassist 不作为本次认证必需条件。
+本次请求三个 scopes：`codewhisperer:completions`、`codewhisperer:analysis`、`codewhisperer:conversations`。此前 macOS Kiro CLI **2.33.1** 的 `get_scopes`、映射函数及常量表已核验这三项默认值；这不是所有配置下的完整运行契约或账号授权保证。参考 kiro.rs 的五项 scopes 中额外的 transformations/taskassist 不作为本次认证必需条件。
+
+上述旧 Windows 快照另有独立静态补证：注册缓存未命中编排调用的 `1428e6f70` 读取 `api.oidc.scopePrefix`，缺省/空值回退为 `codewhisperer:`，其他非空前缀缺少末尾冒号时补齐；`14249ae60` 再与三个已核验后缀 `completions/analysis/conversations` 构造三项。因此该局部输入的默认值也与上述三项一致，但配置前缀可改变值。此证据不是新增真实登录、所有 PKCE 流程或最终线上 body 的验证，也不把该缓存分支可选字段的省略外推为 AWS 规范。Axiom 当前仍固定使用这三个 scopes；这项 scope 静态补证没有开放任意前缀或增加权限，不应与后续 clientName 中性化混称“所有注册参数均未改变”。
 
 ### Google / GitHub Portal
 
@@ -57,13 +63,19 @@ Builder ID 也是 AWS OIDC 协议，但它是**个人身份**，不能把 `idc` 
 
 Portal URL 参数、刷新请求字段及响应解析已有此前审查的 CLI 2.33.1 的函数级证据；Social 首次换码的完整调用链仍未恢复，其字段主要参考 kiro.rs。详见[认证静态对照](kiro-protocol-audit.md)。**未进行真实账号验证，不宣称 IDE 与 CLI 所有调用语义一致**。不伪造个人 profile ARN、机器指纹或未证实的客户端身份头。
 
+### Windows External 静态补证（非新增登录支持）
+
+旧 Windows 快照的一条 External 刷新消费路径静态核定了表单/缓存键及 `expires_in` 的 None/Some/error 分流：**只有成功解析为 None 才选择3600秒，Some使用其整数值，非法数字字符串或解析错误不是默认分支**。正常合法日期范围内生成UTC文本并保留可变小数精度。该有限结论不等于 Axiom 当前 OIDC/social 可在 expiry 缺失时补3600，不适用于所有身份或实际服务器寿命，也不是 Mac 新版本复验。可携带说明见[历史证据摘要](../.agents/skills/kiro-native-parity-evidence/references/windows-evidence.md)；原本机报告名为 `EXTERNAL-REFRESH-FIELDS-STATUS.md`，不随工程复制原始数据。
+
+这是只读静态与合成验证，不是新增真实登录/请求、成功落盘或完整schema/方法wire恢复。Axiom仍未新增独立External/API_KEY接入，未据此修改上述AWS OIDC或Portal刷新实现、凭据派生门禁、权限或身份；该分析报告为本机产物，不随工程发布。
+
 ## 实时模型目录
 
 「拉取模型列表」走原生 `Provider.refreshModels`，不是通用 OpenAI `/models`，也不把内置名单或旧缓存当成实时结果：
 
 - AWS JSON `POST /`，目标 `AmazonCodeWhispererService.ListAvailableModels`，`origin=KIRO_CLI`；`origin`、可选 `profileArn` 和分页 `nextToken` 同时写入 query 与 JSON body，使用当前账号 Bearer access token。
 - 固定服务端点：没有 profile 时使用 `q.us-east-1.amazonaws.com`；显式 profile ARN 的区域可选美国或法兰克福 `q.eu-central-1.amazonaws.com`。**SSO 认证区域不是模型服务区域。** 不接受自定义 Base URL，不跨区域或去掉 profile 猜测重试，不伪造个人 profile。
-- 每次请求完成所有分页后才发布目录；总超时 15 秒、最多 20 页、每页 2 MiB、最多 1000 个唯一模型。格式错误、循环分页、401/403/429 等均报错，不发布半份列表或显示缓存伪装的成功。
+- 每次请求完成所有分页后才发布目录；总超时 15 秒、最多 20 页、每页 2 MiB、最多 1000 个唯一模型。fetch/读体即使不响应 signal 也有独立的取消等待边界，迟到响应尝试清理且不等待卡住的 cancel，见[目录取消修复与离线验证](kiro-catalog-cancellation.md)。格式错误、循环分页、401/403/429 等均报错，不发布半份列表或显示缓存伪装的成功。
 - 仅采用服务返回的模型 ID、名称、有效 token 限额及 supportedInputTypes 声明。未知限额不显示为 0 上下文；含 IMAGE 时展示并传递图片能力，缺少/仅未知输入声明显示待确认，思考等级另按明确的 kiro.rs 兼容配置提供（不是目录声明），零值单价只是 SDK 占位，**不表示免费、已验证能力或可推理权限**。
 - 原生图片协议现已接入，`supportedInputTypes`（`TEXT`／`IMAGE`）及其来源随 V2 目录缓存保留；旧 V1 文本能力标记迁移为上游未知，不自动开启图片。`supportsPromptCache` 仍未映射为缓存行为。缺字段不是 false；工具／思考没有本次已核实的对应目录字段。思考采用单独的明确 backend ID 兼容配置，不凭名称子串猜测，详见[思考等级配置](kiro-thinking.md)。用户明确的能力覆盖和主动禁图设置仍保留，详见[图片请求](kiro-images.md)。
 - 空目录意味着本次接口确实返回空数组，不用静态条目补齐。企业账号仍可能需要已选定的 profile 和组织授权；本次不提供 profile 枚举/切换界面。
@@ -95,7 +107,7 @@ Kiro 执行进程的 HTTP 池默认空闲保留时间现为 60 秒，直连与 H
 
 ### 此前认证审查的官方发布包
 
-以下是此前认证审查保留的 macOS 2.33.1 证据，不是本轮 Windows 目录分析的目标，也不代表最新 stable 版本。本轮目录目标为本机 Windows CLI **2.12.0**；查询到的最新 stable manifest 为 **2.34.0**，没有下载或安装该新版。
+以下是此前认证审查保留的 macOS 2.33.1 证据，不是本次待建立的 Mac 原生基线，也不代表当前 stable 版本。当时 Windows 目录分析使用的是旧快照（仅直接确认 chat/ACP v2 组件自报 **2.12.0**，非独立复核 launcher 版本）；**2.34.0**是该阶段的历史 stable manifest 查询结果，当时未下载或安装。后续 Windows 基准和最新迁移顺序见[Mac接手文档](kiro-macos-handoff.md)，不要按本段历史版本恢复实验。
 
 - 官方安装入口：<https://cli.kiro.dev/install>；仅静态读取，未执行脚本。
 - 固定版本：**Kiro CLI 2.33.1**，来自官方 stable manifest。

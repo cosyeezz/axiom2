@@ -154,7 +154,7 @@ export function kiroChat(oauth: OAuthAuth, transport?: typeof fetch) {
         headers.set("Content-Type", "application/x-amz-json-1.0"); headers.set("Accept", "application/vnd.amazon.eventstream");
         headers.set("x-amz-target", "AmazonCodeWhispererStreamingService.GenerateAssistantResponse");
         headers.set("x-amzn-codewhisperer-optout", "true");
-        headers.set("User-Agent", "Axiom KiroChat/1.0"); headers.set("amz-sdk-invocation-id", randomUUID()); headers.set("amz-sdk-request", "attempt=1; max=1");
+        headers.set("amz-sdk-invocation-id", randomUUID()); headers.set("amz-sdk-request", "attempt=1; max=1");
         stage = "transport";
         response = await waitForKiro((options.fetch ?? transport ?? globalThis.fetch)(kiroChatEndpoint(account), { method: "POST", redirect: "error", headers, body, signal: bounded }), bounded, cancelBody);
         bounded.throwIfAborted(); stage = "response";

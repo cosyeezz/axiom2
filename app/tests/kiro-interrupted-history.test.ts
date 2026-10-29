@@ -164,13 +164,13 @@ test("Kiro unknown tool outcomes constrain side-effect replay even for synthetic
     assert.match(wire, /Do not blindly repeat operations with side effects/);
     assert.match(wire, /verify the current state or ask the user/);
     assert.match(wire, /normalized user message does not prove/);
-    assert.equal(wire.match(/Axiom recovery safety/g)?.length, 1);
+    assert.equal(wire.match(/\[Recovery safety\]/g)?.length, 1);
     assert.doesNotMatch(wire, /unknown-call|toolResults/);
     assert.equal(first.seenCalls.has("unknown-call"), true);
     assert.deepEqual(first.payload, second.payload); assert.deepEqual(normalized, before);
   }
   const paired = request([user("Start"), assistant(["done"]), result("done")]);
-  assert.doesNotMatch(JSON.stringify(paired.payload), /Axiom recovery safety/);
+  assert.doesNotMatch(JSON.stringify(paired.payload), /\[Recovery safety\]/);
 });
 
 test("Kiro system updates do not close pending calls and remain part of the full policy", () => {

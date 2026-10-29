@@ -91,9 +91,31 @@ export function restoreKiroCatalog(models: unknown, legacy = false): Model<Api>[
     });
   } catch { return undefined; }
 }
+/** Bound waiting even when an injected transport/reader ignores the abort signal. */
+function waitForCatalog<T>(work: PromiseLike<T>, signal: AbortSignal, late?: (value: T) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const abort = () => {
+      if (settled) return;
+      settled = true; signal.removeEventListener("abort", abort); reject(signal.reason);
+    };
+    Promise.resolve(work).then(value => {
+      if (settled) { late?.(value); return; }
+      settled = true; signal.removeEventListener("abort", abort); resolve(value);
+    }, error => {
+      if (settled) return;
+      settled = true; signal.removeEventListener("abort", abort); reject(error);
+    });
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+  });
+}
+function cancelCatalogBody(response: Response) {
+  if (response.body && !response.body.locked) void response.body.cancel().catch(() => {});
+}
 async function responseJson(response: Response, signal: AbortSignal): Promise<Json> {
   if (Number(response.headers.get("content-length")) > maxBytes) {
-    await response.body?.cancel();
+    cancelCatalogBody(response);
     throw Error("Kiro 模型目录响应超过本地 2 MiB 限制。");
   }
   const reader = response.body?.getReader();
@@ -105,7 +127,7 @@ async function responseJson(response: Response, signal: AbortSignal): Promise<Js
   try {
     signal.throwIfAborted();
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await waitForCatalog(reader.read(), signal);
       signal.throwIfAborted();
       if (done) break;
       size += value.byteLength;
@@ -116,7 +138,7 @@ async function responseJson(response: Response, signal: AbortSignal): Promise<Js
     catch { throw Error("Kiro 模型目录响应格式无效。"); }
   } finally {
     signal.removeEventListener("abort", abort);
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }
@@ -138,24 +160,23 @@ export async function fetchKiroCatalog(credential: Credential | undefined, signa
     for (const [key, value] of Object.entries(body)) url.searchParams.set(key, value);
     let response: Response;
     try {
-      response = await transport(url.href, {
+      response = await waitForCatalog(transport(url.href, {
         method: "POST", redirect: "error", signal: bounded,
         headers: { Authorization: `Bearer ${account.access}`, "Content-Type": "application/x-amz-json-1.0",
           Accept: "application/json", "x-amz-target": "AmazonCodeWhispererService.ListAvailableModels",
-          "amz-sdk-invocation-id": randomUUID(), "amz-sdk-request": "attempt=1; max=1",
-          "User-Agent": "Axiom KiroCatalog/1.0" },
+          "amz-sdk-invocation-id": randomUUID(), "amz-sdk-request": "attempt=1; max=1" },
         body: JSON.stringify(body),
-      });
+      }), bounded, cancelCatalogBody);
     } catch {
       bounded.throwIfAborted();
       throw Error("Kiro 模型目录网络请求失败，请检查网络后重试。");
     }
     if (bounded.aborted) {
-      await response.body?.cancel();
+      cancelCatalogBody(response);
       bounded.throwIfAborted();
     }
     if (!response.ok) {
-      await response.body?.cancel();
+      cancelCatalogBody(response);
       if (response.status === 401) throw Error("Kiro 认证已失效，请重新登录后拉取模型目录。");
       if (response.status === 403) throw Error("Kiro 账号无权读取模型目录，请检查订阅、组织权限及所选 profile。");
       if (response.status === 429) throw Error("Kiro 模型目录请求被限流，请稍后重试。");

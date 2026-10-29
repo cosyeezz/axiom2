@@ -3,15 +3,15 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, loadSkills, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { tmpdir } from "./temporary.js";
-import { axiomSystemPrompt, buildAxiomSystemPrompt, installAxiomPrompt, piDevelopmentSkillPath } from "../src/server/axiom-prompt.js";
+import { axiomSystemPrompt, neutralSystemPrompt, buildAxiomSystemPrompt, installAxiomPrompt, piDevelopmentSkillPath } from "../src/server/axiom-prompt.js";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getCurrentSystemMessage, getSystemMessageText, type SystemMessage } from "@earendil-works/pi-ai";
 import type { BuildSystemPromptOptions } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { capabilityRuntime, discoverCapabilities } from "../src/server/capability-resources.js";
-import { environmentResourceOptions } from "../src/server/environment-resources.js";
+import { environmentResourceOptions as hostResourceOptions } from "../src/server/environment-resources.js";
 import { previewEnvironment } from "../src/server/session-environment.js";
 import { prepareSkillInput } from "../src/server/skill-input.js";
 
@@ -19,6 +19,10 @@ const nativePrompt = await import(new URL("./core/system-prompt.js", import.meta
   buildSystemPrompt(input: BuildSystemPromptOptions): string;
   buildSystemPromptSections(input: BuildSystemPromptOptions): Record<string, string>;
 };
+
+// Agent directories do not disable Pi's shared user-home skill discovery.
+// These fixtures exercise shipped/selected host resources, not external skills.
+const environmentResourceOptions = (...args: Parameters<typeof hostResourceOptions>) => ({ ...hostResourceOptions(...args), noSkills: true });
 
 test("native English tool snippets and rules survive byte-for-byte, including hidden and extension tools", () => {
   for (const selectedTools of [["read", "bash", "edit", "write"], ["read", "grep", "extension"]]) {
@@ -47,6 +51,86 @@ test("native English tool snippets and rules survive byte-for-byte, including hi
   const defaults = { cwd: "/project" };
   assert.equal(buildAxiomSystemPrompt({ ...defaults, forceSystemPrompt: nativePrompt.buildSystemPrompt(defaults) + "\nEXTENSION_SUFFIX" }),
     buildAxiomSystemPrompt(defaults) + "\nEXTENSION_SUFFIX");
+});
+
+test("Kiro neutralizes only generated identity and the shipped skill description, preserving caller content", () => {
+  const f = fixture();
+  try {
+    const { skills } = loadSkills({ cwd: f.cwd, agentDir: f.agentDir, skillPaths: [piDevelopmentSkillPath], includeDefaults: false });
+    const custom = { ...skills[0], name: "user-skill", filePath: join(f.cwd, "USER.md"), description: "User Axiom skill must remain" };
+    const options: BuildSystemPromptOptions = { cwd: f.cwd, skills: [...skills, custom],
+      appendSystemPrompt: "APPENDED Axiom policy", sections: { extra: "User Axiom section" } };
+    const before = structuredClone(options), actual = buildAxiomSystemPrompt(options, "kiro-chat");
+    assert.ok(actual.startsWith(neutralSystemPrompt));
+    assert.doesNotMatch(actual, /Axiom is built on Pi|Axiom's underlying/);
+    for (const text of [custom.description, options.appendSystemPrompt!, "User Axiom section"]) assert.ok(actual.includes(text));
+    assert.ok(buildAxiomSystemPrompt(options).startsWith(axiomSystemPrompt));
+    assert.match(buildAxiomSystemPrompt(options), /Axiom is built on Pi/);
+    for (const customPrompt of [axiomSystemPrompt, nativePrompt.buildSystemPromptSections(options).preamble]) {
+      const input = { ...options, customPrompt };
+      assert.ok(buildAxiomSystemPrompt(input, "kiro-chat").startsWith(customPrompt));
+    }
+    const opaque = "OPAQUE Axiom extension prompt";
+    assert.equal(buildAxiomSystemPrompt({ ...options, forceSystemPrompt: opaque }, "kiro-chat"), opaque);
+    const forced = nativePrompt.buildSystemPrompt(options) + "\nEXTENSION Axiom suffix";
+    assert.equal(buildAxiomSystemPrompt({ ...options, forceSystemPrompt: forced }, "kiro-chat"), actual + "\nEXTENSION Axiom suffix");
+    assert.deepEqual(options, before);
+  } finally { f.cleanup(); }
+});
+
+test("runtime Kiro identity follows model switches and reload without rewriting caller prompts or history", async () => {
+  const f = fixture(), settingsManager = SettingsManager.inMemory({ cacheWarming: "off" });
+  const loader = new DefaultResourceLoader({ cwd: f.cwd, agentDir: f.agentDir, settingsManager,
+    ...environmentResourceOptions(f, () => ({})), noExtensions: true });
+  await loader.reload();
+  const { session } = await createAgentSession({ cwd: f.cwd, agentDir: f.agentDir, settingsManager, resourceLoader: loader,
+    sessionManager: SessionManager.inMemory(f.cwd) });
+  try {
+    const bridge = session as unknown as { _baseSystemPromptOptions: BuildSystemPromptOptions;
+      _preparePromptAndToolLoadout(options: BuildSystemPromptOptions, messages: AgentMessage[]): SystemMessage | undefined };
+    const setApi = (api: "kiro-chat" | "openai-completions") => (session.agent.state.model = {
+      provider: api === "kiro-chat" ? "kiro" : "fixture", id: "fixture", name: "Fixture", api,
+      baseUrl: "http://127.0.0.1:1", reasoning: false, input: ["text"], contextWindow: 32000, maxTokens: 1024,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
+    installAxiomPrompt(session);
+    const messages: AgentMessage[] = [{ role: "system", content: "", timestamp: 0,
+      sections: { preamble: axiomSystemPrompt, extra: "Historical Axiom policy" } }];
+    const history = JSON.stringify(messages[0]);
+    const prepare = () => {
+      const update = bridge._preparePromptAndToolLoadout(bridge._baseSystemPromptOptions, messages);
+      if (update) messages.push(update);
+      return update;
+    };
+    setApi("kiro-chat"); prepare();
+    assert.equal(getCurrentSystemMessage(messages)?.sections?.preamble, neutralSystemPrompt);
+    assert.ok(session.systemPrompt.startsWith(neutralSystemPrompt));
+    assert.doesNotMatch(getCurrentSystemMessage(messages)?.sections?.skills ?? "", /Axiom is built on Pi|Axiom's underlying/);
+    assert.equal(prepare(), undefined);
+    setApi("openai-completions"); prepare();
+    assert.equal(getCurrentSystemMessage(messages)?.sections?.preamble, axiomSystemPrompt);
+    const options = bridge._baseSystemPromptOptions;
+    options.forceSystemPrompt = nativePrompt.buildSystemPrompt(options) + "\nFORCED Axiom suffix";
+    prepare();
+    assert.ok(options.forceSystemPrompt.startsWith(axiomSystemPrompt));
+    setApi("kiro-chat");
+    assert.ok(session.systemPrompt.startsWith(neutralSystemPrompt), "getter uses the original generated force prompt");
+    prepare();
+    assert.ok(options.forceSystemPrompt.startsWith(neutralSystemPrompt));
+    assert.ok(options.forceSystemPrompt.endsWith("FORCED Axiom suffix"));
+    setApi("openai-completions"); prepare();
+    assert.ok(options.forceSystemPrompt.startsWith(axiomSystemPrompt));
+    options.forceSystemPrompt = "OPAQUE Axiom extension prompt";
+    setApi("kiro-chat"); prepare();
+    assert.equal(session.systemPrompt, options.forceSystemPrompt);
+    delete options.forceSystemPrompt;
+    writeFileSync(join(f.cwd, ".pi", "SYSTEM.md"), axiomSystemPrompt);
+    await session.reload(); prepare();
+    assert.ok(session.systemPrompt.startsWith(axiomSystemPrompt), "explicit user identity is not a generated identity");
+    writeFileSync(join(f.cwd, ".pi", "SYSTEM.md"), "");
+    await session.reload(); prepare();
+    assert.ok(session.systemPrompt.startsWith(neutralSystemPrompt));
+    assert.equal(JSON.stringify(messages[0]), history);
+  } finally { session.dispose(); f.cleanup(); }
 });
 
 test("runtime prompt patches follow native loadouts, migrate old docs once, and survive reload", async () => {

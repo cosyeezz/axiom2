@@ -23,7 +23,7 @@ test("Kiro sends current user images in native AWS blob JSON, without mutating t
   const messages: Context["messages"] = [{ role: "user", content: [{ type: "text", text: "look" }, png, { type: "text", text: "closely" }, png], timestamp: 1 }];
   const before = structuredClone(messages), state = request(messages), current = state.currentMessage.userInputMessage;
   assert.equal(current.modelId, model.id); assert.equal(current.origin, "KIRO_CLI");
-  assert.equal(current.content, "<axiom_system>\nAxiom image test\n</axiom_system>\n\nlook\nclosely");
+  assert.equal(current.content, "<system_prompt>\nAxiom image test\n</system_prompt>\n\nlook\nclosely");
   assert.deepEqual(current.images, [wireImage(), wireImage()]);
   assert.deepEqual(messages, before); assert.equal(state.history, undefined);
   assert.ok(!JSON.stringify(current.images).includes("data:image/"));

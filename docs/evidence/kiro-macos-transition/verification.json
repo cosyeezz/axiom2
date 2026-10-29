@@ -1,0 +1,262 @@
+{
+  "schema": "kiro-macos-transition-checkpoint-1",
+  "status": "passed_selected_commit_checks_not_final_parity",
+  "baselineCommit": "c2efc89cafdfc27cf8861e7c9005073af1166761",
+  "testedIndexTree": "5096670dca5bfd5ead992db461e45bfdbf251c03",
+  "preReceiptIndexTree": "6081052683686e431f46cd1faaf9da931f4ed1e6",
+  "sourceSnapshot": {
+    "scope": "1823 exported app/scripts/skills/Kiro-doc files, each matched its tested tree blob before/after; 9910 unrelated entries omitted",
+    "sourceManifestSha256": "e41e918c65b7f1946e5f0f2514d73ed4d0c9c6a9621d32dacbbe9549328f3589",
+    "definition": "SHA256 of UTF8(path TAB fileSHA256 LF) in tested tree order for exported present files; node_modules excluded",
+    "dependencies": "Existing Windows app/node_modules via junction, no dependency edits or installs; Node v24.19.0, Pi 1.1.0",
+    "sourceUnchangedAfterTests": true,
+    "afterTestsOnlyDocumentChanges": [
+      "docs/evidence/kiro-macos-transition/verify-skill.mjs",
+      "docs/kiro-auth.md"
+    ]
+  },
+  "checks": [
+    {
+      "name": "selected Kiro prompt and separated compaction hunk",
+      "cwd": "<exported-index>/app",
+      "command": "node node_modules/tsx/dist/cli.mjs --import ./tests/vite-assets.mjs --test --test-concurrency=1 --test-timeout=30000 --test-name-pattern \"Kiro (compaction|neutralizes|identity)\" tests/compression-request.test.ts tests/axiom-prompt.test.ts",
+      "exitCode": 0,
+      "executions": 1,
+      "tests": 3,
+      "passed": 3,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationMs": 8168.159,
+      "source": "mac-transition-selected-tests-01.log",
+      "sourceSha256": "c6788d59ab2d65ae693cb45030d92dcd2e1367206ae758943765550005593d71",
+      "boundary": "synthetic/local session, no real model or CLI; no historical 190-test rerun"
+    },
+    {
+      "name": "selected index app typecheck",
+      "cwd": "<exported-index>/app",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+      "exitCode": 0,
+      "executions": 1,
+      "diagnostics": [],
+      "source": "mac-transition-types-01.log",
+      "sourceSha256": "0af0caa2c64f1c670be0f69548c0ef6a1ffdb6370aecab740374574556a5360c",
+      "boundary": "tsconfig app source/tests/vite config; no build, deployment or restart"
+    },
+    {
+      "name": "portable Skill and project discovery",
+      "cwd": "<repo>",
+      "command": "node docs/evidence/kiro-macos-transition/verify-skill.mjs",
+      "exitCode": 0,
+      "executions": 1,
+      "node": "v24.19.0",
+      "pi": "1.1.0",
+      "parserSha256": "0e20ec500ed9783d5b01b5399e6600134fc3fdd10e6dc46c9113bc01565c9aa5",
+      "skillCount": 1,
+      "diagnostics": [],
+      "discoveries": [
+        {
+          "cwd": ".",
+          "source": "auto",
+          "enabled": true
+        },
+        {
+          "cwd": "app",
+          "source": "auto",
+          "enabled": true
+        }
+      ],
+      "localLinkInstances": 51,
+      "markdownFilesChecked": 10,
+      "boundary": "Pi parser/package resolver, trusted project isolated settings; not active-session hot discovery/selection or Mac runtime"
+    },
+    {
+      "name": "independent document review",
+      "source": "mac-transition-doc-review-01.md",
+      "sourceSha256": "d1af635608dc138fbf12f0fce511fb22e6a9e019e97f9822a19b953aa2b34b73",
+      "files": 9,
+      "closure": {
+        "B1": "corrected auth historical version wording now staged",
+        "B2": "repo/index/HEAD target present, HEAD and index blob b40b5c7717ce39e2afd113aa1fd30aca70fbecd7; only initial selective snapshot omitted it"
+      },
+      "boundary": "Initial review on selective snapshot; subsequent focused correction checked in repo, main verified staged auth SHA"
+    },
+    {
+      "name": "index scope and preservation",
+      "stagedFilesBeforeThisReceipt": 29,
+      "mixedFilesOnlyKiroHunks": [
+        "app/src/server/compression-request.ts",
+        "app/tests/compression-request.test.ts"
+      ],
+      "otherWorkingFilesUnchanged": 20,
+      "userSkillEqualCopies": 6,
+      "historicalPinsMatched": 13,
+      "frozenHistoricalBundleFiles": 30,
+      "frozenHistoricalBundleReadOnly": 30,
+      "gitDiffCachedCheckExit": 0,
+      "limitedCredentialPatternScan": "passed; not an exhaustive secret audit"
+    }
+  ],
+  "setupFailures": [
+    "First full snapshot checkout hit Windows long path; its partial directory was removed before any test.",
+    "PowerShell newline stdin added CR to Git paths; corrected with binary NUL stdin and a fresh short-path selective snapshot before any test.",
+    "Test worker hash preflight used an unavailable .NET formatting API and then expected omitted tree entries; fixed preflight only, test command executed once."
+  ],
+  "stagedFiles": [
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/SKILL.md",
+      "bytes": 12233,
+      "sha256": "77aa89b644410483e97db6d15014470afdf238dd8a7389d800b3caa62c0230df"
+    },
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/references/case-lessons.md",
+      "bytes": 7339,
+      "sha256": "b6d7f956b305dd6f37562b7dd26b025b197236defacfa710cc0a700ef2b539e4"
+    },
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/references/macos-native.md",
+      "bytes": 4468,
+      "sha256": "522a3dd0be9f4f544513f56945a89650da6a3ccef07c67ac30b32953a745e0b4"
+    },
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/references/session-entry.md",
+      "bytes": 1569,
+      "sha256": "8b97fa1b730c7e7bdadb95975993d597ad5cf9287dc5a96bb4ec6ce6e09ed9ac"
+    },
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/references/windows-evidence.md",
+      "bytes": 5098,
+      "sha256": "fd306e7e80d94272f35159d4ed55643004a4b2b09dc9cb91a15e7cecec8d2153"
+    },
+    {
+      "path": ".agents/skills/kiro-native-parity-evidence/references/windows-runtime.md",
+      "bytes": 8961,
+      "sha256": "c99079be1cdcd0e374d221cfb8b5ee78e3664dea5c6bb9363e4768c178a7728e"
+    },
+    {
+      "path": "app/src/server/axiom-prompt.ts",
+      "bytes": 5924,
+      "sha256": "267d8b356718a9826d7541fa3d4c9dac80e45eb84a626efe8529384728dbb0b8"
+    },
+    {
+      "path": "app/src/server/compression-request.ts",
+      "bytes": 15148,
+      "sha256": "211d15cc667dac2ab0b9aa5af66bdff6faf29d455df84e024a3eb025ce1d0c0e"
+    },
+    {
+      "path": "app/src/server/providers/kiro-auth.ts",
+      "bytes": 16770,
+      "sha256": "c729b4573d38b3019e1bf774572e7b6cebd02bacf47a86c97b4f29dbfd9ab41e"
+    },
+    {
+      "path": "app/src/server/providers/kiro-catalog.ts",
+      "bytes": 11547,
+      "sha256": "e5b8bce68fcd0d9dcceb93c7776715db0989bbe28340018e03559bbf420492f4"
+    },
+    {
+      "path": "app/src/server/providers/kiro-chat-protocol.ts",
+      "bytes": 12628,
+      "sha256": "ad11df7e524719b79959a53bba94868c6f183addfced79874b3e01b738995b6d"
+    },
+    {
+      "path": "app/src/server/providers/kiro-chat.ts",
+      "bytes": 22098,
+      "sha256": "51e025afd812b170cbe9ab03264b38270f925d7aa6e5e37a70f177f50d89ad32"
+    },
+    {
+      "path": "app/src/server/providers/kiro-profile.ts",
+      "bytes": 4107,
+      "sha256": "075fa82487cdf0d405644945ba07db16031c6b3bd9f33c74f5c30347ad4ea569"
+    },
+    {
+      "path": "app/tests/axiom-prompt.test.ts",
+      "bytes": 20994,
+      "sha256": "a062abdced143b29f2397479bbfe49b180ccb8b197fdc580dd5a513206d795e2"
+    },
+    {
+      "path": "app/tests/compression-request.test.ts",
+      "bytes": 18863,
+      "sha256": "c9cf5e234a16b5ce2ebf41d6e039060ceb767bb0bb3cc8a96f9b2cb006e68f3e"
+    },
+    {
+      "path": "app/tests/kiro-auth.test.ts",
+      "bytes": 13561,
+      "sha256": "26302b098cc946605a2ef181840f49e0c35976fcc0199371a3d7912a4227a3d2"
+    },
+    {
+      "path": "app/tests/kiro-catalog-bounds.test.ts",
+      "bytes": 5879,
+      "sha256": "b989913dfc3b54591e3cda5500679ebceb3f53cc9b0a1d8d5ecb497db23730f2"
+    },
+    {
+      "path": "app/tests/kiro-catalog.test.ts",
+      "bytes": 17627,
+      "sha256": "4f4908c3adaa65ed4d8586bc69ffb9eec1a383856d108a7700ef0f99220a419b"
+    },
+    {
+      "path": "app/tests/kiro-chat.test.ts",
+      "bytes": 30787,
+      "sha256": "3ed793c1ee67a42b6b387db5cb176de570d6e9ef40d08e9c7002d1cea69c9053"
+    },
+    {
+      "path": "app/tests/kiro-failure.test.ts",
+      "bytes": 35198,
+      "sha256": "71c62fd476654c6260ecf6f453849cfa7cb88f0d5e486be1eb01b1fc592e4f58"
+    },
+    {
+      "path": "app/tests/kiro-images.test.ts",
+      "bytes": 11736,
+      "sha256": "c6695ff819b629163d8d80a0a04d38c272feaab30a3aa4917a4af7f9052b50e9"
+    },
+    {
+      "path": "app/tests/kiro-interrupted-history.test.ts",
+      "bytes": 17881,
+      "sha256": "c631fca33bdd571c590fa36ad25bc09ec6eef03cde864af51625feb4fad80215"
+    },
+    {
+      "path": "app/tests/kiro-profile.test.ts",
+      "bytes": 6203,
+      "sha256": "00981da0ce574be6a9562ae614f434ca046ab9b01e2e8fa1f9fd3ea5299fc204"
+    },
+    {
+      "path": "docs/evidence/kiro-macos-transition/README.md",
+      "bytes": 1671,
+      "sha256": "61ba1c806999d32dfd483b1b0ee696516b40949cbb7b2e26f1a2824f48de202b"
+    },
+    {
+      "path": "docs/evidence/kiro-macos-transition/verify-skill.mjs",
+      "bytes": 4509,
+      "sha256": "03b237cad8182de7fa5fccbf0a9195f3039bbfd2ffa9f419f3bdad9fc4548521"
+    },
+    {
+      "path": "docs/kiro-auth.md",
+      "bytes": 21470,
+      "sha256": "0b6968a089d0ac03f2d1a74b8f51af089ad27642262f0b61c451257823e16505"
+    },
+    {
+      "path": "docs/kiro-catalog-cancellation.md",
+      "bytes": 3749,
+      "sha256": "2ff14e6a14e0a617cdf998708857cd532ff3db89c316e686cb517baf40e7bbf3"
+    },
+    {
+      "path": "docs/kiro-handoff.md",
+      "bytes": 6342,
+      "sha256": "73a7645e6e24747cb7416abe16a3d2611e6430437092a6390b7cbc0320ecb882"
+    },
+    {
+      "path": "docs/kiro-macos-handoff.md",
+      "bytes": 6950,
+      "sha256": "7bba031738c744e313f8eec4d2328d0ead6910b76ca41db43536b8998b8eea4a"
+    }
+  ],
+  "originalLogs": "Named logs/review remain in the original Windows evidence directory; this receipt carries results and hashes, not their private absolute paths or complete logs.",
+  "limits": [
+    "This is a local engineering checkpoint, not completion of native/server indistinguishability.",
+    "Actual macOS host, architecture, official CLI version/artifact and new baseline have not been obtained.",
+    "Windows controller01/JS01 remain Failed and forbidden for Native; controller02 remains DRAFT_READY=False; Windows supervisor is not a Mac prerequisite.",
+    "No new target Native/CLI, model request, capture, credential export, application restart or old fixture execution.",
+    "Previous suite counts are inherited history, not combined with the three new selected tests.",
+    "Read-only attributes are not ACL immutability; source hashes do not prove atomic loaded-image identity.",
+    "No remote push performed by these checks."
+  ]
+}

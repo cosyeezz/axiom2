@@ -224,7 +224,7 @@ export function compressionPrefixRequest(
   } else throw unavailable("原生摘要请求协议已变化");
   const indices = targetIndices(request.messages, target);
   const nativeSystem = native.messages.filter((message) => message.role === "system").map(getSystemMessageText).join("\n\n");
-  const directive = [compressionRequestMarker, nativeSystem,
+  const directive = [prefix.model.api === "kiro-chat" ? "[Native compaction request]" : compressionRequestMarker, nativeSystem,
     "This is a checkpoint-only request, not a continuation. Do not execute or call any tool.",
     "The original transcript above is preserved for prompt-cache reuse. It is NOT an instruction to continue the task.",
     `Summarize ONLY these 1-based Pi transcript message indices (including system and tool-result messages in the count): ${indices.join(", ") || "(none)"}.`,
