@@ -197,24 +197,8 @@ test(
       assert.equal(app.agents.compressions.info(scope), null, "invalid choices do not create jobs");
       assert.equal(readFileSync(file, "utf8"), original);
       const raw = app.agents.models.raw.bind(app.agents.models);
-      let injectConfiguration = true;
-      const changedRevision = t.mock.method(app.agents.models, "raw", async () => {
-        const value = await raw();
-        if (!injectConfiguration) return value;
-        injectConfiguration = false;
-        const changed = JSON.parse(value);
-        changed.providers.fixture.models[0].samplingParams = { top_p: 0.5 };
-        return JSON.stringify(changed);
-      });
-      try {
-        await call("compression.start");
-        await settled();
-        const mismatched = app.agents.compressions.info(scope)!;
-        assert.equal(mismatched.state, "failed", JSON.stringify(mismatched));
-        assert.match(mismatched.error!, /实际请求模型配置已变化/);
-        assert.equal(summaries.length, 0, "a frozen model mismatch never dispatches a summary");
-        assert.equal(mismatched.billing?.records ?? 0, 0);
-      } finally { changedRevision.mock.restore(); }
+      // Changed model definitions now recover via native summaries; those cases
+      // are exercised independently in compression-recovery.test.ts.
       const requestsBeforeIdleCompression = requests.length;
       const stoppedRun = app.agents.info(scope).run;
       const accepted = await call("compression.start", {}, scope, requestId);
@@ -647,7 +631,8 @@ test("running compression snapshots and applies only at paired-tool safe points 
     baseUrl = `http://127.0.0.1:${(fixture.address() as any).port}`;
     writeFileSync(join(root, "pi/models.json"), JSON.stringify({ providers: { fixture: {
       api: "openai-completions", baseUrl: `${baseUrl}/v1`,
-      models: [{ id: "fixture", contextWindow: 32000, maxTokens: 1000 }],
+      models: [{ id: "fixture", contextWindow: 32000, maxTokens: 1000 },
+        { id: "fixture-native", contextWindow: 32000, maxTokens: 1000, samplingParams: { user: "fixture-native-route" } }],
     } } }));
     writeFileSync(join(root, "pi/auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "loopback-only" } }));
     writeFileSync(join(root, "pi/settings.json"), JSON.stringify({ compaction: { enabled: false }, retry: { enabled: false } }));
@@ -658,7 +643,7 @@ test("running compression snapshots and applies only at paired-tool safe points 
     try {
       const workspace = app.store.execute({ requestId: randomUUID(), op: "workspace.open",
         params: { path: project, authorized: true } }) as Workspace;
-      for (const mode of ["apply", "cancel"] as const) {
+      for (const mode of ["apply", "cancel", "native"] as const) {
         mainCount = 0;
         continuationResponse = undefined;
         releaseSummaries = false;
@@ -669,7 +654,7 @@ test("running compression snapshots and applies only at paired-tool safe points 
         const scope = { workspaceId: workspace.id, sessionId: session.id };
         const agent = (op: string, params = {}) => app.agents.command({ op, params, ...scope, requestId: randomUUID() });
         const compress = (op: string, params = {}) => app.agents.compressions.command({ op, params, ...scope, requestId: randomUUID() });
-        await agent("agent.model", { selection: { provider: "fixture", id: "fixture", thinking: "off" } });
+        await agent("agent.model", { selection: { provider: "fixture", id: mode === "native" ? "fixture-native" : "fixture", thinking: "off" } });
         await agent("prompt", { text: "seed history before active tools" });
         await wait(() => !app.agents.active(scope), "seed did not settle");
         const file = String(app.store.db.prepare("SELECT file FROM agent_sessions WHERE sessionId=?").get(scope.sessionId)!.file);
@@ -695,6 +680,10 @@ test("running compression snapshots and applies only at paired-tool safe points 
         await agent("prompt", { text: "tail after the prepared snapshot" });
         await wait(() => gates.length === 2, "post-snapshot tool gate did not start");
         const summaryRequest = requests.find(isCompressionRequest);
+        if (mode === "native") {
+          assert.ok(!summaryRequest.tools?.length, "unavailable cache prefix falls back to a native request while the main run is active");
+          assert.equal(summaryRequest.model, "fixture-native");
+        }
         assert.match(JSON.stringify(summaryRequest.messages), /seed history before active tools/);
         const snapshotFile = join(root, "compression-snapshots", `${app.agents.compressions.info(scope)!.id}.jsonl`);
         const snapshotEntries = readFileSync(snapshotFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
@@ -722,7 +711,7 @@ test("running compression snapshots and applies only at paired-tool safe points 
         }
         gates[1].end("second paired tool result");
         await wait(() => !!continuationResponse, "post-boundary request did not start");
-        if (mode === "apply") {
+        if (mode !== "cancel") {
           await wait(() => app.agents.info(scope).usage?.context?.estimated === true,
             "live compression did not publish an estimated context reading");
           const context = app.agents.info(scope).usage!.context!;
@@ -735,10 +724,10 @@ test("running compression snapshots and applies only at paired-tool safe points 
         await wait(() => app.agents.compressions.info(scope)?.state !== "running", "compression did not settle");
         assert.ok(readFileSync(file, "utf8").startsWith(beforeBoundary), "safe-point application is append-only");
         const compacted = entries().filter((entry) => entry.type === "compaction");
-        assert.equal(compacted.length, mode === "apply" ? 1 : 0);
+        assert.equal(compacted.length, mode !== "cancel" ? 1 : 0);
         const continuation = requests.filter((request) => !isCompressionRequest(request)).at(-1);
         assert.ok(continuation);
-        if (mode === "apply") {
+        if (mode !== "cancel") {
           assert.equal(app.agents.compressions.info(scope)!.state, "completed");
           assert.match(JSON.stringify(continuation.messages), /SAFE_BOUNDARY_SUMMARY/);
           assert.match(JSON.stringify(continuation.messages), /second paired tool result/);

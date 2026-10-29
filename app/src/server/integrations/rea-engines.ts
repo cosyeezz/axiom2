@@ -60,6 +60,11 @@ export function discoverEnginePaths(config: ReaEnginePaths = {}, source: NodeJS.
   }
   return paths;
 }
+/** Bind Java before REA can fall back to a bare java.exe on Windows. */
+export function requireGhidraJavaHome(paths: ReaEnginePaths): string {
+  if (!paths.java) throw Error("Ghidra 需要依赖 JDK 21，请先安装上方的 JDK 21 组件，或配置有效的 JAVA_HOME 后重试。已有安装包会保留。");
+  return paths.java;
+}
 export function engineValidationRevision(config: ReaConfig, id: ReaEngineId, paths = discoverEnginePaths(config.engines)) {
   return `${reaEngineRevision(config, id)}:${["ghidra", "jadx"].includes(id) ? paths.java ?? "" : ""}`;
 }
@@ -110,6 +115,7 @@ export async function checkEngines(root: string, config: ReaConfig, packageRoot:
         item.version = wabtVersion; item.status = "ready"; item.detail = "三个 WASM 工具的版本检查通过，未加载分析目标。";
       } else {
         if (!packageRoot || !engineContractSupported(config.installation?.version)) throw Error(`当前检测契约验证于 REA ${engineContractVersion}；请先安装该版本或等待适配新版本。`);
+        if (item.id === "ghidra") requireGhidraJavaHome(paths);
         const { entry } = inspectReaProgram(packageRoot, config.installation.version);
         const result = await run(reaNode(root, config), [entry, "doctor", "--provider", item.id, "--skill=false", "--format", "json"], { cwd: root, env, environmentDirectory, signal, timeout: 60_000 });
         const report = JSON.parse(result.stdout);

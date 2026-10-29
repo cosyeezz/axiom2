@@ -378,8 +378,11 @@ function compressionBoundary(event?: BoundaryState): BoundaryResult | undefined 
       }
       compressionSnapshots.delete(id);
       compressionMemory.delete(id);
-      const request = lastCompressionPrefix?.sessionId === session.sessionId
-        ? lastCompressionPrefix : readCompressionPrefix(activeInput!.file);
+      let request = lastCompressionPrefix?.sessionId === session.sessionId ? lastCompressionPrefix : undefined;
+      if (!request) {
+        try { request = readCompressionPrefix(activeInput!.file); }
+        catch { /* Missing cache metadata must not block native summarization. */ }
+      }
       send({ type: "compression-snapshot", id, snapshot: captureCompression(session.sessionManager), request });
     } catch (error) {
       compressionSnapshots.delete(id);
@@ -997,7 +1000,7 @@ async function run(input: WorkerInput) {
         } catch {
           lastCompressionPrefix = undefined;
           try { forgetCompressionPrefix(input.file); } catch { /* A stale sidecar still has to pass frozen projection/model checks. */ }
-          runSend({ type: "warning", text: "本次请求的缓存前缀未能完整保存；聊天继续，压缩时将明确检查前缀是否可用。" });
+          runSend({ type: "warning", text: "本次请求的缓存前缀未能完整保存；聊天继续，压缩时可改用原生摘要。" });
         }
       }
       return baseStream(model, context, options);

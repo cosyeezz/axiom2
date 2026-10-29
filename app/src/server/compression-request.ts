@@ -54,11 +54,22 @@ const serviceTiers = new Set(["auto", "default", "flex", "priority", "scale"]);
 const inputSampling = new Set(["input", "messages", "system", "instructions", "tools", "tool_choice", "model",
   "prompt_cache_key", "prompt_cache_retention", "previous_response_id", "conversation", "prompt", "context_management"]);
 const fieldNames = (keys: string[]) => keys.map(key => /^[a-z_][a-z_0-9]{0,47}$/i.test(key) ? key : "自定义字段").join(", ");
-function samplingUnavailable(model: Model<Api>, sampling: Record<string, unknown>): string | undefined {
+function unsafeSampling(sampling: Record<string, unknown>): string | undefined {
   const input = Object.keys(sampling).filter(key => inputSampling.has(key));
   if (input.length) return `模型采样配置会覆盖输入或缓存路由（字段：${fieldNames(input)}）`;
   if (sampling.truncation !== undefined && sampling.truncation !== "disabled")
     return "模型采样配置允许自动裁剪（字段：truncation）";
+}
+
+/** Cache incompatibility may fall back, but input replacement/truncation may not. */
+export function assertCompressionInput(model: Model<Api>, options: SimpleStreamOptions = {}) {
+  const reason = unsafeSampling({ ...modelSampling(model, options), ...options.samplingParams });
+  if (reason) throw Error(`压缩模型配置不安全：${reason}；未发送摘要请求。`);
+}
+
+function samplingUnavailable(model: Model<Api>, sampling: Record<string, unknown>): string | undefined {
+  const unsafe = unsafeSampling(sampling);
+  if (unsafe) return unsafe;
   const unsupported = Object.keys(sampling).filter(key => !scalarSampling.has(key) && !(key === "service_tier" &&
     openAiApis.has(model.api) && typeof sampling[key] === "string" && serviceTiers.has(sampling[key] as string)));
   if (unsupported.length) return `模型采样字段尚未验证可安全复用（字段：${fieldNames(unsupported)}）；请检查字段与当前协议是否兼容`;

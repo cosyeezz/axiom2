@@ -7,6 +7,7 @@ export interface SourceGitlinkRecord {
   path: string;
   commit: string;
 }
+export type GitlinkRecord = SourceGitlinkRecord;
 export interface DmgRecord {
   size: number;
   sha256: string;

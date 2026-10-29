@@ -343,9 +343,12 @@ export class Compressions {
   private snapshot(live: Live, snapshot: CompressionSnapshot, request?: CompressionPrefix) {
     if (live.snapshot || live.cancel) return;
     const file = this.manager(live.scope).getSessionFile();
-    if (!request && file) request = readCompressionPrefix(file);
-    if (!request) throw Error("没有可复用的真实会话请求前缀，未生成摘要。");
-    assertCompressionPrefix(request, snapshot.header.id, live.input.selection);
+    // Cache reuse is an optimization, never a prerequisite for recovering a
+    // stopped/full session. Legacy transcripts need not have a request sidecar.
+    try {
+      if (!request && file) request = readCompressionPrefix(file);
+      if (request) assertCompressionPrefix(request, snapshot.header.id, live.input.selection);
+    } catch { request = undefined; }
     live.input.request = request;
     live.snapshot = snapshot;
     writeFileSync(live.input.file, [snapshot.header, ...snapshot.entries].map((e) => JSON.stringify(e)).join("\n") + "\n", { flag: "wx", mode: 0o600 });

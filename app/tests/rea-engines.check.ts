@@ -78,11 +78,13 @@ try {
   await java.getByRole("button", { name: /^(安装|更新|切换推荐版)JDK 21$/ }).click();
   await java.getByRole("button", { name: "确认下载安装", exact: true }).click();
   await java.getByText("已是推荐版本", { exact: true }).waitFor(); assert.equal(installs, 1);
-  assert.match(savedConfig().engines.java, /integrations\/rea\/engines\/java-/);
+  assert.match(savedConfig().engines.java, /integrations[\\/]rea[\\/]engines[\\/]java-/);
   await java.getByRole("button", { name: "检查JDK 21更新", exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '检查JDK 21更新' && !(button as HTMLButtonElement).disabled));
   assert.equal(await java.getByRole("button", { name: /^(安装|更新|重新安装|修复|切换推荐版)JDK 21$/ }).count(), 0, "equivalent JDK versions do not offer another download");
   const ghidra = section.getByRole("region", { name: "Ghidra维护", exact: true }), hopper = section.getByRole("region", { name: "Hopper维护", exact: true });
+  const jdkNotice = "Ghidra 需要依赖 JDK 21，请先在上方「JDK 21」组件中下载并安装；安装 Ghidra 不会自动安装 JDK。";
+  await ghidra.getByText(jdkNotice, { exact: true }).waitFor();
   const panelFor = (id: "ghidra" | "hopper") => id === "ghidra" ? ghidra : hopper;
   const labelFor = (id: "ghidra" | "hopper") => id === "ghidra" ? "Ghidra" : "Hopper";
   const prepareDownload = async (id: "ghidra" | "hopper") => {
@@ -92,12 +94,32 @@ try {
     await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).click();
     return panel.getByRole("group", { name: `确认下载${label}`, exact: true });
   };
+  if (["win32", "linux"].includes(process.platform) && process.arch === "x64") {
+    await ghidra.getByRole("button", { name: "检查Ghidra更新", exact: true }).click();
+    await ghidra.getByRole("button", { name: "安装Ghidra", exact: true }).click();
+    const installConfirm = ghidra.getByRole("group", { name: "确认安装Ghidra", exact: true });
+    await installConfirm.getByText(jdkNotice, { exact: true }).waitFor();
+    await installConfirm.getByRole("button", { name: "暂不安装", exact: true }).click();
+    await ghidra.getByRole("button", { name: "下载Ghidra安装包", exact: true }).click();
+    const downloadConfirm = ghidra.getByRole("group", { name: "确认下载Ghidra", exact: true });
+    await downloadConfirm.getByText(jdkNotice, { exact: true }).waitFor();
+    await downloadConfirm.getByRole("button", { name: "确认下载", exact: true }).click();
+    await ghidra.getByText("已下载 · 待安装", { exact: true }).waitFor();
+    await page.reload();
+    await ghidra.getByRole("button", { name: "安装Ghidra", exact: true }).click();
+    await installConfirm.getByText(jdkNotice, { exact: true }).waitFor();
+    assert.match(await installConfirm.innerText(), /将使用已下载的安装包/);
+    await installConfirm.getByRole("button", { name: "暂不安装", exact: true }).click();
+    assert.equal(installs, 1, "dependency notices and cancellations never install Ghidra or JDK automatically");
+    assert.equal(savedConfig().engines.ghidra, undefined);
+  }
   if (process.platform === "darwin") {
     for (const id of ["ghidra", "hopper"] as const) {
       const panel = panelFor(id), label = labelFor(id);
       assert.equal(await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).isDisabled(), true);
       const confirm = await prepareDownload(id);
       assert.match(await confirm.innerText(), /下载后可继续安装/);
+      if (id === "ghidra") await confirm.getByText(jdkNotice, { exact: true }).waitFor();
       await confirm.getByRole("button", { name: "暂不下载", exact: true }).click();
       const before = downloads;
       await panel.getByRole("button", { name: `下载${label}安装包`, exact: true }).click();
@@ -193,5 +215,5 @@ try {
     if ([390, 1440].includes(width)) await page.screenshot({ path: join(output, `engines-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
-  console.log("REA engines UI passed: cached Ghidra installation without re-download, Hopper installer opening without marking installation complete, confirmations/reload, default locations, equivalent JDK version, parallel downloads and cancellation, 320/390/820/1440 layouts and 44px targets; fixture packages and installer only.");
+  console.log("REA engines UI passed: upfront JDK dependency notices for fresh/download/cached Ghidra confirmations; cached Ghidra installation without re-download, Hopper installer opening without marking installation complete, confirmations/reload, default locations, equivalent JDK version, parallel downloads and cancellation, 320/390/820/1440 layouts and 44px targets; fixture packages and installer only.");
 } finally { for (const gate of downloadGates.values()) gate.release(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); }

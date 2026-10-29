@@ -13,4 +13,16 @@ Axiom 的异步压缩与 Pi 原生自动压缩独立运行：
 
 `reserveTokens` 同时影响 Pi 摘要的输出预算（仍受模型最大输出限制），不是纯百分比参数。默认保留最近 20,000 Token，小窗口的压缩降幅可能受此保留量限制。
 
-验证见 `native-compaction-policy.test.ts`、`auto-compression.test.ts`、`compression-context.test.ts`。后端代码需构建并重启后台才能可靠应用到已存在的 worker；会话资源 reload 不会重新加载 worker 模块。
+## 手动压缩与满窗恢复
+
+- **运行中**：点击压缩仍沿用 Axiom 自动压缩的快照、记忆提醒与安全点应用流程；不打断正在进行的模型或工具请求。
+- **已停止**：立即快照并压缩全部当前有效上下文，不启动主任务、不要求先完成一次新的模型请求。直接以有效 projection 构造范围，调用 Pi 公开 `compact()`；即使只有一条超长用户消息，也不受 `AgentSession.compact()` 的保留尾巴最小长度限制。
+- 原始 JSONL 继续归档。已有摘要作为更新输入，但已归档或被 context edit 省略的旧原文不会重新加入；快照之后的新消息保留在最终摘要之后。
+- 最近真实请求的 `.request-prefix.json` 只用于缓存优化。缺失、损坏、模型/思考级别/配置或 projection 不匹配，以及完整前缀加输出预算超窗时，回退当前会话模型的 Pi 原生摘要请求。
+- 原生摘要本身也超窗时，按顺序分片 Pi 序列化后的目标内容，累计更新完整交接摘要。每片均做预算检查并沿用摘要重试策略，只重试失败片；全部成功才一次应用，失败或取消不提交任何中间摘要。沿用 Pi 对单条工具结果的序列化截短规则，不承诺原始工具输出的每个字符都发送给模型。
+- 输入覆盖和自动裁剪等不安全模型 sampling 配置仍硬拒绝，不能借原生回退绕过；空、被取消、输出截断或调用工具的响应不能成为摘要。
+- 按实际物理请求记账，包括未能最终提交的分批或重试；失败不等于免费。没有发出的本地校验失败不产生请求记录。
+
+验证见 `native-compaction-policy.test.ts`、`auto-compression.test.ts`、`compression-context.test.ts`、`compression-native.test.ts`、`compression-recovery.test.ts` 与 `compression-page.check.ts`。恢复测试只使用隔离临时会话和 localhost 模拟供应商。
+
+后端代码需构建并重启后台才能可靠应用到已存在的 worker；会话资源 reload 不会重新加载 worker 模块。

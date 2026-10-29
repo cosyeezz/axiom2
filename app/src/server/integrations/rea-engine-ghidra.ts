@@ -3,18 +3,18 @@ import { mkdir, readdir, rm } from "node:fs/promises";
 import { delimiter, join, relative, isAbsolute, sep } from "node:path";
 import { extractEngineArchive } from "./rea-engine-archive.js";
 import { downloadEngineFile, smallText, type EngineFetch } from "./rea-engine-install.js";
-import { discoverEnginePaths, engineEnvironment, engineHost, type EngineHost } from "./rea-engines.js";
+import { discoverEnginePaths, engineEnvironment, engineHost, requireGhidraJavaHome, type EngineHost } from "./rea-engines.js";
 import { maintenancePhase } from "../maintenance.js";
 import { runEngine, type EngineRun } from "./rea-engine-process.js";
 import { reaDirectory, reaProcessEnvironment, readReaConfig } from "./rea-runtime.js";
 
 export async function ghidraBuildEnvironment(root: string, signal: AbortSignal, run: EngineRun = runEngine, host = engineHost()) {
   const config = readReaConfig(root), paths = discoverEnginePaths(config.engines);
-  if (!paths.java) throw Error("安装 Ghidra 需要 JDK 21，请先安装上方的 JDK 21。");
+  const javaHome = requireGhidraJavaHome(paths);
   const base = reaProcessEnvironment(root, config);
-  const env: NodeJS.ProcessEnv = { ...base, ...engineEnvironment(paths), PATH: [join(paths.java, "bin"), base.PATH].filter(Boolean).join(delimiter) };
+  const env: NodeJS.ProcessEnv = { ...base, ...engineEnvironment(paths), PATH: [join(javaHome, "bin"), base.PATH].filter(Boolean).join(delimiter) };
   const environmentDirectory = join(reaDirectory(root), "environment", "engines", "ghidra");
-  const java = join(paths.java, "bin", "java");
+  const java = join(javaHome, "bin", "java");
   const version = await run(java, ["-XshowSettings:properties", "-version"], { cwd: root, env, environmentDirectory, signal });
   const properties = version.stdout + version.stderr;
   const modules = await run(java, ["--list-modules"], { cwd: root, env, environmentDirectory, signal });

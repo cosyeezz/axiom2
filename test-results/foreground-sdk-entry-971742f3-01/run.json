@@ -1,0 +1,17 @@
+﻿{
+    "workingDirectory":  "F:\\Axiom\\axiom2",
+    "command":  "node --test app/tests/foreground-service.test.mjs",
+    "TEMP":  "C:/Users/dane/AppData/Local/Temp/axiom-foreground-sdk-fixture-971742f3-01",
+    "TMP":  "C:/Users/dane/AppData/Local/Temp/axiom-foreground-sdk-fixture-971742f3-01",
+    "shellTimeoutSeconds":  60,
+    "startedUtc":  "2026-10-29T07:22:14.3958775Z",
+    "testExitCode":  0,
+    "elapsedMilliseconds":  801,
+    "finishedUtc":  "2026-10-29T07:22:15.2039990Z",
+    "changedFiles":  [
+
+                     ],
+    "remainingTempEntriesBeforeCleanup":  0,
+    "privateTempRemoved":  true,
+    "hashesUnchanged":  true
+}

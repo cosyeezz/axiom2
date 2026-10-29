@@ -329,7 +329,7 @@ try {
   assert.equal(server.agents.compressions.info(a)?.state, "completed", JSON.stringify(server.agents.compressions.info(a)));
   completeSummaries = false;
   const afterFirstCount = requests.length;
-  assert.ok(requests.some(request => JSON.stringify(request.messages.at(-1)).includes("## Original Request")), "native split-turn format is preserved");
+  assert.ok(requests.every(request => JSON.stringify(request.messages.at(-1)).includes("## Critical Context")), "stopped snapshots use the complete native handoff format, not a retained split turn");
   await page.waitForSelector('[data-od-id="background-compression-trigger"][data-state="completed"]');
   // Recent archived ranges now stay expanded: a new compaction is transparent
   // in the timeline instead of forcing an old numbered card into the view.

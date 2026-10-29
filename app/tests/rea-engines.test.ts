@@ -160,7 +160,7 @@ test("probe timeout terminates descendants holding inherited pipes", async () =>
 
 test("Ghidra and JADX require healthy scoped doctor reports, never merely a zero exit code", { skip: process.platform === "win32" && process.arch !== "x64" }, async () => {
   const root = temporary(), value = config(root), ghidra = join(root, "Ghidra home"), jadx = join(root, "jadx.jar");
-  mkdirSync(ghidra); writeFileSync(jadx, "fixture"); value.engines = { ghidra, jadx };
+  mkdirSync(ghidra); writeFileSync(jadx, "fixture"); value.engines = { ghidra, jadx, java: join(root, "JDK home") };
   const packageRoot = join(root, "integrations", "rea", "versions", value.installation!.directory, "node_modules", "rea-agents");
   try {
     for (const fixture of [

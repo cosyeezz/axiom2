@@ -9,6 +9,7 @@ import type { CleanupScope } from "../../shared/cleanup-scope.js";
 
 export type ReaFeedback = { text: string; error?: boolean; jobId?: string };
 type Action = (op: string, params?: Record<string, unknown>) => Promise<void>;
+const ghidraJavaRequirement = "Ghidra 需要依赖 JDK 21，请先在上方「JDK 21」组件中下载并安装；安装 Ghidra 不会自动安装 JDK。";
 export function ReaEngines({ state, busy, blocked, sending, feedback, action, reportedErrorResources }: { state: ReaState; busy: boolean; blocked: boolean; sending: string[]; feedback: Record<string, ReaFeedback>; action: Action; reportedErrorResources: string[] }) {
   return <section className="section tools-section rea-engines-section" aria-labelledby="rea-engines-heading">
     <div className="section-heading"><h3 id="rea-engines-heading">分析引擎与配套组件</h3><p>REA {state.version ?? "未安装"}{state.engineHost && ` · ${({ win32: "Windows", darwin: "macOS", linux: "Linux" } as Record<string, string>)[state.engineHost.platform] ?? state.engineHost.platform} ${state.engineHost.arch}`}</p></div>
@@ -57,6 +58,7 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
     {!error && installerOpened && !current && <p className="field-help" role="status">{job.message}</p>}
     {!error && job?.kind === "clearDownloads" && !job.running && <p className="field-help" role="status">{job.message}</p>}
     {engine.pendingOperation && !job?.running && <BuiltinRecovery label={label} operationId={engine.pendingOperation} disabled={uninstallBusy || busy} reconcile={force => void action("rea.reconcile", { engine: engine.id, operationId: engine.pendingOperation, force })} />}
+    {engine.id === "ghidra" && <p className="field-help">{ghidraJavaRequirement}</p>}
     <div className="tools-actions">
       <button className="btn" disabled={unavailable} onClick={() => void action("rea.engine-check", { engine: engine.id })}><Icon name="refresh-cw" />{downloadable ? `检查${label}更新` : `检测${label}`}</button>
       {cachedInstall && !current && <button className="btn" disabled={unavailable} onClick={() => setConfirm({ revision, version: engine.download!.version, downloadPath: engine.download!.path, recommendedVersion: recommended, operation: engine.id === "hopper" ? "open" : "install" })}><Icon name="package" />安装{label}</button>}
@@ -93,7 +95,8 @@ function Engine({ engine, state, uninstallBusy, blocked, sending, feedback, acti
     </div>}
     {confirm && <div className="tools-conflict inline-confirmation" role="group" aria-label={`确认${confirm.operation === "download" ? "下载" : "安装"}${label}`}>
       <p>{confirm.operation === "download" ? "下载" : "安装"} {label} {confirm.version}？{confirm.operation === "open" ? "将在后台 Mac 打开安装映像，请在系统窗口完成安装。" : confirm.downloadPath ? "将使用已下载的安装包。" : confirm.operation === "download" ? "下载后可继续安装。" : ""}</p>
-      {confirm.operation === "install" && engine.id === "ghidra" && state.engineHost?.platform === "darwin" && <p>需要 JDK 21 和 Xcode 命令行工具；会自动准备 Gradle 并构建本机组件。</p>}
+      {engine.id === "ghidra" && <p>{ghidraJavaRequirement}</p>}
+      {confirm.operation === "install" && engine.id === "ghidra" && state.engineHost?.platform === "darwin" && <p>macOS 还需要 Xcode 命令行工具；会自动准备 Gradle 并构建本机组件。</p>}
       {stale && <p role="alert">此组件或安装版本已变化，请重新确认。</p>}
       <div className="tools-actions"><button className="btn" onClick={() => setConfirm(undefined)}>暂不{confirm.operation === "download" ? "下载" : "安装"}</button><button className="btn btn-primary" disabled={busy || stale} onClick={() => {
         const selection = confirm; setConfirm(undefined);

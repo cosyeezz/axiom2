@@ -46,9 +46,33 @@ export function captureCompression(manager: Reader): CompressionSnapshot {
   return copy({ header, entries });
 }
 
-/** Pi's zero recent-token budget still retains its final cut point. For a
- * stopped-session checkpoint, include that tail in the native full summary too.
- * This runs only inside the scratch session's session_before_compact hook.
+/** Prepare a stopped snapshot before Pi's retained-tail minimum-size check.
+ * Use only the effective projection: old archived/omitted raw entries stay out.
+ * Pi's public compact() still owns summary prompts, merging and file metadata.
+ */
+export function prepareFullCompression(
+  entries: SessionEntry[], settings: SessionBeforeCompactEvent["preparation"]["settings"],
+): SessionBeforeCompactEvent["preparation"] {
+  const projection = buildSessionProjection(entries);
+  const previous = projection.entries.find(item => item.sourceEntry.type === "compaction" && item.messages.length)?.sourceEntry;
+  const preparation: SessionBeforeCompactEvent["preparation"] = {
+    firstKeptEntryId: entries.at(-1)?.id ?? "",
+    messagesToSummarize: [], turnPrefixMessages: [], isSplitTurn: false,
+    tokensBefore: projection.messages.reduce((total, message) => total + estimateTokens(message), 0),
+    previousSummary: previous?.type === "compaction" ? previous.summary : undefined,
+    fileOps: { read: new Set(), written: new Set(), edited: new Set() }, settings,
+  };
+  if (previous?.type === "compaction" && !previous.fromHook) {
+    const details = previous.details as { readFiles?: unknown; modifiedFiles?: unknown } | undefined;
+    if (Array.isArray(details?.readFiles)) for (const file of details.readFiles) if (typeof file === "string") preparation.fileOps.read.add(file);
+    if (Array.isArray(details?.modifiedFiles)) for (const file of details.modifiedFiles) if (typeof file === "string") preparation.fileOps.edited.add(file);
+  }
+  includeAllCompressionMessages(preparation, entries);
+  return preparation;
+}
+
+/** Pi's zero recent-token budget still retains its final cut point. Include
+ * that tail in the full summary without changing the original transcript.
  */
 export function includeAllCompressionMessages(preparation: SessionBeforeCompactEvent["preparation"], entries: SessionEntry[]) {
   const messages = buildSessionProjection(entries).entries

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { compact, convertToLlm, SessionManager, type SessionBeforeCompactEvent } from "@earendil-works/pi-coding-agent";
 import { normalizeContext, type AssistantMessage, type Model, type TranscriptContext } from "@earendil-works/pi-ai";
 import {
-  assertCompressionBudget, assertCompressionPrefix, captureCompressionPrefix, compressionModelIdentity, compressionPrefixRequest, compressionRequestOptions,
+  assertCompressionBudget, assertCompressionInput, assertCompressionPrefix, captureCompressionPrefix, compressionModelIdentity, compressionPrefixRequest, compressionRequestOptions,
   readCompressionPrefix, saveCompressionPrefix, observeCompressionPayload,
 } from "../src/server/compression-request.js";
 import { compactionInstructions } from "../src/server/compaction-display.js";
@@ -46,6 +46,14 @@ async function runNative(f: ReturnType<typeof fixture>, preparation: Preparation
   });
   return { requests, result };
 }
+
+test("input-replacing or truncating sampling is unsafe even without cache reuse", () => {
+  for (const samplingParams of [{ messages: [] }, { input: "replacement" }, { system: "replacement" }, { truncation: "auto" }])
+    assert.throws(() => assertCompressionInput({ ...model, samplingParams }), /配置不安全/);
+  assert.throws(() => assertCompressionInput({ ...model, samplingParamsByThinkingLevel: { low: { truncation: "auto" } } }, { reasoning: "low" }), /配置不安全/);
+  assert.throws(() => assertCompressionInput(model, { samplingParams: { instructions: "replacement" } }), /配置不安全/);
+  assert.doesNotThrow(() => assertCompressionInput({ ...model, samplingParams: { user: "safe-routing-label", top_p: 0.5, truncation: "disabled" } }));
+});
 
 test("native full and split summaries preserve real system/tool/message prefix once, then append only instructions", async () => {
   const f = fixture();

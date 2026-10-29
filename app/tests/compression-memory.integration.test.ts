@@ -175,7 +175,8 @@ test("precompression reminder: optional memory work, safe points and cancellatio
       }
     } else {
       assert.equal(job.state, scenario === "cancel" || scenario === "cancelRejected" ? "cancelled" : "failed", job.error ?? "");
-      assert.equal(summaries, previousSummaries, "cancelled or interrupted preparation never starts the Axiom background summary");
+      if (scenario !== "overflow") assert.equal(summaries, previousSummaries, "cancelled preparation never starts a summary");
+      assert.equal(job.billing?.records ?? 0, 0, "interrupted preparation never dispatches the Axiom background summary");
       assert.equal(readFileSync(memoryPath, "utf8"), before);
       if (scenario === "overflow") {
         // Pi's independent overflow safety net is allowed to compact and retry.

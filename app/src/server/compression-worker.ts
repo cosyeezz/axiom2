@@ -4,6 +4,7 @@ import { acceptsLease, awaitExecutionPermit, ExecutionPermitDeniedError, leaseSe
 import { join } from "node:path";
 import {
   createAgentSession,
+  compact,
   DefaultResourceLoader,
   SettingsManager,
   buildSessionProjection,
@@ -17,13 +18,14 @@ import { invalidModelDefinition } from "./model-runtime.js";
 import { openTranscript } from "./transcript.js";
 import { compactionInstructions } from "./compaction-display.js";
 import { compressionError } from "./compression-error.js";
-import { assertCompressionBudget, assertCompressionPrefix, compressionModelIdentity, compressionPrefixRequest, compressionRequestOptions, type CompressionPrefix } from "./compression-request.js";
+import { assertCompressionBudget, assertCompressionInput, assertCompressionPrefix, compressionModelIdentity, compressionPrefixRequest, compressionRequestOptions, type CompressionPrefix } from "./compression-request.js";
 import { sumCosts, type CostTotals } from "../shared/costs.js";
 import { usageCost } from "./usage-cost.js";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { kiroCompressionProjection, kiroSummaryUsage } from "./providers/kiro-usage.js";
 import { installKiroCompactionUsage } from "./kiro-compaction-usage.js";
-import { includeAllCompressionMessages } from "./compression-context.js";
+import { prepareFullCompression } from "./compression-context.js";
+import { streamNativeCompression } from "./compression-native.js";
 
 export interface CompressionInput {
   executionGate?: boolean;
@@ -39,6 +41,7 @@ let session: AgentSession | undefined,
   cancelled = false,
   started = false;
 let activeLease: LeaseRef | undefined;
+const fullCompressionAbort = new AbortController();
 const send = (value: unknown) => leaseSender(activeLease)(value);
 process.on("disconnect", () => process.exit(1));
 process.on("message", (event: any) => {
@@ -47,6 +50,7 @@ process.on("message", (event: any) => {
   if (event.type !== "start" && !(event.type === "shutdown" && sameInstance(event.instance)) && workerInstance && !sameLease(event.lease, activeLease)) return;
   if (event.type === "stop" || event.type === "shutdown") {
     cancelled = true;
+    fullCompressionAbort.abort();
     session?.abortCompaction();
   }
   if (event.type === "start" && !started) {
@@ -59,28 +63,29 @@ async function run(input: CompressionInput) {
   const send = leaseSender(activeLease);
   const accounting: Promise<unknown>[] = [];
   try {
-    if (!input.request) throw Error("没有可复用的真实会话请求前缀，未发送摘要请求。");
     const transcript = openTranscript(input.file, input.cwd);
-    assertCompressionPrefix(input.request, transcript.getSessionId(), input.selection);
-    configureModelNetwork(input.root, input.modelsFile, input.request.model.provider);
+    let prefix = input.request;
+    if (prefix) {
+      try { assertCompressionPrefix(prefix, transcript.getSessionId(), input.selection); }
+      catch { prefix = undefined; }
+    }
+    configureModelNetwork(input.root, input.modelsFile, prefix?.model.provider ?? input.selection.provider);
     const runtime = await new ModelService(input.root).runtime(
       input.modelsFile, false, input.selection.provider,
     );
-    const model = runtime.getModel(
-      input.request.model.provider,
-      input.request.model.id,
-    );
+    const recordedModel = prefix && runtime.getModel(prefix.model.provider, prefix.model.id);
     const configurationError = await invalidModelDefinition(input.modelsFile, input.selection.provider);
     // Parser diagnostics may echo arbitrary secret configuration values.
     if (configurationError) throw Error("压缩模型配置读取失败，请检查供应商配置；原配置未修改。");
-    if (!model || compressionModelIdentity(model) !== input.request.model.identity)
-      throw Error("当前会话的实际请求模型配置已变化；无法复用其缓存前缀，请重试压缩。");
-    const thinking = input.request.options.reasoning ?? "off";
+    if (prefix && (!recordedModel || compressionModelIdentity(recordedModel) !== prefix.model.identity)) prefix = undefined;
+    const model = prefix && recordedModel || runtime.getModel(input.selection.provider, input.selection.id);
+    if (!model) throw Error("当前会话模型不可用，未发送摘要请求。");
+    const thinking = prefix ? prefix.options.reasoning ?? "off" : input.selection.thinking;
     let preparation: SessionBeforeCompactEvent["preparation"] | undefined;
     let fullSummaryPrepared = false;
     // No project resources, external extensions or executable coding tools.
-    // One host-only hook widens the stopped-session range; the native summary
-    // generator, format, retries and accounting remain unchanged.
+    // One host-only hook observes native running-session preparation. Stopped
+    // snapshots use Pi's public compact() without its retained-tail size gate.
     const settingsManager = SettingsManager.inMemory({
       cacheWarming: "off",
       compaction: { enabled: false, keepRecentTokens: 0 },
@@ -92,10 +97,6 @@ async function run(input: CompressionInput) {
       noExtensions: true,
       extensionFactories: [(pi) => { pi.on("session_before_compact", (event) => {
         preparation = event.preparation;
-        if (input.summarizeAll) {
-          includeAllCompressionMessages(preparation, event.branchEntries);
-          fullSummaryPrepared = true;
-        }
       }); }],
       noSkills: true,
       noPromptTemplates: true,
@@ -116,7 +117,7 @@ async function run(input: CompressionInput) {
       sessionManager: transcript,
       noTools: "all",
     }));
-    if (session.thinkingLevel !== thinking)
+    if (prefix && session.thinkingLevel !== thinking)
       throw Error("摘要请求未能使用会话的有效思考等级。");
     if (resourceLoader.getExtensions().errors.length) throw Error("原生摘要前缀适配器未能加载。");
     await session.bindExtensions({ mode: "rpc" });
@@ -126,20 +127,17 @@ async function run(input: CompressionInput) {
     });
     await awaitExecutionPermit(activeLease, input.executionGate);
     if (cancelled) return send({ type: "cancelled" });
-    // Keep native preparation, retries, full/split summary formats and accounting.
-    // Only the outgoing request changes: original transcript prefix + tail directive.
-    // Tool declarations remain byte-aligned for caching; no agent loop executes them.
+    // Keep native preparation, retries, full/split formats and physical accounting.
+    // Reuse a verified cache prefix only when it fits; otherwise send the native
+    // serialized summary request, without first running the stopped main agent.
     const stream = session.agent.streamFunction;
     const charges: CostTotals[] = [], physical: AssistantMessage[] = [];
     const publishBilling = () => send({ type: "billing", billing: sumCosts(charges) });
-    session.agent.streamFunction = async (model, context, options) => {
+    const dispatch: typeof stream = async (model, request, requestOptions) => {
+      assertCompressionInput(model, requestOptions);
       // A split-prefix dispatch after cancellation never reaches native HTTP.
       // Keep nonKiro accounting unchanged; do not add a fictitious Kiro charge.
-      if (model.api === "kiro-chat" && (options?.signal?.aborted || compactionUsage.isCancelled())) return stream(model, context, options);
-      if (!preparation || input.summarizeAll && !fullSummaryPrepared) throw Error("没有原生摘要范围，未发送摘要请求。");
-      const request = compressionPrefixRequest(input.request!, session!.sessionManager.getBranch(), preparation, context);
-      const requestOptions = compressionRequestOptions(input.request!, options);
-      assertCompressionBudget(model, request, requestOptions);
+      if (model.api === "kiro-chat" && (requestOptions?.signal?.aborted || compactionUsage.isCancelled())) return stream(model, request, requestOptions);
       // Local validation is not a physical request. Record an unknown charge
       // only after preflight succeeds, but still before the provider can start.
       const index = charges.push(usageCost(null)) - 1;
@@ -156,9 +154,44 @@ async function run(input: CompressionInput) {
         charges[index] = usageCost(message.usage, message.responseModel ?? message.model);
         publishBilling();
       }).catch((error) => { send({ type: "model_result", id: callId, error: compressionError(error) }); }));
+      // Pi rejects error/length responses itself, but an aborted stream can carry
+      // partial text. Never fold that text into a batch or persist a checkpoint.
+      const result = response.result.bind(response);
+      let checked: ReturnType<typeof result> | undefined;
+      response.result = () => checked ??= result().then(message => {
+        if (message.stopReason === "aborted") throw Error("摘要请求已取消，未应用压缩。");
+        if (message.stopReason === "stop" && !message.content.some(block => block.type === "text" && block.text.trim()))
+          throw Error("摘要返回空内容，未应用压缩。");
+        return message;
+      });
       return response;
     };
-    const result = await session.compact(compactionInstructions);
+    session.agent.streamFunction = async (model, context, options) => {
+      if (!preparation || input.summarizeAll && !fullSummaryPrepared) throw Error("没有原生摘要范围，未发送摘要请求。");
+      if (prefix) {
+        let cached;
+        const requestOptions = compressionRequestOptions(prefix, options);
+        try {
+          cached = compressionPrefixRequest(prefix, session!.sessionManager.getBranch(), preparation, context);
+          assertCompressionBudget(model, cached, requestOptions);
+        } catch { prefix = undefined; }
+        if (prefix && cached) return dispatch(model, cached, requestOptions);
+      }
+      return streamNativeCompression(model, context, options ?? {}, preparation, dispatch, settingsManager.getRetrySettings());
+    };
+    let result;
+    if (input.summarizeAll) {
+      // Even a single over-window user message is valid full-summary input.
+      // Do not fabricate a chat turn to satisfy AgentSession.compact's tail gate.
+      preparation = prepareFullCompression(transcript.getBranch(), settingsManager.getCompactionSettings(model));
+      fullSummaryPrepared = true;
+      send({ type: "phase" });
+      result = await compact(preparation, model, undefined, undefined, compactionInstructions,
+        fullCompressionAbort.signal, session.thinkingLevel, session.agent.streamFunction,
+        undefined, settingsManager.getRetrySettings());
+      fullCompressionAbort.signal.throwIfAborted();
+      transcript.appendCompaction(result.summary, result.firstKeptEntryId, result.tokensBefore, result.details, false, result.usage);
+    } else result = await session.compact(compactionInstructions);
     if (model.provider === "kiro") await Promise.allSettled(accounting);
     const entry = session.sessionManager.getLeafEntry();
     if (entry?.type !== "compaction") throw Error("pi 未生成有效的原生压缩记录，摘要未应用。");

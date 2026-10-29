@@ -1,0 +1,22 @@
+﻿[
+    {
+        "Path":  "app/desktop/foreground-service.mjs",
+        "SHA256":  "B8B6017C01482BCDC7271A916728922ADC47552857A67A325BAFF2505C627E3E"
+    },
+    {
+        "Path":  "app/desktop/foreground-service.ps1",
+        "SHA256":  "9FF05C65531E20A6079CD3533F4E4975311D71DBB0C4B58342315759A37DDF81"
+    },
+    {
+        "Path":  "app/desktop/foreground-artifacts.mjs",
+        "SHA256":  "CC67E7DAB8188F1E14E4F09AA1460593315B843AD03D51D28B495D144D913F2F"
+    },
+    {
+        "Path":  "bin/service.mjs",
+        "SHA256":  "F26457A683A04B71E9E4EF363152832E8D12C96524B7E163680B23C4444026F9"
+    },
+    {
+        "Path":  "app/tests/foreground-service.test.mjs",
+        "SHA256":  "319E1ECFF361B6117F84118C6DB44188D36F092CDA7C2662725239034FC95F1E"
+    }
+]

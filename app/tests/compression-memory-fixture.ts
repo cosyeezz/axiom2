@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { compressionMemoryPrompt } from "../src/server/compression-memory.js";
 
-/** Summary requests retain chat tools for cache-prefix parity, but never execute them. */
+/** Cached-prefix and ordinary native summaries both run without an agent loop. */
 export function isCompressionRequest(body: any) {
   const content = body.messages?.at(-1)?.content;
   const text = typeof content === "string" ? content : (content ?? []).map((part: any) => part.text ?? "").join("\n");
-  return text.startsWith("[Axiom native compaction request]");
+  return text.startsWith("[Axiom native compaction request]") || body.messages?.some((message: any) =>
+    ["system", "developer"].includes(message.role) && typeof message.content === "string" &&
+    message.content.startsWith("You are a context summarization assistant."));
 }
 
 /** A loopback model checks memory when the host reminder reaches its tail. */

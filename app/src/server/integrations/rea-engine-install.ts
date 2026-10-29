@@ -9,7 +9,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReaEngineId } from "../../shared/rea-engines.js";
 import { extractEngineArchive } from "./rea-engine-archive.js";
-import { engineHost, engineInstallable, type EngineHost } from "./rea-engines.js";
+import { discoverEnginePaths, requireGhidraJavaHome, engineHost, engineInstallable, type EngineHost } from "./rea-engines.js";
 import { ghidraVersion, jadxVersion, jadxSha256, wabtVersion, engineContractSupported, engineContractVersion } from "./rea-engine-policy.js";
 import { readReaConfig, reaDirectory } from "./rea-runtime.js";
 import { reuseEngineDownload } from "./rea-engine-download.js";
@@ -116,6 +116,7 @@ export async function findEnginePath(root: string, id: ReaEngineId, host: Engine
 export async function prepareEngine(root: string, id: ReaEngineId, signal: AbortSignal, notify: (message: string) => void, fetcher: EngineFetch = fetchEngine, selected?: EngineRelease, options: { cachedOnly?: boolean; run?: EngineRun } = {}) {
   const host = engineHost(), run = options.run ?? runEngine;
   if (!engineInstallable(id, host)) throw Error("当前组件需要手动安装，请使用下载安装包。");
+  if (id === "ghidra") requireGhidraJavaHome(discoverEnginePaths(readReaConfig(root).engines));
   const release = selected ?? await engineRelease(id, signal, host, fetcher, readReaConfig(root).installation?.version);
   if (release.format === "dmg") throw Error("Hopper 安装由用户通过官方安装器完成。");
   const buildEnv = id === "ghidra" && host.platform === "darwin" ? await ghidraBuildEnvironment(root, signal, run) : undefined;

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager, type CompactionEntry } from "@earendil-works/pi-coding-agent";
-import { applyCompression, captureCompression, compressionDraft } from "../src/server/compression-context.js";
+import { applyCompression, captureCompression, compressionDraft, prepareFullCompression } from "../src/server/compression-context.js";
 
 const user = (manager: SessionManager, content: string) =>
   manager.appendMessage({ role: "user", content, timestamp: Date.now() });
@@ -25,6 +25,25 @@ const seeded = () => {
   assistant(manager);
   return manager;
 };
+
+test("full preparation handles one message and preserves only effective context plus previous metadata", () => {
+  const settings = { enabled: false, reserveTokens: 1024, keepRecentTokens: 0 };
+  const manager = SessionManager.inMemory();
+  user(manager, "SINGLE_INPUT");
+  const single = prepareFullCompression(manager.getBranch(), settings);
+  assert.equal(single.messagesToSummarize.length, 1);
+  assert.equal(single.isSplitTurn, false);
+  manager.appendCompaction("PREVIOUS_SUMMARY", null, 100, { readFiles: ["previous-read"], modifiedFiles: ["previous-write"] });
+  const current = user(manager, "BEFORE_EDIT");
+  manager.appendContextEdit(current, { content: "AFTER_EDIT" });
+  const full = prepareFullCompression(manager.getBranch(), settings);
+  assert.equal(full.previousSummary, "PREVIOUS_SUMMARY");
+  assert.match(JSON.stringify(full.messagesToSummarize), /AFTER_EDIT/);
+  assert.doesNotMatch(JSON.stringify(full.messagesToSummarize), /SINGLE_INPUT|BEFORE_EDIT/);
+  assert.deepEqual([...full.fileOps.read], ["previous-read"]);
+  assert.deepEqual([...full.fileOps.edited], ["previous-write"]);
+  assert.deepEqual(full.turnPrefixMessages, []);
+});
 
 test("compression retain-none appends natively, preserves new context and is durable/idempotent", (t) => {
   const root = mkdtempSync(join(tmpdir(), "axiom-compression-context-"));
